@@ -123,6 +123,10 @@ pub struct Settings {
     /// (default; on when the UI language is right-to-left, e.g. Arabic), `"on"`,
     /// or `"off"` for terminals that already reorder bidirectional text (T564).
     pub bidi: String,
+    /// Mirror the layout for right-to-left languages (docks and the editor's
+    /// scroll bar swap sides): `"auto"` (default; on when the UI language is
+    /// right-to-left), `"on"` or `"off"` (T564).
+    pub mirror_layout: String,
     /// Keyboard navigation style id: `"apple"` (default), `"vscode"`, `"emacs"`,
     /// or `"vi"`.
     pub keymap: String,
@@ -573,6 +577,7 @@ impl Default for Settings {
             theme_dark: "dark".to_string(),
             locale: "en".to_string(),
             bidi: "auto".to_string(),
+            mirror_layout: "auto".to_string(),
             keymap: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,

@@ -12,8 +12,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Arabic (and other RTL) text are reordered into visual order per UAX #9, with
   numbers and Latin runs kept left-to-right and borders and column gaps held in
   place. New `bidi` setting: `auto` (default; on for a right-to-left UI language),
-  `on`, `off` (for terminals that reorder text themselves). Layout is not
-  mirrored.
+  `on`, `off` (for terminals that reorder text themselves). New `mirror_layout`
+  setting (same values) swaps the docks and the editor's scroll bar to the
+  opposite sides, including dock-resize dragging; the menu bar stays left-aligned.
 
 - **Large files ask, binary files open in the byte editor** (T571): a file over
   `large_file_mb` (default 50, `0` never asks) now asks "open it anyway?" instead of

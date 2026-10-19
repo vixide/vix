@@ -42,6 +42,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `theme_dark`    | string | `"dark"` | The theme `"auto"` picks on a dark terminal (or when it can't tell). |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
 | `bidi`          | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
+| `mirror_layout` | string | `"auto"` | Mirror docks and the scroll bar for right-to-left languages: `auto`, `on` or `off`. |
 | `bidi` | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
 | `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vi"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
