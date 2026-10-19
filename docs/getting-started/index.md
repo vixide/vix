@@ -41,7 +41,7 @@ image preview, scripting, the integrated terminal, the HTTP client, the AI
 assistant, Git and Jujutsu integration, language servers, debug adapters, the
 Run Command / project-task shell runner, and syntax highlighting. It links no
 TLS stack, makes no network connections, and Vix starts no other program itself (no `git`,
-no language server, no shell). It is built with a size-optimized profile and is about 66% smaller than the default build (7.4 MiB vs 21.8 MiB on macOS arm64). It has no
+no language server, no shell). It is built with the `minimal` Cargo profile (fat LTO, one codegen unit, panics abort), chosen to shrink the attack surface; as a side effect it is also about 66% smaller than the default build (7.4 MiB vs 21.8 MiB on macOS arm64). It has no
 installer: unpack it and put `vix` on your `PATH`. Build the same thing from
 source with `cargo build --profile minimal --no-default-features`, or keep what you want
 with `--features sql,git,…` (see

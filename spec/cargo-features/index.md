@@ -121,6 +121,9 @@ about 44% smaller, with `vix --version --json` reporting `"capabilities":[]`. Th
 in its comment.
 
 The release workflow builds the minimal variant with the dedicated `[profile.minimal]`
-(inherits `release`; `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`), which brings
-it to 7,800,336 bytes (7.4 MiB), about 66% smaller than the default build. Panics abort
-instead of unwinding in that variant only.
+(inherits `release`; `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`), whose purpose is
+a reduced security surface, not size. `panic = "abort"` ends the process on a panic
+rather than unwinding and carrying on with half-updated state, and fat LTO with one
+codegen unit lets the linker drop dependency code no enabled feature reaches. The
+binary is also smaller (7,800,336 bytes, 7.4 MiB, about 66% below the default build),
+but that is a side effect. Panics abort instead of unwinding in that variant only.
