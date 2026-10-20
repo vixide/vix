@@ -4275,3 +4275,49 @@ fn mirrored_confirm_dialog_right_aligns_its_text() {
     let right = col(&mut app, &mut term);
     assert!(right > left, "text moved right: {left} -> {right}");
 }
+
+/// T564: in a mirrored layout the find box's button rectangles follow the
+/// right-aligned drawing, so clicking a drawn toggle still flips that option.
+#[test]
+fn mirrored_find_box_buttons_follow_the_drawing() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.run_action("edit.find");
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    app.settings.mirror_layout = "on".into();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let mirrored = app.layout.search_case;
+    let buf = term.backend().buffer();
+    assert_ne!(
+        buf[(mirrored.x, mirrored.y)].symbol(),
+        " ",
+        "the recorded rect starts on the drawn button"
+    );
+    let before = format!("{:?}", app.search.as_ref().unwrap().flags);
+    app.on_mouse(click(mirrored.x, mirrored.y));
+    let after = format!("{:?}", app.search.as_ref().unwrap().flags);
+    assert_ne!(before, after, "clicking the drawn Case button toggled it");
+}
+
+/// T564: the calculator's Run/Insert hit rects follow the mirrored drawing and
+/// cover the drawn button text.
+#[test]
+fn mirrored_calculator_buttons_follow_the_drawing() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.calculator = Some(vix::calculator_tool::Calculator::new());
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    app.settings.mirror_layout = "off".into();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let plain = app.layout.calculator_rects[1];
+    app.settings.mirror_layout = "on".into();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let run = app.layout.calculator_rects[1];
+    assert!(run.x > plain.x, "Run moved: {plain:?} -> {run:?}");
+    let buf = term.backend().buffer();
+    assert_eq!(
+        buf[(run.x, run.y)].symbol(),
+        "[",
+        "rect starts on the button"
+    );
+}

@@ -8,6 +8,7 @@
 //! keeps its style when it moves; a wide character keeps its trailing cell.
 
 use ratatui::buffer::{Buffer, Cell};
+use ratatui::layout::Rect;
 use vix_locale_model::visual_order;
 
 /// Whether the pass should run: `bidi = "on"`, or `"auto"` with a
@@ -102,12 +103,16 @@ pub(super) fn reorder_buffer(buf: &mut Buffer) {
 /// becomes its distance from the right edge, so lines are right-aligned and tree
 /// indentation grows from the right (T564). Rows that contain a border glyph
 /// are left alone, as are rows that are blank. Cells keep their style.
-pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16) {
+pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16) -> Reflection {
     let area = buf.area;
     let (x0, x1) = (x0.max(area.left()), x1.min(area.right()));
     let (y0, y1) = (y0.max(area.top()), y1.min(area.bottom()));
+    let mut reflection = Reflection {
+        y0,
+        shifts: vec![0; usize::from(y1.saturating_sub(y0))],
+    };
     if x1 <= x0 {
-        return;
+        return reflection;
     }
     let width = usize::from(x1 - x0);
     for y in y0..y1 {
@@ -131,6 +136,8 @@ pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16)
         if new_start == start {
             continue;
         }
+        reflection.shifts[usize::from(y - y0)] =
+            i32::try_from(new_start).unwrap_or(0) - i32::try_from(start).unwrap_or(0);
         let mut blank = cells
             .iter()
             .find(|c| c.symbol() == " ")
@@ -142,6 +149,29 @@ pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16)
         for (i, cell) in out.into_iter().enumerate() {
             buf[(x0 + u16::try_from(i).unwrap_or(0), y)] = cell;
         }
+    }
+    reflection
+}
+
+/// How far [`reflect_rows`] moved each row's content, so a panel can move the
+/// click rectangles it recorded to follow the drawing (T564).
+pub(super) struct Reflection {
+    y0: u16,
+    shifts: Vec<i32>,
+}
+
+impl Reflection {
+    /// Move `rect` sideways by its row's shift; a rect on an untouched row stays.
+    pub(super) fn shift(&self, rect: &mut Rect) {
+        let Some(delta) = rect
+            .y
+            .checked_sub(self.y0)
+            .and_then(|i| self.shifts.get(usize::from(i)))
+        else {
+            return;
+        };
+        let x = i32::from(rect.x) + delta;
+        rect.x = u16::try_from(x.max(0)).unwrap_or(rect.x);
     }
 }
 
@@ -191,5 +221,16 @@ mod tests {
     fn enabled_follows_setting_and_locale() {
         assert!(enabled("on", "en") && !enabled("off", "ar"));
         assert!(enabled("auto", "ar") && !enabled("auto", "en"));
+    }
+
+    #[test]
+    fn a_reflection_moves_a_rect_with_its_row() {
+        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
+        buf.set_string(0, 0, "ab", ratatui::style::Style::default());
+        let reflection = reflect_rows(&mut buf, 0, 10, 0, 1);
+        let mut r = Rect::new(0, 0, 2, 1);
+        reflection.shift(&mut r);
+        assert_eq!(r.x, 8, "the rect follows the text to the right edge");
+        assert_eq!(buf[(r.x, 0)].symbol(), "a");
     }
 }

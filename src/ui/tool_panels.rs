@@ -434,18 +434,20 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
         ),
     ]);
     frame.render_widget(Paragraph::new(buttons), rows[1]);
-    // Approximate button hit rects: split the buttons row in two halves.
-    let half = rows[1].width / 2;
+    // Button hit rects: the drawn " [ Run ] [ Insert ] " cells, so they can
+    // follow the row when a mirrored layout right-aligns it.
+    let run_w = u16::try_from(t!("ui.calculator_run").chars().count() + 5).unwrap_or(0);
+    let insert_w = u16::try_from(t!("ui.calculator_insert").chars().count() + 5).unwrap_or(0);
     app.layout.calculator_rects[1] = Rect {
-        x: rows[1].x,
+        x: rows[1].x + 1,
         y: rows[1].y,
-        width: half,
+        width: run_w.min(rows[1].width.saturating_sub(1)),
         height: 1,
     };
     app.layout.calculator_rects[2] = Rect {
-        x: rows[1].x + half,
+        x: rows[1].x + 1 + run_w,
         y: rows[1].y,
-        width: rows[1].width - half,
+        width: insert_w.min(rows[1].width.saturating_sub(1 + run_w)),
         height: 1,
     };
 
@@ -460,6 +462,24 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
         rows[3],
     );
+    mirror_calculator(app, frame, inner);
+}
+
+/// In a mirrored layout, right-align the calculator's rows and move its button
+/// rectangles with them (T564).
+fn mirror_calculator(app: &mut App, frame: &mut Frame, inner: Rect) {
+    if !super::layout_mirrored(app) {
+        return;
+    }
+    let reflection = super::bidi::reflect_rows(
+        frame.buffer_mut(),
+        inner.x,
+        inner.right(),
+        inner.y,
+        inner.bottom(),
+    );
+    reflection.shift(&mut app.layout.calculator_rects[1]);
+    reflection.shift(&mut app.layout.calculator_rects[2]);
 }
 
 pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
