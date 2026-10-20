@@ -36,10 +36,9 @@ right edge, submenus open to the left, and the dock toggles move to the left
 edge. In the explorer, the menu dropdowns, the messages dock and the bottom dock,
 text is right-aligned and tree indentation grows from the right. The status bar
 swaps its two halves, and the tab strip sits against the right edge (clicks follow
-the drawing). The yes/no, unsaved-changes, script-trust and paste-conflict dialogs
-right-align their text; dialogs with clickable fields or buttons (the info box,
-Find, Calculator, Pomodoro) reorder their text but stay left-aligned, because
-their clicks depend on columns.
+the drawing). The dialogs right-align their text too; the Find box and Calculator move
+their recorded button rectangles with the drawing, and the info box and
+Pomodoro dialog are centred, so clicks always land on what is drawn.
 
 ## Choosing a language
 

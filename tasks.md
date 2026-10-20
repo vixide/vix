@@ -6328,7 +6328,7 @@ as every other task.
   string T561 hit on the first attempt. Full local gate
   (`scripts/check`: fmt/build/clippy pedantic/full workspace test
   suite/headless examples/doc/check-docs) green.
-- [ ] **T564 — No bidi/RTL text support anywhere in the render path,
+- [x] **T564 — No bidi/RTL text support anywhere in the render path,
   affecting the `ar` (Arabic) locale.** `crates/vix-locale-model/src/
   lib.rs`'s `Locale` struct has no direction flag; nothing in
   `src/ui.rs`/`src/ui/*.rs` checks for RTL; confirmed no bidi support
@@ -6351,8 +6351,9 @@ as every other task.
   The menu bar, dropdowns and submenus mirror too, and the explorer and
   menu dropdown, messages and bottom-dock text is right-aligned, the
   status bar swaps its halves and the tab strip is right-aligned. Still open:
-  the dialogs with clickable fields or buttons (info box, Find, Calculator,
-  Pomodoro), whose clicks use columns; the keyboard-only dialogs are done.
+  nothing: dialogs are done too (**done 2026-10-20**) — the Find box and
+  Calculator move their recorded button rectangles with the drawing
+  (`Reflection::shift`), the info box and Pomodoro dialog are already centred.
 - [x] **T565 — Fixed-plural-form translations are grammatically wrong
   for Arabic, Russian, and Polish across most counted-value strings.**
   `rust-i18n` 4.2.1 (confirmed via its vendored source) has no

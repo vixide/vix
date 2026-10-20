@@ -314,6 +314,36 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
         Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
         rows[rows.len() - 1],
     );
+    mirror_search_box(app, frame, inner);
+}
+
+/// In a mirrored layout, right-align the find box's rows and move the recorded
+/// button rectangles with them so clicks still land on what is drawn (T564).
+fn mirror_search_box(app: &mut App, frame: &mut Frame, inner: Rect) {
+    if !super::layout_mirrored(app) {
+        return;
+    }
+    let reflection = super::bidi::reflect_rows(
+        frame.buffer_mut(),
+        inner.x,
+        inner.right(),
+        inner.y,
+        inner.bottom(),
+    );
+    let l = &mut app.layout;
+    for r in [
+        &mut l.search_case,
+        &mut l.search_smartcase,
+        &mut l.search_word,
+        &mut l.search_regex,
+        &mut l.search_replace_toggle,
+        &mut l.search_scope,
+        &mut l.search_once,
+        &mut l.search_ask,
+        &mut l.search_all,
+    ] {
+        reflection.shift(r);
+    }
 }
 
 /// Draw the find box's option row: the match toggles (Case / Smart case / Word /
