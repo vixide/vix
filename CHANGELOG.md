@@ -695,6 +695,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Minimal release workflow** can be run by hand (`workflow_dispatch`) as a dry run: it
+  builds and packages the archives but attaches nothing unless run for a tag.
+
 - **YAML library** (security): the deprecated `serde_yaml` (and its unmaintained
   `unsafe-libyaml`) is replaced by the maintained drop-in `serde_norway`, so the
   `RUSTSEC-2024-0449` ignore in `deny.toml` is gone.
