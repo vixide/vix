@@ -695,6 +695,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **YAML library** (security): the deprecated `serde_yaml` (and its unmaintained
+  `unsafe-libyaml`) is replaced by the maintained drop-in `serde_norway`, so the
+  `RUSTSEC-2024-0449` ignore in `deny.toml` is gone.
+
+
 - **Bool fields on `Settings` and `App` are grouped internally**
   (improvement plan T149, now fully done — 7/7 structs): the 32 on/off
   preferences on the `vix-settings` `Settings` struct now live in 11

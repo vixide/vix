@@ -132,8 +132,8 @@ fn locale_catalog_keys(root: &Path) -> BTreeSet<String> {
         }
         let yaml =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let map: std::collections::BTreeMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&yaml)
+        let map: std::collections::BTreeMap<String, serde_norway::Value> =
+            serde_norway::from_str(&yaml)
                 .unwrap_or_else(|e| panic!("{} does not parse as YAML: {e}", path.display()));
         keys.extend(map.into_keys());
     }

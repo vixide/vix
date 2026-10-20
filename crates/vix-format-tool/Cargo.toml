@@ -9,5 +9,5 @@ description = "Reformat the selection (or buffer) within one data format: pretty
 
 [dependencies]
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 toml = { workspace = true }

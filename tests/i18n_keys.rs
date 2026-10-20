@@ -84,7 +84,7 @@ fn keys_in(text: &str) -> BTreeSet<String> {
 /// own merge silently lets one win, which would hide a real mistake (a key
 /// copy-pasted into the wrong namespace file, or moved without deleting its
 /// old copy).
-fn load_catalog(root: &Path) -> BTreeMap<String, serde_yaml::Value> {
+fn load_catalog(root: &Path) -> BTreeMap<String, serde_norway::Value> {
     let dir = root.join("crates/vix-i18n/locales");
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
         .expect("locales/ directory")
@@ -98,7 +98,7 @@ fn load_catalog(root: &Path) -> BTreeMap<String, serde_yaml::Value> {
     for path in paths {
         let yaml = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-        let map: BTreeMap<String, serde_yaml::Value> = serde_yaml::from_str(&yaml)
+        let map: BTreeMap<String, serde_norway::Value> = serde_norway::from_str(&yaml)
             .unwrap_or_else(|e| panic!("{} does not parse as YAML: {e}", path.display()));
         for (key, value) in map {
             if key == "_version" {
@@ -233,8 +233,8 @@ fn calls_in(text: &str) -> Vec<(String, BTreeSet<String>)> {
 }
 
 /// The `%{name}` placeholders in a catalog entry's English text.
-fn placeholders(entry: &serde_yaml::Value) -> BTreeSet<String> {
-    let Some(text) = entry.get("en").and_then(serde_yaml::Value::as_str) else {
+fn placeholders(entry: &serde_norway::Value) -> BTreeSet<String> {
+    let Some(text) = entry.get("en").and_then(serde_norway::Value::as_str) else {
         return BTreeSet::new();
     };
     let mut names = BTreeSet::new();
@@ -341,18 +341,18 @@ const LOCALE_FLOORS: &[(&str, usize)] = &[
 /// `_version`; a malformed non-mapping entry is
 /// `catalog_entries_are_maps_of_locale_to_string`'s job to report, so it's
 /// just dropped here rather than double-reported).
-fn catalog_entries(root: &Path) -> BTreeMap<String, serde_yaml::Mapping> {
+fn catalog_entries(root: &Path) -> BTreeMap<String, serde_norway::Mapping> {
     load_catalog(root)
         .into_iter()
         .filter_map(|(k, v)| match v {
-            serde_yaml::Value::Mapping(m) => Some((k, m)),
+            serde_norway::Value::Mapping(m) => Some((k, m)),
             _ => None,
         })
         .collect()
 }
 
 /// How many `entries` carry each locale code seen anywhere in the catalog.
-fn locale_coverage(entries: &BTreeMap<String, serde_yaml::Mapping>) -> BTreeMap<String, usize> {
+fn locale_coverage(entries: &BTreeMap<String, serde_norway::Mapping>) -> BTreeMap<String, usize> {
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for entry in entries.values() {
         for key in entry.keys() {
@@ -428,8 +428,8 @@ fn catalog_entries_are_maps_of_locale_to_string() {
     let mut bad = Vec::new();
     for (key, value) in load_catalog(&root) {
         match value {
-            serde_yaml::Value::Mapping(m) => {
-                if !m.contains_key(serde_yaml::Value::String("en".into())) {
+            serde_norway::Value::Mapping(m) => {
+                if !m.contains_key(serde_norway::Value::String("en".into())) {
                     bad.push(format!("{key}: no `en` fallback"));
                 }
             }
@@ -523,7 +523,7 @@ fn counted_messages_in_ar_ru_pl_are_count_invariant() {
             .get(*key)
             .unwrap_or_else(|| panic!("counted key `{key}` is not in the catalog"));
         for locale in ["ar", "ru", "pl"] {
-            let Some(text) = entry.get(locale).and_then(serde_yaml::Value::as_str) else {
+            let Some(text) = entry.get(locale).and_then(serde_norway::Value::as_str) else {
                 bad.push(format!("{key} has no {locale} text"));
                 continue;
             };

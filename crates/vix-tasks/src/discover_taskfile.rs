@@ -4,17 +4,17 @@ use crate::task::{NamedTask, TaskSource};
 
 /// Parse the top-level `tasks:` mapping of a go-task `Taskfile.yml`: each
 /// key under it becomes a task name, command `task NAME`, prefixed `task:`.
-/// Uses `serde_yaml` (already a workspace dependency) rather than a
+/// Uses `serde_norway` (already a workspace dependency) rather than a
 /// hand-rolled scanner, so this handles any valid YAML shape for the
 /// `tasks` mapping (flow or block style, quoted or unquoted keys). Malformed
 /// YAML, a missing `tasks` key, or a non-mapping `tasks` value all return an
 /// empty vector.
 #[must_use]
 pub fn discover_taskfile_tasks(taskfile_yml: &str) -> Vec<NamedTask> {
-    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(taskfile_yml) else {
+    let Ok(value) = serde_norway::from_str::<serde_norway::Value>(taskfile_yml) else {
         return Vec::new();
     };
-    let Some(tasks) = value.get("tasks").and_then(serde_yaml::Value::as_mapping) else {
+    let Some(tasks) = value.get("tasks").and_then(serde_norway::Value::as_mapping) else {
         return Vec::new();
     };
     tasks
