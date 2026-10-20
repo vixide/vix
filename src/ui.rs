@@ -285,8 +285,47 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
 
     draw_overlays(app, frame, area, rows[0]);
+    right_to_left_passes(app, frame);
+}
+
+/// The end-of-frame right-to-left passes: reorder bidirectional text, then
+/// right-align the mirrored surfaces (T564).
+fn right_to_left_passes(app: &App, frame: &mut Frame) {
     if bidi::enabled(&app.settings.bidi, &rust_i18n::locale()) {
         bidi::reorder_buffer(frame.buffer_mut());
+    }
+    if layout_mirrored(app) {
+        reflect_panels(app, frame.buffer_mut());
+    }
+}
+
+/// Right-align the text of the surfaces whose mouse handling is row-based (the
+/// explorer and the menu dropdowns), leaving borders and scroll columns in
+/// place. Panels whose clicks depend on columns stay left-aligned (T564).
+fn reflect_panels(app: &App, buf: &mut ratatui::buffer::Buffer) {
+    use crate::app::Visible;
+    let ex = app.layout.explorer;
+    if app.visible.contains(Visible::EXPLORER) && ex.width > 4 {
+        // Inside the border, short of the scroll bar column.
+        bidi::reflect_rows(
+            buf,
+            ex.x + 1,
+            ex.right().saturating_sub(2),
+            ex.y + 1,
+            ex.bottom(),
+        );
+    }
+    if app.menu.open.is_some() {
+        let mut rects = vec![app.layout.menu_dropdown];
+        if app.menu.submenu_open() {
+            rects.push(app.layout.submenu_dropdown);
+        }
+        if app.menu.subsubmenu_open() {
+            rects.push(app.layout.subsubmenu_dropdown);
+        }
+        for d in rects.into_iter().filter(|d| d.width > 2 && d.height > 2) {
+            bidi::reflect_rows(buf, d.x + 1, d.right() - 1, d.y + 1, d.bottom() - 1);
+        }
     }
 }
 
