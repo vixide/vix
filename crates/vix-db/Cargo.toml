@@ -8,7 +8,7 @@ repository.workspace = true
 description = "DB workbench: connection management, schema browsing, and SQL queries."
 
 [dependencies]
-vix-settings = { path = "../vix-settings", version = "1.6.0" }
+vix-settings = { path = "../vix-settings", version = "1.7.0" }
 confy = { workspace = true }
 crossterm = { workspace = true }
 futures-util = { workspace = true }
@@ -19,11 +19,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
-vix-clipboard = { path = "../vix-clipboard", version = "1.6.0" }
-vix-fileops = { path = "../vix-fileops", version = "1.6.0" }
-vix-i18n = { path = "../vix-i18n", version = "1.6.0" }
-vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
-vix-theme = { path = "../vix-theme", version = "1.6.0" }
+vix-clipboard = { path = "../vix-clipboard", version = "1.7.0" }
+vix-fileops = { path = "../vix-fileops", version = "1.7.0" }
+vix-i18n = { path = "../vix-i18n", version = "1.7.0" }
+vix-list-state = { path = "../vix-list-state", version = "1.7.0" }
+vix-theme = { path = "../vix-theme", version = "1.7.0" }
 
 # macOS and Windows: store DB passwords through the native credential store
 # (Security framework / Credential Manager, T548) rather than shelling out to

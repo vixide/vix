@@ -10,4 +10,4 @@ description = "Rhai-based user scripting: load, sandbox, and run scripts against
 [dependencies]
 jiff = { workspace = true }
 rhai = { workspace = true }
-vix-macros = { path = "../vix-macros", version = "1.6.0" }
+vix-macros = { path = "../vix-macros", version = "1.7.0" }

@@ -8,4 +8,4 @@ repository.workspace = true
 description = "Parse Git merge-conflict markers, resolve the conflict under the cursor, and list every conflict in a buffer for the Conflict overlay"
 
 [dependencies]
-vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
+vix-list-state = { path = "../vix-list-state", version = "1.7.0" }
