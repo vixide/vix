@@ -6351,7 +6351,8 @@ as every other task.
   The menu bar, dropdowns and submenus mirror too, and the explorer and
   menu dropdown, messages and bottom-dock text is right-aligned, the
   status bar swaps its halves and the tab strip is right-aligned. Still open:
-  dialogs, whose button clicks use columns and need per-dialog work.
+  the dialogs with clickable fields or buttons (info box, Find, Calculator,
+  Pomodoro), whose clicks use columns; the keyboard-only dialogs are done.
 - [x] **T565 — Fixed-plural-form translations are grammatically wrong
   for Arabic, Russian, and Polish across most counted-value strings.**
   `rust-i18n` 4.2.1 (confirmed via its vendored source) has no
