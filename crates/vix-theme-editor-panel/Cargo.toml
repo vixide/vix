@@ -8,5 +8,5 @@ repository.workspace = true
 description = "List a theme's color slots and edit each one, live-previewed on the real UI as you go, then save the result as a new custom theme."
 
 [dependencies]
-vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
-vix-theme-model = { path = "../vix-theme-model", version = "1.6.0" }
+vix-list-state = { path = "../vix-list-state", version = "1.7.0" }
+vix-theme-model = { path = "../vix-theme-model", version = "1.7.0" }

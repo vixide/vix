@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Org-capture: template-driven capture with placeholders and targets."
 
 [dependencies]
-vix-settings = { path = "../vix-settings", version = "1.6.0" }
+vix-settings = { path = "../vix-settings", version = "1.7.0" }
 serde = { workspace = true }
 
 [dev-dependencies]

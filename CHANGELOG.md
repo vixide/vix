@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-20
+
 ### Added
 
 - **Chaos monkey `--rtl 1`** (T564): runs the random-input driver in Arabic with

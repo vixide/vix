@@ -13,7 +13,7 @@ default = ["process"]
 process = []
 
 [dependencies]
-vix-settings = { path = "../vix-settings", version = "1.6.0" }
+vix-settings = { path = "../vix-settings", version = "1.7.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-vix-lsp-core = { path = "../vix-lsp-core", version = "1.6.0" }
+vix-lsp-core = { path = "../vix-lsp-core", version = "1.7.0" }
