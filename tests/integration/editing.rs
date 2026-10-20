@@ -4245,3 +4245,33 @@ fn mirrored_status_bar_and_tabs_follow_the_drawing() {
     app.on_mouse(click(x0, tabs_y));
     assert_eq!(app.editor.active, 0, "clicking the first tab activates it");
 }
+
+/// T564: a keyboard-only dialog's text is right-aligned when mirrored.
+#[test]
+fn mirrored_confirm_dialog_right_aligns_its_text() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.confirm = Some(vix::app::Confirm {
+        message: "Delete everything?".into(),
+        paths: Vec::new(),
+        kind: vix::app::ConfirmKind::Delete,
+    });
+    let mut term = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    let col = |app: &mut App, term: &mut Terminal<TestBackend>| -> usize {
+        term.draw(|f| vix::ui::draw(app, f)).unwrap();
+        let buf = term.backend().buffer();
+        (0..buf.area.height)
+            .find_map(|y| {
+                let row: String = (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect();
+                row.find("Delete everything?")
+            })
+            .expect("dialog text is drawn")
+    };
+    app.settings.mirror_layout = "off".into();
+    let left = col(&mut app, &mut term);
+    app.settings.mirror_layout = "on".into();
+    let right = col(&mut app, &mut term);
+    assert!(right > left, "text moved right: {left} -> {right}");
+}

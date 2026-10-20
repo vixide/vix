@@ -12,6 +12,20 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Right-align a keyboard-only dialog's text when the layout is mirrored. These
+/// dialogs have no column-based clicks, so shifting the drawn text is safe (T564).
+fn right_align(app: &App, frame: &mut Frame, inner: Rect) {
+    if super::layout_mirrored(app) {
+        super::bidi::reflect_rows(
+            frame.buffer_mut(),
+            inner.x,
+            inner.right(),
+            inner.y,
+            inner.bottom(),
+        );
+    }
+}
+
 pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.confirm.as_ref() else {
         return;
@@ -33,6 +47,7 @@ pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
+    right_align(app, frame, inner);
 }
 
 /// The "trust this workspace's scripts?" prompt (T132).
@@ -69,6 +84,7 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         theme::dim(),
     ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+    right_align(app, frame, inner);
 }
 
 pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
@@ -208,6 +224,7 @@ pub(super) fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
         Line::from(Span::styled(choices.to_string(), theme::dim())),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
+    right_align(app, frame, inner);
 }
 
 pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
@@ -240,6 +257,7 @@ pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(lines), inner);
+    right_align(app, frame, inner);
 }
 
 pub(super) fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
