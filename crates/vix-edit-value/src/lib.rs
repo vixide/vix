@@ -5,9 +5,9 @@
 //! fold/unfold containers, navigate, and edit scalar values — code folding, but
 //! for structured data. Saving serializes the tree back to JSON or YAML.
 //!
-//! JSON and YAML share one model: both parse (via `serde_yaml`, which also reads
+//! JSON and YAML share one model: both parse (via `serde_norway`, which also reads
 //! JSON) into `Val` (private), and only the serializer differs (a key-order-preserving
-//! JSON pretty-printer, or `serde_yaml` for YAML). The [`Format`] chosen at open
+//! JSON pretty-printer, or `serde_norway` for YAML). The [`Format`] chosen at open
 //! time decides the title and the serializer.
 //!
 //! Like the other editors, this module owns the data, cursor, fold state, and an
@@ -122,7 +122,8 @@ impl Tree {
     /// valid JSON or YAML" with no indication of what was actually wrong or
     /// where).
     pub fn from_text(text: &str, format: Format) -> Result<Self, String> {
-        let parsed: serde_yaml::Value = serde_yaml::from_str(text).map_err(|e| e.to_string())?;
+        let parsed: serde_norway::Value =
+            serde_norway::from_str(text).map_err(|e| e.to_string())?;
         let mut tree = Tree {
             root: from_yaml(&parsed),
             format,
@@ -224,7 +225,7 @@ impl Tree {
                 out.push('\n');
                 out
             }
-            Format::Yaml => serde_yaml::to_string(&to_yaml(&self.root)).unwrap_or_default(),
+            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)).unwrap_or_default(),
         }
     }
 
@@ -506,9 +507,9 @@ fn parse_scalar(s: &str) -> Val {
     }
 }
 
-/// Convert a parsed `serde_yaml` value into [`Val`] (preserving map order).
-fn from_yaml(v: &serde_yaml::Value) -> Val {
-    use serde_yaml::Value as Y;
+/// Convert a parsed `serde_norway` value into [`Val`] (preserving map order).
+fn from_yaml(v: &serde_norway::Value) -> Val {
+    use serde_norway::Value as Y;
     match v {
         Y::Null => Val::Null,
         Y::Bool(b) => Val::Bool(*b),
@@ -527,8 +528,8 @@ fn from_yaml(v: &serde_yaml::Value) -> Val {
 }
 
 /// Render a mapping key as a string.
-fn yaml_key(k: &serde_yaml::Value) -> String {
-    use serde_yaml::Value as Y;
+fn yaml_key(k: &serde_norway::Value) -> String {
+    use serde_norway::Value as Y;
     match k {
         Y::String(s) => s.clone(),
         Y::Bool(b) => b.to_string(),
@@ -538,9 +539,9 @@ fn yaml_key(k: &serde_yaml::Value) -> String {
     }
 }
 
-/// Convert [`Val`] into a `serde_yaml` value for YAML serialization.
-fn to_yaml(val: &Val) -> serde_yaml::Value {
-    use serde_yaml::Value as Y;
+/// Convert [`Val`] into a `serde_norway` value for YAML serialization.
+fn to_yaml(val: &Val) -> serde_norway::Value {
+    use serde_norway::Value as Y;
     match val {
         Val::Null => Y::Null,
         Val::Bool(b) => Y::Bool(*b),
@@ -552,7 +553,7 @@ fn to_yaml(val: &Val) -> serde_yaml::Value {
         Val::Str(s) => Y::String(s.clone()),
         Val::Arr { items, .. } => Y::Sequence(items.iter().map(to_yaml).collect()),
         Val::Obj { entries, .. } => {
-            let mut m = serde_yaml::Mapping::new();
+            let mut m = serde_norway::Mapping::new();
             for (k, v) in entries {
                 m.insert(Y::String(k.clone()), to_yaml(v));
             }

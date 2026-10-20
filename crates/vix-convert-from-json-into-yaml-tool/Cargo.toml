@@ -9,7 +9,7 @@ description = "Convert: JSON into YAML."
 
 [dependencies]
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

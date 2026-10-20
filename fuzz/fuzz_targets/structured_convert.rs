@@ -11,7 +11,7 @@
 //! as `1.1533333333353333e30` — the last digit differs. That's YAML's
 //! decimal-text number formatting losing a `f64`'s exact bit pattern, an
 //! inherent property of any text-based numeric round trip, not a Vix bug —
-//! `serde_yaml` chose to serialize the value that way, not this crate's own
+//! `serde_norway` chose to serialize the value that way, not this crate's own
 //! logic. [`values_equivalent`] tolerates a tiny relative difference between
 //! numbers and requires exact equality for everything else (so a string
 //! becoming a number, or a key going missing, still fails).

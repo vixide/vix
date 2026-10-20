@@ -12,12 +12,12 @@ or the command palette. The logic lives in the `edit_value` module; the host
 
 - Both JSON and YAML parse into one model ([`Val`]): scalars (null, bool, number,
   string), arrays, and objects (object key order is preserved). Parsing uses
-  `serde_yaml`, which also reads JSON.
+  `serde_norway`, which also reads JSON.
 - A flattened view of the tree drives display; collapsed containers omit their
   descendants. A cursor selects one visible row. Numbers keep their textual form
   so they round-trip unchanged.
 - Saving serializes back to the chosen [`Format`]: a key-order-preserving JSON
-  pretty-printer, or `serde_yaml` for YAML. Scalar edits are undoable.
+  pretty-printer, or `serde_norway` for YAML. Scalar edits are undoable.
 
 ## Keys
 

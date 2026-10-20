@@ -68,7 +68,7 @@ md-5 = "0.11"
 crc32fast = "1"
 uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
-serde_yaml = "0.9.34"
+serde_norway = "0.9"
 markdown = "1.0.0"
 nix = { version = "0.31", features = ["signal"] }
 qrcode = { version = "0.14", default-features = false }
@@ -499,7 +499,7 @@ md-5 = { workspace = true }
 crc32fast = { workspace = true }
 uuid = { workspace = true }
 include_dir = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 markdown = { workspace = true }
 nix = { workspace = true }
 # QR code generation (Tools → QR Code). default-features = false drops the

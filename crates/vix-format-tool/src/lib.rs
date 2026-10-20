@@ -33,8 +33,8 @@ pub fn json_minify(input: &str) -> Result<String, String> {
 /// # Errors
 /// Returns an error when the input is not valid YAML.
 pub fn yaml_format(input: &str) -> Result<String, String> {
-    let v: serde_yaml::Value = serde_yaml::from_str(input).map_err(|e| e.to_string())?;
-    serde_yaml::to_string(&v).map_err(|e| e.to_string())
+    let v: serde_norway::Value = serde_norway::from_str(input).map_err(|e| e.to_string())?;
+    serde_norway::to_string(&v).map_err(|e| e.to_string())
 }
 
 /// Canonicalize TOML (re-emit pretty-printed).
