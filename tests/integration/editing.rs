@@ -4208,3 +4208,40 @@ fn mirrored_explorer_right_aligns_entries() {
     let right = last_text_col(&mut app, &mut term);
     assert!(right > left + 5, "entry moved right: {left} -> {right}");
 }
+
+/// T564: a mirrored layout swaps the status bar's segments (cursor position at
+/// the left edge) and right-aligns the tab strip, and clicking a tab still
+/// activates it.
+#[test]
+fn mirrored_status_bar_and_tabs_follow_the_drawing() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.editor.new_tab_with_content("one");
+    app.editor.new_tab_with_content("two");
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    let find = |term: &Terminal<TestBackend>, y: u16, needle: &str| -> Option<usize> {
+        let buf = term.backend().buffer();
+        let row: String = (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().to_string())
+            .collect();
+        row.find(needle)
+    };
+    let status_y = 29;
+    app.settings.mirror_layout = "off".into();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let ln_plain = find(&term, status_y, "Ln ").expect("status shows Ln");
+    app.settings.mirror_layout = "on".into();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let ln_mirrored = find(&term, status_y, "Ln ").expect("status shows Ln");
+    assert!(
+        ln_mirrored + 40 < ln_plain,
+        "Ln moved left: {ln_plain} -> {ln_mirrored}"
+    );
+    // Click the first tab's title where it was drawn.
+    let tabs_y = app.layout.tabs.y;
+    let x0 = vix::ui::tabs_origin(&app, app.layout.tabs);
+    assert!(x0 > 40, "tab strip is right-aligned (origin {x0})");
+    app.editor.active = 2;
+    app.on_mouse(click(x0, tabs_y));
+    assert_eq!(app.editor.active, 0, "clicking the first tab activates it");
+}

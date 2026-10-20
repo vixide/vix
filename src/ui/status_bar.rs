@@ -64,22 +64,39 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(u16::try_from(right.chars().count()).unwrap_or(u16::MAX) + 1),
-        ])
-        .split(inner);
-
-    frame.render_widget(
-        Paragraph::new(left).style(bg).alignment(Alignment::Left),
-        cols[0],
-    );
-    frame.render_widget(
-        Paragraph::new(right).style(bg).alignment(Alignment::Right),
-        cols[1],
-    );
+    // Mirrored layouts swap the two segments: the cursor/git segment sits at
+    // the left edge and the status text hugs the right edge (T564).
+    let mirrored = super::layout_mirrored(app);
+    let right_w = Constraint::Length(u16::try_from(right.chars().count()).unwrap_or(u16::MAX) + 1);
+    let right_col = if mirrored {
+        let c = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([right_w, Constraint::Min(1)])
+            .split(inner);
+        frame.render_widget(
+            Paragraph::new(left).style(bg).alignment(Alignment::Right),
+            c[1],
+        );
+        frame.render_widget(
+            Paragraph::new(right).style(bg).alignment(Alignment::Left),
+            c[0],
+        );
+        c[0]
+    } else {
+        let c = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), right_w])
+            .split(inner);
+        frame.render_widget(
+            Paragraph::new(left).style(bg).alignment(Alignment::Left),
+            c[0],
+        );
+        frame.render_widget(
+            Paragraph::new(right).style(bg).alignment(Alignment::Right),
+            c[1],
+        );
+        c[1]
+    };
 
     // Record the git/branch segment's rectangle (the leftmost part of the
     // right-aligned right segment, after its 1-cell padding) so a click on the
@@ -87,9 +104,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let git_w = u16::try_from(git.chars().count()).unwrap_or(u16::MAX);
     app.layout.git_status_bar = if git_w > 0 {
         Rect {
-            x: cols[1].x + 1,
-            y: cols[1].y,
-            width: git_w.min(cols[1].width),
+            x: if mirrored {
+                right_col.x
+            } else {
+                right_col.x + 1
+            },
+            y: right_col.y,
+            width: git_w.min(right_col.width),
             height: 1,
         }
     } else {

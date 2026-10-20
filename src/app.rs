@@ -8875,7 +8875,7 @@ impl App {
     }
 
     fn tab_click(&mut self, col: u16) {
-        let mut x = self.layout.tabs.x + 1;
+        let mut x = crate::ui::tabs_origin(self, self.layout.tabs);
         for (i, tab) in self.editor.tabs.iter().enumerate() {
             let w = u16::try_from(tab.title().chars().count()).unwrap_or(u16::MAX);
             if col >= x && col < x + w {
