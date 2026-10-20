@@ -47,6 +47,14 @@ jobs:
       - name: build the driver
         run: cargo build --release --example chaos_monkey
       # No network namespace access for the app, as in the test job (T573).
+      # The same run with the Arabic UI, bidi reordering and mirrored layout forced on.
+      - name: run (right-to-left)
+        env:
+          SEED: ${{ inputs.seed || github.run_id }}
+          ITERATIONS: ${{ inputs.iterations || '500' }}
+          EVENTS: ${{ inputs.events || '600' }}
+        run: |
+          sudo unshare -n -- sh -c "ip link set lo up && exec sudo -u $USER env PATH=$PATH HOME=$HOME target/release/examples/chaos_monkey --seed $SEED --iterations $ITERATIONS --events $EVENTS --rtl 1"
       - name: run
         env:
           SEED: ${{ inputs.seed || github.run_id }}

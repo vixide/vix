@@ -14,7 +14,8 @@
 //! Options: `--seed N` (first iteration's seed; default from the clock, always
 //! printed), `--iterations N` (default 50), `--events N` per iteration (default
 //! 300), `--timeout SECS` per iteration (default 20), `--last N` events kept for
-//! the report (default 40). Iteration `i` uses seed `seed + i`, so the seed
+//! the report (default 40), `--rtl 1` (Arabic UI with bidi reordering and the mirrored
+//! layout forced on). Iteration `i` uses seed `seed + i`, so the seed
 //! printed for a failure replays it with `--iterations 1`.
 //!
 //! The run re-executes itself in a sandbox: an empty `PATH` (so no random
@@ -31,6 +32,7 @@ use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -74,9 +76,10 @@ fn parse_options() -> Options {
             ("--events", Some(v)) => o.events = usize::try_from(v).unwrap_or(300),
             ("--timeout", Some(v)) => o.timeout = Duration::from_secs(v),
             ("--last", Some(v)) => o.last = usize::try_from(v).unwrap_or(40),
+            ("--rtl", Some(v)) => RTL.store(v != 0, Ordering::Relaxed),
             _ => {
                 eprintln!(
-                    "usage: chaos_monkey [--seed N] [--iterations N] [--events N] [--timeout SECS] [--last N]"
+                    "usage: chaos_monkey [--seed N] [--iterations N] [--events N] [--timeout SECS] [--last N] [--rtl 1]"
                 );
                 std::process::exit(64);
             }
@@ -260,9 +263,18 @@ fn make_workspace(root: &Path) {
     }
 }
 
+/// `--rtl 1`: run in Arabic with the bidi pass and mirrored layout forced on.
+static RTL: AtomicBool = AtomicBool::new(false);
+
 fn new_app(root: &Path, session: &Path) -> App {
-    let mut app =
-        App::new(root.to_path_buf(), Settings::default()).with_session_path(session.to_path_buf());
+    let mut settings = Settings::default();
+    if RTL.load(Ordering::Relaxed) {
+        settings.locale = "ar".into();
+        settings.bidi = "on".into();
+        settings.mirror_layout = "on".into();
+        rust_i18n::set_locale("ar");
+    }
+    let mut app = App::new(root.to_path_buf(), settings).with_session_path(session.to_path_buf());
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app.open_initial(&root.join("notes.txt"));
     app.open_initial(&root.join("main.rs"));

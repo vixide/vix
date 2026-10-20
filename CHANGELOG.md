@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Chaos monkey `--rtl 1`** (T564): runs the random-input driver in Arabic with
+  bidi reordering and the mirrored layout forced on; the nightly chaos workflow
+  runs it as a second pass.
+
 - **Spawn-site guard** (security): `tests/spawn_sites.rs` fails the build when a
   source file outside a documented allowlist can start a child process, so the
   minimal build's "starts no other program" property cannot regress unnoticed.
