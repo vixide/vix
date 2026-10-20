@@ -183,6 +183,15 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
             .style(theme::dim())
             .wrap(Wrap { trim: true });
         frame.render_widget(hint, inner);
+        if super::layout_mirrored(app) {
+            super::bidi::reflect_rows(
+                frame.buffer_mut(),
+                inner.x,
+                inner.right(),
+                inner.y,
+                inner.bottom(),
+            );
+        }
         return;
     }
 
@@ -228,6 +237,17 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
+    // Mirrored layouts right-align each message, so the close "x" lands on the
+    // dock's right edge where `messages_mouse` hits it (T564).
+    if super::layout_mirrored(app) {
+        super::bidi::reflect_rows(
+            frame.buffer_mut(),
+            list_area.x,
+            list_area.right(),
+            list_area.y,
+            list_area.bottom(),
+        );
+    }
     if vbar {
         let sb = Rect {
             x: inner.x + inner.width - 1,

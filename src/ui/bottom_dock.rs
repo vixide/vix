@@ -71,6 +71,15 @@ pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
             .collect()
     };
     frame.render_widget(Paragraph::new(lines), text_area);
+    if super::layout_mirrored(app) {
+        super::bidi::reflect_rows(
+            frame.buffer_mut(),
+            text_area.x,
+            text_area.right(),
+            text_area.y,
+            text_area.bottom(),
+        );
+    }
 
     if vbar {
         let sb = Rect {

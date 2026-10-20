@@ -73,6 +73,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use search::{draw_palette, draw_prompt, draw_search, draw_workspace_search};
 use status_bar::draw_status_bar;
+pub use tabs::tabs_origin;
 use tabs::{center_split, draw_breadcrumb, draw_tabs};
 #[cfg(feature = "terminal")]
 use terminal::draw_terminal;

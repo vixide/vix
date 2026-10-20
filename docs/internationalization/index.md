@@ -33,10 +33,11 @@ drawer and other docks to the left, and the editor's scroll bar to the left.
 Mouse dragging to resize a dock follows the mirrored edges. The menu bar
 mirrors too: the first menu is rightmost, dropdowns line up with their title's
 right edge, submenus open to the left, and the dock toggles move to the left
-edge. In the explorer and the menu dropdowns, text is right-aligned and tree
-indentation grows from the right. Other panels (messages, dialogs, tabs, the status
-bar) reorder their text but stay left-aligned, because their mouse handling depends
-on columns.
+edge. In the explorer, the menu dropdowns, the messages dock and the bottom dock,
+text is right-aligned and tree indentation grows from the right. The status bar
+swaps its two halves, and the tab strip sits against the right edge (clicks follow
+the drawing). Dialogs reorder their text but stay left-aligned, because their
+button clicks depend on columns.
 
 ## Choosing a language
 

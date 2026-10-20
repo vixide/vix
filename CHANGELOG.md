@@ -24,7 +24,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   setting (same values) swaps the docks and the editor's scroll bar to the
   opposite sides, including dock-resize dragging, and mirrors the menu bar (first
   menu rightmost, dropdowns and submenus open leftwards, dock toggles at the left),
-  and right-aligns the explorer and menu dropdown text (indentation grows from the right).
+  and right-aligns the explorer, menu dropdown, messages and bottom-dock text (indentation
+  grows from the right), swaps the status bar's halves and right-aligns the tab strip.
 
 - **Large files ask, binary files open in the byte editor** (T571): a file over
   `large_file_mb` (default 50, `0` never asks) now asks "open it anyway?" instead of

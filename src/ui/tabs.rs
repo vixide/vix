@@ -39,7 +39,35 @@ pub(super) fn draw_breadcrumb(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(line).style(theme::base()), area);
 }
 
+/// The x of the first tab's title: one cell in from the left edge, or, in a
+/// mirrored layout, where the tab strip's right-aligned block begins (T564).
+pub fn tabs_origin(app: &App, area: Rect) -> u16 {
+    if !super::layout_mirrored(app) {
+        return area.x + 1;
+    }
+    let n = app.editor.tabs.len();
+    let titles: usize = app
+        .editor
+        .tabs
+        .iter()
+        .map(|t| t.title().chars().count())
+        .sum();
+    // Each title is padded by one cell either side; dividers sit between.
+    let total = titles + 3 * n.saturating_sub(1) + 2;
+    let total = u16::try_from(total).unwrap_or(u16::MAX).min(area.width);
+    area.right().saturating_sub(total) + 1
+}
+
 pub(super) fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
+    let strip = Rect {
+        x: tabs_origin(app, area) - 1,
+        width: area.right() - (tabs_origin(app, area) - 1),
+        ..area
+    };
+    frame.render_widget(
+        Paragraph::new("").style(theme::region_base(theme::Region::Editor)),
+        area,
+    );
     let titles: Vec<Line> = app
         .editor
         .tabs
@@ -65,5 +93,5 @@ pub(super) fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
             theme::region_base(theme::Region::Editor).add_modifier(Modifier::UNDERLINED),
         )
         .divider(Span::styled("│", theme::dim()));
-    frame.render_widget(tabs, area);
+    frame.render_widget(tabs, strip);
 }
