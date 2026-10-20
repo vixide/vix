@@ -15,7 +15,8 @@ The locale chooser lists these; the host applies a selection via
 the line has no strong right-to-left character). The App's `ui::bidi` pass applies
 it to each drawn frame under the `bidi` setting (`auto` | `on` | `off`, T564).
 The layout mirrors (docks and the editor scroll bar swap sides) under
-`mirror_layout`, as does the menu bar (titles, dropdowns, submenus, dock toggles).
+`mirror_layout`, as does the menu bar (titles, dropdowns, submenus, dock toggles). Text in the explorer and menu dropdowns is
+right-aligned too (`ui::bidi::reflect_rows`); panels with column-sensitive clicks are not.
 
 ## See also
 

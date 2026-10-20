@@ -6348,8 +6348,10 @@ as every other task.
   not something to start speculatively.
   **Partly done (2026-10-19):** text is reordered per UAX #9 (`bidi`
   setting) and docks plus the editor scroll bar mirror (`mirror_layout`).
-  The menu bar, dropdowns and submenus mirror too. Still open:
-  right-aligning text inside panels.
+  The menu bar, dropdowns and submenus mirror too, and the explorer and
+  menu dropdown text is right-aligned. Still open: right-aligning the other
+  panels (messages, dialogs, tabs, status bar), whose mouse handling uses
+  columns, so it needs per-panel work rather than a post-draw pass.
 - [x] **T565 — Fixed-plural-form translations are grammatically wrong
   for Arabic, Russian, and Polish across most counted-value strings.**
   `rust-i18n` 4.2.1 (confirmed via its vendored source) has no

@@ -4174,3 +4174,37 @@ fn mirrored_menu_bar_hit_tests_follow_the_drawing() {
         "toggles hug the left edge"
     );
 }
+
+/// T564: with a mirrored layout the explorer's entries are right-aligned, and
+/// clicking an entry still selects it (row-based hit-testing).
+#[test]
+fn mirrored_explorer_right_aligns_entries() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let dir = unique_dir("t564-explorer");
+    std::fs::write(dir.join("alpha.txt"), "x").unwrap();
+    let mut app = app_at(&dir);
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    let last_text_col = |app: &mut App, term: &mut Terminal<TestBackend>| -> u16 {
+        term.draw(|f| vix::ui::draw(app, f)).unwrap();
+        let ex = app.layout.explorer;
+        let buf = term.backend().buffer();
+        let row = (ex.y + 1..ex.bottom())
+            .find(|&y| {
+                (ex.x + 1..ex.right() - 1)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+                    .contains("alpha")
+            })
+            .expect("alpha.txt is listed");
+        (ex.x + 1..ex.right() - 1)
+            .rev()
+            .find(|&x| buf[(x, row)].symbol() != " ")
+            .unwrap()
+            - ex.x
+    };
+    app.settings.mirror_layout = "off".into();
+    let left = last_text_col(&mut app, &mut term);
+    app.settings.mirror_layout = "on".into();
+    let right = last_text_col(&mut app, &mut term);
+    assert!(right > left + 5, "entry moved right: {left} -> {right}");
+}
