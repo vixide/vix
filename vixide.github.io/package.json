@@ -20,7 +20,7 @@
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.0",
-    "vite": "^8.2.2"
+    "vite": "^8.3.3"
   },
   "dependencies": {
     "@lilydesignsystem/svelte-headless": "^0.1.0",
