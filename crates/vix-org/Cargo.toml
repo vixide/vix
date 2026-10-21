@@ -10,7 +10,7 @@ description = "Basic Org-mode operations: headline structure editing and lightwe
 [dependencies]
 bitflags = { workspace = true }
 regex = { workspace = true }
-vix-civil-date = { path = "../vix-civil-date", version = "1.7.0" }
+vix-civil-date = { path = "../vix-civil-date", version = "1.7.1" }
 
 [dev-dependencies]
 proptest = { workspace = true }

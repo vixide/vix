@@ -9,4 +9,4 @@ description = "The interactive Column View overlay (Org C-c C-x C-c): a live, wr
 
 [dependencies]
 crossterm = { workspace = true }
-vix-org = { path = "../vix-org", version = "1.7.0" }
+vix-org = { path = "../vix-org", version = "1.7.1" }
