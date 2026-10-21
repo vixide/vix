@@ -127,7 +127,8 @@ jobs:
   # crate's API with the latest version published on crates.io; the release
   # type is inferred from the version in Cargo.toml (an unchanged version is
   # treated as a patch release, so any break fails until the version is bumped).
-  # Needs cargo-semver-checks >= 0.47 for the current rustdoc JSON format.
+  # Needs cargo-semver-checks >= 0.51 for the current rustdoc JSON format
+  # (0.47 only reads up to v57; rustc 1.99 writes v61).
   semver:
     name: semver (cargo-semver-checks)
     runs-on: ubuntu-latest
