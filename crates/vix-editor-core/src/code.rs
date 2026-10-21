@@ -898,7 +898,7 @@ impl Code {
         let mut matches = cursor.matches(query, root_node, RopeProvider(text));
         let mut out = Vec::new();
         while let Some(m) = matches.next() {
-            for capture in m.captures {
+            for capture in m.captures() {
                 let name = names[capture.index as usize];
                 let is_prose = name == "comment"
                     || name.starts_with("comment.")
@@ -933,7 +933,7 @@ impl Code {
         let capture_names = query.capture_names();
 
         while let Some(m) = matches.next() {
-            for capture in m.captures {
+            for capture in m.captures() {
                 let name = capture_names[capture.index as usize];
                 if let Some(value) = ctx.theme.get(name) {
                     results.push((
