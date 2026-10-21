@@ -6822,6 +6822,479 @@ is actually requested.
 
 ---
 
+## Run M (new capabilities + code quality, researched 2026-10-21)
+
+Rationale and sequencing are in `plan.md` § "New capabilities and code
+quality". Three read-only research passes (language/editing and
+UX/workflow against Helix, Zed, Neovim 0.11/0.12, VS Code, Kakoune,
+Fresh, ttt, and Emacs; plus a measured code-quality audit) each checked
+their candidates against the code and dropped anything Vix already has.
+File:line references are as of `c9e2d3c`, so re-check them before
+starting. One branch per task, following the usual rules: spec first, `t!`
+in every locale, and a menu item, palette entry, and keybinding for each
+new action.
+
+### Code quality & correctness
+
+- [ ] **T595 — Org table time-sort panics on non-ASCII cells
+  (T559's bug class, a site it missed).** `parse_time_key`
+  (`crates/vix-org-table/src/lib.rs:871-872`) checks `s.len() >= 10`,
+  which counts bytes, then slices `&s[0..4]`. A cell such as `abcéxxxxxx`
+  puts a char boundary inside the slice and panics the main thread via
+  `SortKind::Time` (`:824-827`). Fix: use `s.get(0..4).is_some_and(..)`
+  (and the same for the other slices). Then turn on
+  `#![warn(clippy::string_slice)]` in vix-org, vix-org-table,
+  vix-org-capture, vix-roam, and vix-structural-replace. These crates hold
+  most of the 154 workspace hits: 17 in org-table, 14 in
+  `vix-org/columns.rs`, 13 in structural-replace. Fix each real hit, and
+  give each one that is provably ASCII-safe an `#[expect(.., reason)]`.
+  Test: sort a table containing `"abcéxxxxxx"`. **Small, high severity.**
+- [ ] **T596 — The in-memory clipboard is a process-wide global, which
+  makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
+  `static MEMORY: Mutex<Option<String>>` is shared by every parallel test
+  thread. The 2026-09-17 flake (`modal.rs:409` pasted `"one "`) happened
+  with the in-memory clipboard, not the OS one. The memory note that blames
+  the OS pasteboard is wrong: update it. Fix: `thread_local!` (the app is
+  single-threaded, and none of the 11 callers runs on a background thread).
+  Test: two threads set and read, and each sees only its own value.
+  **Small.**
+- [ ] **T597 — Spellcheck and the coverage gutter recompute every
+  frame.** `ui::draw` (`src/ui.rs:175`) calls `refresh_spellcheck`
+  (`src/app.rs:4731-4772`), which runs a full tree-sitter query
+  (`code.rs:886`), copies every comment and string range, and checks every
+  word. That happens on every frame: every event, every 500 ms idle, and
+  every 50 ms while busy (`src/main.rs:299-317`).
+  `refresh_coverage_gutter` (`src/app/coverage.rs:89`) also redoes path
+  matching every frame. Fix: cache on `(active, revision)` like the word
+  highlight, outline, backlinks, and git gutter siblings do. Optional:
+  drain all pending events before each redraw (`main.rs:318` reads one per
+  draw). Verify: a counter test (one recompute per revision) and a case in
+  `benches/frame_ops.rs`. **Small.**
+- [ ] **T598 — Discarded `Result`s that hide real failures.**
+  - `src/app/scripts.rs:175` `let _ = self.store_session(..)` silently
+    loses a script-trust decision (T545's shape).
+  - `src/app/modal.rs:509` and `src/app/org.rs:379` ignore
+    `vix_clipboard::set` (T542's pattern).
+  - `src/app.rs:7483` swallows a failed preview-tab open.
+  - `Editor::set_clipboard` (`crates/vix-editor-core/src/editor.rs:661`)
+    returns a `Result` that is always `Ok`, which forces six more `let _ =`
+    (`org.rs:985`, `ai.rs:682`, `org_table.rs:330`, `actions.rs:671,708`).
+
+  Fix: make it return `()`, and route the rest through warn helpers in
+  the style of `store_settings_or_warn`. Verify: a grep for
+  `let _ = .*(store_session|clipboard::set|editor.open)` finds nothing.
+  **Small.**
+- [ ] **T599 — Move lints to `[workspace.lints]`, and lint the targets
+  that are missed today.** No `[lints]` table exists anywhere, and 124
+  crate roots repeat the same three attributes. 15 targets get no lints at
+  all: 6 `benches/*.rs`, 8 `tests/*.rs` (action_catalog, snapshots,
+  spawn_sites, …), and `crates/vix-i18n/build.rs`. Fix: in
+  `[workspace.lints]` set `unsafe_code = "forbid"`, `missing_docs =
+  "deny"`, and `clippy.pedantic = "warn"`, then add `lints.workspace =
+  true` everywhere and drop the inline attributes. Add these cheap lints
+  at their measured counts: `allow_attributes_without_reason` (17),
+  `redundant_clone` (6), `clone_on_ref_ptr` (17), `dbg_macro` (0), and
+  `todo` (0). Update `AGENTS.md`'s hard-rules wording. **Small–medium.**
+- [ ] **T600 — Remove about 27 unused root dependencies.** `cargo
+  machete`, cross-checked by grep, finds that root `Cargo.toml` still
+  lists anyhow, arboard, crc32fast, evalexpr, getrandom, htmd,
+  percent-encoding, pulldown-cmark, ratatui-core, rust-embed, sha2,
+  spellbook, streaming-iterator, sysinfo, tree-sitter,
+  unicode-segmentation, unicode-width, vix-capped-stack, vix-civil-date,
+  vix-greedy-wrap, vix-hex-rgb, and others. `src/` names none of them,
+  and the "absorbed from the former subcrates" comment (around line 285)
+  is stale. Also unused: `serde` in vix-dap and vix-org-capture. The
+  `rust-i18n` and `md-5` hits are false positives, so add them to
+  `[package.metadata.cargo-machete] ignored`. Verify: default build,
+  `--no-default-features` build, and the T587 feature matrix all pass, and
+  `cargo machete` is clean. **Small.**
+- [ ] **T601 — Declare internal crates once in
+  `[workspace.dependencies]`.** There are 215 hard-coded `version =
+  "1.7.1"` pins, so each release touches about 55 manifests. Fix: declare
+  `vix-x = { path = "crates/vix-x", version = "1.7.1" }` once, and use
+  `vix-x.workspace = true` in the members. Verify: the pin count drops to
+  about the number of definitions, and `cargo publish --dry-run` of a
+  leaf crate works. Update the release checklist in `AI_STATEMENT.md`.
+  **Small.**
+- [ ] **T602 — Semver policy for the published crates.** All 123 crates
+  publish in lockstep, and real breaking changes have shipped in minor
+  versions. Between 1.5.0 and HEAD: `vix_lsp::…::diagnostics_for` changed
+  from returning `&[Diagnostic]` to `Vec<Diagnostic>`, and
+  `vix_db::connect::Connection` moved to `vix_settings::model` with no
+  re-export. `AI_STATEMENT.md` §1 says "semver, not a rubber stamp", but
+  nothing checks it. The installed `cargo-semver-checks` 0.4.0 can't read
+  the current rustdoc JSON (v61). Decide on one policy: (a) run
+  `cargo semver-checks --baseline-version <last>` in §1 and in CI, or
+  (b) document the member crates as internal and not API-stable (in each
+  crate README and in AI_STATEMENT). **Ask the user which one.**
+  **Medium.**
+- [ ] **T603 — Remove draw-path `unwrap()`s, then gate `unwrap_used`.**
+  95 non-test `unwrap()`/`expect()` remain, 48 of them in `src/`. About 40
+  follow the pattern `if app.x.is_some() { draw_x(app) }` followed by
+  `app.x.as_ref().unwrap()`. Examples:
+  - `src/ui/edit_surfaces.rs:162,172,315,324,392,466,552,647,707,760,790,847,877`
+  - `info_panels.rs` (10)
+  - `picker_panels.rs` (5)
+  - `choosers.rs` (4)
+  - the paste queue at `src/app.rs:7099-7126` (5 in one loop)
+
+  Fix: each `draw_x` takes `&X`. Then turn on
+  `clippy::unwrap_used`/`expect_used` at warn level, with
+  `allow-unwrap-in-tests` in `clippy.toml` and `#[expect(reason)]` on the
+  roughly 50 sites that are provably safe. This closes T546's "true today
+  but not enforced" gap cheaply. **Medium.**
+- [ ] **T604 — Adopt cargo-nextest.** `cargo test --workspace` takes
+  75.8 s of wall time, but the 137 binaries only spend 32.6 s running
+  tests, because cargo runs the binaries one after another. The
+  integration binary alone takes 26.65 s. Nextest runs binaries in
+  parallel and isolates each test in its own process, which also ends
+  T596's class of shared-global flakes. Add `.config/nextest.toml` with
+  retries and slow-test reporting, and use it in `ci.yml` and
+  `scripts/check`. Keep `cargo test --doc` (11.7 s) as a separate step.
+  Record CI timings before and after. **Small.**
+- [ ] **T605 — One `wait_until` test helper.** Bounded poll loops (300 ×
+  10 ms = 3 s caps) are copy-pasted at
+  `tests/integration/editing.rs:2216,2257,2307,2335,3288` and
+  `workspace.rs:838`, even though `common.rs:139` already has a deadline
+  helper. Replace them all with
+  `wait_until(app, poll, pred, Duration::from_secs(10))`, which gives more
+  headroom on slow macOS and Windows runners. **Small.**
+- [ ] **T606 — Mutation testing for the pure crates.** `cargo mutants`
+  on vix-list-state, vix-byte-size, and vix-civil-date produced 197
+  mutants in 56 s, and 4 were missed:
+  - `vix-list-state/src/lib.rs:52` (`page_down` `+`→`*`)
+  - `:74`/`:76` (`ensure_visible` `<`→`<=`, the scroll logic shared by 17
+    panels)
+  - `vix-civil-date/src/lib.rs:22` (the 400-year `146_096` boundary)
+
+  Add the tests that kill these mutants. Then add a scheduled, advisory
+  `cargo mutants` job over the small pure crates (list-state, civil-date,
+  byte-size, textops, capped-stack, greedy-wrap, hex-rgb). **Small.**
+- [ ] **T607 — Coverage measurement in CI.** Nothing runs llvm-cov or
+  tarpaulin today. Add an advisory GitHub job that runs `cargo llvm-cov
+  --workspace --cobertura` and uploads the artifact. Vix's own T210
+  coverage gutter reads that format, so the project can use the gutter on
+  itself (document this in `docs/`). This also gives real numbers for
+  T608 and T609. **Small.**
+- [ ] **T608 — DAP mock-adapter tests.** `crates/vix-dap/src/lib.rs` is
+  716 lines with 3 tests, and they cover pure helpers only.
+  `handle_event` (`:324`), `handle_response` (`:370`), `configure`
+  (`:444`), and request sequencing are untested. LSP has a Python mock
+  server (`tests/lsp_smoke.rs`), but DAP has none. Add a mock adapter
+  covering initialize → launch → stopped → stackTrace → variables → a
+  failed request. vix-editor is also thin (2,022 lines, 98 pub fns, 8
+  tests), so add unit tests for its non-trivial pub fns. Do this before
+  T617. **Medium.**
+- [ ] **T609 — Snapshot tests per overlay family.** 13 snapshot tests
+  cover about 66 overlays (`src/ui.rs:337-560`, 25 modules). Add one
+  insta snapshot per family: DB workbench, AI diff, edit-value, edit-bytes,
+  edit-outline, choosers, info panels, calculator/converters, and the
+  merge-conflict overlay. **Medium.**
+- [ ] **T610 — Typed errors in the library crates.** 45 public fns in 31
+  files return `Result<_, String>`. vix-git alone has 10 of them
+  (`lib.rs:528-1024`), and the ai-core providers and every
+  `convert-*-tool` crate do the same. Callers can't tell "git not
+  installed" from "git failed". Start with vix-git, vix-http-client, and
+  vix-ai-core, using `enum Error { Spawn(io::Error), Failed { code,
+  stderr } }`, plus `thiserror` (already in the tree transitively). Turn
+  "not installed" into a translated hint. **Medium, lower priority.**
+- [ ] **T611 — One overlay priority table for drawing and key routing.**
+  `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
+  lines (`src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
+  checks (`src/ui.rs:337+`). Key priority is a separately ordered chain
+  (`src/app/keymap.rs:138-411`). Nothing checks that the topmost drawn
+  overlay is the one that gets keys. Step 1: one `OVERLAYS` table that both
+  paths iterate, plus a test asserting that they agree for every overlay.
+  Step 2, later, after a spec: an `Overlay` enum for the modals that are
+  mutually exclusive. **Large (step 1 is medium).**
+
+### Language intelligence & editing
+
+- [ ] **T612 — Completion filters as you type, auto-triggers, and applies
+  `textEdit`/`additionalTextEdits`.**
+  - In `src/app/lsp_dap.rs:668-672`, any key other than
+    Up/Down/Enter/Tab/Esc closes the popup.
+  - `accept_completion` (`:618-636`) matches the word prefix only and
+    ignores `textEdit.range`.
+  - `parse_completion_item` (`crates/vix-lsp-core/src/message.rs:973-991`)
+    drops `additionalTextEdits` (so auto-import doesn't work), as well as
+    `filterText`, `sortText`, and `isIncomplete`.
+  - The server's `triggerCharacters` are never read.
+
+  Helix, Neovim 0.11+, Zed, and VS Code all do this. Fix:
+  - Extend `CompletionItem` (range, additional edits, filter/sort text,
+    kind, commit chars) and add `CompletionList.is_incomplete`.
+  - The popup keeps the full list and a fuzzy-filtered view; when the list
+    is incomplete, re-request.
+  - On accept, replace the range, then apply the additional edits via
+    `apply_edits_to_text`.
+  - Auto-request after an identifier char or a trigger char, with
+    debounce, behind an `lsp_auto_complete` setting.
+
+  Tests: parsers; typing narrows the list; range and import edits apply; a
+  trigger char opens the popup. **Medium.**
+- [ ] **T613 — LSP snippet completions.** `message.rs:78` advertises
+  `"snippetSupport": false`, but `vix-snippets` already has a
+  `$1`/`${1:x}`/`$0` tabstop engine. Fix: advertise true, keep
+  `insertTextFormat`, and on accept with format 2 hand the body to the
+  `vix-snippets` parser to start a tabstop session. Tests: Tab moves to
+  `$2` then `$0`; plain text is unchanged; nested placeholders work.
+  Depends on T612's accept path. **Small.**
+- [ ] **T614 — Inline diagnostics, and the message at the cursor.**
+  `refresh_diagnostic_marks` (`lsp_dap.rs:404-440`) sends only underline
+  spans. `goto_diagnostic` (`:786`) moves without showing any text, and
+  messages appear only in the Problems panel. Helix 25.01 and Neovim 0.11
+  (`virtual_lines`) both show diagnostics inline. Fix: add an
+  `inline_diagnostics = "off" | "cursor-line" | "all"` setting. Pass
+  `(line, severity, message)` to the editor and draw dimmed end-of-line
+  virtual text, truncated, in `vix-editor-core/src/render.rs`. Show the
+  cursor's diagnostic in the status line, including after `goto`. The
+  end-of-line virtual-text primitive is reused by T617 (inline values)
+  and T620 (color swatches). Tests: a render snapshot, truncation at
+  width, the three modes, and goto showing the message. **Small–medium.**
+- [ ] **T615 — Incremental `didChange` and ranged semantic tokens.**
+  `message.rs:157-163` always sends the full text, and `lsp_dap.rs:378`
+  sends the whole buffer on every revision. The `vix-lsp` spec (line 75)
+  re-requests `semanticTokens/full` on every change. Neovim 0.12 added
+  `semanticTokens/range`, and incremental sync is standard. Fix: when
+  `textDocumentSync.change == 2`, collect edit deltas from the
+  editor-core history/revision hooks and send range changes (converted
+  via `vix_lsp::position`). Use `semanticTokens/range` for the viewport,
+  or `full/delta`, when offered, and debounce. Tests: a mock server that
+  applies the deltas ends up with exactly the buffer text, including
+  multi-byte and astral chars. **Medium.**
+- [ ] **T616 — Tree-sitter textobjects and function/class motions.**
+  `crates/vix-editor-core/langs/*/` ship only `highlights.scm` (and Rust
+  `tests.scm`). `vix-modal`'s `text_object.rs` covers words and
+  delimiters only, and offline structural select can only expand. Helix
+  textobjects and nvim-treesitter-textobjects do this. Fix: bundle
+  `textobjects.scm` for the 21 languages, adapted from Helix's
+  MIT-licensed queries (record the license). Add
+  `Code::textobject_range(kind, inside, pos)` and
+  `next_textobject(kind, dir)`, and actions select
+  function/class/parameter inside/around plus goto next/prev
+  function/class. Add an offline shrink via an expansion stack. Do this
+  before T112–T115, which bind it as `if`/`af`/`]f`. Tests: a
+  per-language fixture, next/prev wrap, expand-then-shrink round trip.
+  **Medium.**
+- [ ] **T617 — Debugger depth.** `vix-dap` sends only `setBreakpoints`,
+  `launch`, `stackTrace`, `scopes`, `variables`, `evaluate`, and the step
+  and continue requests. It has no condition, `hitCondition`, or
+  `logMessage`, and no `setExceptionBreakpoints`, `attach`, `threads`, or
+  `setVariable`. Its own spec lists the limit "variables one level deep,
+  top frame". Zed, VS Code, and nvim-dap have all of these. Fix:
+  - Breakpoint condition, hit, and log fields, set from Run → Edit
+    Breakpoint….
+  - Exception filters taken from the `initialize` capabilities.
+  - `attach` via a `debug_adapters.attach` table.
+  - A Debug panel tree with lazy `variables` expansion, plus frame and
+    thread selection.
+  - Optionally, inline values using T614's virtual text.
+
+  Needs T608 first. **Medium–large.**
+- [ ] **T618 — Inline ghost-text completion.** A grep for
+  `inlineCompletion` or `ghost` finds nothing. Neovim 0.12 supports
+  `textDocument/inlineCompletion`, and Zed has Edit Predictions. Fix:
+  - Add the LSP `inlineCompletion` request and capability, which also
+    makes copilot-language-server work.
+  - Optionally add FIM prompts via `vix-ai-core` on an idle debounce.
+  - Draw a dimmed overlay: Tab accepts, a word-accept key takes one word,
+    and Esc dismisses.
+  - Add an `inline_completion = off | lsp | ai` setting.
+  - Drop stale suggestions when the revision changes.
+
+  Write the spec first. **Large.**
+- [ ] **T619 — Per-document pull diagnostics.** Vix has no
+  `textDocument/diagnostic`. It pulls only `workspace/diagnostic`, and
+  only when Problems opens. Pull-only servers such as Roslyn therefore
+  show no underlines. Fix: when the server offers `diagnosticProvider`,
+  pull after didOpen and after a debounced didChange, track
+  `previousResultId`, handle `workspace/diagnostic/refresh`, and merge
+  into the per-(file, server) map. Tests: full and unchanged reports, and
+  a pull-only mock server producing underlines. **Small.**
+- [ ] **T620 — Outgoing calls and type hierarchy.** The `vix-lsp` spec
+  (line 74) says "outgoing calls not wired", and there is no
+  `typeHierarchy` at all. Add `request_outgoing_calls`,
+  `prepare_type_hierarchy`, and `supertypes`/`subtypes` next to
+  `request_incoming_calls` (`crates/vix-lsp/src/lib.rs:707`). Add a
+  direction toggle in the call-hierarchy view and `lsp.type_hierarchy_*`
+  actions. Tag each item with the server it came from, which also fixes
+  T123b's documented multi-server limit. **Small–medium.**
+- [ ] **T621 — Document colors and document links.** Vix has no
+  `documentColor`, `colorPresentation`, or `documentLink`. Helix 25.07,
+  Neovim 0.12, and VS Code all have them. Request them on open and on a
+  debounced change. Draw a `■` swatch before each color (T614's virtual
+  text), and make links openable via `lsp.open_link` and modifier-click
+  (using the existing URL opener). Optional: send a color chosen in
+  `vix-x11-color-picker` back to the server via `colorPresentation`.
+  **Small.**
+- [ ] **T622 — Multi-cursor depth.** `CaretMove`
+  (`crates/vix-editor-core/src/multicursor.rs:42-51`) has only
+  Left/Right/Up/Down. `skip_multi_cursor` and its `_back` variant
+  (`src/app.rs:3686-3690`) just call `add_next_occurrence`, and
+  `remove_multi_cursor` clears all carets. These are catalog actions that
+  don't do what their names say. Fix: add Word, LineStart/End, and
+  Home/End motions per caret. Add `split_selection_into_lines` and
+  `select_regex_in_selection` (Kakoune/Helix `s`/`S`/`Alt-s`), plus a real
+  skip and remove-last-caret. Distribute pasted lines one per caret.
+  Tests: unit tests per operation, and make `tests/integration/catalog.rs`
+  assert real behavior. **Medium.**
+- [ ] **T623 — File-rename and watched-file notifications.** Vix has no
+  `willRenameFiles`, `didRenameFiles`, or `didChangeWatchedFiles`. On an
+  explorer rename (`vix-fileops`), send `willRenameFiles`, apply the
+  returned WorkspaceEdit (imports update), then send `didRenameFiles`.
+  Handle `client/registerCapability` watchers, and forward the existing
+  auto-reload file-watch events, so servers notice outside edits to
+  `Cargo.toml` and `package.json`. **Small–medium.**
+- [ ] **T624 — On-type formatting.** Vix has no `onTypeFormatting`. Read
+  `documentOnTypeFormattingProvider` trigger chars, then request and
+  apply edits after a matching insert, behind a `format_on_type` setting.
+  **Small.**
+
+### UX, workflow & platform
+
+- [ ] **T625 — OSC 52 clipboard fallback, for SSH and tmux.**
+  `vix-clipboard` uses only `arboard` (`set` `:64`, `get` `:86`), so over
+  SSH copying silently fails. Helix (`termcode`) and Neovim both have
+  OSC 52 providers. Fix: add a `clipboard_provider = "auto" | "system" |
+  "osc52"` setting. With `auto`, write `ESC]52;c;<base64>BEL` when
+  `SSH_TTY`/`SSH_CONNECTION` is set or arboard errors, wrapped in DCS
+  passthrough under `TMUX`. Reads fall back to the internal register.
+  Tests: a pure `encode_osc52(text, tmux)`, and provider selection from a
+  fake environment. **Small.**
+- [ ] **T626 — Live settings reload.** Saving `config.toml` from
+  `open_settings_file` (`src/app/session.rs:416`) doesn't re-apply
+  settings, because `App::save` (`src/app.rs:3744`) never reloads, so
+  changes need a restart. Helix has `:config-reload`, and Zed applies
+  settings live. Fix: when the saved path is `Settings::config_path()`,
+  call `try_load_from`. On error, post a notification and keep the old
+  settings. On success, call `App::apply_settings(old, new)`, which
+  re-resolves the theme, keymap, and locale and rebuilds the menus. Also
+  add a `vix.reload_settings` action. Tests: save a changed config and the
+  theme or keymap switches; bad TOML keeps the old settings. **Small.**
+- [ ] **T627 — Per-project and per-language settings.**
+  `Settings::try_load` (`crates/vix-settings/src/lib.rs:637`) reads only
+  user config. `.vix/` holds only tasks, project, and scripts, and there
+  is no per-language map (`.editorconfig` covers indentation only). Helix
+  has `.helix/config.toml` and `languages.toml`, and Zed has
+  `.zed/settings.json` with `languages` overrides. Fix: deep-merge
+  `<root>/.vix/settings.toml`, gated by the T132 workspace-trust prompt,
+  and add a `languages` map of partial settings resolved per buffer.
+  Precedence is built-in < user < project < language. Update the spec.
+  Tests: precedence, an untrusted workspace ignores the project file, and
+  unknown keys are reported. Do this after T626. **Medium.**
+- [ ] **T628 — Terminal protocol polish.** `src/main.rs:209-225` enables
+  only mouse capture, bracketed paste, and keyboard disambiguation. Vix
+  has no synchronized output, no focus events, and no color-depth
+  fallback: themes emit raw RGB, and there is no `COLORTERM` check. Fix:
+  - Wrap `terminal.draw` in `Begin/EndSynchronizedUpdate` (DEC 2026).
+  - Enable focus change, run auto-reload (`src/app.rs:5073`) on
+    `FocusGained`, and add an `auto_save = "focus_lost"` mode.
+  - Add a pure `vix-theme` `downsample(Color, depth)` (truecolor → 256 →
+    16), chosen from `COLORTERM`/`TERM`/`TERM_PROGRAM=Apple_Terminal`, and
+    report it in `vix --doctor`.
+  - Use OSC 8 hyperlinks in markdown preview and notifications.
+
+  **Small–medium.**
+- [ ] **T629 — Hot exit: recover unsaved buffers after a crash or
+  quit.** Sessions store files, scroll positions, and splits only, and
+  `auto_save` writes to the real file. VS Code (`files.hotExit`), Zed,
+  Vim swap files, and Emacs auto-save all recover unsaved work. Fix: on
+  idle and on quit, write dirty buffers to
+  `<config>/backup/<hash(path)>`, reusing `vix-undo-store`'s path-hash and
+  content-hash scheme. On reopen, offer "Recover unsaved changes?" with a
+  diff (`vix-diff-view`), and never auto-apply. Give untitled buffers
+  stable session ids. Tests: round trip, a stale backup shown as a diff,
+  and a clean save deleting the backup. **Medium.**
+- [ ] **T630 — Picker preview pane and resume-last-picker.** The palette's
+  only preview is `:` line-goto. `src/ui/choosers.rs` and
+  `src/ui/search.rs` draw one-line rows, and nothing resumes or remembers
+  queries. Telescope, snacks.picker, and Helix all have this. Fix:
+  - A shared `draw_preview(path, line)` that shows a highlighted ±N-line
+    window, used by the file finder, `@`/`@@`, and workspace search when
+    the screen is at least about 100 columns wide.
+  - Store the last `(mode, query, selection)` per picker.
+  - Add `palette.resume` and Up/Down query history.
+
+  **Medium.**
+- [ ] **T631 — Terminal scrollback and multiple terminals.**
+  `vix-terminal`'s spec § Limitations says "Scrollback beyond the
+  visible grid is not shown" and "mouse reporting is not forwarded", and
+  `App.terminal: Option<Terminal>` (`src/app.rs:1858`) allows only one.
+  Fix: a `Vec<Terminal>` shown as bottom-dock tabs. Use
+  `vt100::Parser::new(rows, cols, scrollback)` for a Shift+PgUp scroll
+  mode. Add select and copy via `vix-clipboard`, and forward the mouse
+  when the child requests it. **Medium–large.**
+- [ ] **T632 — Problem matchers and next-error over task output.** The
+  bottom dock only makes `path:line` clickable
+  (`crates/vix-bottom-dock/spec/index.md:94`). Task output never reaches
+  Problems or the gutter. VS Code `problemMatcher`, Emacs `next-error`,
+  and Vim quickfix all do this. Fix: a `vix-tasks::matcher` with built-in
+  patterns for rustc (`--> f:l:c`), gcc/clang, tsc, eslint, pytest, and
+  go, plus an optional `matcher = "…"` in `tasks.toml`. Feed the results
+  into the Problems panel as a "task" source, and add
+  `go.next_error`/`go.prev_error`. Tests: a fixture per tool, a multi-line
+  rustc block, and wrap-around. **Medium.**
+- [ ] **T633 — Interactive rebase editor.**
+  `docs/git-panel/index.md:177` lists it under Roadmap. Fix:
+  - A `git.rebase_interactive` action (prompt for the base) that sets
+    `GIT_SEQUENCE_EDITOR` to a throwaway script, the same trick as
+    `edit_description` (`src/app/git.rs:1165`).
+  - A todo overlay in `src/app/git_rebase.rs` with
+    p/r/e/s/f/d keys and Alt-↑/↓ to reorder.
+  - `git.rebase_continue`/`abort`, and `git.cherry_pick` from Browse Log.
+
+  Tests: a pure todo parse/serialize round trip, and squashing two commits
+  in a temp repo. **Medium.**
+- [ ] **T634 — Git stash list and worktrees.** `src/app/git.rs:110-111`
+  has only `stash_push` and `stash_pop`, and there is no worktree support.
+  Magit, Neogit, and VS Code all have both. Add `git.stash_list`, a
+  chooser with apply, pop, drop, and show (a diff in a read-only tab, the
+  same as Browse Log). Add `git.worktree_add`/`list`/`remove`; switching
+  worktrees reuses the project-switch path so sessions restore per
+  worktree. Tests: temp-repo integration tests. **Small–medium.**
+- [ ] **T635 — Agent Client Protocol (ACP) client.** Zed defined ACP, and
+  Neovim (CodeCompanion, avante), Emacs (agent-shell), and JetBrains
+  support it. Agents that speak it include Claude Code, Gemini CLI,
+  Codex, and others. Vix's `vix-ai-core` is one-shot HTTP, and
+  `spawn_ai_cli` (`src/app/ai.rs:315`) pipes one prompt. Fix: a new
+  `vix-acp` crate that speaks JSON-RPC over the agent's stdio, reusing
+  `vix-lsp-core` framing. It needs initialize, session, and prompt;
+  streamed `session/update`; permission requests; and
+  `fs/read_text_file`/`write_text_file` answered from open buffers. Route
+  edits through `vix-ai-diff` accept/reject, show tool calls and plans in
+  the AI panel, and add an `ai_agents` settings list. Write the spec and
+  trust model first, since agents can write files. Tests: a mock agent
+  binary under `examples/`, a denied permission writes nothing, and edits
+  land as a pending diff. **Large.**
+- [ ] **T636 — Oil/wdired-style directory editing.** The explorer has
+  only per-item operations, with no bulk rename. Fix: an
+  `explorer.edit_directory` action that opens one line per entry with a
+  hidden id, reusing T211's synthetic-path editable buffer (intercepted
+  in `App::save`). On save, diff it into renames, creates (a trailing `/`
+  means a directory), and deletes. Confirm through `ReplaceConfirm` and
+  apply via `vix-fileops`, respecting `explorer_delete`. Tests: a pure
+  diff that includes a cycle where two names are swapped. **Medium.**
+- [ ] **T637 — Rhai plugin installer.** `vix-script` has load paths but
+  no install, update, or registry. micro has `-plugin install/update/
+  remove/list`. Fix: add `vix --plugin install <git-url>[@rev]`, plus
+  `list`, `update`, and `remove`, in `src/cli.rs`. Clone into
+  `scripts_dir()/<name>/`, pin the commit in `<config>/plugins.lock`, and
+  add a Vix → Plugins chooser. Installed scripts keep the existing
+  sandbox, with no new capabilities. Tests: a lockfile round trip, and an
+  install from a local `file://` bare repo. **Medium.**
+- [ ] **T638 — Undo tree visualizer.** `edit.undo_branch` only cycles
+  branches (`crates/vix-editor-core/src/code.rs:1010`), and the tree in
+  `history.rs:20` is never drawn. undotree and Emacs vundo both draw it.
+  Fix: add `History::nodes()` (parent, children, timestamp, seq), plus a
+  `vix-undo-tree-panel` crate with an ASCII graph layout. Moving the
+  selection previews that state live, Enter commits it, and Esc restores
+  the starting state. Tests: layouts for linear, branching, and deep
+  trees, and checking that navigating to a node gives the expected text.
+  **Medium.**
+
+---
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -6945,6 +7418,13 @@ CI-discovered rounds to get genuinely right on Windows).
     (prerequisites; T583 and T585 pay off even if no flag ever lands),
     then T586 + T587 (framework + CI), then T588 → T592 in order, T593
     only if a locked-down build is wanted, and T594 last.
+13. **Run M (new capabilities + code quality, 2026-10-21):** T595 first
+    (crash), then T596–T601 and T604 (cheap quality wins; nextest speeds up
+    everything after it). Then T612 → T613, T614, T625, T626 → T627.
+    After those, the remaining medium items in any order: T616 before
+    Run B's T112–T115, and T608 before T617. The large items (T611, T618,
+    T635) come last, each after its spec is agreed. T602 needs a policy
+    decision from the user first.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
