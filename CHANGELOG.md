@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Smaller crate**: the published `vix` package no longer includes the project website
+  (`vixide.github.io/`), CI definitions or agent settings; none are read by the build or tests.
+
 ## [1.7.1] - 2026-10-21
 
 ### Changed
