@@ -6837,18 +6837,22 @@ new action.
 ### Code quality & correctness
 
 - [ ] **T595 — Org table time-sort panics on non-ASCII cells
-  (T559's bug class, a site it missed).** `parse_time_key`
-  (`crates/vix-org-table/src/lib.rs:871-872`) checks `s.len() >= 10`,
-  which counts bytes, then slices `&s[0..4]`. A cell such as `abcéxxxxxx`
-  puts a char boundary inside the slice and panics the main thread via
-  `SortKind::Time` (`:824-827`). Fix: use `s.get(0..4).is_some_and(..)`
-  (and the same for the other slices). Then turn on
-  `#![warn(clippy::string_slice)]` in vix-org, vix-org-table,
-  vix-org-capture, vix-roam, and vix-structural-replace. These crates hold
-  most of the 154 workspace hits: 17 in org-table, 14 in
-  `vix-org/columns.rs`, 13 in structural-replace. Fix each real hit, and
-  give each one that is provably ASCII-safe an `#[expect(.., reason)]`.
-  Test: sort a table containing `"abcéxxxxxx"`. **Small, high severity.**
+  (T559's bug class, a site it missed).**
+  - [x] **(a) The crash — done 2026-10-21.** `parse_time_key`
+    (`crates/vix-org-table/src/lib.rs`) checked `s.len() >= 10`, which
+    counts bytes, then sliced `&s[0..4]`, so a cell like `abcéxxxxxx`
+    panicked the main thread through `SortKind::Time`. The minutes slice
+    (`&m[..2]`) had the same bug (`2024-01-05 10:1é`), which the audit had
+    not named. Both now use `get(..)`. Regression tests fail on the old
+    code (panic at the audited line) and pass now.
+  - [ ] **(b) Turn on `#![warn(clippy::string_slice)]`** in vix-org,
+    vix-org-table, vix-org-capture, vix-roam, and
+    vix-structural-replace, then audit every hit. Measured 2026-10-21
+    (all targets, so some hits repeat): vix-org 60, vix-org-table 22,
+    vix-structural-replace 17, vix-org-capture 8, vix-roam 4. Fix each
+    real hit. Give each site that is provably ASCII-safe an
+    `#[expect(clippy::string_slice, reason = "...")]`. Do one crate per
+    branch. **Medium.**
 - [ ] **T596 — The in-memory clipboard is a process-wide global, which
   makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
   `static MEMORY: Mutex<Option<String>>` is shared by every parallel test

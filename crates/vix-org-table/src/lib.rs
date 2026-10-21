@@ -868,14 +868,17 @@ fn parse_time_key(raw: &str) -> Option<String> {
         return Some(format!("9999-99-99 {h:0>2}:{m}"));
     }
 
-    if s.len() >= 10
-        && is_ascii_digits(&s[0..4], 4)
-        && s.as_bytes()[4] == b'-'
-        && is_ascii_digits(&s[5..7], 2)
-        && s.as_bytes()[7] == b'-'
-        && is_ascii_digits(&s[8..10], 2)
-    {
-        let date = &s[0..10];
+    // `get` rather than indexing: `s` is user text, and a multi-byte char
+    // straddling byte 4, 7 or 10 would make a slice panic.
+    if let Some(date) = s.get(0..10).filter(|d| {
+        d.is_ascii()
+            && is_ascii_digits(&d[0..4], 4)
+            && d.as_bytes()[4] == b'-'
+            && is_ascii_digits(&d[5..7], 2)
+            && d.as_bytes()[7] == b'-'
+            && is_ascii_digits(&d[8..10], 2)
+    }) {
+        // `date` is 10 ASCII bytes, so byte 10 is a char boundary.
         let rest = s[10..].trim_start();
         let rest = rest.split_once(' ').map_or(rest, |(first, tail)| {
             if !first.is_empty() && first.chars().all(char::is_alphabetic) {
@@ -886,16 +889,12 @@ fn parse_time_key(raw: &str) -> Option<String> {
         });
         let time = rest
             .split_once(':')
-            .filter(|(h, m)| {
-                !h.is_empty()
-                    && h.len() <= 2
-                    && h.bytes().all(|b| b.is_ascii_digit())
-                    && is_ascii_digits(&m[..2.min(m.len())], 2)
+            .filter(|(h, _)| !h.is_empty() && h.len() <= 2 && h.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|(h, m)| {
+                let mm = m.get(..2).filter(|mm| is_ascii_digits(mm, 2))?;
+                Some(format!("{h:0>2}:{mm}"))
             })
-            .map_or_else(
-                || "00:00".to_string(),
-                |(h, m)| format!("{h:0>2}:{}", &m[..2]),
-            );
+            .unwrap_or_else(|| "00:00".to_string());
         return Some(format!("{date} {time}"));
     }
 
@@ -2162,6 +2161,43 @@ mod tests {
             })
             .collect();
         assert_eq!(dates, vec!["2023-12-01", "2024-01-05", "not-a-date"]);
+    }
+
+    #[test]
+    fn parse_time_key_does_not_panic_on_multibyte_text() {
+        // A multi-byte char straddling byte 4, 7, 10 or the minutes slice used
+        // to panic the byte slicing.
+        for cell in [
+            "abcéxxxxxx",
+            "2024-é1-05",
+            "20é4-01-05",
+            "2024-01-0é",
+            "2024-01-05 10:1é",
+            "2024-01-05 1é:30",
+            "é2024-01-05",
+            "日本語日本語日本語",
+        ] {
+            let _ = parse_time_key(cell);
+        }
+        assert_eq!(
+            parse_time_key("2024-01-05 10:1é").as_deref(),
+            Some("2024-01-05 00:00")
+        );
+        assert_eq!(
+            parse_time_key("<2024-01-05 Fri 10:30>").as_deref(),
+            Some("2024-01-05 10:30")
+        );
+        assert_eq!(
+            parse_time_key("2024-01-05").as_deref(),
+            Some("2024-01-05 00:00")
+        );
+    }
+
+    #[test]
+    fn sort_rows_time_kind_survives_non_ascii_cells() {
+        let text = "| abcéxxxxxx |\n| 2024-01-05 |\n| 2024-01-05 10:1é |";
+        let (first, last) = table_range(text, 0).unwrap();
+        assert!(sort_rows(text, first, last, 0, SortKind::Time, false, false).is_some());
     }
 
     #[test]
