@@ -153,13 +153,23 @@ pub fn complete(
     input: &str,
 ) -> Result<String, String> {
     let body = provider.request_body(model, instruction, input);
-    let mut req = ureq::post(endpoint);
+    // A provider's HTTP error status carries a JSON error body that
+    // `parse_response` reports, so a status is not a transport error.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+    // Serialized here (compact) rather than via `send_json`, which pretty-prints.
+    let mut req = agent
+        .post(endpoint)
+        .header("content-type", "application/json");
     for (name, value) in provider.headers(api_key) {
-        req = req.set(name, &value);
+        req = req.header(name, &value);
     }
-    let json = match req.send_json(body) {
-        Ok(resp) | Err(ureq::Error::Status(_, resp)) => resp
-            .into_json::<serde_json::Value>()
+    let json = match req.send(body.to_string()) {
+        Ok(mut resp) => resp
+            .body_mut()
+            .read_json::<serde_json::Value>()
             .map_err(|e| e.to_string())?,
         Err(e) => return Err(e.to_string()),
     };

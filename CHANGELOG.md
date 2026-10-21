@@ -8,6 +8,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **HTTP client library** (security): `ureq` 2 → 3 for the HTTP client and the AI providers.
+  ureq 2 pinned `webpki-roots` 0.26, whose bundled roots trust the distrusted emSign
+  intermediates (RUSTSEC-2026-0381); ureq 3 uses the fixed 1.x. Response header names
+  in the HTTP client's output are now lower-case, and JSON bodies are sent compact.
+- **TLS certificates**: `rustls-webpki` 0.103.16 and `webpki-roots` 1.0.10 (RUSTSEC-2026-0382/0381).
 - **tree-sitter 0.27**: updated the syntax-highlighting query code for the `QueryMatch::captures()` accessor.
 
 ## [1.7.0] - 2026-10-20
