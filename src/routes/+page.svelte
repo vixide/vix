@@ -12,8 +12,8 @@
 <section class="hero">
   <h1>A keyboard-friendly terminal text editor.</h1>
   <p class="hero-tagline">
-    Vix is a high-speed, high-security integrated development environment that
-    lives entirely in your terminal — a file explorer, tree-sitter syntax
+    Vix is a high-speed, high-security integrated development environment in
+    your terminal — a file explorer, tree-sitter syntax
     highlighting, LSP, a database workbench, Git, Org mode, and much more,
     built on <a href="https://ratatui.rs/">ratatui</a> in Rust.
   </p>
@@ -48,16 +48,10 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5`}</code
   </header>
 
   <div class="card-grid">
-    <Card heading="A real Cargo workspace" href="https://github.com/vixide/vix">
+    <Card heading="Keymaps" href="/features/">
       <p class="card-description">
-        A thin App shell over more than 100 focused <code>vix-*</code> member
-        crates — one crate, one job, each with its own spec.
-      </p>
-    </Card>
-    <Card heading="Ten keymaps" href="/features/">
-      <p class="card-description">
-        Apple, VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ
-        (macOS/Windows), Eclipse, and Sublime Text — switch anytime.
+        Vi, Emacs, VS Code, IntelliJ, Eclipse, Sublime, Apple, Windows.
+        Switch anytime.
       </p>
     </Card>
     <Card heading="LSP, DAP, and Git" href="/features/">
@@ -67,22 +61,27 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5`}</code
         built in.
       </p>
     </Card>
-    <Card heading="A database workbench" href="/features/">
+    <Card heading="Git &amp; Jujutsu versioning" href="/features/">
       <p class="card-description">
-        Connect to SQLite, PostgreSQL, or MySQL, browse the schema, run
-        queries with autocomplete, and read results in a filterable grid.
+        Use version control to branch, merge, commit, view logs, annotate, and
+        more.
+      </p>
+    </Card>
+    <Card heading="Database workbench" href="/features/">
+      <p class="card-description">
+        Connect to SQLite, PostgreSQL, MySQL, and more. Browse schemas, run
+        queries, and read results in filterable grids.
       </p>
     </Card>
     <Card heading="Org mode" href="/features/">
       <p class="card-description">
-        Headline promote/demote, TODO cycling, a structural table editor with
-        <code>TBLFM</code> formulas, an interactive Column View, and Org-roam.
+        Organize your work, tasks, contacts, outlines, and more with org.
       </p>
     </Card>
-    <Card heading="A Project menu" href="/features/">
+    <Card heading="Project tooling" href="/features/">
       <p class="card-description">
-        Per-project-type lifecycle commands, task discovery across seven
-        build tools, monorepo subprojects, and test-at-point.
+        Project lifecycle commands, task discovery, build tools, monorepo
+        subprojects, and test-at-point.
       </p>
     </Card>
   </div>
