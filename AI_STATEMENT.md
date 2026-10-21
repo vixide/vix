@@ -67,7 +67,12 @@ A crates.io release of a workspace crate is ready when:
 
 1. **Version is correct** — bumped in `Cargo.toml` (`workspace.package.version`,
    and any per-crate override) in a way that matches the actual change —
-   semver, not a rubber stamp.
+   semver, not a rubber stamp. This is checked mechanically: run
+   `cargo semver-checks --workspace` (CI's `semver` job runs the same
+   command) against the version last published on crates.io. A breaking
+   public-API change requires a major bump of every affected crate; the
+   version in `Cargo.toml` must already be bumped when the check runs, since
+   an unchanged version is treated as a patch release.
 2. **`CHANGELOG.md` is updated** — the user-visible changes since the last
    release are recorded under the right heading, not left in `[Unreleased]`.
 3. **The gate is green** — `scripts/check` clean locally, *and* CI confirmed

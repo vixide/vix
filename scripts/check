@@ -57,6 +57,13 @@ git diff --exit-code -- man/ || {
 	exit 1
 }
 
+echo "==> semver (T602)"
+if command -v cargo-semver-checks >/dev/null 2>&1; then
+	cargo semver-checks --workspace
+else
+	echo "    (skipping: 'cargo install cargo-semver-checks --locked' to enable; needs network for the crates.io baseline)"
+fi
+
 echo "==> scripts/check-docs"
 python3 "$(dirname "$0")/check-docs"
 

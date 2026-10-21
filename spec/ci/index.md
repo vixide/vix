@@ -159,6 +159,17 @@ run in the normal job, and the snapshot and menu tests are gated on
 `#[cfg(feature = "full")]`. Tests that need one capability gate on its feature
 (`#[cfg(feature = "ai")]`, …), the same pattern as `lang-*` grammar tests.
 
+### Semver (T602)
+
+The GitHub `semver` job runs `cargo semver-checks --workspace` (pinned
+`0.51.0`) against the version of each crate last published on crates.io. The
+release type is inferred from the version in `Cargo.toml`, and an unchanged
+version counts as a patch release, so a breaking public-API change fails until
+the affected crates are bumped to a new major version. `scripts/check` runs the
+same command and skips it with a note when `cargo-semver-checks` isn't
+installed. GitHub only for now: it needs network access to crates.io and
+nothing about it is forge-specific, so GitLab and Codeberg can add it later.
+
 ## GitLab
 
 Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the

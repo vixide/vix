@@ -6916,18 +6916,19 @@ new action.
   about the number of definitions, and `cargo publish --dry-run` of a
   leaf crate works. Update the release checklist in `AI_STATEMENT.md`.
   **Small.**
-- [ ] **T602 — Semver policy for the published crates.** All 123 crates
-  publish in lockstep, and real breaking changes have shipped in minor
-  versions. Between 1.5.0 and HEAD: `vix_lsp::…::diagnostics_for` changed
-  from returning `&[Diagnostic]` to `Vec<Diagnostic>`, and
-  `vix_db::connect::Connection` moved to `vix_settings::model` with no
-  re-export. `AI_STATEMENT.md` §1 says "semver, not a rubber stamp", but
-  nothing checks it. The installed `cargo-semver-checks` 0.4.0 can't read
-  the current rustdoc JSON (v61). Decide on one policy: (a) run
-  `cargo semver-checks --baseline-version <last>` in §1 and in CI, or
-  (b) document the member crates as internal and not API-stable (in each
-  crate README and in AI_STATEMENT). **Ask the user which one.**
-  **Medium.**
+- [x] **T602 — Semver policy for the published crates.** Done
+  2026-10-21: policy (a), enforced mechanically. All 123 crates publish in
+  lockstep, and real breaking changes had shipped in minor versions:
+  between 1.5.0 and 1.7.1, `vix_db::connect::Connection` moved with no
+  re-export, and `LspEvent` gained variants on a non-`non_exhaustive` enum.
+  Now `cargo semver-checks --workspace` runs in CI (new `semver` job,
+  pinned 0.51.0), in `scripts/check` (skipped with a hint when the tool
+  isn't installed), and in `AI_STATEMENT.md` §1. The old local 0.4.0 could
+  not read rustdoc JSON v61; 0.47+ can. Verified: against the published
+  1.7.1 all 124 packages pass, and against 1.5.0 it reports the two breaks
+  above. Not verified: how it treats a brand-new crate that has no
+  published baseline yet. If CI fails on one, add it to an `--exclude`
+  list until its first publish.
 - [ ] **T603 — Remove draw-path `unwrap()`s, then gate `unwrap_used`.**
   95 non-test `unwrap()`/`expect()` remain, 48 of them in `src/`. About 40
   follow the pattern `if app.x.is_some() { draw_x(app) }` followed by

@@ -122,6 +122,26 @@ jobs:
       - name: check each feature
         run: cargo hack check -p vix --each-feature --no-dev-deps
 
+  # T602: every crate is published to crates.io in lockstep, so a breaking
+  # public-API change must come with a major version bump. Compares each
+  # crate's API with the latest version published on crates.io; the release
+  # type is inferred from the version in Cargo.toml (an unchanged version is
+  # treated as a patch release, so any break fails until the version is bumped).
+  # Needs cargo-semver-checks >= 0.47 for the current rustdoc JSON format.
+  semver:
+    name: semver (cargo-semver-checks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-semver-checks
+        run: cargo install cargo-semver-checks --version 0.51.0 --locked
+      - name: cargo semver-checks
+        run: cargo semver-checks --workspace
+
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
   # gate; the external pass hits real URLs, which go stale independently of
