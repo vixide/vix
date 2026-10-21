@@ -131,6 +131,9 @@ homepage.workspace = true
 readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
+# The project website, CI definitions and agent settings live in the repository
+# but are not part of the crate: nothing in the build or tests reads them.
+exclude = ["/vixide.github.io/", "/.github/", "/.forgejo/", "/.claude/"]
 
 [package.metadata.wix]
 upgrade-guid = "FEEBD501-4333-4380-A051-E232AD127DED"
