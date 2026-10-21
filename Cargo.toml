@@ -31,7 +31,7 @@ bitflags = "2"
 ignore = "0.4"
 trash = "5"
 walkdir = "2"
-ureq = "2"
+ureq = "3"
 regex = "1"
 # macOS and Windows: store secrets (DB passwords, T124's AI provider API
 # keys) through the native credential store (Security framework / Credential

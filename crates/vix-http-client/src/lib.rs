@@ -113,18 +113,21 @@ pub fn send(req: &Request) -> Result<String, String> {
             req.url
         ));
     }
-    let mut r = ureq::request(&req.method, &req.url);
+    // An HTTP error *status* carries a response worth showing, so it must not
+    // surface as an `Err`.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let mut builder = ureq::http::Request::builder()
+        .method(req.method.as_str())
+        .uri(&req.url);
     for (name, value) in &req.headers {
-        r = r.set(name, value);
+        builder = builder.header(name, value);
     }
-    let result = if req.body.is_empty() {
-        r.call()
-    } else {
-        r.send_string(&req.body)
-    };
-    match result {
-        // A success or an HTTP status error both carry a response worth showing.
-        Ok(resp) | Err(ureq::Error::Status(_, resp)) => Ok(format_response(resp)),
+    let request = builder.body(req.body.clone()).map_err(|e| e.to_string())?;
+    match agent.run(request) {
+        Ok(resp) => Ok(format_response(resp)),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -137,21 +140,22 @@ fn scheme_is_http(url: &str) -> bool {
 
 /// Format a `ureq` response into a readable text block (status, headers, blank
 /// line, body). Consumes `resp` to read its body.
-fn format_response(resp: ureq::Response) -> String {
+fn format_response(resp: ureq::http::Response<ureq::Body>) -> String {
     use std::fmt::Write as _;
+    let status = resp.status();
     let mut out = format!(
-        "{} {} {}\n",
-        resp.http_version(),
-        resp.status(),
-        resp.status_text()
+        "{:?} {} {}\n",
+        resp.version(),
+        status.as_u16(),
+        status.canonical_reason().unwrap_or("")
     );
-    for name in resp.headers_names() {
-        if let Some(value) = resp.header(&name) {
+    for (name, value) in resp.headers() {
+        if let Ok(value) = value.to_str() {
             let _ = writeln!(out, "{name}: {value}");
         }
     }
     out.push('\n');
-    match resp.into_string() {
+    match resp.into_body().read_to_string() {
         Ok(body) => out.push_str(&body),
         Err(e) => {
             let _ = write!(out, "<failed to read body: {e}>");

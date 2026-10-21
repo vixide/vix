@@ -9,8 +9,8 @@ description = "Direct HTTP clients for AI providers (Anthropic, OpenAI-compatibl
 
 [dependencies]
 serde_json = { workspace = true }
-# "json" enables `Request::send_json`/`Response::into_json` (not on by
-# default in ureq 2.x); scoped to this crate rather than the shared
+# "json" enables `read_json` (not on by default in ureq 3);
+# scoped to this crate rather than the shared
 # workspace entry since `vix-http-client` sends/reads plain text, not JSON.
 ureq = { workspace = true, features = ["json"] }
 
