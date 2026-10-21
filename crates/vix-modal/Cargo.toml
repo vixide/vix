@@ -8,4 +8,4 @@ repository.workspace = true
 description = "A real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator x motion composition, counts, registers, text objects, dot-repeat."
 
 [dependencies]
-vix-textops = { path = "../vix-textops", version = "1.7.0" }
+vix-textops = { path = "../vix-textops", version = "1.7.1" }

@@ -916,14 +916,14 @@ checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "vix-conflict-tool"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-convert-from-json-into-toml-tool"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
  "toml",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-json-into-yaml-tool"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -939,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-toml-into-json-tool"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
  "toml",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-yaml-into-json-tool"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -955,21 +955,21 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-tabular"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix-fileops"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "trash",
 ]
 
 [[package]]
 name = "vix-find-panel"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "bitflags",
  "regex",
@@ -999,25 +999,25 @@ dependencies = [
 
 [[package]]
 name = "vix-http-client"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "ureq",
 ]
 
 [[package]]
 name = "vix-list-state"
-version = "1.7.0"
+version = "1.7.1"
 
 [[package]]
 name = "vix-lsp-core"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix-macros"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "crossterm",
  "serde",
@@ -1027,18 +1027,18 @@ dependencies = [
 
 [[package]]
 name = "vix-org-table"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "evalexpr",
 ]
 
 [[package]]
 name = "vix-textops"
-version = "1.7.0"
+version = "1.7.1"
 
 [[package]]
 name = "vix-vcard-parser"
-version = "1.7.0"
+version = "1.7.1"
 
 [[package]]
 name = "wasi"

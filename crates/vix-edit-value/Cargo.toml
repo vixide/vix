@@ -11,8 +11,8 @@ description = "The structured-value editor: a foldable tree for JSON and YAML."
 crossterm = { workspace = true }
 serde_json = { workspace = true }
 serde_norway = { workspace = true }
-vix-capped-stack = { path = "../vix-capped-stack", version = "1.7.0" }
-vix-list-state = { path = "../vix-list-state", version = "1.7.0" }
+vix-capped-stack = { path = "../vix-capped-stack", version = "1.7.1" }
+vix-list-state = { path = "../vix-list-state", version = "1.7.1" }
 
 [dev-dependencies]
 proptest = { workspace = true }
