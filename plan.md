@@ -350,6 +350,89 @@ each area's inline dispatch into its own `src/app/<area>.rs` first
 `run.*` arms are misfiled in `src/app/git.rs`). That refactor is worth
 doing even if a flag never lands.
 
+### New capabilities and code quality (researched 2026-10-21)
+
+All 594 earlier tasks are done, so this round started fresh with three
+read-only research passes. Two compared Vix with the 2026 state of the art:
+Helix 25.x, Zed, Neovim 0.11/0.12, VS Code, Kakoune, Fresh, ttt, and Emacs
+(Magit, wdired). One pass covered language intelligence and core editing,
+the other UX, workflow and platform. The third pass measured code quality
+with clippy, `cargo machete`, `cargo tree -d`, a timed test run,
+`cargo-mutants`, and function-length and spec-drift scripts. Each candidate
+was checked against Vix's actual code before it was kept. The kept items
+are **Run M** in `tasks.md` (T595–T638).
+
+**The finding in one line:** LSP *breadth* is complete (35 methods wired,
+T123 closed), but several features stop at a first version. Examples:
+completion that doesn't filter as you type, no snippet expansion,
+diagnostics that never show their text in the editor, full-document sync,
+and a one-level debugger. The platform also has gaps that matter in daily
+use: no clipboard over SSH, no live settings reload, no per-project
+settings, and no crash recovery for unsaved buffers.
+
+1. **Code quality and correctness (T595–T611).**
+   - *Crash bug.* One real crash: an Org table sort by time slices a string
+     by bytes (`vix-org-table/src/lib.rs:871`), the same bug class as T559,
+     and 154 `string_slice` sites remain workspace-wide.
+   - *Correctness.* A process-global in-memory clipboard that still makes a
+     known test flaky. Spellcheck recomputed on every frame. Discarded
+     `Result`s that hide failures (a script-trust decision can be lost).
+   - *Build hygiene.* Lint attributes repeated in 124 crate roots, while 15
+     build targets (benches, some tests, a `build.rs`) get no lints at all.
+     About 27 unused root dependencies. 215 hard-coded internal version
+     pins. Breaking API changes shipped in minor versions of published
+     crates, with no semver check.
+   - *Unwraps.* About 40 draw-path `unwrap()`s that a signature change
+     removes.
+   - *Tests.* nextest (75.8 s wall vs 32.6 s of actual test time), mutation
+     testing, coverage, a DAP mock adapter, and overlay snapshots.
+   - *Larger refactors.* One overlay priority table shared by drawing and
+     key routing, and typed errors in library crates.
+2. **Language intelligence and editing (T612–T624).** Completion
+   filter-as-you-type and auto-trigger, with `textEdit` and
+   `additionalTextEdits` (auto-import). LSP snippets through the existing
+   `vix-snippets` engine. Inline diagnostics. Incremental `didChange` and
+   ranged semantic tokens. Tree-sitter textobjects and function/class
+   motions. Debugger depth (conditional/log breakpoints, attach, a variable
+   tree). Inline ghost-text completion. Pull diagnostics. Outgoing calls and
+   type hierarchy. Document colors and links. Multi-cursor depth (Kakoune
+   split/select-in-selection). File-rename and watched-file notifications.
+   On-type formatting.
+3. **UX, workflow and platform (T625–T638).** OSC 52 clipboard over SSH and
+   tmux. Live settings reload. Per-project and per-language settings, gated
+   by workspace trust. Synchronized output, focus events and color-depth
+   fallback. Hot-exit backups of unsaved buffers. Picker preview and resume.
+   Terminal scrollback and multiple terminals. Problem matchers with
+   next-error. Interactive rebase. Stash list and worktrees. An Agent Client
+   Protocol (ACP) client. Oil-style directory editing. A Rhai plugin
+   installer. An undo-tree visualizer.
+
+**Sequencing.**
+- T595 (crash) comes first. The cheap quality items (T596–T601, T604) go
+  next, because they shorten every later task's feedback loop, nextest
+  especially.
+- Then the high-value, small-to-medium features: T612/T613 (completion +
+  snippets), T614 (inline diagnostics), T625–T627 (OSC 52, settings reload,
+  project settings).
+- The large items (T618 ghost text, T635 ACP, T624 rebuilt multi-cursor
+  motions, T611 overlay table) come last. Each should get a spec written
+  and agreed before code.
+- T616 (textobjects) should land before Run B's deferred modal work
+  (T112–T115), which would bind it as `if`/`af`.
+
+**Deliberately not proposed.** The scan found these already in Vix:
+- kitty keyboard protocol, OSC 11 background detection
+- jump labels, bookmarks, session restore
+- wgrep, 3-way merge, project frecency, `--doctor`
+- semantic tokens, inlay hints, code lens, linked editing, LSP
+  restart/log, tree-sitter injections, large-file prompt
+
+These were left out on purpose: ex-command scripting (excluded by the
+`vix-modal` spec) and anything already in the Ideas backlog (remote/SSH,
+collaborative editing, runtime grammars, remote-control socket). Duplicate
+dependency versions all come from third-party crates, and `deny.toml`
+already warns on them.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on
