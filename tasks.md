@@ -6927,8 +6927,8 @@ new action.
   re-export, and `LspEvent` gained variants on a non-`non_exhaustive` enum.
   Now `cargo semver-checks --workspace` runs in CI (new `semver` job,
   pinned 0.51.0), in `scripts/check` (skipped with a hint when the tool
-  isn't installed), and in `AI_STATEMENT.md` §1. The old local 0.4.0 could
-  not read rustdoc JSON v61; 0.47+ can. Verified: against the published
+  isn't installed), and in `AI_STATEMENT.md` §1. Older tools (0.47 and
+  below) cannot read rustdoc JSON v61 from rustc 1.99; 0.51 can. Verified: against the published
   1.7.1 all 124 packages pass, and against 1.5.0 it reports the two breaks
   above. Not verified: how it treats a brand-new crate that has no
   published baseline yet. If CI fails on one, add it to an `--exclude`

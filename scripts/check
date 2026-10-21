@@ -58,10 +58,19 @@ git diff --exit-code -- man/ || {
 }
 
 echo "==> semver (T602)"
+# Older cargo-semver-checks can't read the rustdoc JSON of a current toolchain
+# (0.47 stops at format v57, rustc 1.99 writes v61), so require 0.51 or newer.
+semver_ok=no
 if command -v cargo-semver-checks >/dev/null 2>&1; then
+	semver_v=$(cargo semver-checks --version | awk '{print $2}')
+	if [ "$(printf '%s\n0.51.0\n' "$semver_v" | sort -V | head -n1)" = "0.51.0" ]; then
+		semver_ok=yes
+	fi
+fi
+if [ "$semver_ok" = yes ]; then
 	cargo semver-checks --workspace
 else
-	echo "    (skipping: 'cargo install cargo-semver-checks --locked' to enable; needs network for the crates.io baseline)"
+	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 fi
 
 echo "==> scripts/check-docs"
