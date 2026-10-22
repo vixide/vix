@@ -7030,6 +7030,21 @@ new action.
   Step 2, later, after a spec: an `Overlay` enum for the modals that are
   mutually exclusive. **Large (step 1 is medium).**
 
+- [ ] **T639 — `password_prompt_gates_server_connections` does a real OS
+  keyring lookup, so it flakes under load.** Found 2026-10-22 while
+  landing T597's follow-up. The test (`crates/vix-db/src/lib.rs`, ~743)
+  selects a Postgres connection, and `wait_for_connect` gives the
+  background credential waterfall 5 s. That waterfall runs the real
+  `secret.rs` lookup: `password_command`, then the macOS Keychain (or
+  `secret-tool` on Linux). On a machine at load average 8–14 it failed
+  3 of 12 runs (2.7 s when it passes, a 5.3 s timeout when it fails),
+  and the same flake showed with the pre-`biased;` `session.rs`
+  (1 of 12), so it is not caused by T-anything in this run. Fix: let tests
+  inject the credential lookup (a no-op or in-memory backend), the way
+  T596 isolated the clipboard, so the test no longer depends on the host's
+  keyring. Test: the same assertions run with a lookup that returns
+  "no password" instantly. **Small.**
+
 ### Language intelligence & editing
 
 - [ ] **T612 — Completion filters as you type, auto-triggers, and applies
