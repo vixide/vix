@@ -6866,7 +6866,7 @@ new action.
   `in_memory_clipboard_is_per_thread` test fails 3/3 on the old static
   (both threads read `two`) and passes now. Left open: the nextest
   isolation that T604 would add on top.
-- [ ] **T597 — Spellcheck and the coverage gutter recompute every
+- [x] **T597 — Spellcheck and the coverage gutter recompute every
   frame.** `ui::draw` (`src/ui.rs:175`) calls `refresh_spellcheck`
   (`src/app.rs:4731-4772`), which runs a full tree-sitter query
   (`code.rs:886`), copies every comment and string range, and checks every
@@ -6878,6 +6878,19 @@ new action.
   drain all pending events before each redraw (`main.rs:318` reads one per
   draw). Verify: a counter test (one recompute per revision) and a case in
   `benches/frame_ops.rs`. **Small.**
+  Done 2026-10-22: `ui::draw` now calls `refresh_spellcheck_if_stale` and
+  `refresh_coverage_gutter_if_stale`, which compare an `(active tab,
+  revision)` key like the word-highlight and backlinks siblings do. The
+  explicit callers (toggle, accept a suggestion, add or ignore a word, load
+  a report) still call the always-recompute versions. Covered by
+  `coverage_gutter_refresh_is_skipped_until_the_buffer_changes`; the
+  spellcheck path has no automated test because its dictionaries are
+  untracked (the existing end-to-end spell test is `#[ignore]`). Left open:
+  draining all pending events before each redraw (`main.rs:318`) and a
+  `benches/frame_ops.rs` case. Same weakness as the siblings: a tab closed
+  and a new one opened at the same index with an equal revision would reuse
+  the old key until its first edit.
+
 - [ ] **T598 — Discarded `Result`s that hide real failures.**
   - `src/app/scripts.rs:175` `let _ = self.store_session(..)` silently
     loses a script-trust decision (T545's shape).
