@@ -193,3 +193,57 @@ fn load_coverage_file_with_empty_input_is_a_no_op() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T597: `ui::draw` calls the `_if_stale` refresh on every frame (idle ticks
+/// included), and it must only rebuild the gutter when the active tab or its
+/// content changed. Clearing the marks by hand makes a skipped rebuild visible.
+#[test]
+fn coverage_gutter_refresh_is_skipped_until_the_buffer_changes() {
+    let dir = unique_dir("coverage-stale");
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("lib.rs");
+    fs::write(&src, "fn a() {}\nfn b() {}\n").unwrap();
+    let report = dir.join("coverage.info");
+    fs::write(
+        &report,
+        format!("SF:{}\nDA:1,3\nDA:2,0\nend_of_record\n", src.display()),
+    )
+    .unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&src);
+    app.run_action("tools.load_coverage_file");
+    for c in report.to_string_lossy().chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.has_coverage());
+
+    let marks = |app: &vix::app::App| {
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .map_or(0, Vec::len)
+    };
+    assert_eq!(marks(&app), 2, "loading builds the gutter");
+
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .clear_gutter_marks();
+    app.refresh_coverage_gutter_if_stale();
+    assert_eq!(
+        marks(&app),
+        0,
+        "nothing changed, so the frame skips the rebuild"
+    );
+
+    app.on_key(key('x'));
+    app.refresh_coverage_gutter_if_stale();
+    assert_eq!(marks(&app), 2, "an edit makes it rebuild");
+
+    fs::remove_dir_all(&dir).ok();
+}

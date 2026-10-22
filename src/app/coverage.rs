@@ -82,6 +82,17 @@ impl App {
         self.visible.contains(crate::app::Visible::COVERAGE) && self.coverage.is_some()
     }
 
+    /// [`Self::refresh_coverage_gutter`] for the per-frame call in
+    /// `ui::draw`: does nothing unless the active tab or its content changed
+    /// since the last refresh (T597). Loading a report or toggling the gutter
+    /// calls `refresh_coverage_gutter` directly, which always recomputes.
+    pub fn refresh_coverage_gutter_if_stale(&mut self) {
+        if self.coverage_key == self.active_revision_key() {
+            return;
+        }
+        self.refresh_coverage_gutter();
+    }
+
     /// Recompute the coverage gutter for the active tab from the loaded
     /// report. No-op when the gutter isn't visible (`src/ui.rs`'s call site
     /// only calls this when it is) or the active tab's path isn't in the
@@ -90,6 +101,7 @@ impl App {
         if !self.visible.contains(crate::app::Visible::COVERAGE) {
             return;
         }
+        self.coverage_key = self.active_revision_key();
         let Some(report) = &self.coverage else {
             return;
         };

@@ -1963,6 +1963,11 @@ pub struct App {
     word_highlight_key: Option<(usize, u64, usize)>,
     /// `(active tab, revision)` the backlinks dock was last built for.
     backlinks_follow_key: Option<(usize, u64)>,
+    /// `(active tab, revision)` the misspelling underlines were last built for
+    /// (T597), so a redraw with nothing edited does not re-scan the buffer.
+    spell_key: Option<(usize, u64)>,
+    /// `(active tab, revision)` the coverage gutter was last built for (T597).
+    coverage_key: Option<(usize, u64)>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Position-history jump list (Alt+Left / Alt+Right).
@@ -2440,6 +2445,8 @@ impl App {
             last_auto_save: None,
             word_highlight_key: None,
             backlinks_follow_key: None,
+            spell_key: None,
+            coverage_key: None,
             clip: Vec::new(),
             nav_history: Vec::new(),
             bookmarks: Vec::new(),
@@ -4725,10 +4732,32 @@ impl App {
         }
     }
 
+    /// `(active tab, revision)` of the active text tab, for cheap change
+    /// detection; `None` when there is no text tab (none open, or an image).
+    fn active_revision_key(&self) -> Option<(usize, u64)> {
+        self.editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (self.editor.active, t.editor.revision()))
+    }
+
+    /// [`Self::refresh_spellcheck`] for the per-frame call in `ui::draw`: does
+    /// nothing unless the active tab or its content changed since the last
+    /// refresh (T597). Anything else that changes the answer (toggling
+    /// spell-check, accepting a suggestion, adding or ignoring a word) calls
+    /// `refresh_spellcheck` directly, which always recomputes.
+    pub fn refresh_spellcheck_if_stale(&mut self) {
+        if self.spell_key == self.active_revision_key() {
+            return;
+        }
+        self.refresh_spellcheck();
+    }
+
     /// Recompute the misspelled-word underlines on the active buffer. Scans only
     /// comment and string ranges; clears the marks when spell-checking is off, no
     /// dictionary loaded, or the tab is not editable text.
     pub fn refresh_spellcheck(&mut self) {
+        self.spell_key = self.active_revision_key();
         self.ensure_speller();
         if self.speller.is_none() {
             if let Some(t) = self.editor.active_tab_mut() {

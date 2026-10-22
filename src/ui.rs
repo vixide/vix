@@ -170,13 +170,14 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
 /// Render the whole frame: lay out panes, record their rectangles for mouse
 /// hit-testing, draw each pane, then draw any active overlay on top.
 pub fn draw(app: &mut App, frame: &mut Frame) {
-    // Refresh misspelled-word underlines before painting (event-driven redraw, so
-    // this recomputes once per input rather than continuously).
+    // Refresh misspelled-word underlines before painting. Frames also fire on
+    // idle ticks and while a task is busy, so this only re-scans the buffer when
+    // the active tab or its content changed (T597).
     if app.flags.contains(AppFlags::SPELLCHECK) {
-        app.refresh_spellcheck();
+        app.refresh_spellcheck_if_stale();
     }
     if app.coverage_gutter_active() {
-        app.refresh_coverage_gutter();
+        app.refresh_coverage_gutter_if_stale();
     } else if app.flags.contains(AppFlags::GIT_REPO) {
         app.refresh_git_gutter();
     }
