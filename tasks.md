@@ -6853,7 +6853,7 @@ new action.
     real hit. Give each site that is provably ASCII-safe an
     `#[expect(clippy::string_slice, reason = "...")]`. Do one crate per
     branch. **Medium.**
-- [ ] **T596 — The in-memory clipboard is a process-wide global, which
+- [x] **T596 — The in-memory clipboard is a process-wide global, which
   makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
   `static MEMORY: Mutex<Option<String>>` is shared by every parallel test
   thread. The 2026-09-17 flake (`modal.rs:409` pasted `"one "`) happened
@@ -6862,6 +6862,10 @@ new action.
   single-threaded, and none of the 11 callers runs on a background thread).
   Test: two threads set and read, and each sees only its own value.
   **Small.**
+  Done 2026-10-21: `MEMORY` is now `thread_local!`. The new
+  `in_memory_clipboard_is_per_thread` test fails 3/3 on the old static
+  (both threads read `two`) and passes now. Left open: the nextest
+  isolation that T604 would add on top.
 - [ ] **T597 — Spellcheck and the coverage gutter recompute every
   frame.** `ui::draw` (`src/ui.rs:175`) calls `refresh_spellcheck`
   (`src/app.rs:4731-4772`), which runs a full tree-sitter query

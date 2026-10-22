@@ -8,7 +8,7 @@
 //! copy) it is what keeps the platform backend from being entered concurrently.
 //!
 //! **The platform clipboard is opt-in.** Until [`use_system`] is called, [`set`]
-//! and [`get`] read and write a process-local in-memory clipboard instead. The
+//! and [`get`] read and write a thread-local in-memory clipboard instead. The
 //! `vix` binary opts in once at startup; everything else — the test suite above
 //! all — keeps the in-memory clipboard, so running `cargo test` can never
 //! overwrite whatever the developer had copied. (It did: a keymap test cut the
@@ -20,6 +20,7 @@
 #![deny(missing_docs)]
 
 use anyhow::{Result, anyhow};
+use std::cell::RefCell;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -31,8 +32,13 @@ static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
 /// [`use_system`] turns it on.
 static SYSTEM: AtomicBool = AtomicBool::new(false);
 
-/// The in-memory clipboard used until [`use_system`] is called.
-static MEMORY: Mutex<Option<String>> = Mutex::new(None);
+thread_local! {
+    /// The in-memory clipboard used until [`use_system`] is called. Per thread,
+    /// not process-wide: parallel tests each get their own, so one test's copy
+    /// can never be pasted by another (T596). The app only touches the
+    /// clipboard from its UI thread, so nothing real is split by this.
+    static MEMORY: RefCell<Option<String>> = const { RefCell::new(None) };
+}
 
 /// Route [`set`] / [`get`] to the platform clipboard for the rest of the
 /// process. The `vix` binary calls this once at startup; anything that does not
@@ -64,7 +70,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 pub fn set(text: &str) -> Result<()> {
     let _guard = lock(&CLIPBOARD_LOCK);
     if !is_system() {
-        *lock(&MEMORY) = Some(text.to_string());
+        MEMORY.with_borrow_mut(|m| *m = Some(text.to_string()));
         return Ok(());
     }
     arboard::Clipboard::new()
@@ -86,8 +92,8 @@ pub fn set(text: &str) -> Result<()> {
 pub fn get() -> Result<String> {
     let _guard = lock(&CLIPBOARD_LOCK);
     if !is_system() {
-        return lock(&MEMORY)
-            .clone()
+        return MEMORY
+            .with_borrow(Clone::clone)
             .ok_or_else(|| anyhow!("clipboard is empty"));
     }
     arboard::Clipboard::new()
@@ -115,5 +121,29 @@ mod tests {
             "goodbye",
             "a second copy replaces the first"
         );
+    }
+
+    /// The in-memory clipboard belongs to the calling thread, so parallel tests
+    /// (each on its own thread) cannot overwrite one another's copy. It used to
+    /// be a process-wide static, which made `y`/`p` tests flake under
+    /// `cargo test`'s default parallelism (T596).
+    #[test]
+    fn in_memory_clipboard_is_per_thread() {
+        use std::sync::{Arc, Barrier};
+        let barrier = Arc::new(Barrier::new(2));
+        let handles: Vec<_> = ["one", "two"]
+            .into_iter()
+            .map(|mine| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    set(mine).unwrap();
+                    // Both threads have written before either reads back.
+                    barrier.wait();
+                    get().unwrap()
+                })
+            })
+            .collect();
+        let got: Vec<String> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(got, ["one", "two"]);
     }
 }
