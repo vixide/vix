@@ -395,13 +395,18 @@ async fn stream_sql(
     let mut truncated = false;
     loop {
         let item = tokio::select! {
-            item = stream.next() => item,
+            // `biased`: when a row and a cancel are both ready, cancel wins.
+            // Without it `select!` picks a ready branch at random, so a
+            // cancelled statement could still run to completion (a CI flake
+            // in `cancel_is_a_one_way_signal_the_next_statement_also_notices`).
+            biased;
             // Cancelled (or the Session, and its cancel_tx, was simply
             // dropped -- `changed()` also errors then): give up on this
             // statement immediately rather than wait on a network read
             // that may never produce another item, so the worker can move
             // on to closing the connection and exiting (T532).
             _ = cancel_rx.changed() => return false,
+            item = stream.next() => item,
         };
         let Some(item) = item else {
             break;
