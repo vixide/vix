@@ -13,7 +13,7 @@ Two guarantees:
   uncontended; under parallel tests it is what keeps the backend from being
   entered twice at once.
 - **The platform clipboard is opt-in.** Until `use_system` is called, `set` and
-  `get` read and write a process-local in-memory clipboard. `src/main.rs` opts
+  `get` read and write a thread-local in-memory clipboard (T596: so parallel tests cannot see each other's copies). `src/main.rs` opts
   in once at startup, so the app behaves exactly as before; everything else —
   the test suite above all — copies and pastes in memory.
 
