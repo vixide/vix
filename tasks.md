@@ -6836,7 +6836,7 @@ new action.
 
 ### Code quality & correctness
 
-- [ ] **T595 — Org table time-sort panics on non-ASCII cells
+- [x] **T595 — Org table time-sort panics on non-ASCII cells
   (T559's bug class, a site it missed).**
   - [x] **(a) The crash — done 2026-10-21.** `parse_time_key`
     (`crates/vix-org-table/src/lib.rs`) checked `s.len() >= 10`, which
@@ -6845,7 +6845,7 @@ new action.
     (`&m[..2]`) had the same bug (`2024-01-05 10:1é`), which the audit had
     not named. Both now use `get(..)`. Regression tests fail on the old
     code (panic at the audited line) and pass now.
-  - [ ] **(b) Turn on `#![warn(clippy::string_slice)]`** in vix-org,
+  - [x] **(b) Turn on `#![warn(clippy::string_slice)]`** in vix-org,
     vix-org-table, vix-org-capture, vix-roam, and
     vix-structural-replace, then audit every hit. Measured 2026-10-21
     (all targets, so some hits repeat): vix-org 60, vix-org-table 22,
@@ -6861,7 +6861,10 @@ new action.
     `cfg_attr(not(test), ...)` since tests slice their own ASCII fixtures;
     library hits became `get`/`split_at_checked`, no `#[expect]` needed.
     **vix-structural-replace done** (same day): all
-    slices became `get(..).unwrap_or_default()`. Remaining: vix-org (60).
+    slices became `get(..).unwrap_or_default()`. **vix-org done** (same day): 57 sites, all
+    `get(..).unwrap_or_default()`; no hit was a live panic (each followed an
+    ASCII-prefix/regex-offset guarantee), so this is hardening. **(b) is
+    complete; T595 done.**
 - [x] **T596 — The in-memory clipboard is a process-wide global, which
   makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
   `static MEMORY: Mutex<Option<String>>` is shared by every parallel test

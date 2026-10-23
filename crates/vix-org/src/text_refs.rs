@@ -27,8 +27,8 @@ pub fn link_at(text: &str, cursor: usize) -> Option<(String, Option<String>)> {
     let l = *text.split('\n').collect::<Vec<_>>().get(line_idx)?;
     let col = cursor - line_start.min(cursor);
     let contains = |l: &str, start: usize, end: usize| {
-        let sc = l[..start].chars().count();
-        let ec = sc + l[start..end].chars().count();
+        let sc = l.get(..start).unwrap_or_default().chars().count();
+        let ec = sc + l.get(start..end).unwrap_or_default().chars().count();
         (sc..=ec).contains(&col)
     };
     for c in LINK.captures_iter(l) {
@@ -53,7 +53,7 @@ pub fn link_pos(text: &str, cursor: usize, forward: bool) -> Option<usize> {
     let mut starts: Vec<usize> = LINK
         .find_iter(text)
         .chain(BARE_LINK.find_iter(text))
-        .map(|m| text[..m.start()].chars().count())
+        .map(|m| text.get(..m.start()).unwrap_or_default().chars().count())
         .collect();
     starts.sort_unstable();
     starts.dedup();
@@ -96,7 +96,9 @@ fn sparse_folds(text: &str, pred: impl Fn(&str) -> bool) -> Vec<(usize, usize)> 
 
 /// Whether a line is a headline whose keyword is `TODO`.
 fn is_todo_headline(line: &str) -> bool {
-    headline_level(line).is_some_and(|lv| line[lv..].split_whitespace().next() == Some("TODO"))
+    headline_level(line).is_some_and(|lv| {
+        line.get(lv..).unwrap_or_default().split_whitespace().next() == Some("TODO")
+    })
 }
 
 /// Sparse-tree folds showing only `TODO` headlines (Org `C-c / t`): every
@@ -143,8 +145,13 @@ pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
     let on_definition = FOOTNOTE.find(line).is_some_and(|m| m.start() == 0);
     let label_at_cursor = FOOTNOTE.captures_iter(line).find_map(|c| {
         let m = c.get(0)?;
-        let sc = line[..m.start()].chars().count();
-        let ec = sc + line[m.start()..m.end()].chars().count();
+        let sc = line.get(..m.start()).unwrap_or_default().chars().count();
+        let ec = sc
+            + line
+                .get(m.start()..m.end())
+                .unwrap_or_default()
+                .chars()
+                .count();
         (sc..=ec).contains(&col).then(|| c[1].to_string())
     });
     match label_at_cursor {
@@ -155,7 +162,7 @@ pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
                 if let Some(pos) = l.find(&needle)
                     && (i != line_idx || pos != 0)
                 {
-                    let sc = l[..pos].chars().count();
+                    let sc = l.get(..pos).unwrap_or_default().chars().count();
                     return (text.to_string(), line_start_char(text, i) + sc);
                 }
             }
@@ -199,9 +206,9 @@ pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
 /// `org-footnote-section`). The cursor belongs at the end of the result.
 fn append_footnote_definition(text: &str, label: &str) -> String {
     let mut out = text.trim_end_matches('\n').to_string();
-    let has_section = out
-        .split('\n')
-        .any(|l| headline_level(l).is_some_and(|lv| l[lv..].trim() == "Footnotes"));
+    let has_section = out.split('\n').any(|l| {
+        headline_level(l).is_some_and(|lv| l.get(lv..).unwrap_or_default().trim() == "Footnotes")
+    });
     if !has_section {
         out.push_str("\n\n* Footnotes");
     }
@@ -223,7 +230,8 @@ pub fn id_location(text: &str, id: &str) -> Option<usize> {
         // the literal comparison even runs, on a line that doesn't even
         // match. `get` returns `None` instead, and once it returns `Some`
         // offset 4 is proven a boundary, so the later `t[4..]` is safe too.
-        t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(":id:")) && t[4..].trim() == id
+        t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(":id:"))
+            && t.get(4..).unwrap_or_default().trim() == id
     })?;
     Some(governing(&lines, hit).unwrap_or(hit))
 }
@@ -240,7 +248,7 @@ fn src_begin(line: &str) -> Option<String> {
         .get(..11)
         .is_some_and(|p| p.eq_ignore_ascii_case("#+begin_src"))
     {
-        &t[11..]
+        t.get(11..).unwrap_or_default()
     } else {
         return None;
     };
@@ -308,7 +316,7 @@ pub fn column_view(text: &str) -> String {
         let tags = TAGS
             .captures(line)
             .map_or_else(String::new, |c| c[1].to_string());
-        let (keyword, body) = split_keyword(bare[level..].trim());
+        let (keyword, body) = split_keyword(bare.get(level..).unwrap_or_default().trim());
         let (prio, title) = match strip_priority(body) {
             Some((p, after)) => (format!("[#{p}]"), after),
             None => (String::new(), body),

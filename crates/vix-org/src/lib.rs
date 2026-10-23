@@ -9,6 +9,7 @@
 //! All functions are pure so they can be unit-tested without a live editor.
 
 #![warn(clippy::pedantic)]
+#![cfg_attr(not(test), warn(clippy::string_slice))]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -65,7 +66,7 @@ const DONE: &str = "DONE";
 #[must_use]
 pub fn headline_level(line: &str) -> Option<usize> {
     let stars = line.len() - line.trim_start_matches('*').len();
-    if stars > 0 && line[stars..].starts_with(' ') {
+    if stars > 0 && line.get(stars..).unwrap_or_default().starts_with(' ') {
         Some(stars)
     } else {
         None

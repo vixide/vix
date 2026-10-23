@@ -27,7 +27,11 @@ pub(crate) fn relevel(line: &str, delta: i64) -> String {
         Some(level) => {
             let new = usize::try_from((i64::try_from(level).unwrap_or(i64::MAX) + delta).max(1))
                 .unwrap_or(1);
-            format!("{} {}", "*".repeat(new), line[level..].trim_start())
+            format!(
+                "{} {}",
+                "*".repeat(new),
+                line.get(level..).unwrap_or_default().trim_start()
+            )
         }
         None => line.to_string(),
     }
@@ -120,7 +124,9 @@ pub fn nav_backward_same(text: &str, line: usize) -> Option<usize> {
 pub fn headlines(text: &str) -> Vec<(usize, usize, String)> {
     text.split('\n')
         .enumerate()
-        .filter_map(|(i, l)| headline_level(l).map(|lv| (i, lv, l[lv..].trim().to_string())))
+        .filter_map(|(i, l)| {
+            headline_level(l).map(|lv| (i, lv, l.get(lv..).unwrap_or_default().trim().to_string()))
+        })
         .collect()
 }
 
@@ -165,7 +171,7 @@ pub fn sort_children(text: &str, line: usize) -> Option<String> {
     sorted.sort_by_key(|&(s, _)| {
         let l = lines[s];
         let lv = headline_level(l).unwrap_or(0);
-        l[lv..].trim().to_ascii_lowercase()
+        l.get(lv..).unwrap_or_default().trim().to_ascii_lowercase()
     });
     let mut out: Vec<&str> = lines[..first].to_vec();
     for &(s, e) in &sorted {
