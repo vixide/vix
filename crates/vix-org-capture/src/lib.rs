@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
+#![warn(clippy::string_slice)]
 
 //! Org-capture: template-driven capture, in the shape of Emacs
 //! `org-capture-templates` — a template with `%^{Prompt}`-style placeholders,
@@ -410,22 +411,31 @@ pub fn wrap_entry(entry_type: EntryType, expanded: &str) -> String {
 /// `None`.
 fn headline_stars(line: &str) -> Option<usize> {
     let stars = line.len() - line.trim_start_matches('*').len();
-    (stars > 0 && line[stars..].starts_with(' ')).then_some(stars)
+    (stars > 0 && after_stars(line, stars).starts_with(' ')).then_some(stars)
+}
+
+/// `line` past its first `stars` bytes.
+///
+/// `stars` must come from [`headline_stars`] (or the same leading-`*` count),
+/// so it only ever spans ASCII `*` bytes and is a char boundary.
+fn after_stars(line: &str, stars: usize) -> &str {
+    #[expect(
+        clippy::string_slice,
+        reason = "`stars` counts leading ASCII `*` bytes, so it is a char boundary"
+    )]
+    &line[stars..]
 }
 
 /// Strip a trailing ` :tag:tag:` block from a headline's text, if present.
 fn strip_tags(text: &str) -> &str {
-    if let Some(idx) = text.rfind(" :") {
-        let tail = &text[idx + 1..];
-        if tail.len() > 2
-            && tail.starts_with(':')
-            && tail.ends_with(':')
-            && tail[1..tail.len() - 1]
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
-        {
-            return text[..idx].trim_end();
-        }
+    if let Some((head, tail)) = text.rsplit_once(" :")
+        && let Some(tags) = tail.strip_suffix(':')
+        && !tags.is_empty()
+        && tags
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+    {
+        return head.trim_end();
     }
     text
 }
@@ -436,7 +446,8 @@ fn find_headline(lines: &[String], title: &str) -> Option<(usize, usize)> {
     let want = title.trim().to_ascii_lowercase();
     lines.iter().enumerate().find_map(|(i, l)| {
         let stars = headline_stars(l)?;
-        (strip_tags(l[stars..].trim()).to_ascii_lowercase() == want).then_some((i, stars))
+        (strip_tags(after_stars(l, stars).trim()).to_ascii_lowercase() == want)
+            .then_some((i, stars))
     })
 }
 
@@ -514,7 +525,7 @@ fn bump_stars(entry_lines: &[String], target_level: usize) -> Vec<String> {
             Some(s) => {
                 let new_s = (i64::try_from(s).unwrap_or(0) + delta).max(1);
                 let new_s = usize::try_from(new_s).unwrap_or(1);
-                format!("{}{}", "*".repeat(new_s), &l[s..])
+                format!("{}{}", "*".repeat(new_s), after_stars(l, s))
             }
             None => l.clone(),
         })
@@ -580,7 +591,8 @@ pub fn insert_under_id(
     let id = id.trim();
     let id_line = lines.iter().position(|l| {
         let t = l.trim();
-        t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(":ID:")) && t[4..].trim() == id
+        t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(":ID:"))
+            && t.get(4..).is_some_and(|v| v.trim() == id)
     })?;
     let owner = (0..id_line)
         .rev()
@@ -654,8 +666,9 @@ fn find_child_headline(
         None => (0, lines.len()),
         Some(p) => (p + 1, subtree_end(lines, p, level - 1)),
     };
-    (start..end)
-        .find(|&i| headline_stars(&lines[i]) == Some(level) && lines[i][level..].trim() == title)
+    (start..end).find(|&i| {
+        headline_stars(&lines[i]) == Some(level) && after_stars(&lines[i], level).trim() == title
+    })
 }
 
 /// Append a new headline at `level` as the last child of `parent` (or at the
