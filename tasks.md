@@ -6857,8 +6857,10 @@ new action.
     boundary-safe (each follows an already-matched ASCII prefix), each with an
     `#[expect]` + reason. **vix-org-capture done** (same day): an `after_stars` helper holds
     the one `#[expect]`; `strip_tags` rewritten with `rsplit_once`/
-    `strip_suffix`. Remaining: vix-org-table (22), vix-structural-replace
-    (17), vix-org (60).
+    `strip_suffix`. **vix-org-table done** (2026-10-23): lint is
+    `cfg_attr(not(test), ...)` since tests slice their own ASCII fixtures;
+    library hits became `get`/`split_at_checked`, no `#[expect]` needed.
+    Remaining: vix-structural-replace (17), vix-org (60).
 - [x] **T596 — The in-memory clipboard is a process-wide global, which
   makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
   `static MEMORY: Mutex<Option<String>>` is shared by every parallel test

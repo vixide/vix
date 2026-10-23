@@ -18,6 +18,9 @@
 //! without a live editor.
 
 #![warn(clippy::pedantic)]
+// Tests slice their own ASCII fixtures; the lint guards library code that
+// slices user text.
+#![cfg_attr(not(test), warn(clippy::string_slice))]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -872,14 +875,14 @@ fn parse_time_key(raw: &str) -> Option<String> {
     // straddling byte 4, 7 or 10 would make a slice panic.
     if let Some(date) = s.get(0..10).filter(|d| {
         d.is_ascii()
-            && is_ascii_digits(&d[0..4], 4)
+            && d.get(0..4).is_some_and(|y| is_ascii_digits(y, 4))
             && d.as_bytes()[4] == b'-'
-            && is_ascii_digits(&d[5..7], 2)
+            && d.get(5..7).is_some_and(|mo| is_ascii_digits(mo, 2))
             && d.as_bytes()[7] == b'-'
-            && is_ascii_digits(&d[8..10], 2)
+            && d.get(8..10).is_some_and(|dd| is_ascii_digits(dd, 2))
     }) {
         // `date` is 10 ASCII bytes, so byte 10 is a char boundary.
-        let rest = s[10..].trim_start();
+        let rest = s.get(10..).unwrap_or_default().trim_start();
         let rest = rest.split_once(' ').map_or(rest, |(first, tail)| {
             if !first.is_empty() && first.chars().all(char::is_alphabetic) {
                 tail.trim_start()
@@ -1153,22 +1156,24 @@ fn increment_value(s: &str) -> String {
 
     let digit_start = s.rfind(|c: char| !c.is_ascii_digit()).map_or(0, |i| i + 1);
     if digit_start < s.len()
-        && let Ok(n) = s[digit_start..].parse::<i64>()
+        && let Some((head, tail)) = s.split_at_checked(digit_start)
+        && let Ok(n) = tail.parse::<i64>()
     {
-        let width = s.len() - digit_start;
-        let digits = if s[digit_start..].starts_with('0') {
+        let width = tail.len();
+        let digits = if tail.starts_with('0') {
             format!("{:0width$}", n + 1)
         } else {
             (n + 1).to_string()
         };
-        return format!("{}{digits}", &s[..digit_start]);
+        return format!("{head}{digits}");
     }
 
     let digit_end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
     if digit_end > 0
-        && let Ok(n) = s[..digit_end].parse::<i64>()
+        && let Some((head, tail)) = s.split_at_checked(digit_end)
+        && let Ok(n) = head.parse::<i64>()
     {
-        return format!("{}{}", n + 1, &s[digit_end..]);
+        return format!("{}{tail}", n + 1);
     }
 
     s.to_string()
@@ -1328,7 +1333,7 @@ fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
     if s.len() >= prefix.len()
         && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
     {
-        Some(&s[prefix.len()..])
+        s.get(prefix.len()..)
     } else {
         None
     }
@@ -1544,17 +1549,22 @@ fn expand_aggregate_functions(expr: &str, ctx: &EvalContext) -> Result<String, S
         let boundary_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_';
         if boundary_ok {
             for name in FUNCS {
-                if expr[i..].starts_with(name) && bytes.get(i + name.len()) == Some(&b'(') {
+                if expr.get(i..).is_some_and(|r| r.starts_with(name))
+                    && bytes.get(i + name.len()) == Some(&b'(')
+                {
                     let open = i + name.len();
                     let close = find_matching_paren(expr, open).ok_or("unbalanced parentheses")?;
-                    let values = resolve_range(expr[open + 1..close].trim(), ctx)?;
+                    let values =
+                        resolve_range(expr.get(open + 1..close).unwrap_or_default().trim(), ctx)?;
                     out.push_str(&wrap_number(aggregate(name, &values)));
                     i = close + 1;
                     continue 'outer;
                 }
             }
         }
-        let ch = expr[i..]
+        let ch = expr
+            .get(i..)
+            .unwrap_or_default()
             .chars()
             .next()
             .expect("i < expr.len() so a char exists");
@@ -1723,7 +1733,7 @@ fn format_result(v: f64, format: Option<&str>) -> String {
 fn apply_printf_format(v: f64, fmt: &str) -> Option<String> {
     let rest = fmt.trim().strip_prefix("%.")?;
     let digits_end = rest.find(['f', 'F'])?;
-    let prec: usize = rest[..digits_end].parse().ok()?;
+    let prec: usize = rest.get(..digits_end)?.parse().ok()?;
     Some(format!("{v:.prec$}"))
 }
 
