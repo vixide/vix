@@ -12,10 +12,6 @@
 //! something useful regardless of which Nerd Font the terminal uses. A glyph that
 //! a particular font lacks simply renders as a fallback box; nothing breaks.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One selectable glyph and a short, human-readable name.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Glyph {

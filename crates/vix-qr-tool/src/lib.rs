@@ -4,10 +4,6 @@
 //! half-block characters, suitable for display in a TUI overlay and scanning from
 //! the screen. The host shows the rendered art read-only.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use qrcode::QrCode;
 use qrcode::render::unicode;
 

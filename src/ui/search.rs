@@ -2,8 +2,6 @@
 //! replace, the in-buffer find/replace box, and the generic prompt overlay
 //! (including its Org-capture preview).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -187,7 +185,10 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
     rects
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "a single linear frame-drawing routine for one overlay"
+)]
 pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let replacing = s.flags.contains(SearchFlags::REPLACING);

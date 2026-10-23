@@ -14,8 +14,6 @@
 //! (constructs the LSP client at startup) and `menu_hover` (menu tooltips,
 //! an unrelated same-named function) both stayed in `app.rs`.
 
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent};

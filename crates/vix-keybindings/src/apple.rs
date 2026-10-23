@@ -25,8 +25,6 @@
 //!   so other panes keep their own `Ctrl+D` handling), which a
 //!   keymap-keyed static table can't express.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const NORMAL: &[Binding] = &[

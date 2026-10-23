@@ -19,10 +19,6 @@
 //! went through this same dispatch". Everything behind the same
 //! `Settings::modal_engine` flag, default off.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 pub mod count;
 pub mod mode;
 pub mod motion;

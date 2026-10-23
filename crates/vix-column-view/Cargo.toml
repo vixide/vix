@@ -10,3 +10,6 @@ description = "The interactive Column View overlay (Org C-c C-x C-c): a live, wr
 [dependencies]
 crossterm = { workspace = true }
 vix-org = { workspace = true }
+
+[lints]
+workspace = true

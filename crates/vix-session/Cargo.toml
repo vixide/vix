@@ -14,3 +14,6 @@ vix-fileops = { workspace = true }
 
 [dev-dependencies]
 toml = { workspace = true }
+
+[lints]
+workspace = true

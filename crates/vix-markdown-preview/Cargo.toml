@@ -10,3 +10,6 @@ description = "Render Markdown to formatted plain-text lines for a read-only pre
 [dependencies]
 pulldown-cmark = { workspace = true }
 vix-outline-panel = { workspace = true }
+
+[lints]
+workspace = true

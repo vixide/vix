@@ -9,3 +9,6 @@ description = "Available UI languages for Vix; the View → Locale submenu."
 
 [dependencies]
 unicode-bidi = "0.3"
+
+[lints]
+workspace = true

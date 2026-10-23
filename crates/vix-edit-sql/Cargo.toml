@@ -11,3 +11,6 @@ description = "The SQL edit surface: a statement-oriented view of a `.sql` buffe
 crossterm = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

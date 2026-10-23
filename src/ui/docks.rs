@@ -2,8 +2,6 @@
 //! (DAP) panel, the outline dock (document structure sidebar), and the
 //! notifications drawer.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap};
 

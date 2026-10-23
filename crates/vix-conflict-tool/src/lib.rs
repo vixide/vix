@@ -12,10 +12,6 @@
 //! that line range with the chosen side (ours / theirs / both) via
 //! [`Resolution`].
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Which side of a conflict to keep.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Resolution {

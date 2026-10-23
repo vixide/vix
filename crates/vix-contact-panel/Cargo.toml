@@ -9,3 +9,6 @@ description = "Browse a directory of vCard files as a table of contacts."
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

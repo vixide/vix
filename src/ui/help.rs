@@ -3,8 +3,6 @@
 //! table over every built-in binding, the editor additionally marking user
 //! and script overrides and a rebind/reset target row.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

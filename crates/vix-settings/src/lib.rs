@@ -14,10 +14,6 @@
 //! assert_eq!(defaults.locale, "en");
 //! ```
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use serde::{Deserialize, Serialize};
 
 mod model;

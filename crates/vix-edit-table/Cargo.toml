@@ -11,3 +11,6 @@ description = "The table editor: a spreadsheet-like grid for viewing and editing
 crossterm = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-convert-tabular = { workspace = true }
+
+[lints]
+workspace = true

@@ -8,10 +8,6 @@
 //! *stricter* public-facing API that rejects malformed input instead of
 //! zero-filling it.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Parse a `#RRGGBB` (or `RRGGBB`) hex string into an `(r, g, b)` triple.
 ///
 /// Any component that is missing or invalid is treated as `0`.

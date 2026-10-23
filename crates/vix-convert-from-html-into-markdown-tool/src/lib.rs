@@ -3,10 +3,6 @@
 //! Uses `htmd` (a Turndown-inspired converter) to turn an HTML fragment into
 //! Markdown text.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert HTML `input` to Markdown.
 ///
 /// # Errors

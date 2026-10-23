@@ -9,10 +9,6 @@
 //! parsed once on first use — plus a [`Panel`] holding the query, highlighted
 //! row, and scroll offset over the *filtered* rows.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::sync::OnceLock;
 
 /// One media type: its name, a human description, the associated file

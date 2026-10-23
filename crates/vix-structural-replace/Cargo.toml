@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Structural search & replace: a pattern language with metavariable holes, matched against source text token-by-token."
 
 [dependencies]
+
+[lints]
+workspace = true

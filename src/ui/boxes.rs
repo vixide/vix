@@ -2,8 +2,6 @@
 //! calendar (Tools → Calendar…), the clock (Tools → Clock…), and the
 //! workspace dashboard (Tools → Workspace Dashboard…).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 

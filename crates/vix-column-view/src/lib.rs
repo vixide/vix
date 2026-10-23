@@ -25,10 +25,6 @@
 //!   "trust the user" convention for other free-text Org fields; `n`/`p`/
 //!   digit-select are the constrained-cycle affordances instead.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_org::{
@@ -784,7 +780,7 @@ mod tests {
         let mut view = ColumnView::open(&text, 0, (2026, 8, 12), None);
         assert_eq!(view.row_count(), 2);
         assert_eq!(view.col_count(), 4);
-        let mut buf = text.clone();
+        let mut buf = text;
         assert_eq!(
             view.handle_key(code(KeyCode::Down), &mut buf),
             Outcome::Consumed
@@ -800,7 +796,7 @@ mod tests {
     fn edits_a_field_and_recomputes_ancestor_summary() {
         let text = spec_text();
         let mut view = ColumnView::open(&text, 0, (2026, 8, 12), None);
-        let mut buf = text.clone();
+        let mut buf = text;
         view.handle_key(code(KeyCode::Down), &mut buf); // Child row
         view.handle_key(code(KeyCode::Right), &mut buf); // TODO
         view.handle_key(code(KeyCode::Right), &mut buf); // EFFORT
@@ -827,7 +823,7 @@ mod tests {
     fn allowed_value_cycling_and_digit_select() {
         let text = spec_text();
         let mut view = ColumnView::open(&text, 0, (2026, 8, 12), None);
-        let mut buf = text.clone();
+        let mut buf = text;
         view.handle_key(code(KeyCode::Down), &mut buf);
         view.col = 3; // OWNER column, already "Tammy" (index 0 of the ALL list)
         view.handle_key(key('n'), &mut buf);

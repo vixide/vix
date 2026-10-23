@@ -6,10 +6,6 @@
 //! symbol's line. On open it can select the symbol nearest the cursor with
 //! [`Outline::select_nearest`].
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One outline row: a symbol's kind, name, and 1-based line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {

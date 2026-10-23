@@ -17,12 +17,9 @@
 //! its new position). All functions are pure so they can be unit-tested
 //! without a live editor.
 
-#![warn(clippy::pedantic)]
 // Tests slice their own ASCII fixtures; the lint guards library code that
 // slices user text.
 #![cfg_attr(not(test), warn(clippy::string_slice))]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 use evalexpr::Value;
 
@@ -1517,8 +1514,10 @@ fn eval_formula_value(
     let ctx = EvalContext { table, data_rows };
     let expanded = expand_aggregate_functions(expr, &ctx)?;
     let substituted = substitute_scalar_refs(&expanded, &ctx, current_row)?;
-    #[allow(clippy::cast_precision_loss)]
-    // pragmatic: table formulas do not need i64-exact precision
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "table formulas do not need i64-exact precision"
+    )]
     match evalexpr::eval(&substituted).map_err(|e| e.to_string())? {
         Value::Int(i) => Ok(i as f64),
         Value::Float(f) => Ok(f),
@@ -1575,7 +1574,7 @@ fn expand_aggregate_functions(expr: &str, ctx: &EvalContext) -> Result<String, S
 }
 
 /// Compute the named aggregate over `values`.
-#[allow(clippy::cast_precision_loss)] // pragmatic: element counts here are small
+#[allow(clippy::cast_precision_loss, reason = "element counts here are small")]
 fn aggregate(name: &str, values: &[f64]) -> f64 {
     match name {
         "vsum" => values.iter().sum(),
@@ -1714,7 +1713,10 @@ fn format_result(v: f64, format: Option<&str>) -> String {
     if !v.is_finite() {
         return "#ERROR".to_string();
     }
-    #[allow(clippy::cast_possible_truncation)] // pragmatic: table cell values are small
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "table cell values are small"
+    )]
     if v.fract().abs() < 1e-9 {
         (v.round() as i64).to_string()
     } else {

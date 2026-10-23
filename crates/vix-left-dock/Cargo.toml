@@ -10,3 +10,6 @@ description = "Left dock: the file explorer's lazily-expanded directory tree + s
 [dependencies]
 regex = { workspace = true }
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

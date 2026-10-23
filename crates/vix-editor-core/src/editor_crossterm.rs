@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,

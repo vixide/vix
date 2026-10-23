@@ -9,8 +9,6 @@
 //! every Shift-requiring token is written out explicitly (`"C-S-p"`, not
 //! relying on an uppercase char).
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const NORMAL: &[Binding] = &[

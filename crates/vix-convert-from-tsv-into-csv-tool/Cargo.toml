@@ -9,3 +9,6 @@ description = "Convert: TSV text into CSV."
 
 [dependencies]
 vix-convert-tabular = { workspace = true }
+
+[lints]
+workspace = true

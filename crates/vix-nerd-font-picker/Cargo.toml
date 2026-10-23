@@ -8,3 +8,6 @@ repository.workspace = true
 description = "A curated set of Nerd Font glyphs and the character-picker grid state."
 
 [dependencies]
+
+[lints]
+workspace = true

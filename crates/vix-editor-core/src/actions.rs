@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 use crate::code::EditKind;
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -596,7 +595,7 @@ impl Action for Duplicate {
             // the next line. The last line has no trailing newline, so insert a
             // leading newline instead — otherwise the copy joins onto the original.
             let (to_insert, line_base) = if line_text.ends_with('\n') {
-                (line_text.clone(), insert_pos)
+                (line_text, insert_pos)
             } else {
                 (format!("\n{line_text}"), insert_pos + 1)
             };

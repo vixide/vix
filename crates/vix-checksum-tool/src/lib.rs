@@ -8,10 +8,6 @@
 //! CRC-32. MD5 and CRC-32 are here for compatibility with legacy tooling that
 //! still expects them, not because either is cryptographically sound.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use sha2::{Digest, Sha256, Sha512};
 
 /// SHA-256 digest of `text` (UTF-8 bytes) as a 64-character lowercase hex string.

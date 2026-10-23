@@ -9,8 +9,6 @@
 //! too big to move in one piece; see `tasks.md`'s T141 entry). Mostly
 //! contiguous, plus one outlier (`refresh_backlinks_follow`).
 
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 use super::{App, AppFlags, Prompt, PromptKind};

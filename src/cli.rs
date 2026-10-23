@@ -13,7 +13,10 @@
 // `#[arg(long)]` CLI flag, not related state a bitflags field could group --
 // `clap::Parser`'s derive needs one named `bool` field per flag, so there is
 // no bitflags-shaped alternative here the way T149 found for `App`/`Settings`.
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool is an independent clap `#[arg(long)]` flag; the derive needs one named field per flag"
+)]
 #[derive(clap::Parser, Debug)]
 #[command(
     name = "vix",

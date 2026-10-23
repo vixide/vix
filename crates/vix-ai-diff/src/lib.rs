@@ -7,10 +7,6 @@
 //! accepted choices. Pure data over `split_inclusive('\n')` lines, so the result
 //! is an exact reconstruction (no line-ending guessing) and unit-testable.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One segment of the proposed diff.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Seg {

@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 use crate::history::History;
 use crate::selection::Selection;
 use crate::utils::{calculate_end_position, comment as lang_comment, count_indent_units, indent};
@@ -757,7 +756,7 @@ impl Code {
         let cancel = Arc::new(AtomicBool::new(false));
         let worker = self.parse_worker.as_mut().expect("worker ensured above");
         worker.cancel.store(true, Ordering::Relaxed); // abort the superseded parse
-        worker.cancel = cancel.clone();
+        worker.cancel = Arc::clone(&cancel);
         worker.requested = generation;
         worker
             .requests
@@ -1551,12 +1550,13 @@ mod tests {
         // and independent of how far the worker thread has actually gotten.
         let big = "fn f() { let x = 1; }\n".repeat(3000);
         let code = Code::new(&big, "rust", None).unwrap();
-        let cancel = code
-            .parse_worker
-            .as_ref()
-            .expect("over the async threshold, so the worker exists")
-            .cancel
-            .clone();
+        let cancel = Arc::clone(
+            &code
+                .parse_worker
+                .as_ref()
+                .expect("over the async threshold, so the worker exists")
+                .cancel,
+        );
         assert!(
             !cancel.load(Ordering::Relaxed),
             "not cancelled while `code` is still alive"

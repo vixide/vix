@@ -2,8 +2,6 @@
 //! popup (candidate keys for a pending prefix) and the jump-to-line labels
 //! (leap-style navigation).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

@@ -16,10 +16,6 @@
 //! Centralizing the logic means CSV→JSON and JSON→CSV (and the TSV pair) share
 //! exactly one parser and one mapper, so the directions stay consistent.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use serde_json::{Map, Value};
 
 /// Parse CSV text into rows of fields, honoring RFC 4180 quoting: fields may be

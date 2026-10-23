@@ -1,6 +1,9 @@
 //! Integration tests for Vix's terminal-independent logic.
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 
 #[cfg(feature = "ai")]
 mod ai;

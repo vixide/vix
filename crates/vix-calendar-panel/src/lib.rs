@@ -6,10 +6,6 @@
 //! stays unit-testable without a terminal. The live date/time strings (local,
 //! UTC, ISO week, active zone) moved to `vix-clock-panel`.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T566:
 // `title()` used `strftime("%B %Y")`, and `%B` isn't locale-aware without

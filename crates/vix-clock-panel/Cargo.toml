@@ -10,3 +10,6 @@ description = "Clock box: live date/time strings (local, UTC, ISO week, active z
 [dependencies]
 jiff = { workspace = true }
 vix-time-zone-model = { workspace = true }
+
+[lints]
+workspace = true

@@ -28,10 +28,6 @@
 //! UI (none exists yet) can pair its `action_id` results with [`title_key`]
 //! the same way.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One catalog entry: an action id and the i18n key for its title.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Action {

@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
 use crate::editor::{Editor, Flags};
 use ratatui_core::buffer::Buffer;
@@ -396,7 +395,10 @@ impl Editor {
     /// Render a trailing `...` right after a folded start line's text, so a
     /// collapsed fold (e.g. an Org drawer `:PROPERTIES:...`) shows that content
     /// is hidden below it, mirroring how Org and outline editors mark a fold.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a draw helper split out of draw_text_lines; its inputs are the frame state it was carved from"
+    )]
     fn draw_fold_ellipsis(
         &self,
         buf: &mut Buffer,
@@ -428,7 +430,10 @@ impl Editor {
     /// Render `visible` with visible whitespace glyphs (→ tab, · space, ␍ CR, and
     /// a trailing ¶ at a line's end), dimming the glyph cells. Split out of
     /// [`Editor::draw_text_lines`] to keep it within the line limit.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a draw helper split out of draw_text_lines; its inputs are the frame state it was carved from"
+    )]
     fn draw_whitespace_line(
         &self,
         buf: &mut Buffer,
@@ -516,7 +521,10 @@ impl Editor {
     /// Draw the optional end-of-line virtual note (e.g. inline git blame) for
     /// `line_idx`, dimmed after the line content. Only when not horizontally
     /// scrolled and the note is for this line.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a draw helper split out of draw_text_lines; its inputs are the frame state it was carved from"
+    )]
     fn draw_eol_note(
         &self,
         buf: &mut Buffer,
@@ -553,7 +561,10 @@ impl Editor {
 
     /// Draw a line's text with inline hints inserted at their columns (the real
     /// glyphs after each hint shift right); the hint cells are dimmed.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a draw helper split out of draw_text_lines; its inputs are the frame state it was carved from"
+    )]
     fn draw_line_with_inlays(
         &self,
         buf: &mut Buffer,

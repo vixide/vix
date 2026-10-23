@@ -13,10 +13,6 @@
 //! script's `bind_key` requests into the real keymap (`crates/
 //! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 mod discovery;
 mod engine;
 
@@ -113,7 +109,7 @@ mod tests {
             buffer_text: "hello".to_string(),
             ..Default::default()
         };
-        let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(999_i64)], state.clone());
+        let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(999_i64)], state);
         let InvokeOutcome::Ran(state) = outcome else {
             panic!("expected Ran")
         };

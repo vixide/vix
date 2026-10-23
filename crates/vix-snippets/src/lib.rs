@@ -6,10 +6,6 @@
 //! media-type, and project. The tabstop syntax in a snippet body is parsed by
 //! [`vix_snippet_tool::parse`]; this module handles the files and the merge.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::{Path, PathBuf};
 
 /// Where a snippet came from (used for display and merge precedence).

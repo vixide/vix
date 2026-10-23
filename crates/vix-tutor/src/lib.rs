@@ -7,10 +7,6 @@
 //! temp dir, chapter navigation — lives in the App shell's `tutor.rs` slice
 //! (T402).
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 pub mod chapter;
 pub mod check;
 

@@ -5,10 +5,6 @@
 //! opening tag for a closing one — accounting for nested same-name tags. Pure and
 //! unit-tested; the host uses it to move the cursor.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One parsed tag occurrence in the document.
 struct Tag {
     /// Char offset of the `<`.

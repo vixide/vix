@@ -21,8 +21,6 @@
 //! `wrap_text`, `smart_toggle`) sit interleaved in the original range but
 //! aren't org-specific, so they stayed in `app.rs`.
 
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
@@ -912,7 +910,7 @@ impl App {
             .to_string_lossy()
             .into_owned();
         let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1);
-        self.status = t!("status.org_link_stored", link = stored.clone()).to_string();
+        self.status = t!("status.org_link_stored", link = stored).to_string();
         self.stored_org_link = Some(stored);
     }
 
@@ -1145,7 +1143,7 @@ impl App {
         let show_tags_prompt = field.is_none() && pc.wants_tags && pc.tags.is_none();
         if let Some(field) = field {
             let mut prompt = Prompt::new(PromptKind::OrgCaptureField, field.label.clone())
-                .with_input(field.default.clone());
+                .with_input(field.default);
             if let Some(preview) = self.capture_preview(Some(next_idx), false) {
                 prompt = prompt.with_preview(preview);
             }

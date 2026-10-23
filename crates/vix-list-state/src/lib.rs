@@ -18,10 +18,6 @@
 //! `usize`s fit every one of these without changing any panel's public
 //! shape; only each panel's *method bodies* change.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 /// The highlighted row one step up, stopping at the top (row 0).
 #[must_use]
 pub fn up(selected: usize) -> usize {

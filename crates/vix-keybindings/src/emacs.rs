@@ -13,8 +13,6 @@
 //! dispatch can't drift apart again; `nav.switch_buffer` is the real,
 //! now-existing action id both `C-x b` and `C-x C-b` run.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 /// The top level: every Ctrl-letter binding `emacs_key` used to hardcode,

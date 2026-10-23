@@ -3,8 +3,6 @@
 //! shared `draw_list_chooser`), the diff viewer, the Git status panel, the
 //! right-click context menu, and the spell-check suggestion popup.
 
-#![warn(clippy::pedantic)]
-
 use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};

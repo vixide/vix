@@ -8,3 +8,6 @@ repository.workspace = true
 description = "A small library of reusable text snippets, plus the picker's selection state."
 
 [dependencies]
+
+[lints]
+workspace = true

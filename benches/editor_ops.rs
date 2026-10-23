@@ -8,6 +8,7 @@
 //! editor is judged on the 20,000-line file, not the 200-line one.
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::fmt::Write as _;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 use vix::editor_core::actions::{Delete, InsertText};
@@ -26,9 +27,11 @@ fn source(lines: usize) -> String {
     let mut i = 0;
     let mut have = 0;
     while have < lines {
-        out.push_str(&format!(
+        write!(
+            out,
             "/// Item {i}.\npub fn item_{i}(value: &str) -> usize {{\n    let n = value.len();\n    if n > {i} {{ n - {i} }} else {{ 0 }}\n}}\n\n"
-        ));
+        )
+        .expect("writing to a String cannot fail");
         i += 1;
         have += LINES_PER_CHUNK;
     }
@@ -130,7 +133,7 @@ fn bench_random_edits(c: &mut Criterion) {
                     state ^= state >> 7;
                     state ^= state << 17;
                     let len = ed.code_ref().len_chars();
-                    #[allow(clippy::cast_possible_truncation)]
+                    #[allow(clippy::cast_possible_truncation, reason = "benchmark sizes are small")]
                     let pos = if len == 0 { 0 } else { (state as usize) % len };
                     ed.set_cursor(pos);
                     if state.is_multiple_of(2) {

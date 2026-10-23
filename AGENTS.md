@@ -83,15 +83,21 @@ change every forge's config with it. See [`spec/ci/index.md`](spec/ci/index.md).
 
 ## Hard rules enforced by the build
 
-Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
-(see each crate's `src/lib.rs`). Therefore:
+The root `Cargo.toml` sets `unsafe_code = "forbid"` and `missing_docs = "deny"`
+in `[workspace.lints.rust]` (and `clippy::pedantic` in `[workspace.lints.clippy]`);
+every crate opts in with `[lints] workspace = true`, so the policy covers libs,
+bins, tests, benches, examples and build scripts (T599). Therefore:
 
 - **Every public item needs a doc comment.** A new `pub fn`/`struct`/`field`
   without `///` fails the build.
 - **No `unsafe`.**
-- **`#![warn(clippy::pedantic)]`** is on at the crate root **and repeated in
-  every module file**. There is no blanket `#![allow(clippy::pedantic)]` and no
-  `#![allow(missing_docs)]`; fix findings in code. Sanctioned allows are only a
+- **`clippy::pedantic`** is on everywhere through `[workspace.lints]` -- no
+  per-file attribute is needed. A new crate must carry `[lints] workspace =
+  true`. `allow_attributes_without_reason`, `redundant_clone`,
+  `clone_on_ref_ptr` (write `Arc::clone(&x)`), `dbg_macro` and `todo` are on
+  too, so **every `#[allow(..)]` needs a `reason = ".."`**. There is no
+  blanket `#![allow(clippy::pedantic)]` and no `#![allow(missing_docs)]`; fix
+  findings in code. Sanctioned allows are only a
   handful of **targeted** `#[allow(clippy::too_many_lines)]` /
   `too_many_arguments` on specific functions that resist further extraction —
   there is no standing `#[allow(clippy::struct_excessive_bools)]` anywhere in

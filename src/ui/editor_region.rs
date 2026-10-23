@@ -3,8 +3,6 @@
 //! "center" case (text area with an optional minimap and horizontal
 //! scrollbar).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 

@@ -10,3 +10,5 @@ description = "AI chat panel: a persistent conversation surface for the configur
 [dependencies]
 vix-greedy-wrap = { workspace = true }
 
+[lints]
+workspace = true

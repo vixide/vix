@@ -17,8 +17,6 @@
 //! `App::eclipse_token` builds the right one for the right modifier
 //! combination.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const NORMAL: &[Binding] = &[

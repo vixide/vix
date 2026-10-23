@@ -4,8 +4,6 @@
 //! call sites need no `cfg` of their own. `App::db` / `App::edit_sql` are
 //! uninhabited-typed `Option`s that are always `None`.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::KeyEvent;
 
 use super::App;

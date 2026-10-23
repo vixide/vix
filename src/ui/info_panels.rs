@@ -9,8 +9,6 @@
 //! crate (see `AGENTS.md`'s non-negotiable convention, and T142's own
 //! task text after it was revised to match).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

@@ -9,3 +9,5 @@ description = "Text case transforms applied to the editor selection (Edit → Ca
 
 [dependencies]
 
+[lints]
+workspace = true

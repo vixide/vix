@@ -4,10 +4,6 @@
 //! files are read from disk. `App` owns the buffers, so it drives the actual
 //! scanning; this crate just holds the panel state.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;

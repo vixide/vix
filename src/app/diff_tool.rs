@@ -2,8 +2,6 @@
 //! active buffer and another file. Plain file comparison, independent of the
 //! `git` capability (moved out of `git.rs` by T593 for that reason).
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{App, DiffViewState};

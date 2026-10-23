@@ -1,8 +1,6 @@
 //! The `http` capability's absent half (T592): no HTTP client, so the shared
 //! dispatch and event loop's entry points are no-ops.
 
-#![warn(clippy::pedantic)]
-
 use super::App;
 
 impl App {

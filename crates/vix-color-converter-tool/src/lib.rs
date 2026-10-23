@@ -11,10 +11,6 @@
 //! - HSL: `h, s%, l%` with hue 0–360 and saturation/lightness 0–100 (the `%`
 //!   signs are optional).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// An RGB color (8 bits per channel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {

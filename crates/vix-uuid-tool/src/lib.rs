@@ -20,10 +20,6 @@
 //! namespace, so each invocation yields a distinct — but correctly constructed —
 //! identifier. The deterministic core is [`v3_named`] / [`v5_named`].
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use uuid::Uuid;
 
 /// Six random bytes for use as a v1/v6 node id, with the multicast bit set so it

@@ -8,10 +8,6 @@
 //! tick. Keeping the clock out of this crate makes every transition
 //! deterministic and unit-testable.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Default work length, in minutes.
 pub const DEFAULT_WORK_MINUTES: u64 = 25;
 /// Break length, in minutes.

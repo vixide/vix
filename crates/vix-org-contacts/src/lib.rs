@@ -13,10 +13,6 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::fmt::Write as _;
 
 /// The contact fields offered in the Insert-Field submenu, in order.

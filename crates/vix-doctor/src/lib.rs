@@ -8,10 +8,6 @@
 //! (`vix --doctor`) runs before any `App` exists at all, so nothing here can
 //! depend on the App shell or a terminal.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T561:
 // this crate originally called `t!` zero times -- shown inside a live,

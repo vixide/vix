@@ -12,3 +12,6 @@ crossterm = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 vix-fileops = { workspace = true }
+
+[lints]
+workspace = true

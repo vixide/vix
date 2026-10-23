@@ -67,10 +67,6 @@
 //!   [`history::push_history`]'s history list) but does not implement the UI
 //!   or persistence around them.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::Path;
 
 use serde::Deserialize;

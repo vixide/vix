@@ -11,3 +11,6 @@ description = "The Vix theme model: the JSON theme model, ratatui styles, and th
 ratatui = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

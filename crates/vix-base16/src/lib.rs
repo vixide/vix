@@ -10,10 +10,6 @@
 //! Names are prefixed `Base16 …` to avoid colliding with the hand-authored JSON
 //! themes in `themes/`.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use vix_theme_model::{CustomTheme, parse_theme};
 
 /// One palette: a display name and the 16 `base00`–`base0F` colors as RGB hex

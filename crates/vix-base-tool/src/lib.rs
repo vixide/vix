@@ -6,10 +6,6 @@
 //! re-renders it in one base (with the conventional prefix). Used by Tools →
 //! Convert → Number via `App::transform_selection_or_buffer_try`.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Parse `s` as an integer with an auto-detected radix.
 fn parse(s: &str) -> Result<i128, String> {
     let t = s.trim().replace('_', "");

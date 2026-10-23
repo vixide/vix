@@ -4,10 +4,6 @@
 //! inserts its body at the cursor. The set is curated and language-agnostic; the
 //! host owns insertion.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One named, insertable snippet.
 pub struct Snippet {
     /// Display name shown in the picker.

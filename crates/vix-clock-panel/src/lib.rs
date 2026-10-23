@@ -8,10 +8,6 @@
 //! time, the UTC instant, the ISO 8601 commercial (week) date, and the wall
 //! clock in the application-wide active time zone.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use jiff::Zoned;
 use jiff::tz::{Offset, TimeZone};
 

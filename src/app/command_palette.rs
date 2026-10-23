@@ -9,8 +9,6 @@
 //! here would collide with that `use`. Mostly contiguous, unlike the
 //! git/scripts slices -- closer in shape to keymap dispatch.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{App, Focus};

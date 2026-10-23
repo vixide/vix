@@ -21,3 +21,6 @@ ureq = { workspace = true, features = ["json"] }
 # `crates/vix-db/src/secret.rs` for the sibling implementation this mirrors.
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 keyring = { workspace = true }
+
+[lints]
+workspace = true

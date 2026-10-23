@@ -9,8 +9,6 @@
 //! media-type detection, not part of the media-type *panel*, despite the
 //! similar name.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 

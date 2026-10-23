@@ -1,8 +1,6 @@
 //! The file explorer (left dock): the directory tree, flattened to rows,
 //! with git-status coloring, vertical and horizontal scroll.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 

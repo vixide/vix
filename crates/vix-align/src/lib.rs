@@ -10,10 +10,6 @@
 //! assert_eq!(out, "a   = 1\nbbb = 2\n");
 //! ```
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Align every line of `text` that contains `delim` so the (first) delimiter sits
 /// in a common column. Preserves a trailing newline if present.
 #[must_use]

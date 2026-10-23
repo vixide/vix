@@ -9,3 +9,6 @@ description = "The code-outline list (symbol kind + name + line) and the panel's
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

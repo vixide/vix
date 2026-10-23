@@ -1,7 +1,5 @@
 //! The code-overview minimap: a dim bar-chart summary of the active buffer.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 

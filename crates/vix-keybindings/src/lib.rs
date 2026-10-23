@@ -40,10 +40,6 @@
 //! that's T104j, wiring `vix-script`'s `LoadedScript::bindings` in as a
 //! second batch of [`overrides::Override`]s alongside the persisted ones.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 mod apple;
 mod eclipse;
 mod emacs;

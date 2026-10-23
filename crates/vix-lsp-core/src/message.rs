@@ -5,8 +5,6 @@
 //! [`crate::frame::encode`]; parsers take the already-decoded `result`/`params`
 //! value and extract a small, host-friendly shape.
 
-#![warn(clippy::pedantic)]
-
 use serde_json::{Value, json};
 
 use crate::{CompletionItem, Diagnostic, Location, Position, Range, SemanticToken, Severity};

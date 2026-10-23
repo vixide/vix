@@ -9,3 +9,6 @@ description = "The X11 color table and the picker's row-selection + scroll state
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

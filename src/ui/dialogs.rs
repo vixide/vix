@@ -3,8 +3,6 @@
 //! prompt, the paste-name-conflict prompt, and the interactive query-replace
 //! status bar.
 
-#![warn(clippy::pedantic)]
-
 use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};

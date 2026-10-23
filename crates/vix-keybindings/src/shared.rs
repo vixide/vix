@@ -28,8 +28,6 @@
 //! ignores the Shift bit entirely, matching the original dispatch's own
 //! guards (or lack of one).
 
-#![warn(clippy::pedantic)]
-
 use crate::Binding;
 
 /// Every keymap-agnostic binding, in no particular order.

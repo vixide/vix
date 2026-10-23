@@ -1,5 +1,8 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 
 // Test setup casts small counts to `u16` cell coordinates and builds fixture
 // strings by collecting `format!`; both are fine in tests.

@@ -1,8 +1,6 @@
 //! The file browser overlay (File → Open…): a `walkdir`-backed listing with
 //! fuzzy/glob/extension filtering, sort, and hidden-file toggling.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

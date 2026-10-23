@@ -18,10 +18,6 @@
 //!
 //! [`Settings::ai_command`]: https://docs.rs/vix-settings (see `crates/vix-settings/src/lib.rs`)
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 pub mod anthropic;
 pub mod ollama;
 pub mod openai;

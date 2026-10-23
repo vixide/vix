@@ -10,3 +10,6 @@ description = "base16-generated themes for the theme system."
 [dependencies]
 vix-hex-rgb = { workspace = true }
 vix-theme-model = { workspace = true }
+
+[lints]
+workspace = true

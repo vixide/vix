@@ -3,8 +3,6 @@
 //! and palette code still calls these entry points. Each is a no-op, so the call
 //! sites carry no `cfg` of their own.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyEvent, MouseEvent};
 
 use super::App;

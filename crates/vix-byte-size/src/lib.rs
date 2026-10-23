@@ -6,10 +6,6 @@
 //! not domain-driven similarity, since both crates format the exact same
 //! quantity (a file or disk size in bytes) the exact same way.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert a `u64` to the nearest `f64` without a lossy `as` cast. The high
 /// and low 32-bit halves are each representable exactly, so the single
 /// rounding on the recombining add matches what `n as f64` would produce.
@@ -121,7 +117,10 @@ mod tests {
         // actually formats (real file/disk sizes) is far below that, so the
         // two must agree exactly there.
         for n in [0_u64, 1, 1024, u64::from(u32::MAX), 5_000_000_000] {
-            #[allow(clippy::cast_precision_loss)]
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "the fixture values are exactly representable as f64"
+            )]
             let expected = n as f64;
             assert_eq!(u64_to_f64(n), expected, "mismatch for {n}");
         }

@@ -8,8 +8,6 @@
 //! fully unit-testable here rather than only exercisable through
 //! `tests/integration.rs`.
 
-#![warn(clippy::pedantic)]
-
 use std::collections::BTreeMap;
 
 /// Where an override request came from — for reporting, not for

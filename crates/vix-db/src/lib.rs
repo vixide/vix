@@ -24,10 +24,6 @@
 //! left here is genuinely shared: the `Browser`/`Form`/`Pane`/`View`/
 //! `Popup` state itself and the two top-level dispatchers.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;

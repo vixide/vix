@@ -9,3 +9,6 @@ description = "Parse LCOV and Cobertura XML coverage reports into per-file, per-
 
 [dependencies]
 regex.workspace = true
+
+[lints]
+workspace = true

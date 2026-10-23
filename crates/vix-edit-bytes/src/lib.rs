@@ -15,10 +15,6 @@
 //! overwrites the current byte's high then low nibble; **u**/**Ctrl+R**
 //! undo/redo; **Ctrl+S** save; **Esc**/**q** close.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Bytes shown per row.

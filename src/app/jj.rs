@@ -1,8 +1,6 @@
 //! Jujutsu (`jj`): the `jj.*` action dispatcher and its prompt handlers, for
 //! repos that use `jj` instead of (or alongside) Git.
 
-#![warn(clippy::pedantic)]
-
 use super::{App, Prompt, PromptKind};
 
 impl App {

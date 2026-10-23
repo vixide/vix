@@ -7,8 +7,6 @@
 //! `Settings::scripts_dir()`, `<App::root>/.vix/scripts` — is host wiring
 //! (tasks.md T103), not this crate's job.
 
-#![warn(clippy::pedantic)]
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

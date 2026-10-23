@@ -11,3 +11,6 @@ description = "Reformat the selection (or buffer) within one data format: pretty
 serde_json = { workspace = true }
 serde_norway = { workspace = true }
 toml = { workspace = true }
+
+[lints]
+workspace = true

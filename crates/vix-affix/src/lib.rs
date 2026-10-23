@@ -13,10 +13,6 @@
 //! `prefix` and a trailing `suffix`; [`toggle`] drops them when `text` is already
 //! wrapped (starts with `prefix` and ends with `suffix`), otherwise adds them.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Wrap `text` with `prefix` before and `suffix` after.
 #[must_use]
 pub fn add(text: &str, prefix: &str, suffix: &str) -> String {

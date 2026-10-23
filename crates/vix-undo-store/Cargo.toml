@@ -14,3 +14,6 @@ sha2 = { workspace = true }
 vix-editor-core = { path = "../vix-editor-core", version = "1.7.1", default-features = false }
 vix-fileops = { workspace = true }
 vix-settings = { workspace = true }
+
+[lints]
+workspace = true

@@ -4,10 +4,6 @@
 //! crate; this module re-exports them as `crate::*` and keeps the icon set
 //! (which is not part of the theme model).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 pub use vix_theme_model::{
     CustomTheme, Region, base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg,
     region_fg, region_modifiers, region_title, selected, set_custom, syntax_color, syntax_theme,

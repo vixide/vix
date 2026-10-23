@@ -2,8 +2,6 @@
 //! no PTY shell, but shared dispatch, key-routing and the event loop still call
 //! these entry points. Each is a no-op, so call sites carry no `cfg`.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::KeyEvent;
 
 use super::App;

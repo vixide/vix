@@ -15,10 +15,6 @@
 //! renders the grid, syncs the visible scroll window, and acts on the
 //! returned outcome.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::cmp::Ordering;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

@@ -13,10 +13,6 @@
 //! `Outline` exactly as the source-file outline does, just pointed at
 //! *preview* lines instead of source lines.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::fmt::Write;
 
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};

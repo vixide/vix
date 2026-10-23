@@ -12,10 +12,7 @@
 //! All functions are pure so they can be unit-tested without a live editor or a
 //! filesystem.
 
-#![warn(clippy::pedantic)]
 #![warn(clippy::string_slice)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 use std::fmt::Write as _;
 use std::sync::LazyLock;

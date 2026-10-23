@@ -8,8 +8,6 @@
 //! module moving would have broken. `dropdown_width` is `pub(super)` for the
 //! same reason: `ui::menu_dropdown_rect` (also staying) still calls it.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 

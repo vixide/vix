@@ -6,8 +6,6 @@
 //! scalar values (chars). These helpers convert a *column within a single line*
 //! both ways; the host pairs them with line-start offsets to map whole positions.
 
-#![warn(clippy::pedantic)]
-
 /// The position encoding negotiated with the server (`positionEncoding` in the
 /// initialize result), deciding what a `character` column counts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

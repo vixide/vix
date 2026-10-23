@@ -8,10 +8,7 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
-#![warn(clippy::pedantic)]
 #![cfg_attr(not(test), warn(clippy::string_slice))]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 mod columns;
 pub use columns::{

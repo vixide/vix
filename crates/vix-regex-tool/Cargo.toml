@@ -9,3 +9,6 @@ description = "A live regular-expression tester, plus the dialog's editing state
 
 [dependencies]
 regex = { workspace = true }
+
+[lints]
+workspace = true

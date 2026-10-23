@@ -9,8 +9,6 @@
 //! key/mouse handlers, `open_settings_file`). `App::new`/`build_core`
 //! (the constructor itself) deliberately stayed in `app.rs`.
 
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};

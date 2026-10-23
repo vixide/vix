@@ -8,10 +8,6 @@
 //! the same magic-constant arithmetic), not domain-driven similarity, since
 //! none of the three crates otherwise depend on a date/time library.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert a day count since 1970-01-01 to a `(year, month, day)` civil date.
 /// The inverse of [`days_from_civil`].
 #[must_use]

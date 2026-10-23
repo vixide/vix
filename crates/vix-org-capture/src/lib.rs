@@ -1,6 +1,3 @@
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 #![warn(clippy::string_slice)]
 
 //! Org-capture: template-driven capture, in the shape of Emacs

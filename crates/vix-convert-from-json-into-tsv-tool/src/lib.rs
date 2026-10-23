@@ -3,10 +3,6 @@
 //! The TSV header is the union of all object keys (first-seen order); each
 //! object becomes one row. See [`vix_convert_tabular`] for the shared logic.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert JSON `input` (an array of objects) to TSV.
 ///
 /// # Errors

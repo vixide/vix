@@ -16,10 +16,6 @@
 //! already-known paragraph (no embedded newlines) and a width; splitting a
 //! multi-line source into paragraphs is the caller's job.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Greedily word-wrap one paragraph (no embedded newlines) to `width`
 /// columns. A blank line yields a single empty string; `width` `0` returns
 /// the line unchanged. A word longer than `width` is hard-broken

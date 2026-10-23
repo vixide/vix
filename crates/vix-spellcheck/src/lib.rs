@@ -16,10 +16,6 @@
 //! [`spellbook`]: https://crates.io/crates/spellbook
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "hunspell")]

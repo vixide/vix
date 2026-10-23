@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **One lint policy** (T599): `unsafe_code`, `missing_docs` and `clippy::pedantic` now live in `[workspace.lints]`, and every crate and target (tests, benches, examples, build scripts) inherits them; `allow` attributes now need a `reason`.
 - **Smaller crate**: the published `vix` package no longer includes the project website
   (`vixide.github.io/`), CI definitions or agent settings; none are read by the build or tests.
 

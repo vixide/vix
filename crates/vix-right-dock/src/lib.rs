@@ -4,10 +4,6 @@
 //! Pure data — the host (the `vix` app) renders the drawer and routes keys and
 //! clicks; this crate owns only the message list and selection logic.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 /// Severity of a message, which selects its icon.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Level {

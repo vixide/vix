@@ -8,8 +8,6 @@
 //! both keymaps' Normal mode. Spacemacs's own `SPC`-leader is a separate,
 //! sequence-matched table under its own keymap id (`spacemacs.rs`).
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 /// Normal mode's single-key bindings. `g`/`d`/`y` (starting a pending

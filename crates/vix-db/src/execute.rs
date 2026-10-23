@@ -139,7 +139,7 @@ impl Browser {
                     let sql = params::substitute(&prompt.sql, &pairs);
                     // Record the placeholder template — never the substituted
                     // secret values — in the persisted history.
-                    self.history_override = Some(prompt.sql.clone());
+                    self.history_override = Some(prompt.sql);
                     self.view = View::Workbench;
                     self.execute_sql(sql);
                 }

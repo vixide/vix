@@ -4,10 +4,6 @@
 //! path, dirty flag, keymap mode, language, line ending, selection) and the Nerd
 //! Font glyphs, calls these builders, and renders the resulting strings.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 /// The left segment: `" {mode}{path}{dirty}  —  {status}"`.
 ///
 /// `mode` is the keymap mode indicator (with trailing spacing) or empty; `dirty`

@@ -26,8 +26,7 @@ fn tool_available(program: &str) -> bool {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 /// A minimal LSP server: answers `initialize`, publishes one diagnostic for the
@@ -105,7 +104,7 @@ while True:
 /// (with a minimal but real result) instead of erroring, for the T123
 /// auto-trigger test -- the shared `MOCK_SERVER` above deliberately errors on
 /// that method for `mock_server_error_response_surfaces_as_a_request_failed_event`.
-const MOCK_SERVER_SIGNATURE_HELP_OK: &str = r#"
+const MOCK_SERVER_SIGNATURE_HELP_OK: &str = r"
 import sys, json
 
 def read_msg():
@@ -151,7 +150,7 @@ while True:
         send({'jsonrpc':'2.0','id':mid,'result':None})
     elif method == 'exit':
         break
-"#;
+";
 
 /// A mock server that completes `initialize` and answers exactly one
 /// `didOpen` (publishing a diagnostic so the test can tell it got there),
@@ -206,7 +205,7 @@ while True:
 /// `MOCK_SERVER`'s "mock error", so a test can tell whether both reached
 /// the client (correct, T123b) or the second clobbered the first (the bug
 /// T123b fixed).
-const MOCK_SERVER_SECOND_LINTER: &str = r#"
+const MOCK_SERVER_SECOND_LINTER: &str = r"
 import sys, json
 
 def read_msg():
@@ -248,14 +247,14 @@ while True:
         send({'jsonrpc':'2.0','id':mid,'result':None})
     elif method == 'exit':
         break
-"#;
+";
 
 /// T123f: logs every message with a `method` (as one JSON line each) to the
 /// log file path given as `argv[1]`, so the Rust test can inspect exactly
 /// what `initialize` and later notifications actually carried -- opts into
 /// `workspace/didChangeWorkspaceFolders` via `changeNotifications: true` so
 /// the client should send one when a folder is added after startup.
-const MOCK_SERVER_LOGS_WORKSPACE_FOLDERS: &str = r#"
+const MOCK_SERVER_LOGS_WORKSPACE_FOLDERS: &str = r"
 import sys, json
 
 LOG = sys.argv[1]
@@ -308,7 +307,7 @@ while True:
         send({'jsonrpc':'2.0','id':mid,'result':None})
     elif method == 'exit':
         break
-"#;
+";
 
 #[test]
 fn mock_server_round_trips_diagnostics_and_hover() {

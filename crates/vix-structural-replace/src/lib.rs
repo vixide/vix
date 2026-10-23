@@ -35,9 +35,6 @@
 //! patterns against realistic file sizes are fast in practice, which is
 //! what this optimizes for.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 // Tests slice their own ASCII fixtures; the lint guards library code.
 #![cfg_attr(not(test), warn(clippy::string_slice))]
 

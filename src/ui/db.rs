@@ -2,8 +2,6 @@
 //! password/save/ask/params prompts, and the three-pane workbench itself
 //! (schema tree, SQL editor with autocomplete, results grid).
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 

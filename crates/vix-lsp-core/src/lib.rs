@@ -7,9 +7,6 @@
 //! writes [`frame::encode`]d requests to its stdin — so everything here stays
 //! synchronous and unit-testable with no IO.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 // `message::initialize_params`'s single `json!` literal (the full advertised
 // capabilities object) is large enough that the default limit trips on the
 // macro's own expansion depth (T123f, adding a couple more fields pushed it

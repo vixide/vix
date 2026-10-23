@@ -1,8 +1,6 @@
 //! The bottom dock: the output/log strip beneath the main body, with
 //! vertical and horizontal scroll.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 

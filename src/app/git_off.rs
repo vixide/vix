@@ -7,8 +7,6 @@
 //! data types (`FileStatus`, `LogPanel`, `Change`, …) live there and `App`'s
 //! fields use them, but nothing here ever calls into its process-spawning code.
 
-#![warn(clippy::pedantic)]
-
 use std::path::Path;
 
 use crossterm::event::{KeyEvent, MouseEvent};

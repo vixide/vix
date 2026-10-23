@@ -10,3 +10,6 @@ description = "Process-wide serialized access to the system clipboard."
 [dependencies]
 anyhow = { workspace = true }
 arboard = { workspace = true }
+
+[lints]
+workspace = true

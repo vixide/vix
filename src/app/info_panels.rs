@@ -8,8 +8,6 @@
 //! of "tools", another large genuinely contiguous block like org core
 //! was, no cherry-picking needed).
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{

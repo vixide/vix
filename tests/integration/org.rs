@@ -1,8 +1,14 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 // Shared fixtures/helpers live in `common.rs`; every test here needs a
 // handful of them, so a glob import earns its keep over a long explicit list.
-#![allow(clippy::wildcard_imports)]
+#![allow(
+    clippy::wildcard_imports,
+    reason = "every test needs a handful of the shared helpers in common.rs"
+)]
 
 use crate::common::*;
 
@@ -388,7 +394,7 @@ fn org_tab_folds_drawer_under_cursor() {
     fs::write(&file, "* Name\n:properties:\n:foo: 123\n:end:\nbody\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
 
     // Put the caret on the `:properties:` drawer header (line 1).
     app.run_action("edit.go_first");
@@ -462,7 +468,7 @@ fn emacs_org_ctrl_c_chords_cycle_todo_and_close_with_note() {
     fs::write(&file, "* Task\n").unwrap();
     let mut app = app_at(&dir);
     app.settings.keymap = "emacs".to_string();
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.run_action("edit.go_first"); // cursor on the headline
 
     // C-c C-t cycles none -> TODO -> DONE.
@@ -511,7 +517,7 @@ fn org_ctrl_c_ctrl_c_toggles_checkbox() {
     let file = dir.join("list.org");
     fs::write(&file, "- [ ] a\n- [ ] b\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.run_action("edit.go_first"); // line 0: - [ ] a
 
     app.run_action("org.ctrl_c_ctrl_c");

@@ -10,3 +10,6 @@ description = "An exhaustive, queryable registry of every built-in keybinding ac
 [dependencies]
 serde = { workspace = true }
 toml = { workspace = true }
+
+[lints]
+workspace = true

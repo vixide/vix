@@ -8,10 +8,6 @@
 //! Keeping it data-only makes the transcript layout (word wrapping, the visible
 //! window) unit-testable without a terminal.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Who authored a turn in the transcript.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {

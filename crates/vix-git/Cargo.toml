@@ -17,3 +17,6 @@ process = []
 similar = { workspace = true }
 vix-civil-date = { workspace = true }
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

@@ -12,10 +12,6 @@
 //!
 //! Grouping with `()` is not supported; such input returns `None`.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Upper bound on the total number of elements a single abbreviation may expand
 /// to. A multiply operator (`*N`) — and nested multiplies, which compound —
 /// would otherwise let a tiny input (e.g. `div*900000000` or `a*1e5>b*1e5`)

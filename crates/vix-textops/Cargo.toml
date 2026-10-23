@@ -11,3 +11,6 @@ description = "Small pure text transforms used by Edit/Tools actions."
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true
