@@ -15,3 +15,6 @@ sha2 = { workspace = true }
 # The package `md-5` has library name `md5`, which machete does not map back.
 [package.metadata.cargo-machete]
 ignored = ["md-5"]
+
+[lints]
+workspace = true

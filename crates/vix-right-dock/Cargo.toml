@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Right dock: a message drawer of advice and notifications + selection."
 
 [dependencies]
+
+[lints]
+workspace = true

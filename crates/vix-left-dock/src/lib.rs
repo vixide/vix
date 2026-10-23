@@ -4,10 +4,6 @@
 //! Pure logic over `std::fs` — the host (the `vix` app) renders the tree and
 //! routes keys/clicks/file operations; this crate owns the tree state.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 /// A visible row in the flattened tree.

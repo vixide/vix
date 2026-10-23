@@ -12,3 +12,6 @@ serde_json = { workspace = true }
 vix-list-state = { workspace = true }
 vix-settings = { workspace = true }
 vix-snippet-tool = { workspace = true }
+
+[lints]
+workspace = true

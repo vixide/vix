@@ -8,10 +8,6 @@
 //! [`apply`] work from a bare [`vix_settings::Settings`] value and real
 //! filesystem paths only.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

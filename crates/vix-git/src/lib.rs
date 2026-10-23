@@ -11,10 +11,6 @@
 //!   own `git` means credential helpers, SSH agents, and hooks all behave exactly
 //!   as on the command line.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 #[cfg(feature = "process")]
 use std::ffi::OsString;
 #[cfg(feature = "process")]

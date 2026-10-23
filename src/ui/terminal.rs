@@ -1,7 +1,5 @@
 //! The PTY-backed integrated terminal panel.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -17,7 +15,10 @@ fn vt_color(c: vt100::Color) -> Color {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "a single linear frame-drawing routine for one overlay"
+)]
 pub(super) fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.terminal.is_none() {
         return;

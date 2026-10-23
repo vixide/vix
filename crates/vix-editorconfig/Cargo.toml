@@ -9,3 +9,6 @@ description = "Minimal EditorConfig support: resolve the indent settings for a f
 
 [dependencies]
 regex = { workspace = true }
+
+[lints]
+workspace = true

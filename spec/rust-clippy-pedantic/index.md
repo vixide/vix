@@ -2,10 +2,13 @@
 
 For Rust code.
 
-Add :
+Set it once, in the workspace `Cargo.toml`:
 
-```rust
-#![warn(clippy::pedantic)]
+```toml
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
 ```
 
-For all targets, including any file `main.rs`, `lib.rs`, `tests/` `examples/` `benches/`.
+and give every crate `[lints] workspace = true`. That covers all targets,
+including `main.rs`, `lib.rs`, `tests/`, `examples/`, `benches/` and `build.rs`,
+without repeating an attribute in each file (T599).

@@ -4,8 +4,6 @@
 //! as the cursor scroll (`Editor::focus`) and mouse hit-testing
 //! (`cursor_from_mouse`).
 
-#![warn(clippy::pedantic)]
-
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};

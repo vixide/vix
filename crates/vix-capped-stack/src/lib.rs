@@ -11,10 +11,6 @@
 //! collide in name or purpose with `vix-undo-store` (persistent, per-file
 //! undo history saved to disk, a genuinely different feature).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Push `item` onto `stack`, evicting the oldest entry (index `0`) first if
 /// that would grow `stack` past `cap` entries. `cap == 0` degenerates to "the
 /// stack never holds anything" rather than panicking or growing unbounded.

@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Formatting for the bottom status bar's two segments."
 
 [dependencies]
+
+[lints]
+workspace = true

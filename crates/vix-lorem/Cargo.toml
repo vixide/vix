@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum)."
 
 [dependencies]
+
+[lints]
+workspace = true

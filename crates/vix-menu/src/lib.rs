@@ -6,10 +6,6 @@
 //! and [`MenuDef::title`], so the bar follows the active locale. An item may
 //! instead open a nested submenu (e.g. View → Editor, Edit → Find).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;

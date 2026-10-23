@@ -1,10 +1,6 @@
 //! Filesystem helpers for the explorer's copy / cut / paste / delete, plus a
 //! crash-safe atomic writer used across the app for saving files.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

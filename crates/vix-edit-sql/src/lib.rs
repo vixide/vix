@@ -7,10 +7,6 @@
 //! save the result back to the buffer. It mirrors the other `edit_*` surfaces:
 //! pure logic here, rendering and file I/O in the host.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Editor::handle_key`].

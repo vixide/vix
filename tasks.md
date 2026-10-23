@@ -6923,7 +6923,7 @@ new action.
   `store_session_or_warn` (existing `msg.session_save_failed`); preview-tab
   open failures warn via new `msg.preview_open_failed` (15 locales). The
   verify grep finds nothing.
-- [ ] **T599 — Move lints to `[workspace.lints]`, and lint the targets
+- [x] **T599 — Move lints to `[workspace.lints]`, and lint the targets
   that are missed today.** No `[lints]` table exists anywhere, and 124
   crate roots repeat the same three attributes. 15 targets get no lints at
   all: 6 `benches/*.rs`, 8 `tests/*.rs` (action_catalog, snapshots,

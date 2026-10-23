@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Live workspace metrics for the dashboard overlay (Tools → Workspace Dashboard)."
 
 [dependencies]
+
+[lints]
+workspace = true

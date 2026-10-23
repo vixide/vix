@@ -10,3 +10,6 @@ description = "Find / find-and-replace for the editor."
 [dependencies]
 bitflags = { workspace = true }
 regex = { workspace = true }
+
+[lints]
+workspace = true

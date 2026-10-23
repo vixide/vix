@@ -20,10 +20,6 @@
 //! ascending) and at least one fuzzy token is present, files are ranked by
 //! fuzzy score instead, best match first; an explicit sort always wins.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -463,7 +459,10 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
 /// A human-readable size such as `973 B`, `4.1 KB`, `12 MB`.
 #[must_use]
 pub fn size_label(size: u64) -> String {
-    #[allow(clippy::cast_precision_loss)] // display only; fine beyond 2^52 bytes
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "display only; fine beyond 2^52 bytes"
+    )]
     let mut value = size as f64;
     let mut unit = "B";
     for next in ["KB", "MB", "GB", "TB"] {

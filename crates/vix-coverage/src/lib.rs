@@ -2,10 +2,6 @@
 //! hit data for the coverage gutter (Tools → Load Coverage File…). Vix
 //! visualizes an existing report; it doesn't run coverage tools itself.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::LazyLock;

@@ -15,10 +15,6 @@
 //! line `doomed` from a scratch buffer, and that landed on the real macOS
 //! pasteboard.)
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use anyhow::{Result, anyhow};
 use std::cell::RefCell;
 use std::sync::Mutex;

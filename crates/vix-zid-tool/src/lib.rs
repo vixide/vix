@@ -7,10 +7,6 @@
 //! from the operating system's secure random source (`getrandom`), so each ZID
 //! is unpredictable and collision-safe for practical purposes.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Generate a fresh ZID of `byte_len` secure-random bytes, rendered as
 /// `2 * byte_len` lowercase hex characters. Falls back to all-zero bytes only if
 /// the OS RNG is somehow unavailable (never expected on supported platforms).

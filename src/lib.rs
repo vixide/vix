@@ -30,9 +30,6 @@
 //! [`ratatui`]: https://crates.io/crates/ratatui
 
 // Always start with high quality coding conventions.
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 
 // The translation table is embedded once, in the `vix_i18n` crate. Bringing it
 // in with `#[macro_use]` makes the `t!` and `surface!` macros available

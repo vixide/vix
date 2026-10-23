@@ -2,8 +2,6 @@
 //! (language/line-ending/encoding/selection), git branch, and cursor
 //! position.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 

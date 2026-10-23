@@ -9,3 +9,6 @@ description = "A real modal-editing engine for the Vi/Spacemacs keymaps: modes, 
 
 [dependencies]
 vix-textops = { workspace = true }
+
+[lints]
+workspace = true

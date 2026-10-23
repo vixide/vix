@@ -5,10 +5,6 @@
 //! hunks. Pure data (no IO, no terminal) so the layout is unit-testable; the host
 //! owns scrolling and `ui` renders the colored lines.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// The kind of a rendered diff line, selecting its color/prefix.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {

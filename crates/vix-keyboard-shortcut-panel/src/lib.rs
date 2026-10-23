@@ -11,10 +11,6 @@
 //! sorts either column by clicking its header (first click ascending, second
 //! descending).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One help row.
 #[derive(Clone, Copy)]
 pub struct Row {

@@ -156,9 +156,8 @@ fn render_screen(app: &mut App, width: u16, height: u16) -> String {
     term.draw(|f| vix::ui::draw(app, f)).unwrap();
     let buf = term.backend().buffer();
     let raw = app.root.display().to_string();
-    let canonical = fs::canonicalize(&app.root)
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| raw.clone());
+    let canonical =
+        fs::canonicalize(&app.root).map_or_else(|_| raw.clone(), |p| p.display().to_string());
     (0..height)
         .map(|y| {
             let line = (0..width)

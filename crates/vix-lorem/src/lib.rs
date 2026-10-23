@@ -3,10 +3,6 @@
 //! Deterministic (no randomness): words, sentences, and paragraphs are derived
 //! from a fixed canonical passage so output is stable and testable.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// The canonical lorem ipsum passage the generators draw from.
 const PARAGRAPH: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, \
 sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad \

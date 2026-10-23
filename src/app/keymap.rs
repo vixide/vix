@@ -11,8 +11,6 @@
 //! a method is *defined* never has to happen in lockstep with everything it
 //! calls.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::{App, AppFlags, Focus, Keymap, display_key, menu_index_for_alt};

@@ -4,10 +4,6 @@
 //! TOML documents must be a table at the top level, so a JSON array or scalar
 //! input is reported as an error.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert JSON `input` to TOML.
 ///
 /// # Errors

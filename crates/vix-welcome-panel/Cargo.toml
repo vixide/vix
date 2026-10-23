@@ -9,3 +9,6 @@ description = "The first-run welcome screen's scroll state."
 
 [dependencies]
 vix-greedy-wrap = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,8 +2,6 @@
 //! editor: the completion list, the hover tooltip, and the code-action /
 //! code-lens choosers (sharing one generic single-column chooser box).
 
-#![warn(clippy::pedantic)]
-
 use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{

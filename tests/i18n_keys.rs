@@ -9,6 +9,7 @@
 //! defines it, so the gate catches the next one.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 /// The workspace root (this test's package is the root package).
@@ -104,13 +105,12 @@ fn load_catalog(root: &Path) -> BTreeMap<String, serde_norway::Value> {
             if key == "_version" {
                 continue; // each file's own format marker, not a message
             }
-            if merged.insert(key.clone(), value).is_some() {
-                panic!(
-                    "key `{key}` is defined in more than one locales/*.yml file \
-                     (also seen in {})",
-                    path.display()
-                );
-            }
+            assert!(
+                merged.insert(key.clone(), value).is_none(),
+                "key `{key}` is defined in more than one locales/*.yml file \
+                 (also seen in {})",
+                path.display()
+            );
         }
     }
     merged
@@ -377,14 +377,13 @@ fn i18n_coverage_report_and_floor() {
     // in the failure output below if the ratchet catches a regression.
     let mut report: Vec<(&str, usize)> = counts.iter().map(|(l, &n)| (l.as_str(), n)).collect();
     report.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-    let table: String = report
-        .iter()
-        .map(|(locale, n)| {
-            let pct = 100.0 * f64::from(u32::try_from(*n).unwrap_or(u32::MAX))
-                / f64::from(u32::try_from(total).unwrap_or(1));
-            format!("  {locale:>4}  {n:>5} / {total} ({pct:5.1}%)\n")
-        })
-        .collect();
+    let mut table = String::new();
+    for (locale, n) in &report {
+        let pct = 100.0 * f64::from(u32::try_from(*n).unwrap_or(u32::MAX))
+            / f64::from(u32::try_from(total).unwrap_or(1));
+        writeln!(table, "  {locale:>4}  {n:>5} / {total} ({pct:5.1}%)")
+            .expect("writing to a String cannot fail");
+    }
     println!("locales/ coverage ({total} entries):\n{table}");
 
     // Every locale actually present in the catalog must have a floor

@@ -6,10 +6,6 @@
 //! Leaves are addressed by their **in-order index** (left-to-right / top-to-bottom
 //! as laid out). The tree is capped at [`MAX_LEAVES`] panes.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use ratatui_core::layout::Rect;
 
 use crate::editor::SplitDir;

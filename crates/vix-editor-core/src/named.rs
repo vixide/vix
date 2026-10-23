@@ -7,8 +7,6 @@
 //! files, macros, shell/command/overwrite modes, suspend); those are dispatched
 //! by the host, not here.
 
-#![warn(clippy::pedantic)]
-
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, UnIndent, Undo,

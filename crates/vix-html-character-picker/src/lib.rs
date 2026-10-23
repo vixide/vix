@@ -9,10 +9,6 @@
 //! offset. The host renders the rows, maps clicks to rows, and inserts the chosen
 //! reference.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::sync::OnceLock;
 
 /// One HTML named character reference.

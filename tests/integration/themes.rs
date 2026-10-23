@@ -7,10 +7,12 @@
 //! smoke test; this file pins the actual RGB values `insta`'s plain-text
 //! screen flattening can't see (it captures only glyphs, not color/style).
 
-#![warn(clippy::pedantic)]
 // Shared fixtures/helpers live in `common.rs`; this file needs `fs` from
 // there, and a glob import earns its keep over a long explicit list.
-#![allow(clippy::wildcard_imports)]
+#![allow(
+    clippy::wildcard_imports,
+    reason = "every test needs a handful of the shared helpers in common.rs"
+)]
 
 use crate::common::*;
 

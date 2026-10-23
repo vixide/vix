@@ -6,8 +6,6 @@
 //! across the file rather than one contiguous block. An inherent `impl App`
 //! block can live in any module of the crate.
 
-#![warn(clippy::pedantic)]
-
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};

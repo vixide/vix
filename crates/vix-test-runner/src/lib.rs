@@ -5,10 +5,6 @@
 //! Pure text → data, so it is unit-testable; the host runs the command (via the
 //! async pipeline) and renders the [`TestResult`]s.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Outcome of a single test.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Status {

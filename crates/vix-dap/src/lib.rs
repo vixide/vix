@@ -11,10 +11,6 @@
 //! One debug session is active at a time. The host owns breakpoints, the UI, and
 //! how `DapEvent`s are applied.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin};

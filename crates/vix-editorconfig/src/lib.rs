@@ -12,10 +12,6 @@
 //! the common forms (`*`, `**`, `?`, `[...]`, `{a,b}`, `{s1,s2}` extension lists);
 //! exotic patterns (`{num1..num2}`) are not handled.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::Path;
 
 /// The `EditorConfig` properties that apply to a file, each `None` when unset.

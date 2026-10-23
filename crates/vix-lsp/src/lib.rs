@@ -13,10 +13,6 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::io::{Read, Write};
@@ -321,7 +317,7 @@ impl Lsp {
 
     /// The (created on demand) stderr log for `lang`.
     fn log_for(&mut self, lang: &str) -> LogBuf {
-        self.logs.entry(lang.to_string()).or_default().clone()
+        Arc::clone(self.logs.entry(lang.to_string()).or_default())
     }
 
     /// The recent stderr of every server configured for `path`, each under a
@@ -1526,7 +1522,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
     let stdin = child.stdin.take()?;
     let stdout = child.stdout.take()?;
     if let Some(stderr) = child.stderr.take() {
-        spawn_stderr_reader(stderr, log.clone());
+        spawn_stderr_reader(stderr, Arc::clone(log));
     }
     let (tx, rx) = channel();
     spawn_reader(stdout, tx);
@@ -1784,8 +1780,8 @@ mod tests {
             source: None,
             related: Vec::new(),
         };
-        lsp.set_diagnostics("rust-analyzer", &canonical(&path), vec![err.clone()]);
-        lsp.set_diagnostics("rust-clippy", &canonical(&path), vec![warn.clone()]);
+        lsp.set_diagnostics("rust-analyzer", &canonical(&path), vec![err]);
+        lsp.set_diagnostics("rust-clippy", &canonical(&path), vec![warn]);
         let merged = lsp.diagnostics_for(&path);
         assert_eq!(merged.len(), 2);
         assert!(merged.iter().any(|d| d.message == "type error"));

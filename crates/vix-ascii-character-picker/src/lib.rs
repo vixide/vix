@@ -9,10 +9,6 @@
 //! highlighted row and the scroll offset. The host renders the rows, maps clicks
 //! to rows, and inserts the chosen character.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Number of ASCII codes in the table (`0..=127`).
 pub const LEN: usize = 128;
 

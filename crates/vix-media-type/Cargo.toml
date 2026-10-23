@@ -12,3 +12,6 @@ vix-list-state = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

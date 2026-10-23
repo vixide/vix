@@ -23,10 +23,6 @@
 //! - **Space**: toggle collapse. **Ctrl+S**: save. **u** / **Ctrl+R**:
 //!   undo / redo. **Esc** / **q**: close.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after the outline handled a key.

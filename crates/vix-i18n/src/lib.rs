@@ -33,9 +33,6 @@
 //! backend (`_rust_i18n_translate`/`_rust_i18n_try_translate`/the fallback
 //! walk) is a hand-written copy of what `i18n!`'s own codegen produces, kept
 //! behaviorally identical — only the backend underneath changed.
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -150,7 +147,10 @@ pub fn _rust_i18n_lookup_fallback(locale: &str) -> Option<&str> {
 // what `rust_i18n::i18n!`'s own codegen would have generated -- `surface!`'s
 // `pub use` and the `t!` macro's `crate::_rust_i18n_try_translate` reference
 // depend on these precise names, not sloppy "forgot to finish this" code.
-#[allow(clippy::used_underscore_items)]
+#[allow(
+    clippy::used_underscore_items,
+    reason = "the underscore-prefixed names are the ones rust-i18n's t! expansion requires"
+)]
 #[must_use]
 pub fn _rust_i18n_translate<'r>(locale: &str, key: &'r str) -> Cow<'r, str> {
     _rust_i18n_try_translate(locale, key).unwrap_or_else(|| {
@@ -166,7 +166,10 @@ pub fn _rust_i18n_translate<'r>(locale: &str, key: &'r str) -> Cow<'r, str> {
 /// fallback and then `_RUST_I18N_FALLBACK_LOCALE` before giving up.
 /// `None` when nothing in that chain has a value for `key`. Called by the
 /// `t!` macro's expansion; not meant to be called directly.
-#[allow(clippy::used_underscore_items)]
+#[allow(
+    clippy::used_underscore_items,
+    reason = "the underscore-prefixed names are the ones rust-i18n's t! expansion requires"
+)]
 pub fn _rust_i18n_try_translate<'r>(locale: &str, key: impl AsRef<str>) -> Option<Cow<'r, str>> {
     _rust_i18n_backend_translate(locale, key.as_ref()).or_else(|| {
         let mut current_locale = locale;
@@ -260,7 +263,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::used_underscore_items)]
+    #[allow(
+        clippy::used_underscore_items,
+        reason = "the underscore-prefixed names are the ones rust-i18n's t! expansion requires"
+    )]
     fn missing_translate_falls_back_to_locale_dot_key() {
         // `_rust_i18n_translate`'s own fallback (used by callers other than
         // the `t!` macro, which calls `_rust_i18n_try_translate` directly
@@ -277,7 +283,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::used_underscore_items)]
+    #[allow(
+        clippy::used_underscore_items,
+        reason = "the underscore-prefixed names are the ones rust-i18n's t! expansion requires"
+    )]
     fn available_locales_lists_every_bundled_locale_sorted() {
         let locales = _rust_i18n_available_locales();
         assert!(

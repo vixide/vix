@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Convert an integer between decimal, hexadecimal, binary, and octal."
 
 [dependencies]
+
+[lints]
+workspace = true

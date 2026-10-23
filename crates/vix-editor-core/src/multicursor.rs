@@ -8,8 +8,6 @@
 //! Edits run directly on the rope in one undo transaction, processing carets in
 //! ascending order with a running offset so each edit stays valid.
 
-#![warn(clippy::pedantic)]
-
 use crate::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
 use crate::editor::Editor;
 use crate::selection::Selection;

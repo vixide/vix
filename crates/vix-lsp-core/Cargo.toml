@@ -9,3 +9,6 @@ description = "A pure LSP client core: JSON-RPC framing, message builders, parse
 
 [dependencies]
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

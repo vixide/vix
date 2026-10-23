@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Howard Hinnant's civil-date algorithm: convert between a day count since 1970-01-01 (the Unix epoch) and a (year, month, day) calendar date, with no dependency on a date/time crate."
 
 [dependencies]
+
+[lints]
+workspace = true

@@ -11,3 +11,6 @@ description = "Rhai-based user scripting: load, sandbox, and run scripts against
 jiff = { workspace = true }
 rhai = { workspace = true }
 vix-macros = { workspace = true }
+
+[lints]
+workspace = true

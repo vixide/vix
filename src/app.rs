@@ -1,7 +1,5 @@
 //! Application state and event handling.
 
-#![warn(clippy::pedantic)]
-
 #[cfg(feature = "ai")]
 mod ai;
 #[cfg(not(feature = "ai"))]
@@ -12450,7 +12448,10 @@ impl App {
     /// Dispatch a submitted [`Prompt`] to its kind's handler — one match arm
     /// (or grouped arms sharing a handler) per [`PromptKind`], so the line
     /// count grows with the variant count, not with any one prompt's logic.
-    #[allow(clippy::too_many_lines)]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match arm per PromptKind, so length tracks the variant count"
+    )]
     fn accept_prompt(&mut self) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -12857,7 +12858,7 @@ impl App {
         };
         let child = std::sync::Arc::new(std::sync::Mutex::new(child));
         let (tx, rx) = std::sync::mpsc::channel();
-        let reader_child = child.clone();
+        let reader_child = std::sync::Arc::clone(&child);
         std::thread::spawn(move || {
             use std::io::BufRead;
             let reader = std::io::BufReader::new(stdout);
@@ -14462,7 +14463,7 @@ mod tests {
         app.settings.explorer_delete = "hard".to_string(); // plain fs::remove_file, not trash
         app.confirm = Some(Confirm {
             message: String::new(),
-            paths: vec![path.clone()],
+            paths: vec![path],
             kind: ConfirmKind::Delete,
         });
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();

@@ -9,3 +9,6 @@ description = "Org-roam: networked, Zettelkasten-style note-taking over a direct
 
 [dependencies]
 regex = { workspace = true }
+
+[lints]
+workspace = true

@@ -7,10 +7,6 @@
 //! replacement-template [`unescape`]. All operate on `&str` with **character**
 //! offsets; the host owns the buffer and applies the returned text.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use regex::Regex;
 
 /// Byte offset of character index `ch` in `text` (or `text.len()` if past the end).

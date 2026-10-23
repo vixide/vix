@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Parse test-runner output into a pass/fail list with jump-to-failure."
 
 [dependencies]
+
+[lints]
+workspace = true

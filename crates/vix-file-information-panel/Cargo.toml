@@ -13,3 +13,6 @@ vix-byte-size = { workspace = true }
 vix-civil-date = { workspace = true }
 vix-i18n = { workspace = true }
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

@@ -9,6 +9,7 @@
 //! see `benches/editor_ops.rs` for the per-keystroke costs.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::fmt::Write as _;
 use std::hint::black_box;
 use vix::git::diff_marks;
 use vix::palette::symbols;
@@ -22,9 +23,11 @@ fn source(lines: usize) -> String {
     let mut i = 0;
     let mut have = 0;
     while have < lines {
-        out.push_str(&format!(
+        write!(
+            out,
             "/// Item {i}.\npub fn item_{i}(value: &str) -> usize {{\n    let n = value.len();\n    if n > {i} {{ n - {i} }} else {{ 0 }}\n}}\n\n"
-        ));
+        )
+        .expect("writing to a String cannot fail");
         i += 1;
         have += LINES_PER_CHUNK;
     }

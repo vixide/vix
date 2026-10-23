@@ -1,8 +1,6 @@
 //! All rendering. `draw` lays out the frame, records pane rectangles for mouse
 //! hit-testing, and delegates to per-pane helpers.
 
-#![warn(clippy::pedantic)]
-
 #[cfg(feature = "ai")]
 mod ai;
 mod bidi;

@@ -8,10 +8,6 @@
 //! `App::transform_selection_or_buffer` and the latter via
 //! `App::rewrite_at_cursor`; everything here is unit-tested without a terminal.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert all line endings to LF (`\n`), dropping any `\r`.
 #[must_use]
 pub fn to_lf(text: &str) -> String {

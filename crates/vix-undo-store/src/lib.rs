@@ -6,10 +6,6 @@
 //! the stored content hash matches the file's current content, so undo is never
 //! replayed onto text it doesn't match.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};

@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Shared arithmetic for a scrollable, single-selection list — up/down (one row or one page), select-by-index, and keeping a scroll offset following the highlight within a fixed-height viewport."
 
 [dependencies]
+
+[lints]
+workspace = true

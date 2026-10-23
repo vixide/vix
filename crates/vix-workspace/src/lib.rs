@@ -14,10 +14,6 @@
 //! files = ["/home/me/proj/src/main.rs"]
 //! ```
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};

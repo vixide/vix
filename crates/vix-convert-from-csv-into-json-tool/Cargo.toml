@@ -9,3 +9,6 @@ description = "Convert: CSV text into a JSON array of objects."
 
 [dependencies]
 vix-convert-tabular = { workspace = true }
+
+[lints]
+workspace = true

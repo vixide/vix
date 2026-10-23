@@ -9,3 +9,6 @@ description = "Read-only side-by-side comparison: a unified diff between two tex
 
 [dependencies]
 similar = { workspace = true }
+
+[lints]
+workspace = true

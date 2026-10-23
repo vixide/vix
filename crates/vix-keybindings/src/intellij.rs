@@ -27,8 +27,6 @@
 //! `Ctrl+Shift+G` alike. Both tables list the Shift variant as an
 //! explicit second `Binding` row rather than silently dropping it.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const MACOS: &[Binding] = &[

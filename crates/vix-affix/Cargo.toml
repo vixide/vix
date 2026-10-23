@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Add, drop, and toggle a prefix/suffix pair around text."
 
 [dependencies]
+
+[lints]
+workspace = true

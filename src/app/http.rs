@@ -1,7 +1,5 @@
 //! HTTP client: send the active `.http`-style buffer and poll the response.
 
-#![warn(clippy::pedantic)]
-
 use super::{App, Focus};
 
 impl App {
@@ -26,7 +24,7 @@ impl App {
             self.status = t!("status.http_no_request").to_string();
             return;
         };
-        self.status = t!("status.http_sending", url = req.url.clone()).to_string();
+        self.status = t!("status.http_sending", url = req.url).to_string();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(crate::http_client::send(&req));

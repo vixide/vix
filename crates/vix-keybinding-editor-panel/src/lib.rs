@@ -21,10 +21,6 @@
 //! non-empty context") — listing a chord binding as "rebindable" here
 //! would promise something the system underneath can't actually do.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Where a row's effective binding currently comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {

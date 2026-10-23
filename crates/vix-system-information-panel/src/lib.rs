@@ -9,10 +9,6 @@
 //! data (via [`sysinfo`]) and tracks the highlighted row and scroll offset; the
 //! host renders the table, maps clicks to rows, and inserts the chosen value.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
 // this crate originally called `t!` zero times -- every row label was

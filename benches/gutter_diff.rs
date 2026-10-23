@@ -8,13 +8,15 @@
 //! 50,000-line cap must keep a giant buffer to the cost of counting its lines.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::fmt::Write as _;
 use std::hint::black_box;
 use vix::git::diff_marks;
 
 /// `lines` distinct source-like lines.
 fn source(lines: usize) -> String {
     (0..lines).fold(String::new(), |mut out, i| {
-        out.push_str(&format!("    let value_{i} = compute({i}) + {};\n", i % 97));
+        writeln!(out, "    let value_{i} = compute({i}) + {};", i % 97)
+            .expect("writing to a String cannot fail");
         out
     })
 }
@@ -39,7 +41,8 @@ fn lightly_edited(text: &str, every: usize) -> String {
 /// script (a distinct-lines rewrite is *easy*, with nothing to match).
 fn rewritten(lines: usize) -> String {
     (0..lines).fold(String::new(), |mut out, i| {
-        out.push_str(&format!("    repeated_{} += 1;\n", (i * 7919 + i / 3) % 48));
+        writeln!(out, "    repeated_{} += 1;", (i * 7919 + i / 3) % 48)
+            .expect("writing to a String cannot fail");
         out
     })
 }
@@ -47,7 +50,8 @@ fn rewritten(lines: usize) -> String {
 /// The same few dozen repeated lines in a different order (for the head side).
 fn repetitive(lines: usize) -> String {
     (0..lines).fold(String::new(), |mut out, i| {
-        out.push_str(&format!("    repeated_{} += 1;\n", (i * 31 + i / 5) % 48));
+        writeln!(out, "    repeated_{} += 1;", (i * 31 + i / 5) % 48)
+            .expect("writing to a String cannot fail");
         out
     })
 }

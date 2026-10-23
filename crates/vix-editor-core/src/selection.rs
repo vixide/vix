@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 #[derive(Debug, Clone, Copy)]
 /// How a drag selection snaps to text units as the cursor moves.
 pub enum SelectionSnap {

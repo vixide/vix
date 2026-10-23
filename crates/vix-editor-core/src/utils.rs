@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 /// Return the language name inferred from a filename's extension, or `"unknown"`.
 #[must_use]
 pub fn get_lang(filename: &str) -> String {

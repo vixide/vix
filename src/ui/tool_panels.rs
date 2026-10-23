@@ -2,8 +2,6 @@
 //! generic modal dialog (About/Website/Email), the color converter, the
 //! regex tester, the calculator, and the unit converter.
 
-#![warn(clippy::pedantic)]
-
 use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};

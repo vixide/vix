@@ -4,10 +4,6 @@
 //! Pure data — the host (the `vix` app) renders the dock and routes keys/clicks;
 //! this crate owns the line buffer and its scroll offset.
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 /// Default scrollback: maximum lines retained before the oldest are dropped.
 pub const DEFAULT_SCROLLBACK: usize = 1_000;
 

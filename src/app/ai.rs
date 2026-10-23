@@ -2,8 +2,6 @@
 //! doc-comment), the background CLI/HTTP runner, the chat panel, and the
 //! accept/reject diff review.
 
-#![warn(clippy::pedantic)]
-
 use super::{
     AiDest, AiDiffState, AiMsg, AiReplace, AiTarget, App, Focus, KeyCode, KeyEvent, Prompt,
     PromptKind, spawn_shell,
@@ -343,7 +341,7 @@ impl App {
         let stdout = child.stdout.take().expect("piped stdout");
         let child = std::sync::Arc::new(std::sync::Mutex::new(child));
         let (tx, rx) = std::sync::mpsc::channel();
-        let reader_child = child.clone();
+        let reader_child = child;
         std::thread::spawn(move || {
             use std::io::Read;
             let mut out = String::new();

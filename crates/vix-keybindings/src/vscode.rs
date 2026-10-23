@@ -21,8 +21,6 @@
 //! the original code (and this table) must not silently collide that
 //! with plain `Ctrl+p` if it does.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const NORMAL: &[Binding] = &[

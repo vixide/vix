@@ -15,10 +15,6 @@
 //! (the View → Keymap submenu is built from [`KEYMAPS`]) and maps it onto key
 //! bindings.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// One selectable keyboard navigation style.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Keymap {

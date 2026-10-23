@@ -11,10 +11,6 @@
 //! keys = ["(", "Right", "Right"]
 //! ```
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use std::path::Path;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

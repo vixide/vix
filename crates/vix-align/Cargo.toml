@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Align lines on a delimiter (`=`, `:`, `,`, `|`, …)."
 
 [dependencies]
+
+[lints]
+workspace = true

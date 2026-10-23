@@ -3,8 +3,6 @@
 //! structured-value (JSON/YAML) editor, the byte (hex) editor, the HTML
 //! character picker, and the document-outline panel.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

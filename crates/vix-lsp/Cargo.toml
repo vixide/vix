@@ -16,3 +16,6 @@ process = []
 serde_json = { workspace = true }
 vix-lsp-core = { workspace = true }
 vix-settings = { workspace = true }
+
+[lints]
+workspace = true

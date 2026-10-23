@@ -9,3 +9,5 @@ description = "Data for the keyboard-shortcut help overlay."
 
 [dependencies]
 
+[lints]
+workspace = true

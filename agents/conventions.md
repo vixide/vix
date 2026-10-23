@@ -5,7 +5,7 @@ on top.
 
 ## Documentation
 
-- `#![deny(missing_docs)]` is on at every crate root. Document all public items
+- `missing_docs = "deny"` is set for every crate by `[workspace.lints]`. Document all public items
   with `///`; module headers use `//!`.
 - Doc comments say *what and why*, briefly. Implementation details that would
   surprise a reader get an inline `//` comment explaining the *why*.
@@ -21,9 +21,11 @@ on top.
 
 ## Lints
 
-- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` at every crate root,
-  and `#![warn(clippy::pedantic)]` is repeated in **every module file** (lints are
-  per-module). Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
+- `unsafe_code = "forbid"`, `missing_docs = "deny"` and `clippy::pedantic` live
+  once in the root `[workspace.lints]`; each crate has `[lints] workspace = true`
+  (T599), so there are no per-file lint attributes to repeat. Every
+  `#[allow(..)]` needs a `reason = ".."`, and `Arc::clone(&x)` is used instead
+  of `x.clone()` on reference-counted pointers. Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
 - **No blanket allows.** There is no `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
   extract helpers for `too_many_lines`, context structs for `too_many_arguments`,

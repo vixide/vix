@@ -9,3 +9,6 @@ description = "HTML Characters panel (Tools menu): named-character table + picke
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

@@ -10,3 +10,6 @@ description = "Display one parsed vCard as a table of labelled fields, plus pane
 [dependencies]
 vix-list-state = { workspace = true }
 vix-vcard-parser = { workspace = true }
+
+[lints]
+workspace = true

@@ -6,10 +6,6 @@
 //! lines the host hands it and tracks the scroll offset. The host renders the
 //! visible window with a scrollbar and forwards scroll keys.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Scroll state for the welcome overlay.
 ///
 /// The text is stored as source *paragraphs* (one entry per source line — each a

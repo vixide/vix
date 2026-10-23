@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Time-zone modeling: the IANA canonical zone table + the app-wide active zone."
 
 [dependencies]
+
+[lints]
+workspace = true

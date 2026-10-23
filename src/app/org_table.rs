@@ -13,8 +13,6 @@
 //! levels of the tree. Two contiguous clusters, bundled together since
 //! Column View renders interactive `TBLFM` tables.
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{App, Focus, Prompt, PromptKind};
@@ -339,7 +337,7 @@ impl App {
     /// non-integers to 2 decimal places with trailing zeros trimmed.
     fn format_table_number(v: f64) -> String {
         if v.fract().abs() < 1e-9 {
-            #[allow(clippy::cast_possible_truncation)] // pragmatic: table sums are small
+            #[allow(clippy::cast_possible_truncation, reason = "table sums are small")]
             return (v.round() as i64).to_string();
         }
         let s = format!("{v:.2}");

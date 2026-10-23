@@ -10,3 +10,6 @@ description = "List a theme's color slots and edit each one, live-previewed on t
 [dependencies]
 vix-list-state = { workspace = true }
 vix-theme-model = { workspace = true }
+
+[lints]
+workspace = true

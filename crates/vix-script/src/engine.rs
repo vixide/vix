@@ -2,8 +2,6 @@
 //! native-function API (§ API v1), plus the types that carry a call's
 //! request and result across the host boundary.
 
-#![warn(clippy::pedantic)]
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -165,7 +163,7 @@ struct Registry {
 /// `registry` rather than `host`.
 fn register_registration_fns(engine: &mut Engine, registry: &Rc<RefCell<Registry>>) {
     {
-        let r = registry.clone();
+        let r = Rc::clone(registry);
         engine.register_fn(
             "register_command",
             move |id: String, label: String, handler: String| {
@@ -173,7 +171,7 @@ fn register_registration_fns(engine: &mut Engine, registry: &Rc<RefCell<Registry
             },
         );
     }
-    let r = registry.clone();
+    let r = Rc::clone(registry);
     engine.register_fn(
         "bind_key",
         move |key_token: String, command_id: String| -> Result<(), Box<rhai::EvalAltResult>> {
@@ -197,11 +195,11 @@ fn register_registration_fns(engine: &mut Engine, registry: &Rc<RefCell<Registry
 /// selection") — every one reads and/or writes `host`.
 fn register_buffer_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("buffer_text", move || h.borrow().buffer_text.clone());
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("set_buffer_text", move |text: String| {
             let mut s = h.borrow_mut();
             s.buffer_text = text;
@@ -209,11 +207,11 @@ fn register_buffer_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
         });
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("selection_text", move || h.borrow().selection_text.clone());
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("set_selection_text", move |text: String| {
             let mut s = h.borrow_mut();
             s.selection_text = text;
@@ -221,16 +219,16 @@ fn register_buffer_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
         });
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("current_line", move || h.borrow().current_line.clone());
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("cursor_offset", move || {
             i64::try_from(h.borrow().cursor_offset).unwrap_or(i64::MAX)
         });
     }
-    let h = host.clone();
+    let h = Rc::clone(host);
     engine.register_fn("set_cursor_offset", move |n: i64| {
         let mut s = h.borrow_mut();
         let len = i64::try_from(s.buffer_text.chars().count()).unwrap_or(i64::MAX);
@@ -243,18 +241,18 @@ fn register_buffer_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
 /// "Messages") — all three just append to `host`, never read it.
 fn register_prompt_and_message_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("prompt", move |message: String, on_submit: String| {
             h.borrow_mut().prompt = Some(PromptRequest { message, on_submit });
         });
     }
     {
-        let h = host.clone();
+        let h = Rc::clone(host);
         engine.register_fn("message", move |text: String| {
             h.borrow_mut().messages.push(HostMessage::Info(text));
         });
     }
-    let h = host.clone();
+    let h = Rc::clone(host);
     engine.register_fn("error", move |text: String| {
         h.borrow_mut().messages.push(HostMessage::Error(text));
     });

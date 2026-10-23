@@ -5,10 +5,6 @@
 //! and newlines — common when pasting wrapped Base64 — and reports an error when
 //! the input is not valid Base64 or does not decode to UTF-8 text.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 

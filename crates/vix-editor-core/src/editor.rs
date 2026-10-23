@@ -1,4 +1,3 @@
-#![warn(clippy::pedantic)]
 use crate::actions::Action;
 use crate::click::{ClickKind, ClickTracker};
 use crate::code::Code;

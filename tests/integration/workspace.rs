@@ -1,8 +1,14 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 // Shared fixtures/helpers live in `common.rs`; every test here needs a
 // handful of them, so a glob import earns its keep over a long explicit list.
-#![allow(clippy::wildcard_imports)]
+#![allow(
+    clippy::wildcard_imports,
+    reason = "every test needs a handful of the shared helpers in common.rs"
+)]
 
 use crate::common::*;
 
@@ -745,8 +751,8 @@ fn session_snapshot_and_restore_round_trip() {
 
     // Open two files, focus the second, move its cursor, then snapshot.
     let mut app = app_at(&dir);
-    app.open_initial(&a.clone());
-    app.open_initial(&b.clone());
+    app.open_initial(&a);
+    app.open_initial(&b);
     app.run_action("cursor_down"); // line 2 of b.txt
     app.run_action("cursor_right");
     let snap = app.workspace_session();
@@ -775,7 +781,7 @@ fn session_restores_scroll_offset() {
     fs::write(&a, &body).unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&a.clone());
+    app.open_initial(&a);
     if let Some(t) = app.editor.active_tab_mut() {
         t.editor.set_offset_y(120);
     }

@@ -22,3 +22,6 @@ vix-spellcheck = { path = "../vix-spellcheck", version = "1.7.1", default-featur
 # `t!` expands to `rust_i18n` paths that machete cannot see.
 [package.metadata.cargo-machete]
 ignored = ["rust-i18n"]
+
+[lints]
+workspace = true

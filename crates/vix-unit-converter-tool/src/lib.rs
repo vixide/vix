@@ -11,10 +11,6 @@
 //! The base units are: metre (length), gram (mass), kelvin (temperature), byte
 //! (data) and second (time).
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// A measurable quantity. Conversions are only defined within one dimension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dimension {

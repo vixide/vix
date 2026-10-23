@@ -7,8 +7,6 @@
 //! source ranges bundled into one module for symmetry with the app-side
 //! `picker_panels.rs` state module.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 

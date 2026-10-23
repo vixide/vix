@@ -17,8 +17,9 @@ Quick orientation:
   changes, change the code when it drifted, keep them in sync.
 - **Build/test/lint**: `cargo build`, `cargo test`,
   `cargo clippy --workspace --all-targets -- -D warnings` (kept clean).
-- **Hard rules**: `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`,
-  `#![warn(clippy::pedantic)]` in every crate; internationalize all user-facing
+- **Hard rules**: `unsafe_code = "forbid"`, `missing_docs = "deny"`,
+  `clippy::pedantic` for every crate via the root `[workspace.lints]` (each
+  crate has `[lints] workspace = true`); internationalize all user-facing
   text via `t!` + the right `locales/*.yml` file; one action id, one
   `run_action` arm.
 

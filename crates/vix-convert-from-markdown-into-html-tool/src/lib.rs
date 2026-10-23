@@ -2,10 +2,6 @@
 //!
 //! Parses `CommonMark` with `pulldown-cmark` and renders the HTML fragment.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use pulldown_cmark::{Parser, html};
 
 /// Convert Markdown `input` to an HTML fragment.

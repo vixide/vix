@@ -11,3 +11,6 @@ description = "A workspace: a named set of project folders plus the files to reo
 serde = { workspace = true }
 toml = { workspace = true }
 vix-fileops = { workspace = true }
+
+[lints]
+workspace = true

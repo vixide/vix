@@ -17,10 +17,6 @@
 //! or `//` are comments. Parsing is pure and unit-tested; [`send`] performs the
 //! (blocking) request and is meant to be called from a background thread.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// A parsed HTTP request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {

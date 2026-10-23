@@ -7,10 +7,6 @@
 //! flattening structured `N`/`ADR` values. Pure data; the host renders the rows
 //! and inserts the selected value into the editor.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use vix_vcard_parser::Vcard;
 
 /// One display row: a label and a value.

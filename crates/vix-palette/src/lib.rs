@@ -9,10 +9,6 @@
 //! | `@`    | Symbols (file)     |
 //! | `@@`   | Symbols (workspace)|
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate).
 #[macro_use]

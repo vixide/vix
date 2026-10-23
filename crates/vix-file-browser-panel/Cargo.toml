@@ -11,3 +11,6 @@ description = "File browser panel (File → Open): recursive listing with fuzzy 
 walkdir = { workspace = true }
 vix-list-state = { workspace = true }
 vix-palette = { workspace = true }
+
+[lints]
+workspace = true

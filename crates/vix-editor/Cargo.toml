@@ -22,3 +22,6 @@ vix-editor-core = { path = "../vix-editor-core", version = "1.7.1", default-feat
 vix-fileops = { workspace = true }
 vix-textops = { workspace = true }
 vix-theme = { workspace = true }
+
+[lints]
+workspace = true

@@ -9,3 +9,6 @@ description = "Parse Git merge-conflict markers, resolve the conflict under the 
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

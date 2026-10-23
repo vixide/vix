@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Greedy word-wrap of a single paragraph to a column width, hard-breaking any word longer than the width so no line ever overflows."
 
 [dependencies]
+
+[lints]
+workspace = true

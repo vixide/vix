@@ -11,3 +11,6 @@ description = "A pragmatic subset of Emmet abbreviation expansion."
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

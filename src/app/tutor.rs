@@ -2,8 +2,6 @@
 //! the live progress indicator (`crates/vix-tutor/spec/index.md`). `vix
 //! --tutor` and **Help → Tutorial** both call [`App::open_tutor`].
 
-#![warn(clippy::pedantic)]
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 

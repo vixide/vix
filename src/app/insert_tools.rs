@@ -19,8 +19,6 @@
 //! more than one field, not a single call) and so did the prefix-matched
 //! actions (`view.theme:`, `script:`, …).
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{App, SQL_CREATE_EXTENSION, SQL_CREATE_TABLE};
@@ -207,7 +205,10 @@ impl App {
 
     /// Insert a ditaa ASCII-art shape for a `tools.draw.*` action at the cursor.
     /// Returns `true` if `action` was a known shape. See <https://ditaa.sourceforge.net/>.
-    #[allow(clippy::too_many_lines)]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match arm per insert tool, so length tracks the tool count"
+    )]
     pub(super) fn draw_insert(&mut self, action: &str) -> bool {
         let art = match action {
             "tools.draw.rectangle" => "+-------+\n|       |\n+-------+\n",

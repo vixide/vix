@@ -8,8 +8,6 @@
 //! here with the keybinding-editor code (T204), which stays in `app.rs`
 //! for now (not one of this epic's named slices).
 
-#![warn(clippy::pedantic)]
-
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{

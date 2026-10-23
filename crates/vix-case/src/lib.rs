@@ -4,10 +4,6 @@
 //! `camel` / `pascal` re-tokenize the text into words (splitting on separators
 //! and camelCase humps) and rejoin in the target style.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// `FOO BAR`
 #[must_use]
 pub fn upper(s: &str) -> String {

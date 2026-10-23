@@ -4,9 +4,6 @@
 //! on exit. All of the application logic lives in the `vix` library crate.
 
 // Always start with high quality coding conventions.
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 
 // When we build for MUSL static, use faster memory allocator.
 #[cfg(target_env = "musl")]

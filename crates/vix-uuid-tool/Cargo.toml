@@ -9,3 +9,6 @@ description = "Generate UUIDs of every version, v1 through v8."
 
 [dependencies]
 uuid = { workspace = true }
+
+[lints]
+workspace = true

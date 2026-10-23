@@ -18,8 +18,6 @@
 //! read closely enough to convert it for real, the same way T104a found
 //! Emacs needed [`crate::ChordContext`] in the first place.
 
-#![warn(clippy::pedantic)]
-
 use crate::{Binding, ChordContext};
 
 const LEADER: &[Binding] = &[

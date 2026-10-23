@@ -1,8 +1,6 @@
 //! AI overlays: the reviewable AI-diff hunk viewer and the persistent AI chat
 //! panel.
 
-#![warn(clippy::pedantic)]
-
 use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
@@ -10,7 +8,10 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use crate::app::App;
 use crate::theme::{self, icon};
 
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "a single linear frame-drawing routine for one overlay"
+)]
 pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ai_diff::Seg;
     let Some(review) = app.ai_diff_review() else {

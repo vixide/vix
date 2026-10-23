@@ -3,10 +3,6 @@
 //! The first TSV row supplies the object keys; each later row becomes one object
 //! with string values. See [`vix_convert_tabular`] for the shared logic.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert TSV `input` to pretty-printed JSON.
 ///
 /// # Errors

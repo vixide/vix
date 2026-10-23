@@ -11,3 +11,6 @@ description = "The byte editor: a hex/ASCII view for editing raw file bytes."
 crossterm = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

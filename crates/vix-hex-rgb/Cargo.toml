@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Lenient `#RRGGBB`/`RRGGBB` hex-string to `(r, g, b)` byte-triple parsing, treating any missing or invalid component as 0."
 
 [dependencies]
+
+[lints]
+workspace = true

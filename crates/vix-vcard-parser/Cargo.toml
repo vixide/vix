@@ -11,3 +11,6 @@ description = "A small, dependency-free vCard 4.0 (RFC 6350) parser."
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

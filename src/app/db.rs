@@ -1,8 +1,6 @@
 //! DB workbench glue: the `db.*` action dispatcher, the overlay's key handling,
 //! and the pollers for its background query/connect/reconnect tasks.
 
-#![warn(clippy::pedantic)]
-
 #[cfg(feature = "ai")]
 use super::{AiDest, AiReplace};
 use super::{App, KeyEvent, Level};

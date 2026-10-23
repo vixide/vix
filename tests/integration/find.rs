@@ -1,8 +1,14 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 // Shared fixtures/helpers live in `common.rs`; every test here needs a
 // handful of them, so a glob import earns its keep over a long explicit list.
-#![allow(clippy::wildcard_imports)]
+#![allow(
+    clippy::wildcard_imports,
+    reason = "every test needs a handful of the shared helpers in common.rs"
+)]
 
 use crate::common::*;
 
@@ -86,7 +92,7 @@ fn replace_all_with_capture_groups() {
     let file = dir.join("swap.txt");
     fs::write(&file, "key: value\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
 
     // Open replace, enable regex, search `(\w+): (\w+)`, replace `$2: $1`.
     app.run_action("edit.replace");

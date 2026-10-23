@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Parse and convert colors between HEX, RGB, and HSL."
 
 [dependencies]
+
+[lints]
+workspace = true

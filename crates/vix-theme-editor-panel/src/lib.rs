@@ -8,10 +8,6 @@
 //! `vix-x11-color-picker`, reused rather than duplicated — see
 //! `spec/index.md`).
 
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-#![warn(clippy::pedantic)]
-
 use vix_theme_model::{CustomTheme, Rgb};
 
 /// One editable color slot. Named directly rather than modeled generically

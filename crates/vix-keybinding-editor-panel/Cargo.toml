@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Data and table state for the keybinding editor overlay (rebind/reset)."
 
 [dependencies]
+
+[lints]
+workspace = true

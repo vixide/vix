@@ -9,3 +9,6 @@ description = "ASCII panel (Tools menu): the ASCII reference table + row-selecti
 
 [dependencies]
 vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,7 +1,5 @@
 //! Integrated terminal: toggle, key forwarding and output polling.
 
-#![warn(clippy::pedantic)]
-
 use super::{App, KeyCode, KeyEvent};
 
 impl App {

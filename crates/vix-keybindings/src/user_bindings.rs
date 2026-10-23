@@ -18,8 +18,6 @@
 //! doesn't reference [`crate::lookup`] at all. `remove` was added in
 //! T204 for the keybinding editor's "Reset to default".
 
-#![warn(clippy::pedantic)]
-
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

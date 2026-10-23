@@ -15,9 +15,9 @@ build/meta docs (`index`, `navigation`, `comparisons`, `emacs-menus`, `license`,
 
 ## Lint posture
 
-Every crate root sets `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`, and
-`#![warn(clippy::pedantic)]`, and **every module file** repeats
-`#![warn(clippy::pedantic)]`. There is **no** blanket `#![allow(clippy::pedantic)]`
+The root `Cargo.toml` `[workspace.lints]` table sets `unsafe_code = "forbid"`,
+`missing_docs = "deny"` and `clippy::pedantic` for every crate and every target
+(each crate has `[lints] workspace = true`; T599). There is **no** blanket `#![allow(clippy::pedantic)]`
 or `#![allow(missing_docs)]` anywhere — findings are fixed in code. Sanctioned
 allows are only a handful of **targeted** `#[allow(clippy::too_many_lines)]` /
 `too_many_arguments` ones on specific functions that resist further

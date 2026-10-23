@@ -3,10 +3,6 @@
 //! CSV quoting is honored on the way in; the tab-separated output has no quoting.
 //! See [`vix_convert_tabular`] for the shared logic.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 /// Convert CSV `input` to TSV.
 ///
 /// # Errors

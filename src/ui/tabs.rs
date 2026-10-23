@@ -2,8 +2,6 @@
 //! breadcrumb bar (active file name + enclosing symbol), plus the layout
 //! split that carves their rows out of the center column.
 
-#![warn(clippy::pedantic)]
-
 use ratatui::prelude::*;
 use ratatui::widgets::{Paragraph, Tabs};
 

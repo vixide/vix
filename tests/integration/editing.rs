@@ -1,8 +1,14 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::format_collect,
+    reason = "tests count and index small fixtures, and build expected text with format! over iterators"
+)]
 // Shared fixtures/helpers live in `common.rs`; every test here needs a
 // handful of them, so a glob import earns its keep over a long explicit list.
-#![allow(clippy::wildcard_imports)]
+#![allow(
+    clippy::wildcard_imports,
+    reason = "every test needs a handful of the shared helpers in common.rs"
+)]
 
 use crate::common::*;
 
@@ -1255,7 +1261,7 @@ fn open_edit_save_round_trip() {
     fs::write(&file, "first line\nsecond line\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     assert_eq!(app.editor.active_tab().unwrap().lines()[0], "first line");
 
     // Move to end of the first line and append text.
@@ -1277,7 +1283,7 @@ fn edit_table_opens_edits_and_saves_csv() {
     fs::write(&file, "name,age\nalice,30\nbob,25\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
 
     app.run_action("tools.edit_table");
     assert!(
@@ -1324,7 +1330,7 @@ fn edit_outline_opens_indents_and_saves() {
     fs::write(&file, "A\nB\n  B1\nC\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
 
     app.run_action("tools.edit_outline");
     assert!(
@@ -1358,7 +1364,7 @@ fn edit_json_opens_edits_and_saves() {
     fs::write(&file, "{\n  \"a\": 1\n}\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.run_action("tools.edit_json");
     assert!(app.edit_value.is_some(), "JSON editor opened");
 
@@ -1413,7 +1419,7 @@ fn edit_bytes_opens_overwrites_and_saves() {
     fs::write(&file, "hello").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.run_action("tools.edit_bytes");
     assert!(app.edit_bytes.is_some(), "byte editor opened");
 
@@ -1626,7 +1632,7 @@ fn save_trims_trailing_whitespace_by_default() {
     let file = dir.join("t.txt");
     fs::write(&file, "abc\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.on_key(keycode(KeyCode::End));
     for _ in 0..3 {
         app.on_key(key(' '));
@@ -1646,7 +1652,7 @@ fn save_ensures_final_newline_by_default() {
     let file = dir.join("n.txt");
     fs::write(&file, "abc").unwrap(); // no trailing newline
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.run_action("file.save");
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
@@ -1664,7 +1670,7 @@ fn save_respects_disabled_normalization() {
     let mut app = app_at(&dir);
     app.settings.save.trim_trailing_whitespace = false;
     app.settings.save.ensure_final_newline = false;
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.on_key(keycode(KeyCode::End));
     for _ in 0..2 {
         app.on_key(key(' '));
@@ -1948,7 +1954,7 @@ fn help_overlay_lists_all_active_shortcuts_and_sorts() {
         .iter()
         .map(|&i| h.rows[i].keys.clone())
         .collect();
-    let mut rev = desc.clone();
+    let mut rev = desc;
     rev.reverse();
     assert_eq!(asc, rev, "second click flips the order");
 }
@@ -2927,7 +2933,7 @@ fn unsaved_prompt_save_writes_and_closes() {
     let file = dir.join("note.txt");
     fs::write(&file, "hello\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(&file.clone());
+    app.open_initial(&file);
     app.on_key(keycode(KeyCode::End));
     for c in "!!!".chars() {
         app.on_key(key(c));

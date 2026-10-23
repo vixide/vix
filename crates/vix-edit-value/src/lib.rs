@@ -19,10 +19,6 @@
 //! container); **Space** toggles fold; **u**/**Ctrl+R** undo/redo; **Ctrl+S**
 //! save; **Esc**/**q** close.
 
-#![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Which serialization the buffer uses.
