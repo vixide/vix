@@ -38,6 +38,8 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
+// Tests slice their own ASCII fixtures; the lint guards library code.
+#![cfg_attr(not(test), warn(clippy::string_slice))]
 
 use std::fmt;
 
@@ -78,14 +80,14 @@ const PUNCT: &str = "!#%&*+-./:<=>?@^|~";
 /// pattern's literal portions), so token boundaries line up between them.
 fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
     while i < text.len() {
-        let c = text[i..].chars().next()?;
+        let c = text.get(i..).unwrap_or_default().chars().next()?;
         if c.is_whitespace() {
             i += c.len_utf8();
         } else {
             break;
         }
     }
-    let c = text[i..].chars().next()?;
+    let c = text.get(i..).unwrap_or_default().chars().next()?;
     if "([{".contains(c) {
         let end = i + c.len_utf8();
         return Some((
@@ -161,7 +163,12 @@ fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
 fn scan_string_literal(text: &str, i: usize, quote: char) -> usize {
     let mut j = i + quote.len_utf8();
     while j < text.len() {
-        let c2 = text[j..].chars().next().unwrap_or(quote);
+        let c2 = text
+            .get(j..)
+            .unwrap_or_default()
+            .chars()
+            .next()
+            .unwrap_or(quote);
         if c2 == '\\' {
             j += c2.len_utf8();
             if let Some(c3) = text.get(j..).and_then(|s| s.chars().next()) {
@@ -182,7 +189,12 @@ fn scan_string_literal(text: &str, i: usize, quote: char) -> usize {
 fn scan_run(text: &str, i: usize, keep: impl Fn(char) -> bool) -> usize {
     let mut j = i;
     while j < text.len() {
-        let c = text[j..].chars().next().unwrap_or('\0');
+        let c = text
+            .get(j..)
+            .unwrap_or_default()
+            .chars()
+            .next()
+            .unwrap_or('\0');
         if keep(c) {
             j += c.len_utf8();
         } else {
@@ -264,7 +276,7 @@ impl Pattern {
         let mut i = 0;
         loop {
             while i < pattern.len() {
-                let Some(c) = pattern[i..].chars().next() else {
+                let Some(c) = pattern.get(i..).unwrap_or_default().chars().next() else {
                     break;
                 };
                 if c.is_whitespace() {
@@ -284,7 +296,7 @@ impl Pattern {
                 }
                 let name_start = j;
                 let mut name_end = j;
-                for (k, c) in pattern[j..].char_indices() {
+                for (k, c) in pattern.get(j..).unwrap_or_default().char_indices() {
                     let ok = if k == 0 {
                         c.is_alphabetic() || c == '_'
                     } else {
@@ -298,7 +310,10 @@ impl Pattern {
                 }
                 if name_end > name_start {
                     tokens.push(PatternToken::Hole {
-                        name: pattern[name_start..name_end].to_string(),
+                        name: pattern
+                            .get(name_start..name_end)
+                            .unwrap_or_default()
+                            .to_string(),
                         multi,
                     });
                     i = name_end;
@@ -312,7 +327,10 @@ impl Pattern {
             };
             tokens.push(PatternToken::Literal(
                 tok.kind,
-                pattern[tok.start..tok.end].to_string(),
+                pattern
+                    .get(tok.start..tok.end)
+                    .unwrap_or_default()
+                    .to_string(),
             ));
             i = next;
         }
@@ -384,7 +402,7 @@ impl Pattern {
         match pat_tok {
             PatternToken::Literal(kind, text) => {
                 let t = toks.get(ti)?;
-                if t.kind == *kind && &source[t.start..t.end] == text {
+                if t.kind == *kind && source.get(t.start..t.end).unwrap_or_default() == text {
                     self.match_from(pi + 1, toks, ti + 1, source, caps)
                 } else {
                     None
@@ -458,7 +476,7 @@ fn consume_unit(toks: &[Token], i: usize) -> Option<usize> {
 }
 
 /// Substitute `$NAME`/`$$NAME` placeholders in `template` with `m`'s
-/// captured source text (the exact `source[start..end]` slice for the
+/// captured source text (the exact `source.get(start..end).unwrap_or_default()` slice for the
 /// *first* capture of that name), and copy any other text through as-is. A
 /// placeholder naming a hole the pattern didn't capture renders as an empty
 /// string rather than erroring, and a bare `$`/`$$` not followed by a name
@@ -467,7 +485,7 @@ fn consume_unit(toks: &[Token], i: usize) -> Option<usize> {
 pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
     let mut out = String::new();
     let mut i = 0;
-    while let Some(c) = template[i..].chars().next() {
+    while let Some(c) = template.get(i..).unwrap_or_default().chars().next() {
         if c != '$' {
             out.push(c);
             i += c.len_utf8();
@@ -480,7 +498,7 @@ pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
         }
         let name_start = j;
         let mut name_end = j;
-        for (k, ch) in template[j..].char_indices() {
+        for (k, ch) in template.get(j..).unwrap_or_default().char_indices() {
             let ok = if k == 0 {
                 ch.is_alphabetic() || ch == '_'
             } else {
@@ -497,9 +515,9 @@ pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
             i += 1;
             continue;
         }
-        let name = &template[name_start..name_end];
+        let name = template.get(name_start..name_end).unwrap_or_default();
         if let Some((_, (cs, ce))) = m.captures.iter().find(|(n, _)| n == name) {
-            out.push_str(&source[*cs..*ce]);
+            out.push_str(source.get(*cs..*ce).unwrap_or_default());
         }
         i = name_end;
     }

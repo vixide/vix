@@ -6860,7 +6860,8 @@ new action.
     `strip_suffix`. **vix-org-table done** (2026-10-23): lint is
     `cfg_attr(not(test), ...)` since tests slice their own ASCII fixtures;
     library hits became `get`/`split_at_checked`, no `#[expect]` needed.
-    Remaining: vix-structural-replace (17), vix-org (60).
+    **vix-structural-replace done** (same day): all
+    slices became `get(..).unwrap_or_default()`. Remaining: vix-org (60).
 - [x] **T596 — The in-memory clipboard is a process-wide global, which
   makes a known test flaky.** `crates/vix-clipboard/src/lib.rs:18`
   `static MEMORY: Mutex<Option<String>>` is shared by every parallel test
