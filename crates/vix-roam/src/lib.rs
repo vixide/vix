@@ -13,6 +13,7 @@
 //! filesystem.
 
 #![warn(clippy::pedantic)]
+#![warn(clippy::string_slice)]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -55,7 +56,12 @@ pub fn node_title(content: &str) -> Option<String> {
         let lower = line.trim_start().to_ascii_lowercase();
         if let Some(rest) = lower.strip_prefix("#+title:") {
             let start = line.len() - rest.len();
-            return Some(line[start..].trim().to_string());
+            #[expect(
+                clippy::string_slice,
+                reason = "`to_ascii_lowercase` keeps byte offsets, and the stripped prefix is ASCII, so `start` is a char boundary"
+            )]
+            let value = &line[start..];
+            return Some(value.trim().to_string());
         }
     }
     None
@@ -78,7 +84,12 @@ fn property(content: &str, key: &str) -> Option<String> {
         if let Some(rest) = t.get(..want.len())
             && rest.eq_ignore_ascii_case(&want)
         {
-            return Some(t[want.len()..].trim().to_string());
+            #[expect(
+                clippy::string_slice,
+                reason = "`get(..want.len())` above succeeded, so the offset is a char boundary"
+            )]
+            let value = &t[want.len()..];
+            return Some(value.trim().to_string());
         }
     }
     None
@@ -106,7 +117,12 @@ pub fn transclusion(id: &str, title: &str) -> String {
 /// `None`. Mirrors `org::headline_level` so this module stays self-contained.
 fn headline_stars(line: &str) -> Option<usize> {
     let stars = line.len() - line.trim_start_matches('*').len();
-    (stars > 0 && line[stars..].starts_with(' ')).then_some(stars)
+    #[expect(
+        clippy::string_slice,
+        reason = "`stars` counts leading ASCII `*` bytes, so it is a char boundary"
+    )]
+    let rest = &line[stars..];
+    (stars > 0 && rest.starts_with(' ')).then_some(stars)
 }
 
 /// Make the headline at `line` a node by giving it an `:ID:`. If the headline
@@ -148,7 +164,14 @@ pub fn all_ids(content: &str) -> Vec<String> {
             let t = l.trim();
             t.get(..4)
                 .filter(|p| p.eq_ignore_ascii_case(":ID:"))
-                .map(|_| t[4..].trim().to_string())
+                .map(|_| {
+                    #[expect(
+                        clippy::string_slice,
+                        reason = "`get(..4)` above succeeded, so 4 is a char boundary"
+                    )]
+                    let value = &t[4..];
+                    value.trim().to_string()
+                })
         })
         .filter(|s| !s.is_empty())
         .collect()
