@@ -80,6 +80,7 @@ impl App {
     }
 
     /// [`App::store_session`], but surface a failure as a warning message.
+    #[cfg(feature = "script")]
     pub(super) fn store_session_or_warn(&mut self, session: &crate::session::Session) {
         if let Err(e) = self.store_session(session) {
             self.messages.push(
