@@ -118,6 +118,131 @@ insta = "1"
 # tasks.md), via examples/generate_man.rs (dev-only).
 clap_mangen = "0.3.3"
 
+# Internal crates, declared once (T601): members say `vix-x.workspace = true`.
+vix-action-catalog = { path = "crates/vix-action-catalog", version = "1.7.1" }
+vix-affix = { path = "crates/vix-affix", version = "1.7.1" }
+vix-ai-core = { path = "crates/vix-ai-core", version = "1.7.1" }
+vix-ai-diff = { path = "crates/vix-ai-diff", version = "1.7.1" }
+vix-ai-panel = { path = "crates/vix-ai-panel", version = "1.7.1" }
+vix-align = { path = "crates/vix-align", version = "1.7.1" }
+vix-ascii-character-picker = { path = "crates/vix-ascii-character-picker", version = "1.7.1" }
+vix-base-tool = { path = "crates/vix-base-tool", version = "1.7.1" }
+vix-base16 = { path = "crates/vix-base16", version = "1.7.1" }
+vix-base64-tool = { path = "crates/vix-base64-tool", version = "1.7.1" }
+vix-bottom-dock = { path = "crates/vix-bottom-dock", version = "1.7.1" }
+vix-byte-size = { path = "crates/vix-byte-size", version = "1.7.1" }
+vix-calculator-tool = { path = "crates/vix-calculator-tool", version = "1.7.1" }
+vix-calendar-panel = { path = "crates/vix-calendar-panel", version = "1.7.1" }
+vix-capped-stack = { path = "crates/vix-capped-stack", version = "1.7.1" }
+vix-case = { path = "crates/vix-case", version = "1.7.1" }
+vix-checksum-tool = { path = "crates/vix-checksum-tool", version = "1.7.1" }
+vix-civil-date = { path = "crates/vix-civil-date", version = "1.7.1" }
+vix-clipboard = { path = "crates/vix-clipboard", version = "1.7.1" }
+vix-clock-panel = { path = "crates/vix-clock-panel", version = "1.7.1" }
+vix-color-converter-tool = { path = "crates/vix-color-converter-tool", version = "1.7.1" }
+vix-column-view = { path = "crates/vix-column-view", version = "1.7.1" }
+vix-conflict-tool = { path = "crates/vix-conflict-tool", version = "1.7.1" }
+vix-contact-panel = { path = "crates/vix-contact-panel", version = "1.7.1" }
+vix-convert-from-csv-into-json-tool = { path = "crates/vix-convert-from-csv-into-json-tool", version = "1.7.1" }
+vix-convert-from-csv-into-tsv-tool = { path = "crates/vix-convert-from-csv-into-tsv-tool", version = "1.7.1" }
+vix-convert-from-html-into-markdown-tool = { path = "crates/vix-convert-from-html-into-markdown-tool", version = "1.7.1" }
+vix-convert-from-json-into-csv-tool = { path = "crates/vix-convert-from-json-into-csv-tool", version = "1.7.1" }
+vix-convert-from-json-into-toml-tool = { path = "crates/vix-convert-from-json-into-toml-tool", version = "1.7.1" }
+vix-convert-from-json-into-tsv-tool = { path = "crates/vix-convert-from-json-into-tsv-tool", version = "1.7.1" }
+vix-convert-from-json-into-yaml-tool = { path = "crates/vix-convert-from-json-into-yaml-tool", version = "1.7.1" }
+vix-convert-from-markdown-into-html-tool = { path = "crates/vix-convert-from-markdown-into-html-tool", version = "1.7.1" }
+vix-convert-from-toml-into-json-tool = { path = "crates/vix-convert-from-toml-into-json-tool", version = "1.7.1" }
+vix-convert-from-tsv-into-csv-tool = { path = "crates/vix-convert-from-tsv-into-csv-tool", version = "1.7.1" }
+vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into-json-tool", version = "1.7.1" }
+vix-convert-from-yaml-into-json-tool = { path = "crates/vix-convert-from-yaml-into-json-tool", version = "1.7.1" }
+vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "1.7.1" }
+vix-coverage = { path = "crates/vix-coverage", version = "1.7.1" }
+vix-dap = { path = "crates/vix-dap", version = "1.7.1" }
+vix-db = { path = "crates/vix-db", version = "1.7.1" }
+vix-diff-view = { path = "crates/vix-diff-view", version = "1.7.1" }
+vix-doctor = { path = "crates/vix-doctor", version = "1.7.1" }
+vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.7.1" }
+vix-edit-outline = { path = "crates/vix-edit-outline", version = "1.7.1" }
+vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.7.1" }
+vix-edit-table = { path = "crates/vix-edit-table", version = "1.7.1" }
+vix-edit-value = { path = "crates/vix-edit-value", version = "1.7.1" }
+vix-editor = { path = "crates/vix-editor", version = "1.7.1" }
+vix-editor-core = { path = "crates/vix-editor-core", version = "1.7.1" }
+vix-editorconfig = { path = "crates/vix-editorconfig", version = "1.7.1" }
+vix-emmet = { path = "crates/vix-emmet", version = "1.7.1" }
+vix-file-browser-panel = { path = "crates/vix-file-browser-panel", version = "1.7.1" }
+vix-file-information-panel = { path = "crates/vix-file-information-panel", version = "1.7.1" }
+vix-fileops = { path = "crates/vix-fileops", version = "1.7.1" }
+vix-find-panel = { path = "crates/vix-find-panel", version = "1.7.1" }
+vix-format-tool = { path = "crates/vix-format-tool", version = "1.7.1" }
+vix-git = { path = "crates/vix-git", version = "1.7.1" }
+vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "1.7.1" }
+vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "1.7.1" }
+vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "1.7.1" }
+vix-http-client = { path = "crates/vix-http-client", version = "1.7.1" }
+vix-i18n = { path = "crates/vix-i18n", version = "1.7.1" }
+vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "1.7.1" }
+vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "1.7.1" }
+vix-keybindings = { path = "crates/vix-keybindings", version = "1.7.1" }
+vix-keyboard-shortcut-panel = { path = "crates/vix-keyboard-shortcut-panel", version = "1.7.1" }
+vix-keymap-model = { path = "crates/vix-keymap-model", version = "1.7.1" }
+vix-left-dock = { path = "crates/vix-left-dock", version = "1.7.1" }
+vix-list-state = { path = "crates/vix-list-state", version = "1.7.1" }
+vix-locale-model = { path = "crates/vix-locale-model", version = "1.7.1" }
+vix-lorem = { path = "crates/vix-lorem", version = "1.7.1" }
+vix-lsp = { path = "crates/vix-lsp", version = "1.7.1" }
+vix-lsp-core = { path = "crates/vix-lsp-core", version = "1.7.1" }
+vix-macros = { path = "crates/vix-macros", version = "1.7.1" }
+vix-markdown-preview = { path = "crates/vix-markdown-preview", version = "1.7.1" }
+vix-media-type = { path = "crates/vix-media-type", version = "1.7.1" }
+vix-menu = { path = "crates/vix-menu", version = "1.7.1" }
+vix-modal = { path = "crates/vix-modal", version = "1.7.1" }
+vix-nerd-font-picker = { path = "crates/vix-nerd-font-picker", version = "1.7.1" }
+vix-org = { path = "crates/vix-org", version = "1.7.1" }
+vix-org-capture = { path = "crates/vix-org-capture", version = "1.7.1" }
+vix-org-contacts = { path = "crates/vix-org-contacts", version = "1.7.1" }
+vix-org-table = { path = "crates/vix-org-table", version = "1.7.1" }
+vix-outline-panel = { path = "crates/vix-outline-panel", version = "1.7.1" }
+vix-palette = { path = "crates/vix-palette", version = "1.7.1" }
+vix-pomodoro-tool = { path = "crates/vix-pomodoro-tool", version = "1.7.1" }
+vix-qr-tool = { path = "crates/vix-qr-tool", version = "1.7.1" }
+vix-regex-tool = { path = "crates/vix-regex-tool", version = "1.7.1" }
+vix-right-dock = { path = "crates/vix-right-dock", version = "1.7.1" }
+vix-roam = { path = "crates/vix-roam", version = "1.7.1" }
+vix-script = { path = "crates/vix-script", version = "1.7.1" }
+vix-session = { path = "crates/vix-session", version = "1.7.1" }
+vix-settings = { path = "crates/vix-settings", version = "1.7.1" }
+vix-settings-bundle = { path = "crates/vix-settings-bundle", version = "1.7.1" }
+vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "1.7.1" }
+vix-snippets = { path = "crates/vix-snippets", version = "1.7.1" }
+vix-spellcheck = { path = "crates/vix-spellcheck", version = "1.7.1" }
+vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "1.7.1" }
+vix-structural-replace = { path = "crates/vix-structural-replace", version = "1.7.1" }
+vix-system-information-panel = { path = "crates/vix-system-information-panel", version = "1.7.1" }
+vix-tags = { path = "crates/vix-tags", version = "1.7.1" }
+vix-tasks = { path = "crates/vix-tasks", version = "1.7.1" }
+vix-terminal = { path = "crates/vix-terminal", version = "1.7.1" }
+vix-test-runner = { path = "crates/vix-test-runner", version = "1.7.1" }
+vix-text-information-panel = { path = "crates/vix-text-information-panel", version = "1.7.1" }
+vix-textops = { path = "crates/vix-textops", version = "1.7.1" }
+vix-theme = { path = "crates/vix-theme", version = "1.7.1" }
+vix-theme-editor-panel = { path = "crates/vix-theme-editor-panel", version = "1.7.1" }
+vix-theme-model = { path = "crates/vix-theme-model", version = "1.7.1" }
+vix-time-zone-model = { path = "crates/vix-time-zone-model", version = "1.7.1" }
+vix-tutor = { path = "crates/vix-tutor", version = "1.7.1" }
+vix-undo-store = { path = "crates/vix-undo-store", version = "1.7.1" }
+vix-unit-converter-tool = { path = "crates/vix-unit-converter-tool", version = "1.7.1" }
+vix-url-tool = { path = "crates/vix-url-tool", version = "1.7.1" }
+vix-uuid-tool = { path = "crates/vix-uuid-tool", version = "1.7.1" }
+vix-vcard-panel = { path = "crates/vix-vcard-panel", version = "1.7.1" }
+vix-vcard-parser = { path = "crates/vix-vcard-parser", version = "1.7.1" }
+vix-welcome-panel = { path = "crates/vix-welcome-panel", version = "1.7.1" }
+vix-workspace = { path = "crates/vix-workspace", version = "1.7.1" }
+vix-workspace-dashboard-panel = { path = "crates/vix-workspace-dashboard-panel", version = "1.7.1" }
+vix-workspace-search = { path = "crates/vix-workspace-search", version = "1.7.1" }
+vix-x11-color-picker = { path = "crates/vix-x11-color-picker", version = "1.7.1" }
+vix-zid-tool = { path = "crates/vix-zid-tool", version = "1.7.1" }
+
 [package]
 name = "vix"
 version.workspace = true
@@ -205,31 +330,31 @@ lang-yaml = ["vix-editor-core/lang-yaml"]
 # other converted structs (`vix-editor-core`, `vix-find-panel`, …) use.
 bitflags = { workspace = true }
 # Shared single-embed i18n backend for the whole workspace (see crates/vix-i18n).
-vix-i18n = { path = "crates/vix-i18n", version = "1.7.1" }
+vix-i18n = { workspace = true }
 
 # Extracted concept crates (one per major concept).
 # base16-generated themes for the theme system.
-vix-base16 = { path = "crates/vix-base16", version = "1.7.1" }
+vix-base16 = { workspace = true }
 # Process-wide serialized access to the system clipboard.
-vix-clipboard = { path = "crates/vix-clipboard", version = "1.7.1" }
+vix-clipboard = { workspace = true }
 # Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
-vix-clock-panel = { path = "crates/vix-clock-panel", version = "1.7.1" }
+vix-clock-panel = { workspace = true }
 # Convert: CSV text into a JSON array of objects.
-vix-convert-from-csv-into-json-tool = { path = "crates/vix-convert-from-csv-into-json-tool", version = "1.7.1" }
+vix-convert-from-csv-into-json-tool = { workspace = true }
 # Convert: CSV text into TSV.
-vix-convert-from-csv-into-tsv-tool = { path = "crates/vix-convert-from-csv-into-tsv-tool", version = "1.7.1" }
+vix-convert-from-csv-into-tsv-tool = { workspace = true }
 # Convert: a JSON array of objects into CSV.
-vix-convert-from-json-into-csv-tool = { path = "crates/vix-convert-from-json-into-csv-tool", version = "1.7.1" }
+vix-convert-from-json-into-csv-tool = { workspace = true }
 # Convert: a JSON array of objects into TSV.
-vix-convert-from-json-into-tsv-tool = { path = "crates/vix-convert-from-json-into-tsv-tool", version = "1.7.1" }
+vix-convert-from-json-into-tsv-tool = { workspace = true }
 # Convert: TSV text into CSV.
-vix-convert-from-tsv-into-csv-tool = { path = "crates/vix-convert-from-tsv-into-csv-tool", version = "1.7.1" }
+vix-convert-from-tsv-into-csv-tool = { workspace = true }
 # Convert: TSV text into a JSON array of objects.
-vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into-json-tool", version = "1.7.1" }
+vix-convert-from-tsv-into-json-tool = { workspace = true }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
 vix-dap = { path = "crates/vix-dap", version = "1.7.1", default-features = false }
 # DB workbench: connection management, schema browsing, and SQL queries.
-vix-db = { path = "crates/vix-db", version = "1.7.1", optional = true }
+vix-db = { workspace = true, optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
 vix-editor = { path = "crates/vix-editor", version = "1.7.1", default-features = false }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
@@ -238,222 +363,222 @@ vix-editor-core = { path = "crates/vix-editor-core", version = "1.7.1", default-
 # LSP client: process management and document sync over `vix_lsp_core`.
 vix-lsp = { path = "crates/vix-lsp", version = "1.7.1", default-features = false }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
-vix-menu = { path = "crates/vix-menu", version = "1.7.1" }
+vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
 # buffer (see crates/vix-script/spec/index.md). Optional behind the `script`
 # capability feature (T590; spec/cargo-features).
-vix-script = { path = "crates/vix-script", version = "1.7.1", optional = true }
+vix-script = { workspace = true, optional = true }
 # Per-workspace editor session, persisted with `confy`.
-vix-session = { path = "crates/vix-session", version = "1.7.1" }
+vix-session = { workspace = true }
 # User settings, persisted with `confy`.
-vix-settings = { path = "crates/vix-settings", version = "1.7.1" }
+vix-settings = { workspace = true }
 # JSON snippet files: loading, scope resolution, merging, and the picker.
-vix-snippets = { path = "crates/vix-snippets", version = "1.7.1" }
+vix-snippets = { workspace = true }
 # Nerd Font icons, plus a re-export of the `vix_theme_model` theme model.
-vix-theme = { path = "crates/vix-theme", version = "1.7.1" }
+vix-theme = { workspace = true }
 # Persistent undo: save a buffer's undo tree to disk and restore it on reopen.
-vix-undo-store = { path = "crates/vix-undo-store", version = "1.7.1" }
+vix-undo-store = { workspace = true }
 # Display one parsed vCard as a table of labelled fields, plus panel state.
-vix-vcard-panel = { path = "crates/vix-vcard-panel", version = "1.7.1" }
+vix-vcard-panel = { workspace = true }
 # A workspace: a named set of project folders plus the files to reopen.
-vix-workspace = { path = "crates/vix-workspace", version = "1.7.1" }
+vix-workspace = { workspace = true }
 # Search (and replace) across every file under the workspace root, not just
 # the active buffer.
-vix-workspace-search = { path = "crates/vix-workspace-search", version = "1.7.1" }
+vix-workspace-search = { workspace = true }
 # A single (action id -> i18n title key) catalog for every `App::run_action`
 # id that has no `vix-menu` item of its own.
-vix-action-catalog = { path = "crates/vix-action-catalog", version = "1.7.1" }
+vix-action-catalog = { workspace = true }
 # Add, drop, and toggle a prefix/suffix pair around text.
-vix-affix = { path = "crates/vix-affix", version = "1.7.1" }
+vix-affix = { workspace = true }
 # Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
 # plus keyring-backed API-key resolution.
-vix-ai-core = { path = "crates/vix-ai-core", version = "1.7.1", optional = true }
+vix-ai-core = { workspace = true, optional = true }
 # Reviewable diff for AI text transforms (Annotate / Improve).
-vix-ai-diff = { path = "crates/vix-ai-diff", version = "1.7.1", optional = true }
+vix-ai-diff = { workspace = true, optional = true }
 # AI chat panel: a persistent conversation surface for the configured assistant.
-vix-ai-panel = { path = "crates/vix-ai-panel", version = "1.7.1", optional = true }
+vix-ai-panel = { workspace = true, optional = true }
 # Align lines on a delimiter (`=`, `:`, `,`, `|`, …).
-vix-align = { path = "crates/vix-align", version = "1.7.1" }
+vix-align = { workspace = true }
 # ASCII panel (Tools menu): the ASCII reference table + row-selection state.
-vix-ascii-character-picker = { path = "crates/vix-ascii-character-picker", version = "1.7.1" }
+vix-ascii-character-picker = { workspace = true }
 # Base64 encode and decode (Tools → Convert → Base64).
-vix-base64-tool = { path = "crates/vix-base64-tool", version = "1.7.1" }
+vix-base64-tool = { workspace = true }
 # Convert an integer between decimal, hexadecimal, binary, and octal.
-vix-base-tool = { path = "crates/vix-base-tool", version = "1.7.1" }
+vix-base-tool = { workspace = true }
 # Format a byte count as a human-readable size (`16.0 KiB`).
-vix-byte-size = { path = "crates/vix-byte-size", version = "1.7.1" }
+vix-byte-size = { workspace = true }
 # Bottom dock: a scrollable line buffer for logs, output, and data views.
-vix-bottom-dock = { path = "crates/vix-bottom-dock", version = "1.7.1" }
+vix-bottom-dock = { workspace = true }
 # Evaluate a typed formula, plus the Calculator dialog's editing state.
-vix-calculator-tool = { path = "crates/vix-calculator-tool", version = "1.7.1" }
+vix-calculator-tool = { workspace = true }
 # Calendar box: the navigable month grid.
-vix-calendar-panel = { path = "crates/vix-calendar-panel", version = "1.7.1" }
+vix-calendar-panel = { workspace = true }
 # Text case transforms applied to the editor selection (Edit → Case).
-vix-case = { path = "crates/vix-case", version = "1.7.1" }
+vix-case = { workspace = true }
 # Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
-vix-checksum-tool = { path = "crates/vix-checksum-tool", version = "1.7.1" }
+vix-checksum-tool = { workspace = true }
 # Parse and convert colors between HEX, RGB, and HSL.
-vix-color-converter-tool = { path = "crates/vix-color-converter-tool", version = "1.7.1" }
+vix-color-converter-tool = { workspace = true }
 # The interactive Column View overlay (Org C-c C-x C-c): a live,
 # write-through spreadsheet view onto the outline.
-vix-column-view = { path = "crates/vix-column-view", version = "1.7.1" }
+vix-column-view = { workspace = true }
 # Parse Git merge-conflict markers and resolve the conflict under the cursor.
-vix-conflict-tool = { path = "crates/vix-conflict-tool", version = "1.7.1" }
+vix-conflict-tool = { workspace = true }
 # Browse a directory of vCard files as a table of contacts.
-vix-contact-panel = { path = "crates/vix-contact-panel", version = "1.7.1" }
+vix-contact-panel = { workspace = true }
 # Convert: HTML into Markdown.
-vix-convert-from-html-into-markdown-tool = { path = "crates/vix-convert-from-html-into-markdown-tool", version = "1.7.1" }
+vix-convert-from-html-into-markdown-tool = { workspace = true }
 # Convert: JSON into TOML.
-vix-convert-from-json-into-toml-tool = { path = "crates/vix-convert-from-json-into-toml-tool", version = "1.7.1" }
+vix-convert-from-json-into-toml-tool = { workspace = true }
 # Convert: JSON into YAML.
-vix-convert-from-json-into-yaml-tool = { path = "crates/vix-convert-from-json-into-yaml-tool", version = "1.7.1" }
+vix-convert-from-json-into-yaml-tool = { workspace = true }
 # Convert: Markdown into HTML.
-vix-convert-from-markdown-into-html-tool = { path = "crates/vix-convert-from-markdown-into-html-tool", version = "1.7.1" }
+vix-convert-from-markdown-into-html-tool = { workspace = true }
 # Convert: TOML into JSON.
-vix-convert-from-toml-into-json-tool = { path = "crates/vix-convert-from-toml-into-json-tool", version = "1.7.1" }
+vix-convert-from-toml-into-json-tool = { workspace = true }
 # Convert: YAML into JSON.
-vix-convert-from-yaml-into-json-tool = { path = "crates/vix-convert-from-yaml-into-json-tool", version = "1.7.1" }
+vix-convert-from-yaml-into-json-tool = { workspace = true }
 # Shared CSV/TSV/JSON conversion helpers for the Tools → Convert tools.
-vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "1.7.1" }
+vix-convert-tabular = { workspace = true }
 # LCOV and Cobertura XML coverage report parsing for the coverage gutter.
-vix-coverage = { path = "crates/vix-coverage", version = "1.7.1" }
+vix-coverage = { workspace = true }
 # Read-only side-by-side comparison: a unified diff between two texts.
-vix-diff-view = { path = "crates/vix-diff-view", version = "1.7.1" }
+vix-diff-view = { workspace = true }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
 vix-doctor = { path = "crates/vix-doctor", version = "1.7.1", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
-vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.7.1" }
+vix-edit-bytes = { workspace = true }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
-vix-edit-outline = { path = "crates/vix-edit-outline", version = "1.7.1" }
+vix-edit-outline = { workspace = true }
 # The SQL edit surface: a statement-oriented view of a `.sql` buffer.
-vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.7.1", optional = true }
+vix-edit-sql = { workspace = true, optional = true }
 # The table editor: a spreadsheet-like grid for viewing and editing
 # delimited data (CSV/TSV) as rows and columns.
-vix-edit-table = { path = "crates/vix-edit-table", version = "1.7.1" }
+vix-edit-table = { workspace = true }
 # The structured-value editor: a foldable tree for JSON and YAML.
-vix-edit-value = { path = "crates/vix-edit-value", version = "1.7.1" }
+vix-edit-value = { workspace = true }
 # Minimal EditorConfig support: resolve the indent settings for a file.
-vix-editorconfig = { path = "crates/vix-editorconfig", version = "1.7.1" }
+vix-editorconfig = { workspace = true }
 # A pragmatic subset of Emmet abbreviation expansion.
-vix-emmet = { path = "crates/vix-emmet", version = "1.7.1" }
+vix-emmet = { workspace = true }
 # File browser (File → Open…): walkdir-backed listing with fuzzy search, sort, and filters.
-vix-file-browser-panel = { path = "crates/vix-file-browser-panel", version = "1.7.1" }
+vix-file-browser-panel = { workspace = true }
 # Information about the active editor file, plus the panel's row-selection state.
-vix-file-information-panel = { path = "crates/vix-file-information-panel", version = "1.7.1" }
+vix-file-information-panel = { workspace = true }
 # Filesystem helpers for the explorer's copy / cut / paste / delete.
-vix-fileops = { path = "crates/vix-fileops", version = "1.7.1" }
+vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
-vix-find-panel = { path = "crates/vix-find-panel", version = "1.7.1" }
+vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
-vix-format-tool = { path = "crates/vix-format-tool", version = "1.7.1" }
+vix-format-tool = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
 vix-git = { path = "crates/vix-git", version = "1.7.1", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.
-vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "1.7.1" }
+vix-html-character-picker = { workspace = true }
 # A minimal HTTP client driven by a `.http`-style buffer.
-vix-http-client = { path = "crates/vix-http-client", version = "1.7.1", optional = true }
+vix-http-client = { workspace = true, optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
-vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "1.7.1" }
+vix-jwt-tool = { workspace = true }
 # Data and table state for the keybinding editor overlay (rebind/reset).
-vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "1.7.1" }
+vix-keybinding-editor-panel = { workspace = true }
 # Data for the keyboard-shortcut help overlay.
-vix-keyboard-shortcut-panel = { path = "crates/vix-keyboard-shortcut-panel", version = "1.7.1" }
+vix-keyboard-shortcut-panel = { workspace = true }
 # An exhaustive, queryable registry of every built-in keybinding, and the
 # user/script override layer built on it.
-vix-keybindings = { path = "crates/vix-keybindings", version = "1.7.1" }
+vix-keybindings = { workspace = true }
 # The available keyboard navigation styles ("keymaps"); the View → Keymap submenu.
-vix-keymap-model = { path = "crates/vix-keymap-model", version = "1.7.1" }
+vix-keymap-model = { workspace = true }
 # Left dock: the file explorer's lazily-expanded directory tree + selection.
-vix-left-dock = { path = "crates/vix-left-dock", version = "1.7.1" }
+vix-left-dock = { workspace = true }
 # Shared selected/scroll arithmetic for a scrollable single-selection list.
-vix-list-state = { path = "crates/vix-list-state", version = "1.7.1" }
+vix-list-state = { workspace = true }
 # Available UI languages for Vix; the View → Locale submenu.
-vix-locale-model = { path = "crates/vix-locale-model", version = "1.7.1" }
+vix-locale-model = { workspace = true }
 # Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum).
-vix-lorem = { path = "crates/vix-lorem", version = "1.7.1" }
+vix-lorem = { workspace = true }
 # A pure LSP client core: JSON-RPC framing, message builders, parsers, positions.
-vix-lsp-core = { path = "crates/vix-lsp-core", version = "1.7.1" }
+vix-lsp-core = { workspace = true }
 # Persisted keyboard macros: named recordings of editor key events.
-vix-macros = { path = "crates/vix-macros", version = "1.7.1" }
+vix-macros = { workspace = true }
 # Render Markdown to formatted plain-text lines for a read-only preview pane.
-vix-markdown-preview = { path = "crates/vix-markdown-preview", version = "1.7.1" }
+vix-markdown-preview = { workspace = true }
 # The IANA-style media-type (MIME) table and the picker's filter + selection.
-vix-media-type = { path = "crates/vix-media-type", version = "1.7.1" }
+vix-media-type = { workspace = true }
 # A real modal-editing engine for the Vi/Spacemacs keymaps (design-only for now).
-vix-modal = { path = "crates/vix-modal", version = "1.7.1" }
+vix-modal = { workspace = true }
 # A curated set of Nerd Font glyphs and the character-picker grid state.
-vix-nerd-font-picker = { path = "crates/vix-nerd-font-picker", version = "1.7.1" }
+vix-nerd-font-picker = { workspace = true }
 # Basic Org-mode operations: headline structure editing and lightweight export.
-vix-org = { path = "crates/vix-org", version = "1.7.1" }
+vix-org = { workspace = true }
 # Org-capture: template-driven capture with placeholders and targets.
-vix-org-capture = { path = "crates/vix-org-capture", version = "1.7.1" }
+vix-org-capture = { workspace = true }
 # Org-contacts: contact management over Org files.
-vix-org-contacts = { path = "crates/vix-org-contacts", version = "1.7.1" }
+vix-org-contacts = { workspace = true }
 # Org-mode pipe-table editing: parsing, alignment, structural edits, and TBLFM formulas.
-vix-org-table = { path = "crates/vix-org-table", version = "1.7.1" }
+vix-org-table = { workspace = true }
 # The code-outline list (symbol kind + name + line) and the panel's selection.
-vix-outline-panel = { path = "crates/vix-outline-panel", version = "1.7.1" }
+vix-outline-panel = { workspace = true }
 # Command palette (Ctrl+P) with prefix-driven modes.
-vix-palette = { path = "crates/vix-palette", version = "1.7.1" }
+vix-palette = { workspace = true }
 # A Pomodoro work/break countdown as a small state machine.
-vix-pomodoro-tool = { path = "crates/vix-pomodoro-tool", version = "1.7.1" }
+vix-pomodoro-tool = { workspace = true }
 # QR code generation (Tools → QR Code).
-vix-qr-tool = { path = "crates/vix-qr-tool", version = "1.7.1" }
+vix-qr-tool = { workspace = true }
 # A live regular-expression tester, plus the dialog's editing state.
-vix-regex-tool = { path = "crates/vix-regex-tool", version = "1.7.1" }
+vix-regex-tool = { workspace = true }
 # Right dock: a message drawer of advice and notifications + selection.
-vix-right-dock = { path = "crates/vix-right-dock", version = "1.7.1" }
+vix-right-dock = { workspace = true }
 # Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
-vix-roam = { path = "crates/vix-roam", version = "1.7.1" }
+vix-roam = { workspace = true }
 # Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the
 # active custom theme into one file, and restore them from it.
-vix-settings-bundle = { path = "crates/vix-settings-bundle", version = "1.7.1" }
+vix-settings-bundle = { workspace = true }
 # A small library of reusable text snippets, plus the picker's selection state.
-vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "1.7.1" }
+vix-snippet-tool = { workspace = true }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
 vix-spellcheck = { path = "crates/vix-spellcheck", version = "1.7.1", default-features = false }
 # Formatting for the bottom status bar's two segments.
-vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "1.7.1" }
+vix-status-bar-panel = { workspace = true }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
-vix-structural-replace = { path = "crates/vix-structural-replace", version = "1.7.1" }
+vix-structural-replace = { workspace = true }
 # A read-only snapshot of host system information, plus the panel's selection.
-vix-system-information-panel = { path = "crates/vix-system-information-panel", version = "1.7.1" }
+vix-system-information-panel = { workspace = true }
 # Matching HTML/XML tag navigation.
-vix-tags = { path = "crates/vix-tags", version = "1.7.1" }
+vix-tags = { workspace = true }
 # Project task running: tasks.toml, per-project-type lifecycle commands, discovered tasks, subprojects, and test-at-point.
-vix-tasks = { path = "crates/vix-tasks", version = "1.7.1" }
+vix-tasks = { workspace = true }
 # Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
-vix-terminal = { path = "crates/vix-terminal", version = "1.7.1", optional = true }
+vix-terminal = { workspace = true, optional = true }
 # Parse test-runner output into a pass/fail list with jump-to-failure.
-vix-test-runner = { path = "crates/vix-test-runner", version = "1.7.1" }
+vix-test-runner = { workspace = true }
 # Statistics about a span of text, plus the panel's row-selection state.
-vix-text-information-panel = { path = "crates/vix-text-information-panel", version = "1.7.1" }
+vix-text-information-panel = { workspace = true }
 # Small pure text transforms used by Edit/Tools actions.
-vix-textops = { path = "crates/vix-textops", version = "1.7.1" }
+vix-textops = { workspace = true }
 # List a theme's color slots and edit each one, live-previewed as you go.
-vix-theme-editor-panel = { path = "crates/vix-theme-editor-panel", version = "1.7.1" }
+vix-theme-editor-panel = { workspace = true }
 # The Vix theme model: the JSON theme model, ratatui styles, and theme loading.
-vix-theme-model = { path = "crates/vix-theme-model", version = "1.7.1" }
+vix-theme-model = { workspace = true }
 # Time-zone modeling: the IANA canonical zone table + the app-wide active zone.
-vix-time-zone-model = { path = "crates/vix-time-zone-model", version = "1.7.1" }
+vix-time-zone-model = { workspace = true }
 # An interactive, in-editor tutorial: chapter metadata, bundled lesson text, progress checks.
-vix-tutor = { path = "crates/vix-tutor", version = "1.7.1" }
+vix-tutor = { workspace = true }
 # Convert a number between physical units, plus the Unit Converter dialog's state.
-vix-unit-converter-tool = { path = "crates/vix-unit-converter-tool", version = "1.7.1" }
+vix-unit-converter-tool = { workspace = true }
 # URL percent-encode and decode (Tools → Convert → URL).
-vix-url-tool = { path = "crates/vix-url-tool", version = "1.7.1" }
+vix-url-tool = { workspace = true }
 # Generate UUIDs of every version, v1 through v8.
-vix-uuid-tool = { path = "crates/vix-uuid-tool", version = "1.7.1" }
+vix-uuid-tool = { workspace = true }
 # A small, dependency-free vCard 4.0 (RFC 6350) parser.
-vix-vcard-parser = { path = "crates/vix-vcard-parser", version = "1.7.1" }
+vix-vcard-parser = { workspace = true }
 # The first-run welcome screen's scroll state.
-vix-welcome-panel = { path = "crates/vix-welcome-panel", version = "1.7.1" }
+vix-welcome-panel = { workspace = true }
 # Live workspace metrics for the dashboard overlay (Tools → Workspace Dashboard).
-vix-workspace-dashboard-panel = { path = "crates/vix-workspace-dashboard-panel", version = "1.7.1" }
+vix-workspace-dashboard-panel = { workspace = true }
 # The X11 color table and the picker's row-selection + scroll state.
-vix-x11-color-picker = { path = "crates/vix-x11-color-picker", version = "1.7.1" }
+vix-x11-color-picker = { workspace = true }
 # Generate a secure random ZID: a lowercase hexadecimal identifier.
-vix-zid-tool = { path = "crates/vix-zid-tool", version = "1.7.1" }
+vix-zid-tool = { workspace = true }
 
 # Terminal UI core. The whole widget ecosystem must agree on this version.
 ratatui = { workspace = true }

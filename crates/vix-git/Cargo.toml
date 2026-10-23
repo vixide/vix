@@ -15,5 +15,5 @@ process = []
 
 [dependencies]
 similar = { workspace = true }
-vix-civil-date = { path = "../vix-civil-date", version = "1.7.1" }
-vix-list-state = { path = "../vix-list-state", version = "1.7.1" }
+vix-civil-date = { workspace = true }
+vix-list-state = { workspace = true }

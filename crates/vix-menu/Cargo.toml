@@ -9,10 +9,10 @@ description = "Top menu bar with keyboard-navigable dropdowns (one level of subm
 
 [dependencies]
 rust-i18n = { workspace = true }
-vix-i18n = { path = "../vix-i18n", version = "1.7.1" }
-vix-keymap-model = { path = "../vix-keymap-model", version = "1.7.1" }
-vix-locale-model = { path = "../vix-locale-model", version = "1.7.1" }
-vix-time-zone-model = { path = "../vix-time-zone-model", version = "1.7.1" }
+vix-i18n = { workspace = true }
+vix-keymap-model = { workspace = true }
+vix-locale-model = { workspace = true }
+vix-time-zone-model = { workspace = true }
 
 # `t!` expands to `rust_i18n` paths that machete cannot see.
 [package.metadata.cargo-machete]
