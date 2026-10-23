@@ -506,7 +506,12 @@ impl App {
                 .set(name, vix_modal::register::RegisterValue { text, kind });
         } else {
             self.modal_unnamed_kind = kind;
-            let _ = vix_clipboard::set(&text);
+            if let Some(tab) = self.editor.active_tab_mut() {
+                tab.editor.set_clipboard(&text);
+            } else {
+                // No tab to hold the in-memory fallback: use the bare helper.
+                vix_clipboard::set(&text).ok();
+            }
         }
     }
 

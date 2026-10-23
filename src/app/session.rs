@@ -79,6 +79,16 @@ impl App {
         }
     }
 
+    /// [`App::store_session`], but surface a failure as a warning message.
+    pub(super) fn store_session_or_warn(&mut self, session: &crate::session::Session) {
+        if let Err(e) = self.store_session(session) {
+            self.messages.push(
+                crate::messages::Level::Warn,
+                t!("msg.session_save_failed", error = e).to_string(),
+            );
+        }
+    }
+
     /// Persist `session` to [`App::session_path`] when one is set, else to
     /// the user's config directory.
     pub(super) fn store_session(

@@ -6903,7 +6903,7 @@ new action.
   and a new one opened at the same index with an equal revision would reuse
   the old key until its first edit.
 
-- [ ] **T598 — Discarded `Result`s that hide real failures.**
+- [x] **T598 — Discarded `Result`s that hide real failures.**
   - `src/app/scripts.rs:175` `let _ = self.store_session(..)` silently
     loses a script-trust decision (T545's shape).
   - `src/app/modal.rs:509` and `src/app/org.rs:379` ignore
@@ -6917,6 +6917,12 @@ new action.
   the style of `store_settings_or_warn`. Verify: a grep for
   `let _ = .*(store_session|clipboard::set|editor.open)` finds nothing.
   **Small.**
+  Done 2026-10-23: `set_clipboard` returns `()` and its 5 `let _ =` callers
+  are gone; org subtree copy and the modal unnamed register now use the
+  active tab's fallback-aware `set_clipboard`; script trust saves via new
+  `store_session_or_warn` (existing `msg.session_save_failed`); preview-tab
+  open failures warn via new `msg.preview_open_failed` (15 locales). The
+  verify grep finds nothing.
 - [ ] **T599 — Move lints to `[workspace.lints]`, and lint the targets
   that are missed today.** No `[lints]` table exists anywhere, and 124
   crate roots repeat the same three attributes. 15 targets get no lints at

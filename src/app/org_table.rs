@@ -327,7 +327,7 @@ impl App {
                 // the message below used to claim success unconditionally
                 // even when nothing was actually stored anywhere.
                 if let Some(t) = self.editor.active_tab_mut() {
-                    let _ = t.editor.set_clipboard(&formatted);
+                    t.editor.set_clipboard(&formatted);
                 }
                 self.status = t!("status.org_table_sum", sum = formatted).to_string();
             }
