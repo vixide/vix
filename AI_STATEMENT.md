@@ -73,6 +73,14 @@ A crates.io release of a workspace crate is ready when:
    public-API change requires a major bump of every affected crate; the
    version in `Cargo.toml` must already be bumped when the check runs, since
    an unchanged version is treated as a patch release.
+   Internal crates are declared once, in the root `[workspace.dependencies]`
+   (T601), each with a `version = "X.Y.Z"` pin that `cargo publish` needs. So a
+   bump touches `workspace.package.version` and every such pin in that one
+   file — plus the few members that keep an explicit `path`/`version` line
+   because they set `default-features = false` (`grep -rn 'version = "OLD"'
+   Cargo.toml crates/*/Cargo.toml` finds all of them). Check with
+   `cargo publish --dry-run -p <a leaf crate>`.
+
 2. **`CHANGELOG.md` is updated** — the user-visible changes since the last
    release are recorded under the right heading, not left in `[Unreleased]`.
 3. **The gate is green** — `scripts/check` clean locally, *and* CI confirmed

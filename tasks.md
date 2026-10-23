@@ -6953,7 +6953,7 @@ new action.
   the `rust-i18n` (6 crates) and `md-5` (library name `md5`) false positives.
   `cargo machete` is clean; the all-targets build and the per-feature checks
   pass. The now-unused `[workspace.dependencies]` entries were left in place.
-- [ ] **T601 — Declare internal crates once in
+- [x] **T601 — Declare internal crates once in
   `[workspace.dependencies]`.** There are 215 hard-coded `version =
   "1.7.1"` pins, so each release touches about 55 manifests. Fix: declare
   `vix-x = { path = "crates/vix-x", version = "1.7.1" }` once, and use
@@ -6961,6 +6961,13 @@ new action.
   about the number of definitions, and `cargo publish --dry-run` of a
   leaf crate works. Update the release checklist in `AI_STATEMENT.md`.
   **Small.**
+  Done 2026-10-23: 123 definitions in root `[workspace.dependencies]`, 200
+  member lines converted to `workspace = true` (8 keep `optional = true`).
+  The 10 lines with `default-features = false` keep explicit path+version,
+  since a member cannot turn off defaults of a workspace dependency. Pins:
+  215 → 131 in root (123 defs + 7 explicit + package version) and 3 in
+  members. `cargo publish --dry-run` passes for a leaf (vix-byte-size) and a
+  crate with internal deps (vix-calculator-tool). Release checklist updated.
 - [x] **T602 — Semver policy for the published crates.** Done
   2026-10-21: policy (a), enforced mechanically. All 123 crates publish in
   lockstep, and real breaking changes had shipped in minor versions:
