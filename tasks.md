@@ -6934,7 +6934,7 @@ new action.
   at their measured counts: `allow_attributes_without_reason` (17),
   `redundant_clone` (6), `clone_on_ref_ptr` (17), `dbg_macro` (0), and
   `todo` (0). Update `AGENTS.md`'s hard-rules wording. **Small–medium.**
-- [ ] **T600 — Remove about 27 unused root dependencies.** `cargo
+- [x] **T600 — Remove about 27 unused root dependencies.** `cargo
   machete`, cross-checked by grep, finds that root `Cargo.toml` still
   lists anyhow, arboard, crc32fast, evalexpr, getrandom, htmd,
   percent-encoding, pulldown-cmark, ratatui-core, rust-embed, sha2,
@@ -6947,6 +6947,12 @@ new action.
   `[package.metadata.cargo-machete] ignored`. Verify: default build,
   `--no-default-features` build, and the T587 feature matrix all pass, and
   `cargo machete` is clean. **Small.**
+  Done 2026-10-23: 27 root deps removed (plus the stale "absorbed from the
+  former subcrates" headers), `serde` dropped from vix-dap and
+  vix-org-capture, and `[package.metadata.cargo-machete] ignored` added for
+  the `rust-i18n` (6 crates) and `md-5` (library name `md5`) false positives.
+  `cargo machete` is clean; the all-targets build and the per-feature checks
+  pass. The now-unused `[workspace.dependencies]` entries were left in place.
 - [ ] **T601 — Declare internal crates once in
   `[workspace.dependencies]`.** There are 215 hard-coded `version =
   "1.7.1"` pins, so each release touches about 55 manifests. Fix: declare

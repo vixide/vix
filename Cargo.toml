@@ -288,14 +288,10 @@ vix-bottom-dock = { path = "crates/vix-bottom-dock", version = "1.7.1" }
 vix-calculator-tool = { path = "crates/vix-calculator-tool", version = "1.7.1" }
 # Calendar box: the navigable month grid.
 vix-calendar-panel = { path = "crates/vix-calendar-panel", version = "1.7.1" }
-# Push an item onto a Vec, evicting the oldest entry if that would grow it past a cap.
-vix-capped-stack = { path = "crates/vix-capped-stack", version = "1.7.1" }
 # Text case transforms applied to the editor selection (Edit → Case).
 vix-case = { path = "crates/vix-case", version = "1.7.1" }
 # Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
 vix-checksum-tool = { path = "crates/vix-checksum-tool", version = "1.7.1" }
-# Howard Hinnant's civil-date algorithm: days-since-epoch <-> (year, month, day).
-vix-civil-date = { path = "crates/vix-civil-date", version = "1.7.1" }
 # Parse and convert colors between HEX, RGB, and HSL.
 vix-color-converter-tool = { path = "crates/vix-color-converter-tool", version = "1.7.1" }
 # The interactive Column View overlay (Org C-c C-x C-c): a live,
@@ -352,10 +348,6 @@ vix-find-panel = { path = "crates/vix-find-panel", version = "1.7.1" }
 vix-format-tool = { path = "crates/vix-format-tool", version = "1.7.1" }
 # Git integration: status/diff/staging via the git CLI.
 vix-git = { path = "crates/vix-git", version = "1.7.1", default-features = false }
-# Greedy word-wrap of one paragraph to a column width, hard-breaking over-long words.
-vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "1.7.1" }
-# Lenient #RRGGBB/RRGGBB hex-string to (r, g, b) byte-triple parsing.
-vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "1.7.1" }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "1.7.1" }
 # A minimal HTTP client driven by a `.http`-style buffer.
@@ -484,43 +476,15 @@ confy = { workspace = true }
 clap = { workspace = true }
 rust-i18n = { workspace = true }
 
-# Dependencies absorbed from the former subcrates (now modules under src/).
-base64 = { workspace = true }
-evalexpr = { workspace = true }
-getrandom = { workspace = true }
-htmd = { workspace = true }
+# Other direct dependencies of the App shell.
 jiff = { workspace = true }
-percent-encoding = { workspace = true }
-pulldown-cmark = { workspace = true }
-sha2 = { workspace = true }
-# `inline` enables word-level (intra-line) diffs in the Compare overlay.
-similar = { workspace = true }
-spellbook = { workspace = true }
-sysinfo = { workspace = true }
 toml = { workspace = true }
-md-5 = { workspace = true }
-crc32fast = { workspace = true }
-uuid = { workspace = true }
 include_dir = { workspace = true }
 serde_norway = { workspace = true }
-markdown = { workspace = true }
 nix = { workspace = true }
-# QR code generation (Tools → QR Code). default-features = false drops the
-# optional image/svg renderers; we only use the built-in Unicode renderer.
-qrcode = { workspace = true }
 # `vt100` parses the integrated terminal's escape sequences into a screen grid.
 vt100 = { workspace = true, optional = true }
-
-# Dependencies for the in-tree code-editor widget (src/editor_core/).
-anyhow = { workspace = true }
-arboard = { workspace = true }
-ratatui-core = { workspace = true }
 ropey = { workspace = true }
-rust-embed = { workspace = true }
-streaming-iterator = { workspace = true }
-tree-sitter = { workspace = true }
-unicode-segmentation = { workspace = true }
-unicode-width = { workspace = true }
 
 [dev-dependencies]
 clap_mangen = { workspace = true }
