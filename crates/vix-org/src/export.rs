@@ -62,7 +62,7 @@ pub fn to_markdown(text: &str) -> String {
         {
             // Drop block delimiters; their inner lines pass through as-is.
         } else if let Some(level) = headline_level(line) {
-            let rest = line[level..].trim_start();
+            let rest = line.get(level..).unwrap_or_default().trim_start();
             out.push(format!("{} {}", "#".repeat(level), inline_md(rest)));
         } else {
             out.push(inline_md(line));
@@ -150,7 +150,7 @@ pub fn to_html(text: &str) -> String {
             let tag = level.min(6);
             body.push(format!(
                 "<h{tag}>{}</h{tag}>",
-                inline_html(line[level..].trim_start())
+                inline_html(line.get(level..).unwrap_or_default().trim_start())
             ));
         } else if let Some(item) = line
             .trim_start()
@@ -275,7 +275,7 @@ pub fn to_latex(text: &str) -> String {
             };
             body.push(format!(
                 "{cmd}{{{}}}",
-                inline_latex(line[level..].trim_start())
+                inline_latex(line.get(level..).unwrap_or_default().trim_start())
             ));
         } else if let Some(item) = line
             .trim_start()

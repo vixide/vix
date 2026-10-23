@@ -20,11 +20,11 @@ use super::{DONE, TODO, headline_level, set_headline_keyword, subtree_range};
 /// remaining body.
 pub(crate) fn split_keyword(rest: &str) -> (&str, &str) {
     if let Some(body) = rest.strip_prefix(&format!("{TODO} ")) {
-        (&rest[..=TODO.len()], body)
+        (rest.get(..=TODO.len()).unwrap_or_default(), body)
     } else if rest == TODO {
         (rest, "")
     } else if let Some(body) = rest.strip_prefix(&format!("{DONE} ")) {
-        (&rest[..=DONE.len()], body)
+        (rest.get(..=DONE.len()).unwrap_or_default(), body)
     } else if rest == DONE {
         (rest, "")
     } else {
@@ -222,8 +222,11 @@ pub fn toggle_checkbox(text: &str, line: usize) -> Option<String> {
     let mark = caps.get(2)?.as_str();
     let new_mark = if mark == " " { "x" } else { " " };
     let lead_end = caps.get(1)?.end();
-    let rest = &target[lead_end + 3..]; // skip "[m]"
-    lines[line] = format!("{}[{new_mark}]{rest}", &target[..lead_end]);
+    let rest = target.get(lead_end + 3..).unwrap_or_default(); // skip "[m]"
+    lines[line] = format!(
+        "{}[{new_mark}]{rest}",
+        target.get(..lead_end).unwrap_or_default()
+    );
     Some(lines.join("\n"))
 }
 
@@ -251,7 +254,11 @@ fn set_cookie(line: &str, done: usize, total: usize) -> String {
     } else {
         format!("[{done}/{total}]")
     };
-    format!("{}{replacement}{}", &line[..m.start()], &line[m.end()..])
+    format!(
+        "{}{replacement}{}",
+        line.get(..m.start()).unwrap_or_default(),
+        line.get(m.end()..).unwrap_or_default()
+    )
 }
 
 /// Replace a checkbox's mark character on a line that already has one.
@@ -260,14 +267,22 @@ fn set_checkbox_mark(line: &str, mark: char) -> String {
         return line.to_string();
     };
     let lead_end = caps.get(1).map_or(0, |g| g.end());
-    format!("{}[{mark}]{}", &line[..lead_end], &line[lead_end + 3..])
+    format!(
+        "{}[{mark}]{}",
+        line.get(..lead_end).unwrap_or_default(),
+        line.get(lead_end + 3..).unwrap_or_default()
+    )
 }
 
 /// The TODO state of a headline: `Some(true)` if it carries the DONE keyword,
 /// `Some(false)` for TODO, `None` if it has no TODO keyword (or isn't a headline).
 pub(crate) fn headline_todo(line: &str) -> Option<bool> {
     let stars = headline_level(line)?;
-    let kw = line[stars..].split_whitespace().next()?;
+    let kw = line
+        .get(stars..)
+        .unwrap_or_default()
+        .split_whitespace()
+        .next()?;
     if kw == DONE {
         Some(true)
     } else if kw == TODO {
@@ -288,7 +303,7 @@ fn cookie_data(drawer: &[String]) -> Option<(bool, bool)> {
         if let Some(rest) = t.get(..13)
             && rest.eq_ignore_ascii_case(":COOKIE_DATA:")
         {
-            let value = t[13..].to_ascii_lowercase();
+            let value = t.get(13..).unwrap_or_default().to_ascii_lowercase();
             let recursive = value.contains("recursive");
             if value.contains("todo") {
                 return Some((true, recursive));

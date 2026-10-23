@@ -142,9 +142,9 @@ fn parse_ymd(s: &str) -> Option<(i64, i64, i64)> {
     if s.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
         return None;
     }
-    let year: i64 = s[..4].parse().ok()?;
-    let month: i64 = s[5..7].parse().ok()?;
-    let day: i64 = s[8..10].parse().ok()?;
+    let year: i64 = s.get(..4).unwrap_or_default().parse().ok()?;
+    let month: i64 = s.get(5..7).unwrap_or_default().parse().ok()?;
+    let day: i64 = s.get(8..10).unwrap_or_default().parse().ok()?;
     ((1..=12).contains(&month) && (1..=31).contains(&day)).then_some((year, month, day))
 }
 
@@ -208,19 +208,28 @@ pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<
     let m = matches
         .iter()
         .find(|m| {
-            let sc = l[..m.start()].chars().count();
-            let ec = sc + l[m.start()..m.end()].chars().count();
+            let sc = l.get(..m.start()).unwrap_or_default().chars().count();
+            let ec = sc
+                + l.get(m.start()..m.end())
+                    .unwrap_or_default()
+                    .chars()
+                    .count();
             (sc..=ec).contains(&col)
         })
         .or_else(|| (matches.len() == 1).then(|| &matches[0]))?;
-    let (y, mo, d) = parse_ymd(&m.as_str()[..10])?;
+    let (y, mo, d) = parse_ymd(m.as_str().get(..10)?)?;
     let days = days_from_civil(y, mo, d) + delta_days;
     let (ny, nm, nd) = civil_from_days(days);
     let mut new_date = format!("{ny:04}-{nm:02}-{nd:02}");
     if m.as_str().len() > 10 {
         let _ = write!(new_date, " {}", weekday_name(days));
     }
-    let new_line = format!("{}{}{}", &l[..m.start()], new_date, &l[m.end()..]);
+    let new_line = format!(
+        "{}{}{}",
+        l.get(..m.start()).unwrap_or_default(),
+        new_date,
+        l.get(m.end()..).unwrap_or_default()
+    );
     let mut out: Vec<&str> = lines.clone();
     out[line_idx] = &new_line;
     Some((out.join("\n"), cursor))

@@ -98,8 +98,13 @@ pub struct ColumnsSpec {
 pub fn parse_columns_spec(line: &str) -> Option<ColumnsSpec> {
     let mut rest = line.trim();
     for prefix in ["#+COLUMNS:", ":COLUMNS:"] {
-        if rest.len() >= prefix.len() && rest[..prefix.len()].eq_ignore_ascii_case(prefix) {
-            rest = rest[prefix.len()..].trim();
+        if rest.len() >= prefix.len()
+            && rest
+                .get(..prefix.len())
+                .unwrap_or_default()
+                .eq_ignore_ascii_case(prefix)
+        {
+            rest = rest.get(prefix.len()..).unwrap_or_default().trim();
             break;
         }
     }
@@ -366,9 +371,9 @@ fn direct_children(lines: &[&str], h: usize) -> Vec<usize> {
 /// extra states column view needs to display and edit.
 fn split_keyword_generic(rest: &str) -> (&str, &str) {
     let word_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-    let word = &rest[..word_end];
+    let word = rest.get(..word_end).unwrap_or_default();
     if KEYWORDS.contains(&word) {
-        (word, rest[word_end..].trim_start())
+        (word, rest.get(word_end..).unwrap_or_default().trim_start())
     } else {
         ("", rest)
     }
@@ -381,7 +386,7 @@ fn parse_headline_parts(line: &str) -> (String, String, String) {
         return (String::new(), String::new(), String::new());
     };
     let bare = crate::properties_and_dates::TAGS.replace(line, "");
-    let rest = bare[level..].trim();
+    let rest = bare.get(level..).unwrap_or_default().trim();
     let (kw, body) = split_keyword_generic(rest);
     let (prio, title) = match crate::todo_meta::strip_priority(body) {
         Some((p, after)) => (format!("[#{p}]"), after),
@@ -452,7 +457,10 @@ fn planning_value(lines: &[&str], h: usize, keyword: &str) -> String {
     let Some(pos) = combined.find(&needle) else {
         return String::new();
     };
-    let after = &combined[pos + needle.len()..].trim_start();
+    let after = combined
+        .get(pos + needle.len()..)
+        .unwrap_or_default()
+        .trim_start();
     let Some(open) = after.find(['<', '[']) else {
         return String::new();
     };
@@ -461,10 +469,13 @@ fn planning_value(lines: &[&str], h: usize, keyword: &str) -> String {
     } else {
         ']'
     };
-    let Some(close) = after[open..].find(close_char) else {
+    let Some(close) = after.get(open..).unwrap_or_default().find(close_char) else {
         return String::new();
     };
-    after[open..=open + close].to_string()
+    after
+        .get(open..=open + close)
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// `#+CATEGORY:` value from the filename, stripping any directory and
@@ -493,7 +504,7 @@ fn category_value(lines: &[&str], h: usize, file_name: Option<&str>) -> String {
         if t.get(..11)
             .is_some_and(|p| p.eq_ignore_ascii_case("#+CATEGORY:"))
         {
-            let v = t[11..].trim();
+            let v = t.get(11..).unwrap_or_default().trim();
             if !v.is_empty() {
                 return v.to_string();
             }
@@ -533,11 +544,11 @@ fn entry_timestamp(lines: &[&str], h: usize, active: bool) -> String {
         let Some(pos) = line.find(open) else {
             continue;
         };
-        let rest = &line[pos..];
+        let rest = line.get(pos..).unwrap_or_default();
         let Some(cp) = rest.find(close) else {
             continue;
         };
-        let cand = &rest[..=cp];
+        let cand = rest.get(..=cp).unwrap_or_default();
         if cand.chars().nth(1).is_some_and(|c| c.is_ascii_digit()) {
             return cand.to_string();
         }
@@ -945,7 +956,7 @@ fn est_combine(values: &[&str]) -> String {
 fn apply_summary(token: &str, child_values: &[&str]) -> String {
     match token {
         "+" => sum_numeric(child_values, None),
-        t if t.starts_with("+;") => sum_numeric(child_values, Some(&t[2..])),
+        t if t.starts_with("+;") => sum_numeric(child_values, Some(t.get(2..).unwrap_or_default())),
         "$" => sum_numeric(child_values, Some("%.2f")),
         "min" => numeric_reduce(child_values, f64::min),
         "max" => numeric_reduce(child_values, f64::max),
@@ -1140,7 +1151,7 @@ fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
     let bare = crate::properties_and_dates::TAGS
         .replace(&original, "")
         .to_string();
-    let rest = bare[level..].trim();
+    let rest = bare.get(level..).unwrap_or_default().trim();
     let (kw, body) = split_keyword_generic(rest);
     let kw_prefix = if kw.is_empty() {
         String::new()
@@ -1283,7 +1294,7 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
     let trimmed = begin_line.trim();
     let lower = trimmed.to_ascii_lowercase();
     let idx = lower.find("columnview")?;
-    let rest = &trimmed[idx + "columnview".len()..];
+    let rest = trimmed.get(idx + "columnview".len()..).unwrap_or_default();
     let tokens = tokenize_quoted(rest);
 
     let mut id = String::new();

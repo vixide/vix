@@ -15,7 +15,12 @@ use super::{headline_level, headline_todo};
 /// Extract the `YYYY-MM-DD` date from the first `<…>`/`[…]` timestamp in `s`.
 fn first_date(s: &str) -> Option<String> {
     let start = s.find(['<', '['])?;
-    let date: String = s[start + 1..].chars().take(10).collect();
+    let date: String = s
+        .get(start + 1..)
+        .unwrap_or_default()
+        .chars()
+        .take(10)
+        .collect();
     let b = date.as_bytes();
     if date.len() == 10 && b[4] == b'-' && b[7] == b'-' && b[..4].iter().all(u8::is_ascii_digit) {
         Some(date)
@@ -54,7 +59,7 @@ pub fn agenda_items(files: &[(String, String)]) -> Vec<AgendaItem> {
         let mut current_line = 0;
         for (idx, line) in content.lines().enumerate() {
             if let Some(level) = headline_level(line) {
-                current = line[level..].trim().to_string();
+                current = line.get(level..).unwrap_or_default().trim().to_string();
                 current_line = idx;
                 if current.split_whitespace().next() == Some("TODO") {
                     items.push(AgendaItem {
@@ -160,7 +165,7 @@ pub fn agenda(files: &[(String, String)]) -> String {
 /// The headline text (after the leading stars) of a headline `line`.
 fn headline_text(line: &str) -> &str {
     match headline_level(line) {
-        Some(level) => line[level..].trim_start(),
+        Some(level) => line.get(level..).unwrap_or_default().trim_start(),
         None => line,
     }
 }
@@ -197,11 +202,11 @@ fn headline_tags(line: &str) -> Vec<String> {
     let Some(sp) = trimmed.rfind(char::is_whitespace) else {
         return Vec::new();
     };
-    let tail = &trimmed[sp + 1..];
+    let tail = trimmed.get(sp + 1..).unwrap_or_default();
     if tail.len() < 2 || !tail.starts_with(':') || !tail.ends_with(':') {
         return Vec::new();
     }
-    let inner = &tail[1..tail.len() - 1];
+    let inner = tail.get(1..tail.len() - 1).unwrap_or_default();
     if inner.is_empty()
         || inner.split(':').any(|t| {
             t.is_empty()
@@ -368,7 +373,7 @@ pub fn render_list(title: &str, items: &[AgendaItem]) -> (String, Vec<Option<usi
 /// Minutes in a `CLOCK:` line's explicit `=> H:MM` total, if present.
 pub(crate) fn clock_minutes(line: &str) -> Option<u32> {
     let rest = line.trim().strip_prefix("CLOCK:")?;
-    let after = &rest[rest.find("=>")? + 2..];
+    let after = rest.get(rest.find("=>")? + 2..).unwrap_or_default();
     let (h, m) = after.trim().split_once(':')?;
     Some(h.trim().parse::<u32>().ok()? * 60 + m.trim().parse::<u32>().ok()?)
 }
@@ -387,7 +392,7 @@ pub fn time_report(content: &str) -> String {
     let mut totals: Vec<(String, u32)> = Vec::new();
     for line in content.lines() {
         if let Some(level) = headline_level(line) {
-            current = line[level..].trim().to_string();
+            current = line.get(level..).unwrap_or_default().trim().to_string();
             continue;
         }
         if let Some(min) = clock_minutes(line) {
@@ -429,7 +434,12 @@ pub(crate) fn clock_start(line: &str) -> Option<String> {
         .strip_prefix("CLOCK:")?
         .trim()
         .strip_prefix('[')?;
-    Some(inner[..inner.find(']')?].to_string())
+    Some(
+        inner
+            .get(..inner.find(']')?)
+            .unwrap_or_default()
+            .to_string(),
+    )
 }
 
 /// Days since 1970-01-01 for a civil date. Delegates to `vix-civil-date`
