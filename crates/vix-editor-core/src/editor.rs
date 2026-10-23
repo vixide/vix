@@ -654,18 +654,13 @@ impl Editor {
 
     /// Set the clipboard text, falling back to an in-memory clipboard when the
     /// system clipboard is unavailable.
-    ///
-    /// # Errors
-    /// Currently always returns `Ok`; the system-clipboard failure path falls
-    /// back to the in-memory clipboard.
-    pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
+    pub fn set_clipboard(&mut self, text: &str) {
         // Route through the shared, lock-guarded clipboard helper so every crate
         // accesses the (non-thread-safe) platform backend sequentially. Fall back
         // to the in-memory clipboard if the system clipboard is unavailable.
         if vix_clipboard::set(text).is_err() {
             self.clipboard = Some(text.to_string());
         }
-        Ok(())
     }
 
     /// Return the clipboard text, preferring the system clipboard and falling

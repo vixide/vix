@@ -172,7 +172,7 @@ impl App {
         let key = self.session_key();
         let mut session = self.load_session();
         session.set_scripts_trusted(&key, trusted);
-        let _ = self.store_session(&session);
+        self.store_session_or_warn(&session);
     }
 
     /// Keys for the script-trust prompt: `y`/`Enter` trusts and loads, `n`/

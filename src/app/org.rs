@@ -376,7 +376,8 @@ impl App {
             return;
         };
         let lines: Vec<&str> = text.split('\n').collect();
-        let _ = vix_clipboard::set(&format!("{}\n", lines[start..end].join("\n")));
+        tab.editor
+            .set_clipboard(&format!("{}\n", lines[start..end].join("\n")));
         if cut {
             let rest: Vec<&str> = lines
                 .iter()
@@ -982,7 +983,7 @@ impl App {
             // below used to claim success unconditionally even when
             // nothing was actually stored anywhere.
             if let Some(t) = self.editor.active_tab_mut() {
-                let _ = t.editor.set_clipboard(&target);
+                t.editor.set_clipboard(&target);
             }
             self.status = t!("status.org_link_copied", url = target).to_string();
         } else if let Some(id) = target.strip_prefix("id:") {

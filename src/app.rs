@@ -7509,7 +7509,12 @@ impl App {
             && !is_image_path(&node.path)
         {
             let path = node.path.clone();
-            let _ = self.editor.open(&path, true);
+            if let Err(e) = self.editor.open(&path, true) {
+                self.messages.push(
+                    crate::messages::Level::Warn,
+                    t!("msg.preview_open_failed", error = e).to_string(),
+                );
+            }
         }
     }
 
