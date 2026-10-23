@@ -348,6 +348,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
 /// The declaration-scanning pattern used by [`symbols`], compiled once. It
 /// never varies with input, so callers on a per-frame path (sticky-scroll
 /// header, breadcrumb) don't each pay to recompile it (T511).
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static SYMBOL_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
     let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
               namespace|package|macro_rules!";

@@ -5,7 +5,11 @@
 //! that the whole editing pipeline is usable as a plain library.
 //!
 //! Run with: `cargo run --example headless_edit`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use std::fs;

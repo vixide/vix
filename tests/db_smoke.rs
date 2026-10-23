@@ -8,7 +8,11 @@
 //! type a query (watching autocomplete fire), execute at the cursor with F5,
 //! sort, filter, export, EXPLAIN with the plan-doctor insight, and the
 //! write-confirmation gate. No external database or CLI is required.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![cfg(feature = "sql")]
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

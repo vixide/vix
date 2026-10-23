@@ -4,7 +4,11 @@
 //! plan T502). Prints the result to stdout; the source file is untouched.
 //!
 //! Run with: `cargo run --example textops_pipeline -- <file>`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use std::path::PathBuf;

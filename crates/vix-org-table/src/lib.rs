@@ -1539,6 +1539,10 @@ fn wrap_number(v: f64) -> String {
 /// `vcount(range)` calls (where `range` is `@R$C..@R2$C2`) into their
 /// computed numeral, before handing the rest of the expression to `evalexpr`
 /// (which knows nothing about Org ranges).
+#[expect(
+    clippy::expect_used,
+    reason = "the loop guard `i < expr.len()` guarantees a char exists"
+)]
 fn expand_aggregate_functions(expr: &str, ctx: &EvalContext) -> Result<String, String> {
     const FUNCS: [&str; 5] = ["vsum", "vmean", "vmin", "vmax", "vcount"];
     let mut out = String::new();

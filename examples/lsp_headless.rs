@@ -4,7 +4,11 @@
 //! Python 3 is available, with no real language server required.
 //!
 //! Run with: `cargo run --example lsp_headless`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use std::time::{Duration, Instant};

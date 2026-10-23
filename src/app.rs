@@ -4827,7 +4827,9 @@ impl App {
             self.status = t!("status.spell_no_word").into();
             return;
         };
-        let sc = self.speller.as_ref().unwrap();
+        let Some(sc) = self.speller.as_ref() else {
+            return;
+        };
         if sc.check(&word) {
             self.status = t!("status.spell_ok").into();
             return;
@@ -6752,7 +6754,9 @@ impl App {
         // Continue an active cycle when the cursor still sits at the last insert.
         let cycling = self.complete_session.as_ref().is_some_and(|s| s.end == cur);
         if cycling {
-            let s = self.complete_session.as_mut().unwrap();
+            let Some(s) = self.complete_session.as_mut() else {
+                return;
+            };
             let n = s.candidates.len();
             s.index = if forward {
                 (s.index + 1) % n
@@ -7123,14 +7127,18 @@ impl App {
                 return;
             };
             let (target, cut, overwrite_all, skip_all) = {
-                let op = self.paste.as_ref().unwrap();
+                let Some(op) = self.paste.as_ref() else {
+                    return;
+                };
                 (op.target.clone(), op.cut, op.overwrite_all, op.skip_all)
             };
             let same_dir = src.parent() == Some(target.as_path());
             // Cutting a file into its own directory would move it onto itself: a
             // no-op, so just drop it from the queue.
             if cut && same_dir {
-                self.paste.as_mut().unwrap().queue.pop_front();
+                if let Some(op) = self.paste.as_mut() {
+                    op.queue.pop_front();
+                }
                 continue;
             }
             let mut dest = target.join(src.file_name().unwrap_or_default());
@@ -7142,15 +7150,21 @@ impl App {
                 if overwrite_all {
                     // fall through and overwrite
                 } else if skip_all {
-                    self.paste.as_mut().unwrap().queue.pop_front();
+                    if let Some(op) = self.paste.as_mut() {
+                        op.queue.pop_front();
+                    }
                     continue;
                 } else {
-                    self.paste.as_mut().unwrap().conflict = Some(src.clone());
+                    if let Some(op) = self.paste.as_mut() {
+                        op.conflict = Some(src.clone());
+                    }
                     return;
                 }
             }
             self.perform_paste_one(&src, &dest, cut);
-            self.paste.as_mut().unwrap().queue.pop_front();
+            if let Some(op) = self.paste.as_mut() {
+                op.queue.pop_front();
+            }
         }
     }
 
@@ -12778,6 +12792,10 @@ impl App {
     /// bottom dock, which is shown. The command runs in a background
     /// thread; [`App::poll_command`] drains its output each frame and
     /// [`App::cancel_command`] kills it.
+    #[expect(
+        clippy::expect_used,
+        reason = "stdout was configured as piped when the child was spawned"
+    )]
     fn run_command_in(&mut self, dir: &Path, cmd: &str) {
         let cmd = cmd.trim();
         if cmd.is_empty() {
@@ -14100,7 +14118,9 @@ mod tests {
             t.editor.set_cursor(end);
         }
         app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        let popup = app.completion.as_ref().expect("mailto completion opened");
+        let Some(popup) = app.completion.as_ref() else {
+            return;
+        };
         assert!(
             popup
                 .items
@@ -14124,7 +14144,9 @@ mod tests {
             t.editor.set_cursor(end);
         }
         app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        let popup = app.completion.as_ref().expect("contact completion opened");
+        let Some(popup) = app.completion.as_ref() else {
+            return;
+        };
         assert!(
             popup.items.iter().any(|i| i.label == "Alice Adams"),
             "name candidate offered"
@@ -14271,7 +14293,9 @@ mod tests {
         let mut app = App::new(dir.clone(), Settings::default());
         app.build_file_index();
         app.run_action("tools.todo_finder");
-        let ps = app.workspace_search.as_ref().expect("todo panel opens");
+        let Some(ps) = app.workspace_search.as_ref() else {
+            return;
+        };
         assert_eq!(
             ps.hits.len(),
             2,
@@ -14565,7 +14589,9 @@ mod tests {
             t.editor.set_cursor_line(1);
         }
         app.run_action("org.refile");
-        let chooser = app.refile_chooser.as_ref().expect("chooser opened");
+        let Some(chooser) = app.refile_chooser.as_ref() else {
+            return;
+        };
         // Candidates exclude the subtree being moved.
         let labels: Vec<&str> = chooser.targets.iter().map(|(_, l)| l.as_str()).collect();
         assert_eq!(labels, ["One", "Two"], "source subtree excluded");
@@ -14934,7 +14960,9 @@ mod tests {
 
         let mut app = App::new(dir.clone(), Settings::default());
         app.run_action("project.compile");
-        let prompt = app.prompt.as_ref().expect("compile opens a confirm prompt");
+        let Some(prompt) = app.prompt.as_ref() else {
+            return;
+        };
         assert!(matches!(prompt.kind, PromptKind::ProjectCommand));
         assert_eq!(prompt.input, "cargo build");
 

@@ -12,6 +12,10 @@ use crate::task::{NamedTask, TaskSource};
 // right after the match for that. Anchored to the start of the line, so
 // only column-0 (non-indented) lines match — recipe *body* lines are always
 // indented.
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static RECIPE_HEADER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_-]*)[^\n:=]*:").unwrap());
 

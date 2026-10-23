@@ -810,7 +810,7 @@ impl App {
                 .rev()
                 .find(|&&l| l < cur)
                 .copied()
-                .unwrap_or(*lines.last().unwrap())
+                .unwrap_or_else(|| lines.last().copied().unwrap_or(cur))
         };
         let area = self.editor_view();
         self.editor.goto(target as usize, None, area);

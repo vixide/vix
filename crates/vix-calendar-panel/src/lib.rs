@@ -24,6 +24,10 @@ pub fn now_local() -> Zoned {
 }
 
 /// The first day of the month containing `date`.
+#[expect(
+    clippy::expect_used,
+    reason = "invariant established earlier in this function"
+)]
 fn first_of_month(date: Date) -> Date {
     Date::new(date.year(), date.month(), 1).expect("first of month is always valid")
 }

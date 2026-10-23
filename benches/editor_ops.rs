@@ -6,6 +6,11 @@
 //! buffer, pasting a block, undoing, and the line transforms that rewrite the
 //! whole buffer. The numbers that matter are the *large-buffer* ones — an
 //! editor is judged on the 20,000-line file, not the 200-line one.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::fmt::Write as _;

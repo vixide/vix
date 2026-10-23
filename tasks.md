@@ -6981,7 +6981,7 @@ new action.
   above. Not verified: how it treats a brand-new crate that has no
   published baseline yet. If CI fails on one, add it to an `--exclude`
   list until its first publish.
-- [ ] **T603 — Remove draw-path `unwrap()`s, then gate `unwrap_used`.**
+- [x] **T603 — Remove draw-path `unwrap()`s, then gate `unwrap_used`.**
   95 non-test `unwrap()`/`expect()` remain, 48 of them in `src/`. About 40
   follow the pattern `if app.x.is_some() { draw_x(app) }` followed by
   `app.x.as_ref().unwrap()`. Examples:

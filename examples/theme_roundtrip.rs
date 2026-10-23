@@ -2,7 +2,11 @@
 //! reload it to prove the round trip is lossless (improvement plan T502).
 //!
 //! Run with: `cargo run --example theme_roundtrip`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use vix::theme_model::CustomTheme;

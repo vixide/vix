@@ -12,10 +12,18 @@ use crate::task::{NamedTask, TaskSource};
 // (e.g. `task "release_#{ver}"`) is captured whole and then rejected by
 // `record_task`'s `contains("#{")` check, rather than silently truncated at
 // the `#` into a wrong-but-plausible-looking plain name.
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static TASK_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^task\s*\(?\s*[:'"]([A-Za-z0-9_.:\-{}#]+)['"]?"#).unwrap());
 
 // `namespace :name do` / `namespace "name" do`.
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static NAMESPACE_OPEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^namespace\s*\(?\s*[:'"]([A-Za-z0-9_.\-]+)['"]?\s+do\b"#).unwrap()
 });

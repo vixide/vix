@@ -176,10 +176,9 @@ pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 }
 
 pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.git_panel.is_none() {
+    let Some(selected) = app.git_panel.as_ref().map(|p| p.selected) else {
         return;
-    }
-    let selected = app.git_panel.as_ref().unwrap().selected;
+    };
     let rows = app.git_status.len().max(1);
     let width = 64u16.min(area.width);
     let max_rows = area.height.saturating_sub(4).max(1);
@@ -258,10 +257,13 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 /// mirrors `draw_outline`'s own manual scroll/`ensure_visible` layout
 /// instead.
 pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.git_log.is_none() {
+    let Some((n, scope)) = app
+        .git_log
+        .as_ref()
+        .map(|p| (p.entries.len(), p.scope.clone()))
+    else {
         return;
-    }
-    let n = app.git_log.as_ref().unwrap().entries.len();
+    };
     let width = 100u16.min(area.width);
     let max_rows = area.height.saturating_sub(4).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
@@ -273,7 +275,7 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
         height,
     };
     frame.render_widget(Clear, rect);
-    let title = match &app.git_log.as_ref().unwrap().scope {
+    let title = match &scope {
         crate::git::LogScope::Repo => format!(" {} {} ", icon::BRANCH, t!("ui.git_log")),
         crate::git::LogScope::File(p) => {
             let name = std::path::Path::new(p)
@@ -300,7 +302,9 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.git_log.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.git_log.as_ref().unwrap();
+    let Some(p) = app.git_log.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(p.entries.len()) {
         let e = &p.entries[idx];

@@ -19,7 +19,11 @@
 //!
 //! See "Reviewing/updating snapshots" in `agents/conventions.md` for the
 //! workflow when a golden file needs to change.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 // Default-feature only: the menu bar and palette differ in a build with a capability
 // compiled out (T587).
 #![cfg(feature = "full")]

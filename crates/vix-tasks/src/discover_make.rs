@@ -9,6 +9,10 @@ use crate::task::{NamedTask, TaskSource};
 // 0. The `regex` crate has no look-around, so this does not itself exclude
 // a `VAR := value` assignment; [`is_variable_assignment`] checks the
 // character right after the match for that.
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static TARGET_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z0-9_.-]+)\s*:").unwrap());
 

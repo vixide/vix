@@ -21,6 +21,10 @@ use crate::selection::Selection;
 /// because `shift` only ever reflects edits already applied to this same
 /// buffer: a caret can't be shifted further out of bounds than the buffer
 /// actually grew or shrank.
+#[expect(
+    clippy::expect_used,
+    reason = "the value is bounded well below the target type"
+)]
 fn shifted(pos: usize, shift: isize) -> usize {
     pos.checked_add_signed(shift)
         .expect("caret offset stays within the buffer after a prior edit's shift")
@@ -117,6 +121,10 @@ impl Editor {
     /// Never in practice: the running shift only ever reflects `text`'s
     /// length and prior carets' removed spans, both bounded by the buffer
     /// this same call is editing, so the `isize` conversion cannot overflow.
+    #[expect(
+        clippy::expect_used,
+        reason = "the value is bounded well below the target type"
+    )]
     pub fn multi_insert(&mut self, text: &str) {
         let added = text.chars().count();
         let mut carets = self.gather();
@@ -167,6 +175,10 @@ impl Editor {
     /// Never in practice: same bound as [`Self::multi_insert`] — the running
     /// shift only ever reflects removed spans within the buffer this same
     /// call is editing, so the `isize` conversion cannot overflow.
+    #[expect(
+        clippy::expect_used,
+        reason = "the value is bounded well below the target type"
+    )]
     pub fn multi_delete(&mut self, forward: bool) {
         let len = self.code_ref().len_chars();
         let mut carets = self.gather();

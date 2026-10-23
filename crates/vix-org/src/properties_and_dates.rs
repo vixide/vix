@@ -18,6 +18,10 @@ use crate::agenda::days_from_civil;
 // ----- Tags & properties -----------------------------------------------------
 
 /// The trailing `:tag1:tag2:` group on a headline, with leading whitespace.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 pub(crate) static TAGS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[ \t]+(:(?:[A-Za-z0-9_@#%]+:)+)[ \t]*$").expect("tags regex"));
 
@@ -158,6 +162,10 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// Three-letter weekday for days since 1970-01-01 (a Thursday).
+#[expect(
+    clippy::expect_used,
+    reason = "the value is bounded well below the target type"
+)]
 fn weekday_name(days: i64) -> &'static str {
     ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"]
         [usize::try_from(days.rem_euclid(7)).expect("rem_euclid(7) fits usize")]
@@ -178,6 +186,10 @@ pub fn timestamp_for(date: &str, active: bool) -> Option<String> {
 }
 
 /// A `YYYY-MM-DD` date with an optional weekday, as found inside timestamps.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}( [A-Za-z]{2,3})?").expect("date regex"));
 

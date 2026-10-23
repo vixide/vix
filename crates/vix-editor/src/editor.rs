@@ -137,6 +137,10 @@ fn apply_theme(ed: &mut CodeEditor) {
     ed.set_cursor_style(Some(cursor));
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "invariant established earlier in this function"
+)]
 fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> CodeEditor {
     let name = path
         .and_then(|p| p.file_name())
@@ -169,6 +173,10 @@ fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> C
 ///
 /// Never in practice: the underlying `"text"` grammar always initializes.
 #[must_use]
+#[expect(
+    clippy::expect_used,
+    reason = "invariant established earlier in this function"
+)]
 pub fn text_field(content: &str) -> CodeEditor {
     let mut ed = CodeEditor::new("text", content, Vec::new())
         .expect("text field init for plain text never fails");

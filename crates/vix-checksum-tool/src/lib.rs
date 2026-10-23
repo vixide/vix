@@ -38,6 +38,7 @@ pub fn crc32_hex(text: &str) -> String {
 }
 
 /// Render bytes as a lowercase hex string (two characters per byte).
+#[expect(clippy::expect_used, reason = "a nibble is always below 16")]
 fn to_hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {

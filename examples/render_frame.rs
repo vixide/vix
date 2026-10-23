@@ -4,7 +4,11 @@
 //! here as its own minimal, standalone example (T502).
 //!
 //! Run with: `cargo run --example render_frame -- [file]`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use std::path::PathBuf;

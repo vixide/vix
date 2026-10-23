@@ -16,7 +16,11 @@
 //!
 //! CI (T305): regenerate with `--write`, then `git diff --exit-code` — a
 //! non-empty diff means a generated page drifted from its source.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 #[macro_use]

@@ -94,7 +94,7 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(h) = app.help.as_mut() {
         h.clamp_scroll(view_h);
     }
-    let h = app.help.as_ref().unwrap();
+    let Some(h) = app.help.as_ref() else { return };
     let filtered = h.matches();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for &idx in filtered.iter().skip(h.scroll).take(view_h) {
@@ -123,6 +123,10 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
 /// filter/sort/scroll table shape, plus a highlighted [`Panel::selected`]
 /// row (rebind/reset target) and a `[user]`/`[script: name]` tag on any
 /// row whose source isn't the built-in keymap.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one linear layout pass over the editor overlay; splitting it would only shuffle locals"
+)]
 pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rect) {
     use vix_keybinding_editor_panel::Column;
     let Some(p) = app.keybinding_editor.as_ref() else {
@@ -203,7 +207,9 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
     if let Some(p) = app.keybinding_editor.as_mut() {
         p.clamp_scroll(view_h);
     }
-    let p = app.keybinding_editor.as_ref().unwrap();
+    let Some(p) = app.keybinding_editor.as_ref() else {
+        return;
+    };
     let filtered = p.matches();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row_pos, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {

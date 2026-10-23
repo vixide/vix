@@ -119,6 +119,10 @@ pub fn occur_folds(text: &str, query: &str) -> Vec<(usize, usize)> {
 // ----- Footnotes -------------------------------------------------------------
 
 /// A `[fn:LABEL]` footnote token.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static FOOTNOTE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[fn:([A-Za-z0-9_-]+)\]").expect("footnote regex"));
 

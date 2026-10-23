@@ -57,7 +57,7 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::Import => draw_db_import(app, frame, chunks[0]),
         crate::db::View::CellEdit => draw_db_cell_edit(app, frame, chunks[0]),
     }
-    let b = app.db.as_ref().expect("still open");
+    let Some(b) = app.db.as_ref() else { return };
     if let Some(msg) = &b.message {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(msg.clone(), theme::dim()))),

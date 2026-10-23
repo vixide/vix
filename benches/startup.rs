@@ -6,6 +6,11 @@
 //! that these two are no longer paid at the same point in startup. See
 //! `docs/performance/index.md` for the numbers this produced and the
 //! before/after story.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::fs;

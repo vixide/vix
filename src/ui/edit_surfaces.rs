@@ -157,7 +157,9 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let grid = app.edit_table.as_ref().unwrap();
+    let Some(grid) = app.edit_table.as_ref() else {
+        return;
+    };
     let widths = column_widths(grid);
     let avail = usize::from(chunks[1].width);
     let first = first_visible_col(grid, &widths, avail);
@@ -167,7 +169,9 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         g.ensure_row_visible(body_h);
     }
 
-    let grid = app.edit_table.as_ref().unwrap();
+    let Some(grid) = app.edit_table.as_ref() else {
+        return;
+    };
     let cols = visible_cols(grid, &widths, avail);
     frame.render_widget(
         Paragraph::new(table_row_line(grid, 0, &cols, &widths)),
@@ -310,7 +314,9 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view = app.column_view.as_ref().unwrap();
+    let Some(view) = app.column_view.as_ref() else {
+        return;
+    };
     let widths = column_view_widths(view);
     let avail = usize::from(chunks[1].width);
     let cols = column_view_visible_cols(view, &widths, avail);
@@ -319,7 +325,9 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
         v.ensure_row_visible(body_h);
     }
 
-    let view = app.column_view.as_ref().unwrap();
+    let Some(view) = app.column_view.as_ref() else {
+        return;
+    };
     frame.render_widget(
         Paragraph::new(column_view_row_line(view, true, 0, &cols, &widths)),
         chunks[0],
@@ -387,7 +395,9 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(e) = app.edit_sql.as_mut() {
         e.ensure_visible(body_h);
     }
-    let editor = app.edit_sql.as_ref().unwrap();
+    let Some(editor) = app.edit_sql.as_ref() else {
+        return;
+    };
     let total = editor.len();
     let width = chunks[0].width as usize;
     let mut lines: Vec<Line> = Vec::with_capacity(body_h);
@@ -461,7 +471,9 @@ pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(t) = app.edit_outline.as_mut() {
         t.ensure_visible(body_h);
     }
-    let tree = app.edit_outline.as_ref().unwrap();
+    let Some(tree) = app.edit_outline.as_ref() else {
+        return;
+    };
     let vis = tree.visible();
     let start = tree.scroll();
     let mut lines = Vec::with_capacity(body_h);
@@ -547,7 +559,9 @@ pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(t) = app.edit_value.as_mut() {
         t.ensure_visible(body_h);
     }
-    let tree = app.edit_value.as_ref().unwrap();
+    let Some(tree) = app.edit_value.as_ref() else {
+        return;
+    };
     let editing = tree.is_editing();
     let start = tree.scroll();
     let mut lines = Vec::with_capacity(body_h);
@@ -642,7 +656,9 @@ pub(super) fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(h) = app.edit_bytes.as_mut() {
         h.ensure_visible(body_h);
     }
-    let hex = app.edit_bytes.as_ref().unwrap();
+    let Some(hex) = app.edit_bytes.as_ref() else {
+        return;
+    };
     let start = hex.scroll();
     let mut lines = Vec::with_capacity(body_h);
     for row in start..(start + body_h).min(hex.rows()) {
@@ -702,7 +718,9 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.html_panel.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.html_panel.as_ref().unwrap();
+    let Some(p) = app.html_panel.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (i, e) in entities[p.scroll..(p.scroll + view_h).min(total)]
         .iter()
@@ -752,10 +770,9 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 /// current buffer's headings/symbols — distinct from the prose outline
 /// editor's own `edit_outline` overlay above).
 pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.outline.is_none() {
+    let Some(n) = app.outline.as_ref().map(vix_outline_panel::Outline::len) else {
         return;
-    }
-    let n = app.outline.as_ref().unwrap().len();
+    };
     let width = 48u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
@@ -785,7 +802,9 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(o) = app.outline.as_mut() {
         o.ensure_visible(view_h);
     }
-    let o = app.outline.as_ref().unwrap();
+    let Some(o) = app.outline.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in o.scroll..(o.scroll + view_h).min(o.len()) {
         let e = &o.entries[idx];
@@ -839,10 +858,9 @@ fn preview_line(text: &str, max: usize) -> String {
 /// Render the Conflict overlay (T556, `git.conflict_list`): every merge
 /// conflict in the active buffer, each row previewing both sides.
 pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.conflict_list.is_none() {
+    let Some(n) = app.conflict_list.as_ref().map(vix_conflict_tool::List::len) else {
         return;
-    }
-    let n = app.conflict_list.as_ref().unwrap().len();
+    };
     let width = 64u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
@@ -872,7 +890,9 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(l) = app.conflict_list.as_mut() {
         l.ensure_visible(view_h);
     }
-    let l = app.conflict_list.as_ref().unwrap();
+    let Some(l) = app.conflict_list.as_ref() else {
+        return;
+    };
     // Reserve room for the row number and the " → " separator so both
     // previews get a fair, even share of the remaining width.
     let side_width = (chunks[0].width as usize).saturating_sub(9) / 2;

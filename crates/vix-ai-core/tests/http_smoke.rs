@@ -4,6 +4,11 @@
 //! actually exercises `ureq` over a socket: headers really sent, a JSON body
 //! really posted, and a non-2xx status still parsed as a real response
 //! rather than treated as a transport failure.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};

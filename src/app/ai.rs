@@ -310,6 +310,10 @@ impl App {
     /// drive any assistant CLI, not just `claude`. This is the original AI
     /// spawn path (predates T124's HTTP providers) and its behavior is
     /// unchanged — it is still what `ai_provider = "cli"` (the default) uses.
+    #[expect(
+        clippy::expect_used,
+        reason = "stdout was configured as piped when the child was spawned"
+    )]
     pub(super) fn spawn_ai_cli(
         &mut self,
         prompt: &str,
