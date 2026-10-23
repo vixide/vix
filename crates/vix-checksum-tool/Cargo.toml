@@ -11,3 +11,7 @@ description = "Compute SHA-256, SHA-512, MD5, and CRC-32 checksums of text, retu
 crc32fast = { workspace = true }
 md-5 = { workspace = true }
 sha2 = { workspace = true }
+
+# The package `md-5` has library name `md5`, which machete does not map back.
+[package.metadata.cargo-machete]
+ignored = ["md-5"]

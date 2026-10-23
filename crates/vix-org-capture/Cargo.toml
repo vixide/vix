@@ -9,7 +9,6 @@ description = "Org-capture: template-driven capture with placeholders and target
 
 [dependencies]
 vix-settings = { path = "../vix-settings", version = "1.7.1" }
-serde = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -32,3 +32,7 @@ vix-theme = { path = "../vix-theme", version = "1.7.1" }
 # backend; Linux keeps the already-secure `secret-tool` CLI (secret on stdin).
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 keyring = { workspace = true }
+
+# `t!` expands to `rust_i18n` paths that machete cannot see.
+[package.metadata.cargo-machete]
+ignored = ["rust-i18n"]

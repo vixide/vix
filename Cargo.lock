@@ -2062,15 +2062,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "markdown"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5cab8f2cadc416a82d2e783a1946388b31654d391d1c7d92cc1f03e295b1deb"
-dependencies = [
- "unicode-id",
-]
-
-[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4745,12 +4736,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
-name = "unicode-id"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65dd75ab2d9d379dbe86d4059e91d8b5a6e7054865eaba1ddbfc7a817ff96392"
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4910,51 +4895,28 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vix"
 version = "1.7.1"
 dependencies = [
- "anyhow",
- "arboard",
- "base64 0.23.1",
  "bitflags 2.13.2",
  "clap",
  "clap_mangen",
  "confy",
- "crc32fast",
  "criterion",
  "crossterm",
- "evalexpr",
- "getrandom 0.2.17",
- "htmd",
  "ignore",
  "image",
  "include_dir",
  "insta",
  "jiff",
- "markdown",
- "md-5 0.11.0",
  "mimalloc",
  "nix 0.31.3",
- "percent-encoding",
- "pulldown-cmark",
- "qrcode",
  "ratatui",
- "ratatui-core",
  "ratatui-image",
  "regex",
  "ropey",
- "rust-embed",
  "rust-i18n",
  "serde",
  "serde_json",
  "serde_norway",
- "sha2 0.11.1",
- "similar 3.2.0",
- "spellbook",
- "streaming-iterator",
- "sysinfo",
  "toml 1.1.8+spec-1.1.0",
- "tree-sitter",
- "unicode-segmentation",
- "unicode-width 0.2.2",
- "uuid",
  "vix-action-catalog",
  "vix-affix",
  "vix-ai-core",
@@ -4969,10 +4931,8 @@ dependencies = [
  "vix-byte-size",
  "vix-calculator-tool",
  "vix-calendar-panel",
- "vix-capped-stack",
  "vix-case",
  "vix-checksum-tool",
- "vix-civil-date",
  "vix-clipboard",
  "vix-clock-panel",
  "vix-color-converter-tool",
@@ -5012,8 +4972,6 @@ dependencies = [
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
- "vix-greedy-wrap",
- "vix-hex-rgb",
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",
@@ -5344,7 +5302,6 @@ dependencies = [
 name = "vix-dap"
 version = "1.7.1"
 dependencies = [
- "serde",
  "serde_json",
  "vix-lsp-core",
  "vix-settings",
@@ -5719,7 +5676,6 @@ name = "vix-org-capture"
 version = "1.7.1"
 dependencies = [
  "proptest",
- "serde",
  "vix-settings",
 ]
 
