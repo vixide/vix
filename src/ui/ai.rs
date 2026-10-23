@@ -153,7 +153,9 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let view_h = body.height as usize;
     let view_w = body.width as usize;
     let lines: Vec<Line> = {
-        let p = app.ai_panel.as_mut().unwrap();
+        let Some(p) = app.ai_panel.as_mut() else {
+            return;
+        };
         let visible = p.visible(view_w, view_h);
         visible
             .into_iter()

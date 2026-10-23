@@ -6,7 +6,11 @@
 //! source of truth here, not an intermediate format).
 //!
 //! Run with: `cargo run --example vcard_parse`
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use vix::org_contacts::{Contact, parse, to_vcard};

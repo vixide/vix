@@ -256,6 +256,8 @@ redundant_clone = "warn"
 clone_on_ref_ptr = "warn"
 dbg_macro = "warn"
 todo = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
 
 [package]
 name = "vix"

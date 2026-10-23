@@ -7,6 +7,11 @@
 //! bug reached the file explorer's delete dialog.) This test walks the
 //! workspace source, collects every `t!("…")` key, and asserts the catalog
 //! defines it, so the gate catches the next one.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;

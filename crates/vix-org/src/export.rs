@@ -14,13 +14,25 @@ use super::{agenda_items, headline_level};
 
 // ----- Export ---------------------------------------------------------------
 
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 pub(crate) static LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\[([^\]]+)\]\]").expect("link regex"));
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 pub(crate) static BARE_LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("bare link regex"));
 
 /// Apply an inline-emphasis substitution for a single marker char, mapping
 /// `<m>text<m>` to `open`…`close`. Word-ish: the marker hugs the text.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 fn emph(input: &str, marker: char, open: &str, close: &str) -> String {
     let m = regex::escape(&marker.to_string());
     let re = Regex::new(&format!(r"{m}([^{m}\s][^{m}]*?){m}")).expect("emph regex");
@@ -200,6 +212,10 @@ fn escape_latex(s: &str) -> String {
 
 /// Link sentinels used by [`inline_latex`]: links are captured before escaping
 /// (the control chars survive the escape pass) and restored as `\href` after.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static SENTINEL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("\u{1}([^\u{2}]*)\u{2}([^\u{3}]*)\u{3}").expect("sentinel"));
 

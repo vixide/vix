@@ -7,6 +7,11 @@
 //! costs); the cache-hit path is a cheap key comparison, not worth a
 //! microbenchmark. A regression here is felt as frame lag, not typing lag —
 //! see `benches/editor_ops.rs` for the per-keystroke costs.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::fmt::Write as _;

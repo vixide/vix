@@ -6,7 +6,11 @@
 //! Run with: `cargo run --example i18n_lookup -- [key]`
 //! Defaults to `status.opened` (a key that also takes an interpolated
 //! argument, to show that working too).
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 // `t!`'s expansion needs `_rust_i18n_try_translate` in *this* crate's root --

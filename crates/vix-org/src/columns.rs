@@ -59,6 +59,10 @@ const KEYWORDS: &[&str] = &[
 
 /// One `%[WIDTH]PROPERTY[(TITLE)]{SUMMARY}` token inside a `#+COLUMNS`/`:COLUMNS:`
 /// spec.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static COL_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"%(\d+)?([A-Za-z_][A-Za-z0-9_]*)(?:\(([^)]*)\))?(?:\{([^}]*)\})?")
         .expect("column token regex")

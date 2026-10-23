@@ -4,7 +4,11 @@
 //!
 //! Run with: `cargo run --example org_export -- [file.org]`
 //! With no argument, exports a small built-in sample.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 const SAMPLE: &str = "\

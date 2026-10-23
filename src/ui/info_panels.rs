@@ -50,7 +50,9 @@ pub(super) fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.contacts.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.contacts.as_ref().unwrap();
+    let Some(p) = app.contacts.as_ref() else {
+        return;
+    };
     let show_bar = total > view_h && chunks[0].width > 1;
     let list_area = if show_bar {
         Rect {
@@ -138,7 +140,7 @@ pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.vcard.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.vcard.as_ref().unwrap();
+    let Some(p) = app.vcard.as_ref() else { return };
     let show_bar = total > view_h && chunks[0].width > 1;
     let list_area = if show_bar {
         Rect {
@@ -191,7 +193,9 @@ pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
         height,
     };
     frame.render_widget(Clear, rect);
-    let picker = app.snippets.as_ref().unwrap();
+    let Some(picker) = app.snippets.as_ref() else {
+        return;
+    };
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -228,7 +232,9 @@ pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.snippets.as_mut() {
         p.ensure_visible(view_h, lib);
     }
-    let picker = app.snippets.as_ref().unwrap();
+    let Some(picker) = app.snippets.as_ref() else {
+        return;
+    };
     let filtered = picker.matches(lib);
     let total = filtered.len();
     let colw = chunks[1].width as usize;
@@ -368,7 +374,9 @@ pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(o) = app.markdown_toc.as_mut() {
         o.ensure_visible(view_h);
     }
-    let o = app.markdown_toc.as_ref().unwrap();
+    let Some(o) = app.markdown_toc.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in o.scroll..(o.scroll + view_h).min(o.len()) {
         let e = &o.entries[idx];
@@ -421,7 +429,9 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let p = app.text_info.as_ref().unwrap();
+    let Some(p) = app.text_info.as_ref() else {
+        return;
+    };
     let view_h = chunks[0].height as usize;
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (idx, row) in p.rows.iter().take(view_h).enumerate() {
@@ -451,10 +461,13 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.file_info.is_none() {
+    let Some(n) = app
+        .file_info
+        .as_ref()
+        .map(vix_file_information_panel::Panel::len)
+    else {
         return;
-    }
-    let n = app.file_info.as_ref().unwrap().len();
+    };
     let width = 64u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
@@ -484,7 +497,9 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.file_info.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.file_info.as_ref().unwrap();
+    let Some(p) = app.file_info.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(p.len()) {
         let row = &p.rows[idx];
@@ -514,10 +529,13 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.system_info.is_none() {
+    let Some(n) = app
+        .system_info
+        .as_ref()
+        .map(vix_system_information_panel::Panel::len)
+    else {
         return;
-    }
-    let n = app.system_info.as_ref().unwrap().len();
+    };
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
@@ -547,7 +565,9 @@ pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.system_info.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.system_info.as_ref().unwrap();
+    let Some(p) = app.system_info.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(p.len()) {
         let row = &p.rows[idx];

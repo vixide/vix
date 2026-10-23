@@ -95,7 +95,9 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
   per-file attribute is needed. A new crate must carry `[lints] workspace =
   true`. `allow_attributes_without_reason`, `redundant_clone`,
   `clone_on_ref_ptr` (write `Arc::clone(&x)`), `dbg_macro` and `todo` are on
-  too, so **every `#[allow(..)]` needs a `reason = ".."`**. There is no
+  too, so **every `#[allow(..)]` needs a `reason = ".."`**. `unwrap_used` and `expect_used` are on too (tests exempt):
+  prefer `let Some(x) = .. else { return }` and `?`; use
+  `#[expect(clippy::expect_used, reason = "..")]` only for provably safe sites. There is no
   blanket `#![allow(clippy::pedantic)]` and no `#![allow(missing_docs)]`; fix
   findings in code. Sanctioned allows are only a
   handful of **targeted** `#[allow(clippy::too_many_lines)]` /

@@ -746,6 +746,10 @@ impl Code {
 
     /// Send the current buffer to the background worker for reparsing, cancelling
     /// any in-flight parse. Returns `false` if no worker is available.
+    #[expect(
+        clippy::expect_used,
+        reason = "invariant established earlier in this function"
+    )]
     fn request_async_parse(&mut self) -> bool {
         if !self.ensure_parse_worker() {
             return false;

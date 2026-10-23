@@ -11,6 +11,10 @@ use regex::Regex;
 // A Cobertura class's opening tag or a line element, matched in document
 // order -- see `parse_cobertura`. Compiled once; the pattern is a fixed
 // literal, so this can't fail at runtime.
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static COBERTURA_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?x)

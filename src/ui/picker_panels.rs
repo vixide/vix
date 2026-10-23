@@ -136,7 +136,9 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.ascii_panel.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.ascii_panel.as_ref().unwrap();
+    let Some(p) = app.ascii_panel.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(LEN) {
         let code = u8::try_from(idx).unwrap_or(u8::MAX);
@@ -256,7 +258,9 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.x11_panel.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.x11_panel.as_ref().unwrap();
+    let Some(p) = app.x11_panel.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for c in &colors[p.scroll..(p.scroll + view_h).min(total)] {
         let swatch = Span::styled("██", Style::default().fg(Color::Rgb(c.r, c.g, c.b)));
@@ -343,7 +347,9 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(p) = app.theme_editor.as_mut() {
         p.ensure_visible(view_h);
     }
-    let editor = app.theme_editor.as_ref().unwrap();
+    let Some(editor) = app.theme_editor.as_ref() else {
+        return;
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (i, slot) in vix_theme_editor_panel::Slot::ALL
         .iter()
@@ -415,7 +421,9 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
         height,
     };
     frame.render_widget(Clear, rect);
-    let p = app.media_type_panel.as_ref().unwrap();
+    let Some(p) = app.media_type_panel.as_ref() else {
+        return;
+    };
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -452,7 +460,9 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     if let Some(p) = app.media_type_panel.as_mut() {
         p.ensure_visible(view_h);
     }
-    let p = app.media_type_panel.as_ref().unwrap();
+    let Some(p) = app.media_type_panel.as_ref() else {
+        return;
+    };
     let filtered = p.matches();
     let total = filtered.len();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);

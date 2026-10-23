@@ -162,6 +162,10 @@ fn free_port() -> Option<u16> {
 /// timeout elapses. Returns early with `false` if `child` (the `ssh` process)
 /// exits first — with `ExitOnForwardFailure=yes` a failed forward exits almost
 /// immediately, so this avoids blocking the caller for the full timeout.
+#[expect(
+    clippy::expect_used,
+    reason = "invariant established earlier in this function"
+)]
 fn wait_ready(local_port: u16, child: &mut Child) -> bool {
     use std::net::TcpStream;
     let deadline = Instant::now() + READY_TIMEOUT;

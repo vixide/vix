@@ -6,6 +6,11 @@
 //! rewritten file: the 40 ms deadline must keep it bounded (look at the
 //! `rewritten` rows staying near that budget as the line count grows) and the
 //! 50,000-line cap must keep a giant buffer to the cost of counting its lines.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::fmt::Write as _;

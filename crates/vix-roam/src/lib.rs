@@ -291,6 +291,10 @@ pub fn add_filetag(content: &str, tag: &str) -> String {
     lines.join("\n")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static ID_LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[id:([^\]]+)\]").expect("id link regex"));
 

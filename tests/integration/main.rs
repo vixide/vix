@@ -1,5 +1,10 @@
 //! Integration tests for Vix's terminal-independent logic.
 #![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
+#![allow(
     clippy::cast_possible_truncation,
     clippy::format_collect,
     reason = "tests count and index small fixtures, and build expected text with format! over iterators"

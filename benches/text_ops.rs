@@ -5,6 +5,11 @@
 //! so their cost is a function of *buffer* size, not of the edit. That is the
 //! thing to watch: a transform that is O(buffer) per keystroke is fine at 200
 //! lines and not fine at 20,000.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;

@@ -135,6 +135,7 @@ impl RenderState {
     }
 
     /// Fold a single Markdown event into the accumulated lines.
+    #[expect(clippy::unwrap_used, reason = "writing to a String cannot fail")]
     fn handle(&mut self, ev: Event) {
         match ev {
             Event::Start(Tag::Heading { level, .. }) => {

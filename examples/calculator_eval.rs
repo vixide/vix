@@ -4,7 +4,11 @@
 //!
 //! Run with: `cargo run --example calculator_eval -- "expression"`
 //! With no argument, evaluates a few built-in samples.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 fn main() {

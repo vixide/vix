@@ -201,6 +201,10 @@ pub fn close_headline(text: &str, line: usize, now: &str, note: &str) -> Option<
     Some(lines.join("\n"))
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static CHECKBOX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(\s*(?:[-+*]|\d+[.)])\s+)\[([ xX-])\]").expect("checkbox regex")
 });
@@ -233,6 +237,10 @@ pub fn toggle_checkbox(text: &str, line: usize) -> Option<String> {
 // ----- Statistics cookies & checkbox propagation ----------------------------
 
 /// A statistics cookie: `[/]`/`[n/m]` (fraction) or `[%]`/`[n%]` (percent).
+#[expect(
+    clippy::expect_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static COOKIE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\d*/\d*\]|\[\d*%\]").expect("cookie regex"));
 

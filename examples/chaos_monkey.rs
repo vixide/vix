@@ -25,7 +25,11 @@
 //! For a network-free run, wrap it: `unshare -rn cargo run --example chaos_monkey`.
 //!
 //! Exit status: 0 clean, 1 an iteration panicked, 2 an iteration hung.
-
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 #![warn(clippy::pedantic)]
 
 use std::collections::VecDeque;

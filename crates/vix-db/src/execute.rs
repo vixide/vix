@@ -119,6 +119,10 @@ impl Browser {
 
     /// Keys on the bind-parameter prompt: each `Enter` records the value for the
     /// current placeholder; once all are filled the substituted statement runs.
+    #[expect(
+        clippy::expect_used,
+        reason = "invariant established earlier in this function"
+    )]
     pub(super) fn key_params(&mut self, key: KeyEvent) -> Outcome {
         let Some(prompt) = self.params.as_mut() else {
             self.view = View::Workbench;

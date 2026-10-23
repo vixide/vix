@@ -44,14 +44,18 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let fb = app.file_browser.as_ref().unwrap();
+    let Some(fb) = app.file_browser.as_ref() else {
+        return;
+    };
     draw_file_browser_header(fb, frame, chunks[0], chunks[1]);
 
     let view_h = chunks[2].height as usize;
     if let Some(fb) = app.file_browser.as_mut() {
         fb.ensure_visible(view_h);
     }
-    let fb = app.file_browser.as_ref().unwrap();
+    let Some(fb) = app.file_browser.as_ref() else {
+        return;
+    };
     let filtered = fb.matches();
     let total = filtered.len();
     // Fixed size (9) and date (16) columns; the path takes the rest.

@@ -52,24 +52,56 @@ pub enum TestFrameworkHint {
     JavaGradle,
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static RUST_TEST_ATTR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*#\[\s*test\s*\]\s*$").unwrap());
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static RUST_FN_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap()
 });
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static PYTHON_TEST_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*def\s+(test_[A-Za-z0-9_]*)\s*\(").unwrap());
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static GO_TEST_FUNC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*func\s+(Test[A-Za-z0-9_]*)\s*\(").unwrap());
 // The Rust `regex` crate has no backreferences, so each quote style needs
 // its own alternative + capture group rather than one group plus `\1`.
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static JS_TEST_CALL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\b(?:it|test|describe)\s*\(\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)"#).unwrap()
 });
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static RUBY_RSPEC_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\b(?:it|describe)\s+(?:'([^']*)'|"([^"]*)")"#).unwrap());
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static RUBY_MINITEST_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*def\s+(test_[A-Za-z0-9_]*)").unwrap());
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 static ELIXIR_TEST_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^\s*test\s+"([^"]+)"\s+do\b"#).unwrap());
 

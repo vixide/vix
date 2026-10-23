@@ -30,6 +30,10 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
+#[expect(
+    clippy::expect_used,
+    reason = "a build script has no better channel than panicking"
+)]
 fn main() {
     let dir = Path::new("locales");
     println!("cargo:rerun-if-changed={}", dir.display());

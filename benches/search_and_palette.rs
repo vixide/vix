@@ -5,6 +5,11 @@
 //! re-filters the file index, and workspace search re-scans every file under
 //! the root. A regression here is felt as typing lag, which is why they are
 //! benchmarked rather than merely tested.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "benches, examples and tests fail loudly on a broken fixture"
+)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
