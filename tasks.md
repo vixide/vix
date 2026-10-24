@@ -7017,7 +7017,7 @@ new action.
   helper. Replace them all with
   `wait_until(app, poll, pred, Duration::from_secs(10))`, which gives more
   headroom on slow macOS and Windows runners. **Small.**
-- [ ] **T606 — Mutation testing for the pure crates.** `cargo mutants`
+- [x] **T606 — Mutation testing for the pure crates.** `cargo mutants`
   on vix-list-state, vix-byte-size, and vix-civil-date produced 197
   mutants in 56 s, and 4 were missed:
   - `vix-list-state/src/lib.rs:52` (`page_down` `+`→`*`)
@@ -7028,6 +7028,14 @@ new action.
   Add the tests that kill these mutants. Then add a scheduled, advisory
   `cargo mutants` job over the small pure crates (list-state, civil-date,
   byte-size, textops, capped-stack, greedy-wrap, hex-rgb). **Small.**
+  Done: the 3 real gaps are killed (`vix-list-state` `page_down` and the
+  `ensure_visible` `scroll + height` term, `vix-civil-date`'s era
+  boundary); the 4th, `selected < scroll` -> `<=`, is equivalent and sits in
+  `.cargo/mutants.toml`. `.github/workflows/mutants.yml` runs weekly and is
+  advisory. First full baseline over the other four crates (textops,
+  capped-stack, greedy-wrap, hex-rgb): 519 mutants, 58 missed, 26 timeouts
+  -- 52 in `vix-textops`, 6 in `vix-greedy-wrap` (chiefly `wrap_paragraph_at`, `smart_toggle_at`,
+  `tag_column`). Triage those from the first scheduled report.
 - [ ] **T607 — Coverage measurement in CI.** Nothing runs llvm-cov or
   tarpaulin today. Add an advisory GitHub job that runs `cargo llvm-cov
   --workspace --cobertura` and uploads the artifact. Vix's own T210

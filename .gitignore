@@ -24,3 +24,5 @@ vix-*/Cargo.lock
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/coverage/
+mutants.out/
+mutants.out.old/
