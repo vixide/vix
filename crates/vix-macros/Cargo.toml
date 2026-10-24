@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Persisted keyboard macros: named recordings of editor key events."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 vix-fileops = { workspace = true }

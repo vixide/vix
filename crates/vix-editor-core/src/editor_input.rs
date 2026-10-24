@@ -6,16 +6,16 @@ use crate::editor::{Editor, Flags};
 use crate::multicursor::CaretMove;
 use crate::selection::SelectionSnap;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui_core::layout::Rect;
+use vix_input::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 impl Editor {
-    /// Handle a crossterm key event, then scroll to keep the cursor visible.
+    /// Handle a key event, then scroll to keep the cursor visible.
     ///
     /// # Errors
     /// Returns an error when an applied action fails.
     pub fn input(&mut self, key: KeyEvent, area: &Rect) -> Result<()> {
-        use crossterm::event::KeyCode;
+        use vix_input::KeyCode;
 
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
@@ -165,7 +165,7 @@ impl Editor {
         true
     }
 
-    /// Handle a crossterm mouse event (scroll, click, drag, selection).
+    /// Handle a mouse event (scroll, click, drag, selection).
     ///
     /// # Errors
     /// Returns an error when an applied action fails.
@@ -235,7 +235,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::KeyModifiers;
+    use vix_input::KeyModifiers;
 
     fn ev(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
         MouseEvent {

@@ -10,7 +10,7 @@ description = "DB workbench: connection management, schema browsing, and SQL que
 [dependencies]
 vix-settings = { workspace = true }
 confy = { workspace = true }
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 futures-util = { workspace = true }
 percent-encoding = { workspace = true }
 ratatui = { workspace = true }

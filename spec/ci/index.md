@@ -137,6 +137,16 @@ the small pure crates (list-state, civil-date, byte-size, textops, capped-stack,
 hex-rgb) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
 
+### Desktop GUI (T641)
+
+`.github/workflows/gui.yml` (GitHub only) builds the GPUI desktop GUI — `gui/`, a separate
+Cargo workspace the main gate never builds — on macOS, Windows and Linux: `cargo fmt --check`,
+pedantic clippy with warnings denied, and the unit tests, all via `--manifest-path
+gui/Cargo.toml --locked`. On macOS it also runs a real render (the `screenshot` feature:
+open the window, type into the command palette, save a PNG) and uploads the image. Linux
+installs GPUI's system libraries first. It is advisory (`continue-on-error`) and path-filtered
+to changes that can affect the GUI. See `gui/spec/index.md`.
+
 ### Chaos monkey (T575)
 
 `.github/workflows/chaos.yml` (GitHub only) runs `examples/chaos_monkey` nightly and on
@@ -172,7 +182,9 @@ The GitHub `semver` job runs `cargo semver-checks --workspace` (pinned
 `0.51.0`) against the version of each crate last published on crates.io. The
 release type is inferred from the version in `Cargo.toml`, and an unchanged
 version counts as a patch release, so a breaking public-API change fails until
-the affected crates are bumped to a new major version. `scripts/check` runs the
+the affected crates are bumped to a new major version. A crate never yet published (no
+baseline) is excluded by name until its first release — currently `vix-input`
+(T640); drop the `--exclude` once it is on crates.io. `scripts/check` runs the
 same command and skips it with a note when `cargo-semver-checks` (>= 0.51) isn't
 installed. GitHub only for now: it needs network access to crates.io and
 nothing about it is forge-specific, so GitLab and Codeberg can add it later.

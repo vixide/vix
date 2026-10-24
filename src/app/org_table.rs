@@ -13,7 +13,7 @@
 //! levels of the tree. Two contiguous clusters, bundled together since
 //! Column View renders interactive `TBLFM` tables.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, Focus, Prompt, PromptKind};
 

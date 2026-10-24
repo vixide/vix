@@ -4975,6 +4975,7 @@ dependencies = [
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",
+ "vix-input",
  "vix-jwt-tool",
  "vix-keybinding-editor-panel",
  "vix-keybindings",
@@ -5171,7 +5172,7 @@ version = "1.7.1"
 name = "vix-column-view"
 version = "1.7.1"
 dependencies = [
- "crossterm",
+ "vix-input",
  "vix-org",
 ]
 
@@ -5312,7 +5313,6 @@ name = "vix-db"
 version = "1.7.1"
 dependencies = [
  "confy",
- "crossterm",
  "futures-util",
  "keyring",
  "percent-encoding",
@@ -5325,6 +5325,7 @@ dependencies = [
  "vix-clipboard",
  "vix-fileops",
  "vix-i18n",
+ "vix-input",
  "vix-list-state",
  "vix-settings",
  "vix-theme",
@@ -5351,8 +5352,8 @@ dependencies = [
 name = "vix-edit-bytes"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "vix-capped-stack",
+ "vix-input",
  "vix-list-state",
 ]
 
@@ -5360,8 +5361,8 @@ dependencies = [
 name = "vix-edit-outline"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "vix-capped-stack",
+ "vix-input",
  "vix-list-state",
 ]
 
@@ -5369,8 +5370,8 @@ dependencies = [
 name = "vix-edit-sql"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "vix-capped-stack",
+ "vix-input",
  "vix-list-state",
 ]
 
@@ -5378,20 +5379,20 @@ dependencies = [
 name = "vix-edit-table"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "vix-capped-stack",
  "vix-convert-tabular",
+ "vix-input",
 ]
 
 [[package]]
 name = "vix-edit-value"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "proptest",
  "serde_json",
  "serde_norway",
  "vix-capped-stack",
+ "vix-input",
  "vix-list-state",
 ]
 
@@ -5415,7 +5416,6 @@ version = "1.7.1"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",
- "crossterm",
  "getrandom 0.2.17",
  "ratatui-core",
  "ropey",
@@ -5444,6 +5444,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "vix-clipboard",
  "vix-hex-rgb",
+ "vix-input",
 ]
 
 [[package]]
@@ -5546,6 +5547,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-input"
+version = "1.7.1"
+dependencies = [
+ "bitflags 2.13.2",
+ "crossterm",
+]
+
+[[package]]
 name = "vix-jwt-tool"
 version = "1.7.1"
 dependencies = [
@@ -5617,10 +5626,10 @@ dependencies = [
 name = "vix-macros"
 version = "1.7.1"
 dependencies = [
- "crossterm",
  "serde",
  "toml 1.1.8+spec-1.1.0",
  "vix-fileops",
+ "vix-input",
 ]
 
 [[package]]
@@ -5842,8 +5851,8 @@ name = "vix-terminal"
 version = "1.7.1"
 dependencies = [
  "anyhow",
- "crossterm",
  "portable-pty",
+ "vix-input",
  "vt100",
 ]
 

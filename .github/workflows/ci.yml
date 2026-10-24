@@ -141,7 +141,9 @@ jobs:
       - name: install cargo-semver-checks
         run: cargo install cargo-semver-checks --version 0.51.0 --locked
       - name: cargo semver-checks
-        run: cargo semver-checks --workspace
+        # A crate with no crates.io release yet has no baseline to compare
+        # against; exclude it until its first publish (vix-input: T640).
+        run: cargo semver-checks --workspace --exclude vix-input
 
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the

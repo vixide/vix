@@ -2,7 +2,7 @@
 //! active buffer and another file. Plain file comparison, independent of the
 //! `git` capability (moved out of `git.rs` by T593 for that reason).
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, DiffViewState};
 

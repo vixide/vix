@@ -7373,6 +7373,29 @@ new action.
   the starting state. Tests: layouts for linear, branching, and deep
   trees, and checking that navigating to a node gives the expected text.
   **Medium.**
+- [x] **T640 — GUI Phase 0: backend-neutral input (`vix-input`).** Every
+  key/mouse handler (App shell, keymap, macros, modal recording, editor
+  widget, terminal encoder, edit surfaces, DB workbench) took
+  `crossterm::event` types, making the terminal a structural dependency of
+  all input handling. New `vix-input` crate mirrors crossterm's shapes
+  exactly (one-line `use` change per file, same case-normalized equality);
+  only `src/main.rs` converts crossterm events, via the `crossterm`
+  feature. Startup and the loop's background work moved into
+  `App::start`/`App::tick`/`App::poll_interval` (`src/app/event_loop.rs`)
+  so a second front end shares them. Spec:
+  `crates/vix-input/spec/index.md`. **Done.**
+- [x] **T641 — GUI Phase 1: the whole App in a GPUI window (`gui/`).**
+  Separate workspace (GPUI stays out of the terminal build), GPUI Kit pinned
+  `=0.8.0`. `ui::draw` renders into a ratatui cell-grid `Backend`, painted
+  with a monospace font plus Nerd Font fallbacks; GPUI keystrokes/mouse map
+  to `vix-input` events shaped like crossterm's; native menu bar from
+  `vix-menu` dispatching `App::run_action`; native open dialog; OS
+  appearance drives `theme = "auto"`. Opt-in `screenshot` feature renders
+  the window to PNG after scripted actions/keystrokes (verified: palette
+  overlay, live typing, icons, highlighting). Spec: `gui/spec/index.md`.
+  **Done.** Follow-ons: CI job on all three OSes (GPUI's Linux system deps),
+  IME/dead keys via an input handler, runtime menu relabeling on locale
+  change, Phase 2 native components.
 
 ---
 

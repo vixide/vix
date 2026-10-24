@@ -1,0 +1,94 @@
+# The GPUI desktop GUI (T641, tasks.md; gui/spec/index.md). `gui/` is its own
+# Cargo workspace so GPUI never enters the terminal build, which also means the
+# main CI gate (ci.yml, scripts/check) never builds it -- this workflow does,
+# on all three desktop platforms. Advisory for now (`continue-on-error`): GPUI
+# Kit is pre-1.0 and its platform layers still move, so a GUI break should be
+# visible without blocking the terminal editor. GitHub only; see
+# spec/ci/index.md.
+
+name: GUI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gui/**"
+      - "src/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/gui.yml"
+  pull_request:
+    paths:
+      - "gui/**"
+      - "src/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/gui.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: gui-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  gui:
+    name: gui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui
+      # GPUI's Linux platform layer: X11 + Wayland windowing, xkbcommon
+      # keymaps, fontconfig/freetype fonts, Vulkan (via wgpu), ALSA.
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libfreetype-dev libwayland-dev \
+            libx11-xcb-dev libxkbcommon-x11-dev libvulkan-dev libssl-dev libzstd-dev
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path gui/Cargo.toml --check
+      - name: cargo clippy (pedantic, -D warnings)
+        run: cargo clippy --manifest-path gui/Cargo.toml --locked --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --manifest-path gui/Cargo.toml --locked
+      # A real render: open the window, type into the command palette, and
+      # save a PNG. macOS runners have a window server; Linux and Windows
+      # runners are headless here, so only macOS takes the screenshot.
+      - name: render smoke test (macOS)
+        if: runner.os == 'macOS'
+        env:
+          VIX_GUI_SCREENSHOT: ${{ runner.temp }}/vix-gui.png
+          VIX_GUI_SCREENSHOT_KEYS: "ctrl-p c a r g o"
+        run: |
+          cargo run --manifest-path gui/Cargo.toml --locked --features screenshot -- README.md
+          test -s "$VIX_GUI_SCREENSHOT"
+      - name: upload screenshot
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vix-gui-screenshot
+          path: ${{ runner.temp }}/vix-gui.png
+          if-no-files-found: ignore

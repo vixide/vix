@@ -12,7 +12,6 @@
 )]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use regex::Regex;
 use std::fs;
 use std::hint::black_box;
@@ -21,6 +20,7 @@ use vix::app::App;
 use vix::find_panel;
 use vix::palette::{fuzzy_match, fuzzy_score};
 use vix::settings::Settings;
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// A buffer with `lines` lines and a match roughly every tenth line.
 fn haystack(lines: usize) -> String {

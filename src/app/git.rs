@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 #[cfg(feature = "ai")]
 use super::{AiDest, AiReplace};

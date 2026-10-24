@@ -38,14 +38,14 @@ fn main() {
     // dispatch, not a private shortcut.
     app.run_action("search.workspace_dock");
     for c in pattern.chars() {
-        app.on_key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char(c),
-            crossterm::event::KeyModifiers::NONE,
+        app.on_key(vix_input::KeyEvent::new(
+            vix_input::KeyCode::Char(c),
+            vix_input::KeyModifiers::NONE,
         ));
     }
-    app.on_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Enter,
-        crossterm::event::KeyModifiers::NONE,
+    app.on_key(vix_input::KeyEvent::new(
+        vix_input::KeyCode::Enter,
+        vix_input::KeyModifiers::NONE,
     ));
 
     // Results (plus a "$ search ..." header line) land in the bottom dock,

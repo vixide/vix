@@ -18,7 +18,7 @@
 //! working exactly as it did before the engine existed.
 
 use super::ModalPending;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
 
 use super::App;

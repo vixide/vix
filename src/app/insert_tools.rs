@@ -19,7 +19,7 @@
 //! more than one field, not a single call) and so did the prefix-matched
 //! actions (`view.theme:`, `script:`, …).
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, SQL_CREATE_EXTENSION, SQL_CREATE_TABLE};
 

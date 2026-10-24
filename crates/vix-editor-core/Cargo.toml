@@ -40,7 +40,7 @@ lang-yaml = ["dep:tree-sitter-yaml"]
 [dependencies]
 anyhow = { workspace = true }
 bitflags = { workspace = true }
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 vix-clipboard = { workspace = true }
 vix-hex-rgb = { workspace = true }
 getrandom = { workspace = true }

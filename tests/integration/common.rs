@@ -9,13 +9,13 @@
 
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
-#[cfg(feature = "ai")]
+// Used by `wait_until` in every build, not only with `ai` (T605's helper).
 pub(crate) use std::time::{Duration, Instant};
 
-pub(crate) use crossterm::event::{
+pub(crate) use ratatui::layout::Rect;
+pub(crate) use vix_input::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-pub(crate) use ratatui::layout::Rect;
 
 pub(crate) use vix::app::{App, AppFlags, Focus, PromptKind};
 pub(crate) use vix::calendar;

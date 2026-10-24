@@ -51,9 +51,9 @@ keys = ["H", "i", ",", "Space"]
     // Type the rest by hand, same as a user would after a macro sets up a
     // common prefix.
     for c in "World".chars() {
-        app.on_key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char(c),
-            crossterm::event::KeyModifiers::NONE,
+        app.on_key(vix_input::KeyEvent::new(
+            vix_input::KeyCode::Char(c),
+            vix_input::KeyModifiers::NONE,
         ));
     }
 

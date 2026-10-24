@@ -3,7 +3,7 @@
 //! event loop still call these entry points. Each is a no-op, so call sites carry
 //! no `cfg`.
 
-use crossterm::event::KeyEvent;
+use vix_input::KeyEvent;
 
 use super::App;
 

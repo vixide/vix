@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The interactive Column View overlay (Org C-c C-x C-c): a live, write-through spreadsheet view onto the outline."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 vix-org = { workspace = true }
 
 [lints]

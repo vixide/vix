@@ -9,8 +9,8 @@
 //! media-type detection, not part of the media-type *panel*, despite the
 //! similar name.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
+use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{App, AppFlags, AsciiPanel, NerdPalette, Prompt, PromptKind, X11Panel, rect_contains};
 use crate::settings::Settings;

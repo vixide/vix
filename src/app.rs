@@ -11,6 +11,7 @@ mod db;
 #[cfg(not(feature = "sql"))]
 mod db_off;
 mod diff_tool;
+mod event_loop;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(not(feature = "git"))]
@@ -50,16 +51,16 @@ use crate::editor_core::actions::{
     Undo as UndoAction,
 };
 use crate::editor_core::selection::Selection;
-use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 // Only this module's own `#[cfg(test)]` unit tests build `KeyModifiers` chords
 // directly now; the keymap-dispatch code that used to need it crate-wide moved
 // to `app::keymap` (T141).
-#[cfg(test)]
-use crossterm::event::KeyModifiers;
 use include_dir::{Dir, include_dir};
 use ratatui::layout::Rect;
 #[cfg(feature = "image")]
 use ratatui_image::picker::Picker as ImagePicker;
+#[cfg(test)]
+use vix_input::KeyModifiers;
 
 /// Stand-in for the terminal-graphics picker in a build without the `image`
 /// feature; never constructed, so `App::picker` stays `None`.
@@ -8791,9 +8792,7 @@ impl App {
             self.flags.insert(AppFlags::EDITOR_DRAG);
         }
         let area = self.layout.editor;
-        let alt = mouse
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::ALT);
+        let alt = mouse.modifiers.contains(vix_input::KeyModifiers::ALT);
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             // Alt+click adds an extra caret; a plain click collapses to one.
             if alt {

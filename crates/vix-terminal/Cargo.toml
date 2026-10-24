@@ -9,7 +9,7 @@ description = "Integrated terminal: a real PTY hosting a shell, parsed by `vt100
 
 [dependencies]
 anyhow = { workspace = true }
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 portable-pty = { workspace = true }
 vt100 = { workspace = true }
 

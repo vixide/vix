@@ -17,7 +17,7 @@
 
 use std::cmp::Ordering;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_convert_tabular::{parse_csv, parse_tsv, write_csv, write_tsv};
 

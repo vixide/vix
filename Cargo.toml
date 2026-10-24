@@ -181,6 +181,7 @@ vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "1.7.1" }
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "1.7.1" }
 vix-http-client = { path = "crates/vix-http-client", version = "1.7.1" }
 vix-i18n = { path = "crates/vix-i18n", version = "1.7.1" }
+vix-input = { path = "crates/vix-input", version = "1.7.1" }
 vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "1.7.1" }
 vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "1.7.1" }
 vix-keybindings = { path = "crates/vix-keybindings", version = "1.7.1" }
@@ -347,6 +348,8 @@ lang-yaml = ["vix-editor-core/lang-yaml"]
 bitflags = { workspace = true }
 # Shared single-embed i18n backend for the whole workspace (see crates/vix-i18n).
 vix-i18n = { workspace = true }
+# Backend-neutral key/mouse event types; the terminal build converts crossterm's.
+vix-input = { workspace = true, features = ["crossterm"] }
 
 # Extracted concept crates (one per major concept).
 # base16-generated themes for the theme system.

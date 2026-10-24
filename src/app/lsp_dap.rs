@@ -16,7 +16,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{
     App, CompletionPopup, Focus, Prompt, PromptKind, apply_edits_to_text, char_to_lsp_pos,

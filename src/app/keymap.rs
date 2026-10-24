@@ -11,7 +11,7 @@
 //! a method is *defined* never has to happen in lockstep with everything it
 //! calls.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::{App, AppFlags, Focus, Keymap, display_key, menu_index_for_alt};
 use crate::editor_core::actions::Copy as CopyAction;
