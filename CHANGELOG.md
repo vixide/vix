@@ -9,7 +9,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Desktop GUIs, experimental** (T641, T642, T646): `gui/` builds two front ends that run the whole of Vix — every panel, overlay and dock — in a native window on macOS, Windows and Linux, so the toolkits can be compared: `vix-gpui` (GPUI Kit) and `vix-egui` (egui/eframe, with IME input), each a complete implementation with no common GUI library. Both have a native menu bar (egui: macOS) with a system open-file dialog, and closing the window runs Vix's own quit flow. Run with `cargo run --manifest-path gui/Cargo.toml --release -p vix-gpui` or `-p vix-egui`. See `gui/spec/index.md`.
-- **Desktop GUI distributions** (T645): releases now ship `vix-gpui` and `vix-egui` alongside the terminal app — `brew install vixide/tap/vix-gpui` (or `vix-egui`), shell and PowerShell installers, archives for macOS and Linux (x86_64 and aarch64), and a Windows `.zip` and `.msi`.
+- **More desktop GUIs** (T647): `vix-iced` (iced), `vix-gtk4` (GTK 4: Pango text, a native GIO menu bar and file chooser on every platform) and `vix-slint` (Slint, used under the GPLv3, so `vix-slint` is GPL-3.0-only), each a complete, self-contained front end like the first two. Run with `cargo run --manifest-path gui/Cargo.toml --release -p vix-iced` (or `vix-gtk4`, `vix-slint`); see `gui/spec/index.md` for how they compare.
+- **Desktop GUI distributions** (T645, T647): releases now ship `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` alongside the terminal app — `brew install vixide/tap/vix-gpui` (or `vix-egui`, `vix-iced`, `vix-slint`), shell and PowerShell installers, archives for macOS and Linux (x86_64 and aarch64), and a Windows `.zip` and `.msi`.
 
 ### Changed
 

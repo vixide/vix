@@ -2,7 +2,10 @@
 name = "vix-slint"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+# Slint is used under the GPL-3.0-only (see `slint` below), so a vix-slint
+# binary can be distributed only under the GPLv3, not under Vix's other
+# license choices.
+license = "GPL-3.0-only"
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -43,6 +46,42 @@ screenshot = ["dep:image"]
 [target.'cfg(target_os = "macos")'.dependencies]
 # The platform file dialog, for the menu's Open with System Dialog….
 rfd = "0.17"
+
+# Release distributions (T645, T647): `brew install vixide/tap/vix-slint`,
+# shell and PowerShell installers, an MSI, and archives, built by dist from the
+# repo-root dist-workspace.toml (which lists this workspace as `cargo:gui`).
+# `publish = false` keeps it off crates.io, so dist must be told to ship it.
+# No musl target: a GUI links the system's windowing, GPU and font libraries.
+# No npm package: a desktop app is not a Node tool.
+[package.metadata.dist]
+dist = true
+formula = "vix-slint"
+installers = ["shell", "powershell", "homebrew", "msi"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+# Linux build-time system libraries (the same set as .github/workflows/gui.yml).
+[package.metadata.dist.dependencies.apt]
+libasound2-dev = "*"
+libfontconfig-dev = "*"
+libfreetype-dev = "*"
+libwayland-dev = "*"
+libx11-xcb-dev = "*"
+libxkbcommon-x11-dev = "*"
+libxcursor-dev = "*"
+libxrandr-dev = "*"
+libxi-dev = "*"
+libvulkan-dev = "*"
+libssl-dev = "*"
+libzstd-dev = "*"
+# OpenGL / EGL for Slint's femtovg renderer.
+libgl1-mesa-dev = "*"
+libegl-dev = "*"
+
+[package.metadata.wix]
+upgrade-guid = "061C9BC7-4CA5-4EC6-A33F-49330ED9EC8E"
+path-guid = "9B5F94EA-29F1-405E-9D6F-28F042501290"
+license = false
+eula = false
 
 [lints]
 workspace = true

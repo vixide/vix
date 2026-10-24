@@ -137,18 +137,19 @@ the small pure crates (list-state, civil-date, byte-size, textops, capped-stack,
 hex-rgb) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
 
-### Desktop GUIs (T641, T642)
+### Desktop GUIs (T641, T642, T647)
 
 `.github/workflows/gui.yml` (GitHub only) builds the desktop GUIs — `gui/`, a separate Cargo
-workspace the main gate never builds: `vix-gpui` (GPUI) and `vix-egui`
-(egui) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
+workspace the main gate never builds: `vix-gpui` (GPUI), `vix-egui`
+(egui), `vix-iced` (iced), `vix-gtk4` (GTK 4) and `vix-slint` (Slint) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
 denied over all features, and the unit tests, all via `--manifest-path gui/Cargo.toml
 --locked`. On macOS it also runs each front end's real render (the `screenshot` feature:
 open the window, type into the command palette, save a PNG) and uploads the images. Linux
-installs the windowing/font system libraries first. It is advisory (`continue-on-error`) and
+installs the windowing/font system libraries, GTK 4 and OpenGL/EGL first; macOS installs
+Homebrew's `gtk4`; Windows runners have no GTK, so `vix-gtk4` is excluded there. It is advisory (`continue-on-error`) and
 path-filtered to changes that can affect the GUIs. The matrix also includes
 `ubuntu-22.04` and `ubuntu-22.04-arm`, the runners `release.yml` builds the GUIs on: dist
-releases `vix-gpui` and `vix-egui` from the same tag as `vix-tui` (T645; `dist-workspace.toml`
+releases `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` (not `vix-gtk4`) from the same tag as `vix-tui` (T645; `dist-workspace.toml`
 members `cargo:.` and `cargo:gui`), so a GUI that does not build there fails the whole release.
 See `gui/spec/index.md`.
 

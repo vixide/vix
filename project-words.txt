@@ -329,3 +329,9 @@ rfd
 skrifa
 preedit
 toolkits
+femtovg
+Multicontext
+Pango
+Slint
+slint
+winit
