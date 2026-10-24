@@ -8,7 +8,12 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 description = "Vix IDE: a visual integrated development environment that is TUI, friendly, featureful, high-speed, and high-security."
-license.workspace = true
+# The `vix` binary's license, not the source's (T648, spec/license): the
+# source is offered under five licenses, but this binary links Apache-2.0-only
+# crates (`approx`, `gethostname`, `htmd`, `ring`, `similar`), and the FSF
+# holds Apache-2.0 incompatible with GPL-2.0-only. `scripts/check-binary-licenses`
+# recomputes this from the dependency graph.
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
 repository.workspace = true
 homepage.workspace = true
 readme = "../README.md"

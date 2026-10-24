@@ -72,6 +72,20 @@ member, as `App::start` / `App::tick` / `App::poll_interval` do.
    and a custom element drawing `vix-editor-core`'s buffer with proportional
    text, migrating one panel at a time with the cell grid as the fallback.
 
+## Licenses
+
+Each front end is a distributed binary, so it carries the licenses its
+framework and the rest of its linked dependencies allow, not automatically
+all five of Vix's source licenses: its `Cargo.toml` `license` and its own
+`LICENSE` file state that subset, and `scripts/check-binary-licenses`
+recomputes it from `gui/Cargo.lock` and fails on any difference. Today
+`vix-gpui`, `vix-egui`, `vix-iced` and `vix-gtk4` are `Apache-2.0 OR
+BSD-3-Clause OR MIT OR GPL-3.0-only` (GPUI is Apache-2.0 only, and every
+toolkit stack links Apache-2.0-only crates, which rule out GPL-2.0-only)
+and `vix-slint` is `GPL-3.0-only` (Slint, used under its GPLv3 option).
+A new front end, or a toolkit upgrade, follows the same rule. See
+[`spec/license/index.md`](../../spec/license/index.md) ("Binary licenses").
+
 ## Behavior every front end implements
 
 - **Rendering.** Text is drawn in *spans* — maximal same-style stretches of

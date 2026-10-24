@@ -87,4 +87,7 @@ fi
 echo "==> scripts/check-docs"
 python3 "$(dirname "$0")/check-docs"
 
+echo "==> per-binary licenses (T648)"
+python3 "$(dirname "$0")/check-binary-licenses"
+
 echo "OK: build + clippy + tests + doc + docs all passed"

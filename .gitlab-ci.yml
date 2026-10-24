@@ -232,6 +232,13 @@ docs:
   script:
     - python3 scripts/check-docs
 
+# Each distributed binary declares exactly the licenses its linked
+# dependencies allow (T648, spec/license). Mirrors `scripts/check`.
+binary-licenses:
+  stage: check
+  script:
+    - python3 scripts/check-binary-licenses
+
 # ---------------------------------------------------------------------------
 # Release (tag pipelines only)
 # ---------------------------------------------------------------------------

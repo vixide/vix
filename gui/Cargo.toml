@@ -17,7 +17,12 @@ members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint"]
 version = "1.7.1"
 edition = "2024"
 rust-version = "1.96"
-license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+# Each front end's binary license (T648, spec/license): the subset of Vix's
+# five source licenses that every crate it links allows. GPUI Kit / GPUI are
+# Apache-2.0 only, and every front end links Apache-2.0-only crates, which
+# the FSF holds incompatible with GPL-2.0-only. vix-slint overrides this with
+# GPL-3.0-only (Slint). `scripts/check-binary-licenses` recomputes it.
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
 publish = false
 repository = "https://github.com/vixide/vix"
 homepage = "https://github.com/vixide/vix"

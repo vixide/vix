@@ -135,6 +135,10 @@ jobs:
       # `scripts/check`; see spec/test/index.md.
       - name: scripts/check-docs
         run: python3 scripts/check-docs
+      # Each distributed binary declares exactly the licenses its linked
+      # dependencies allow (T648, spec/license). Mirrors `scripts/check`.
+      - name: scripts/check-binary-licenses
+        run: python3 scripts/check-binary-licenses
 
       # Broken-link gate for the docs (T002, spec/ci/index.md), pinned and
       # checksummed like cargo-deny in security.yml.

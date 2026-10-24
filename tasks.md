@@ -7437,6 +7437,19 @@ new action.
   to the getting-started install page (see `gui/spec/index.md`'s
   Distribution section) once their first release exists.
 
+- [x] **T648 — Per-framework binary licenses.** Each distributed binary
+  (`vix-tui` and every `gui/` front end) declares in `license`, and ships
+  in its own `LICENSE`, exactly the subset of Vix's five licenses that its
+  framework and every linked crate allow; the library crates keep all
+  five. Found: every binary links Apache-2.0-only crates (and GPUI itself
+  is Apache-2.0 only), so none can be offered under GPL-2.0-only;
+  `vix-slint` is GPL-3.0-only. New `scripts/check-binary-licenses` (SPDX
+  `OR`/`AND`/`WITH` evaluation, self-tested; walks each binary's linked
+  graph across all platforms) runs in `scripts/check` and CI on all three
+  forges. Rule in `spec/license/index.md` ("Binary licenses") and
+  `gui/spec/index.md`. Also fixed the root `LICENSE`'s paths
+  (`docs/license/` → `docs/licenses/`).
+
 - [x] **T647 — Three more GUI front ends: `vix-iced`, `vix-gtk4`,
   `vix-slint`.** Each self-contained (its own copies of `grid`, `render`,
   `key_rules`, `menu_tree`, `font_choice`, `startup`), verified by a real

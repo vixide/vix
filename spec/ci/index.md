@@ -333,6 +333,16 @@ README/CHANGELOG/LICENSE — confirmed with `dist generate --mode ci
 --check` that adding `include` doesn't itself change the generated
 `release.yml`.
 
+## Binary licenses (T648)
+
+`scripts/check-binary-licenses` runs in `scripts/check` and on all three
+forges (GitHub and Codeberg in the lint job beside `check-docs`, GitLab as
+the `binary-licenses` job). It reads `cargo metadata --locked` for the root
+workspace and for `gui/` (no build), walks each binary package's linked
+dependency graph, and fails when a package's declared `license` is not
+exactly the subset of Vix's five licenses that graph permits. The rule and
+the current results are in `spec/license/index.md` ("Binary licenses").
+
 ## Docs links
 
 `lychee` link-checks every `*.md` on every push and pull request, on all three
