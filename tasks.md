@@ -7437,6 +7437,21 @@ new action.
   to the getting-started install page (see `gui/spec/index.md`'s
   Distribution section) once their first release exists.
 
+- [x] **T647 — Three more GUI front ends: `vix-iced`, `vix-gtk4`,
+  `vix-slint`.** Each self-contained (its own copies of `grid`, `render`,
+  `key_rules`, `menu_tree`, `font_choice`, `startup`), verified by a real
+  render on macOS. iced `=0.14.0` (canvas; IME through a zero-size widget;
+  macOS muda menus as a subscription). GTK 4 via gtk4-rs 0.11 on the GTK 4.0
+  API (Cairo + Pango; driven `IMMulticontext`; GIO menu bar and
+  `FileChooserNative` everywhere). Slint `=1.18.1` through
+  `slint-interpreter`, because Slint's generated Rust contains `unsafe`
+  code and the workspace forbids it (per-row diffed models; `MenuBar` on
+  macOS/Windows; no IME); `vix-slint` is `GPL-3.0-only` because Slint is
+  used under the GPLv3. `gui.yml` builds all five (GTK 4 installed on
+  Linux/macOS, excluded on Windows) and screenshots all five on macOS;
+  dist releases `vix-iced` and `vix-slint` too, but not `vix-gtk4` (it
+  needs a GTK runtime; on Windows the DLLs would have to ship with it).
+
 - [x] **T646 — Each GUI is self-contained: no common GUI library.**
   `gui/vix-gui-common` is removed; `vix-gpui` and `vix-egui` each carry
   their own `grid`, `render`, `key_rules`, `menu_tree`, `font_choice` and

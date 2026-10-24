@@ -1,0 +1,77 @@
+[package]
+name = "vix-iced"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Vix desktop GUI on iced: the full Vix App in a native window."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Pinned like the other front ends' toolkits, so they are compared at known
+# versions. `canvas` paints the cell grid; `advanced` measures the font's
+# cell width (`text::Paragraph`) and supplies the widget that asks for IME
+# input; `advanced-shaping` makes cosmic-text fall back per glyph to any
+# installed font (Nerd Font icons, CJK); `tokio` drives `time::every`, the
+# `App::tick` timer.
+iced = { version = "=0.14.0", features = ["canvas", "advanced", "advanced-shaping", "tokio"] }
+# PNG output for the scripted render smoke test.
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-iced` renders the window to a PNG after
+# scripted actions/keystrokes and quits (see gui/spec/index.md).
+screenshot = ["dep:image"]
+
+# iced has no native menu bar; muda supplies one. macOS only: on Windows its
+# setup takes a raw window handle through an `unsafe fn`, which this
+# workspace forbids, and on Linux it needs a GTK event loop.
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = "0.21"
+# The platform file dialog, for the menu's Open with System Dialog….
+rfd = "0.17"
+
+# Release distributions (T645, T647): `brew install vixide/tap/vix-iced`,
+# shell and PowerShell installers, an MSI, and archives, built by dist from the
+# repo-root dist-workspace.toml (which lists this workspace as `cargo:gui`).
+# `publish = false` keeps it off crates.io, so dist must be told to ship it.
+# No musl target: a GUI links the system's windowing, GPU and font libraries.
+# No npm package: a desktop app is not a Node tool.
+[package.metadata.dist]
+dist = true
+formula = "vix-iced"
+installers = ["shell", "powershell", "homebrew", "msi"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+# Linux build-time system libraries (the same set as .github/workflows/gui.yml).
+[package.metadata.dist.dependencies.apt]
+libasound2-dev = "*"
+libfontconfig-dev = "*"
+libfreetype-dev = "*"
+libwayland-dev = "*"
+libx11-xcb-dev = "*"
+libxkbcommon-x11-dev = "*"
+libxcursor-dev = "*"
+libxrandr-dev = "*"
+libxi-dev = "*"
+libvulkan-dev = "*"
+libssl-dev = "*"
+libzstd-dev = "*"
+
+[package.metadata.wix]
+upgrade-guid = "77E7A86B-5823-4BAB-BCE8-40FDB6E6F138"
+path-guid = "407D2DD3-6A53-4557-ADAC-15F4FFE20C13"
+license = false
+eula = false
+
+[lints]
+workspace = true

@@ -152,7 +152,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | `tui/tests/`    | `tui/tests/integration/main.rs` (+ 15 area submodules: `catalog`, `db`, `editing`, `find`, `git`, `keybindings`, `keymaps`, `lsp`, `menu`, `org`, `palette`, `panels`, `scripting`, `workspace`, `common`), `db_smoke.rs`, `lsp_smoke.rs`, `i18n_keys.rs`, `example_scripts.rs`, `snapshots.rs` (+ `snapshots/*.snap`) — terminal-independent tests. |
 | `fuzz/`         | `cargo-fuzz` targets over the pure text/parse cores.                |
 | `tui/`          | The terminal UI: package `vix-tui` (command `vix`, library crate `vix`) — the App shell's `src/`, `tests/`, `benches/`, `examples/`, `themes/`, `man/`, `wix/` (T643). |
-| `gui/`          | The desktop GUIs — GPUI and egui front ends, each a self-contained implementation (no common GUI library) — in their own `[workspace]` so no GUI toolkit enters the terminal build; see `gui/spec/index.md`. |
+| `gui/`          | The desktop GUIs — GPUI, egui, iced, GTK 4 and Slint front ends, each a self-contained implementation (no common GUI library) — in their own `[workspace]` so no GUI toolkit enters the terminal build; see `gui/spec/index.md`. |
 | `tui/benches/`  | Criterion benchmarks (`cargo bench`).                               |
 | `scripts/`      | `check` (the CI-parity gate) and `check-docs` (documentation integrity). |
 | `vixide.github.io/` | The public GitHub Pages site (SvelteKit + Lily Design System), a monorepo subproject — see `spec/monorepo-github-pages/index.md`. Maintained here; published to the read-only sibling repo `git@github.com:vixide/vixide.github.io.git` via `git subtree push`, never edited there directly. |
