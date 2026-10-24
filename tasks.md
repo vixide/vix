@@ -7396,6 +7396,15 @@ new action.
   **Done.** Follow-ons: CI job on all three OSes (GPUI's Linux system deps),
   IME/dead keys via an input handler, runtime menu relabeling on locale
   change, Phase 2 native components.
+- [x] **T642 — GUI: an egui front end beside GPUI, over a shared core.**
+  `gui/` becomes one workspace of three crates: `vix-gui-common` (cell-grid
+  backend, color + span/background planning, keystroke rules, menu tree,
+  font choice, startup, scripted screenshot run), `vix-gpui` (the T641 GUI,
+  renamed, now only GPUI glue) and `vix-egui` (eframe `=0.37.0`: egui
+  painter, Key/Text/IME event split, fonts by family name via `fontique`,
+  macOS native menu via `muda`, `rfd` dialog). Both close through
+  `file.quit`; both render the same scripted screenshot (palette + typing
+  verified identical). Comparison table in `gui/spec/index.md`. **Done.**
 
 ---
 

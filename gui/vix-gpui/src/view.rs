@@ -17,49 +17,16 @@ use ratatui::Terminal;
 use vix::app::{App as VixApp, AppFlags};
 use vix_input::{KeyModifiers, MouseEvent, MouseEventKind};
 
-use crate::grid::GridBackend;
+use vix_gui_common::fonts;
+use vix_gui_common::grid::GridBackend;
+use vix_gui_common::render::Palette;
+
 use crate::keys;
 use crate::menus::{OpenNative, RunAction};
-use crate::paint::{Metrics, paint_grid};
+use crate::paint::{Metrics, paint_grid, rgba};
 
-/// Font size in the window, in logical pixels.
-const FONT_SIZE: f32 = 14.0;
-/// Line height as a multiple of the font size.
-const LINE_HEIGHT: f32 = 1.3;
 /// Wheel pixels per scrolled line, for trackpads reporting pixel deltas.
 const PIXELS_PER_LINE: f32 = 20.0;
-
-/// The monospace family for this platform, unless `VIX_GUI_FONT` names one.
-fn font_family() -> String {
-    std::env::var("VIX_GUI_FONT").unwrap_or_else(|_| {
-        if cfg!(target_os = "macos") {
-            "Menlo".into()
-        } else if cfg!(target_os = "windows") {
-            "Consolas".into()
-        } else {
-            "DejaVu Sans Mono".into()
-        }
-    })
-}
-
-/// Installed families to fall back to for glyphs the primary font lacks.
-///
-/// Vix draws file, panel and status icons from the Nerd Font private-use
-/// range (a terminal user gets them from a Nerd-patched terminal font), and a
-/// stock monospace font has none of them. Prefer the icons-only "Symbols Nerd
-/// Font", then any installed "… Nerd Font Mono" family; with none installed,
-/// icons show the platform's missing-glyph box, as in a non-Nerd terminal.
-fn nerd_fallbacks(installed: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = ["Symbols Nerd Font Mono", "Symbols Nerd Font"]
-        .into_iter()
-        .filter(|f| installed.iter().any(|i| i == f))
-        .map(String::from)
-        .collect();
-    if let Some(mono) = installed.iter().find(|f| f.ends_with("Nerd Font Mono")) {
-        out.push(mono.clone());
-    }
-    out
-}
 
 /// The root view of a Vix window.
 pub struct VixView {
@@ -83,8 +50,20 @@ impl VixView {
     pub fn new(app: VixApp, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
+        // The window's close button runs Vix's own quit flow (which asks about
+        // unsaved changes and saves the session) instead of closing outright.
+        let view = cx.entity().downgrade();
+        window.on_window_should_close(cx, move |_, cx| {
+            let _ = view.update(cx, |v, cx| {
+                v.app.run_action("file.quit");
+                v.after_input(cx);
+            });
+            false
+        });
         #[cfg(feature = "screenshot")]
-        Self::schedule_screenshot(window, cx);
+        if let Some(script) = vix_gui_common::startup::Script::from_env() {
+            Self::schedule_screenshot(script, window, cx);
+        }
         let ticker = cx.spawn(async move |this, cx| {
             loop {
                 let interval = this
@@ -110,50 +89,45 @@ impl VixView {
         }
     }
 
-    /// With `VIX_GUI_SCREENSHOT=<path>` set: wait for startup to settle, run
-    /// the comma-separated action ids in `VIX_GUI_SCREENSHOT_ACTIONS` (to open
-    /// an overlay, say), then type the space-separated GPUI keystrokes in
-    /// `VIX_GUI_SCREENSHOT_KEYS` (`cmd-p`, `h`, `shift-a`, `enter`) through the
-    /// window's real key dispatch, render the window to `<path>` as PNG, and
-    /// quit.
+    /// The scripted render smoke test (`vix_gui_common::startup::Script`):
+    /// keystrokes go through GPUI's real key dispatch.
     #[cfg(feature = "screenshot")]
-    fn schedule_screenshot(window: &Window, cx: &mut Context<Self>) {
-        let Ok(path) = std::env::var("VIX_GUI_SCREENSHOT") else {
-            return;
-        };
-        let actions = std::env::var("VIX_GUI_SCREENSHOT_ACTIONS").unwrap_or_default();
-        let keys = std::env::var("VIX_GUI_SCREENSHOT_KEYS").unwrap_or_default();
+    fn schedule_screenshot(
+        script: vix_gui_common::startup::Script,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(2)).await;
             let _ = this.update(cx, |view, cx| {
-                for id in actions.split(',').filter(|a| !a.is_empty()) {
+                for id in &script.actions {
                     view.app.run_action(id);
                 }
                 view.after_input(cx);
             });
             let _ = cx.update(|window, cx| {
-                for k in keys.split_whitespace() {
+                for k in &script.keys {
                     match gpui_kit::Keystroke::parse(k) {
                         Ok(ks) => {
                             window.dispatch_keystroke(ks, cx);
                         }
-                        Err(e) => eprintln!("vix-gui: bad keystroke {k:?}: {e}"),
+                        Err(e) => eprintln!("vix-gpui: bad keystroke {k:?}: {e}"),
                     }
                 }
             });
             cx.background_executor().timer(Duration::from_secs(1)).await;
             // Draw explicitly: macOS pauses frame callbacks for a window that
             // is not visible (a CI runner, or behind other windows), so the
-            // last presented frame may predate the actions above.
+            // last presented frame may predate the input above.
             let _ = cx.update(|window, cx| {
                 window.draw(cx).clear(cx);
                 match window.render_to_image() {
                     Ok(image) => {
-                        if let Err(e) = image.save(&path) {
-                            eprintln!("vix-gui: could not save {path}: {e}");
+                        if let Err(e) = image.save(&script.path) {
+                            eprintln!("vix-gpui: could not save {}: {e}", script.path);
                         }
                     }
-                    Err(e) => eprintln!("vix-gui: could not render the window: {e}"),
+                    Err(e) => eprintln!("vix-gpui: could not render the window: {e}"),
                 }
                 cx.quit();
             });
@@ -186,33 +160,26 @@ impl VixView {
         if let Some(m) = &self.metrics {
             return m.clone();
         }
-        let family = font_family();
-        let font_size = px(FONT_SIZE);
+        let family = fonts::primary_family();
+        let font_size = px(fonts::FONT_SIZE);
         let ts = window.text_system();
         let font_id = ts.resolve_font(&gpui_kit::font(family.clone()));
-        let fallbacks = nerd_fallbacks(&ts.all_font_names());
+        let fallbacks = fonts::nerd_fallbacks(&ts.all_font_names());
         let cell_width = ts
             .em_advance(font_id, font_size)
-            .unwrap_or(px(FONT_SIZE * 0.6));
-        let cell_height = px((FONT_SIZE * LINE_HEIGHT).round());
+            .unwrap_or(px(fonts::FONT_SIZE * 0.6));
         let dark = matches!(
             window.appearance(),
             WindowAppearance::Dark | WindowAppearance::VibrantDark
         );
-        let (fg, bg) = if dark {
-            (0xd4_d4d4, 0x1e_1e1e)
-        } else {
-            (0x1e_1e1e, 0xff_ffff)
-        };
         let m = Metrics {
             family: family.into(),
             fallbacks: (!fallbacks.is_empty())
                 .then(|| gpui_kit::FontFallbacks::from_fonts(fallbacks)),
             font_size,
             cell_width,
-            cell_height,
-            default_fg: gpui_kit::rgb(fg),
-            default_bg: gpui_kit::rgb(bg),
+            cell_height: px(fonts::cell_height()),
+            palette: Palette::for_appearance(dark),
         };
         self.metrics = Some(m.clone());
         m
@@ -242,11 +209,7 @@ impl VixView {
 
     fn on_key_down(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
-        if let Some(key) = keys::key_event(
-            &ks.key,
-            ks.key_char.as_deref(),
-            keys::modifiers(ks.modifiers),
-        ) {
+        if let Some(key) = keys::key_event(ks) {
             self.app.on_key(key);
             cx.stop_propagation();
             self.after_input(cx);
@@ -366,7 +329,7 @@ impl Render for VixView {
         let buffer = self.term.backend().buffer().clone();
         let cursor = self.term.backend().cursor();
         let canvas_size = Rc::clone(&self.canvas_size);
-        let bg = m.default_bg;
+        let bg = rgba(m.palette.bg);
 
         div()
             .size_full()

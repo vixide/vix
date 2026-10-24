@@ -1,0 +1,17 @@
+[package]
+name = "vix-gui-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Toolkit-agnostic core of the Vix desktop GUIs: the ratatui cell-grid backend, run planning, colors, key-mapping rules, the menu tree, font discovery and startup."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+ratatui = { workspace = true }
+
+[lints]
+workspace = true

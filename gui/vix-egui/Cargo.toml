@@ -1,0 +1,40 @@
+[package]
+name = "vix-egui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Vix desktop GUI on egui (eframe): the full Vix App in a native window."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+vix-gui-common = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Pinned like vix-gpui's toolkit, so the two are compared at known versions.
+eframe = { version = "=0.37.0", features = ["wgpu"] }
+# Font lookup by family name (the same OS font database egui's own system
+# fallback uses), so this build draws the same primary font and Nerd Font
+# icons as vix-gpui.
+fontique = { version = "0.11", default-features = false, features = ["system", "fontconfig-dlopen"] }
+# PNG output for the scripted render smoke test.
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-egui` renders the window to a PNG after
+# scripted actions/keystrokes and quits (see gui/spec/index.md).
+screenshot = ["dep:image"]
+
+# egui has no native menu bar; muda supplies one. macOS only: on Windows its
+# setup takes a raw window handle through an `unsafe fn`, which this
+# workspace forbids, and on Linux it needs a GTK event loop.
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = "0.21"
+# The platform file dialog, for the menu's Open with System Dialog….
+rfd = "0.17"
+
+[lints]
+workspace = true

@@ -137,15 +137,16 @@ the small pure crates (list-state, civil-date, byte-size, textops, capped-stack,
 hex-rgb) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
 
-### Desktop GUI (T641)
+### Desktop GUIs (T641, T642)
 
-`.github/workflows/gui.yml` (GitHub only) builds the GPUI desktop GUI — `gui/`, a separate
-Cargo workspace the main gate never builds — on macOS, Windows and Linux: `cargo fmt --check`,
-pedantic clippy with warnings denied, and the unit tests, all via `--manifest-path
-gui/Cargo.toml --locked`. On macOS it also runs a real render (the `screenshot` feature:
-open the window, type into the command palette, save a PNG) and uploads the image. Linux
-installs GPUI's system libraries first. It is advisory (`continue-on-error`) and path-filtered
-to changes that can affect the GUI. See `gui/spec/index.md`.
+`.github/workflows/gui.yml` (GitHub only) builds the desktop GUIs — `gui/`, a separate Cargo
+workspace the main gate never builds: `vix-gui-common`, `vix-gpui` (GPUI) and `vix-egui`
+(egui) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
+denied over all features, and the unit tests, all via `--manifest-path gui/Cargo.toml
+--locked`. On macOS it also runs each front end's real render (the `screenshot` feature:
+open the window, type into the command palette, save a PNG) and uploads the images. Linux
+installs the windowing/font system libraries first. It is advisory (`continue-on-error`) and
+path-filtered to changes that can affect the GUIs. See `gui/spec/index.md`.
 
 ### Chaos monkey (T575)
 
