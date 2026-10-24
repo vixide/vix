@@ -82,4 +82,18 @@ mod tests {
             assert!((1..=31).contains(&d), "day {d} out of range for day {days}");
         }
     }
+
+    #[test]
+    fn last_day_of_a_400_year_era_round_trips() {
+        // Mutation T606: the `146_096` term only matters on the final day of a
+        // 400-year era (0000-03-01 based), e.g. 2000-02-29 -> 2000-12-31 spans.
+        assert_eq!(days_from_civil(2000, 12, 31), 11_322);
+        assert_eq!(civil_from_days(11_322), (2000, 12, 31));
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+        // Every day across a whole era, so each boundary term is exercised.
+        for z in -146_097..=146_097 {
+            let (y, m, d) = civil_from_days(z);
+            assert_eq!(days_from_civil(y, m, d), z, "day {z} -> {y}-{m}-{d}");
+        }
+    }
 }

@@ -1,0 +1,6 @@
+# cargo-mutants settings (T606). Only list genuinely *equivalent* mutants here
+# -- ones that cannot change observable behavior -- never a mutant a test could kill.
+exclude_re = [
+    # `selected < scroll` -> `<=`: at selected == scroll both branches yield `scroll`.
+    "vix-list-state/src/lib.rs.*replace < with <= in ensure_visible",
+]

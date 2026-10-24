@@ -130,6 +130,13 @@ up to 90 minutes; `GITHUB_TOKEN`-created releases cannot trigger a second workfl
 No installers: dist builds one app per package and every installer assumes one
 binary per target. Not exercised on a runner until the next tag.
 
+### Mutation testing (T606)
+
+`.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly and on demand over
+the small pure crates (list-state, civil-date, byte-size, textops, capped-stack, greedy-wrap,
+hex-rgb) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
+points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
+
 ### Chaos monkey (T575)
 
 `.github/workflows/chaos.yml` (GitHub only) runs `examples/chaos_monkey` nightly and on

@@ -1,0 +1,49 @@
+# Mutation testing of the small pure crates (T606, tasks.md): `cargo mutants`
+# rewrites operators and return values, and every mutant the tests do not catch
+# points at an unasserted behavior. Advisory -- a missed mutant never fails a
+# push, and some are equivalent (no observable difference). The run is scheduled
+# rather than per-push because it rebuilds each crate once per mutant.
+# GitHub only; see spec/ci/index.md.
+
+name: Mutation testing
+
+on:
+  schedule:
+    # Weekly, Sunday 04:15 UTC.
+    - cron: "15 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  mutants:
+    name: pure crates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Advisory: report missed mutants without failing the workflow.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: cargo mutants
+        run: |
+          cargo mutants \
+            -p vix-list-state -p vix-civil-date -p vix-byte-size -p vix-textops \
+            -p vix-capped-stack -p vix-greedy-wrap -p vix-hex-rgb \
+            --no-shuffle
+      - name: upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-out
+          path: mutants.out/

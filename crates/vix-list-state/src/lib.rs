@@ -141,4 +141,35 @@ mod tests {
     fn ensure_visible_clamps_a_zero_height_to_one_row() {
         assert_eq!(ensure_visible(5, 0, 0, 100), 5);
     }
+
+    #[test]
+    fn page_down_adds_the_page_size() {
+        // Mutation T606: `+` -> `*` survived because no test used selected > 1.
+        assert_eq!(page_down(2, 3, 100), 5);
+        assert_eq!(page_down(7, 4, 100), 11);
+        assert_eq!(page_down(2, 0, 100), 3, "page 0 still moves one row");
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_when_selection_sits_just_below_the_window() {
+        // Row 5 is the first row outside a 5-row window starting at 0.
+        assert_eq!(ensure_visible(5, 0, 5, 100), 1);
+        // Row 4 is the last visible row: no scroll.
+        assert_eq!(ensure_visible(4, 0, 5, 100), 0);
+    }
+
+    #[test]
+    fn ensure_visible_keeps_a_selection_on_the_top_edge() {
+        assert_eq!(ensure_visible(3, 4, 5, 100), 3);
+        assert_eq!(ensure_visible(4, 4, 5, 100), 4, "on the top edge: stays");
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_down_from_a_nonzero_offset() {
+        // Mutation T606: `scroll + height` -> `scroll * height` only differs
+        // once scroll > 0 and height > 2.
+        assert_eq!(ensure_visible(8, 3, 5, 100), 4, "first row past the window");
+        assert_eq!(ensure_visible(7, 3, 5, 100), 3, "last visible row: stays");
+        assert_eq!(ensure_visible(9, 3, 5, 100), 5);
+    }
 }
