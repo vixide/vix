@@ -5,10 +5,11 @@
 #
 #   cargo run --release -p vix-gpui [-- FILE…]   # GPUI (GPUI Kit)
 #   cargo run --release -p vix-egui [-- FILE…]   # egui (eframe)
+#   cargo run --release -p vix-iced [-- FILE…]   # iced
 
 [workspace]
 resolver = "3"
-members = ["vix-gpui", "vix-egui"]
+members = ["vix-gpui", "vix-egui", "vix-iced"]
 
 [workspace.package]
 version = "1.7.1"
