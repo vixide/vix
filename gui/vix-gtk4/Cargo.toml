@@ -1,0 +1,37 @@
+[package]
+name = "vix-gtk4"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Vix desktop GUI on GTK 4 (gtk4-rs): the full Vix App in a native window."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Pinned to one minor, like the other front ends' toolkits, so the builds are
+# compared at known versions. No `v4_x` features: only the GTK 4.0 API is
+# used, so it builds against older distributions (Ubuntu 22.04 ships 4.6).
+gtk4 = "0.11.5"
+# Pango text drawn onto the DrawingArea's Cairo context (same gtk-rs release
+# train as gtk4 0.11).
+pangocairo = "0.22.9"
+# PNG output for the scripted render smoke test; the same cairo-rs gtk4
+# uses, with its `png` feature.
+cairo-rs = { version = "0.22", features = ["png"], optional = true }
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-gtk4` renders the window to a PNG after
+# scripted actions/keystrokes and quits (see gui/spec/index.md).
+screenshot = ["dep:cairo-rs"]
+
+[lints]
+workspace = true

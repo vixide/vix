@@ -6,10 +6,11 @@
 #   cargo run --release -p vix-gpui [-- FILE…]   # GPUI (GPUI Kit)
 #   cargo run --release -p vix-egui [-- FILE…]   # egui (eframe)
 #   cargo run --release -p vix-iced [-- FILE…]   # iced
+#   cargo run --release -p vix-gtk4 [-- FILE…]   # GTK 4 (gtk4-rs)
 
 [workspace]
 resolver = "3"
-members = ["vix-gpui", "vix-egui", "vix-iced"]
+members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4"]
 
 [workspace.package]
 version = "1.7.1"
