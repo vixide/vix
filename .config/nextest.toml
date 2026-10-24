@@ -1,0 +1,15 @@
+# cargo-nextest settings (T604). Nextest runs every test in its own process,
+# in parallel across all test binaries, which also ends the shared-global
+# flakes that `cargo test` (one process per binary) is prone to.
+
+[profile.default]
+# One retry absorbs a loaded-runner timeout; a test that only passes on retry
+# is reported as FLAKY, not hidden.
+retries = 1
+# Report anything slower than 30 s, and kill a test stuck for 3 minutes.
+slow-timeout = { period = "30s", terminate-after = 6 }
+fail-fast = false
+
+[profile.ci]
+retries = 2
+failure-output = "immediate-final"

@@ -19,7 +19,16 @@ echo "==> cargo clippy (pedantic, -D warnings)"
 cargo clippy --workspace --all-targets -- -D warnings
 
 echo "==> cargo test"
-cargo test --workspace
+# T604: nextest (VIX_NEXTEST=1) is parallel across binaries and isolates each
+# test in its own process -- a win on Linux CI, but on macOS every one of the
+# ~2000 process spawns is scanned by XProtect/syspolicyd and it measured ~2x
+# *slower* than `cargo test` (2117 s vs 1026 s), so it is opt-in here.
+if [ "${VIX_NEXTEST:-0}" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
+	cargo nextest run --workspace
+	cargo test --workspace --doc # nextest does not run doctests
+else
+	cargo test --workspace
+fi
 
 echo "==> feature combinations (T587)"
 cargo clippy -p vix --no-default-features --all-targets -- -D warnings
