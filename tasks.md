@@ -7437,6 +7437,15 @@ new action.
   to the getting-started install page (see `gui/spec/index.md`'s
   Distribution section) once their first release exists.
 
+- [x] **T649 — Keep `vix-editor-core` semver-compatible after T598.**
+  T598 changed the published `Editor::set_clipboard(&mut self, &str) ->
+  Result<()>` to return `()`, a major-version break that failed the semver
+  gate. The `()`-returning method is now `Editor::copy_to_clipboard` (all
+  callers moved), and `set_clipboard` is back with its 1.x signature as a
+  thin compatibility wrapper (always `Ok`). Follow-up: mark it
+  `#[deprecated]` at the next minor release (a deprecation is itself a
+  minor change), remove it at 2.0.
+
 - [x] **T648 — Per-framework binary licenses.** Each distributed binary
   (`vix-tui` and every `gui/` front end) declares in `license`, and ships
   in its own `LICENSE`, exactly the subset of Vix's five licenses that its

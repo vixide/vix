@@ -507,7 +507,7 @@ impl App {
         } else {
             self.modal_unnamed_kind = kind;
             if let Some(tab) = self.editor.active_tab_mut() {
-                tab.editor.set_clipboard(&text);
+                tab.editor.copy_to_clipboard(&text);
             } else {
                 // No tab to hold the in-memory fallback: use the bare helper.
                 vix_clipboard::set(&text).ok();

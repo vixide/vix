@@ -375,7 +375,7 @@ impl App {
         };
         let lines: Vec<&str> = text.split('\n').collect();
         tab.editor
-            .set_clipboard(&format!("{}\n", lines[start..end].join("\n")));
+            .copy_to_clipboard(&format!("{}\n", lines[start..end].join("\n")));
         if cut {
             let rest: Vec<&str> = lines
                 .iter()
@@ -976,12 +976,12 @@ impl App {
             || target.starts_with("mailto:")
         {
             // T542 (Run H): route through the editor's fallback-aware
-            // `set_clipboard` (real clipboard, else an in-memory register)
+            // `copy_to_clipboard` (real clipboard, else an in-memory register)
             // instead of the bare `vix_clipboard::set` -- the message
             // below used to claim success unconditionally even when
             // nothing was actually stored anywhere.
             if let Some(t) = self.editor.active_tab_mut() {
-                t.editor.set_clipboard(&target);
+                t.editor.copy_to_clipboard(&target);
             }
             self.status = t!("status.org_link_copied", url = target).to_string();
         } else if let Some(id) = target.strip_prefix("id:") {
