@@ -8,7 +8,7 @@
 //! [`HostState`] snapshot). Loading scripts at startup from the real
 //! `Settings::scripts_dir()`/`<App::root>/.vix/scripts`, surfacing commands
 //! in the palette and the Tools → Scripts menu, and applying a handler's
-//! effects back to the real editor are host wiring (`src/app.rs`, built on
+//! effects back to the real editor are host wiring (`tui/src/app.rs`, built on
 //! top of this crate, not inside it) — done as of tasks.md T103. Wiring a
 //! script's `bind_key` requests into the real keymap (`crates/
 //! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.

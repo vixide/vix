@@ -8,7 +8,7 @@ The feature is a thin editor wiring around the `vix-affix` crate, which is
 pure text logic: adding, dropping, or toggling a `prefix`/`suffix` pair around
 a string. `vix-affix` has no menu presence of its own — it does not do
 anything with lines or files, only strings — the surrounding feature lives in
-`App::surround` / `App::toggle_wrap` in `src/app.rs`.
+`App::surround` / `App::toggle_wrap` in `tui/src/app.rs`.
 
 ## How to use
 

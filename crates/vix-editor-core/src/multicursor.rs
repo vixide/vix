@@ -531,7 +531,7 @@ mod caret_tests {
     // `multi_insert`/`multi_delete` were rewritten to (replacing the file's
     // former blanket `#[allow(clippy::cast_possible_wrap,
     // clippy::cast_sign_loss)]`) — no prior test in this crate or
-    // `tests/integration.rs` actually drove either method; the existing
+    // `tui/tests/integration.rs` actually drove either method; the existing
     // multi-caret tests only ever check that carets were *added*.
 
     #[test]

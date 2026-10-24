@@ -1,4 +1,4 @@
-//! The `IntelliJ` IDEA keymap's built-in bindings (`src/app.rs`'s
+//! The `IntelliJ` IDEA keymap's built-in bindings (`tui/src/app.rs`'s
 //! `intellij_key`), converted from that function's former hardcoded
 //! `match`.
 //!

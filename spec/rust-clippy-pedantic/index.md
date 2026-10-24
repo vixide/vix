@@ -10,5 +10,5 @@ pedantic = { level = "warn", priority = -1 }
 ```
 
 and give every crate `[lints] workspace = true`. That covers all targets,
-including `main.rs`, `lib.rs`, `tests/`, `examples/`, `benches/` and `build.rs`,
+including `main.rs`, `lib.rs`, `tests/`, `tui/examples/`, `tui/benches/` and `build.rs`,
 without repeating an attribute in each file (T599).

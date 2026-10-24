@@ -40,7 +40,7 @@ as long as the trailing path segments agree.
   `parse_cobertura` into a `Report`, and `Report::lines_for`/`file_count`.
   No I/O, no `App` dependency; unit tested against both formats plus the
   suffix-matching fallback.
-- The host (`App`, `src/app/coverage.rs`) reads the file (**Tools → Load
+- The host (`App`, `tui/src/app/coverage.rs`) reads the file (**Tools → Load
   Coverage File…**, prompting for a path, pre-filled from the
   `coverage_path` setting when set), keeps the parsed `Report` and a
   visibility flag, and reuses the diff-gutter's existing `(line, Color)`

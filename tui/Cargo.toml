@@ -1,0 +1,429 @@
+# The Vix terminal UI: the `vix` command. The App shell (CLI, event loop,
+# `App` state, rendering, explorer) over the `crates/vix-*` members, which
+# the desktop GUIs in `../gui/` reuse through this package's library.
+[package]
+name = "vix-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Vix IDE: a visual integrated development environment that is TUI, friendly, featureful, high-speed, and high-security."
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["tui", "editor", "ide", "terminal", "developer"]
+categories = ["text-editors", "command-line-utilities"]
+# The library keeps the crate name `vix` (so `use vix::…` is unchanged for
+# tests, examples, benches and the GUIs), and the command is still `vix`.
+[lib]
+name = "vix"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vix"
+path = "src/main.rs"
+
+# Release names stay what they were before the package was renamed: the
+# Homebrew formula and npm package are still `vix` (dist, T643).
+[package.metadata.dist]
+formula = "vix"
+npm-package = "vix"
+# The man page (T307), generated from the real `Cli` definition by
+# `cargo run --example generate_man` and committed at man/vix.1 -- CI
+# regenerates and diffs it on every push, so the committed copy in a tagged
+# release is always current. Bundled into every archive/installer, Windows
+# included, same as the auto-included README/CHANGELOG/LICENSE.
+include = ["man/vix.1"]
+
+[package.metadata.wix]
+upgrade-guid = "FEEBD501-4333-4380-A051-E232AD127DED"
+path-guid = "DB77424D-5C03-419E-810B-73753D47005E"
+license = false
+eula = false
+
+[features]
+# Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
+# so the default is a lean set; opt into more (or all) at build time:
+#   cargo build --release                                  # common grammars
+#   cargo build --release --no-default-features            # no highlighting (smallest)
+#   cargo build --release --no-default-features --features syntax-all
+#
+# The grammars actually live in the vix_editor_core crate; these features simply
+# forward to that crate's identically-named features.
+default = ["syntax-common", "full"]
+syntax-common = ["vix-editor-core/syntax-common"]
+syntax-all = ["vix-editor-core/syntax-all"]
+
+# Capability features (T586, spec/cargo-features). All default-on, so a normal
+# build is unchanged. They start empty (no `dep:` yet) and gate nothing but the
+# runtime filter in `src/capability.rs`; later tasks (T588+) attach crates.
+sql = ["dep:vix-db", "dep:vix-edit-sql"]
+image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
+script = ["dep:vix-script"]
+terminal = ["dep:vix-terminal", "dep:vt100"]
+http = ["dep:vix-http-client"]
+ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
+git = ["tasks", "vix-git/process", "vix-doctor/probe-git"]
+jj = ["tasks"]
+lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
+dap = ["vix-dap/process"]
+# The shell runner: Run Command, project tasks, tests, and everything that
+# funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
+tasks = []
+hunspell = ["vix-spellcheck/hunspell"]
+# Every capability. `default` enables it; tests that assume the whole product
+# (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
+# capability off legitimately has a different menu bar.
+full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "lsp", "dap", "tasks", "hunspell"]
+# The network-facing capabilities together.
+net = ["http", "ai", "sql"]
+
+lang-bash = ["vix-editor-core/lang-bash"]
+lang-c = ["vix-editor-core/lang-c"]
+lang-c-sharp = ["vix-editor-core/lang-c-sharp"]
+lang-cpp = ["vix-editor-core/lang-cpp"]
+lang-css = ["vix-editor-core/lang-css"]
+lang-go = ["vix-editor-core/lang-go"]
+lang-html = ["vix-editor-core/lang-html"]
+lang-java = ["vix-editor-core/lang-java"]
+lang-javascript = ["vix-editor-core/lang-javascript"]
+lang-json = ["vix-editor-core/lang-json"]
+lang-markdown = ["vix-editor-core/lang-markdown"]
+lang-python = ["vix-editor-core/lang-python"]
+lang-rust = ["vix-editor-core/lang-rust"]
+lang-toml = ["vix-editor-core/lang-toml"]
+lang-typescript = ["vix-editor-core/lang-typescript"]
+lang-yaml = ["vix-editor-core/lang-yaml"]
+
+# Every internal `crates/vix-*` member is declared with BOTH a `path` (used for
+# all in-workspace builds) and an explicit `version` (used when publishing to
+# crates.io). The version is the shared `workspace.package.version` above; keep
+# the two in step when bumping — a mismatched `version` here would publish
+# against the wrong dependency range even though local builds resolve by path.
+[dependencies]
+# Bit-set types for `App`'s grouped bool state (T149) — the same crate the
+# other converted structs (`vix-editor-core`, `vix-find-panel`, …) use.
+bitflags = { workspace = true }
+# Shared single-embed i18n backend for the whole workspace (see crates/vix-i18n).
+vix-i18n = { workspace = true }
+# Backend-neutral key/mouse event types; the terminal build converts crossterm's.
+vix-input = { workspace = true, features = ["crossterm"] }
+
+# Extracted concept crates (one per major concept).
+# base16-generated themes for the theme system.
+vix-base16 = { workspace = true }
+# Process-wide serialized access to the system clipboard.
+vix-clipboard = { workspace = true }
+# Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
+vix-clock-panel = { workspace = true }
+# Convert: CSV text into a JSON array of objects.
+vix-convert-from-csv-into-json-tool = { workspace = true }
+# Convert: CSV text into TSV.
+vix-convert-from-csv-into-tsv-tool = { workspace = true }
+# Convert: a JSON array of objects into CSV.
+vix-convert-from-json-into-csv-tool = { workspace = true }
+# Convert: a JSON array of objects into TSV.
+vix-convert-from-json-into-tsv-tool = { workspace = true }
+# Convert: TSV text into CSV.
+vix-convert-from-tsv-into-csv-tool = { workspace = true }
+# Convert: TSV text into a JSON array of objects.
+vix-convert-from-tsv-into-json-tool = { workspace = true }
+# Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
+vix-dap = { path = "../crates/vix-dap", version = "1.7.1", default-features = false }
+# DB workbench: connection management, schema browsing, and SQL queries.
+vix-db = { workspace = true, optional = true }
+# Editor host: the `CodeEditor` widget wrapper and the pane tree.
+vix-editor = { path = "../crates/vix-editor", version = "1.7.1", default-features = false }
+# The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
+# default-features = false leaves grammar selection to the root `lang-*` features.
+vix-editor-core = { path = "../crates/vix-editor-core", version = "1.7.1", default-features = false }
+# LSP client: process management and document sync over `vix_lsp_core`.
+vix-lsp = { path = "../crates/vix-lsp", version = "1.7.1", default-features = false }
+# Top menu bar with keyboard-navigable dropdowns (one level of submenus).
+vix-menu = { workspace = true }
+# User `.rhai` scripting: load, sandbox, and run scripts against the active
+# buffer (see crates/vix-script/spec/index.md). Optional behind the `script`
+# capability feature (T590; spec/cargo-features).
+vix-script = { workspace = true, optional = true }
+# Per-workspace editor session, persisted with `confy`.
+vix-session = { workspace = true }
+# User settings, persisted with `confy`.
+vix-settings = { workspace = true }
+# JSON snippet files: loading, scope resolution, merging, and the picker.
+vix-snippets = { workspace = true }
+# Nerd Font icons, plus a re-export of the `vix_theme_model` theme model.
+vix-theme = { workspace = true }
+# Persistent undo: save a buffer's undo tree to disk and restore it on reopen.
+vix-undo-store = { workspace = true }
+# Display one parsed vCard as a table of labelled fields, plus panel state.
+vix-vcard-panel = { workspace = true }
+# A workspace: a named set of project folders plus the files to reopen.
+vix-workspace = { workspace = true }
+# Search (and replace) across every file under the workspace root, not just
+# the active buffer.
+vix-workspace-search = { workspace = true }
+# A single (action id -> i18n title key) catalog for every `App::run_action`
+# id that has no `vix-menu` item of its own.
+vix-action-catalog = { workspace = true }
+# Add, drop, and toggle a prefix/suffix pair around text.
+vix-affix = { workspace = true }
+# Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
+# plus keyring-backed API-key resolution.
+vix-ai-core = { workspace = true, optional = true }
+# Reviewable diff for AI text transforms (Annotate / Improve).
+vix-ai-diff = { workspace = true, optional = true }
+# AI chat panel: a persistent conversation surface for the configured assistant.
+vix-ai-panel = { workspace = true, optional = true }
+# Align lines on a delimiter (`=`, `:`, `,`, `|`, …).
+vix-align = { workspace = true }
+# ASCII panel (Tools menu): the ASCII reference table + row-selection state.
+vix-ascii-character-picker = { workspace = true }
+# Base64 encode and decode (Tools → Convert → Base64).
+vix-base64-tool = { workspace = true }
+# Convert an integer between decimal, hexadecimal, binary, and octal.
+vix-base-tool = { workspace = true }
+# Format a byte count as a human-readable size (`16.0 KiB`).
+vix-byte-size = { workspace = true }
+# Bottom dock: a scrollable line buffer for logs, output, and data views.
+vix-bottom-dock = { workspace = true }
+# Evaluate a typed formula, plus the Calculator dialog's editing state.
+vix-calculator-tool = { workspace = true }
+# Calendar box: the navigable month grid.
+vix-calendar-panel = { workspace = true }
+# Text case transforms applied to the editor selection (Edit → Case).
+vix-case = { workspace = true }
+# Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
+vix-checksum-tool = { workspace = true }
+# Parse and convert colors between HEX, RGB, and HSL.
+vix-color-converter-tool = { workspace = true }
+# The interactive Column View overlay (Org C-c C-x C-c): a live,
+# write-through spreadsheet view onto the outline.
+vix-column-view = { workspace = true }
+# Parse Git merge-conflict markers and resolve the conflict under the cursor.
+vix-conflict-tool = { workspace = true }
+# Browse a directory of vCard files as a table of contacts.
+vix-contact-panel = { workspace = true }
+# Convert: HTML into Markdown.
+vix-convert-from-html-into-markdown-tool = { workspace = true }
+# Convert: JSON into TOML.
+vix-convert-from-json-into-toml-tool = { workspace = true }
+# Convert: JSON into YAML.
+vix-convert-from-json-into-yaml-tool = { workspace = true }
+# Convert: Markdown into HTML.
+vix-convert-from-markdown-into-html-tool = { workspace = true }
+# Convert: TOML into JSON.
+vix-convert-from-toml-into-json-tool = { workspace = true }
+# Convert: YAML into JSON.
+vix-convert-from-yaml-into-json-tool = { workspace = true }
+# Shared CSV/TSV/JSON conversion helpers for the Tools → Convert tools.
+vix-convert-tabular = { workspace = true }
+# LCOV and Cobertura XML coverage report parsing for the coverage gutter.
+vix-coverage = { workspace = true }
+# Read-only side-by-side comparison: a unified diff between two texts.
+vix-diff-view = { workspace = true }
+# Environment checks for `vix --doctor` and Help → Run Diagnostics.
+vix-doctor = { path = "../crates/vix-doctor", version = "1.7.1", default-features = false }
+# The byte editor: a hex/ASCII view for editing raw file bytes.
+vix-edit-bytes = { workspace = true }
+# The outline editor: hierarchical hide/show and restructuring for prose text.
+vix-edit-outline = { workspace = true }
+# The SQL edit surface: a statement-oriented view of a `.sql` buffer.
+vix-edit-sql = { workspace = true, optional = true }
+# The table editor: a spreadsheet-like grid for viewing and editing
+# delimited data (CSV/TSV) as rows and columns.
+vix-edit-table = { workspace = true }
+# The structured-value editor: a foldable tree for JSON and YAML.
+vix-edit-value = { workspace = true }
+# Minimal EditorConfig support: resolve the indent settings for a file.
+vix-editorconfig = { workspace = true }
+# A pragmatic subset of Emmet abbreviation expansion.
+vix-emmet = { workspace = true }
+# File browser (File → Open…): walkdir-backed listing with fuzzy search, sort, and filters.
+vix-file-browser-panel = { workspace = true }
+# Information about the active editor file, plus the panel's row-selection state.
+vix-file-information-panel = { workspace = true }
+# Filesystem helpers for the explorer's copy / cut / paste / delete.
+vix-fileops = { workspace = true }
+# Find / find-and-replace for the editor.
+vix-find-panel = { workspace = true }
+# Reformat the selection (or buffer) within one data format: pretty-print or minify.
+vix-format-tool = { workspace = true }
+# Git integration: status/diff/staging via the git CLI.
+vix-git = { path = "../crates/vix-git", version = "1.7.1", default-features = false }
+# HTML Characters panel (Tools menu): named-character table + picker state.
+vix-html-character-picker = { workspace = true }
+# A minimal HTTP client driven by a `.http`-style buffer.
+vix-http-client = { workspace = true, optional = true }
+# Decode a JSON Web Token's header and payload into readable JSON.
+vix-jwt-tool = { workspace = true }
+# Data and table state for the keybinding editor overlay (rebind/reset).
+vix-keybinding-editor-panel = { workspace = true }
+# Data for the keyboard-shortcut help overlay.
+vix-keyboard-shortcut-panel = { workspace = true }
+# An exhaustive, queryable registry of every built-in keybinding, and the
+# user/script override layer built on it.
+vix-keybindings = { workspace = true }
+# The available keyboard navigation styles ("keymaps"); the View → Keymap submenu.
+vix-keymap-model = { workspace = true }
+# Left dock: the file explorer's lazily-expanded directory tree + selection.
+vix-left-dock = { workspace = true }
+# Shared selected/scroll arithmetic for a scrollable single-selection list.
+vix-list-state = { workspace = true }
+# Available UI languages for Vix; the View → Locale submenu.
+vix-locale-model = { workspace = true }
+# Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum).
+vix-lorem = { workspace = true }
+# A pure LSP client core: JSON-RPC framing, message builders, parsers, positions.
+vix-lsp-core = { workspace = true }
+# Persisted keyboard macros: named recordings of editor key events.
+vix-macros = { workspace = true }
+# Render Markdown to formatted plain-text lines for a read-only preview pane.
+vix-markdown-preview = { workspace = true }
+# The IANA-style media-type (MIME) table and the picker's filter + selection.
+vix-media-type = { workspace = true }
+# A real modal-editing engine for the Vi/Spacemacs keymaps (design-only for now).
+vix-modal = { workspace = true }
+# A curated set of Nerd Font glyphs and the character-picker grid state.
+vix-nerd-font-picker = { workspace = true }
+# Basic Org-mode operations: headline structure editing and lightweight export.
+vix-org = { workspace = true }
+# Org-capture: template-driven capture with placeholders and targets.
+vix-org-capture = { workspace = true }
+# Org-contacts: contact management over Org files.
+vix-org-contacts = { workspace = true }
+# Org-mode pipe-table editing: parsing, alignment, structural edits, and TBLFM formulas.
+vix-org-table = { workspace = true }
+# The code-outline list (symbol kind + name + line) and the panel's selection.
+vix-outline-panel = { workspace = true }
+# Command palette (Ctrl+P) with prefix-driven modes.
+vix-palette = { workspace = true }
+# A Pomodoro work/break countdown as a small state machine.
+vix-pomodoro-tool = { workspace = true }
+# QR code generation (Tools → QR Code).
+vix-qr-tool = { workspace = true }
+# A live regular-expression tester, plus the dialog's editing state.
+vix-regex-tool = { workspace = true }
+# Right dock: a message drawer of advice and notifications + selection.
+vix-right-dock = { workspace = true }
+# Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
+vix-roam = { workspace = true }
+# Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the
+# active custom theme into one file, and restore them from it.
+vix-settings-bundle = { workspace = true }
+# A small library of reusable text snippets, plus the picker's selection state.
+vix-snippet-tool = { workspace = true }
+# Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
+vix-spellcheck = { path = "../crates/vix-spellcheck", version = "1.7.1", default-features = false }
+# Formatting for the bottom status bar's two segments.
+vix-status-bar-panel = { workspace = true }
+# Structural search & replace: metavariable-hole patterns matched token-by-token.
+vix-structural-replace = { workspace = true }
+# A read-only snapshot of host system information, plus the panel's selection.
+vix-system-information-panel = { workspace = true }
+# Matching HTML/XML tag navigation.
+vix-tags = { workspace = true }
+# Project task running: tasks.toml, per-project-type lifecycle commands, discovered tasks, subprojects, and test-at-point.
+vix-tasks = { workspace = true }
+# Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
+vix-terminal = { workspace = true, optional = true }
+# Parse test-runner output into a pass/fail list with jump-to-failure.
+vix-test-runner = { workspace = true }
+# Statistics about a span of text, plus the panel's row-selection state.
+vix-text-information-panel = { workspace = true }
+# Small pure text transforms used by Edit/Tools actions.
+vix-textops = { workspace = true }
+# List a theme's color slots and edit each one, live-previewed as you go.
+vix-theme-editor-panel = { workspace = true }
+# The Vix theme model: the JSON theme model, ratatui styles, and theme loading.
+vix-theme-model = { workspace = true }
+# Time-zone modeling: the IANA canonical zone table + the app-wide active zone.
+vix-time-zone-model = { workspace = true }
+# An interactive, in-editor tutorial: chapter metadata, bundled lesson text, progress checks.
+vix-tutor = { workspace = true }
+# Convert a number between physical units, plus the Unit Converter dialog's state.
+vix-unit-converter-tool = { workspace = true }
+# URL percent-encode and decode (Tools → Convert → URL).
+vix-url-tool = { workspace = true }
+# Generate UUIDs of every version, v1 through v8.
+vix-uuid-tool = { workspace = true }
+# A small, dependency-free vCard 4.0 (RFC 6350) parser.
+vix-vcard-parser = { workspace = true }
+# The first-run welcome screen's scroll state.
+vix-welcome-panel = { workspace = true }
+# Live workspace metrics for the dashboard overlay (Tools → Workspace Dashboard).
+vix-workspace-dashboard-panel = { workspace = true }
+# The X11 color table and the picker's row-selection + scroll state.
+vix-x11-color-picker = { workspace = true }
+# Generate a secure random ZID: a lowercase hexadecimal identifier.
+vix-zid-tool = { workspace = true }
+
+# Terminal UI core. The whole widget ecosystem must agree on this version.
+ratatui = { workspace = true }
+# Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
+crossterm = { workspace = true }
+# Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
+ignore = { workspace = true }
+# Regular expressions for find/replace.
+regex = { workspace = true }
+# Settings serialization (confy handles the TOML; serde derives the schema).
+serde = { workspace = true }
+# JSON for the LSP client's JSON-RPC traffic.
+serde_json = { workspace = true }
+# Image preview. Default features pull `chafa-dyn`, which dynamically links the
+# native libchafa via pkg-config and so blocks portable cross-compilation; drop
+# it and keep the built-in protocols (Sixel/Kitty/iTerm2/Halfblocks).
+ratatui-image = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+confy = { workspace = true }
+clap = { workspace = true }
+rust-i18n = { workspace = true }
+
+# Other direct dependencies of the App shell.
+jiff = { workspace = true }
+toml = { workspace = true }
+include_dir = { workspace = true }
+serde_norway = { workspace = true }
+nix = { workspace = true }
+# `vt100` parses the integrated terminal's escape sequences into a screen grid.
+vt100 = { workspace = true, optional = true }
+ropey = { workspace = true }
+
+[dev-dependencies]
+clap_mangen = { workspace = true }
+criterion = { workspace = true }
+insta = { workspace = true }
+
+# Benchmarks run with Criterion's own harness, not libtest's.
+[[bench]]
+name = "text_ops"
+harness = false
+
+[[bench]]
+name = "editor_ops"
+harness = false
+
+[[bench]]
+name = "search_and_palette"
+harness = false
+
+[[bench]]
+name = "startup"
+harness = false
+
+[[bench]]
+name = "frame_ops"
+harness = false
+
+[[bench]]
+name = "gutter_diff"
+harness = false
+
+# Faster allocator for the MUSL static target (glibc's allocator is fine, but
+# musl's is slow). Used as the global allocator in lib.rs/main.rs under the same
+# cfg, so it is only pulled in — and its C code only compiled — for musl builds.
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { workspace = true }
+
+[lints]
+workspace = true

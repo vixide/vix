@@ -177,7 +177,7 @@ are substituted for real; the field about to be answered is marked
 to keep the current field's line in view for templates with many fields (the
 org-contacts template's 17 is the extreme case). Built by
 `vix_org_capture::preview` (pure, unit-tested) and `App::capture_preview`;
-rendered by `draw_prompt_preview` (`src/ui.rs`).
+rendered by `draw_prompt_preview` (`tui/src/ui.rs`).
 
 ### Priority
 

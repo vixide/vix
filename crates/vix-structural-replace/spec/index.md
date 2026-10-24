@@ -62,7 +62,7 @@ this optimizes for.
   `Pattern::compile` parses a pattern string; `Pattern::find_all`/
   `find_from` search a source string; `render_replacement` substitutes a
   match's captures into a replacement template.
-- The host (`App`, `src/app.rs`) provides two scopes, both reached from
+- The host (`App`, `tui/src/app.rs`) provides two scopes, both reached from
   the same two-prompt sequence (pattern, then replacement):
   - **Buffer** (**Edit → Structural Replace…**, `edit.structural_replace`)
     — an interactive step-through mirroring `QueryReplace`'s own

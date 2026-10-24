@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 /// `(file, why it may spawn, what gates it out of the minimal build)`.
 const ALLOWED: &[(&str, &str, &str)] = &[
     (
-        "src/app.rs",
+        "tui/src/app.rs",
         "shell/argv runner for tasks, git and jj",
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
@@ -86,9 +86,12 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 #[test]
 fn only_allowlisted_files_can_start_a_child_process() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Paths are repository-relative (this test's package lives in `tui/`).
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     let mut files = Vec::new();
-    rust_files(&root.join("src"), &mut files);
+    rust_files(&root.join("tui/src"), &mut files);
     for e in std::fs::read_dir(root.join("crates")).unwrap().flatten() {
         rust_files(&e.path().join("src"), &mut files);
     }
@@ -111,13 +114,16 @@ fn only_allowlisted_files_can_start_a_child_process() {
     assert!(
         offenders.is_empty(),
         "new child-process spawn site(s): {offenders:?}. Gate each behind a capability \
-         feature, then add it to ALLOWED in tests/spawn_sites.rs with the reason."
+         feature, then add it to ALLOWED in tui/tests/spawn_sites.rs with the reason."
     );
 }
 
 #[test]
 fn every_allowlisted_file_still_spawns() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Paths are repository-relative (this test's package lives in `tui/`).
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     for (rel, _, _) in ALLOWED {
         let text = std::fs::read_to_string(root.join(rel))
             .unwrap_or_else(|_| panic!("{rel} is allowlisted but missing"));

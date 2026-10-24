@@ -19,7 +19,7 @@ that every chapter's tests now guard against.
 Two entry points, both calling the same host method (`App::open_tutor`,
 T402):
 
-- `vix --tutor` (a new `Cli` flag, `src/cli.rs`) — opens straight into the
+- `vix --tutor` (a new `Cli` flag, `tui/src/cli.rs`) — opens straight into the
   tutorial on startup, in place of whatever files were also passed.
 - **Help → Tutorial** (a new `HELP` leaf in `crates/vix-menu/src/lib.rs`,
   action id `help.tutorial`) — opens or resumes it from a running session.
@@ -38,7 +38,7 @@ an ordinary `Tab`, so leaving is just closing it like any other file.
 chapter's body into a fresh temp directory — `vix-tutor-<pid>-<n>`, `<n>`
 a per-session counter on top of the `vix-<feature>-<pid>` convention every
 other temp-dir feature already uses (session/roam/contacts/… tests in
-`src/app.rs`): `<pid>` alone isn't enough here, since `cargo test` runs
+`tui/src/app.rs`): `<pid>` alone isn't enough here, since `cargo test` runs
 every test as a thread *within one process* (identical `std::process::id()`
 for all of them), and every `open_tutor` call used the same fixed tag —
 found via a real, reproducible test failure, not a hypothetical. One file
@@ -131,7 +131,7 @@ entirely, with an incomplete chapter; this is a tutorial, not a gate.
 ## Navigation
 
 Three actions, `App::run_action` arms in a new `tutor.rs` slice under
-`src/app/` (the one-file-per-App-concern convention `src/app/*.rs` already
+`tui/src/app/` (the one-file-per-App-concern convention `tui/src/app/*.rs` already
 follows):
 
 | Action id | Effect |
@@ -198,7 +198,7 @@ Not binding — T402's call — but a starting shape:
   `include_str!` lookup).
 - `check.rs` — `Progress`, `progress()`, and one bespoke check function per
   chapter.
-- `lessons/` — the bundled starter text, one file per chapter, not `src/`
+- `lessons/` — the bundled starter text, one file per chapter, not `tui/src/`
   (content, not code).
 - `lib.rs` — the public surface the App shell's new `tutor.rs` slice calls.
 

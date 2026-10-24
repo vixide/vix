@@ -34,11 +34,11 @@ In Workspace…**.
 
 This crate holds only the panel's *state* — pure data plus the small pieces
 of logic that don't touch the filesystem or the editor (field cycling, the
-compiled pattern/filter, hit-list navigation). `App` (`src/app.rs`) owns the
+compiled pattern/filter, hit-list navigation). `App` (`tui/src/app.rs`) owns the
 open buffers, so it drives the actual scan: reading each candidate file
 (open buffers in their current, possibly-unsaved state; everything else from
 disk), matching `pattern()` against each line, and filtering paths through
-`path_filter()`. Rendering lives in `src/ui.rs`.
+`path_filter()`. Rendering lives in `tui/src/ui.rs`.
 
 ## Editable search results ("wgrep"-style, T211)
 

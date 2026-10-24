@@ -117,7 +117,7 @@ it is what populates **File → Open Recent…**.
 
 ## The themes directory
 
-Alongside `config.toml`, Vix looks for a `themes/` directory in the same config
+Alongside `config.toml`, Vix looks for a `tui/themes/` directory in the same config
 folder (e.g. `~/.config/vix/themes/`), exposed via `Settings::themes_dir()`.
 Drop custom JSON theme files there, then set `theme` to the theme's name to use
 it, in addition to the built-in `"dark"` and `"light"` themes.
@@ -201,7 +201,7 @@ and its default), its 11 `#[serde(flatten)]`'d bool-group sub-structs (T149:
 (`15`), and the `load`/`save`/`config_path`/`themes_dir`/`indent_string`
 helpers, all backed by `confy` under the app name `vix` and config stem
 `config`.
-`src/main.rs` calls `Settings::load()` at startup. In `src/app.rs`,
+`tui/src/main.rs` calls `Settings::load()` at startup. In `tui/src/app.rs`,
 `open_settings_file` handles the `vix.settings` menu action (save-then-open), and
 `on_exit` persists settings (and shuts down LSP) when Vix quits.
 

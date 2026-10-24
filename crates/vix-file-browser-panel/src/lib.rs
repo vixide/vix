@@ -596,7 +596,7 @@ mod tests {
             file("README.md", 1, 1, 1),
         ]);
         p.query = "main".to_string();
-        // "main" is a subsequence of src/main.rs only.
+        // "main" is a subsequence of tui/src/main.rs only.
         assert_eq!(rels(&p), ["src/main.rs"]);
         // A looser query matches more, ranked best-first (contiguous run wins).
         p.query = "rob".to_string();

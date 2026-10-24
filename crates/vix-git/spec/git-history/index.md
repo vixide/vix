@@ -47,7 +47,7 @@ without an active file.
   same `valid_ref_name` + `--end-of-options` defense `checkout` already
   uses (rejects anything that could be misread as a flag before it ever
   reaches the `git` process).
-- The host (`App`, `src/app/git.rs`) builds the panel, dispatches its keys/
+- The host (`App`, `tui/src/app/git.rs`) builds the panel, dispatches its keys/
   clicks, and opens the read-only result tabs via a small shared helper
   (`App::open_readonly_text_tab`) — a synthetic `path` (never a real file)
   gives the tab an arbitrary title through `Tab::title()`'s normal

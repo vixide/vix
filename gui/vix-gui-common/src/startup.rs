@@ -1,5 +1,5 @@
 //! Startup shared by every GUI front end — the same sequence as the terminal
-//! binary (`src/main.rs`), minus the terminal: the real system clipboard,
+//! binary (`tui/src/main.rs`), minus the terminal: the real system clipboard,
 //! settings (a load failure is reported once the App exists), the locale
 //! (`--locale` wins, unsaved), `theme = "auto"` from the OS appearance, then
 //! `App::new` and `App::start`.

@@ -152,7 +152,7 @@ vix --locale fr             # start in French this run
 vix -l ja file.rs           # start in Japanese, open file.rs
 ```
 
-At startup `src/main.rs` resolves the effective locale as the CLI flag if given,
+At startup `tui/src/main.rs` resolves the effective locale as the CLI flag if given,
 otherwise the persisted `settings.locale`, and applies it with
 `rust_i18n::set_locale` before the UI is built (so even the first-run welcome
 screen appears in the right language). The flag is **not written back** to
@@ -215,11 +215,11 @@ text rather than an i18n key (the View → Theme/Locale/Time Zone submenus).
   struct (`code` + `name` endonym), the `LOCALES` array in chooser order (English
   first as the fallback, constructed languages last), and the `by_code` lookup.
   It has no UI dependencies. See `crates/vix-locale-model/src/lib.rs`.
-- The **host** (`src/app.rs`) builds the View → Locale submenu from `LOCALES` and
+- The **host** (`tui/src/app.rs`) builds the View → Locale submenu from `LOCALES` and
   applies a chosen language by code (`set_locale_by_code`): it calls
   `rust_i18n::set_locale`, persists to `settings.locale`, and confirms via
   `status.locale`. Each submenu item dispatches `view.locale:<code>`.
-- The **binary** (`src/main.rs`) parses `--locale`, resolves it against
+- The **binary** (`tui/src/main.rs`) parses `--locale`, resolves it against
   `settings.locale`, and calls `rust_i18n::set_locale` at startup.
 - The **bundle** lives in `locales/*.yml` (one file per key namespace, T148),
   merged and split per-locale once by `crates/vix-i18n/build.rs`, loaded
@@ -234,7 +234,7 @@ gets away with `item(s)`, but Arabic (six number categories), Russian and Polish
 each) read wrongly at most counts when the number precedes the noun (`%{n} wierszy` is
 right for 5, wrong for 1 and 2). So in `ar`, `ru` and `pl` a counted message is phrased
 **count-invariantly**: a label, a colon, the number (`Wiersze: %{n}`, `Строк: %{count}`,
-`الصفوف: %{count}`). `tests/i18n_keys.rs` keeps the list of counted keys
+`الصفوف: %{count}`). `tui/tests/i18n_keys.rs` keeps the list of counted keys
 (`COUNTED_KEYS`) and fails if one of those three locales puts the count directly before a
 noun (an abbreviation like `elem.` or a one/two-letter particle is fine). Add a new counted
 key to that list. Welsh, Irish and Scottish Gaelic have several plural categories too; they

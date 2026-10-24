@@ -101,7 +101,7 @@ The overlay's screens and keys:
 Pure logic (statement splitting, highlighting, completion, formatting, the
 tree, the grid) is unit-tested in the submodules; `db::session` is tested
 against in-memory `SQLite` (including transactions spanning statements), and
-`tests/db_smoke.rs` drives the whole workbench end-to-end on `SQLite` files —
+`tui/tests/db_smoke.rs` drives the whole workbench end-to-end on `SQLite` files —
 fully self-contained, no external database or CLI required.
 
 ## pgsavvy-inspired additions
@@ -193,7 +193,7 @@ module (`instruction` / `context` / `optimize_context` / `extract_sql`). The
 `Running`) and hands the host an `AiRequest` (command-line prompt plus stdin
 context) through `take_ai_request`, mirroring the `take_dirty_*` stores; the
 host spawns it as `AiDest::Db` and routes the reply back through
-`apply_ai_sql`. `tests/db_smoke.rs` drives the whole Ask → brief → reply →
+`apply_ai_sql`. `tui/tests/db_smoke.rs` drives the whole Ask → brief → reply →
 editor flow on a `SQLite` file and asserts that seeded row data never reaches
 the brief.
 

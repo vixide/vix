@@ -63,13 +63,13 @@ jobs:
         run: |
           cargo run --example list_commands -- --write >/dev/null
           git diff --exit-code -- docs/reference/
-      # T307 (tasks.md): man/vix.1 is generated from the real Cli definition
-      # (vix::cli::Cli, shared with src/main.rs) -- regenerate and diff, same
+      # T307 (tasks.md): tui/man/vix.1 is generated from the real Cli definition
+      # (vix::cli::Cli, shared with tui/src/main.rs) -- regenerate and diff, same
       # pattern as docs/reference/ above.
       - name: man page current? (T307)
         run: |
           cargo run --example generate_man >/dev/null
-          git diff --exit-code -- man/
+          git diff --exit-code -- tui/man/
       # The specs are living documentation, so they are gated like code: broken
       # links, a crate with no spec, a crate missing from the crate map, or a
       # README.md that has drifted from its index.md twin all fail here.
@@ -116,11 +116,11 @@ jobs:
       - name: install cargo-hack
         run: cargo install cargo-hack --locked
       - name: clippy with no default features
-        run: cargo clippy -p vix --no-default-features --all-targets -- -D warnings
+        run: cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
       - name: test with no default features
-        run: cargo test -p vix --no-default-features
+        run: cargo test -p vix-tui --no-default-features
       - name: check each feature
-        run: cargo hack check -p vix --each-feature --no-dev-deps
+        run: cargo hack check -p vix-tui --each-feature --no-dev-deps
 
   # T602: every crate is published to crates.io in lockstep, so a breaking
   # public-API change must come with a major version bump. Compares each
@@ -142,8 +142,8 @@ jobs:
         run: cargo install cargo-semver-checks --version 0.51.0 --locked
       - name: cargo semver-checks
         # A crate with no crates.io release yet has no baseline to compare
-        # against; exclude it until its first publish (vix-input: T640).
-        run: cargo semver-checks --workspace --exclude vix-input
+        # against; exclude it until its first publish (vix-input: T640; vix-tui: T643, renamed from vix).
+        run: cargo semver-checks --workspace --exclude vix-input --exclude vix-tui
 
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
@@ -255,7 +255,7 @@ jobs:
           cargo run --example headless_edit >/dev/null
           cargo run --example render_frame -- index.md >/dev/null
           cargo run --example textops_pipeline -- index.md >/dev/null
-          cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+          cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
 
   # The toolchain floor promised by `rust-version` in Cargo.toml. A `check` is
   # enough: if the crate graph compiles on the floor, the claim holds.
@@ -386,7 +386,7 @@ jobs:
               });
             }
 
-  # mdBook site (T301, tasks.md): builds docs/ (via book.toml's `src`) into
+  # mdBook site (T301, tasks.md): builds docs/ (via book.toml's `tui/src`) into
   # a static site and deploys it to GitHub Pages. GitHub-only — GitLab Pages
   # and Codeberg Pages are separate products with their own config, and this
   # repo doesn't publish through them, so there is no GitLab/Codeberg

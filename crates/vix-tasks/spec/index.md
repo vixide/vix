@@ -184,7 +184,7 @@ implemented: Java, Erlang, F#.
 history/test-at-point policy, over plain data (file contents, directory
 listings, cursor positions) with no filesystem or process I/O of its own — so
 every module is unit-tested without a live editor or project. The host
-(`src/app.rs`) does all I/O, prompting, running, and persistence: reading
+(`tui/src/app.rs`) does all I/O, prompting, running, and persistence: reading
 manifests and `.vix/project.toml`, the `ProjectSlot`-addressed confirm/edit
 prompt, `resolve_lifecycle`/`discovered_tasks_at`, and the session-store
 read/write pair described above. The `vix-menu` crate owns the **Project**

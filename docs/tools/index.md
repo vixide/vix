@@ -33,7 +33,7 @@ scheme, `base00`–`base0F`: `base00`–`base07` running dark to light for
 backgrounds and foregrounds, `base08`–`base0F` as accents), turned into full
 Vix themes and merged into the bundled set. They show up under **View →
 Theme**, named `Base16 …` to avoid colliding with the hand-authored JSON
-themes in `themes/`.
+themes in `tui/themes/`.
 
 See `crates/vix-base16/spec/index.md`.
 

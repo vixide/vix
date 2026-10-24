@@ -15,13 +15,13 @@ shipping it.
 
 A keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE") built
 on `ratatui`, organized as a **Cargo workspace** (edition 2024): a thin App
-shell (root package `vix`, `src/`) over ~112 focused `vix-*` member crates
-under `crates/`. `src/lib.rs` re-exports each member crate under a short
+shell (package `vix-tui` in `tui/`, `tui/src/`) over ~112 focused `vix-*` member crates
+under `crates/`. `tui/src/lib.rs` re-exports each member crate under a short
 module name (`pub use vix_git as git;`), so `crate::git`, `crate::menu`, etc.
 still name them. The App shell itself is two large files with submodules:
-`src/app.rs` delegates most of its logic to `src/app/*.rs` (`keymap.rs`,
+`tui/src/app.rs` delegates most of its logic to `tui/src/app/*.rs` (`keymap.rs`,
 `git.rs`, `org.rs`, `lsp_dap.rs`, and others — one per feature area), and
-`src/ui.rs` delegates most of its drawing to `src/ui/*.rs` (`choosers.rs`,
+`tui/src/ui.rs` delegates most of its drawing to `tui/src/ui/*.rs` (`choosers.rs`,
 `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, and others). Adding to an
 existing feature area usually means editing its submodule, not the root
 file.
@@ -38,15 +38,15 @@ leave the drift for later.
 1. **Read the owning spec first.** Update it as part of this change if
    intent is changing, not after.
 2. **Implement in the owning crate.** Keep editing/state logic out of
-   `src/ui.rs` (rendering only lives there). One action id, one
+   `tui/src/ui.rs` (rendering only lives there). One action id, one
    `App::run_action` arm — never a second code path for the same command.
 3. **Internationalize new user-facing text.** Add the key to the right
    `locales/*.yml` namespace file across every language it already carries,
    render with `t!`. Never hard-code a display string.
 4. **Document every new public item.** `#![deny(missing_docs)]` is on at
    every crate root; an undocumented `pub fn`/`struct`/field fails the build.
-5. **Add/extend tests** — `tests/integration/main.rs` (split by topic into
-   `tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
+5. **Add/extend tests** — `tui/tests/integration/main.rs` (split by topic into
+   `tui/tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
    tests. Prefer terminal-independent tests (build an `App`, feed
    `KeyEvent`s, assert on state); render checks use a sized `TestBackend`.
    Never assert on translated text (locale is process-global and can race) —
@@ -115,19 +115,19 @@ leave the drift for later.
 
 | You want to… | Go to… |
 | --- | --- |
-| Add/route a command | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
-| Change rendering | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
+| Add/route a command | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
+| Change rendering | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
 | Add/translate UI text | `locales/*.yml` (+ `t!` at the call site) |
 | Add a setting | `crates/vix-settings/` |
 | Change the editor widget | `crates/vix-editor-core/` |
 | Change theme colors/model | `crates/vix-theme/`, `crates/vix-theme-model/` |
 | Change available UI languages | `crates/vix-locale-model/`, `crates/vix-i18n/` |
-| Change keyboard navigation styles | `crates/vix-keymap-model/` + dispatch in `src/app/keymap.rs` |
-| Change git status/diff/staging | `crates/vix-git/` + wiring in `src/app/git.rs`/`src/ui/choosers.rs` |
+| Change keyboard navigation styles | `crates/vix-keymap-model/` + dispatch in `tui/src/app/keymap.rs` |
+| Change git status/diff/staging | `crates/vix-git/` + wiring in `tui/src/app/git.rs`/`tui/src/ui/choosers.rs` |
 | Change find/replace | `crates/vix-find-panel/` |
 | Change LSP support | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
 | Change the database workbench | `crates/vix-db/` |
-| Add a benchmark or fuzz target | `benches/`, `fuzz/fuzz_targets/` |
+| Add a benchmark or fuzz target | `tui/benches/`, `fuzz/fuzz_targets/` |
 
 See `agents/share/crate-map.md` for the full map and `agents/share/glossary.md`
 for shared terms; `agents/conventions.md` and `agents/workflow.md` go deeper

@@ -51,9 +51,12 @@ fn main() {
     }
 }
 
-/// This example's own package is the workspace root package.
+/// The repository root (this example's package lives in `tui/`).
 fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 fn print_commands() {

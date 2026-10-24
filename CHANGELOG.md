@@ -12,6 +12,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The terminal UI is now the `vix-tui` package in `tui/`** (T643), a sibling of the desktop GUIs in `gui/`; the repository root is a virtual Cargo workspace. The command is still `vix` and the Homebrew formula and npm package are still `vix`, but the crate published to crates.io is now `vix-tui` (the `vix` crate stays at 1.7.1), and release archives and installer scripts are named `vix-tui-*` — the install one-liners become `…/latest/download/vix-tui-installer.sh` (and `.ps1`) from the next release on.
 - **Backend-neutral input** (T640): key and mouse handling throughout Vix now uses the new `vix-input` crate's event types instead of crossterm's; only the terminal event loop converts crossterm events. No behavior change in the terminal.
 - **No unchecked `unwrap`/`expect` in shipped code** (T603): draw functions now bail out with `let … else` instead of unwrapping an `Option` they just checked, and `clippy::unwrap_used`/`expect_used` are enforced workspace-wide (tests exempt via `clippy.toml`; the remaining provably-safe sites carry `#[expect(.., reason)]`).
 - **One lint policy** (T599): `unsafe_code`, `missing_docs` and `clippy::pedantic` now live in `[workspace.lints]`, and every crate and target (tests, benches, examples, build scripts) inherits them; `allow` attributes now need a `reason`.
@@ -37,7 +38,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bidi reordering and the mirrored layout forced on; the nightly chaos workflow
   runs it as a second pass.
 
-- **Spawn-site guard** (security): `tests/spawn_sites.rs` fails the build when a
+- **Spawn-site guard** (security): `tui/tests/spawn_sites.rs` fails the build when a
   source file outside a documented allowlist can start a child process, so the
   minimal build's "starts no other program" property cannot regress unnoticed.
 
@@ -62,13 +63,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A terminal pinentry no longer corrupts the screen on commit** (T570): with
   `commit.gpgsign=true` and a curses/tty `pinentry-program`, Git → Commit and Amend show
   a translated hint instead of running a command that would draw over Vix.
-- **A gutter-diff benchmark** (T574): `benches/gutter_diff.rs` covers unchanged, lightly
+- **A gutter-diff benchmark** (T574): `tui/benches/gutter_diff.rs` covers unchanged, lightly
   edited and heavily rewritten buffers up to 40,000 lines, plus the line cap.
 - **Scroll bar markers** (T578): the editor's scroll bar track shows colored `┃`
   marks where git changes, diagnostics and search matches are (diagnostics win a
   shared row, then git changes, then search), with the `●` thumb drawn on top.
   Turn them off with `show_scrollbar_markers = false`.
-- **A chaos monkey for the real `App`** (T575): `examples/chaos_monkey.rs` feeds
+- **A chaos monkey for the real `App`** (T575): `tui/examples/chaos_monkey.rs` feeds
   seeded random key, mouse, paste and resize streams into the app on a
   `TestBackend`, each iteration under a watchdog, and checks that the cursor and
   selections stay inside the text. A panic or hang prints the seed, the Vix frames
@@ -106,7 +107,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tour, the command palette, multi-cursor editing, git hunk staging, the
   DB workbench, Org-roam, the interactive table editor, and syntax
   highlighting — each a real recorded terminal session against
-  `examples/demo-workspace/`. Regenerate with `scripts/render-demos.sh`
+  `tui/examples/demo-workspace/`. Regenerate with `scripts/render-demos.sh`
   (real VHS, needs a headless-capable browser) or the new
   `scripts/render-demos-lite.sh` (no browser at all — a real pty, a
   hand-written asciicast recorder, and `agg` for the GIF encode; see its
@@ -193,7 +194,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so nobody's existing setup changes. The API key resolves through the
   same command-then-keyring waterfall the DB workbench already uses for
   database passwords. See `crates/vix-ai-core/spec/index.md`.
-- **TUI snapshot test harness** (`tests/snapshots.rs`, improvement plan T004):
+- **TUI snapshot test harness** (`tui/tests/snapshots.rs`, improvement plan T004):
   boots the real `App` against a ratatui `TestBackend`, drives it with
   scripted key events, and compares the rendered frame to a golden text file
   with `insta::assert_snapshot!`. New "Snapshot" test layer documented in
@@ -203,7 +204,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an opened Rust file, File menu open, find bar with matches, the git
   changes panel, the table editor, the F1 keyboard-shortcut overlay, zen
   mode, and a non-default theme — 12 golden screens total.
-- **Benchmark baselines** (improvement plan T006): widened `benches/` to the
+- **Benchmark baselines** (improvement plan T006): widened `tui/benches/` to the
   plan's spec'd scenarios — opening/highlighting a ~100 MB and ~5 MB file, a
   10k-operation random insert/delete burst, and workspace search over a
   10k-file tree — and published the numbers in a new
@@ -380,7 +381,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "wire key bindings into the real keymap" promise from `vix-script`'s
   own spec, finally kept.
 - **6 sample scripts + a scripting guide** (improvement plan T105):
-  `examples/scripts/*.rhai` — wrap-selection-in-markdown-link,
+  `tui/examples/scripts/*.rhai` — wrap-selection-in-markdown-link,
   insert-file-header, title-case-line, dedupe-selection,
   timestamp-signature, open-scratch-with-template — each verified against
   the real `vix-script` runtime, plus `docs/scripting/index.md`
@@ -428,7 +429,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and help text backfilled, plus two longstanding entries
   (`msg.workspace_unsafe_root`, `ui.db_field_sslmode`) that had been
   showing the *wrong* message's translations under their key, now
-  showing their own. `tests/i18n_keys.rs` gained a per-locale coverage
+  showing their own. `tui/tests/i18n_keys.rs` gained a per-locale coverage
   report and a regression-proof floor for all 14. `locales/app.yml`
   also split into one file per key namespace (`menu.yml`, `status.yml`,
   `ui.yml`, `action.yml`, `cmd.yml`, `msg.yml`, `prompt.yml`, `help.yml`,
@@ -559,7 +560,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and X11 Color Picker. `docs/calendar-panel/index.md` was also
   corrected — it had gone stale describing date/time strings that moved
   to the new Clock box.
-- **Demo workspace** (improvement plan T501): `examples/demo-workspace/`,
+- **Demo workspace** (improvement plan T501): `tui/examples/demo-workspace/`,
   a small realistic project (Rust + Python + Markdown sources with real
   TODO/FIXME bugs, `tasks.toml`, an `.http` file against httpbin.org,
   three linked Org-roam notes plus a dailies entry, `data/*.csv|tsv`, and
@@ -602,7 +603,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   they found and fixed nine small pre-existing doc/spec drifts along the
   way (stale menu paths in `docs/menus/index.md`, `docs/git-panel/index.md`,
   `crates/vix-case/spec/index.md`, `crates/vix-theme-editor-panel/spec/
-  index.md`, and this repo's own new `examples/demo-workspace/README.md`;
+  index.md`, and this repo's own new `tui/examples/demo-workspace/README.md`;
   a wrong default in `docs/language-server-protocol/index.md`; a
   self-contradicting "not yet ported" paragraph in `crates/vix-db/spec/
   index.md`; a stale single-prompt description of Org Capture in
@@ -626,7 +627,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   finish this once run somewhere that has one.
 - **4 library examples, Cargo examples batch 1** (improvement plan T502):
   `render_frame` (a real frame rendered to a ratatui `TestBackend`,
-  printed as plain text — the same technique `tests/snapshots.rs` uses),
+  printed as plain text — the same technique `tui/tests/snapshots.rs` uses),
   `theme_roundtrip` (load a bundled theme, tweak a color, save, reload,
   and confirm the tweak survived), `textops_pipeline` (sort, dedupe, and
   uppercase a real file's lines from the CLI, chaining a real `Editor`
@@ -641,19 +642,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `org_export` (Org → Markdown/HTML via `vix_org::to_markdown`/`to_html`),
   `vcard_parse` (parses Org-contacts, exports to vCard 3.0),
   `lsp_headless` (spawns a language server — a tiny mock, reusing
-  `tests/lsp_smoke.rs`'s technique — opens a document, prints its
+  `tui/tests/lsp_smoke.rs`'s technique — opens a document, prints its
   diagnostics), `i18n_lookup` (one translation key resolved against all
   15 locales via `t!(key, locale = ...)`), and `calculator_eval`
   (evaluates expressions with the same engine Tools → Calculator uses).
   Found and corrected two real drifts from this task's own description
-  in `tasks.md`: `vix-query` (folded into `src/app.rs` by T151) was never
+  in `tasks.md`: `vix-query` (folded into `tui/src/app.rs` by T151) was never
   a directory-search tool — it's the query-*replace* confirm-choice enum
   — so `query_search` targets the real search engine instead; and
   `vix-org-contacts` parses *Org* contacts and exports *to* vCard, with
   no reverse direction, so `vcard_parse` demonstrates that real direction
   rather than a "vCard parser" that doesn't exist. Listed in the README
   `## Examples` section alongside T502's four.
-- **Config examples** (improvement plan T504): new `examples/config/` —
+- **Config examples** (improvement plan T504): new `tui/examples/config/` —
   a fully-annotated `config.toml` covering all 63 settings (each with
   its real default value and its own doc comment, cross-checked against
   `docs/reference/settings.md`), a custom `theme.json`, a
@@ -941,9 +942,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`docs/SUMMARY.md`'s link to `dictionaries/index.md` had nothing to
   resolve to). Root-anchored to `/dictionaries/`; both directories are
   now tracked. Also fixes a bad relative link in the new
-  `examples/demo-workspace/notes.md` (T501, above) caught by the same
+  `tui/examples/demo-workspace/notes.md` (T501, above) caught by the same
   `lychee` run.
-- **Two bundled themes shared one name.** `themes/safelight-red.json`
+- **Two bundled themes shared one name.** `tui/themes/safelight-red.json`
   declared `"name": "Phosphor Amber"` — the same name as the real
   `phosphor-amber.json` — so **View → Theme…** only ever offered one of
   the two (a red-on-black theme, unreachable under its own name). Found
@@ -959,7 +960,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   harness's own wait for an async query, bounded by a fixed spin-count
   budget with no relationship to actual wall-clock time, not a race in
   `vix-db` itself. Replaced with a 30-second wall-clock deadline
-  (`tests/db_smoke.rs`'s `drain_query`).
+  (`tui/tests/db_smoke.rs`'s `drain_query`).
 - **Command palette's Files mode is now ranked** (improvement plan T153):
   results are scored with the same fuzzy ranking Commands mode uses and
   sorted accordingly, instead of showing raw filesystem-walk order (not
@@ -1072,7 +1073,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `textops`, `org_table`, `lsp_frame` (LSP `Content-Length` framing), `vcard`,
   `conflict` (merge markers), and `http_request`. Each asserts invariants, not
   just the absence of a panic. See [`fuzz/README.md`](fuzz/README.md).
-- **Benchmarks** (`benches/`, `cargo bench`): Criterion benchmarks for the
+- **Benchmarks** (`tui/benches/`, `cargo bench`): Criterion benchmarks for the
   per-keystroke and per-frame paths — text transforms, opening/typing/pasting/
   undo in the editor widget, find-in-buffer, and palette fuzzy filtering.
 - **`scripts/check-docs`**, now part of `scripts/check`: fails on a broken
@@ -1135,7 +1136,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `show_menu_tooltips` on.
 - **The file explorer's delete confirmation showed `confirm.delete`.** The
   message had no entry in `locales/app.yml`, and a missing key renders as the
-  key itself. It is translated now, and `tests/i18n_keys.rs` fails the build for
+  key itself. It is translated now, and `tui/tests/i18n_keys.rs` fails the build for
   any `t!` key the catalog does not define.
 - **`Ctrl+D` is forward delete in the Apple keymap.** It now removes the
   character to the right of the cursor, like the `Delete` key and every macOS
@@ -1848,7 +1849,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Release packaging** — `cargo-dist` (macOS arm64/x64, Windows, Linux MUSL) and
   a `Makefile` that tests then cross-builds the three targets.
 - **Single-crate architecture (edition 2024).** Every former `vix-*` subcrate is
-  now a module under `src/`; the editor widget is the `editor_core` module
+  now a module under `tui/src/`; the editor widget is the `editor_core` module
   (Tree-sitter highlight queries in `langs/`, gated behind `lang-*` features).
   The workspace has no members. See `agents/share/crate-map.md`.
 - **`#![warn(clippy::pedantic)]` in every module**, with no blanket
@@ -2159,7 +2160,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   month navigation (Left/Right while the calendar is open).
 - **Every theme is now a JSON theme.** The hardcoded monochrome Dark/Light
   *modes* were removed; **Dark** and **Light** are now ordinary bundled themes
-  (`themes/dark.json` / `themes/light.json`, soft `[215,215,215]` on `[40,40,40]`
+  (`tui/themes/dark.json` / `tui/themes/light.json`, soft `[215,215,215]` on `[40,40,40]`
   and its inverse) loaded like any other. The chooser lists every theme
   (including Dark and Light) sorted by name, and the persisted `theme` setting is
   the theme's name.

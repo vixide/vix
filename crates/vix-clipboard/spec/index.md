@@ -13,7 +13,7 @@ Two guarantees:
   uncontended; under parallel tests it is what keeps the backend from being
   entered twice at once.
 - **The platform clipboard is opt-in.** Until `use_system` is called, `set` and
-  `get` read and write a thread-local in-memory clipboard (T596: so parallel tests cannot see each other's copies). `src/main.rs` opts
+  `get` read and write a thread-local in-memory clipboard (T596: so parallel tests cannot see each other's copies). `tui/src/main.rs` opts
   in once at startup, so the app behaves exactly as before; everything else —
   the test suite above all — copies and pastes in memory.
 
@@ -23,7 +23,7 @@ and that text landed on the macOS pasteboard, where the next paste in any app
 produced it. Tests that need the platform clipboard must call `use_system`
 themselves, and none do.
 
-`is_system` reports which clipboard is in effect; `tests/integration/editing.rs`
+`is_system` reports which clipboard is in effect; `tui/tests/integration/editing.rs`
 asserts it is `false` so the isolation cannot be lost by accident.
 
 See `spec/index/index.md` for the project overview.

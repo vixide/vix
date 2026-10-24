@@ -7,9 +7,9 @@ protocol to it: breakpoints, stepping, a live call stack, variables, and
 watches, all inside the editor.
 
 This tutorial walks through a complete session with **`debugpy`** (Python),
-debugging `examples/demo-workspace/scripts/hello.py`. Vix's other
+debugging `tui/examples/demo-workspace/scripts/hello.py`. Vix's other
 documented adapter, **`codelldb`** (for Rust/C/C++, e.g.
-`examples/demo-workspace/rust-app`), is configured the same way — see
+`tui/examples/demo-workspace/rust-app`), is configured the same way — see
 "Using `codelldb` instead" near the end for its config block.
 
 For the condensed reference version of everything below, see
@@ -63,7 +63,7 @@ console = "internalConsole"
 Save the file, then open the demo workspace:
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix scripts/hello.py
 ```
 
@@ -179,7 +179,7 @@ debug session at a time — start a second one and it replaces the first.
 
 ## Using `codelldb` instead
 
-For a compiled target like `examples/demo-workspace/rust-app`, swap in
+For a compiled target like `tui/examples/demo-workspace/rust-app`, swap in
 `codelldb` (install it via the
 [CodeLLDB VS Code extension](https://github.com/vadimcn/vscode-lldb) or any
 standalone build of the same binary) with its own adapter entry:

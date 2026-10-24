@@ -8,7 +8,7 @@ it. Module `settings_bundle`.
   - menuitem "Export Settings…"
   - menuitem "Import Settings…"
 - `vix --export-settings <PATH>` / `vix --import-settings <PATH>` (CLI
-  flags, `src/cli.rs`)
+  flags, `tui/src/cli.rs`)
 
 ## What's bundled
 

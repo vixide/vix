@@ -17,11 +17,11 @@
 //! Two hosts read it, each trying their own primary source first so an id
 //! titled elsewhere is never duplicated:
 //!
-//! - **`App::action_title`** (`src/app.rs`, backs F1 help and the
+//! - **`App::action_title`** (`tui/src/app.rs`, backs F1 help and the
 //!   keybinding editor) tries the menu tree, then falls back to
 //!   [`title_key`].
 //! - **The command palette's `>` mode** (`App::catalog_palette_entries` in
-//!   `src/app/command_palette.rs`) appends every `CATALOG` entry whose id
+//!   `tui/src/app/command_palette.rs`) appends every `CATALOG` entry whose id
 //!   isn't already in `palette::COMMANDS`.
 //!
 //! `vix_keybindings`' [`shortcuts_for`](https://github.com/vixide/vix)-based
@@ -692,11 +692,11 @@ pub fn title_key(action_id: &str) -> Option<&'static str> {
 }
 
 /// Enumerates every action id `App::run_action` can dispatch, by reading
-/// `src/app.rs`'s own dispatch chain out of the source tree.
+/// `tui/src/app.rs`'s own dispatch chain out of the source tree.
 ///
-/// Shared by `tests/action_catalog.rs` (which asserts every id found here is
+/// Shared by `tui/tests/action_catalog.rs` (which asserts every id found here is
 /// titled by a menu leaf, this crate, or `vix_palette::COMMANDS`) and
-/// `examples/list_commands.rs`'s `--write` mode (T305, `tasks.md`), which
+/// `tui/examples/list_commands.rs`'s `--write` mode (T305, `tasks.md`), which
 /// generates `docs/reference/actions.md` from the same list — one scanner,
 /// so the test's notion of "every action id" and the generated reference's
 /// can never drift apart.
@@ -708,7 +708,7 @@ pub mod dispatch_scan {
     /// literal `"id" =>` arm (`view.theme:Dark`, `script:my_script`, …) —
     /// [`every_dispatchable_action_id`] finds the bare prefix (`"view.theme:"`),
     /// never a real, individually titleable action id, so both
-    /// `tests/action_catalog.rs` and `examples/list_commands.rs` exempt any id
+    /// `tui/tests/action_catalog.rs` and `tui/examples/list_commands.rs` exempt any id
     /// starting with one of these from needing its own menu leaf, catalog
     /// entry, or `docs/reference/actions.md` row.
     pub const DYNAMIC_PREFIXES: &[&str] = &[
@@ -726,38 +726,38 @@ pub mod dispatch_scan {
     /// arm added to a `match` that *isn't* part of this chain (a keymap id,
     /// a vim command char, …) never gets mistaken for an action id.
     pub const DISPATCHERS: &[(&str, &str)] = &[
-        ("src/app.rs", "run_action"),
-        ("src/app.rs", "run_file_action"),
-        ("src/app.rs", "run_edit_action"),
-        ("src/app.rs", "run_motion_action"),
-        ("src/app.rs", "run_text_tool_action"),
-        ("src/app.rs", "run_convert_action"),
-        ("src/app.rs", "run_format_action"),
-        ("src/app.rs", "run_lsp_action"),
-        ("src/app.rs", "run_search_action"),
-        ("src/app.rs", "run_named_action"),
-        ("src/app.rs", "run_cursor_action"),
-        ("src/app.rs", "run_app_action"),
-        ("src/app.rs", "run_help_action"),
-        ("src/app.rs", "run_view_action"),
-        ("src/app.rs", "run_view_settings_toggle"),
-        ("src/app.rs", "run_project_action"),
-        ("src/app/db.rs", "db_action"),
-        ("src/app.rs", "open_edit_surface"),
-        ("src/app.rs", "contacts_action"),
-        ("src/app.rs", "go_action"),
-        ("src/app/insert_tools.rs", "run_tools_action"),
-        ("src/app/keymap.rs", "run_vim_action"),
-        ("src/app/git.rs", "run_git_action"),
-        ("src/app/jj.rs", "run_jj_action"),
-        ("src/app/ai.rs", "run_ai_action"),
-        ("src/app/http.rs", "run_http_action"),
-        ("src/app/terminal.rs", "run_terminal_action"),
-        ("src/app/lsp_dap.rs", "run_dap_action"),
-        ("src/app/org.rs", "org_action"),
-        ("src/app/org.rs", "org_edit_action"),
-        ("src/app/org_table.rs", "org_table_action"),
-        ("src/app/roam.rs", "roam_action"),
+        ("tui/src/app.rs", "run_action"),
+        ("tui/src/app.rs", "run_file_action"),
+        ("tui/src/app.rs", "run_edit_action"),
+        ("tui/src/app.rs", "run_motion_action"),
+        ("tui/src/app.rs", "run_text_tool_action"),
+        ("tui/src/app.rs", "run_convert_action"),
+        ("tui/src/app.rs", "run_format_action"),
+        ("tui/src/app.rs", "run_lsp_action"),
+        ("tui/src/app.rs", "run_search_action"),
+        ("tui/src/app.rs", "run_named_action"),
+        ("tui/src/app.rs", "run_cursor_action"),
+        ("tui/src/app.rs", "run_app_action"),
+        ("tui/src/app.rs", "run_help_action"),
+        ("tui/src/app.rs", "run_view_action"),
+        ("tui/src/app.rs", "run_view_settings_toggle"),
+        ("tui/src/app.rs", "run_project_action"),
+        ("tui/src/app/db.rs", "db_action"),
+        ("tui/src/app.rs", "open_edit_surface"),
+        ("tui/src/app.rs", "contacts_action"),
+        ("tui/src/app.rs", "go_action"),
+        ("tui/src/app/insert_tools.rs", "run_tools_action"),
+        ("tui/src/app/keymap.rs", "run_vim_action"),
+        ("tui/src/app/git.rs", "run_git_action"),
+        ("tui/src/app/jj.rs", "run_jj_action"),
+        ("tui/src/app/ai.rs", "run_ai_action"),
+        ("tui/src/app/http.rs", "run_http_action"),
+        ("tui/src/app/terminal.rs", "run_terminal_action"),
+        ("tui/src/app/lsp_dap.rs", "run_dap_action"),
+        ("tui/src/app/org.rs", "org_action"),
+        ("tui/src/app/org.rs", "org_edit_action"),
+        ("tui/src/app/org_table.rs", "org_table_action"),
+        ("tui/src/app/roam.rs", "roam_action"),
     ];
 
     /// Brace-balance `fn fn_name(...) ... { ... }` out of `text`, from its

@@ -34,7 +34,7 @@
 //! more requests claimed the same token — all rejected), and `::shadows`
 //! (an accepted override that also happens to claim a token a built-in
 //! already owns — not a conflict, just reported). `App::override_key`
-//! (`src/app.rs`) is the `on_key` choke point that actually calls this
+//! (`tui/src/app.rs`) is the `on_key` choke point that actually calls this
 //! with the loaded `keybindings.toml` contents, ahead of every keymap's
 //! own dispatch. Script `bind_key` requests don't feed into it yet —
 //! that's T104j, wiring `vix-script`'s `LoadedScript::bindings` in as a

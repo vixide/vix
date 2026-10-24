@@ -1,4 +1,4 @@
-//! The Eclipse keymap's built-in bindings (`src/app.rs`'s `eclipse_key`),
+//! The Eclipse keymap's built-in bindings (`tui/src/app.rs`'s `eclipse_key`),
 //! converted from that function's former hardcoded `match`.
 //!
 //! All-`Ctrl` (plus one `Alt`-only binding, word completion), no chords —

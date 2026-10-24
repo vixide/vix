@@ -48,7 +48,7 @@ docks, panels) have no markers.
 
 ## As implemented in Vix
 
-`src/ui.rs` owns the shared renderers — `draw_scrollbar` (vertical) and
+`tui/src/ui.rs` owns the shared renderers — `draw_scrollbar` (vertical) and
 `draw_hscrollbar` (horizontal) — and the click/drag position mapping
 (`scrollbar_pos_from_row` / `scrollbar_pos_from_col`). Each scrollable view
 records its scrollbar rectangle(s) for hit-testing. Horizontal rendering slices

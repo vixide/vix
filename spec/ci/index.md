@@ -20,7 +20,7 @@ cargo run --example list_commands && cargo run --example headless_edit \
   && cargo run --example query_search -- <dir> <pattern>
 cargo doc --workspace --no-deps                          # RUSTDOCFLAGS=-D warnings
 cargo run --example list_commands -- --write && git diff --exit-code -- docs/reference/  # T305: generated reference current?
-cargo run --example generate_man && git diff --exit-code -- man/          # T307: man page current?
+cargo run --example generate_man && git diff --exit-code -- tui/man/          # T307: man page current?
 python3 scripts/check-docs                               # documentation integrity
 ```
 
@@ -93,7 +93,7 @@ step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
 generate --mode ci`), never the workflow by hand — `dist generate --mode
 ci --check` fails if the committed file has drifted from the config, the
-same check-then-write shape `docs/reference/*.md`/`man/vix.1`'s own
+same check-then-write shape `docs/reference/*.md`/`tui/man/vix.1`'s own
 regenerate-and-diff gate uses, though nothing currently runs it in CI
 (only ever exercised by hand before a release-affecting config change).
 `dist-workspace.toml`'s `cargo-cyclonedx = true` (T554, tasks.md) makes
@@ -150,7 +150,7 @@ path-filtered to changes that can affect the GUIs. See `gui/spec/index.md`.
 
 ### Chaos monkey (T575)
 
-`.github/workflows/chaos.yml` (GitHub only) runs `examples/chaos_monkey` nightly and on
+`.github/workflows/chaos.yml` (GitHub only) runs `tui/examples/chaos_monkey` nightly and on
 demand: seeded random key, mouse, paste and resize streams into the real `App` on a
 `TestBackend`, each iteration under a watchdog, inside an empty network namespace
 (`unshare -n`, as in the offline test job). The example re-executes itself in a
@@ -164,14 +164,14 @@ last events; `--seed N --iterations 1` replays it. It is not in the per-push gat
 ### Feature combinations (T587)
 
 All three forges (a `feature-combos` job on GitHub and GitLab, a step on
-Codeberg) run, for the root package: `cargo clippy --no-default-features
+Codeberg) run, for the `vix-tui` package: `cargo clippy --no-default-features
 --all-targets -- -D warnings`, `cargo test --no-default-features`, and
 `cargo hack check --each-feature --no-dev-deps`, so every capability feature
 (`spec/cargo-features/index.md`) keeps compiling alone and all-off. `scripts/check`
 runs the same three (the `cargo hack` step is skipped with a note when
 `cargo-hack` isn't installed). The checks that read source text or render the
-whole product — `tests/action_catalog.rs` (via `dispatch_scan`), the menu-bar
-insta snapshots, `tests/integration/menu.rs`'s Alt-letter test, and the
+whole product — `tui/tests/action_catalog.rs` (via `dispatch_scan`), the menu-bar
+insta snapshots, `tui/tests/integration/menu.rs`'s Alt-letter test, and the
 `list_commands --write` / `generate_man` diffs — are **default-feature only**: they
 run in the normal job, and the snapshot and menu tests are gated on
 `#[cfg(feature = "full")]`. Tests that need one capability gate on its feature
@@ -185,7 +185,8 @@ release type is inferred from the version in `Cargo.toml`, and an unchanged
 version counts as a patch release, so a breaking public-API change fails until
 the affected crates are bumped to a new major version. A crate never yet published (no
 baseline) is excluded by name until its first release — currently `vix-input`
-(T640); drop the `--exclude` once it is on crates.io. `scripts/check` runs the
+(T640) and `vix-tui` (T643, the TUI package renamed from `vix`); drop each
+`--exclude` once that crate is on crates.io (T644). `scripts/check` runs the
 same command and skips it with a note when `cargo-semver-checks` (>= 0.51) isn't
 installed. GitHub only for now: it needs network access to crates.io and
 nothing about it is forge-specific, so GitLab and Codeberg can add it later.
@@ -295,11 +296,11 @@ is ignored with a dated note because it arrives through
 `docs/reference/keybindings-shared.md`, and one
 `docs/reference/keybindings-<keymap>.md` per keymap are generated, not
 hand-maintained: `cargo run --example list_commands -- --write`
-(`examples/list_commands.rs`, grown from a plain command lister into this
+(`tui/examples/list_commands.rs`, grown from a plain command lister into this
 generator) reads the real data — `vix_menu::menus()`, `vix_palette::COMMANDS`,
 `vix_action_catalog::CATALOG` (and its
 `dispatch_scan::every_dispatchable_action_id`, shared with
-`tests/action_catalog.rs` so both tools' notion of "every action id" can
+`tui/tests/action_catalog.rs` so both tools' notion of "every action id" can
 never drift apart), `vix_settings::Settings::default()` plus a parse of its
 own struct's doc comments, and `vix_keybindings::TABLES`/`SHARED` — and
 writes the pages fresh every time. All three forges regenerate and
@@ -314,13 +315,13 @@ print the command-palette list to stdout.
 
 ## Man page (T307)
 
-`man/vix.1` is generated too: `cargo run --example generate_man`
-(`examples/generate_man.rs`) builds it with `clap_mangen` from
-`vix::cli::Cli` — the same `Cli` `src/main.rs` parses, moved into the
-library crate (`src/cli.rs`) specifically so the two can't drift apart.
+`tui/man/vix.1` is generated too: `cargo run --example generate_man`
+(`tui/examples/generate_man.rs`) builds it with `clap_mangen` from
+`vix::cli::Cli` — the same `Cli` `tui/src/main.rs` parses, moved into the
+library crate (`tui/src/cli.rs`) specifically so the two can't drift apart.
 All three forges (and `scripts/check`) regenerate and
-`git diff --exit-code -- man/`, same pattern as `docs/reference/`
-above. `dist-workspace.toml`'s `include = ["man/vix.1"]` bundles the
+`git diff --exit-code -- tui/man/`, same pattern as `docs/reference/`
+above. `dist-workspace.toml`'s `include = ["tui/man/vix.1"]` bundles the
 committed (and therefore always-current, by the gate above) file into
 every release archive and installer, alongside the auto-included
 README/CHANGELOG/LICENSE — confirmed with `dist generate --mode ci
@@ -365,7 +366,7 @@ shown this failure, so they are unchanged — revisit if one does.
 
 ## Docs site (mdBook)
 
-T301 (`tasks.md`): `book.toml` (`src = "docs"`) plus `docs/SUMMARY.md`
+T301 (`tasks.md`): `book.toml` (`tui/src = "docs"`) plus `docs/SUMMARY.md`
 organize the existing `docs/*/index.md` pages — and a handful of
 repo-root files reached via `../` links (`AGENTS.md`, `agents/*`,
 `AI_STATEMENT.md`, `SECURITY.md`, `CHANGELOG.md`) — into an mdBook site:

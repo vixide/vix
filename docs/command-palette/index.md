@@ -28,7 +28,7 @@ A leading prefix character selects the mode:
 
 With no prefix, type to fuzzy-match files in the workspace. Append
 `:<line>[:<col>]` to a file to jump to that position after opening — for
-example, `src/main.rs:42:10` opens `src/main.rs` and moves to line 42,
+example, `tui/src/main.rs:42:10` opens `tui/src/main.rs` and moves to line 42,
 column 10.
 
 ## Go to line (`:`)
@@ -59,7 +59,7 @@ it is invoked.
 ## Examples
 
 - `README` — open the file matching `README`.
-- `src/main.rs:42:10` — open `src/main.rs` at line 42, column 10.
+- `tui/src/main.rs:42:10` — open `tui/src/main.rs` at line 42, column 10.
 - `>save` — find and run a save command.
 - `#notes` — switch to the buffer matching `notes`.
 - `:128` — preview and jump to line 128.

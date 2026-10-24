@@ -8,7 +8,7 @@ incrementally by an AI agent (or a human) one branch at a time.
 ## Current state (baseline, 2026-07-11)
 
 - **Feature-rich core.** ~98 workspace crates under `crates/`, a thin App
-  shell in `src/`. The editor already has folding, keyboard macros,
+  shell in `tui/src/`. The editor already has folding, keyboard macros,
   bookmarks, multi-cursor, splits, LSP, DAP, git hunk staging, a DB
   workbench, Org-roam, an HTTP client, 15 locales, 9 keymap families, and a
   large Tools suite. The suggested-features backlogs (2026-06/07) are done.
@@ -69,7 +69,7 @@ first so regressions are caught mechanically.
    against golden text screens (insta or hand-rolled). Seed it with ~10
    snapshots: welcome screen, editor with file, menus open, palette, find
    bar, git panel, table edit surface, help overlay.
-4. **Benchmarks.** A `benches/` suite (criterion): open a 100 MB file,
+4. **Benchmarks.** A `tui/benches/` suite (criterion): open a 100 MB file,
    insert/delete at scale in `vix-editor-core`, syntax highlight a large
    buffer, workspace search over a large tree, fuzzy palette scoring.
    Record baseline numbers in `docs/performance/index.md`.
@@ -89,7 +89,7 @@ The genuinely new powers, biggest first.
    - Script API v1: register palette commands, bind keys, read/modify the
      active buffer (selection, line, whole text), prompt for input, show
      messages, run textops-style transforms.
-   - Ship ~6 sample scripts under `examples/scripts/` and document the API.
+   - Ship ~6 sample scripts under `tui/examples/scripts/` and document the API.
    - Design doc first at `crates/vix-script/spec/index.md` (API surface,
      sandboxing, error UX), then implement in slices.
 2. **Modal-editing depth audit (Vi keymap).** The Vi keymap today is a
@@ -199,12 +199,12 @@ Smaller, high-value features; each follows the standard per-feature recipe.
 
 ### Phase 5 — Examples
 
-1. **Demo workspace** at `examples/demo-workspace/`: a small realistic
+1. **Demo workspace** at `tui/examples/demo-workspace/`: a small realistic
    project containing source files in several languages, a `tasks.toml`,
    an `.http` file, an Org directory with roam notes, CSV/TSV data, a
    seeded SQLite database, and intentional TODO/FIXME comments — the shared
    fixture all tutorials and VHS tapes run against. `vix --demo` (or
-   documented `cargo run -- examples/demo-workspace`) opens it.
+   documented `cargo run -- tui/examples/demo-workspace`) opens it.
 2. **Cargo examples** (grow from 2 to ~12), each a small documented program
    using the workspace crates as libraries: render a frame to text with
    `TestBackend`, theme load/modify/save round-trip, run a `vix-query`
@@ -212,7 +212,7 @@ Smaller, high-value features; each follows the standard per-feature recipe.
    Markdown/HTML export, record & replay a keyboard macro, drive an LSP
    server headless via `vix-lsp-core`, evaluate the calculator, parse a
    vCard, i18n lookup across locales.
-3. **Config examples** at `examples/config/`: annotated `config.toml`
+3. **Config examples** at `tui/examples/config/`: annotated `config.toml`
    showing every settings key, a custom theme JSON, custom snippets, a
    `macros.toml`, and (post-Phase-1) sample Rhai scripts.
 4. **Example CI check.** `cargo build --examples` and run the headless
@@ -273,12 +273,12 @@ payoff. Measured today, some areas have a real payoff and some don't:
 
 | Area | Third-party crates that disappear when off | Native C | Process/network surface removed | Coupling into the App shell |
 |---|---|---|---|---|
-| `sql` (vix-db, vix-edit-sql) | **48** (sqlx×6, tokio, libsqlite3-sys, tracing, …) | bundled SQLite | TCP to Postgres/MySQL, `ssh` tunnels, password command | medium: ~500 lines inline in `src/app.rs`; `vix-settings` holds `vix_db::Connection` |
+| `sql` (vix-db, vix-edit-sql) | **48** (sqlx×6, tokio, libsqlite3-sys, tracing, …) | bundled SQLite | TCP to Postgres/MySQL, `ssh` tunnels, password command | medium: ~500 lines inline in `tui/src/app.rs`; `vix-settings` holds `vix_db::Connection` |
 | `image` | **81** (mostly from `image`'s default codecs: AV1 *encoder* rav1e/ravif, exr, tiff, …) | — | untrusted-file codec parsing | medium: `Tab.image` lives in `vix-editor` |
-| `script` (vix-script) | **9**; rhai is one of the largest crates in the build | — | runs user `.rhai` | easy-medium: already isolated in `src/app/scripts.rs` |
+| `script` (vix-script) | **9**; rhai is one of the largest crates in the build | — | runs user `.rhai` | easy-medium: already isolated in `tui/src/app/scripts.rs` |
 | `terminal` (vix-terminal) | **10** (portable-pty, vt100, nix 0.28, …) | — | interactive shell in a PTY | easy |
 | `http` + `ai` | **2** alone; **88** together with `sql` (rustls, **ring**, url/idna/icu, keyring) | ring | all outbound HTTP; `ai_command` shell | easy (http), medium (ai is also used by Git's commit message and DB assist) |
-| `git` (+`jj`) | **0** | — | spawning `git`/`jj` | medium-hard: git feeds explorer colors, status bar, gutter, dashboard; `src/app/git.rs` also hosts the jj and DAP dispatch |
+| `git` (+`jj`) | **0** | — | spawning `git`/`jj` | medium-hard: git feeds explorer colors, status bar, gutter, dashboard; `tui/src/app/git.rs` also hosts the jj and DAP dispatch |
 | `lsp` / `dap` | **0** | — | spawning servers/adapters | hard: completion popup reused by Org-roam/contacts; `lsp_enabled` already exists as a runtime off switch |
 | `org` | **0** | — | none | hard (143 menu leaves, Emacs keymap, `vix-column-view`, settings) — **not worth flagging** |
 
@@ -307,7 +307,7 @@ later. `org` stays unconditional.
    build". That leaves `vix-menu`/`vix-palette` free of `cfg`.
    `#[cfg(feature)]` then lives only where a crate actually has to be
    absent: optional `dep:` edges, App fields, the dispatch functions,
-   poll calls in `main.rs`, and the `src/ui/*` draw calls.
+   poll calls in `main.rs`, and the `tui/src/ui/*` draw calls.
 3. **Settings never lose data.** Before any gating, move the plain data
    types `vix-settings` borrows (`vix_db::connect::Connection`,
    `vix_dap::DebugAdapter`, `vix_org_capture::CaptureTemplate`) out of
@@ -316,7 +316,7 @@ later. `org` stays unconditional.
    fields were gated, a no-`sql` build would silently delete the user's
    `db_connections` on the next save.
 4. **Fix shared plumbing first.**
-   - `menu_index_for_alt` (`src/app.rs:13787`) hard-codes Alt-mnemonic
+   - `menu_index_for_alt` (`tui/src/app.rs:13787`) hard-codes Alt-mnemonic
      indices (`g`→9, …). Dropping Run, AI, DB, or JJ would send every
      later mnemonic to the wrong menu, so it must look menus up by name.
    - The root re-declares sqlx/tokio/futures-util/ureq/portable-pty but
@@ -332,7 +332,7 @@ later. `org` stays unconditional.
    default features today, so gated code would rot immediately. Add a
    Linux job: `--no-default-features` build plus test, and
    `cargo hack --each-feature`. The source-text checks stay
-   default-feature-only: `dispatch_scan` + `tests/action_catalog.rs`,
+   default-feature-only: `dispatch_scan` + `tui/tests/action_catalog.rs`,
    menu-bar insta snapshots, and the `list_commands --write` /
    `generate_man` diffs.
 6. **Specs.** A new `spec/cargo-features/index.md` holds the
@@ -345,9 +345,9 @@ later. `org` stays unconditional.
 the image slimming → settings decoupling → capability framework + CI
 matrix → `sql` → `image` → `script` → `terminal` → `http`/`ai` →
 `git`/`jj` → (optional) `lsp`/`dap` → distribution decision. Extract
-each area's inline dispatch into its own `src/app/<area>.rs` first
-(DB, AI, HTTP, terminal are still inline in `src/app.rs`; jj and the DAP
-`run.*` arms are misfiled in `src/app/git.rs`). That refactor is worth
+each area's inline dispatch into its own `tui/src/app/<area>.rs` first
+(DB, AI, HTTP, terminal are still inline in `tui/src/app.rs`; jj and the DAP
+`run.*` arms are misfiled in `tui/src/app/git.rs`). That refactor is worth
 doing even if a flag never lands.
 
 ### New capabilities and code quality (researched 2026-10-21)

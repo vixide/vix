@@ -40,7 +40,7 @@ The pane tree lives in `crates/vix-editor/src/editor.rs` (`Pane::Leaf`/`Pane::Sp
 `layout`, `dividers`, `leaf_at`, `resize_at`, and tree surgery — unit tested).
 `Editor` (in `crates/vix-editor/src/editor.rs`) holds `split_root: Option<Pane>` and a
 `focused_leaf` index; `set_split`/`unsplit`/`focus_other_pane`/`focus_leaf` mutate
-it and `split_layout`/`split_dividers` drive rendering. `src/ui.rs`
+it and `split_layout`/`split_dividers` drive rendering. `tui/src/ui.rs`
 `draw_editor_region` lays out every pane and divider (`draw_pane` renders each
 tab with its own scrollbar); the host routes pane clicks (`focus_pane_at`),
 divider drags (`resize_split_at`), and the `view.split_*` / `view.unsplit` /

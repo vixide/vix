@@ -38,7 +38,7 @@ the comparison is between toolkits, not between two implementations of Vix.
    crossterm events. See
    [`crates/vix-input/spec/index.md`](../../crates/vix-input/spec/index.md).
    Startup and the loop's background work are `App::start`, `App::tick`,
-   `App::poll_interval` (`src/app/event_loop.rs`), shared by every front end.
+   `App::poll_interval` (`tui/src/app/event_loop.rs`), shared by every front end.
 2. **Phase 1 — the whole App in a window** (T641 GPUI, T642 egui + the
    shared core). The unchanged `ui::draw` renders each frame into the shared
    cell grid, which each front end paints with a monospace font. Every panel,
@@ -131,7 +131,7 @@ PNG, and quits:
 
 ```sh
 VIX_GUI_SCREENSHOT=out.png VIX_GUI_SCREENSHOT_KEYS="ctrl-p c a r g o" \
-  cargo run --manifest-path gui/Cargo.toml -p vix-egui --features screenshot -- src/main.rs
+  cargo run --manifest-path gui/Cargo.toml -p vix-egui --features screenshot -- tui/src/main.rs
 ```
 
 Both draw explicitly for the capture, because a window that is not visible

@@ -11,12 +11,12 @@ no sleeps, no screen scraping.
 | ----- | ----- | -------------- | ------- |
 | **Unit** | `#[cfg(test)] mod tests` beside the code | One pure function: the transform, the parser, the boundary case | `cargo test` |
 | **Property** | Same, with `proptest` | Invariants over generated input — "the cursor a rewrite returns is always inside the text it returns" | `cargo test` |
-| **Integration** | `tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
-| **Snapshot** | `tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
-| **Repo invariants** | `tests/i18n_keys.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
-| **Smoke** | `tests/db_smoke.rs`, `tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
+| **Integration** | `tui/tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
+| **Snapshot** | `tui/tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
+| **Repo invariants** | `tui/tests/i18n_keys.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
+| **Smoke** | `tui/tests/db_smoke.rs`, `tui/tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
 | **Fuzz** | `fuzz/fuzz_targets/` | Parsers and text transforms against input nobody thought of | `cargo +nightly fuzz run <target>` |
-| **Benchmark** | `benches/` | The per-keystroke and per-frame paths, so latency regressions are visible | `cargo bench` |
+| **Benchmark** | `tui/benches/` | The per-keystroke and per-frame paths, so latency regressions are visible | `cargo bench` |
 | **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match | `scripts/check` |
 
 `scripts/check` runs the gate the way CI does: fmt, build, clippy at pedantic
@@ -25,7 +25,7 @@ documentation checks. Fuzzing and benchmarks are deliberately outside it — one
 needs nightly, the other needs a quiet machine.
 
 The integration layer is one test binary (`cargo test --test integration`)
-split across `tests/integration/` (T143): `common.rs` holds the shared
+split across `tui/tests/integration/` (T143): `common.rs` holds the shared
 fixtures/helpers (`app_at`, `key`/`ctrl`, `type_str`, `buffer_with`, …), and
 each area gets its own file — `catalog.rs`, `db.rs`, `editing.rs`, `find.rs`,
 `git.rs`, `keybindings.rs`, `keymaps.rs`, `lsp.rs`, `menu.rs`, `org.rs`,
@@ -59,11 +59,11 @@ assert_eq!(app.editor.active_tab().unwrap().text(), "ello");
 
 ## Snapshot testing
 
-`tests/snapshots.rs` renders a whole frame instead of asserting on state: it
+`tui/tests/snapshots.rs` renders a whole frame instead of asserting on state: it
 boots an `App` the same way an integration test does, drives it with scripted
 key events, draws one frame to a ratatui `TestBackend` (100×30 by default),
 flattens the buffer to plain text (one line per row, trailing spaces
-trimmed), and compares it to a golden file under `tests/snapshots/` with
+trimmed), and compares it to a golden file under `tui/tests/snapshots/` with
 `insta::assert_snapshot!`.
 
 ```rust
@@ -76,7 +76,7 @@ insta::assert_snapshot!(screen);
 Reach for a snapshot when the *layout* is the thing under test — a dialog's
 framing, a dock's column widths, how a long line truncates — not when a plain
 state assertion already says it. Most behavior still belongs in
-`tests/integration/main.rs`; snapshots are for the cases where "what does the
+`tui/tests/integration/main.rs`; snapshots are for the cases where "what does the
 screen look like" is the actual question.
 
 Every snapshot test pins the locale to `en`
@@ -133,7 +133,7 @@ regenerated and trusted blind.
 ```sh
 cargo test --test snapshots                          # fails on any mismatch
 INSTA_UPDATE=always cargo test --test snapshots       # writes the new .snap files
-git diff tests/snapshots/                             # read every line before committing
+git diff tui/tests/snapshots/                             # read every line before committing
 ```
 
 With `cargo-insta` installed (`cargo install cargo-insta`), `cargo insta
@@ -168,7 +168,7 @@ The corpus is not committed; the regression is.
 
 ## Benchmarking
 
-`benches/` holds Criterion benchmarks, one file per area:
+`tui/benches/` holds Criterion benchmarks, one file per area:
 
 | Bench | Covers |
 | ----- | ------ |

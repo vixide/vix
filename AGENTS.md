@@ -23,15 +23,15 @@ it privately, not as a public issue.
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
-shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
+shell** (package `vix-tui` in `tui/`, which builds the `vix` command; sources in `tui/src/`) — CLI, event loop, `App` state, rendering,
 explorer — over **124 focused `vix-*` member crates** under `crates/`, including
-the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
+the custom editor widget `vix-editor-core`. `tui/src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
 `crate::menu`, `crate::db` still name them. The App shell's two largest files
-are themselves split into submodules: `src/app.rs` delegates most of its logic
-to `src/app/*.rs` (`keymap.rs`, `git.rs`, `org.rs`, `lsp_dap.rs`, and others,
-one per feature area), and `src/ui.rs` delegates most of its drawing to
-`src/ui/*.rs` (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, and
+are themselves split into submodules: `tui/src/app.rs` delegates most of its logic
+to `tui/src/app/*.rs` (`keymap.rs`, `git.rs`, `org.rs`, `lsp_dap.rs`, and others,
+one per feature area), and `tui/src/ui.rs` delegates most of its drawing to
+`tui/src/ui/*.rs` (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, and
 others). See [`docs/architecture/index.md`](docs/architecture/index.md).
 
 ## Source of truth
@@ -124,7 +124,7 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
   cursor. Color belongs only to custom JSON themes. See
   [`docs/themes/index.md`](docs/themes/index.md).
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
-  library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
+  library and is tested without a TTY. Rendering lives only in `tui/src/ui.rs`.
 - **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
   (Apple / VSCode macOS / VSCode Windows / Emacs / Vi / Spacemacs / IntelliJ
   macOS / IntelliJ Windows / Eclipse / Sublime Text) in `App::on_key`; keymaps
@@ -138,25 +138,25 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 
 | You want to…                         | Go to…                                                       |
 | ------------------------------------ | ------------------------------------------------------------ |
-| Add/route a command                  | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
-| Change rendering                     | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
+| Add/route a command                  | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
+| Change rendering                     | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
 | Add/translate UI text                | `locales/*.yml` (+ `t!` at the call site)                  |
 | Add a setting                        | `crates/vix-settings/`                                       |
 | Change the editor widget             | `crates/vix-editor-core/` (engine reused; widget is Vix's)  |
 | Change soft-wrap / bracket rendering | `crates/vix-editor-core/src/wrap.rs`, `.../brackets.rs`     |
 | Change theme colors/model            | `crates/vix-theme/`, `crates/vix-theme-model/`             |
 | Change available UI languages        | `crates/vix-locale-model/`, `crates/vix-i18n/`             |
-| Change keyboard navigation styles    | `crates/vix-keymap-model/` + keymap dispatch in `src/app/keymap.rs` |
+| Change keyboard navigation styles    | `crates/vix-keymap-model/` + keymap dispatch in `tui/src/app/keymap.rs` |
 | Change the calendar                  | `crates/vix-calendar-panel/`                               |
-| Change spell checking                | `crates/vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs` |
-| Change git status/diff/staging       | `crates/vix-git/` + wiring in `src/app/git.rs` / `src/ui/choosers.rs` |
+| Change spell checking                | `crates/vix-spellcheck/` + wiring in `tui/src/app.rs` / `tui/src/ui.rs` |
+| Change git status/diff/staging       | `crates/vix-git/` + wiring in `tui/src/app/git.rs` / `tui/src/ui/choosers.rs` |
 | Change the find/replace engine       | `crates/vix-find-panel/` (matches/replace_all/unescape/PathFilter) |
 | Change LSP support                   | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
 | Change the database workbench        | `crates/vix-db/` (module tree + `crates/vix-db/spec`)      |
 | Change clipboard access              | `crates/vix-clipboard/` (opt-in platform pasteboard)       |
-| Change terminal input (paste, modifiers) | `src/main.rs` (terminal modes) + `App::on_paste` / `App::on_key` |
+| Change terminal input (paste, modifiers) | `tui/src/main.rs` (terminal modes) + `App::on_paste` / `App::on_key` |
 | Change Org tables / column view      | `crates/vix-org-table/`, `crates/vix-org/src/columns.rs`, `crates/vix-column-view/` |
-| Add a benchmark or fuzz target       | `benches/`, `fuzz/fuzz_targets/` (see `spec/test/index.md`) |
+| Add a benchmark or fuzz target       | `tui/benches/`, `fuzz/fuzz_targets/` (see `spec/test/index.md`) |
 
 See [`agents/share/crate-map.md`](agents/share/crate-map.md) for the full map.
 
@@ -171,7 +171,7 @@ recent split in place), it should clear a minimum-viable bar:
   crate itself, *or* — for a crate whose only job is holding state the App
   shell drives via key/mouse events (a panel/dialog's fields plus a few
   methods, no meaningful behavior outside that loop) — thorough coverage in
-  `tests/integration/*.rs` exercising the real `App`. The distinction is
+  `tui/tests/integration/*.rs` exercising the real `App`. The distinction is
   whether the crate has any logic worth testing in isolation; a bag of
   fields with no methods has none, no matter which layer tests it.
 - **A consumer other than the App shell, or a clear reuse story.** Either
@@ -183,7 +183,7 @@ A crate that fails all three — no logic to test, no spec of its own
 worth maintaining, and no plausible consumer beyond the one struct field
 that holds it — should fold into its sole consumer instead (precedent:
 `vix-projectile` merged into `vix-tasks` the same day it was built, and
-T151 folding `vix-query` into `src/app.rs`). A crate that's merely small
+T151 folding `vix-query` into `tui/src/app.rs`). A crate that's merely small
 (under ~100 lines) but has real tests and a real reuse story is fine as
 is — `vix-theme`'s icon set and the single-format `vix-convert-from-*-tool`
 family are size-appropriate for what they do, not micro-crates in the
@@ -193,10 +193,10 @@ guideline's sense.
 
 1. Read the owning crate's `spec/index.md` (or the cross-cutting root `spec/`);
    update it if intent is changing.
-2. Implement in the owning crate; keep editing logic out of `src/ui.rs`.
+2. Implement in the owning crate; keep editing logic out of `tui/src/ui.rs`.
 3. Internationalize any new text (YAML key + `t!`).
 4. Document every new public item (`deny(missing_docs)`).
-5. Add/extend tests (`tests/integration/main.rs` or a module's unit tests).
+5. Add/extend tests (`tui/tests/integration/main.rs` or a module's unit tests).
 6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean
    (or run `scripts/check`, the local CI-parity gate), and `scripts/check-docs`
    clean if you touched documentation.

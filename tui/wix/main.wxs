@@ -60,7 +60,7 @@
 
     <Product
         Id='*'
-        Name='vix'
+        Name='vix-tui'
         UpgradeCode='FEEBD501-4333-4380-A051-E232AD127DED'
         Manufacturer='Joel Parker Henderson'
         Language='1033'
@@ -83,11 +83,11 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='vix Installation'/>
+        <Property Id='DiskPrompt' Value='vix-tui Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='vix'>
+                <Directory Id='APPLICATIONFOLDER' Name='vix-tui'>
                     
                     <!--
                       Enabling the license sidecar file in the installer is a four step process:

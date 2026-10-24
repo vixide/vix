@@ -14,7 +14,7 @@ window manager, not to the editor.
 
 A terminal can only report `Command` when the **kitty keyboard protocol** is
 enabled — crossterm sets `KeyModifiers::SUPER` only under
-`KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES`. `src/main.rs` pushes that
+`KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES`. `tui/src/main.rs` pushes that
 flag at startup on macOS (popping it on exit and around suspend), alongside
 mouse capture and bracketed paste. A terminal without support ignores the
 request and keeps its legacy encoding; nothing else changes.
@@ -27,7 +27,7 @@ one to be sent to the app). Whatever the terminal does forward, Vix treats as
 `Control`.
 
 `App::command_as_control` is the fold; it is unit-tested on every platform, and
-`tests/integration/editing.rs` drives `Cmd+F`, `Cmd+Z`, and `Cmd+Shift+Z` through
+`tui/tests/integration/editing.rs` drives `Cmd+F`, `Cmd+Z`, and `Cmd+Shift+Z` through
 `on_key` on macOS.
 
 See `crates/vix-keymap-model/spec/index.md` for the keymaps themselves and

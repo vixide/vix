@@ -137,7 +137,7 @@ Requires a Rust toolchain (1.96+).
 
 ```sh
 cargo run                  # open the editor rooted at the current directory
-cargo run -- src/main.rs   # open one or more files on launch
+cargo run -- tui/src/main.rs   # open one or more files on launch
 cargo run -- file.rs:42:7  # open and jump straight to line 42, column 7
 cargo run -- --locale fr   # start in French (overrides the saved language)
 cargo build --release      # optimized binary at target/release/vix
@@ -189,7 +189,7 @@ cargo run --example i18n_lookup -- [key]      # look up a translation key in all
 cargo run --example calculator_eval -- "expr" # evaluate a math expression
 ```
 
-See `examples/scripts/` for sample Rhai scripts, and `examples/config/`
+See `tui/examples/scripts/` for sample Rhai scripts, and `tui/examples/config/`
 for a fully-annotated `config.toml` (every setting), plus a custom theme,
 snippets file, and `macros.toml` -- each verified by actually loading it
 with the real code that reads it.
@@ -202,7 +202,7 @@ with the real code that reads it.
 that record eight short terminal-session GIFs of real Vix features — an
 overview tour (above), the command palette, multi-cursor editing, git hunk
 staging, the DB workbench, Org-roam, the table editor, and themes — each run
-against `examples/demo-workspace/`. Regenerate them with
+against `tui/examples/demo-workspace/`. Regenerate them with
 `scripts/render-demos.sh` (needs `vhs` on `PATH`, which in turn needs `ttyd`
 and a headless-capable Chrome/Chromium; `brew install vhs` covers the first
 two) or, on a machine that can't run a headless browser at all,

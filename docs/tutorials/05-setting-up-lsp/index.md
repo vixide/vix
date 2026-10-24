@@ -17,7 +17,7 @@ protocol overview lives at
 Open the demo workspace for this tutorial:
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix .
 ```
 
@@ -42,7 +42,7 @@ A server is **not** started when Vix launches — it's spawned lazily the first
 time you open a file whose extension matches one of its `extensions`, and shut
 down (`shutdown`/`exit`) when Vix exits. There's no separate "workspace root"
 setting: Vix sends the folder you opened Vix in (`rootUri`) at `initialize`,
-which is why you should open `examples/demo-workspace` itself (or a
+which is why you should open `tui/examples/demo-workspace` itself (or a
 subdirectory of it) rather than a single file.
 
 `lsp_servers` is empty by default, so the rest of this tutorial is about
@@ -79,7 +79,7 @@ command = ["rust-analyzer"]
 Save the config file, then open the demo workspace's Rust project:
 
 ```sh
-vix examples/demo-workspace/rust-app/src/main.rs
+vix tui/examples/demo-workspace/rust-app/src/main.rs
 ```
 
 The first time you touch this file, Vix spawns `rust-analyzer` and sends
@@ -135,7 +135,7 @@ default to stdio framing and will hang waiting for a socket without it.
 Open the demo workspace's Python script:
 
 ```sh
-vix examples/demo-workspace/scripts/hello.py
+vix tui/examples/demo-workspace/scripts/hello.py
 ```
 
 Put the cursor on `rows` inside `main()` (the `rows = load_rows(data_path)`
@@ -214,7 +214,7 @@ keymap.
 | Workspace Symbols… | **Tools → Language Server → Workspace Symbols…** | — | `lsp.workspace_symbols` | `workspace/symbol` |
 
 A few worth walking through by hand in
-`examples/demo-workspace/rust-app/src/main.rs`:
+`tui/examples/demo-workspace/rust-app/src/main.rs`:
 
 - **Diagnostics.** Errors and warnings underline as you type — red for
   errors, yellow for warnings, cyan for info, blue for hints — on a channel

@@ -2,16 +2,16 @@
 
 ## Shape: a workspace of focused crates
 
-Vix is a **Cargo workspace** (edition 2024). The root package `vix` is a thin
-**App shell**: a library (`src/lib.rs`) with a thin binary (`src/main.rs`) on
+Vix is a **Cargo workspace** (edition 2024). The `vix-tui` package (`tui/`, the `vix` command) is a thin
+**App shell**: a library (`tui/src/lib.rs`) with a thin binary (`tui/src/main.rs`) on
 top. The binary owns only the CLI, the terminal lifecycle, the event loop, and
 process suspend; the shell library holds the `App` state, event routing,
-rendering (`src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
+rendering (`tui/src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
 crate** under `crates/` — 111 of them, each independently testable. This keeps
 the editing logic terminal-independent, so it can be unit-tested and driven from
-examples without a real TTY (see `tests/integration/main.rs` and `examples/`).
+examples without a real TTY (see `tui/tests/integration/main.rs` and `tui/examples/`).
 
-`src/lib.rs` **re-exports** each member crate under a short module name
+`tui/src/lib.rs` **re-exports** each member crate under a short module name
 (`pub use vix_git as git;`, `pub use vix_menu as menu;`, …), so the rest of the
 code — and the tables below — reach them as `crate::git`, `crate::menu`,
 `crate::editor_core`, etc., whether they are App-shell modules or member crates.
@@ -29,7 +29,7 @@ examples:
 | `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/model crates is **data and logic in the crate, host
-renders**: each exposes pure state and helpers; the App shell's `src/ui.rs` draws
+renders**: each exposes pure state and helpers; the App shell's `tui/src/ui.rs` draws
 them, and they return i18n *keys* (not translated text) so the host translates.
 See `agents/share/crate-map.md` for the full crate/module map.
 
@@ -171,8 +171,8 @@ handling and lifted the whole stack to 0.30.
 
 ## Testing strategy
 
-Because the logic is terminal-independent, `tests/integration/main.rs` (split
-by topic into `tests/integration/*.rs`, see `spec/test/index.md`) constructs an
+Because the logic is terminal-independent, `tui/tests/integration/main.rs` (split
+by topic into `tui/tests/integration/*.rs`, see `spec/test/index.md`) constructs an
 `App`, feeds it synthetic `crossterm` `KeyEvent`s, and asserts on the resulting
 state — typing, open/save round trips, tab lifecycle, go-to-line, fuzzy matching,
 the search-pattern builder, end-to-end regex replace with capture groups,

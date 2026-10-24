@@ -41,6 +41,6 @@ plain re-export/delegation to this crate; their own public API (still named
 `human_bytes` at each crate's own call sites) is unchanged. Since T567,
 that delegation calls `human_bytes_for_locale` with the active
 `rust_i18n::locale()` rather than the locale-invariant `human_bytes`,
-since every one of their call sites is user-facing text. `src/app.rs`'s
+since every one of their call sites is user-facing text. `tui/src/app.rs`'s
 workspace-dashboard disk-size figure calls `human_bytes_for_locale`
 directly for the same reason.

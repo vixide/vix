@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// clock or RNG (both of which are unavailable in some harness contexts).
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Recursively copy a file or directory tree from `src` to `dst`.
+/// Recursively copy a file or directory tree from `tui/src` to `dst`.
 ///
 /// Symlinks are **copied as links**, never dereferenced: without this, a symlink
 /// inside a copied directory would cause the target's contents to be duplicated
@@ -71,7 +71,7 @@ fn symlink_portable(_target: &Path, _link: &Path) -> io::Result<()> {
     ))
 }
 
-/// Move `src` to `dst`, falling back to copy+remove across filesystems.
+/// Move `tui/src` to `dst`, falling back to copy+remove across filesystems.
 ///
 /// # Errors
 ///

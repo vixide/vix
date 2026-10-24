@@ -115,6 +115,23 @@ def workspace_crates():
     )
 
 
+def other_packages():
+    """First-party packages that live outside `crates/`: the TUI (`tui/`) and
+    the desktop GUI workspace's members (`gui/*/`). The crate map may name
+    them, but they are not `crates/` members, so they need no crate spec."""
+    manifests = [os.path.join(ROOT, "tui", "Cargo.toml")]
+    gui = os.path.join(ROOT, "gui")
+    if os.path.isdir(gui):
+        manifests += [os.path.join(gui, d, "Cargo.toml") for d in os.listdir(gui)]
+    names = set()
+    for m in manifests:
+        if os.path.exists(m):
+            found = re.search(r'^name\s*=\s*"([^"]+)"', open(m, encoding="utf-8").read(), re.M)
+            if found:
+                names.add(found.group(1))
+    return names
+
+
 def check_crate_specs(crates):
     """Report every crate with no `spec/index.md`."""
     return [
@@ -214,7 +231,7 @@ def check_crate_map(crates):
         return crate in plain or any(fnmatch.fnmatch(crate, g) for g in globs)
 
     missing = [c for c in crates if not covered(c)]
-    known = set(crates) | {"vix-i18n"}
+    known = set(crates) | {"vix-i18n"} | other_packages()
     stale = sorted(
         n
         for n in plain

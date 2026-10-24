@@ -9,8 +9,9 @@ truth rather than a second, drifting copy.
 Quick orientation:
 
 - **Vix** is a keyboard-friendly terminal text editor built on `ratatui`,
-  organized as a **Cargo workspace**: a thin App shell (root package `vix`,
-  `src/`) over ~116 focused `vix-*` member crates under `crates/`.
+  organized as a **Cargo workspace**: a thin App shell (package `vix-tui` in `tui/`,
+  building the `vix` command) over ~124 focused `vix-*` member crates under
+  `crates/`; the desktop GUIs (`vix-gpui`, `vix-egui`) live beside it in `gui/`.
 - **Specs are the source of truth**, one per crate at
   `crates/<crate>/spec/index.md`; cross-cutting specs live at the repo-root
   `spec/`. Development is specification-driven — change the spec when intent

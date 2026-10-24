@@ -8,7 +8,7 @@
 //! are merged into the bundled set, so they appear in View → Theme automatically.
 //!
 //! Names are prefixed `Base16 …` to avoid colliding with the hand-authored JSON
-//! themes in `themes/`.
+//! themes in `tui/themes/`.
 
 use vix_theme_model::{CustomTheme, parse_theme};
 
@@ -102,7 +102,7 @@ fn rgb(hex: &str) -> String {
     format!("[{r}, {g}, {b}]")
 }
 
-/// Render one palette to the bundled theme JSON schema (see `themes/*.json`),
+/// Render one palette to the bundled theme JSON schema (see `tui/themes/*.json`),
 /// mapping base16 slots to Vix regions: `base00` background, `base05` foreground,
 /// `base01` chrome background, `base03` comments, `base0B` strings, `base0D`
 /// cursor, `base0E` keywords.

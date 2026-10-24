@@ -11,7 +11,7 @@ closes with `Esc`. None of them edit your buffers; two of them (System
 Information and File Information) let you copy a value *into* the editor.
 
 Each panel follows the Vix split: a small, pure-state crate holds the data and
-the selection/scroll state, while the host (`src/app.rs`, `src/ui.rs`) gathers
+the selection/scroll state, while the host (`tui/src/app.rs`, `tui/src/ui.rs`) gathers
 the raw values, spawns any background work, renders the overlay, and routes keys
 and mouse clicks.
 
@@ -156,7 +156,7 @@ See [`welcome_panel`](../../vix-welcome-panel/spec/index.md).
 ## As implemented in Vix
 
 All five panels are **shipped**. Each is a small pure-state crate paired with
-host glue in `src/app.rs` and `src/ui.rs`:
+host glue in `tui/src/app.rs` and `tui/src/ui.rs`:
 
 - **Workspace Dashboard** — `workspace_dashboard_panel` (`Dashboard`).
   `open_dashboard` (action `tools.dashboard`) names the folder, spawns three

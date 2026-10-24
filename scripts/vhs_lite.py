@@ -81,7 +81,7 @@ def key_bytes(name: str) -> bytes:
         return CTRL[base.lower()].encode()
     if base == "Enter" and "Ctrl" in mods:
         # Vix requests the kitty keyboard protocol's disambiguated encoding
-        # (src/main.rs, PushKeyboardEnhancementFlags) precisely so Ctrl+Enter
+        # (tui/src/main.rs, PushKeyboardEnhancementFlags) precisely so Ctrl+Enter
         # is distinguishable from plain Enter -- crossterm's parser
         # recognizes this CSI-u form on sight, independent of whether a real
         # terminal actually negotiated the enhancement.

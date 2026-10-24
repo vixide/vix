@@ -25,12 +25,12 @@ echo "==> cargo build --release"
 cargo build --release
 export PATH="$PWD/target/release:$PATH"
 
-# overview.tape and themes.tape both edit examples/demo-workspace/rust-app/
-# src/main.rs; overview.tape saves its edit to disk, so themes.tape (which
+# overview.tape and themes.tape both edit tui/examples/demo-workspace/rust-app/
+# tui/src/main.rs; overview.tape saves its edit to disk, so themes.tape (which
 # runs after it, alphabetically) would otherwise open the file mid-batch
 # already carrying that edit. Reset the whole demo workspace first so every
 # tape starts from its own clean, committed state, run order notwithstanding.
-git checkout -- examples/demo-workspace
+git checkout -- tui/examples/demo-workspace
 
 count=0
 for tape in docs/demos/*.tape; do

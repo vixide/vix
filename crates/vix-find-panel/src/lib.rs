@@ -486,7 +486,7 @@ mod tests {
         assert!(f.allows("src/app.rs"));
         assert!(!f.allows("target/debug/x"));
 
-        // Both: Rust files not under tests/.
+        // Both: Rust files not under tui/tests/.
         let f = PathFilter::new(r"\.rs$", r"(^|/)tests/");
         assert!(f.allows("src/app.rs"));
         assert!(!f.allows("tests/integration.rs"));

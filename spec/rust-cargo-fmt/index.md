@@ -15,4 +15,4 @@ cargo fmt --check
 ```
 
 Applies to every crate and all targets, including any file `main.rs`, `lib.rs`,
-`tests/`, `examples/`, `benches/`.
+`tests/`, `tui/examples/`, `tui/benches/`.

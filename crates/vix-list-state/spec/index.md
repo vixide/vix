@@ -25,8 +25,8 @@ wholesale — was tried first and rejected: panels' fields aren't uniformly
 named (`selected`/`sel`/`row`/`top`), several don't store a plain index at
 all (`vix-edit-bytes` derives a row from a byte cursor via `cursor / COLS`;
 `vix-edit-outline` derives a position from a computed list of currently-
-visible nodes), and dozens of external call sites across `src/app.rs` and
-`src/ui/*.rs` read a panel's `.selected`/`.scroll` fields directly for
+visible nodes), and dozens of external call sites across `tui/src/app.rs` and
+`tui/src/ui/*.rs` read a panel's `.selected`/`.scroll` fields directly for
 rendering and hit-testing. Requiring every panel to rename its fields to
 match a shared struct (or wrap them in one, turning `panel.selected` into
 `panel.cursor.selected` everywhere it's read) would have meant hundreds of

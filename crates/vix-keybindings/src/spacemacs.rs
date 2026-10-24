@@ -1,4 +1,4 @@
-//! Spacemacs's own `SPC`-leader bindings (`src/app.rs`'s
+//! Spacemacs's own `SPC`-leader bindings (`tui/src/app.rs`'s
 //! `spacemacs_leader_key`/`spacemacs_leader_lookup`), converted from that
 //! file's former `SPACEMACS_LEADER` const.
 //!

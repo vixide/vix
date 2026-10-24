@@ -120,7 +120,7 @@ with `/`), and `display_name` (the `FN`, else `Given Family` from `N`, else
 ## As implemented in Vix
 
 **Status:** Shipped. The feature spans three pure-data crates plus host glue in
-`src/app.rs` and `src/ui.rs`.
+`tui/src/app.rs` and `tui/src/ui.rs`.
 
 - **`vcard_parser`** — the vCard 4.0 / RFC 6350 parser. `parse(text)`
   returns a `Vcard` of `Property { name, params, value }` after unfolding,

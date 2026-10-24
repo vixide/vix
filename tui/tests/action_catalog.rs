@@ -19,9 +19,12 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use vix_action_catalog::dispatch_scan::{DYNAMIC_PREFIXES, every_dispatchable_action_id};
 
-/// The workspace root (this test's package is the root package).
+/// The repository root (this test's package lives in `tui/`).
 fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 /// Every action id a `vix_menu::Item` leaf runs.

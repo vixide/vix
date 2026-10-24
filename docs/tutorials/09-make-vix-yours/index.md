@@ -8,12 +8,12 @@ tutorial walks through all four, hands-on, against the demo workspace.
 Open it if you don't already have it open:
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix .
 ```
 
 From the explorer (`Ctrl+B` to show it, `Ctrl+E` to focus it), open
-`examples/demo-workspace/rust-app/src/main.rs`. It's a small Rust file
+`tui/examples/demo-workspace/rust-app/src/main.rs`. It's a small Rust file
 with keywords, strings, a comment or two, and a couple of `TODO`/`FIXME`
 markers — real syntax-highlighted code to preview changes against as we
 go, rather than an empty buffer.

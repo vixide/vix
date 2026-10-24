@@ -15,7 +15,10 @@ use crate::common::*;
 #[test]
 fn project_media_type_example_snippets_load() {
     // The bundled example files live under config/media-types/<type>/snippets/.
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Repository-relative (this test's package lives in `tui/`).
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     let proj = "config/snippets/snippets.json";
 
     // Rust source maps to text/rust (no x- prefix) and loads its examples.
@@ -162,7 +165,10 @@ fn specs_reference_crates_by_their_workspace_paths() {
             }
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Repository-relative (this test's package lives in `tui/`).
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     let mut hits = Vec::new();
     walk(&root.join("spec"), &mut hits);
     walk(&root.join("crates"), &mut hits);

@@ -244,7 +244,7 @@ flat character offset to 1-based line/column via `cursor_1based`.
 
 `crates/vix-menu/src/lib.rs` defines the **Edit** menu and its `Select`, `Move`, `Go`, `Find`,
 and `Case` submenus, plus the **View → Editor** submenu, as static action tables.
-Each item carries an `action` string that `App::run_action` in `src/app.rs`
+Each item carries an `action` string that `App::run_action` in `tui/src/app.rs`
 dispatches; the command palette reuses the same action names.
 
 The `editor_core` crate (`crates/vix-editor-core/src/editor.rs`) provides the underlying

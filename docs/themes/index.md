@@ -8,8 +8,8 @@ apply, Esc to cancel). The chosen theme's name is saved to the `theme` setting.
 ## Built-in themes
 
 **Dark** (default, a soft `[215,215,215]` on `[40,40,40]`) and **Light** (its
-inverse) are ordinary bundled themes — `themes/dark.json` and
-`themes/light.json` — with no special treatment. Edit those files, or install a
+inverse) are ordinary bundled themes — `tui/themes/dark.json` and
+`tui/themes/light.json` — with no special treatment. Edit those files, or install a
 same-named theme of your own, to change them.
 
 ## Following the terminal (`theme = "auto"`)
@@ -31,7 +31,7 @@ Themes are JSON files in the themes directory:
 
 ### Ready-made themes
 
-A set of themes is **bundled into the binary** (from the repo's `themes/`
+A set of themes is **bundled into the binary** (from the repo's `tui/themes/`
 directory) and appears in **View → Theme…** automatically — no installation
 needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`,
 `Turbo`, `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,

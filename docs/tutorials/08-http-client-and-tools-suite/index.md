@@ -8,7 +8,7 @@ more. This tutorial works through both against the repository's demo
 workspace, so every command below is something you can actually run.
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix .
 ```
 
