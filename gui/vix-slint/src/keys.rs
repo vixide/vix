@@ -104,6 +104,7 @@ pub fn key_event(text: &str, mods: Mods, apple: bool) -> Option<KeyEvent> {
 /// The key press for an `Option`/`Alt` chord taken from winit on macOS:
 /// `key` is winit's key without modifiers (`s` for `Option+S`), and the flags
 /// are winit's own (not swapped). "Option as Meta", as in the other builds.
+#[cfg(any(target_os = "macos", test))]
 #[must_use]
 pub fn option_chord(key: &str, shift: bool, control: bool, command: bool) -> Option<KeyEvent> {
     let name = key_name(key)?;
