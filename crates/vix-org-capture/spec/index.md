@@ -229,5 +229,5 @@ template (`App::start_capture`):
    `‹Label›`, later ones `[Label]`, and every non-field placeholder expanded
    immediately (matching Emacs, where `%t`/`%a`/etc. resolve the instant the
    capture buffer opens, before any minibuffer prompt). `draw_prompt`
-   (`src/ui.rs`) renders it above the input, scrolled to keep the current
+   (`tui/src/ui.rs`) renders it above the input, scrolled to keep the current
    field's line in view.

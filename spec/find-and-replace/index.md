@@ -209,10 +209,10 @@ offsets; the app renders the box, owns the buffer, and applies the returned text
   is the same shape for the workspace-wide panel, also converted to a `Flags`
   bitset in T149.
 - `Decision` and `QueryReplace` (the interactive query-replace session state)
-  live directly in `src/app.rs` — folded there from a former standalone
+  live directly in `tui/src/app.rs` — folded there from a former standalone
   `vix-query` crate in T151, whose sole consumer was always the App shell and
   which had no logic of its own to test in isolation.
-- In `src/app.rs`: `start_search` opens the box; `find_step` and `find_with`
+- In `tui/src/app.rs`: `start_search` opens the box; `find_step` and `find_with`
   implement Find Next / Previous with wrap-around and highlight marks;
   `find_selection` implements Find Selection; `replace_all` does in-buffer Replace
   All; `begin_query_replace`, `qr_key`, and `qr_apply` run interactive query-replace

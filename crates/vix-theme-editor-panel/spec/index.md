@@ -36,7 +36,7 @@ choosing any other theme from the View → Theme submenu).
   generic lens over `CustomTheme`'s structure — 15 one-line `get`/`set`
   match arms is simpler than a path/lens abstraction would be here) and
   supplies each row's i18n label key.
-- In `src/app.rs`: `open_theme_editor` snapshots the active theme;
+- In `tui/src/app.rs`: `open_theme_editor` snapshots the active theme;
   `theme_editor_key`'s `Enter` opens the X11 picker with a new
   `theme_editor_picking: bool` flag set, so the X11 panel's own `Enter`
   handler (`insert_selected_x11`, otherwise used by Tools → X11 Colors)

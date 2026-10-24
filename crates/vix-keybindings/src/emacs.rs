@@ -1,4 +1,4 @@
-//! The Emacs keymap's built-in bindings (`src/app.rs`'s `emacs_key` and its
+//! The Emacs keymap's built-in bindings (`tui/src/app.rs`'s `emacs_key` and its
 //! five chord-continuation handlers), converted from that file's former
 //! hardcoded `match` arms plus five `EMACS_CTRL_*` consts into this crate's
 //! shared schema (`SPACEMACS_LEADER` stays Spacemacs's own table, T104b).

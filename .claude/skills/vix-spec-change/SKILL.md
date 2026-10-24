@@ -17,17 +17,17 @@ is correct, then make them match — don't leave the drift for later.
    (CI, tools menu, navigation, …). If intent is changing, update the spec as
    part of this change, not after.
 2. **Implement in the owning crate.** Keep editing/state logic out of
-   `src/ui.rs` (rendering only lives there — usually in one of its
-   `src/ui/*.rs` submodules). One action id, one `App::run_action` arm
-   (routed through `src/app.rs`'s own `src/app/*.rs` submodules) — never a
+   `tui/src/ui.rs` (rendering only lives there — usually in one of its
+   `tui/src/ui/*.rs` submodules). One action id, one `App::run_action` arm
+   (routed through `tui/src/app.rs`'s own `tui/src/app/*.rs` submodules) — never a
    second code path for the same command.
 3. **Internationalize new user-facing text.** Add the key to the right `locales/*.yml` file
    across all languages the file already carries, render with `t!`. Never
    hard-code a display string.
 4. **Document every new public item** — `#![deny(missing_docs)]` is on at
    every crate root; an undocumented `pub fn`/`struct`/field fails the build.
-5. **Add/extend tests** — `tests/integration/main.rs` (split by topic into
-   `tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
+5. **Add/extend tests** — `tui/tests/integration/main.rs` (split by topic into
+   `tui/tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
    tests. Prefer terminal-independent tests (build an `App`, feed
    `KeyEvent`s, assert on state); render checks use a sized `TestBackend`.
    Never assert on translated text (locale is process-global and can race) —

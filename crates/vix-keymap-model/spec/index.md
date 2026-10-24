@@ -206,7 +206,7 @@ The View → Keymap submenu is `VIEW_KEYMAP` in `crates/vix-menu/src/lib.rs`, on
 with action `view.keymap:<id>`, kept in sync with `KEYMAPS` by the
 `keymap_submenu_matches_model` test.
 
-The host wiring lives in `src/app.rs`:
+The host wiring lives in `tui/src/app.rs`:
 
 - `enum Keymap` and `Keymap::from_id` — the active style, parsed from
   `settings.keymap` (unknown ids fall back to `Apple`); `App::active_keymap`

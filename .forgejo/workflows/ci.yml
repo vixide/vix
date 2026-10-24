@@ -93,9 +93,9 @@ jobs:
       - name: feature combinations (T587)
         run: |
           cargo install cargo-hack --locked
-          cargo clippy -p vix --no-default-features --all-targets -- -D warnings
-          cargo test -p vix --no-default-features
-          cargo hack check -p vix --each-feature --no-dev-deps
+          cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
+          cargo test -p vix-tui --no-default-features
+          cargo hack check -p vix-tui --each-feature --no-dev-deps
 
       # T505 (tasks.md): every example must keep running, not just compiling
       # (--all-targets above already builds them all). Only the headless
@@ -107,7 +107,7 @@ jobs:
           cargo run --example headless_edit >/dev/null
           cargo run --example render_frame -- index.md >/dev/null
           cargo run --example textops_pipeline -- index.md >/dev/null
-          cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+          cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
 
       - name: cargo doc (warnings denied)
         env:
@@ -123,13 +123,13 @@ jobs:
           cargo run --example list_commands -- --write >/dev/null
           git diff --exit-code -- docs/reference/
 
-      # T307 (tasks.md): man/vix.1 is generated from the real Cli definition
-      # (vix::cli::Cli, shared with src/main.rs) -- regenerate and diff, same
+      # T307 (tasks.md): tui/man/vix.1 is generated from the real Cli definition
+      # (vix::cli::Cli, shared with tui/src/main.rs) -- regenerate and diff, same
       # pattern as docs/reference/ above.
       - name: man page current? (T307)
         run: |
           cargo run --example generate_man >/dev/null
-          git diff --exit-code -- man/
+          git diff --exit-code -- tui/man/
 
       # The specs are living documentation, gated like code. Mirrors
       # `scripts/check`; see spec/test/index.md.

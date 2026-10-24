@@ -63,12 +63,12 @@ crate existed to enforce it, is now genuinely true.
 
 ### One choke point, nine keymaps, no shared table
 
-`App::on_key` (`src/app.rs:2519`) has exactly one place every keymap passes
+`App::on_key` (`tui/src/app.rs:2519`) has exactly one place every keymap passes
 through before its own dispatch runs — right after the last overlay/panel/
 org-table guard, before the per-keymap `match`:
 
 ```rust
-// src/app.rs:2551-2557
+// tui/src/app.rs:2551-2557
 if self.org_table_key(key) {
     return;
 }
@@ -91,9 +91,9 @@ org-table guard (so it never steals a key from a context that legitimately
 owns it right now) and before all 9 keymaps (so it genuinely intercepts,
 for every keymap, in one place — not nine).
 
-`App`'s private `enum Keymap` (`src/app.rs:879`) has 9 variants. The
+`App`'s private `enum Keymap` (`tui/src/app.rs:879`) has 9 variants. The
 already-shipped `vix-keymap-model::KEYMAPS` (`crates/vix-keymap-model/
-src/lib.rs:34`) has **10** string ids — `vscode-macos` and `vscode-windows`
+tui/src/lib.rs:34`) has **10** string ids — `vscode-macos` and `vscode-windows`
 are separate persisted ids that both dispatch through the single
 `Keymap::Vscode` variant, since VS Code's bindings are identical in a
 terminal regardless of host OS (its own doc comment says as much). A
@@ -102,17 +102,17 @@ registry keyed on keymap has to pick one granularity; § Design picks
 
 ### None of the 9 keymaps are queryable today — only 2 are even partly a table
 
-- **Emacs** (`emacs_key`, `src/app.rs:3154`) is the closest thing to
+- **Emacs** (`emacs_key`, `tui/src/app.rs:3154`) is the closest thing to
   data-driven: top-level `Ctrl`-letter bindings are a hardcoded
   `match c.to_ascii_lowercase() { 'x' => ..., 's' => self.run_action("edit.find"), ... }`
-  (`src/app.rs:3200-3224`), but every chord *continuation* below that is a
+  (`tui/src/app.rs:3200-3224`), but every chord *continuation* below that is a
   real `&[(&str, &str)]` table looked up with `.iter().find(...)` — six of
   them: `SPACEMACS_LEADER`, `EMACS_CTRL_X`, `EMACS_CTRL_C`,
   `EMACS_CTRL_C_X`, `EMACS_CTRL_C_P_C`, `EMACS_CTRL_C_P_C_M`
-  (`src/app.rs:20852`, `20938-21019`). E.g.:
+  (`tui/src/app.rs:20852`, `20938-21019`). E.g.:
 
   ```rust
-  // src/app.rs:20938
+  // tui/src/app.rs:20938
   const EMACS_CTRL_X: &[(&str, &str)] = &[
       ("C-f", "file.open"),
       ("C-s", "file.save"),
@@ -131,20 +131,20 @@ registry keyed on keymap has to pick one granularity; § Design picks
   entry here is also a valid `vix_macros::decode_key` token. What is
   *not* compatible is the **lookup key** the host derives from an incoming
   `KeyEvent` to search these tables with: `Self::chord_key_name`
-  (`src/app.rs:3393-3401`) only ever produces `"C-<char>"` or a bare char —
+  (`tui/src/app.rs:3393-3401`) only ever produces `"C-<char>"` or a bare char —
   it drops Alt and Shift entirely, because nothing in these six tables
   needs them. A shared registry needs one lookup path
   (`vix_macros::encode_key`) that both this crate and any future new tables
   use, not two.
 
-- **Every other keymap** — `vim_normal_key` (`src/app.rs:3459`), `vscode_key`
+- **Every other keymap** — `vim_normal_key` (`tui/src/app.rs:3459`), `vscode_key`
   (`2825`), `intellij_key` (`2880`), `eclipse_key` (`2935`), `sublime_key`
   (`2983`), `global_key`/`apple_ctrl_key` (`2767`/`2772`),
   `global_shared_key` (`3025`) — is a hardcoded `match`/`if` chain with
   **no** backing data structure. `apple_ctrl_key` alone:
 
   ```rust
-  // src/app.rs:2776-2811
+  // tui/src/app.rs:2776-2811
   match c.to_ascii_lowercase() {
       'q' => self.run_action("file.quit"),
       'n' => self.run_action("file.new"),
@@ -172,7 +172,7 @@ registry keyed on keymap has to pick one granularity; § Design picks
 
 ### The existing "shortcut" displays are cosmetic, not data
 
-`App::shortcut_rows` (`src/app.rs:14935-14994`, feeding the F1 help
+`App::shortcut_rows` (`tui/src/app.rs:14935-14994`, feeding the F1 help
 overlay via `crates/vix-keyboard-shortcut-panel`) already aggregates three
 sources — `keyboard_shortcut_panel::ROWS` (a curated static list),
 `collect_menu_shortcuts` (walks `vix_menu::menus()`'s `Item.shortcut`
@@ -717,7 +717,7 @@ the crate's own unit tests something concrete to assert on (7 tests,
 ## Staged plan
 
 Each is its own branch, its own gate run, its own merge — no single
-giant, hard-to-review rewrite of `src/app.rs`'s key dispatch:
+giant, hard-to-review rewrite of `tui/src/app.rs`'s key dispatch:
 
 - **T104** (this spec).
 - **T104a** — `vix-keybindings` crate: the `Binding`/`KeymapTable`/

@@ -63,7 +63,7 @@ adding one.
 
 ```sh
 vix              # open rooted at the current directory
-vix src/main.rs  # open one or more files directly
+vix tui/src/main.rs  # open one or more files directly
 ```
 
 The first time Vix runs anywhere, it shows a scrollable welcome overlay —

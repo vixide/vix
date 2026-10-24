@@ -68,7 +68,7 @@ command cache, one per slot: configure/compile/test/install/package/run), six
 last), and `project_last_command` (the most recently run project command of
 any kind, for "repeat last task"). These are plain fields — not a
 `vix_tasks` struct — so this crate stays a dependency-free leaf; the host
-(`src/app.rs`) converts at the call site. `App` loads them lazily, only once a
+(`tui/src/app.rs`) converts at the call site. `App` loads them lazily, only once a
 `project.*` action is first used in a run, and never overwrites them on exit
 without having loaded them first, so a run that never touches project features
 cannot silently wipe previously saved project state.

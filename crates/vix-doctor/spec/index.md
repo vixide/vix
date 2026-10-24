@@ -6,7 +6,7 @@ color support. Module `doctor`.
 
 - menu "Help"
   - menuitem "Run Diagnostics"
-- `vix --doctor` (CLI flag, `src/cli.rs`)
+- `vix --doctor` (CLI flag, `tui/src/cli.rs`)
 
 Both entry points run the same fixed set of checks and print the same
 plain-text report — the CLI prints to stdout and exits before the TUI
@@ -53,7 +53,7 @@ plain consumers, not the other way around.
 
 Every check name and detail string is internationalized (T561: an
 earlier version called `t!` zero times — a real hard-rule violation,
-found by a self-audit, not caught at build time). `src/main.rs` sets
+found by a self-audit, not caught at build time). `tui/src/main.rs` sets
 the process-wide locale (from `--locale` if passed, else the persisted
 setting) *before* handling `--doctor`, specifically so the CLI path is
 genuinely localized too, not just the in-app **Help → Run

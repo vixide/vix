@@ -10,7 +10,7 @@
 //! fields and calls these as **plain functions** rather than adopting a
 //! shared struct: a struct would mean either renaming every panel's public
 //! fields (breaking every external `.selected`/`.scroll` read across
-//! `src/app.rs`/`src/ui/*.rs`) or wrapping them in an extra field
+//! `tui/src/app.rs`/`tui/src/ui/*.rs`) or wrapping them in an extra field
 //! (`panel.cursor.selected` instead of `panel.selected`), and several
 //! panels don't store a plain index at all — `vix-edit-bytes` derives a row
 //! from a byte cursor (`cursor / COLS`), `vix-edit-outline` derives a

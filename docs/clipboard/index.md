@@ -24,7 +24,7 @@ surface is the ordinary **Edit → Cut / Copy / Paste** menu items.
   entered twice at once.
 - **The platform clipboard is opt-in.** Until `use_system` is called, `set`
   and `get` read and write a process-local in-memory clipboard instead of the
-  real one. `src/main.rs` opts in once at startup, so the running app behaves
+  real one. `tui/src/main.rs` opts in once at startup, so the running app behaves
   exactly as you'd expect; everything else — the test suite above all — cuts
   and pastes in memory only.
 
@@ -33,7 +33,7 @@ the developer's actual system clipboard. A VS Code keymap test cut the line
 `doomed` from a scratch buffer, and that text landed on the macOS pasteboard,
 where the next paste in any other app produced `doomed`. Tests that need the
 real platform clipboard must call `use_system` themselves, and none do —
-`tests/integration/editing.rs` asserts `is_system()` is `false` so the
+`tui/tests/integration/editing.rs` asserts `is_system()` is `false` so the
 isolation can't quietly regress.
 
 ## Clipboard history

@@ -10,4 +10,4 @@ well-known schemes from a small table rather than a JSON file each. The themes
 are merged into the bundled set, so they appear in View → Theme automatically.
 
 Names are prefixed `Base16 …` to avoid colliding with the hand-authored JSON
-themes in `themes/`.
+themes in `tui/themes/`.

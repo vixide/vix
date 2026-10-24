@@ -179,7 +179,7 @@ editor.
   line buffer with `scroll`, a `follow` flag, and a `DEFAULT_SCROLLBACK` of
   `1000`). All three are pure logic with no rendering; each `#![forbid(unsafe_code)]`,
   `#![deny(missing_docs)]`, and `#![warn(clippy::pedantic)]`.
-- **Host wiring** lives in `src/app.rs`: `show_explorer`, `show_messages`,
+- **Host wiring** lives in `tui/src/app.rs`: `show_explorer`, `show_messages`,
   `show_bottom_dock`, and `show_status_bar` track visibility (mirrored into
   `Settings`); `toggle_left_dock`, `toggle_right_dock`, `toggle_bottom_dock`, and
   `toggle_status_bar` flip them. `run_action` maps `view.left_dock`/`view.explorer`,
@@ -190,7 +190,7 @@ editor.
   `MIN_BODY = 3`), driven by a `DockResize` drag started when the pointer presses
   the explorer's right edge, the messages drawer's left edge, or the bottom dock's
   top edge.
-- **Rendering** is in `src/ui.rs`: `draw_messages` (title `ui.messages`,
+- **Rendering** is in `tui/src/ui.rs`: `draw_messages` (title `ui.messages`,
   top+left borders, per-level icons, close marks), `draw_bottom_dock` (title
   `ui.bottom_dock` = "Output", a `visible(height)` window, follow-aware scroll),
   and `draw_status_bar` (segments built by the `status_bar_panel` crate). Each

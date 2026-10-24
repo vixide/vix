@@ -6,7 +6,7 @@
 //! Deliberately pure and keymap-parameterized (`resolve` takes
 //! `keymap_id` as a plain `&str`, no `App` dependency at all) so it's
 //! fully unit-testable here rather than only exercisable through
-//! `tests/integration.rs`.
+//! `tui/tests/integration.rs`.
 
 use std::collections::BTreeMap;
 

@@ -19,7 +19,7 @@ publish = false
 [workspace.dependencies]
 # The whole editor: `App`, `ui::draw`, settings, menus. Each GUI is another
 # front end over exactly the App shell the terminal binary uses.
-vix = { path = ".." }
+vix = { path = "../tui", package = "vix-tui" }
 vix-input = { path = "../crates/vix-input" }
 vix-i18n = { path = "../crates/vix-i18n" }
 vix-gui-common = { path = "vix-gui-common" }

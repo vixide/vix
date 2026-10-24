@@ -9,12 +9,12 @@ Types: `KeyCode`, `KeyModifiers`, `KeyEventKind`, `KeyEventState`,
 
 **Status:** Shipped (GUI Phase 0). Every input-handling path in Vix — the
 `App` shell (`App::on_key`/`App::on_mouse`), the keymap and every
-`src/app/*.rs` key handler, keyboard macros (`vix-macros`), modal-editing
+`tui/src/app/*.rs` key handler, keyboard macros (`vix-macros`), modal-editing
 recording and dot-repeat, the editor widget (`vix-editor-core`'s
 `editor_input` module), the integrated terminal's key encoder
 (`vix-terminal`), and every edit surface (`vix-edit-*`, `vix-column-view`,
-`vix-db`) — takes these types. No crate other than the root package's
-terminal event loop (`src/main.rs`) and `vix-input` itself names crossterm's
+`vix-db`) — takes these types. No crate other than the `vix-tui` package's
+terminal event loop (`tui/src/main.rs`) and `vix-input` itself names crossterm's
 event types.
 
 ## Why

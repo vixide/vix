@@ -140,7 +140,7 @@ test:
     - cargo run --example headless_edit >/dev/null
     - cargo run --example render_frame -- index.md >/dev/null
     - cargo run --example textops_pipeline -- index.md >/dev/null
-    - cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+    - cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
 
 # T587: every Cargo feature combination must keep compiling and passing its own
 # tests (spec/cargo-features/index.md).
@@ -149,9 +149,9 @@ feature-combos:
   script:
     - rustup component add clippy
     - cargo install cargo-hack --locked
-    - cargo clippy -p vix --no-default-features --all-targets -- -D warnings
-    - cargo test -p vix --no-default-features
-    - cargo hack check -p vix --each-feature --no-dev-deps
+    - cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
+    - cargo test -p vix-tui --no-default-features
+    - cargo hack check -p vix-tui --each-feature --no-dev-deps
 
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's
 # complexity (see spec/ci/index.md) — posting a merge-request note needs an
@@ -215,14 +215,14 @@ docs-reference:
     - cargo run --example list_commands -- --write >/dev/null
     - git diff --exit-code -- docs/reference/
 
-# T307 (tasks.md): man/vix.1 is generated from the real Cli definition
-# (vix::cli::Cli, shared with src/main.rs) -- regenerate and diff, same
+# T307 (tasks.md): tui/man/vix.1 is generated from the real Cli definition
+# (vix::cli::Cli, shared with tui/src/main.rs) -- regenerate and diff, same
 # pattern as docs-reference above.
 man-page:
   stage: test
   script:
     - cargo run --example generate_man >/dev/null
-    - git diff --exit-code -- man/
+    - git diff --exit-code -- tui/man/
 
 # The specs are living documentation, gated like code: broken links, a crate
 # with no spec, a crate missing from the crate map, or a README.md that has

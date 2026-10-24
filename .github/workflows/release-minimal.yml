@@ -52,7 +52,7 @@ jobs:
       # The `minimal` profile is for a reduced security surface (panic=abort, fat
       # LTO dead-code elimination); see [profile.minimal] in Cargo.toml.
       - name: build (no default features)
-        run: cargo build --profile minimal --locked -p vix --no-default-features --target ${{ matrix.target }}
+        run: cargo build --profile minimal --locked -p vix-tui --no-default-features --target ${{ matrix.target }}
       - name: package
         shell: bash
         run: |
@@ -63,7 +63,7 @@ jobs:
           bin=vix
           if [ "${{ matrix.ext }}" = zip ]; then bin=vix.exe; fi
           cp "target/${{ matrix.target }}/minimal/$bin" "$name/"
-          cp README.md LICENSE CHANGELOG.md man/vix.1 "$name/"
+          cp README.md LICENSE CHANGELOG.md tui/man/vix.1 "$name/"
           if [ "${{ matrix.ext }}" = zip ]; then
             7z a "$name.zip" "$name" > /dev/null
           else

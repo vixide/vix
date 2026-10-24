@@ -43,7 +43,7 @@ Editing an unsaved Rust file on line 42, column 9, on the `main` branch with
 changes, the bar reads roughly:
 
 ```
- src/app.rs ●  —  Saved        Rust  LF  UTF-8   Ln 42:Col 9   
+ tui/src/app.rs ●  —  Saved        Rust  LF  UTF-8   Ln 42:Col 9   
 ```
 
 Clicking the `main •` branch indicator opens the Git Changes panel.

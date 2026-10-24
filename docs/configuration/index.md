@@ -157,7 +157,7 @@ choosing a theme (**View → Theme…**), language (**View → Locale…**), or 
 
 ## Custom themes directory
 
-Custom JSON themes live next to the config file, in a `themes/` subdirectory
+Custom JSON themes live next to the config file, in a `tui/themes/` subdirectory
 (e.g. `~/.config/vix/themes/*.json` on Linux). See [themes.md](../themes/index.md) for the
 file format. Set `theme` to a custom theme's `name` to load it on startup.
 

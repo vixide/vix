@@ -21,7 +21,7 @@ cd vix/examples/demo-workspace
 vix
 ```
 
-Take a look at [`examples/demo-workspace/README.md`](../../../examples/demo-workspace/README.md)
+Take a look at [`tui/examples/demo-workspace/README.md`](../../../tui/examples/demo-workspace/README.md)
 for what's in this project — a tiny Rust binary, a Python script, some
 Markdown notes, and a couple of data files. We'll open several of these as
 we go.
@@ -54,7 +54,7 @@ With the explorer focused:
 - **`←`** collapses an expanded directory, or steps up to its parent.
 
 Move the selection down to `rust-app/`, press `→` to expand it, then drill
-into `src/` the same way until you reach `main.rs`. Notice that as you
+into `tui/src/` the same way until you reach `main.rs`. Notice that as you
 move the selection with the arrow keys, Vix opens each highlighted file in
 a **preview tab** automatically — a lightweight, throwaway tab that the
 next file you preview simply replaces, so browsing the tree doesn't pile
@@ -67,7 +67,7 @@ lives in [`docs/file-explorer/index.md`](../../file-explorer/index.md).
 ## Reading and editing a file
 
 You should now be looking at
-`examples/demo-workspace/rust-app/src/main.rs`, a small word-frequency
+`tui/examples/demo-workspace/rust-app/src/main.rs`, a small word-frequency
 counter. Scroll to the bottom of `main()` and you'll find two comments:
 
 ```rust
@@ -123,7 +123,7 @@ is currently active.
 A few more things worth trying right now, still inside the demo
 workspace:
 
-- `main.rs:20` — opens `examples/demo-workspace/rust-app/src/main.rs` at
+- `main.rs:20` — opens `tui/examples/demo-workspace/rust-app/src/main.rs` at
   line 20 (append `:<col>` too, if you want a specific column).
 - `>save` — type `>` to switch into command mode, then search commands by
   name instead of remembering a keybinding.
@@ -158,7 +158,7 @@ uses. The complete menu map, including every submenu, lives in
 
 ## A basic find
 
-With `examples/demo-workspace/rust-app/src/main.rs` focused, press
+With `tui/examples/demo-workspace/rust-app/src/main.rs` focused, press
 **`Ctrl+F`** to open the find box and type `FIXME`. Press **Enter** to
 jump to the match; **`Ctrl+G`** (or `F3`) repeats the search forward,
 **`Ctrl+Shift+G`** (or `Shift+F3`) repeats it backward. **`Esc`** closes
@@ -166,7 +166,7 @@ the box.
 
 That's the basic case — searching one open file. Find-and-replace,
 interactive query-replace, and workspace-wide search across every file in
-`examples/demo-workspace/` all build on the same box and get their own
+`tui/examples/demo-workspace/` all build on the same box and get their own
 tutorial (`02-editing-power-techniques`). For the full reference now, see
 [`docs/find/index.md`](../../find/index.md).
 
@@ -174,7 +174,7 @@ tutorial (`02-editing-power-techniques`). For the full reference now, see
 
 The band across the very bottom of the window is the status bar. Toggle it
 with **View → Layout → Bottom Status**. With
-`examples/demo-workspace/rust-app/src/main.rs` open and a change unsaved,
+`tui/examples/demo-workspace/rust-app/src/main.rs` open and a change unsaved,
 it reads roughly:
 
 ```
@@ -211,7 +211,7 @@ the editor:
 
 Try the bottom dock now: press **`Ctrl+Shift+F`** to search the whole
 workspace and type `TODO` — matches from
-`examples/demo-workspace/rust-app/src/main.rs`, `scripts/hello.py`, and
+`tui/examples/demo-workspace/rust-app/src/main.rs`, `scripts/hello.py`, and
 `notes.md` all stream into the bottom dock at once, each with its file and
 line number.
 

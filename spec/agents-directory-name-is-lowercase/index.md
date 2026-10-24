@@ -12,7 +12,7 @@ Not `AGENTS`, not `Agents`.
 ## Why lowercase
 
 - **Every other directory in the tree is lowercase** — `crates/`, `docs/`,
-  `spec/`, `locales/`, `scripts/`, `langs/`, `themes/`, `benches/`, `fuzz/`.
+  `spec/`, `locales/`, `scripts/`, `langs/`, `tui/themes/`, `tui/benches/`, `fuzz/`.
   A single shouting directory is an exception a reader has to remember, and one
   more thing to get wrong in a path.
 - **Case-insensitive filesystems hide mistakes.** macOS and Windows will happily

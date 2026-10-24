@@ -53,7 +53,7 @@ on top.
 ## Actions
 
 - Commands are string ids dispatched by `App::run_action` (in the App shell,
-  `src/app.rs`). The menu (`crates/vix-menu/`) and palette (`crates/vix-palette/`,
+  `tui/src/app.rs`). The menu (`crates/vix-menu/`) and palette (`crates/vix-palette/`,
   re-exported as `crate::menu` / `crate::palette`) reference the same ids.
 - To add a command: add the `run_action` arm, then reference it from a menu item
   and/or `palette::COMMANDS`, and add its i18n label key.
@@ -75,7 +75,7 @@ on top.
 
 ## Rendering
 
-- All of the *app's* drawing is in `src/ui.rs`; no editing/state logic there. The
+- All of the *app's* drawing is in `tui/src/ui.rs`; no editing/state logic there. The
   editor widget renders itself (in `editor_core`); the app just hands it a `Rect`.
 - Paint the whole frame in the theme background first, then panes, then overlays.
 - Overlays `Clear` their rect and set the block `.style(theme::base())` so they
@@ -85,7 +85,7 @@ on top.
 
 ## Terminal input
 
-- The terminal is owned by `src/main.rs` alone: raw mode, mouse capture,
+- The terminal is owned by `tui/src/main.rs` alone: raw mode, mouse capture,
   bracketed paste, and (on macOS) the kitty keyboard flags that make the
   `Command` modifier reportable. Every mode it turns on it turns off again, on
   exit **and** around suspend.
@@ -136,7 +136,7 @@ on top.
   and still means something — on the CI that is not that platform.
 - Pure parsers and text transforms get a fuzz target under `fuzz/fuzz_targets/`;
   anything on the per-keystroke or per-frame path gets a Criterion benchmark
-  under `benches/`. Run one with `cargo +nightly fuzz run <target>` (needs
+  under `tui/benches/`. Run one with `cargo +nightly fuzz run <target>` (needs
   `cargo install cargo-fuzz`; add `-- -max_total_time=600` for a fixed-length
   run rather than fuzzing until Ctrl+C) — it's a separate workspace
   (`fuzz/Cargo.toml`) so `cargo build`/`cargo check --workspace` at the repo
@@ -144,10 +144,10 @@ on top.
   reproducing/minimizing a crash) and [`spec/test/index.md`](../spec/test/index.md).
 - When the *layout itself* is what's under test (a dialog's framing, a dock's
   column widths, a long line truncating), add a golden-screen test to
-  `tests/snapshots.rs` instead of a state assertion — pin the locale to `en`
+  `tui/tests/snapshots.rs` instead of a state assertion — pin the locale to `en`
   first, since `rust_i18n::locale()` is process-global. Reviewing a changed
   snapshot: `INSTA_UPDATE=always cargo test --test snapshots`, then read every
-  line of `git diff tests/snapshots/` (or `cargo insta review` with
+  line of `git diff tui/tests/snapshots/` (or `cargo insta review` with
   `cargo-insta` installed) before committing — a snapshot diff is a signal to
   explain, not a formality to wave through. See
   [`spec/test/index.md`](../spec/test/index.md)'s "Snapshot testing" section.

@@ -1,4 +1,4 @@
-//! The Apple keymap's built-in bindings (`src/app.rs`'s `apple_ctrl_key`),
+//! The Apple keymap's built-in bindings (`tui/src/app.rs`'s `apple_ctrl_key`),
 //! converted from that function's former hardcoded `match`.
 //!
 //! Unlike VS Code/`IntelliJ`/Eclipse/Sublime, Apple's original dispatch is

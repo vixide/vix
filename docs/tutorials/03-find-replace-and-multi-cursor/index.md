@@ -9,7 +9,7 @@ Everything below runs against the demo workspace. If you don't have it open
 already:
 
 ```sh
-vix examples/demo-workspace
+vix tui/examples/demo-workspace
 ```
 
 The terse reference versions of this material live at
@@ -20,7 +20,7 @@ files, and links back to those pages for the full option tables.
 
 ## 1. The Find bar
 
-Open `examples/demo-workspace/rust-app/src/main.rs` (from here on, just
+Open `tui/examples/demo-workspace/rust-app/src/main.rs` (from here on, just
 `main.rs`) and press `Ctrl+F` (**Edit → Find → Find…**).
 Type `counts` — matches highlight as you type. `Enter` (or `F3`) jumps to the
 next match, `Shift+F3` to the previous one, and `Esc` closes the bar without

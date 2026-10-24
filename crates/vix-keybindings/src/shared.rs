@@ -1,4 +1,4 @@
-//! Keymap-agnostic bindings: `src/app.rs`'s `global_shared_key`, which
+//! Keymap-agnostic bindings: `tui/src/app.rs`'s `global_shared_key`, which
 //! every keymap dispatches through identically (menu-bar mnemonics and
 //! function keys). Unlike [`crate::TABLES`] (one table per keymap id),
 //! this is a single flat list looked up via [`lookup_shared`] — these

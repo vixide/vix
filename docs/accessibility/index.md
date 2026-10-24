@@ -40,13 +40,13 @@ text, the way a classic scrolling terminal program (or a well-behaved
 full-screen redraw on every keystroke is, in the words of one detailed
 write-up on the subject, enough to "make screen readers go nuts."
 
-Vix fits this pattern exactly: `src/ui.rs`'s `draw` function repaints
+Vix fits this pattern exactly: `tui/src/ui.rs`'s `draw` function repaints
 the entire frame — menu bar, docks, editor, any open overlay — on every
 tick, and the cursor moves with every keystroke, mouse click, and
 overlay open/close. Nothing checked in this audit found any accommodation
 for that today, and there isn't a small patch that changes it: it's the
 same rendering architecture every overlay and panel in this codebase is
-built on (`src/ui/*.rs`, the whole `panel!`-macro-dispatched family this
+built on (`tui/src/ui/*.rs`, the whole `panel!`-macro-dispatched family this
 session's own [`git.conflict_list` overlay](../../crates/vix-conflict-tool/spec/index.md)
 is one more instance of). Saying otherwise — implying a bell or a title
 update makes Vix "accessible" — would be the wrong kind of confident.

@@ -1,4 +1,4 @@
-//! The Vi (Vim) keymap's built-in bindings (`src/app.rs`'s `vim_normal_key`),
+//! The Vi (Vim) keymap's built-in bindings (`tui/src/app.rs`'s `vim_normal_key`),
 //! converted from that function's former hardcoded `match`.
 //!
 //! Shared with Spacemacs: `spacemacs_key` delegates to the very same

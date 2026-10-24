@@ -13,8 +13,8 @@ implements the spec. When code and spec disagree, decide which is correct and
 make them match — edit the spec when intent changes, edit the code when it
 drifted.
 
-Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (root package
-`vix`, `src/`) over 112 `vix-*` member crates under `crates/`. Each member crate
+Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (package `vix-tui`,
+`tui/src/`, building the `vix` command) over 112 `vix-*` member crates under `crates/`. Each member crate
 owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
@@ -85,7 +85,7 @@ computed with `jiff`, so the workspace depends on one date library only.
 
 ```sh
 cargo run                 # open in the current directory
-cargo run -- src/main.rs  # open one or more files
+cargo run -- tui/src/main.rs  # open one or more files
 cargo run -- file.rs:42:7 # open and jump to line 42, column 7
 cargo test                # run the logic + doc tests
 cargo build --release     # optimized binary (~4.9M, common grammars)
@@ -138,8 +138,8 @@ command-palette file finder operate within it.
   overlay of every binding
 ## Architecture
 
-The root package exposes a library (`src/lib.rs`) plus a thin binary
-(`src/main.rs`). Splitting it this way keeps all editing logic
+The `vix-tui` package exposes a library (crate name `vix`) (`tui/src/lib.rs`) plus a thin binary
+(`tui/src/main.rs`). Splitting it this way keeps all editing logic
 terminal-independent and unit-testable: the binary owns the terminal, and
 nothing else does.
 
@@ -149,8 +149,8 @@ The App shell is deliberately small — everything that can be a crate is one:
 | --------------------- | ---------------------------------------------------------------- |
 | `main.rs`             | CLI (`clap`), locale resolution, terminal setup/teardown, the event loop, suspend/resume |
 | `lib.rs`              | Crate root: lint posture, `i18n!` catalog, and the `pub use vix_* as …` re-exports |
-| `app.rs`              | `App` state, `on_key` / `on_mouse` / `on_paste`, `run_action`, overlay routing, feature wiring — delegates most of this to `src/app/*.rs` submodules (one per feature area: `keymap.rs`, `git.rs`, `org.rs`, …) |
-| `ui.rs`               | All rendering: frame layout — delegates most per-pane/overlay draw functions to `src/ui/*.rs` submodules (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, …) |
+| `app.rs`              | `App` state, `on_key` / `on_mouse` / `on_paste`, `run_action`, overlay routing, feature wiring — delegates most of this to `tui/src/app/*.rs` submodules (one per feature area: `keymap.rs`, `git.rs`, `org.rs`, …) |
+| `ui.rs`               | All rendering: frame layout — delegates most per-pane/overlay draw functions to `tui/src/ui/*.rs` submodules (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, …) |
 | `explorer.rs`         | The directory tree flattened into rows                          |
 | `messages.rs`         | The notification drawer model                                   |
 | `search.rs`, `workspace_search.rs` | Search bar helpers; workspace-wide search/replace state |
@@ -159,7 +159,7 @@ The App shell is deliberately small — everything that can be a crate is one:
 Everything else — the editor widget, menu, palette, find/replace, settings,
 themes, locales, keymaps, docks, panels, pickers, Git, LSP/DAP, Org, the
 database workbench, and every pure text tool — is a `vix-*` member crate.
-`src/lib.rs` re-exports each under a short name (`pub use vix_git as git;`), so
+`tui/src/lib.rs` re-exports each under a short name (`pub use vix_git as git;`), so
 shell code says `crate::git`, `crate::menu`, `crate::db`. See
 [`agents/share/crate-map.md`](../../agents/share/crate-map.md) for the full map
 and [`docs/architecture/index.md`](../../docs/architecture/index.md) for the

@@ -155,30 +155,30 @@ surprised later when that built-in stops firing.
 
 ## Sample scripts
 
-Six working examples live in `examples/scripts/` (linked individually
+Six working examples live in `tui/examples/scripts/` (linked individually
 below) — copy one into `.vix/scripts/` (or `<config dir>/scripts/`) and
-reload to try it. `tests/example_scripts.rs` loads and runs every one of
+reload to try it. `tui/tests/example_scripts.rs` loads and runs every one of
 them, so they stay correct as the API evolves.
 
-- [`wrap-selection-in-markdown-link.rhai`](../../examples/scripts/wrap-selection-in-markdown-link.rhai)
+- [`wrap-selection-in-markdown-link.rhai`](../../tui/examples/scripts/wrap-selection-in-markdown-link.rhai)
   — select some text, run the command (or `Ctrl+Shift+L`), type a URL,
   and the selection becomes a Markdown link wrapping the original text.
   Shows `register_command` + `bind_key` together, and `prompt`/`on_submit`.
-- [`insert-file-header.rhai`](../../examples/scripts/insert-file-header.rhai)
+- [`insert-file-header.rhai`](../../tui/examples/scripts/insert-file-header.rhai)
   — prompts for a one-line description and prepends it as a `//` comment.
   Shows building the whole new buffer text before one `set_buffer_text` call.
-- [`title-case-line.rhai`](../../examples/scripts/title-case-line.rhai) —
+- [`title-case-line.rhai`](../../tui/examples/scripts/title-case-line.rhai) —
   title-cases the line the cursor is on ("the quick fox" → "The Quick Fox").
   There's no "replace the current line" primitive, so this finds the line's
   boundaries in `buffer_text()` using `cursor_offset()` and rewrites the
   whole buffer — the most involved sample, and the clearest example of
   "compute everything, write once."
-- [`dedupe-selection.rhai`](../../examples/scripts/dedupe-selection.rhai) —
+- [`dedupe-selection.rhai`](../../tui/examples/scripts/dedupe-selection.rhai) —
   removes duplicate lines from the selection, keeping the first occurrence
   of each. Plain Rhai arrays and object maps, nothing buffer-specific.
-- [`timestamp-signature.rhai`](../../examples/scripts/timestamp-signature.rhai)
+- [`timestamp-signature.rhai`](../../tui/examples/scripts/timestamp-signature.rhai)
   — inserts `-- 2026-09-04`-style signature at the cursor. Shows `now()`.
-- [`open-scratch-with-template.rhai`](../../examples/scripts/open-scratch-with-template.rhai)
+- [`open-scratch-with-template.rhai`](../../tui/examples/scripts/open-scratch-with-template.rhai)
   — fills an empty active buffer with a dated scratch-note heading. Open a
   fresh buffer first (`Ctrl+N`) — scripts can't open one themselves (see
   "What scripts can't do" above) — then run the command. Shows a simple

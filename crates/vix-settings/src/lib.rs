@@ -817,7 +817,7 @@ fn sh_single_quote(s: &str) -> String {
 /// Windows sibling of [`sh_single_quote`], T547). `cmd.exe` has no quoting
 /// mechanism as airtight as POSIX single quotes — this is a best effort, not
 /// a proof, verified against a real `cmd.exe` (not just string assertions;
-/// see `tests/integration/ai.rs`'s `#[cfg(windows)]` block):
+/// see `tui/tests/integration/ai.rs`'s `#[cfg(windows)]` block):
 ///
 /// - wraps in `"…"`, which suppresses `cmd.exe`'s own `&`/`|`/`<`/`>`/`(`/`)`
 ///   metacharacters for as long as the quoted region stays open;

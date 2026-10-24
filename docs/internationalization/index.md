@@ -127,7 +127,7 @@ gets away with `item(s)`, but Arabic (six number categories), Russian and Polish
 each) read wrongly at most counts when the number precedes the noun (`%{n} wierszy` is
 right for 5, wrong for 1 and 2). So in `ar`, `ru` and `pl` a counted message is phrased
 **count-invariantly**: a label, a colon, the number (`Wiersze: %{n}`, `Строк: %{count}`,
-`الصفوف: %{count}`). `tests/i18n_keys.rs` keeps the list of counted keys
+`الصفوف: %{count}`). `tui/tests/i18n_keys.rs` keeps the list of counted keys
 (`COUNTED_KEYS`) and fails if one of those three locales puts the count directly before a
 noun (an abbreviation like `elem.` or a one/two-letter particle is fine). Add a new counted
 key to that list. Welsh, Irish and Scottish Gaelic have several plural categories too; they

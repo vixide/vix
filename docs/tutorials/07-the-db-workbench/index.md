@@ -18,7 +18,7 @@ see [`docs/db/index.md`](../../db/index.md) and the full specification at
 Open the demo workspace:
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix .
 ```
 

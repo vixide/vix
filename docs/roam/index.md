@@ -91,7 +91,7 @@ menu or the command palette.
 new node and daily-note skeletons, editing the property drawer and
 `#+filetags:`, and compiling backlinks/graph/index views — with no
 filesystem or editor dependency of its own. The host (`App`, mostly
-`src/app/roam.rs`) wires these functions to the menu, prompting for input and
+`tui/src/app/roam.rs`) wires these functions to the menu, prompting for input and
 reading/writing the actual `.org` files under the project root.
 
 See the crate spec at `crates/vix-roam/spec/index.md`, and its sub-specs

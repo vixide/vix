@@ -14,7 +14,7 @@
 //! map. T115 (this slice): [`text_object`]'s `iw aw i( a( i" a"` (+
 //! bracket/quote siblings) pure functions, composing with `d`/`c`/`y` the
 //! same way a motion does; dot-repeat (keystroke replay of the last change)
-//! lives in the host (`src/app/modal.rs`), not here — there's no pure
+//! lives in the host (`tui/src/app/modal.rs`), not here — there's no pure
 //! function to write for "record and replay the exact keys that already
 //! went through this same dispatch". Everything behind the same
 //! `Settings::modal_engine` flag, default off.

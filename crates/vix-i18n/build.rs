@@ -14,7 +14,7 @@
 //!
 //! 2. Split the merged `locales/*.yml` data by **locale** (T517): one JSON
 //!    blob per locale under `$OUT_DIR`, plus a generated `locale_blobs.rs`
-//!    listing them as `(code, include_str!(..))` pairs. `src/lib.rs`
+//!    listing them as `(code, include_str!(..))` pairs. `tui/src/lib.rs`
 //!    `include!`s that list and parses each locale's blob **lazily** (only
 //!    the active locale, and English for the fallback walk, ever get
 //!    deserialized) instead of the `i18n!` macro's own codegen, which

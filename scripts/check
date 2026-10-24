@@ -31,10 +31,10 @@ else
 fi
 
 echo "==> feature combinations (T587)"
-cargo clippy -p vix --no-default-features --all-targets -- -D warnings
-cargo test -p vix --no-default-features
+cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
+cargo test -p vix-tui --no-default-features
 if command -v cargo-hack >/dev/null 2>&1; then
-	cargo hack check -p vix --each-feature --no-dev-deps
+	cargo hack check -p vix-tui --each-feature --no-dev-deps
 else
 	echo "    (skipping each-feature check: 'cargo install cargo-hack --locked' to enable)"
 fi
@@ -44,7 +44,7 @@ cargo run --example list_commands >/dev/null
 cargo run --example headless_edit >/dev/null
 cargo run --example render_frame -- index.md >/dev/null
 cargo run --example textops_pipeline -- index.md >/dev/null
-cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
 # T575: a tiny fixed-seed smoke of the chaos monkey, so the driver cannot rot. The
 # long randomized runs are the nightly `chaos.yml` workflow, not this gate.
 cargo run --example chaos_monkey -- --seed 1 --iterations 3 --events 150 >/dev/null
@@ -61,8 +61,8 @@ git diff --exit-code -- docs/reference/ || {
 
 echo "==> man page current? (T307)"
 cargo run --example generate_man >/dev/null
-git diff --exit-code -- man/ || {
-	echo "FAIL: man/vix.1 is stale — run 'cargo run --example generate_man' and commit the result" >&2
+git diff --exit-code -- tui/man/ || {
+	echo "FAIL: tui/man/vix.1 is stale — run 'cargo run --example generate_man' and commit the result" >&2
 	exit 1
 }
 
@@ -78,8 +78,8 @@ if command -v cargo-semver-checks >/dev/null 2>&1; then
 fi
 if [ "$semver_ok" = yes ]; then
 	# A crate with no crates.io release yet has no baseline to compare against;
-	# exclude it until its first publish (vix-input: T640).
-	cargo semver-checks --workspace --exclude vix-input
+	# exclude it until its first publish (vix-input: T640; vix-tui: T643, renamed from vix).
+	cargo semver-checks --workspace --exclude vix-input --exclude vix-tui
 else
 	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 fi

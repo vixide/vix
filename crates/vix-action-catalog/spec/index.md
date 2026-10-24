@@ -36,25 +36,25 @@ workaround this catalog removes the need for.
   every action id `App::run_action`'s dispatch chain can actually match
   (`DISPATCHERS`, `every_dispatchable_action_id`), plus the dynamically-
   suffixed id prefixes that are exempt from needing their own title
-  (`DYNAMIC_PREFIXES`). Moved here (out of `tests/action_catalog.rs`, which
-  used to define its own private copy) so `tests/action_catalog.rs` and
-  `examples/list_commands.rs`'s `--write` mode (which generates
+  (`DYNAMIC_PREFIXES`). Moved here (out of `tui/tests/action_catalog.rs`, which
+  used to define its own private copy) so `tui/tests/action_catalog.rs` and
+  `tui/examples/list_commands.rs`'s `--write` mode (which generates
   `docs/reference/actions.md`) share one scanner and can never disagree on
   what "every action id" means.
 
 Pure data plus that one scanner, like `vix-keyboard-shortcut-panel`: no
-dependencies, the host (`src/app.rs`) owns rendering and translation (`t!`).
+dependencies, the host (`tui/src/app.rs`) owns rendering and translation (`t!`).
 
 ## How the host reads it
 
 Two independent hosts, each trying their own primary source first:
 
-- **`App::action_title`** (`src/app.rs` — backs F1 help and the keybinding
+- **`App::action_title`** (`tui/src/app.rs` — backs F1 help and the keybinding
   editor) tries the menu tree (`vix_menu::menus()`, walked for a leaf whose
   `action` matches), then this catalog (`title_key`), then falls back to
   the raw action id unchanged (matching the which-key popup).
 - **The command palette's `>` mode** (`App::catalog_palette_entries` in
-  `src/app/command_palette.rs`) appends every `CATALOG` entry to
+  `tui/src/app/command_palette.rs`) appends every `CATALOG` entry to
   `palette::COMMANDS`'s own list, so an action with no `COMMANDS` entry is
   now searchable there too.
 
@@ -64,7 +64,7 @@ key)]` reverse lookup, not yet used by any UI) can pair its results with
 
 ## Keeping it correct
 
-- **Coverage**: `tests/action_catalog.rs` (repo root) walks the real
+- **Coverage**: `tui/tests/action_catalog.rs` (repo root) walks the real
   `App::run_action` dispatch chain by source (brace-balancing each
   dispatcher function out of its file) and asserts every id it can match is
   titled by a menu leaf, a `CATALOG` entry, or a `palette::COMMANDS` entry
@@ -81,7 +81,7 @@ key)]` reverse lookup, not yet used by any UI) can pair its results with
 
 - A menu item or keymap-table binding added for a new action already
   covers it (no catalog entry needed) unless it's genuinely menu-less —
-  `tests/action_catalog.rs` fails the build either way it's missed.
+  `tui/tests/action_catalog.rs` fails the build either way it's missed.
 - Retitle `vix-editor-core/spec/actions.tsv`'s bare action ids to source
   from here directly, rather than duplicating the id list, once that
   crate's codegen has a reason to depend on catalog data (not yet true —

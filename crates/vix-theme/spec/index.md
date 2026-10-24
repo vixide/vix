@@ -16,7 +16,7 @@ an item dispatches the action `view.theme:<name>`.
 
 ## Where themes come from
 
-- **Bundled** themes are compiled into the binary from `themes/*.json` (via
+- **Bundled** themes are compiled into the binary from `tui/themes/*.json` (via
   `include_dir`), so Dark, Light, and the other shipped themes are always present
   with no installation.
 - **User** themes are JSON files in the config themes directory

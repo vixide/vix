@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn an_unknown_key_falls_back_to_its_own_literal() {
-        // A variable, not a `t!("literal")` call: `tests/i18n_keys.rs` scans
+        // A variable, not a `t!("literal")` call: `tui/tests/i18n_keys.rs` scans
         // the workspace for exactly that shape and requires every such key
         // to exist in `locales/` -- this test deliberately uses one that
         // doesn't, to exercise the no-translation-found fallback.

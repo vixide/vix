@@ -7,7 +7,7 @@ for pipe (`|`) tables: recognition, alignment, field/row/column navigation and
 structural edits, rectangle copy/cut/paste, sorting, and a `#+TBLFM:` formula
 layer. The logic lives in the pure `vix-org-table` crate (unit-tested); it is
 wired to the active buffer and cursor by `App::org_table_key` /
-`App::org_table_action` in `src/app.rs`, and exposed as the **Org → Table**
+`App::org_table_action` in `tui/src/app.rs`, and exposed as the **Org → Table**
 menu (`vix-menu`'s `ORG_TABLE`/`ORG_TABLE_RECTANGLE`). See "## Actions" below
 for the full key/action-id map, including what the manual documents but this
 crate/app does not implement.
@@ -210,7 +210,7 @@ implicitly on every keystroke — only when `recalc`/`apply_tblfm` is called.
 ## Actions
 
 Grouped per the Org manual's own "Built-in Table Editor" summary. The "Emacs
-key" column is what's *actually* wired in `src/app.rs` (`App::org_table_key`
+key" column is what's *actually* wired in `tui/src/app.rs` (`App::org_table_key`
 for the plain-key gate, `EMACS_CTRL_C`/`EMACS_CTRL_C_X` for the `C-c`-prefixed
 chords) — verified against the source, not copied from the manual — so it can
 differ from Org's own default binding where this app made a different choice.
@@ -298,7 +298,7 @@ wiring — no function, action id, or menu entry exists for these:
 
 - **Blank field** (`C-c C-c` on an empty selection / `org-table-blank-field`)
   — the crate has a `blank_field` function (used only by its own unit tests)
-  but it is never called from `src/app.rs`, has no `org.table.*` action id,
+  but it is never called from `tui/src/app.rs`, has no `org.table.*` action id,
   and has no menu entry.
 - **Edit field in a dedicated window** (`C-c \``, `org-table-edit-field`).
 - **Field-bounds motion** (`M-a`/`M-e`, `org-table-beginning-of-field` /

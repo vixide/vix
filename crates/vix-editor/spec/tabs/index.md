@@ -141,7 +141,7 @@ instead of a text editor. Image tabs are view-only:
   `close_active`, `close_all`, `next_tab`, `prev_tab` operations). `open` reuses
   an existing tab by canonical path and replaces the lone preview tab in place
   when `preview` is requested.
-- `src/app.rs` wires the actions and shortcuts: `tab.next` / `tab.prev`
+- `tui/src/app.rs` wires the actions and shortcuts: `tab.next` / `tab.prev`
   (`Ctrl+Tab` / `Ctrl+Shift+Tab`), `file.close` (`Ctrl+W`, via
   `request_close_active` → `do_close_active`), `file.close_all`
   (`Ctrl+Shift+W`), and `file.reopen_closed` (`Ctrl+Shift+T`, backed by the
@@ -149,7 +149,7 @@ instead of a text editor. Image tabs are view-only:
   preview tabs come from `preview_selected` (gated on `settings.preview_tabs`)
   and the single-click / arrow-scan handlers; `open_path` promotes a tab on a
   real open. `tab_click` activates and promotes a clicked tab.
-- `src/ui.rs` (`draw_tabs`) renders the strip: the active tab underlined,
+- `tui/src/ui.rs` (`draw_tabs`) renders the strip: the active tab underlined,
   preview tabs dimmed, and a dim `│` divider; `draw_center` renders either the
   active buffer's editor or its image.
 - `crates/vix-menu/src/lib.rs` lists the File-menu entries (New, Open, Close, Close All Tabs,

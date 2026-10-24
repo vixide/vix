@@ -17,9 +17,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-/// The workspace root (this test's package is the root package).
+/// The repository root (this test's package lives in `tui/`).
 fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 /// Every `.rs` file in the workspace, skipping build output and VCS metadata.

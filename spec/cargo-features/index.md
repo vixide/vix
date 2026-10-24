@@ -24,15 +24,15 @@ unflagged: it has no payoff and the heaviest coupling.
 | --- | --- | --- |
 | `sql` | `db.*`, `tools.edit_sql` | `vix-db`, `vix-edit-sql` |
 | `image` | (none; image tabs) | `image`, `ratatui-image` (43 exclusive crates; forwards to `vix-editor/image`) |
-| `script` | `script.*`, `script:*` | `vix-script` (rhai; `src/app/scripts.rs`, with `scripts_off.rs` no-op stand-ins) |
+| `script` | `script.*`, `script:*` | `vix-script` (rhai; `tui/src/app/scripts.rs`, with `scripts_off.rs` no-op stand-ins) |
 | `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
 | `http` | `tools.http_send` | `vix-http-client` (`http_off.rs` stand-ins) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
-| `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `src/app/git.rs`, with `git_off.rs` stand-ins |
-| `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
+| `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `tui/src/app/git.rs`, with `git_off.rs` stand-ins |
+| `jj` | `jj.*` | (surface only: no crates; `tui/src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
 | `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
-| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*` | the runners `spawn_shell` and `spawn_argv` in `src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
+| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*` | the runners `spawn_shell` and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
 | `full` | umbrella for every capability (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
@@ -44,8 +44,8 @@ unchanged.
 
 - **Default-on.** `default` enables `full`, which lists every capability feature. `--no-default-features`
   is a supported build.
-- **Gate at the root, filter at runtime.** `cfg` lives only in the root package
-  (`src/capability.rs` and, from T588, the gated modules). `vix-menu` and
+- **Gate at the root, filter at runtime.** `cfg` lives only in the `vix-tui` package
+  (`tui/src/capability.rs` and, from T588, the gated modules). `vix-menu` and
   `vix-palette` stay `cfg`-free: `vix_menu::set_action_filter` hides any leaf the
   root's `capability::is_available` rejects, plus submenus and menus left empty
   and any stray separator. The palette applies the same predicate. With no
@@ -79,7 +79,7 @@ compiled because `App`'s fields and the panel drawing use its plain data types; 
 file comparison (Tools → Compare with File) moved to `diff_tool.rs` so it works in
 every build. T594 is decided below.
 
-Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
+Tests: `tui/src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.
 
 ## Process spawning (T595)
@@ -100,8 +100,8 @@ What a `--no-default-features` binary still links: `crossterm`'s terminal-size f
 remove it. Everything else was checked by reading the linked binary's symbols
 (`nm`: the only caller of `Command::output` is `crossterm::terminal::sys::unix::tput_value`).
 
-`tests/spawn_sites.rs` keeps this list honest: it scans `src/` and every crate's
-`src/` for process-spawning code and fails when a file outside its `ALLOWED` table
+`tui/tests/spawn_sites.rs` keeps this list honest: it scans `tui/src/` and every crate's
+`tui/src/` for process-spawning code and fails when a file outside its `ALLOWED` table
 (file, reason, gating feature) contains one, or when an allowed file stops
 spawning. A new spawn site must be gated behind a capability feature first.
 

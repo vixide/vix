@@ -47,7 +47,7 @@ pub struct Report {
 
 impl Report {
     /// The per-line hit data recorded for `path` (matched against however the
-    /// *report* names its files, e.g. `src/main.rs`), or `None` if the
+    /// *report* names its files, e.g. `tui/src/main.rs`), or `None` if the
     /// report doesn't cover it.
     ///
     /// Reports name files inconsistently (relative to the project root,

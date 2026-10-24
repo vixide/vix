@@ -40,7 +40,7 @@ richer to compose with until text objects (T115) exist. **T115** (done):
 motion (always a plain character-wise range). Dot-repeat: `.` replays the
 last real change (`d{motion}`, a text object, or `p`/`P` — not `y`,
 matching real Vim's own rule) as host-side keystroke replay
-(`src/app/modal.rs`, not this crate — there's no pure function to write for
+(`tui/src/app/modal.rs`, not this crate — there's no pure function to write for
 it); `c` and a plain Insert-mode session are excluded too, a deliberately
 scoped-out follow-on (replaying typed Insert-mode text needs a recording
 hook outside this crate's host wiring, since those keys never reach
@@ -55,7 +55,7 @@ in user-facing terms.
 
 ## The audit
 
-Everything today lives in `src/app.rs`, as flat match-based methods on
+Everything today lives in `tui/src/app.rs`, as flat match-based methods on
 `App` — there is no separate module, no `Mode` enum, no motion/operator
 abstraction.
 
@@ -345,7 +345,7 @@ Not binding — T112's call — but a starting shape:
   objects).
 - `repeat.rs` — the keystroke-replay dot-repeat mechanism (§ Design:
   dot-repeat).
-- `lib.rs` — the public surface `src/app.rs` calls.
+- `lib.rs` — the public surface `tui/src/app.rs` calls.
 
 Unit tests drive motions/operators/text objects directly (pure functions,
 no host needed) — "heavy unit tests" per T113, including a representative

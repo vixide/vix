@@ -29,8 +29,8 @@ All four share the same overlay conventions:
   line is only updated when it was.
 
 The picker crates are **pure data** — they own the item tables and the
-selection/scroll state, and expose what to insert. The host (`src/app.rs`,
-`src/ui.rs`) renders each overlay, maps key and mouse events to it, and performs
+selection/scroll state, and expose what to insert. The host (`tui/src/app.rs`,
+`tui/src/ui.rs`) renders each overlay, maps key and mouse events to it, and performs
 the insertion.
 
 ## Nerd Font Characters
@@ -129,7 +129,7 @@ plus selection state, and is wired into the host via a Tools-menu action:
 
 - The Tools menu entries live in `crates/vix-menu/src/lib.rs` (`menu.item.tools.nerd_palette`,
   `…ascii`, `…html_chars`, `…x11_colors`).
-- The actions dispatch in `src/app.rs` to `open_nerd_palette`,
+- The actions dispatch in `tui/src/app.rs` to `open_nerd_palette`,
   `open_ascii_panel`, `open_html_panel`, and `open_x11_panel`, each storing an
   `Option<…>` overlay on the `App`.
 - While an overlay is open, the host routes keys (`nerd_key`, `ascii_key`,

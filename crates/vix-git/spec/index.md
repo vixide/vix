@@ -55,7 +55,7 @@ steals keystrokes. The host calls it before `git commit` and `git commit --amend
 ## Gutter diff budget (T574)
 
 `diff_marks` skips buffers over 50,000 lines and puts a 40 ms deadline on Myers. The
-`benches/gutter_diff.rs` Criterion bench keeps this honest: its `rewritten` rows (a few dozen
+`tui/benches/gutter_diff.rs` Criterion bench keeps this honest: its `rewritten` rows (a few dozen
 repeated lines in scrambled order, Myers' worst case) should stay near the deadline as the line
 count grows, and `over_the_line_cap` should cost only the line count.
 

@@ -16,11 +16,11 @@ select does, under the hood), this page only goes as far as using it.
 Open the demo workspace at the repo root and use it for every example below:
 
 ```sh
-vix examples/demo-workspace
+vix tui/examples/demo-workspace
 ```
 
-See `examples/demo-workspace/README.md` for what's in it. This tutorial uses
-`examples/demo-workspace/rust-app/src/main.rs` (from here on, just
+See `tui/examples/demo-workspace/README.md` for what's in it. This tutorial uses
+`tui/examples/demo-workspace/rust-app/src/main.rs` (from here on, just
 `main.rs`), `scripts/hello.py`, and `data/sample.csv`.
 
 ## Keyboard macros

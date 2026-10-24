@@ -18,7 +18,7 @@ and `crates/vix-roam/spec/index.md`.
 Open the demo workspace:
 
 ```sh
-cd examples/demo-workspace
+cd tui/examples/demo-workspace
 vix .
 ```
 
