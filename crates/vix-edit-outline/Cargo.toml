@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The outline editor: hierarchical hide/show and restructuring for prose text."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-list-state = { workspace = true }
 

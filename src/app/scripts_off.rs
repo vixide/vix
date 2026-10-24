@@ -3,7 +3,7 @@
 //! and palette code still calls these entry points. Each is a no-op, so the call
 //! sites carry no `cfg` of their own.
 
-use crossterm::event::{KeyEvent, MouseEvent};
+use vix_input::{KeyEvent, MouseEvent};
 
 use super::App;
 use crate::palette::Entry;

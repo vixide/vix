@@ -5,7 +5,7 @@
 //! slice of [`Browser`]'s ~110 methods concerned with the connection's
 //! *lifecycle* rather than anything the workbench does once connected.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{
     Browser, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form, Outcome, Pane,

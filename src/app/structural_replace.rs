@@ -6,7 +6,7 @@
 //! `workspace_replace_all` already uses (`ReplaceConfirm`), rather than
 //! building a second confirm UI.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use vix_structural_replace::{Pattern, render_replacement};
 

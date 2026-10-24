@@ -23,7 +23,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
     AgendaKind, AgendaView, App, CaptureChooser, Focus, PendingCapture, Prompt, PromptKind,

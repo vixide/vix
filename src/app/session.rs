@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
     App, AppFlags, Focus, ProjectHistory, Prompt, PromptKind, WorkspaceChooser, node_to_pane,

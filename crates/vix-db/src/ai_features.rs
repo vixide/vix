@@ -4,7 +4,7 @@
 //! Extracted from `lib.rs` (T516): the one cohesive slice of [`Browser`]'s
 //! methods that talk to [`ai`] rather than the database itself.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, View, ai, catalog, editor, object_triples};
 

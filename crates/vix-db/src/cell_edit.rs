@@ -6,7 +6,7 @@
 //! cohesive slice of [`Browser`]'s methods concerned with *what a single
 //! cell or row means and how it gets changed*, as opposed to running SQL.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect};
 

@@ -24,7 +24,7 @@ it privately, not as a public issue.
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
 shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
-explorer — over **123 focused `vix-*` member crates** under `crates/`, including
+explorer — over **124 focused `vix-*` member crates** under `crates/`, including
 the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
 `crate::menu`, `crate::db` still name them. The App shell's two largest files
@@ -67,6 +67,7 @@ cargo run                   # run the editor in the current directory
 cargo run -- --locale fr    # run in a specific language
 cargo bench                 # Criterion benchmarks over the hot paths
 cargo +nightly fuzz run <target>   # fuzz a pure core (see fuzz/README.md)
+cargo run --manifest-path gui/Cargo.toml   # the GPUI desktop GUI (separate workspace; gui/spec/index.md)
 scripts/check-docs          # documentation integrity (links, twins, crate specs)
 ```
 

@@ -165,42 +165,9 @@ fn main() -> io::Result<()> {
     if let Some(e) = settings_load_error {
         app.warn_settings_load_failed(&e);
     }
-    // `refresh_git` shells out to `git` (repo?/branch/status, each its own
-    // subprocess) -- moved below the first frame (T122; it alone measured
-    // ~82ms of a ~96ms cold start, `App::new` itself only ~10ms). `App`'s
-    // git fields default to "no repo" either way, the same state opening
-    // Vix outside a repo already renders correctly, so the first frame is
-    // simply one beat behind on the branch/status indicator, not wrong.
-    app.load_scripts();
-    app.maybe_prompt_script_trust();
-    app.resolve_key_overrides();
-    // First-run welcome screen (no-op after it has been seen once).
-    app.maybe_show_welcome();
-
-    // Optional file argument(s): open each, focusing the last. A single `-`
-    // reads stdin into a scratch buffer instead of opening a file named
-    // "-". With no file given, reopen the previous session for this
-    // workspace (if enabled).
-    if cli.tutor {
-        app.open_tutor();
-    } else if cli.files.is_empty() {
-        app.restore_session();
-    } else if cli.files == [PathBuf::from("-")] {
-        let mut content = String::new();
-        io::Read::read_to_string(&mut io::stdin(), &mut content)?;
-        app.open_stdin_buffer(&content);
-    } else {
-        for path in cli.files {
-            app.open_initial(&path);
-        }
-    }
-
-    // `--diff OLD NEW`: a read-only comparison overlay, independent of
-    // whatever else just opened — the shape a `git difftool` driver invokes
-    // with. `num_args = 2` on the arg guarantees exactly two paths here.
-    if let Some(paths) = cli.diff {
-        app.open_diff_files(&paths[0], &paths[1]);
-    }
+    // Scripts, key overrides, the welcome screen, and the initial files /
+    // session / stdin buffer / `--diff` — shared with the GUI front end.
+    app.start(&cli)?;
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture);
@@ -258,64 +225,21 @@ fn main() -> io::Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
-        // Drain any streamed output from a running command into the bottom dock,
-        // and any finished dashboard metrics into the dashboard panel.
-        app.poll_command();
-        app.poll_editor_drag();
-        app.poll_ai_replace();
-        app.poll_dashboard();
-        app.poll_pomodoro();
-        app.poll_terminal();
-        app.refresh_inline_blame();
-        app.refresh_outline_dock();
-        app.refresh_word_highlight();
-        app.refresh_backlinks_follow();
-        // Drain language-server messages (diagnostics, hover/definition/completion
-        // responses) and sync the active document.
-        app.poll_lsp();
-        app.poll_dap();
-        // Install any completed background reparse (large-file async highlighting).
-        app.poll_parse();
-        // Reload files changed on disk by another process (throttled internally).
-        app.poll_file_changes();
-        // Periodically save the active buffer when auto-save is on.
-        app.poll_auto_save();
-        // Drain a finished HTTP response into a new tab.
-        app.poll_http();
-        // Drain a finished asynchronous DB query into the workbench.
-        app.poll_db_query();
-        // Drain a finished asynchronous DB connect/reconnect (Run H, T531).
-        app.poll_db_connect();
-        app.poll_db_reconnect();
+        // Background work shared with the GUI front end (`App::tick`).
+        app.tick();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());
         }
-        // Poll with a timeout so the calendar clock refreshes while idle; poll
-        // faster while a command is streaming, dashboard metrics are computing,
-        // or a language-server request is in flight so output appears promptly.
-        let timeout = if app.command_running()
-            || app.ai_replace_running()
-            || app.dashboard_loading()
-            || app.lsp_busy()
-            || app.pomodoro_running()
-            || app.terminal_running()
-            || app.dap_busy()
-            || app.parse_busy()
-            || app.http_running()
-            || app.db_query_running()
-            || app.db_connect_running()
-            || app.db_reconnect_running()
-            || app.editor_drag_active()
-        {
-            Duration::from_millis(50)
-        } else {
-            Duration::from_millis(500)
-        };
+        // Poll with a timeout so the calendar clock refreshes while idle, and
+        // faster while something is streaming or in flight.
+        let timeout = app.poll_interval();
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) => app.on_key(key),
-                Event::Mouse(mouse) => app.on_mouse(mouse),
+                // The one place crossterm events become backend-neutral
+                // `vix-input` events (the GUI front end converts its own).
+                Event::Key(key) => app.on_key(key.into()),
+                Event::Mouse(mouse) => app.on_mouse(mouse.into()),
                 Event::Paste(text) => app.on_paste(&text),
                 _ => {}
             }

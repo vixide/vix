@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The byte editor: a hex/ASCII view for editing raw file bytes."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-list-state = { workspace = true }
 

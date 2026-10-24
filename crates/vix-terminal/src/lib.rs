@@ -12,7 +12,7 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// A running integrated terminal: the PTY master, the child shell, and the shared
 /// `vt100` parser holding the screen state.
@@ -152,7 +152,7 @@ fn to_io(e: &anyhow::Error) -> std::io::Error {
     std::io::Error::other(e.to_string())
 }
 
-/// Encode a crossterm key event into the byte sequence a terminal expects.
+/// Encode a key event into the byte sequence a terminal expects.
 #[must_use]
 pub fn encode_key(key: KeyEvent) -> Vec<u8> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);

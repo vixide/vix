@@ -7,7 +7,7 @@
 //! save the result back to the buffer. It mirrors the other `edit_*` surfaces:
 //! pure logic here, rendering and file I/O in the host.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Editor::handle_key`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

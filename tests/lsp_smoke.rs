@@ -15,10 +15,10 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::app::App;
 use vix::lsp::{Lsp, LspEvent, RenamePrepared};
 use vix::settings::{LspServer, Settings};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 fn tool_available(program: &str) -> bool {
     Command::new(program)

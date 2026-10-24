@@ -15,8 +15,8 @@
 )]
 #![cfg(feature = "sql")]
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Drain any async DB work started by the last key press — a streamed query
 /// (`F5`/`EXPLAIN`), a background connect, or a cancelled query's background

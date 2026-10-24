@@ -2708,7 +2708,7 @@ fn image_open_without_picker_warns_and_does_not_crash() {
 
 #[test]
 fn scrollbar_drag_scrolls_editor() {
-    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    use vix_input::{MouseButton, MouseEvent, MouseEventKind};
     let dir = unique_dir("scroll");
     let file = dir.join("long.txt");
     let body: String = (1..=200).map(|i| format!("line {i}\n")).collect();

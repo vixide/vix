@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The structured-value editor: a foldable tree for JSON and YAML."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 serde_json = { workspace = true }
 serde_norway = { workspace = true }
 vix-capped-stack = { workspace = true }

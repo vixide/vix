@@ -1,0 +1,23 @@
+[package]
+name = "vix-input"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Backend-neutral keyboard and mouse input types for Vix (key codes, modifiers, key and mouse events), mirroring crossterm's shapes, with an optional lossless conversion from crossterm."
+
+[features]
+default = []
+# Lossless `From` conversions from crossterm's event types (the terminal front end).
+crossterm = ["dep:crossterm"]
+
+[dependencies]
+bitflags = { workspace = true }
+crossterm = { workspace = true, optional = true }
+
+[dev-dependencies]
+crossterm = { workspace = true }
+
+[lints]
+workspace = true

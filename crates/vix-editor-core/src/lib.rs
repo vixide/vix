@@ -15,9 +15,13 @@ pub mod click;
 pub mod code;
 /// The editor widget: state, cursor, selection, and input handling.
 pub mod editor;
-// Always compiled: the main crate always uses the crossterm backend.
-/// Crossterm-backed input and event handling for the editor.
-pub mod editor_crossterm;
+/// Key and mouse input handling for the editor, over backend-neutral
+/// `vix-input` events (always compiled).
+pub mod editor_input;
+/// Former name of [`editor_input`], kept so the path still resolves for
+/// existing users (it only ever held `impl Editor` blocks, so nothing moves).
+#[deprecated(note = "renamed to `editor_input` when input became backend-neutral")]
+pub mod editor_crossterm {}
 /// Undo/redo history of edit batches.
 pub mod history;
 /// Multiple cursors ("carets") and the operations applied across them.

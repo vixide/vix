@@ -77,7 +77,9 @@ if command -v cargo-semver-checks >/dev/null 2>&1; then
 	fi
 fi
 if [ "$semver_ok" = yes ]; then
-	cargo semver-checks --workspace
+	# A crate with no crates.io release yet has no baseline to compare against;
+	# exclude it until its first publish (vix-input: T640).
+	cargo semver-checks --workspace --exclude vix-input
 else
 	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 fi

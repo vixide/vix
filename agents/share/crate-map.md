@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 123
+loop, `App` state, rendering, and the explorer — and it depends on the 124
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -52,7 +52,7 @@ re-export of
 | `wrap`             | **Vix**    | Soft-wrap visual-row layout + wrapped renderer.                 |
 | `brackets`         | **Vix**    | Bracket matching (`matching_bracket`).                          |
 | `lines`            | **Vix**    | Line transforms (move/sort/join/dedupe/trim/reverse).           |
-| `editor_crossterm` | engine     | `KeyEvent` → actions mapping (always compiled).                 |
+| `editor_input` | engine     | `KeyEvent` → actions mapping (always compiled).                 |
 
 `code` also exposes `expand_to_node` (offline structural selection), `len_bytes`,
 and serde on its history types (for persistent undo); `editor` adds the passive
@@ -112,6 +112,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Database    | `vix-db` (the **DB** menu workbench, `crates/vix-db/spec`): a full-screen overlay over embedded sqlx `Any` drivers (bundled SQLite, pure-Rust Postgres/MySQL over rustls). Submodules: `session` (one persistent connection per workbench on a worker thread; blocking `run` + async `send`/`poll` streaming `Chunk`s + `restart`), `connect` (saved-connection model + URLs), `catalog` (schema tree + per-engine metadata/EXPLAIN/DDL SQL), `editor`/`highlight`/`complete`/`format` (SQL editor: statement split, write detection, JOIN-aware autocomplete, beautify), `results` (grid: filter/sort/select/append), `store` (history + saved queries + session query log), `export` (6 formats), `ai` (schema-only NL→SQL, `spawn_ai` bridge), `chart` (ASCII bars), `erd` (Mermaid ER diagram), `import` (CSV/TSV → table), `params` (`:name` binds), `secret` (credential waterfall: `password_command` + OS keyring), `tunnel` (SSH `-L` forward). |
 | Text tools  | `vix-format-tool`, `vix-jwt-tool`, `vix-base-tool`, `vix-base64-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-zid-tool`, `vix-checksum-tool`, `vix-regex-tool`, `vix-markdown-preview`, `vix-convert-tabular`, `vix-convert-from-*-into-*-tool` (12). |
 | Pure text ops | `vix-align` (align lines on a delimiter), `vix-textops` (line-ending convert / squeeze blanks / ROT13 / hard wrap, plus cursor-relative rewrites: increment number, smart toggle, transpose chars/words/lines/sentences/paragraphs/sections, wrap paragraph, `sentence_starts`, `tag_column`), `vix-case` (selection case transforms), `vix-emmet` (abbreviation → HTML), `vix-tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
+| Input types | `vix-input` (GUI Phase 0: backend-neutral `KeyEvent`/`KeyCode`/`KeyModifiers`/`MouseEvent`, mirroring crossterm's shapes; every key/mouse handler takes these, and only the terminal loop in `src/main.rs` converts crossterm events, via the `crossterm` feature — see `crates/vix-input/spec/index.md`). |
 | Pure list ops | `vix-list-state` (T144: `up`/`down`/`page_up`/`page_down`/`select_index`/`ensure_visible` — shared `selected`/`scroll` arithmetic for a scrollable single-selection list; plain functions over `usize`s, not a struct panels adopt, so every panel keeps its own field names — see `crates/vix-list-state/spec/index.md`). |
 | Byte size   | `vix-byte-size` (Run H, T521: `human_bytes(n: u64) -> String`, e.g. `"16.0 KiB"` — extracted after `vix-file-information-panel` and `vix-system-information-panel` were found hand-rolling an identical copy each). |
 | Civil date  | `vix-civil-date` (Run H, T520: Howard Hinnant's `civil_from_days`/`days_from_civil` — extracted after `vix-file-information-panel`, `vix-git`, and `vix-org` were found each hand-rolling an independent copy of the same algorithm). |
@@ -140,7 +141,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 123 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 124 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |
@@ -150,6 +151,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | `examples/`     | `headless_edit.rs`, `list_commands.rs`.                             |
 | `tests/`        | `tests/integration/main.rs` (+ 15 area submodules: `catalog`, `db`, `editing`, `find`, `git`, `keybindings`, `keymaps`, `lsp`, `menu`, `org`, `palette`, `panels`, `scripting`, `workspace`, `common`), `db_smoke.rs`, `lsp_smoke.rs`, `i18n_keys.rs`, `example_scripts.rs`, `snapshots.rs` (+ `snapshots/*.snap`) — terminal-independent tests. |
 | `fuzz/`         | `cargo-fuzz` targets over the pure text/parse cores.                |
+| `gui/`          | The GPUI desktop front end (its own `[workspace]`) — a separate workspace so GPUI never enters the terminal build; see `gui/spec/index.md`. |
 | `benches/`      | Criterion benchmarks (`cargo bench`).                               |
 | `scripts/`      | `check` (the CI-parity gate) and `check-docs` (documentation integrity). |
 | `vixide.github.io/` | The public GitHub Pages site (SvelteKit + Lily Design System), a monorepo subproject — see `spec/monorepo-github-pages/index.md`. Maintained here; published to the read-only sibling repo `git@github.com:vixide/vixide.github.io.git` via `git subtree push`, never edited there directly. |

@@ -13,8 +13,8 @@
 
 use std::path::Path;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// One saved macro: a display name and its tokenized key sequence.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

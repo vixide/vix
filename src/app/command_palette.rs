@@ -9,7 +9,7 @@
 //! here would collide with that `use`. Mostly contiguous, unlike the
 //! git/scripts slices -- closer in shape to keymap dispatch.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, Focus};
 use crate::editor::is_image_path;

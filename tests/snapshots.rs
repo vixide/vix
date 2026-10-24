@@ -32,8 +32,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{Terminal, backend::TestBackend};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix::app::App;
 use vix::settings::Settings;

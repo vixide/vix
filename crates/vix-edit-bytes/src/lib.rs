@@ -15,7 +15,7 @@
 //! overwrites the current byte's high then low nibble; **u**/**Ctrl+R**
 //! undo/redo; **Ctrl+S** save; **Esc**/**q** close.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Bytes shown per row.
 pub const COLS: usize = 16;

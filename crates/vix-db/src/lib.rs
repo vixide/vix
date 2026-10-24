@@ -52,7 +52,7 @@ pub mod session;
 pub mod store;
 pub mod tunnel;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Browser::handle_key`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

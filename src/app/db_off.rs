@@ -4,7 +4,7 @@
 //! call sites need no `cfg` of their own. `App::db` / `App::edit_sql` are
 //! uninhabited-typed `Option`s that are always `None`.
 
-use crossterm::event::KeyEvent;
+use vix_input::KeyEvent;
 
 use super::App;
 

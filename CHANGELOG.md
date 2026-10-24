@@ -6,8 +6,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Desktop GUI, experimental** (T641): `gui/` builds `vix-gui`, which runs the whole of Vix — every panel, overlay and dock — in a native GPU-rendered window on macOS, Windows and Linux via GPUI Kit, with a native menu bar and a system open-file dialog. Run it with `cargo run --manifest-path gui/Cargo.toml --release`. See `gui/spec/index.md`.
+
 ### Changed
 
+- **Backend-neutral input** (T640): key and mouse handling throughout Vix now uses the new `vix-input` crate's event types instead of crossterm's; only the terminal event loop converts crossterm events. No behavior change in the terminal.
 - **No unchecked `unwrap`/`expect` in shipped code** (T603): draw functions now bail out with `let … else` instead of unwrapping an `Option` they just checked, and `clippy::unwrap_used`/`expect_used` are enforced workspace-wide (tests exempt via `clippy.toml`; the remaining provably-safe sites carry `#[expect(.., reason)]`).
 - **One lint policy** (T599): `unsafe_code`, `missing_docs` and `clippy::pedantic` now live in `[workspace.lints]`, and every crate and target (tests, benches, examples, build scripts) inherits them; `allow` attributes now need a `reason`.
 - **Smaller crate**: the published `vix` package no longer includes the project website

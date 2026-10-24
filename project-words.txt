@@ -312,3 +312,12 @@ debuginfo
 dispatchable
 codegen
 spawnable
+bitflags
+fontconfig
+gpui
+GPUI
+impls
+Longbridge
+trackpad
+wgpu
+xkbcommon

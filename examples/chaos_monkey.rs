@@ -41,13 +41,13 @@ use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crossterm::event::{
-    KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, MouseButton, MouseEvent,
-    MouseEventKind,
-};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use vix::app::{App, AppFlags};
 use vix::settings::Settings;
+use vix_input::{
+    KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
+};
 
 /// Marks the sandboxed child process.
 const SANDBOX_VAR: &str = "VIX_CHAOS_SANDBOX";

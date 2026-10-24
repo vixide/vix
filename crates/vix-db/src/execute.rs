@@ -6,7 +6,7 @@
 //! cohesive slice of [`Browser`]'s methods concerned with *running a
 //! statement*, as opposed to connecting or editing results.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use vix_input::{KeyCode, KeyEvent};
 
 use super::{
     Browser, Outcome, Pane, ParamPrompt, TxState, View, catalog, connect, editor, params, session,

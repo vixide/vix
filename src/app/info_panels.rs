@@ -8,7 +8,7 @@
 //! of "tools", another large genuinely contiguous block like org core
 //! was, no cherry-picking needed).
 
-use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
     App, ContactPanel, FileInfoPanel, MarkdownPreview, Outline, Prompt, PromptKind, SnippetSession,

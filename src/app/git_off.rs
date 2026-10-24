@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use crossterm::event::{KeyEvent, MouseEvent};
+use vix_input::{KeyEvent, MouseEvent};
 
 use super::App;
 

@@ -19,7 +19,7 @@
 //! container); **Space** toggles fold; **u**/**Ctrl+R** undo/redo; **Ctrl+S**
 //! save; **Esc**/**q** close.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Which serialization the buffer uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

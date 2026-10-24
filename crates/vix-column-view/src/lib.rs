@@ -25,7 +25,7 @@
 //!   "trust the user" convention for other free-text Org fields; `n`/`p`/
 //!   digit-select are the constrained-cycle affordances instead.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_org::{
     ColumnDef, ColumnRow, ColumnsSpec, apply_column_edit, build_column_table, columns_spec_anchor,

@@ -23,7 +23,7 @@
 //! - **Space**: toggle collapse. **Ctrl+S**: save. **u** / **Ctrl+R**:
 //!   undo / redo. **Esc** / **q**: close.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after the outline handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

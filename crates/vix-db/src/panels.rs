@@ -6,7 +6,7 @@
 //! cohesive slice of [`Browser`]'s methods -- everything that isn't
 //! connecting, running SQL, talking to the assistant, or editing a cell.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{
     Browser, Outcome, Pane, View, catalog, chart, editor, erd, export, format, import,

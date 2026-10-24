@@ -14,10 +14,10 @@
 
 use std::fs;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use vix::app::App;
 use vix::settings::Settings;
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)

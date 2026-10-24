@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The table editor: a spreadsheet-like grid for viewing and editing delimited data (CSV/TSV) as rows and columns."
 
 [dependencies]
-crossterm = { workspace = true }
+vix-input = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-convert-tabular = { workspace = true }
 

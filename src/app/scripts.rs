@@ -8,7 +8,7 @@
 //! here with the keybinding-editor code (T204), which stays in `app.rs`
 //! for now (not one of this epic's named slices).
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
     App, PendingScriptPrompt, Prompt, PromptKind, ScriptChooser, ScriptTrustPrompt,
