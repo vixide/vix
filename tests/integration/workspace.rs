@@ -835,14 +835,16 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
 
     // Wait (bounded) for the async file-count and disk-usage metrics to
     // arrive.
-    for _ in 0..200 {
-        app.poll_dashboard();
-        let d = app.dashboard.as_ref().unwrap();
-        if d.file_count.is_some() && d.disk_usage.is_some() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    wait_until(
+        &mut app,
+        App::poll_dashboard,
+        |a| {
+            a.dashboard
+                .as_ref()
+                .is_some_and(|d| d.file_count.is_some() && d.disk_usage.is_some())
+        },
+        std::time::Duration::from_secs(10),
+    );
     assert_eq!(
         app.dashboard.as_ref().unwrap().file_count,
         Some(2),

@@ -2218,12 +2218,12 @@ fn run_command_streams_output_to_bottom_dock() {
     );
 
     // The command runs in a background thread; drain it like the event loop does.
-    let mut waited = 0;
-    while app.command_running() && waited < 300 {
-        app.poll_command();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        waited += 1;
-    }
+    wait_until(
+        &mut app,
+        App::poll_command,
+        |a| !a.command_running(),
+        std::time::Duration::from_secs(10),
+    );
     app.poll_command();
 
     let out = app.bottom_dock.lines.join("\n");
@@ -2259,12 +2259,12 @@ fn run_command_merges_stderr_into_the_captured_output() {
     }
     app.on_key(keycode(KeyCode::Enter));
 
-    let mut waited = 0;
-    while app.command_running() && waited < 300 {
-        app.poll_command();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        waited += 1;
-    }
+    wait_until(
+        &mut app,
+        App::poll_command,
+        |a| !a.command_running(),
+        std::time::Duration::from_secs(10),
+    );
     app.poll_command();
 
     let out = app.bottom_dock.lines.join("\n");
@@ -2309,12 +2309,12 @@ fn run_command_completes_normally_with_the_bell_setting_on() {
     }
     app.on_key(keycode(KeyCode::Enter));
 
-    let mut waited = 0;
-    while app.command_running() && waited < 300 {
-        app.poll_command();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        waited += 1;
-    }
+    wait_until(
+        &mut app,
+        App::poll_command,
+        |a| !a.command_running(),
+        std::time::Duration::from_secs(10),
+    );
     app.poll_command();
 
     let out = app.bottom_dock.lines.join("\n");
@@ -2337,12 +2337,12 @@ fn cancel_command_kills_a_running_command() {
     // well past typical polling on a loaded/shared CI runner, and this test
     // has been observed to flake at a tighter budget on GitHub's runners
     // even though it is instant locally.
-    let mut waited = 0;
-    while app.command_running() && waited < 1000 {
-        app.poll_command();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        waited += 1;
-    }
+    wait_until(
+        &mut app,
+        App::poll_command,
+        |a| !a.command_running(),
+        std::time::Duration::from_secs(10),
+    );
     assert!(!app.command_running(), "cancel ended the command");
     let out = app.bottom_dock.lines.join("\n");
     assert!(
@@ -3286,13 +3286,12 @@ fn reopening_the_dashboard_while_open_is_idempotent() {
     let mut app = app_at(&dir);
 
     app.run_action("tools.dashboard");
-    for _ in 0..200 {
-        app.poll_dashboard();
-        if app.dashboard.as_ref().unwrap().file_count.is_some() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    wait_until(
+        &mut app,
+        App::poll_dashboard,
+        |a| a.dashboard.as_ref().is_some_and(|d| d.file_count.is_some()),
+        std::time::Duration::from_secs(10),
+    );
     assert_eq!(app.dashboard.as_ref().unwrap().file_count, Some(2));
 
     // Second invocation while still open: the resolved count must survive (a
