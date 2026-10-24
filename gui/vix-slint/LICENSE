@@ -1,0 +1,14 @@
+Vix™ (Vix IDE™) — the `vix-slint` desktop app
+
+This binary is licensed under the GNU General Public License, version 3
+only (https://github.com/vixide/vix/blob/main/docs/licenses/gpl-3.txt).
+
+It is built with the Slint GUI toolkit, used under Slint's GPL-3.0-only
+license, so the binary as a whole is distributed under the GPLv3 only. The
+Vix source code is also offered under Apache-2.0, BSD-3-Clause, MIT and
+GPL-2.0-only; this binary is not. See spec/license/index.md ("Binary
+licenses") in the source repository.
+
+Vix™ and Vix IDE™ are trademarks.
+
+Copyright © 2026 Vix™ and Vix IDE™.

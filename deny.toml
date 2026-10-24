@@ -29,8 +29,10 @@ ignore = [
 ]
 
 [licenses]
-# Vix is offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR
-# GPL-3.0-only" (workspace.package.license). A dependency whose terms are more
+# Vix's source is offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR
+# GPL-2.0-only OR GPL-3.0-only" (workspace.package.license); each distributed
+# binary declares the subset its linked crates allow (T648, spec/license,
+# scripts/check-binary-licenses -- Apache-2.0-only crates rule out GPLv2). A dependency whose terms are more
 # restrictive than the weakest of those takes that choice away from anyone who
 # ships a build, so the allowance below is permissive licenses only, plus
 # MPL-2.0, whose copyleft is per-file and does not reach the linking crate.

@@ -76,6 +76,10 @@ jobs:
       # Mirrors `scripts/check`. See spec/test/index.md.
       - name: scripts/check-docs
         run: python3 scripts/check-docs
+      # Each distributed binary declares exactly the licenses its linked
+      # dependencies allow (T648, spec/license). Mirrors `scripts/check`.
+      - name: scripts/check-binary-licenses
+        run: python3 scripts/check-binary-licenses
 
   # T573 (tasks.md): the suite must make no network calls -- distro builders
   # run `cargo test` in offline sandboxes. Build with the network, then run

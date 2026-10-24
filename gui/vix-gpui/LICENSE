@@ -1,0 +1,19 @@
+Vix™ (Vix IDE™) — the `vix-gpui` desktop app
+
+This binary is licensed under any one of the following, at your option:
+
+  - Apache License, Version 2.0             (https://github.com/vixide/vix/blob/main/docs/licenses/apache.txt)
+  - BSD 3-Clause License                    (https://github.com/vixide/vix/blob/main/docs/licenses/bsd.txt)
+  - MIT License                             (https://github.com/vixide/vix/blob/main/docs/licenses/mit.txt)
+  - GNU General Public License, version 3   (https://github.com/vixide/vix/blob/main/docs/licenses/gpl-3.txt)
+
+The Vix source code is also offered under the GNU General Public License,
+version 2; this binary is not, because it links third-party code licensed
+under the Apache License 2.0 only, which is incompatible with GPLv2.
+GPUI and GPUI Kit, its GUI toolkit, are licensed under the Apache
+License 2.0 only.
+See spec/license/index.md ("Binary licenses") in the source repository.
+
+Vix™ and Vix IDE™ are trademarks.
+
+Copyright © 2026 Vix™ and Vix IDE™.

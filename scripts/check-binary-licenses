@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Per-binary license gate for Vix (T648; spec/license/index.md).
+
+Vix's source is offered under any of five licenses. A *binary* links many
+third-party crates, and it can be distributed only under those of the five
+that every crate linked into it allows: a GUI toolkit (or any dependency)
+whose license is narrower narrows the binary's. Each binary package therefore
+declares in its own `license` field exactly the subset its dependency graph
+permits — no more (that would offer terms the binary cannot honor) and no
+less (that would withhold a choice for no reason).
+
+For every binary package — `vix-tui` (tui/) and each desktop GUI front end
+(gui/*) — this script walks the normal (linked) dependency graph across all
+target platforms, skipping proc-macros and build-only dependencies (neither
+ends up in the binary), classifies each crate's license expression against
+the five, and fails when the declared `license` differs from the computed
+set, naming the crates that rule each license out.
+
+Run from anywhere: `python3 scripts/check-binary-licenses`.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Vix's own five licenses, in the order its `license` fields list them.
+FIVE = ["Apache-2.0", "BSD-3-Clause", "MIT", "GPL-2.0-only", "GPL-3.0-only"]
+ALL = set(FIVE)
+
+# What a dependency's license id allows a binary that links it to be
+# distributed under. Permissive licenses, MPL-2.0 (file-level copyleft that
+# does not reach the linking work), and font licenses that permit bundling
+# with software under any license allow everything.
+PERMITS = {
+    **{
+        lid: ALL
+        for lid in [
+            "0BSD", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0",
+            "CDLA-Permissive-2.0", "ISC", "MIT", "MIT-0", "X11", "NCSA",
+            "Unicode-3.0", "Unicode-DFS-2016", "Unlicense", "WTFPL", "Zlib",
+            "MPL-2.0", "MPL-2.0+", "OFL-1.1", "Ubuntu-font-1.0",
+        ]
+    },
+    # The FSF holds Apache-2.0 incompatible with GPLv2 (its patent and
+    # indemnity terms are "further restrictions"); it is compatible with v3.
+    "Apache-2.0": ALL - {"GPL-2.0-only"},
+    # Copyleft: the binary must be distributed under the same terms.
+    "GPL-2.0-only": {"GPL-2.0-only"},
+    "GPL-3.0-only": {"GPL-3.0-only"},
+    "LGPL-2.1-or-later": {"GPL-2.0-only", "GPL-3.0-only"},
+}
+
+
+def permitted(expr):
+    """The subset of FIVE that a crate under the SPDX expression `expr`
+    allows: `OR` is a union of choices, `AND` an intersection of
+    obligations, `WITH <exception>` only widens use and is ignored, and a
+    `LicenseRef-` alternative (a proprietary license) allows nothing here.
+    Accepts the legacy `/` for `OR`. Raises `KeyError` naming the first
+    unclassified license id."""
+    tokens = re.findall(r"\(|\)|[^\s()]+", expr.replace("/", " OR "))
+    pos = 0
+
+    def peek():
+        return tokens[pos] if pos < len(tokens) else None
+
+    def take():
+        nonlocal pos
+        pos += 1
+        return tokens[pos - 1]
+
+    def atom():
+        if peek() == "(":
+            take()
+            out = disjunction()
+            take()  # ")"
+            return out
+        lid = take()
+        if peek() == "WITH":
+            take()
+            take()
+        if lid.startswith("LicenseRef-"):
+            return set()
+        return set(PERMITS[lid])
+
+    def conjunction():
+        out = atom()
+        while peek() == "AND":
+            take()
+            out &= atom()
+        return out
+
+    def disjunction():
+        out = conjunction()
+        while peek() == "OR":
+            take()
+            out |= conjunction()
+        return out
+
+    return disjunction()
+
+
+def metadata(manifest):
+    return json.loads(
+        subprocess.check_output(
+            ["cargo", "metadata", "--format-version", "1", "--locked", "--manifest-path", manifest],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+    )
+
+
+def linked(meta, root_id):
+    """Ids of every third-party package linked into `root_id`'s binary."""
+    pk = {p["id"]: p for p in meta["packages"]}
+    nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
+    seen, stack = set(), [root_id]
+    while stack:
+        i = stack.pop()
+        if i in seen:
+            continue
+        seen.add(i)
+        for d in nodes[i]["deps"]:
+            if not any(k["kind"] is None for k in d["dep_kinds"]):
+                continue  # dev- or build-only
+            dep = pk[d["pkg"]]
+            if any("proc-macro" in t["kind"] for t in dep["targets"]):
+                continue
+            stack.append(d["pkg"])
+    return [pk[i] for i in seen if pk[i]["source"] is not None]
+
+
+def check(meta, name, problems):
+    pkg = next(p for p in meta["packages"] if p["name"] == name and p["source"] is None)
+    allowed, blockers = set(ALL), {}
+    for dep in linked(meta, pkg["id"]):
+        expr = dep.get("license")
+        if not expr:
+            problems.append(f"{name}: {dep['name']} {dep['version']} has no SPDX license; classify it")
+            continue
+        try:
+            ok = permitted(expr)
+        except KeyError as e:
+            problems.append(f"{name}: unknown license id {e} in {dep['name']} ({expr!r}); add it to PERMITS")
+            continue
+        for lid in ALL - ok:
+            blockers.setdefault(lid, []).append(dep["name"])
+        allowed &= ok
+    want = " OR ".join(l for l in FIVE if l in allowed)
+    have = pkg.get("license") or ""
+    if set(re.split(r"\s+OR\s+", have)) != allowed:
+        why = "; ".join(f"{l} ruled out by {', '.join(sorted(set(b))[:6])}" for l, b in sorted(blockers.items()))
+        problems.append(f"{name}: declares {have!r} but its linked crates permit {want!r} ({why})")
+    else:
+        print(f"OK: {name}: {have}")
+
+
+def self_test():
+    """The expression rules on the shapes crates.io actually carries."""
+    gpl2 = "GPL-2.0-only"
+    assert permitted("MIT OR Apache-2.0") == ALL
+    assert permitted("Apache-2.0") == ALL - {gpl2}
+    assert permitted("Apache-2.0/MIT") == ALL
+    assert permitted("(MIT OR Apache-2.0) AND Unicode-3.0") == ALL
+    assert permitted("Apache-2.0 AND ISC") == ALL - {gpl2}
+    assert permitted("Apache-2.0 WITH LLVM-exception") == ALL - {gpl2}
+    assert permitted("Apache-2.0 OR GPL-2.0-only") == ALL
+    assert permitted(
+        "GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0"
+    ) == {"GPL-3.0-only"}
+    assert permitted("MIT AND GPL-3.0-only") == {"GPL-3.0-only"}
+
+
+def main():
+    self_test()
+    problems = []
+    root = metadata("Cargo.toml")
+    check(root, "vix-tui", problems)
+    gui = os.path.join(ROOT, "gui", "Cargo.toml")
+    if os.path.exists(gui):
+        meta = metadata(gui)
+        members = {m for m in meta["workspace_members"]}
+        for p in meta["packages"]:
+            if p["id"] in members and any("bin" in t["kind"] for t in p["targets"]):
+                check(meta, p["name"], problems)
+    for p in problems:
+        print(f"FAIL: {p}")
+    sys.exit(1 if problems else 0)
+
+
+if __name__ == "__main__":
+    main()
