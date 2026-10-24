@@ -681,7 +681,7 @@ impl App {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.set_clipboard(&text);
+            tab.editor.copy_to_clipboard(&text);
             self.status = t!("status.ai_copied").to_string();
         }
     }

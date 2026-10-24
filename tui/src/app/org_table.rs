@@ -321,11 +321,11 @@ impl App {
             Some(sum) => {
                 let formatted = Self::format_table_number(sum);
                 // T542 (Run H): route through the editor's fallback-aware
-                // `set_clipboard` instead of the bare `vix_clipboard::set` --
+                // `copy_to_clipboard` instead of the bare `vix_clipboard::set` --
                 // the message below used to claim success unconditionally
                 // even when nothing was actually stored anywhere.
                 if let Some(t) = self.editor.active_tab_mut() {
-                    t.editor.set_clipboard(&formatted);
+                    t.editor.copy_to_clipboard(&formatted);
                 }
                 self.status = t!("status.org_table_sum", sum = formatted).to_string();
             }

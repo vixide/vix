@@ -14665,7 +14665,7 @@ mod tests {
         // T542 (Run H): this used to call the bare `vix_clipboard::set`
         // directly and unconditionally show "Copied ... to the clipboard"
         // regardless of its result -- now routed through the editor's
-        // fallback-aware `set_clipboard`, so something is always genuinely
+        // fallback-aware `copy_to_clipboard`, so something is always genuinely
         // stored (real clipboard, else the in-memory register) rather than
         // the message merely claiming so.
         let mut app = App::new(std::env::temp_dir(), Settings::default());

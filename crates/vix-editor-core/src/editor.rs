@@ -651,15 +651,27 @@ impl Editor {
         self.selection = None;
     }
 
-    /// Set the clipboard text, falling back to an in-memory clipboard when the
-    /// system clipboard is unavailable.
-    pub fn set_clipboard(&mut self, text: &str) {
+    /// Copy `text` to the clipboard, falling back to an in-memory clipboard
+    /// when the system clipboard is unavailable. Cannot fail.
+    pub fn copy_to_clipboard(&mut self, text: &str) {
         // Route through the shared, lock-guarded clipboard helper so every crate
         // accesses the (non-thread-safe) platform backend sequentially. Fall back
         // to the in-memory clipboard if the system clipboard is unavailable.
         if vix_clipboard::set(text).is_err() {
             self.clipboard = Some(text.to_string());
         }
+    }
+
+    /// Set the clipboard text. Kept with its published 1.x signature for
+    /// compatibility; it never fails, so prefer [`Self::copy_to_clipboard`],
+    /// which returns nothing (no `let _ =` at the call site). Mark it
+    /// `#[deprecated]` at the next minor release, and remove it at 2.0.
+    ///
+    /// # Errors
+    /// Never; the `Result` is kept only for compatibility.
+    pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
+        self.copy_to_clipboard(text);
+        Ok(())
     }
 
     /// Return the clipboard text, preferring the system clipboard and falling

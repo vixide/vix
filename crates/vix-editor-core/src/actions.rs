@@ -667,7 +667,7 @@ impl Action for Cut {
 
         // 2. Copy to clipboard first, before borrowing code mutably
         let text = editor.code_ref().slice(sel.start, sel.end);
-        editor.set_clipboard(&text);
+        editor.copy_to_clipboard(&text);
 
         // 3. Now borrow code mutably
         let code = editor.code_mut();
@@ -704,7 +704,7 @@ impl Action for Copy {
 
         // 3. Get text and copy to clipboard
         let text = editor.code_ref().slice(sel.start, sel.end);
-        editor.set_clipboard(&text);
+        editor.copy_to_clipboard(&text);
     }
 }
 
