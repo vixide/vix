@@ -2,9 +2,9 @@
 
 Native desktop windows for Vix on macOS, Windows and Linux, built twice — on
 [GPUI](https://github.com/longbridge/gpui-kit) (via Longbridge's GPUI Kit)
-and on [egui](https://github.com/emilk/egui) (via eframe) — over one shared,
-toolkit-agnostic core, so the two can be tried and compared side by side
-before committing to one.
+and on [egui](https://github.com/emilk/egui) (via eframe) — each a complete,
+independent implementation, so the toolkits can be tried and compared side
+by side before committing to one.
 
 **Status:** experimental. GUI Phase 0 (T640) and Phase 1 (T641, T642)
 shipped; Phase 2 (native components) not started, and waits on choosing a
@@ -20,16 +20,33 @@ Both take the same command line as `vix` (`vix::cli::Cli`).
 ## Layout
 
 `gui/` is one Cargo workspace (separate from the repo root, like `fuzz/`)
-with three crates:
+with one crate per front end:
 
-| Crate            | Contents |
-| ---------------- | -------- |
-| `vix-gui-common` | Everything that does not depend on the toolkit: the ratatui cell-grid `Backend` (`grid`), color resolution and per-row background runs / text spans (`render`), the keystroke rules (`keys`), the native menu tree from `vix-menu` (`menu`), font-family choice (`fonts`), and startup plus the scripted screenshot run (`startup`). |
-| `vix-gpui`       | The GPUI front end: a GPUI view holding the `App`, painting via GPUI's text system, GPUI keystrokes → shared key rules, native menus and file dialog through GPUI itself. GPUI Kit pinned `=0.8.0`. |
-| `vix-egui`       | The egui front end: an `eframe::App`, painting via egui's painter, egui events → shared key rules, fonts loaded by family name through `fontique`, native menus (macOS) through `muda`, file dialog through `rfd`. eframe pinned `=0.37.0`. |
+| Crate      | Contents |
+| ---------- | -------- |
+| `vix-gpui` | The GPUI front end: a GPUI view holding the `App`, painting via GPUI's text system, GPUI keystrokes, native menus and file dialog through GPUI itself. GPUI Kit pinned `=0.8.0`. |
+| `vix-egui` | The egui front end: an `eframe::App`, painting via egui's painter, egui events, fonts loaded by family name through `fontique`, native menus (macOS) through `muda`, file dialog through `rfd`. eframe pinned `=0.37.0`. |
 
-Each front end is only the toolkit glue (window, painting, event wiring);
-the comparison is between toolkits, not between two implementations of Vix.
+Each crate also carries its own copy of the parts that do not depend on
+the toolkit: a ratatui cell-grid `Backend` (`grid`), color resolution and
+per-row background runs / text spans (`render`), the keystroke rules
+(`key_rules`), the native menu tree from `vix-menu` (`menu_tree`),
+font-family choice (`font_choice`), and startup plus the scripted
+screenshot run (`startup`).
+
+## Independent implementations
+
+**Each GUI implementation has its own, independent GUI code; there is no
+common GUI library.** A front end depends on the Vix App (package
+`vix-tui`, library `vix`) and the shared Vix crates such as `vix-input` and
+`vix-i18n`, and on nothing from another front end — no shared GUI crate and
+no `path` into a sibling's sources. When two front ends need the same logic
+(the cell grid, the key rules, the menu tree), each keeps its own copy and
+may change it for its toolkit without touching the others. So each front
+end can be kept, changed, or deleted on its own, and comparing toolkits
+compares complete implementations. Logic that every front end needs and
+that is not about the GUI belongs in the App (`tui/src`) or a `crates/`
+member, as `App::start` / `App::tick` / `App::poll_interval` do.
 
 ## Phases
 
@@ -39,15 +56,15 @@ the comparison is between toolkits, not between two implementations of Vix.
    [`crates/vix-input/spec/index.md`](../../crates/vix-input/spec/index.md).
    Startup and the loop's background work are `App::start`, `App::tick`,
    `App::poll_interval` (`tui/src/app/event_loop.rs`), shared by every front end.
-2. **Phase 1 — the whole App in a window** (T641 GPUI, T642 egui + the
-   shared core). The unchanged `ui::draw` renders each frame into the shared
-   cell grid, which each front end paints with a monospace font. Every panel,
+2. **Phase 1 — the whole App in a window** (T641 GPUI, T642 egui; T646
+   made each front end self-contained). The unchanged `ui::draw` renders
+   each frame into a cell grid, which each front end paints with a monospace font. Every panel,
    overlay, picker and dock works identically to the terminal.
 3. **Phase 2 — native components** (not started): docks, tables, Markdown,
    and a custom element drawing `vix-editor-core`'s buffer with proportional
    text, migrating one panel at a time with the cell grid as the fallback.
 
-## Shared behavior (both front ends)
+## Behavior every front end implements
 
 - **Rendering.** Text is drawn in *spans* — maximal same-style stretches of
   a row — each placed at its exact cell column; any non-ASCII cell (box
@@ -56,7 +73,7 @@ the comparison is between toolkits, not between two implementations of Vix.
   italic, underline and strikethrough come from the cell's modifiers;
   `REVERSED` and `DIM` fold into the colors.
 - **Input** is shaped like what crossterm delivers for the same key
-  (`vix_gui_common::keys`): typed characters for plain typing, the
+  (each crate's `key_rules`): typed characters for plain typing, the
   unmodified key for `Ctrl`/`Alt`/`Cmd` chords ("Option as Meta", so
   `Alt+letter` menu mnemonics work), `Shift+Tab` as `BackTab`,
   `Cmd`/Windows/Super as `SUPER` (Vix folds `Cmd` into `Ctrl` on macOS).
@@ -175,10 +192,10 @@ version pins conflict with the default backend's.
 ## Tests
 
 Unit tests (`cargo test --manifest-path gui/Cargo.toml --workspace`) cover,
-in `vix-gui-common`: the grid backend (drawing, cursor tracking, resize),
+in each front end: its grid backend (drawing, cursor tracking, resize),
 color and modifier resolution, row span/background planning, the keystroke
 rules, the menu tree (every model leaf in order; File gains the system-dialog
-item) and font fallback choice; in each front end: its toolkit adapter
+item), font fallback choice, and its toolkit adapter
 (GPUI keystroke parsing and modifier flags; egui's Key/Text/IME split,
 Option-as-Meta, and scripted keystrokes round-tripping) and native menu
 conversion.

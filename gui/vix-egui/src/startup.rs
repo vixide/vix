@@ -1,4 +1,4 @@
-//! Startup shared by every GUI front end — the same sequence as the terminal
+//! Startup — the same sequence as the terminal
 //! binary (`tui/src/main.rs`), minus the terminal: the real system clipboard,
 //! settings (a load failure is reported once the App exists), the locale
 //! (`--locale` wins, unsaved), `theme = "auto"` from the OS appearance, then
@@ -69,6 +69,7 @@ pub fn window_title(root: &std::path::Path) -> String {
     format!("Vix — {}", root.display())
 }
 
+#[cfg(feature = "screenshot")]
 /// A scripted run for the render smoke test: with `VIX_GUI_SCREENSHOT=<path>`
 /// set, a front end waits for startup, runs `actions`, types `keys` through
 /// its real key handling, saves the window as a PNG at `path`, and quits.
@@ -83,6 +84,7 @@ pub struct Script {
     pub keys: Vec<String>,
 }
 
+#[cfg(feature = "screenshot")]
 impl Script {
     /// The scripted run the environment asks for, if any.
     #[must_use]

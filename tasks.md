@@ -7437,6 +7437,14 @@ new action.
   to the getting-started install page (see `gui/spec/index.md`'s
   Distribution section) once their first release exists.
 
+- [x] **T646 — Each GUI is self-contained: no common GUI library.**
+  `gui/vix-gui-common` is removed; `vix-gpui` and `vix-egui` each carry
+  their own `grid`, `render`, `key_rules`, `menu_tree`, `font_choice` and
+  `startup` modules (and tests), free to diverge per toolkit.
+  `gui/spec/index.md` gains the rule ("Independent implementations"): a
+  front end depends on the Vix App and the shared `crates/` members, never
+  on another front end or a shared GUI crate.
+
 - [x] **T645 — Release distributions for the desktop GUIs, and the
   `vix-tui` Homebrew formula.** `dist-workspace.toml` lists `cargo:gui`
   beside `cargo:.`, so one tag releases `vix-tui`, `vix-gpui` and

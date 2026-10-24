@@ -1,10 +1,10 @@
-//! The native menu bar (macOS), from the shared tree in
-//! `vix_gui_common::menu`, through `muda` — egui has no native menus of its
+//! The native menu bar (macOS), from the tree in
+//! `crate::menu_tree`, through `muda` — egui has no native menus of its
 //! own. Each item's muda id is its Vix action id, so a click comes back from
 //! [`clicked`] as the id to hand to `App::run_action`.
 
+use crate::menu_tree::{self as menu, Node};
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
-use vix_gui_common::menu::{self, Node};
 
 /// The muda id of **Open with System Dialog…**.
 pub const OPEN_NATIVE: &str = "vix-gui.open-native";

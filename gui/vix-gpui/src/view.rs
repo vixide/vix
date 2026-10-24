@@ -17,9 +17,9 @@ use ratatui::Terminal;
 use vix::app::{App as VixApp, AppFlags};
 use vix_input::{KeyModifiers, MouseEvent, MouseEventKind};
 
-use vix_gui_common::fonts;
-use vix_gui_common::grid::GridBackend;
-use vix_gui_common::render::Palette;
+use crate::font_choice as fonts;
+use crate::grid::GridBackend;
+use crate::render::Palette;
 
 use crate::keys;
 use crate::menus::{OpenNative, RunAction};
@@ -61,7 +61,7 @@ impl VixView {
             false
         });
         #[cfg(feature = "screenshot")]
-        if let Some(script) = vix_gui_common::startup::Script::from_env() {
+        if let Some(script) = crate::startup::Script::from_env() {
             Self::schedule_screenshot(script, window, cx);
         }
         let ticker = cx.spawn(async move |this, cx| {
@@ -89,11 +89,11 @@ impl VixView {
         }
     }
 
-    /// The scripted render smoke test (`vix_gui_common::startup::Script`):
+    /// The scripted render smoke test (`crate::startup::Script`):
     /// keystrokes go through GPUI's real key dispatch.
     #[cfg(feature = "screenshot")]
     fn schedule_screenshot(
-        script: vix_gui_common::startup::Script,
+        script: crate::startup::Script,
         window: &Window,
         cx: &mut Context<Self>,
     ) {

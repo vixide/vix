@@ -23,7 +23,6 @@ screenshot = ["dep:gpui-pre-platform", "gpui-pre-platform/test-support"]
 vix = { workspace = true }
 vix-input = { workspace = true }
 vix-i18n = { workspace = true }
-vix-gui-common = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
 ratatui = { workspace = true }

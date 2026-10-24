@@ -2,8 +2,8 @@
 //!
 //! The *whole* Vix `App` — every panel, overlay, picker and dock — in a
 //! native, GPU-rendered window on macOS, Windows and Linux. The App's
-//! unchanged `ui::draw` renders into the shared in-memory cell grid
-//! (`vix_gui_common::grid`), which the window paints with a monospace font
+//! unchanged `ui::draw` renders into an in-memory cell grid
+//! (`crate::grid`), which the window paints with a monospace font
 //! (`paint`); keys, mouse and the native menu bar (`menus`) feed straight back
 //! into the same `App::on_key` / `App::on_mouse` / `App::run_action` the
 //! terminal front end uses. See `gui/spec/index.md`.
@@ -11,15 +11,24 @@
 // A release build on Windows is a GUI app: no console window opens beside it.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
+
+mod font_choice;
+mod grid;
+mod key_rules;
 mod keys;
+mod menu_tree;
 mod menus;
 mod paint;
+mod render;
+mod startup;
 mod view;
 
 use clap::Parser;
 use gpui_kit::{AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use vix::cli::Cli;
-use vix_gui_common::startup;
 
 use crate::view::VixView;
 

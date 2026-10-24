@@ -1,7 +1,8 @@
-//! Paint the cell grid with GPUI, following the toolkit-neutral plan in
-//! `vix_gui_common::render`: background runs as quads, text spans as shaped
+//! Paint the cell grid with GPUI, following the plan in
+//! `crate::render`: background runs as quads, text spans as shaped
 //! lines positioned on the cell grid, then the text cursor.
 
+use crate::render::{Palette, Rgba8, SpanStyle, cell_colors, row_backgrounds, row_text};
 use gpui_kit::{
     App, Bounds, FontFallbacks, FontStyle, FontWeight, Hsla, Pixels, Rgba, SharedString,
     StrikethroughStyle, TextAlign, TextRun, UnderlineStyle, Window, fill, point, px, size,
@@ -9,7 +10,6 @@ use gpui_kit::{
 use ratatui::buffer::Buffer;
 use ratatui::layout::Position;
 use ratatui::style::Modifier;
-use vix_gui_common::render::{Palette, Rgba8, SpanStyle, cell_colors, row_backgrounds, row_text};
 
 /// Fonts, cell metrics and default colors for painting.
 #[derive(Clone)]

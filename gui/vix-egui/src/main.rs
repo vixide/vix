@@ -1,9 +1,10 @@
 //! `vix-egui`: the Vix desktop GUI on egui (eframe).
 //!
 //! The *whole* Vix `App` — every panel, overlay, picker and dock — in a native
-//! window on macOS, Windows and Linux, over the same toolkit-agnostic core as
-//! `vix-gpui` (`vix_gui_common`): the App's unchanged `ui::draw` renders into
-//! the shared cell grid, which this front end paints with egui (`view`);
+//! window on macOS, Windows and Linux, with all of its own GUI code (no
+//! library shared with the other front ends): the App's unchanged `ui::draw`
+//! renders into an in-memory cell grid, which this front end paints with egui
+//! (`view`);
 //! keystrokes, IME commits, the mouse and (on macOS) the native menu bar feed
 //! back into the same `App::on_key` / `App::on_mouse` / `App::run_action` the
 //! terminal uses. See `gui/spec/index.md`.
@@ -11,12 +12,22 @@
 // A release build on Windows is a GUI app: no console window opens beside it.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
+
+mod font_choice;
 mod fonts;
+mod grid;
+mod key_rules;
 mod keys;
+mod menu_tree;
 #[cfg(target_os = "macos")]
 mod menus;
+mod render;
 #[cfg(feature = "screenshot")]
 mod screenshot;
+mod startup;
 mod view;
 
 use std::path::PathBuf;
@@ -24,7 +35,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use eframe::egui::{Theme, ViewportBuilder};
 use vix::cli::Cli;
-use vix_gui_common::startup;
 
 use crate::view::VixEgui;
 

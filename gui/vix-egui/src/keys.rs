@@ -1,5 +1,5 @@
-//! egui input events → `vix-input` events, via the shared rules in
-//! `vix_gui_common::keys`.
+//! egui input events → `vix-input` events, via the rules in
+//! `crate::key_rules`.
 //!
 //! egui reports a typed key twice: an [`Event::Key`] for the physical key and
 //! an [`Event::Text`] for the character the layout produced (none for
@@ -24,7 +24,7 @@ pub fn modifiers(m: Modifiers) -> KeyModifiers {
     out
 }
 
-/// The shared rules' name for an egui key (`enter`, `pageup`, `f5`, `a`, `/`).
+/// The key rules' name for an egui key (`enter`, `pageup`, `f5`, `a`, `/`).
 #[must_use]
 pub fn key_name(key: Key) -> Option<String> {
     let named = match key {
@@ -96,7 +96,7 @@ pub fn key_events(event: &Event, held: Modifiers) -> Vec<KeyEvent> {
                 return Vec::new(); // the Text event carries it
             }
             key_name(*key)
-                .and_then(|name| vix_gui_common::keys::key_event(&name, None, mods))
+                .and_then(|name| crate::key_rules::key_event(&name, None, mods))
                 .into_iter()
                 .collect()
         }
@@ -108,7 +108,7 @@ pub fn key_events(event: &Event, held: Modifiers) -> Vec<KeyEvent> {
             text.chars()
                 .filter_map(|c| {
                     let s = c.to_string();
-                    vix_gui_common::keys::key_event(&s, Some(&s), mods)
+                    crate::key_rules::key_event(&s, Some(&s), mods)
                 })
                 .collect()
         }

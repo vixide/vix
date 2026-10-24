@@ -1,4 +1,4 @@
-//! The scripted render smoke test (`vix_gui_common::startup::Script`): wait
+//! The scripted render smoke test (`crate::startup::Script`): wait
 //! for startup, run actions, type keystrokes through the same event handling
 //! real input takes, capture the window with egui's screenshot command, save
 //! a PNG, and quit.
@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::startup::Script;
 use eframe::egui::{Color32, ColorImage, Context, Event, Modifiers};
 use vix::app::App;
-use vix_gui_common::startup::Script;
 
 /// Where a scripted run is up to.
 enum Stage {
