@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
 description = "Vix desktop GUI on GPUI (GPUI Kit): the full Vix App in a native GPU-rendered window."
 
 [features]
@@ -29,6 +33,39 @@ gpui-kit = { version = "=0.8.0", default-features = false }
 # The exact platform crate gpui-kit 0.8.0 pins; named only so `screenshot` can
 # turn on its test-support. Must move in step with the gpui-kit pin.
 gpui-pre-platform = { version = "=0.3.9", optional = true }
+
+# Release distributions (T645): `brew install vixide/tap/vix-gpui`, shell and
+# PowerShell installers, an MSI, and archives, built by dist from the
+# repo-root dist-workspace.toml (which lists this workspace as `cargo:gui`).
+# `publish = false` keeps it off crates.io, so dist must be told to ship it.
+# No musl target: a GUI links the system's windowing, GPU and font libraries.
+# No npm package: a desktop app is not a Node tool.
+[package.metadata.dist]
+dist = true
+formula = "vix-gpui"
+installers = ["shell", "powershell", "homebrew", "msi"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+# Linux build-time system libraries (the same set as .github/workflows/gui.yml).
+[package.metadata.dist.dependencies.apt]
+libasound2-dev = "*"
+libfontconfig-dev = "*"
+libfreetype-dev = "*"
+libwayland-dev = "*"
+libx11-xcb-dev = "*"
+libxkbcommon-x11-dev = "*"
+libxcursor-dev = "*"
+libxrandr-dev = "*"
+libxi-dev = "*"
+libvulkan-dev = "*"
+libssl-dev = "*"
+libzstd-dev = "*"
+
+[package.metadata.wix]
+upgrade-guid = "C50AAA2F-EA0E-41D7-B1AF-179E40DCA9F4"
+path-guid = "8747B3BA-CB23-414F-B51F-1E77BC48486F"
+license = false
+eula = false
 
 [lints]
 workspace = true

@@ -8,6 +8,9 @@
 //! into the same `App::on_key` / `App::on_mouse` / `App::run_action` the
 //! terminal front end uses. See `gui/spec/index.md`.
 
+// A release build on Windows is a GUI app: no console window opens beside it.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod keys;
 mod menus;
 mod paint;

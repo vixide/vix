@@ -1,5 +1,7 @@
 [workspace]
-members = ["cargo:."]
+# The terminal app (vix-tui) and the desktop GUIs (vix-gpui, vix-egui) — the
+# GUIs are their own Cargo workspace (gui/), released from the same tag (T645).
+members = ["cargo:.", "cargo:gui"]
 
 # Config for 'dist'
 [dist]

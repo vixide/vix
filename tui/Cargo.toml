@@ -24,10 +24,11 @@ path = "src/lib.rs"
 name = "vix"
 path = "src/main.rs"
 
-# Release names stay what they were before the package was renamed: the
-# Homebrew formula and npm package are still `vix` (dist, T643).
+# Release names: the npm package is still `vix` (dist, T643); the Homebrew
+# formula is `vix-tui` (`brew install vixide/tap/vix-tui`), beside `vix-gpui`
+# and `vix-egui` (T645). The command it installs is still `vix`.
 [package.metadata.dist]
-formula = "vix"
+formula = "vix-tui"
 npm-package = "vix"
 # The man page (T307), generated from the real `Cli` definition by
 # `cargo run --example generate_man` and committed at man/vix.1 -- CI

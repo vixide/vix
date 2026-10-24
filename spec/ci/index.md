@@ -146,7 +146,11 @@ denied over all features, and the unit tests, all via `--manifest-path gui/Cargo
 --locked`. On macOS it also runs each front end's real render (the `screenshot` feature:
 open the window, type into the command palette, save a PNG) and uploads the images. Linux
 installs the windowing/font system libraries first. It is advisory (`continue-on-error`) and
-path-filtered to changes that can affect the GUIs. See `gui/spec/index.md`.
+path-filtered to changes that can affect the GUIs. The matrix also includes
+`ubuntu-22.04` and `ubuntu-22.04-arm`, the runners `release.yml` builds the GUIs on: dist
+releases `vix-gpui` and `vix-egui` from the same tag as `vix-tui` (T645; `dist-workspace.toml`
+members `cargo:.` and `cargo:gui`), so a GUI that does not build there fails the whole release.
+See `gui/spec/index.md`.
 
 ### Chaos monkey (T575)
 

@@ -7429,7 +7429,26 @@ new action.
   to `vix-tui-installer.sh`/`.ps1` — `latest/download` resolves to the new
   release's assets. (3) Consider a final `vix` 1.7.x on crates.io whose
   README points to `vix-tui`. (4) Re-check the Homebrew tap and npm
-  publish jobs on the first real release run.
+  publish jobs on the first real release run. (5) The formula is now
+  `vix-tui` (T645): add `{"vix": "vix-tui"}` to `vixide/homebrew-tap`'s
+  `formula_renames.json` so `brew upgrade` moves existing `vix` installs
+  over, and change `docs/getting-started/index.md`'s
+  `brew install vixide/homebrew-tap/vix` to `…/vix-tui`. (6) Add the GUIs
+  to the getting-started install page (see `gui/spec/index.md`'s
+  Distribution section) once their first release exists.
+
+- [x] **T645 — Release distributions for the desktop GUIs, and the
+  `vix-tui` Homebrew formula.** `dist-workspace.toml` lists `cargo:gui`
+  beside `cargo:.`, so one tag releases `vix-tui`, `vix-gpui` and
+  `vix-egui`. Each GUI: `[package.metadata.dist] dist = true` (they are
+  `publish = false`), formula named after the package, shell/PowerShell/
+  Homebrew/MSI installers, five targets (no musl), apt build dependencies
+  for Linux, WiX sources in `gui/<crate>/wix/`, and the `windows`
+  subsystem in release builds. The TUI's formula is renamed `vix` →
+  `vix-tui`. `gui.yml` adds the release's own Linux runners
+  (`ubuntu-22.04`, `ubuntu-22.04-arm`). Verified with `dist plan` and
+  `dist generate --mode ci --check` (no drift: the matrix is computed at
+  release time).
 
 ---
 
