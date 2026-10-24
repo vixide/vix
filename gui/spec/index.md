@@ -101,6 +101,36 @@ the comparison is between toolkits, not between two implementations of Vix.
 - Wide (CJK, emoji) glyphs are drawn at their cell position but sized by
   the fallback font.
 
+## Distribution (T645)
+
+Both GUIs are released from the same version tag as the terminal app, by
+`dist` (the repo-root `dist-workspace.toml` lists this workspace as
+`cargo:gui`; `[package.metadata.dist]` in each front end's `Cargo.toml`):
+
+```sh
+brew install vixide/tap/vix-gpui     # or vix-egui; vix-tui for the terminal app
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.sh | sh
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.ps1 | iex"
+```
+
+- **Artifacts** per front end: `.tar.xz` archives for macOS (Apple silicon
+  and Intel) and Linux glibc (x86_64 and aarch64), a `.zip` and an `.msi`
+  for Windows, shell and PowerShell installers, a Homebrew formula pushed to
+  `vixide/homebrew-tap`, and a CycloneDX SBOM. No musl build (a GUI links
+  the system's windowing, GPU and font libraries) and no npm package.
+- **Linux** release builds install the same system libraries as CI
+  (`[package.metadata.dist.dependencies.apt]`); at run time the usual
+  desktop libraries (xkbcommon, Wayland or X11, fontconfig, a Vulkan
+  driver) must be present.
+- **Windows** release builds use the `windows` subsystem, so no console
+  window opens beside the GUI (which also means `--help` prints nothing
+  there); debug builds keep the console.
+- **macOS** ships a plain executable, not an `.app` bundle; it opens its
+  window when run from a terminal, Spotlight does not list it.
+- **Version.** `gui/Cargo.toml`'s `workspace.package.version` must equal the
+  root's: one tag releases all three apps, and dist refuses a tag that does
+  not match every app's version.
+
 ## Why a separate workspace
 
 GPUI and egui each pull in a GPU stack (Metal / DirectX / Vulkan via wgpu),

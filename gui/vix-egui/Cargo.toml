@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
 description = "Vix desktop GUI on egui (eframe): the full Vix App in a native window."
 
 [dependencies]
@@ -35,6 +39,39 @@ screenshot = ["dep:image"]
 muda = "0.21"
 # The platform file dialog, for the menu's Open with System Dialog….
 rfd = "0.17"
+
+# Release distributions (T645): `brew install vixide/tap/vix-egui`, shell and
+# PowerShell installers, an MSI, and archives, built by dist from the
+# repo-root dist-workspace.toml (which lists this workspace as `cargo:gui`).
+# `publish = false` keeps it off crates.io, so dist must be told to ship it.
+# No musl target: a GUI links the system's windowing, GPU and font libraries.
+# No npm package: a desktop app is not a Node tool.
+[package.metadata.dist]
+dist = true
+formula = "vix-egui"
+installers = ["shell", "powershell", "homebrew", "msi"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+# Linux build-time system libraries (the same set as .github/workflows/gui.yml).
+[package.metadata.dist.dependencies.apt]
+libasound2-dev = "*"
+libfontconfig-dev = "*"
+libfreetype-dev = "*"
+libwayland-dev = "*"
+libx11-xcb-dev = "*"
+libxkbcommon-x11-dev = "*"
+libxcursor-dev = "*"
+libxrandr-dev = "*"
+libxi-dev = "*"
+libvulkan-dev = "*"
+libssl-dev = "*"
+libzstd-dev = "*"
+
+[package.metadata.wix]
+upgrade-guid = "540BEBE2-DFA7-43B1-8417-45BE95895F59"
+path-guid = "3EC91C67-D4C4-4E15-9D54-8BA6BE3982B3"
+license = false
+eula = false
 
 [lints]
 workspace = true
