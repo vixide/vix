@@ -228,8 +228,20 @@ jobs:
           key: ${{ matrix.os }}
       - name: cargo build --all-targets
         run: cargo build --workspace --all-targets
+      # T604: nextest on Linux only. Per-test process spawn is cheap there; on
+      # macOS (XProtect scans each spawn) it measured ~2x slower than cargo test.
+      - uses: taiki-e/install-action@v2
+        if: runner.os == 'Linux'
+        with:
+          tool: nextest
       - name: cargo test
-        run: cargo test --workspace
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo nextest run --workspace --profile ci
+            cargo test --workspace --doc
+          else
+            cargo test --workspace
+          fi
       # T505 (tasks.md): every example must keep running, not just compiling
       # (--all-targets above already builds them all, examples included).
       # Only the headless ones -- no real terminal, no external service, no

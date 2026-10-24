@@ -6996,7 +6996,7 @@ new action.
   `allow-unwrap-in-tests` in `clippy.toml` and `#[expect(reason)]` on the
   roughly 50 sites that are provably safe. This closes T546's "true today
   but not enforced" gap cheaply. **Medium.**
-- [ ] **T604 — Adopt cargo-nextest.** `cargo test --workspace` takes
+- [x] **T604 — Adopt cargo-nextest.** `cargo test --workspace` takes
   75.8 s of wall time, but the 137 binaries only spend 32.6 s running
   tests, because cargo runs the binaries one after another. The
   integration binary alone takes 26.65 s. Nextest runs binaries in
@@ -7005,6 +7005,11 @@ new action.
   retries and slow-test reporting, and use it in `ci.yml` and
   `scripts/check`. Keep `cargo test --doc` (11.7 s) as a separate step.
   Record CI timings before and after. **Small.**
+  Done with a finding: on macOS nextest measured ~2x *slower* (2117 s vs
+  1026 s, on a loaded machine where syspolicyd/XProtect scan every process
+  spawn), so `scripts/check` uses it only with `VIX_NEXTEST=1` and CI uses
+  it on Linux only. CI before/after timings are not yet recorded -- read
+  them off the first run. GitLab CI is unchanged.
 - [ ] **T605 — One `wait_until` test helper.** Bounded poll loops (300 ×
   10 ms = 3 s caps) are copy-pasted at
   `tests/integration/editing.rs:2216,2257,2307,2335,3288` and
