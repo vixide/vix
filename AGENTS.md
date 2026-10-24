@@ -67,7 +67,7 @@ cargo run                   # run the editor in the current directory
 cargo run -- --locale fr    # run in a specific language
 cargo bench                 # Criterion benchmarks over the hot paths
 cargo +nightly fuzz run <target>   # fuzz a pure core (see fuzz/README.md)
-cargo run --manifest-path gui/Cargo.toml   # the GPUI desktop GUI (separate workspace; gui/spec/index.md)
+cargo run --manifest-path gui/Cargo.toml -p vix-gpui   # desktop GUI on GPUI (or -p vix-egui; gui/spec/index.md)
 scripts/check-docs          # documentation integrity (links, twins, crate specs)
 ```
 

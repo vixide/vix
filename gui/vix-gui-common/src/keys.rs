@@ -1,4 +1,7 @@
-//! GPUI keystrokes and mouse buttons → backend-neutral `vix-input` events.
+//! The rules turning a GUI keystroke into a backend-neutral `vix-input` key
+//! event, shared by every toolkit front end. Each toolkit maps its own key
+//! type to the lowercase key *names* used here (GPUI's spelling: `enter`,
+//! `escape`, `pageup`, `f5`, or the key's character such as `a` or `/`).
 //!
 //! The conversion reproduces what the terminal front end receives from
 //! crossterm for the same physical key, so every keymap, macro and modal
@@ -15,23 +18,11 @@
 //! - `Cmd` (macOS) / the Windows or Super key becomes `SUPER`; Vix folds
 //!   `Cmd` into `Ctrl` on macOS itself (`App::command_as_control`).
 
-use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
-/// A GPUI modifier state as `vix-input` modifier flags (`Cmd` / Windows /
-/// Super → `SUPER`; GPUI's `fn` key has no terminal equivalent and is dropped).
-#[must_use]
-pub fn modifiers(m: gpui_kit::Modifiers) -> KeyModifiers {
-    let mut out = KeyModifiers::NONE;
-    out.set(KeyModifiers::CONTROL, m.control);
-    out.set(KeyModifiers::ALT, m.alt);
-    out.set(KeyModifiers::SHIFT, m.shift);
-    out.set(KeyModifiers::SUPER, m.platform);
-    out
-}
-
-/// Convert a GPUI keystroke — its `key` name, optional typed `key_char`, and
-/// modifiers (see [`modifiers`]) — into a `vix-input` key press. `None` for a
-/// key Vix ignores.
+/// Convert a keystroke — its `key` name, the optional character the layout
+/// typed (`key_char`), and the held modifiers — into a `vix-input` key press.
+/// `None` for a key Vix ignores.
 #[must_use]
 pub fn key_event(key: &str, key_char: Option<&str>, mods: KeyModifiers) -> Option<KeyEvent> {
     let shift = mods.contains(KeyModifiers::SHIFT);
@@ -81,17 +72,6 @@ fn single_char(s: &str) -> Option<char> {
     let mut chars = s.chars();
     let c = chars.next()?;
     chars.next().is_none().then_some(c)
-}
-
-/// A GPUI mouse button as a `vix-input` one; `None` for back/forward buttons.
-#[must_use]
-pub fn mouse_button(b: gpui_kit::MouseButton) -> Option<MouseButton> {
-    match b {
-        gpui_kit::MouseButton::Left => Some(MouseButton::Left),
-        gpui_kit::MouseButton::Right => Some(MouseButton::Right),
-        gpui_kit::MouseButton::Middle => Some(MouseButton::Middle),
-        gpui_kit::MouseButton::Navigate(_) => None,
-    }
 }
 
 #[cfg(test)]
@@ -147,16 +127,6 @@ mod tests {
         assert_eq!(key("tab", Some("\t"), NONE).code, KeyCode::Tab);
         // "f" alone is the letter, not a function key.
         assert_eq!(key("f", Some("f"), NONE).code, KeyCode::Char('f'));
-    }
-
-    #[test]
-    fn modifier_flags() {
-        let m = gpui_kit::Modifiers {
-            control: true,
-            platform: true,
-            ..gpui_kit::Modifiers::default()
-        };
-        assert_eq!(modifiers(m), CTRL | KeyModifiers::SUPER);
     }
 
     #[test]

@@ -1,63 +1,40 @@
-# The Vix desktop GUI (GPUI). A separate workspace on purpose, like `fuzz/`:
-# GPUI and GPUI Kit pull in a GPU stack (Metal / DirectX / Vulkan via wgpu),
-# windowing and font libraries, and move fast (pinned to an exact version
-# below), so they must never be built by `cargo build` / `cargo test
-# --workspace` / clippy at the repo root, and the terminal build never links
-# them. See spec/index.md.
+# The Vix desktop GUIs. A separate workspace on purpose, like `fuzz/`: GUI
+# toolkits pull in GPU stacks, windowing and font libraries, so they must
+# never be built by `cargo build` / `cargo test --workspace` / clippy at the
+# repo root, and the terminal build never links them. See spec/index.md.
 #
-# Run it with:  cargo run --manifest-path gui/Cargo.toml --release
-
-[package]
-name = "vix-gui"
-version = "1.7.1"
-publish = false
-edition = "2024"
-license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
-description = "Vix desktop GUI: the full Vix App rendered in a native GPU-accelerated window via GPUI Kit."
+#   cargo run --release -p vix-gpui [-- FILE…]   # GPUI (GPUI Kit)
+#   cargo run --release -p vix-egui [-- FILE…]   # egui (eframe)
 
 [workspace]
-members = ["."]
+resolver = "3"
+members = ["vix-gui-common", "vix-gpui", "vix-egui"]
 
-[[bin]]
-name = "vix-gui"
-path = "src/main.rs"
+[workspace.package]
+version = "1.7.1"
+edition = "2024"
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+publish = false
 
-[features]
-# `VIX_GUI_SCREENSHOT=out.png vix-gui` renders the window to a PNG a few
-# seconds after startup and quits — a real-render smoke test for CI and for
-# checking a change without screen-recording permission. Needs GPUI's
-# test-support (for `Window::render_to_image`), so it is off by default.
-# GPUI Kit's own `test-support` feature also drags in its alternate GPUI Fast
-# backend, whose exact version pins conflict with the default backend's, so
-# enable test-support on the default backend's platform crate directly.
-screenshot = ["dep:gpui-pre-platform", "gpui-pre-platform/test-support"]
-
-[dependencies]
-# The whole editor: `App`, `ui::draw`, settings, menus. The GUI is a second
-# front end over exactly the same App shell the terminal binary uses.
+[workspace.dependencies]
+# The whole editor: `App`, `ui::draw`, settings, menus. Each GUI is another
+# front end over exactly the App shell the terminal binary uses.
 vix = { path = ".." }
 vix-input = { path = "../crates/vix-input" }
-# Shared translations: the GUI's few own strings live in the same locale files.
 vix-i18n = { path = "../crates/vix-i18n" }
+vix-gui-common = { path = "vix-gui-common" }
 rust-i18n = "4.2.4"
-# The same command line as the terminal binary (`vix::cli::Cli`).
 clap = { version = "4", features = ["derive"] }
 # Same version as the root workspace's, so `ui::draw`'s Frame type matches.
 ratatui = "0.30"
-# Pinned exactly: GPUI Kit ships breaking changes between minor releases
-# (7 releases in 7 weeks at the time of pinning). Upgrade deliberately.
-gpui-kit = { version = "=0.8.0", default-features = false }
-# The exact platform crate gpui-kit 0.8.0 pins; named only so `screenshot` can
-# turn on its test-support. Must move in step with the gpui-kit pin.
-gpui-pre-platform = { version = "=0.3.9", optional = true }
 
 # Same lint policy as the root workspace's `[workspace.lints]` — a separate
 # workspace cannot inherit it, so it is restated here and must be kept in step.
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "deny"
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 allow_attributes_without_reason = "warn"
 redundant_clone = "warn"

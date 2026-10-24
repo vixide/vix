@@ -1,0 +1,34 @@
+[package]
+name = "vix-gpui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Vix desktop GUI on GPUI (GPUI Kit): the full Vix App in a native GPU-rendered window."
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-gpui` renders the window to a PNG a few
+# seconds after startup and quits — a real-render smoke test for CI and for
+# checking a change without screen-recording permission. GPUI Kit's own
+# `test-support` feature also drags in its alternate GPUI Fast backend, whose
+# exact version pins conflict with the default backend's, so enable
+# test-support on the default backend's platform crate directly.
+screenshot = ["dep:gpui-pre-platform", "gpui-pre-platform/test-support"]
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+vix-gui-common = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Pinned exactly: GPUI Kit ships breaking changes between minor releases
+# (7 releases in 7 weeks at the time of pinning). Upgrade deliberately.
+gpui-kit = { version = "=0.8.0", default-features = false }
+# The exact platform crate gpui-kit 0.8.0 pins; named only so `screenshot` can
+# turn on its test-support. Must move in step with the gpui-kit pin.
+gpui-pre-platform = { version = "=0.3.9", optional = true }
+
+[lints]
+workspace = true

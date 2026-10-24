@@ -1,10 +1,10 @@
-# The GPUI desktop GUI (T641, tasks.md; gui/spec/index.md). `gui/` is its own
-# Cargo workspace so GPUI never enters the terminal build, which also means the
-# main CI gate (ci.yml, scripts/check) never builds it -- this workflow does,
-# on all three desktop platforms. Advisory for now (`continue-on-error`): GPUI
-# Kit is pre-1.0 and its platform layers still move, so a GUI break should be
-# visible without blocking the terminal editor. GitHub only; see
-# spec/ci/index.md.
+# The desktop GUIs (T641, T642, tasks.md; gui/spec/index.md): `gui/` is its own
+# Cargo workspace -- vix-gui-common, vix-gpui (GPUI) and vix-egui (egui) -- so no
+# GUI toolkit enters the terminal build, which also means the main CI gate
+# (ci.yml, scripts/check) never builds it. This workflow does, on all three
+# desktop platforms. Advisory for now (`continue-on-error`): both toolkits are
+# pre-1.0 and their platform layers still move, so a GUI break should be visible
+# without blocking the terminal editor. GitHub only; see spec/ci/index.md.
 
 name: GUI
 
@@ -43,7 +43,7 @@ jobs:
   gui:
     name: gui (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -59,36 +59,39 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: gui
-      # GPUI's Linux platform layer: X11 + Wayland windowing, xkbcommon
-      # keymaps, fontconfig/freetype fonts, Vulkan (via wgpu), ALSA.
+      # Windowing (X11 + Wayland), xkbcommon keymaps, fontconfig/freetype fonts,
+      # Vulkan (wgpu), ALSA -- for GPUI and for egui/winit alike.
       - name: Linux system libraries
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libfontconfig-dev libfreetype-dev libwayland-dev \
-            libx11-xcb-dev libxkbcommon-x11-dev libvulkan-dev libssl-dev libzstd-dev
+            libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev libxrandr-dev \
+            libxi-dev libvulkan-dev libssl-dev libzstd-dev
       - name: cargo fmt --check
-        run: cargo fmt --manifest-path gui/Cargo.toml --check
-      - name: cargo clippy (pedantic, -D warnings)
-        run: cargo clippy --manifest-path gui/Cargo.toml --locked --all-targets -- -D warnings
+        run: cargo fmt --manifest-path gui/Cargo.toml --all --check
+      - name: cargo clippy (pedantic, -D warnings, all features)
+        run: cargo clippy --manifest-path gui/Cargo.toml --locked --workspace --all-targets --all-features -- -D warnings
       - name: cargo test
-        run: cargo test --manifest-path gui/Cargo.toml --locked
-      # A real render: open the window, type into the command palette, and
-      # save a PNG. macOS runners have a window server; Linux and Windows
-      # runners are headless here, so only macOS takes the screenshot.
+        run: cargo test --manifest-path gui/Cargo.toml --locked --workspace
+      # A real render of each front end: open the window, type into the command
+      # palette, and save a PNG. macOS runners have a window server; Linux and
+      # Windows runners are headless here, so only macOS takes the screenshots.
       - name: render smoke test (macOS)
         if: runner.os == 'macOS'
         env:
-          VIX_GUI_SCREENSHOT: ${{ runner.temp }}/vix-gui.png
           VIX_GUI_SCREENSHOT_KEYS: "ctrl-p c a r g o"
         run: |
-          cargo run --manifest-path gui/Cargo.toml --locked --features screenshot -- README.md
-          test -s "$VIX_GUI_SCREENSHOT"
-      - name: upload screenshot
+          for gui in vix-gpui vix-egui; do
+            VIX_GUI_SCREENSHOT="$RUNNER_TEMP/$gui.png" \
+              cargo run --manifest-path gui/Cargo.toml --locked -p "$gui" --features screenshot -- README.md
+            test -s "$RUNNER_TEMP/$gui.png"
+          done
+      - name: upload screenshots
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: vix-gui-screenshot
-          path: ${{ runner.temp }}/vix-gui.png
+          name: vix-gui-screenshots
+          path: ${{ runner.temp }}/vix-*.png
           if-no-files-found: ignore

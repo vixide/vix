@@ -8,7 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Desktop GUI, experimental** (T641): `gui/` builds `vix-gui`, which runs the whole of Vix — every panel, overlay and dock — in a native GPU-rendered window on macOS, Windows and Linux via GPUI Kit, with a native menu bar and a system open-file dialog. Run it with `cargo run --manifest-path gui/Cargo.toml --release`. See `gui/spec/index.md`.
+- **Desktop GUIs, experimental** (T641, T642): `gui/` builds two front ends that run the whole of Vix — every panel, overlay and dock — in a native window on macOS, Windows and Linux, so the toolkits can be compared: `vix-gpui` (GPUI Kit) and `vix-egui` (egui/eframe, with IME input), over one shared core. Both have a native menu bar (egui: macOS) with a system open-file dialog, and closing the window runs Vix's own quit flow. Run with `cargo run --manifest-path gui/Cargo.toml --release -p vix-gpui` or `-p vix-egui`. See `gui/spec/index.md`.
 
 ### Changed
 
