@@ -1,0 +1,190 @@
+// The Vix window, compiled at startup by Slint's interpreter (`view.rs`),
+// which first replaces the marker line below with the native menu bar
+// generated from the Vix menu model (`menus.rs`). Rust drives every
+// property and model and handles every callback.
+//
+// Slint has no immediate-mode canvas, so the cell grid is painted with
+// repeaters: one element per grid row, each holding that row's background
+// runs, text spans and underline/strikethrough lines (`render::row_*`), all
+// placed at cell positions. Rust updates the per-row models in place after
+// each `ui::draw` (`paint.rs`), so a frame only touches the elements whose
+// contents changed.
+
+import { Palette } from "std-widgets.slint";
+
+// A filled run of cells: a background run, or an underline/strikethrough.
+export struct CellRun {
+    col: int,
+    len: int,
+    color: color,
+    // For a line: true draws it through the middle (strikethrough), false
+    // along the bottom (underline). Unused for a background run.
+    strike: bool,
+}
+
+// One text span: same-style text starting at a cell column.
+export struct TextRun {
+    col: int,
+    text: string,
+    color: color,
+    family: string,
+    bold: bool,
+    italic: bool,
+}
+
+// One grid row's contents.
+export struct GridRow {
+    bgs: [CellRun],
+    texts: [TextRun],
+    lines: [CellRun],
+}
+
+// Keyboard modifiers as Slint reports them (on macOS Slint reports Command
+// as `control` and Control as `meta`; `keys::modifiers` undoes that).
+export struct Mods {
+    control: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+}
+
+export component VixWindow inherits Window {
+    in property <string> window-title;
+    in property <string> family;
+    in property <length> font-px;
+    in property <length> cell-h;
+    in property <color> grid-background;
+    in property <[GridRow]> rows;
+    in property <bool> cursor-visible;
+    in property <int> cursor-col;
+    in property <int> cursor-row;
+    in property <color> cursor-color;
+    in property <bool> native-menus;
+
+    // The cell width, measured from the font: a hundred `M`s, for sub-pixel
+    // precision.
+    out property <length> cell-w: measure.preferred-width / 100;
+    out property <length> grid-width: grid.width;
+    out property <length> grid-height: grid.height;
+    // The OS appearance (unknown counts as dark, as in the other builds).
+    out property <bool> dark: Palette.color-scheme != ColorScheme.light;
+
+    // A key press: Slint's text for it and the held modifiers. True when Vix
+    // took it.
+    callback key(string, Mods) -> bool;
+    // A pointer event: kind (0 down, 1 up, 2 move, 3 cancel), button (0 left,
+    // 1 right, 2 middle, 3 other), position in the grid, modifiers.
+    callback pointer(int, int, length, length, Mods);
+    // A wheel or trackpad scroll: deltas and position in the grid, modifiers.
+    callback scroll(length, length, length, length, Mods);
+    // A native menu item: its action id.
+    callback menu-activated(string);
+    // The grid area changed size.
+    callback resized();
+
+    title: root.window-title;
+    preferred-width: 1200px;
+    preferred-height: 800px;
+    background: root.grid-background;
+    forward-focus: grid;
+
+    //@MENUBAR@
+
+    measure := Text {
+        visible: false;
+        text: "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+        font-family: root.family;
+        font-size: root.font-px;
+    }
+
+    grid := FocusScope {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        changed width => {
+            root.resized();
+        }
+        changed height => {
+            root.resized();
+        }
+        key-pressed(e) => {
+            if root.key(e.text, {
+                control: e.modifiers.control,
+                alt: e.modifiers.alt,
+                shift: e.modifiers.shift,
+                meta: e.modifiers.meta,
+            }) {
+                return accept;
+            }
+            reject
+        }
+
+        TouchArea {
+            pointer-event(e) => {
+                root.pointer(
+                    e.kind == PointerEventKind.down ? 0 : e.kind == PointerEventKind.up ? 1 : e.kind == PointerEventKind.move ? 2 : 3,
+                    e.button == PointerEventButton.left ? 0 : e.button == PointerEventButton.right ? 1 : e.button == PointerEventButton.middle ? 2 : 3,
+                    self.mouse-x,
+                    self.mouse-y,
+                    {
+                        control: e.modifiers.control,
+                        alt: e.modifiers.alt,
+                        shift: e.modifiers.shift,
+                        meta: e.modifiers.meta,
+                    });
+            }
+            scroll-event(e) => {
+                root.scroll(e.delta-x, e.delta-y, self.mouse-x, self.mouse-y, {
+                    control: e.modifiers.control,
+                    alt: e.modifiers.alt,
+                    shift: e.modifiers.shift,
+                    meta: e.modifiers.meta,
+                });
+                accept
+            }
+
+            for row[r] in root.rows: Rectangle {
+                x: 0;
+                y: r * root.cell-h;
+                width: parent.width;
+                height: root.cell-h;
+                for b in row.bgs: Rectangle {
+                    x: b.col * root.cell-w;
+                    width: b.len * root.cell-w;
+                    height: root.cell-h;
+                    background: b.color;
+                }
+                for t in row.texts: Text {
+                    x: t.col * root.cell-w;
+                    y: 0;
+                    height: root.cell-h;
+                    vertical-alignment: center;
+                    wrap: no-wrap;
+                    text: t.text;
+                    color: t.color;
+                    font-family: t.family;
+                    font-size: root.font-px;
+                    font-weight: t.bold ? 700 : 400;
+                    font-italic: t.italic;
+                }
+                for l in row.lines: Rectangle {
+                    x: l.col * root.cell-w;
+                    y: l.strike ? root.cell-h / 2 : root.cell-h - 2px;
+                    width: l.len * root.cell-w;
+                    height: 1px;
+                    background: l.color;
+                }
+            }
+
+            Rectangle {
+                visible: root.cursor-visible;
+                x: root.cursor-col * root.cell-w;
+                y: root.cursor-row * root.cell-h;
+                width: 2px;
+                height: root.cell-h;
+                background: root.cursor-color;
+            }
+        }
+    }
+}

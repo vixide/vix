@@ -1,0 +1,48 @@
+[package]
+name = "vix-slint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Vix desktop GUI on Slint: the full Vix App in a native window."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Pinned like the other front ends' toolkits, so they are compared at known
+# versions. Slint is triple-licensed: GPL-3.0-only, the Slint Royalty-free
+# Desktop, Mobile, and Web License, or a commercial license. Vix is offered
+# under GPL-3.0-only among its licenses, so it uses Slint under the GPLv3.
+#
+# `unstable-winit-030` gives the raw winit key event, for Option-as-Meta on
+# macOS (Slint's own key event carries only the Option-composed text);
+# `unstable-fontique-011` gives Slint's font collection, to find a Nerd Font
+# for Vix's icons. Both are safe to use because the version is pinned.
+slint = { version = "=1.18.1", features = ["unstable-winit-030", "unstable-fontique-011"] }
+# The window's `.slint` markup is compiled at startup by Slint's interpreter
+# rather than into Rust by `slint-build`: the generated Rust needs
+# `#[allow(unsafe_code)]`, which this workspace's `forbid` rejects. It also
+# lets the native menu bar be generated from the Vix menu model as markup.
+slint-interpreter = "=1.18.1"
+# PNG output for the scripted render smoke test.
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-slint` renders the window to a PNG after
+# scripted actions/keystrokes and quits (see gui/spec/index.md).
+screenshot = ["dep:image"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The platform file dialog, for the menu's Open with System Dialog….
+rfd = "0.17"
+
+[lints]
+workspace = true
