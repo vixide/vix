@@ -1,6 +1,6 @@
 //! The rules turning a GUI keystroke into a backend-neutral `vix-input` key
-//! event, shared by every toolkit front end. Each toolkit maps its own key
-//! type to the lowercase key *names* used here (GPUI's spelling: `enter`,
+//! event. The toolkit's own key type is first mapped to the lowercase key
+//! *names* used here (`enter`,
 //! `escape`, `pageup`, `f5`, or the key's character such as `a` or `/`).
 //!
 //! The conversion reproduces what the terminal front end receives from

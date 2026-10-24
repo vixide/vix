@@ -140,7 +140,7 @@ points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants prove
 ### Desktop GUIs (T641, T642)
 
 `.github/workflows/gui.yml` (GitHub only) builds the desktop GUIs — `gui/`, a separate Cargo
-workspace the main gate never builds: `vix-gui-common`, `vix-gpui` (GPUI) and `vix-egui`
+workspace the main gate never builds: `vix-gpui` (GPUI) and `vix-egui`
 (egui) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
 denied over all features, and the unit tests, all via `--manifest-path gui/Cargo.toml
 --locked`. On macOS it also runs each front end's real render (the `screenshot` feature:

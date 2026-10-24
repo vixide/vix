@@ -1,7 +1,7 @@
-//! The native menu bar, from the shared tree in `vix_gui_common::menu`.
+//! The native menu bar, from the tree in `crate::menu_tree`.
 
+use crate::menu_tree::{self as menu, Node};
 use gpui_kit::{Menu, MenuItem};
-use vix_gui_common::menu::{self, Node};
 
 /// Run one Vix action by id (`file.save`, `view.theme`, …).
 #[derive(Clone, PartialEq, Eq, Debug, gpui_kit::Action)]

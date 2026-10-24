@@ -1,7 +1,10 @@
 //! The eframe app: owns the Vix `App`, renders it through `ui::draw` into the
-//! shared cell grid each frame, paints the grid with egui, and feeds keyboard,
+//! in-memory cell grid each frame, paints the grid with egui, and feeds keyboard,
 //! mouse and menu input back as `vix-input` events and action ids.
 
+use crate::font_choice::{FONT_SIZE, cell_height};
+use crate::grid::GridBackend;
+use crate::render::{Palette, Rgba8, cell_colors, row_backgrounds, row_text};
 use eframe::egui::{
     Color32, Context, Event, FontFamily, FontId, IMEPurpose, Modifiers, MouseWheelUnit,
     PointerButton, Pos2, Rect, Stroke, TextFormat, Ui, Vec2, ViewportCommand, output::IMEOutput,
@@ -10,9 +13,6 @@ use eframe::egui::{
 use ratatui::Terminal;
 use ratatui::style::Modifier;
 use vix::app::{App as VixApp, AppFlags};
-use vix_gui_common::fonts::{FONT_SIZE, cell_height};
-use vix_gui_common::grid::GridBackend;
-use vix_gui_common::render::{Palette, Rgba8, cell_colors, row_backgrounds, row_text};
 use vix_input::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::fonts::BOLD;
@@ -58,7 +58,7 @@ impl VixEgui {
             #[cfg(target_os = "macos")]
             _menu: crate::menus::install(),
             #[cfg(feature = "screenshot")]
-            script: vix_gui_common::startup::Script::from_env().map(crate::screenshot::Run::new),
+            script: crate::startup::Script::from_env().map(crate::screenshot::Run::new),
         }
     }
 

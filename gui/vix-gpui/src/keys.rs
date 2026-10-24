@@ -1,5 +1,5 @@
-//! GPUI keystrokes and mouse buttons → `vix-input` events, via the shared
-//! rules in `vix_gui_common::keys`.
+//! GPUI keystrokes and mouse buttons → `vix-input` events, via the
+//! rules in `crate::key_rules`.
 
 use vix_input::{KeyEvent, KeyModifiers, MouseButton};
 
@@ -16,10 +16,10 @@ pub fn modifiers(m: gpui_kit::Modifiers) -> KeyModifiers {
 }
 
 /// A GPUI keystroke as a `vix-input` key press. GPUI's key names are the
-/// shared rules' own spelling, so this is a direct hand-off.
+/// key-rule names' own spelling, so this is a direct hand-off.
 #[must_use]
 pub fn key_event(ks: &gpui_kit::Keystroke) -> Option<KeyEvent> {
-    vix_gui_common::keys::key_event(&ks.key, ks.key_char.as_deref(), modifiers(ks.modifiers))
+    crate::key_rules::key_event(&ks.key, ks.key_char.as_deref(), modifiers(ks.modifiers))
 }
 
 /// A GPUI mouse button as a `vix-input` one; `None` for back/forward buttons.

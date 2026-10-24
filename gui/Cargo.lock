@@ -10201,7 +10201,6 @@ dependencies = [
  "ratatui",
  "rfd",
  "rust-i18n",
- "vix-gui-common",
  "vix-i18n",
  "vix-input",
  "vix-tui",
@@ -10273,7 +10272,6 @@ dependencies = [
  "gpui-pre-platform",
  "ratatui",
  "rust-i18n",
- "vix-gui-common",
  "vix-i18n",
  "vix-input",
  "vix-tui",
@@ -10282,17 +10280,6 @@ dependencies = [
 [[package]]
 name = "vix-greedy-wrap"
 version = "1.7.1"
-
-[[package]]
-name = "vix-gui-common"
-version = "1.7.1"
-dependencies = [
- "ratatui",
- "rust-i18n",
- "vix-i18n",
- "vix-input",
- "vix-tui",
-]
 
 [[package]]
 name = "vix-hex-rgb"

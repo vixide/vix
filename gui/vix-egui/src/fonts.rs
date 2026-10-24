@@ -1,13 +1,13 @@
-//! Load the window's fonts into egui: the same primary monospace family and
-//! Nerd Font fallbacks the GPUI build uses (`vix_gui_common::fonts`), found by
+//! Load the window's fonts into egui: the primary monospace family and Nerd
+//! Font fallbacks chosen in `crate::font_choice`, found by
 //! family name through `fontique` — the OS font database egui's own system
 //! fallback is built on. egui keeps its bundled fonts as the last fallback.
 
 use std::sync::Arc;
 
+use crate::font_choice as fonts;
 use eframe::egui::{FontData, FontDefinitions, FontFamily};
 use fontique::{Collection, CollectionOptions, FontStyle, FontWeight, FontWidth, SourceCache};
-use vix_gui_common::fonts;
 
 /// The egui family name used for bold text.
 pub const BOLD: &str = "vix-bold";

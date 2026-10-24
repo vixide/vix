@@ -1,5 +1,4 @@
-//! Which font families the window draws with, shared so every front end
-//! renders the same glyphs.
+//! Which font families the window draws with.
 
 /// Font size, in logical pixels.
 pub const FONT_SIZE: f32 = 14.0;
