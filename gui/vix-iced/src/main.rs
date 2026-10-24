@@ -12,7 +12,8 @@
 // A release build on Windows is a GUI app: no console window opens beside it.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-#[macro_use]
+// `t!` is used only by `menu_tree`.
+#[cfg_attr(any(target_os = "macos", test), macro_use)]
 extern crate vix_i18n;
 vix_i18n::surface!();
 
@@ -22,6 +23,8 @@ mod grid;
 mod ime;
 mod key_rules;
 mod keys;
+// Only the macOS native menu bar reads the menu tree (its tests run everywhere).
+#[cfg(any(target_os = "macos", test))]
 mod menu_tree;
 #[cfg(target_os = "macos")]
 mod menus;
