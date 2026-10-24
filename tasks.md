@@ -7010,7 +7010,7 @@ new action.
   spawn), so `scripts/check` uses it only with `VIX_NEXTEST=1` and CI uses
   it on Linux only. CI before/after timings are not yet recorded -- read
   them off the first run. GitLab CI is unchanged.
-- [ ] **T605 — One `wait_until` test helper.** Bounded poll loops (300 ×
+- [x] **T605 — One `wait_until` test helper.** Bounded poll loops (300 ×
   10 ms = 3 s caps) are copy-pasted at
   `tests/integration/editing.rs:2216,2257,2307,2335,3288` and
   `workspace.rs:838`, even though `common.rs:139` already has a deadline

@@ -132,18 +132,38 @@ pub(crate) fn app_at_with(root: &Path, settings: Settings) -> App {
     app
 }
 
-/// Poll `App::poll_ai_replace` until `pred` holds, or fail after 5 seconds --
-/// generous for a local `sh -c printf`, which finishes in well under that.
-/// Extracted (Run H, T530) after this exact loop was found duplicated
-/// (once as this named helper in `ai.rs`, once inlined in `git.rs`).
-#[cfg(feature = "ai")]
-pub(crate) fn wait_for_ai_replace(app: &mut App, mut pred: impl FnMut(&App) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline && !pred(app) {
-        app.poll_ai_replace();
+/// Poll until `pred` holds, or fail after `timeout`. `poll` is the app's own
+/// drain call (`poll_command`, `poll_dashboard`, ...), run before every check
+/// exactly as the event loop would. One shared bounded loop (T605) instead of a
+/// hand-rolled iteration count at each call site; give it plenty of headroom
+/// (10 s) -- slow macOS and Windows runners lag far behind a local machine, and
+/// the loop returns the moment `pred` holds, so a generous bound costs nothing.
+pub(crate) fn wait_until(
+    app: &mut App,
+    mut poll: impl FnMut(&mut App),
+    mut pred: impl FnMut(&App) -> bool,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        poll(app);
+        if pred(app) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out after {timeout:?} waiting for the condition"
+        );
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(pred(app), "timed out waiting for the AI task to finish");
+}
+
+/// Poll `App::poll_ai_replace` until `pred` holds, or fail. Extracted (Run H,
+/// T530) after this exact loop was found duplicated (once as this named helper
+/// in `ai.rs`, once inlined in `git.rs`); now a thin wrapper over [`wait_until`].
+#[cfg(feature = "ai")]
+pub(crate) fn wait_for_ai_replace(app: &mut App, pred: impl FnMut(&App) -> bool) {
+    wait_until(app, App::poll_ai_replace, pred, Duration::from_secs(10));
 }
 
 /// If a script-trust prompt (T132) is pending, answer "yes" -- the same
