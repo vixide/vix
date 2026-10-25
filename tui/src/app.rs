@@ -709,11 +709,6 @@ pub struct ScriptTrustPrompt {
     /// How many `.rhai` files are waiting under `.vix/scripts/`, unloaded
     /// until this prompt is answered.
     pub count: usize,
-    /// When the prompt opened. Keys arriving sooner than
-    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
-    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
-    /// can backdate it instead of sleeping.
-    pub opened_at: std::time::Instant,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):
@@ -1738,6 +1733,13 @@ pub struct App {
     pub confirm: Option<Confirm>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub script_trust: Option<ScriptTrustPrompt>,
+    /// When [`App::script_trust`] last opened. Keys arriving sooner than
+    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
+    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
+    /// can backdate it instead of sleeping. (Kept here rather than on
+    /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
+    /// change.)
+    pub script_trust_opened_at: Option<std::time::Instant>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub replace_confirm: Option<ReplaceConfirm>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
@@ -2349,6 +2351,7 @@ impl App {
             paste: None,
             confirm: None,
             script_trust: None,
+            script_trust_opened_at: None,
             replace_confirm: None,
             wgrep_baseline: None,
             wgrep_confirm: None,

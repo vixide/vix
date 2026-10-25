@@ -237,9 +237,7 @@ fn script_trust_prompt_ignores_keys_typed_ahead_of_it() {
     app.maybe_prompt_script_trust();
     // Pin the open time to "now" so the guard is certainly still running,
     // however slow the machine was getting here.
-    if let Some(p) = app.script_trust.as_mut() {
-        p.opened_at = std::time::Instant::now();
-    }
+    app.script_trust_opened_at = Some(std::time::Instant::now());
     app.on_key(key('y'));
     assert!(
         app.script_trust.is_some(),

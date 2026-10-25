@@ -182,10 +182,10 @@ pub(crate) fn trust_scripts_if_prompted(app: &mut App) {
 /// (T655), so the next key counts -- instead of sleeping in the test.
 #[cfg(feature = "script")]
 pub(crate) fn arm_script_trust(app: &mut App) {
-    if let Some(p) = app.script_trust.as_mut() {
-        p.opened_at = std::time::Instant::now()
+    if app.script_trust.is_some() {
+        app.script_trust_opened_at = std::time::Instant::now()
             .checked_sub(vix::app::SCRIPT_TRUST_KEY_GUARD * 2)
-            .unwrap_or(p.opened_at);
+            .or(app.script_trust_opened_at);
     }
 }
 
