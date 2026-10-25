@@ -59,3 +59,25 @@ steals keystrokes. The host calls it before `git commit` and `git commit --amend
 repeated lines in scrambled order, Myers' worst case) should stay near the deadline as the line
 count grows, and `over_the_line_cap` should cost only the line count.
 
+
+## Paths when Vix starts in a repository subdirectory (T650)
+
+Every runner that takes a file path takes it **relative to `dir`** (the
+workspace root), which may be a subdirectory of the working tree. Git reads
+`HEAD:<path>` / `:<path>` blob names and `update-index --cacheinfo` paths from
+the repository top level, and `git status --porcelain` prints top-level paths,
+so the crate resolves `git rev-parse --show-toplevel --show-prefix` once per
+directory (cached; only successes are cached), runs each path-taking command
+with the top level as its working directory, and joins the prefix onto the
+path (resolving `.`/`..` lexically). [`status`] converts its rows back, so a
+[`FileStatus`] path is relative to `dir` too, `../`-prefixed for a changed file
+outside it; those rows round-trip through [`stage`]/[`unstage`]. A path that
+can't be mapped (absolute, or climbing above the top level) is passed to git
+unchanged from `dir`, so git reports its own error.
+
+## Literal pathspecs (T651)
+
+Every runner sets `GIT_LITERAL_PATHSPECS=1`, so a path is always a file name
+and never a glob: staging `app/[id]/p` (a Next.js-style route folder) no longer
+also stages `app/i/p`. No caller relies on pathspec magic; one that ever needs
+it opts back in with `:(glob)`.

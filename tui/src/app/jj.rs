@@ -43,9 +43,12 @@ impl App {
         true
     }
 
-    /// Whether the workspace root holds a Jujutsu repo (a `.jj` directory).
+    /// Whether the workspace root is inside a Jujutsu repo: it or one of its
+    /// ancestors holds a `.jj` directory. `jj` itself searches upward the same
+    /// way, so Vix started in a subdirectory of a jj repo still offers the jj
+    /// commands (T650).
     pub(super) fn jj_is_repo(&self) -> bool {
-        self.root.join(".jj").exists()
+        self.root.ancestors().any(|d| d.join(".jj").exists())
     }
 
     /// Run a `jj` command in the workspace, streaming its output into the bottom
