@@ -475,6 +475,8 @@ what each one makes easy:
 
 ## Not yet wired
 
-Spell checking (CSpell, `cspell.json`) is not a CI job yet: the tree still has
-outstanding findings, so it would fail on day one. Tracked in
-[`tasks.md`](../../tasks.md).
+Nothing outstanding. Spell checking (CSpell, `cspell.json`) used to be listed
+here; since 2026-10-25 it is part of `scripts/check-docs`. GitHub and Codeberg
+install the pinned CSpell release and set `VIX_REQUIRE_CSPELL=1`, so an
+unknown word fails the job. GitLab's `rust` image has no Node, so there the
+step is skipped with a notice. Locally it runs whenever CSpell is installed.
