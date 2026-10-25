@@ -34,9 +34,11 @@ screenshot = ["dep:image"]
 
 # iced has no native menu bar; muda supplies one. macOS only: on Windows its
 # setup takes a raw window handle through an `unsafe fn`, which this
-# workspace forbids, and on Linux it needs a GTK event loop.
+# workspace forbids, and on Linux it needs a GTK event loop. No default
+# features: its default `gtk3` is Linux-only and would pin GTK 3 / glib 0.18
+# in Cargo.lock for nothing.
 [target.'cfg(target_os = "macos")'.dependencies]
-muda = "0.21"
+muda = { version = "0.21", default-features = false }
 # The platform file dialog, for the menu's Open with System Dialog….
 rfd = "0.17"
 
