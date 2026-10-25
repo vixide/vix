@@ -47,6 +47,23 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/lat
 [`gui/spec/index.md`](../../gui/spec/index.md) (Distribution) for platforms
 and run-time libraries.
 
+**Linux packages** (`.deb`, `.rpm`, Arch `.pkg.tar.zst`): every
+release carries native packages of `vix-tui` and the desktop GUIs for x86_64
+and aarch64. Download the one for your distribution from the
+[latest release](https://github.com/vixide/vix/releases/latest), then:
+
+```sh
+sudo apt install ./vix-tui_*_amd64.deb                 # Debian, Ubuntu
+sudo dnf install ./vix-tui-*.x86_64.rpm                # Fedora, RHEL, Rocky
+sudo pacman -U ./vix-tui-*-x86_64.pkg.tar.zst          # Arch
+```
+
+They need glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+,
+RHEL/Rocky 10). On older distributions, and on Alpine, use `cargo install
+vix-tui` for now.
+There is no apt or dnf repository yet, so updates mean installing the next
+release's package. See [`spec/linux-packages/index.md`](../../spec/linux-packages/index.md).
+
 **Direct download:** prebuilt archives (`.tar.xz` for macOS/Linux, `.msi`/
 `.zip` for Windows) are attached to every
 [GitHub Release](https://github.com/vixide/vix/releases).
@@ -71,10 +88,6 @@ git clone https://github.com/vixide/vix.git
 cd vix
 cargo build --release   # binary at target/release/vix
 ```
-
-There is no `.deb` package yet — see
-[`spec/debian/index.md`](../../spec/debian/index.md) if you're interested in
-adding one.
 
 ## First launch
 

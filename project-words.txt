@@ -351,6 +351,17 @@ venv
 vimdiff
 
 # Terms found by a full-repo CSpell pass (2026-10-25)
+goreleaser
+nfpm
+INTERP
+rustflags
+createrepo
+dists
+repodata
+libc
+pacman
+Xcursor
+Xrandr
 misroute
 ALLTAGS
 APFS

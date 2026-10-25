@@ -72,6 +72,12 @@ npm install -g @vixide/vix
 cargo install vix-tui
 ```
 
+On Linux, every release also has native packages (`.deb`, `.rpm`, Arch
+`.pkg.tar.zst`) for x86_64 and aarch64. Download yours from the
+[latest release](https://github.com/vixide/vix/releases/latest), then for
+example `sudo apt install ./vix-tui_*_amd64.deb` or
+`sudo dnf install ./vix-tui-*.x86_64.rpm`.
+
 On Windows, use PowerShell:
 
 ```powershell
