@@ -230,6 +230,8 @@ man-page:
 docs:
   stage: check
   script:
+    # The rust image has no Node, so check-docs skips its CSpell step here
+    # (with a notice); GitHub and Codeberg run it as required.
     - python3 scripts/check-docs
 
 # Each distributed binary declares exactly the licenses its linked

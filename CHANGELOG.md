@@ -1228,7 +1228,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR
   GPL-3.0-only", so that dependency took the licensing choice away from anyone
   distributing a build. The Calculator now uses 11.3.1, the last MIT release;
-  its behaviour and tests are unchanged. **Anyone who built from 1.4.0 should
+  its behavior and tests are unchanged. **Anyone who built from 1.4.0 should
   upgrade.**
 - **`portable-pty` 0.8 → 0.9**, which replaces the unmaintained `serial`
   crate (RUSTSEC-2017-0008) with `serial2`.
@@ -1282,7 +1282,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **Mark Done with Note…** (`org.close_note`, in the Org menu and `C-u C-c
     C-t`): prompts for a note, then marks the headline `DONE`, stamps
     `CLOSED: [now]` under it, and logs the note into its `:LOGBOOK:` drawer —
-    Emacs `org-log-done` behaviour. New pure `org::close_headline`.
+    Emacs `org-log-done` behavior. New pure `org::close_headline`.
   - The **Agenda Tracker** is now interactive: it opens read-only, and pressing
     `t` on a task line cycles that task's TODO state directly in its source
     `.org` file, reloads any open buffer for it, and rebuilds the agenda in

@@ -51,7 +51,7 @@ editor — see [index.md](index.md) for scope.
   page it was shared from. A page's own `<svelte:head>` should carry
   `<meta name="description">` only — never `<title>`, or it fights the
   layout's.
-- Theme colours/radii/fonts (`--color-primary`, `--lily-surface`, etc.)
+- Theme colors/radii/fonts (`--color-primary`, `--lily-surface`, etc.)
   live in `static/assets/themes/<slug>.css` — 45 unmodified Lily reference
   theme stylesheets, one per `PickerBar`'s `DEFAULT_THEMES` slug. Don't add
   an application-specific theme file here; `style.css`'s own `:root` block
