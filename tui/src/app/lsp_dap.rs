@@ -713,6 +713,9 @@ impl App {
             self.status = t!("status.lsp_inactive").to_string();
             return;
         }
+        // T652: sync first so the request (and the version its reply is
+        // checked against) reflects the buffer as it is now.
+        self.lsp_sync_active();
         let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
         let enc = self.lsp.encoding_for(&path);
         let sel = self.editor.active_tab_mut().and_then(|t| {
@@ -734,16 +737,48 @@ impl App {
         }
     }
 
-    /// Apply LSP text edits to the active buffer (highest position first, so
-    /// earlier offsets stay valid), then re-anchor the caret.
-    pub(super) fn apply_lsp_edits(&mut self, edits: &[(crate::lsp_core::Range, String)]) {
-        let Some(path) = self.active_path() else {
+    /// Install a folding-range reply's `(start_line, end_line)` ranges on the
+    /// active editor.
+    pub(super) fn apply_folding_ranges(&mut self, ranges: &[(u32, u32)]) {
+        let ranges: Vec<(usize, usize)> = ranges
+            .iter()
+            .map(|&(s, e)| (s as usize, e as usize))
+            .collect();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_fold_ranges(ranges);
+        }
+    }
+
+    /// Whether `path`'s open tab still holds exactly the text last synced to
+    /// the language server -- the text an in-flight request's reply was
+    /// computed against (T652). `None` when `path` has no open tab.
+    fn lsp_tab_in_sync(&self, path: &Path) -> Option<(usize, bool)> {
+        let idx = self
+            .editor
+            .tabs
+            .iter()
+            .position(|t| t.path.as_deref() == Some(path))?;
+        let synced = self.lsp_synced.get(path).copied();
+        Some((idx, synced == Some(self.editor.tabs[idx].editor.revision())))
+    }
+
+    /// Apply a formatting reply's text edits to `path`'s tab -- the file the
+    /// request was for, not whichever tab is active now (T652) -- highest
+    /// position first so earlier offsets stay valid, then re-anchor the caret.
+    /// Dropped (see [`App::drop_stale_lsp_edits`]) if that tab was closed or
+    /// edited since the request was sent. A pending format-on-save of `path`
+    /// writes the formatted tab back to disk.
+    pub(super) fn apply_lsp_edits(
+        &mut self,
+        path: &Path,
+        edits: &[(crate::lsp_core::Range, String)],
+    ) {
+        let Some((idx, true)) = self.lsp_tab_in_sync(path) else {
+            self.drop_stale_lsp_edits(path);
             return;
         };
-        let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab_mut() else {
-            return;
-        };
+        let enc = self.lsp.encoding_for(path);
+        let t = &mut self.editor.tabs[idx];
         // Resolve every range to char offsets first, then apply tail-to-head.
         let mut resolved: Vec<(usize, usize, String)> = {
             let code = t.editor.code_ref();
@@ -771,12 +806,25 @@ impl App {
         t.dirty = true;
         t.preview = false;
         self.status = t!("status.formatted").to_string();
-        // If these edits were a format-on-save, write the formatted buffer back.
-        if let Some(pending) = self.format_save_pending.take()
-            && self.active_path().as_deref() == Some(pending.as_path())
-        {
+        // If these edits were a format-on-save, write the formatted buffer back
+        // -- to its own file, even if another tab is active by now.
+        if self.format_save_pending.as_deref() == Some(path) {
+            self.format_save_pending = None;
+            let active = std::mem::replace(&mut self.editor.active, idx);
             self.write_active_to_disk();
+            self.editor.active = active;
         }
+    }
+
+    /// An edit-returning LSP reply for `path` arrived after the document
+    /// changed (or closed) and was dropped rather than applied to text it
+    /// wasn't computed for (T652). Says so, and cancels a pending
+    /// format-on-save of `path` -- the plain save already wrote the file.
+    pub(super) fn drop_stale_lsp_edits(&mut self, path: &Path) {
+        if self.format_save_pending.as_deref() == Some(path) {
+            self.format_save_pending = None;
+        }
+        self.status = t!("status.lsp_edits_stale").to_string();
     }
 
     /// Jump to the next (`forward`) or previous diagnostic ("issue") in the active
@@ -818,11 +866,16 @@ impl App {
 
     /// On a linked-editing response: store the ranges (as char offsets) and
     /// prompt for the shared replacement text, seeded with the current text.
-    pub(super) fn begin_linked_edit(&mut self, ranges: &[crate::lsp_core::Range]) {
-        let Some(path) = self.active_path() else {
+    /// Only for `path`'s tab while it is still active and unchanged since the
+    /// request (T652); otherwise the ranges are dropped as stale.
+    pub(super) fn begin_linked_edit(&mut self, path: &Path, ranges: &[crate::lsp_core::Range]) {
+        if self.active_path().as_deref() != Some(path)
+            || !matches!(self.lsp_tab_in_sync(path), Some((_, true)))
+        {
+            self.drop_stale_lsp_edits(path);
             return;
-        };
-        let enc = self.lsp.encoding_for(&path);
+        }
+        let enc = self.lsp.encoding_for(path);
         let Some(t) = self.editor.active_tab() else {
             return;
         };

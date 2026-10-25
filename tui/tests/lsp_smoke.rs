@@ -949,3 +949,235 @@ fn rust_analyzer_publishes_diagnostics_for_a_broken_file() {
         "rust-analyzer should publish a diagnostic for the broken file"
     );
 }
+
+/// T652: answers `initialize` and publishes one diagnostic per opened document
+/// (so a test can tell the handshake finished), and answers whole-document
+/// formatting with a single edit inserting `// fmt\n` at the top.
+const MOCK_SERVER_FORMATTING: &str = r"
+import sys, json
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+    elif method == 'textDocument/didOpen':
+        uri = msg['params']['textDocument']['uri']
+        send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
+            'uri': uri,
+            'diagnostics': [{'range':{'start':{'line':0,'character':0},
+                                      'end':{'line':0,'character':1}},
+                             'severity':1,'message':'mock'}]}})
+    elif method == 'textDocument/formatting':
+        pos = {'line':0,'character':0}
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'range':{'start':pos,'end':pos},'newText':'// fmt\n'}]})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+";
+
+/// A scratch workspace with the formatting mock and two Rust files, plus an
+/// `App` (with `settings` tweaked by `tweak`) that has `a.rs` open and synced.
+fn formatting_app(tag: &str, tweak: impl FnOnce(&mut Settings)) -> Option<(App, PathBuf)> {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return None;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-fmt-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).ok()?;
+    let root = root.canonicalize().ok()?;
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_FORMATTING).ok()?;
+    std::fs::write(root.join("a.rs"), "a\n").ok()?;
+    std::fs::write(root.join("b.rs"), "b\n").ok()?;
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    });
+    tweak(&mut settings);
+    let mut app = App::new(root.clone(), settings);
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&root.join("b.rs"));
+    app.open_initial(&root.join("a.rs"));
+    let a = root.join("a.rs");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && app.lsp.diagnostics_for(&a).is_empty() {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !app.lsp.diagnostics_for(&a).is_empty(),
+        "the mock server should have opened a.rs"
+    );
+    Some((app, root))
+}
+
+/// The text of the tab open on `path` (empty if none is).
+fn tab_text(app: &App, path: &std::path::Path) -> String {
+    app.editor
+        .tabs
+        .iter()
+        .find(|t| t.path.as_deref() == Some(path))
+        .map(vix::editor::Tab::text)
+        .unwrap_or_default()
+}
+
+/// Poll the app for a while so any in-flight reply is processed.
+fn settle(app: &mut App, until: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline && !until(app) {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// T652: a formatting reply that arrives after the user switched tabs edits
+/// the file it was requested for, not the newly active one.
+#[test]
+fn formatting_reply_after_a_tab_switch_edits_the_requested_file() {
+    let Some((mut app, root)) = formatting_app("switch", |_| {}) else {
+        return;
+    };
+    let (a, b) = (root.join("a.rs"), root.join("b.rs"));
+    app.run_action("lsp.format");
+    app.open_initial(&b); // switch before the reply is polled
+    settle(&mut app, |app| tab_text(app, &a).starts_with("// fmt"));
+    app.lsp.shutdown();
+    assert_eq!(tab_text(&app, &a), "// fmt\na\n", "a.rs got its edits");
+    assert_eq!(tab_text(&app, &b), "b\n", "b.rs was left alone");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T652: a formatting reply computed against text the user has since edited
+/// is dropped, not applied at stale offsets.
+#[test]
+fn formatting_reply_for_an_edited_document_is_dropped() {
+    let Some((mut app, root)) = formatting_app("stale", |_| {}) else {
+        return;
+    };
+    let a = root.join("a.rs");
+    app.run_action("lsp.format");
+    // Type before the reply is polled: the next sync bumps the version.
+    app.on_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+    // Give the reply time to arrive and be judged.
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    while Instant::now() < deadline {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    app.lsp.shutdown();
+    let text = tab_text(&app, &a);
+    assert!(
+        !text.contains("// fmt"),
+        "stale edits were dropped: {text:?}"
+    );
+    assert!(text.contains('x'), "the typed edit stays: {text:?}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T652: format-on-save followed by a tab switch formats and re-saves the
+/// saved file; the other file is neither edited nor written.
+#[test]
+fn format_on_save_then_tab_switch_formats_and_saves_the_saved_file() {
+    let Some((mut app, root)) = formatting_app("on-save", |s| s.save.format_on_save = true) else {
+        return;
+    };
+    let (a, b) = (root.join("a.rs"), root.join("b.rs"));
+    app.run_action("file.save");
+    app.open_initial(&b);
+    settle(&mut app, |_| {
+        std::fs::read_to_string(&a).is_ok_and(|t| t.starts_with("// fmt"))
+    });
+    app.lsp.shutdown();
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "// fmt\na\n");
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "b\n");
+    assert_eq!(tab_text(&app, &b), "b\n");
+    let a_tab = app
+        .editor
+        .tabs
+        .iter()
+        .find(|t| t.path.as_deref() == Some(a.as_path()))
+        .unwrap();
+    assert!(!a_tab.dirty, "the formatted a.rs was written back");
+    assert_eq!(
+        app.editor.active_tab().and_then(|t| t.path.clone()),
+        Some(b.clone()),
+        "b.rs stays the active tab"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T652, at the client layer: a reply for a document whose version moved on
+/// surfaces as `StaleEdits`, never as `Edits`.
+#[test]
+fn mock_server_formatting_reply_for_a_changed_document_is_stale() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-fmt-client-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_FORMATTING).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "a\n").unwrap();
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
+    lsp.did_open(&file, "a\n");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let (mut asked, mut stale, mut applied) = (false, None, false);
+    while Instant::now() < deadline && stale.is_none() && !applied {
+        for ev in lsp.poll() {
+            match ev {
+                LspEvent::StaleEdits(path) => stale = Some(path),
+                LspEvent::Edits { .. } => applied = true,
+                _ => {}
+            }
+        }
+        if !asked && !lsp.diagnostics_for(&file).is_empty() {
+            lsp.request_formatting(&file, 4);
+            lsp.did_change(&file, "ab\n"); // the document moves on
+            asked = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!applied, "edits for an old version must not be delivered");
+    assert_eq!(stale, Some(file), "the drop is reported for that file");
+}

@@ -3804,6 +3804,9 @@ impl App {
             && self.lsp.handles(&p)
         {
             self.format_save_pending = Some(p.clone());
+            // Sync first, so the request carries the version that was just
+            // saved and its reply isn't judged stale against it (T652).
+            self.lsp_sync_active();
             let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
             self.lsp.request_formatting(&p, tab_size);
         }
@@ -6918,7 +6921,8 @@ impl App {
                         self.lsp.request_incoming_calls(&path, item);
                     }
                 }
-                crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
+                crate::lsp::LspEvent::Edits { path, edits } => self.apply_lsp_edits(&path, &edits),
+                crate::lsp::LspEvent::StaleEdits(path) => self.drop_stale_lsp_edits(&path),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
@@ -6939,16 +6943,10 @@ impl App {
                 }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
-                crate::lsp::LspEvent::LinkedRanges(ranges) => self.begin_linked_edit(&ranges),
-                crate::lsp::LspEvent::FoldingRanges(ranges) => {
-                    let ranges: Vec<(usize, usize)> = ranges
-                        .iter()
-                        .map(|&(s, e)| (s as usize, e as usize))
-                        .collect();
-                    if let Some(t) = self.editor.active_tab_mut() {
-                        t.editor.set_fold_ranges(ranges);
-                    }
+                crate::lsp::LspEvent::LinkedRanges { path, ranges } => {
+                    self.begin_linked_edit(&path, &ranges);
                 }
+                crate::lsp::LspEvent::FoldingRanges(ranges) => self.apply_folding_ranges(&ranges),
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();
                 }
@@ -11454,6 +11452,7 @@ impl App {
         if let Some(path) = self.active_path()
             && self.lsp.handles(&path)
         {
+            self.lsp_sync_active(); // T652: ask about the text as it is now
             let (line, character) = self.cursor_lsp_position(&path);
             self.lsp.request_linked_editing(&path, line, character);
         } else {
