@@ -1,0 +1,85 @@
+# Linux distribution packages (.deb, .rpm, Arch .pkg.tar.zst) for a
+# release — see spec/linux-packages/index.md.
+#
+# dist runs this as a custom publish job (`publish-jobs` in
+# dist-workspace.toml) once the GitHub Release exists, passing its plan.
+# It can also be run by hand for an existing release tag (Actions → Linux
+# packages → Run workflow), e.g. to add packages to a release made before
+# this job existed.
+#
+# The packages are the release's own Linux binaries, repackaged by
+# scripts/build-linux-packages with nfpm (no rebuild), install-tested in a
+# container per distribution, then uploaded to the release.
+
+name: Linux packages
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to package (e.g. 1.8.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  linux-packages:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN: ${{ inputs.plan }}
+      DISPATCH_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          if [ -n "$PLAN" ]; then
+            tag=$(printf '%s' "$PLAN" | jq -r '.announcement_tag')
+          else
+            tag="$DISPATCH_TAG"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Download the release's Linux archives
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir archives --pattern '*-linux-*.tar.xz'
+      # nfpm runs from its pinned container image (NFPM_IMAGE in the script).
+      - name: Build the packages
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: python3 scripts/build-linux-packages --version "$VERSION" --archives archives --out packages
+      - name: Install-test on Debian, Ubuntu, Fedora and Arch
+        run: |
+          # Each GUI's shared libraries all resolve (a missing package
+          # dependency shows as "not found"). Single-quoted on purpose: $b
+          # expands in the container's shell, not here.
+          # shellcheck disable=SC2016
+          gui_ok='for b in vix-gpui vix-egui vix-iced vix-slint; do if ldd /usr/bin/$b | grep "not found"; then exit 1; fi; done'
+          docker run --rm -v "$PWD/packages:/p:ro" debian:12 sh -ec \
+            "apt-get update -qq; apt-get install -y -qq /p/*_amd64.deb >/dev/null; vix --version; $gui_ok"
+          docker run --rm -v "$PWD/packages:/p:ro" ubuntu:22.04 sh -ec \
+            "apt-get update -qq; apt-get install -y -qq /p/*_amd64.deb >/dev/null; vix --version; $gui_ok"
+          docker run --rm -v "$PWD/packages:/p:ro" fedora:41 sh -ec \
+            "dnf install -y -q /p/*.x86_64.rpm >/dev/null; vix --version; $gui_ok"
+          # --disable-sandbox: pacman's download sandbox needs seccomp, which a
+          # container's default profile can refuse.
+          docker run --rm -v "$PWD/packages:/p:ro" archlinux:latest sh -ec \
+            "pacman -Sy --noconfirm --disable-sandbox >/dev/null; pacman -U --noconfirm --disable-sandbox /p/*-x86_64.pkg.tar.zst >/dev/null; vix --version; $gui_ok"
+      - name: Checksums
+        working-directory: packages
+        run: sha256sum -- * > linux-packages.sha256
+      - name: Upload to the release
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber packages/*

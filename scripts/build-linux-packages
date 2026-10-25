@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""Linux distribution packages for Vix (spec/linux-packages/index.md).
+
+Repackages the Linux binaries a release already built (dist's
+`<package>-<target>.tar.xz` archives) as native packages, with nfpm:
+
+- `.deb` for Debian, Ubuntu and derivatives (`apt install ./file.deb`)
+- `.rpm` for Fedora, RHEL/Rocky/Alma, openSUSE (`dnf install ./file.rpm`)
+- `.pkg.tar.zst` for Arch Linux (`pacman -U ./file.pkg.tar.zst`)
+
+Nothing is recompiled: the packaged binary is byte-for-byte the one in the
+release archive. Every package is a glibc build and needs glibc 2.35 or newer
+(Ubuntu 22.04+, Debian 12+, Fedora 36+, RHEL/Rocky 10). The musl build is not
+packaged: release builds of it are dynamically linked against musl's loader
+rather than static, and crash at startup (T670), so there is no Alpine `.apk`
+yet.
+
+Usage:
+    python3 scripts/build-linux-packages --version 1.8.0 \\
+        --archives DIR_WITH_RELEASE_ARCHIVES --out OUT_DIR
+
+nfpm is taken from PATH when installed, otherwise run from the pinned
+`goreleaser/nfpm` container image with docker (or podman).
+"""
+
+import argparse
+import gzip
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import tomllib
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# The nfpm release used when nfpm isn't on PATH; keep in step with the
+# linux-packages workflow.
+NFPM_IMAGE = "docker.io/goreleaser/nfpm:v2.47.0"
+
+MAINTAINER = "Joel Parker Henderson <joel@joelparkerhenderson.com>"
+HOMEPAGE = "https://github.com/vixide/vix"
+
+# Shared libraries that winit/wgpu/glow load with dlopen at run time, so they
+# never show up as ELF NEEDED entries: a window needs X11 or Wayland, plus a
+# GPU driver stack. Listed per package format.
+WINDOWING = {
+    "deb": [
+        "libxkbcommon0",
+        "libwayland-client0 | libx11-6",
+        "libxcursor1",
+        "libxrandr2",
+        "libxi6",
+    ],
+    "rpm": ["libxkbcommon", "libwayland-client", "libX11", "libXcursor", "libXrandr", "libXi"],
+    "archlinux": ["libxkbcommon", "wayland", "libx11", "libxcursor", "libxrandr", "libxi"],
+}
+GPU_VULKAN = {"deb": ["libvulkan1"], "rpm": ["vulkan-loader"], "archlinux": ["vulkan-icd-loader"]}
+GPU_GL = {"deb": ["libegl1", "libgl1"], "rpm": ["mesa-libEGL", "mesa-libGL"], "archlinux": ["libglvnd"]}
+GLIBC = {"deb": ["libc6 (>= 2.35)", "libgcc-s1"], "rpm": ["glibc >= 2.35", "libgcc"], "archlinux": ["glibc>=2.35", "gcc-libs"]}
+
+
+def deps(fmt, *groups):
+    """Concatenate the `fmt` entries of each dependency group."""
+    out = []
+    for group in groups:
+        out.extend(group.get(fmt, []))
+    return out
+
+
+# One entry per released binary package. `needs` is what the binary links
+# directly (its ELF NEEDED entries beyond libc/libgcc), `runtime` what it
+# loads with dlopen. `gui` adds a .desktop entry.
+PACKAGES = {
+    "vix-tui": {
+        "manifest": "tui/Cargo.toml",
+        "binary": "vix",
+        "summary": "Keyboard-friendly terminal text editor and IDE",
+        "gui": False,
+        "needs": {},
+        "runtime": [],
+    },
+    "vix-gpui": {
+        "manifest": "gui/vix-gpui/Cargo.toml",
+        "binary": "vix-gpui",
+        "title": "GPUI",
+        "summary": "Vix editor desktop GUI on GPUI",
+        "gui": True,
+        "needs": {
+            "deb": ["libxkbcommon0", "libxkbcommon-x11-0", "libxcb1"],
+            "rpm": ["libxkbcommon", "libxkbcommon-x11", "libxcb"],
+            "archlinux": ["libxkbcommon", "libxkbcommon-x11", "libxcb"],
+        },
+        "runtime": [WINDOWING, GPU_VULKAN],
+    },
+    "vix-egui": {
+        "manifest": "gui/vix-egui/Cargo.toml",
+        "binary": "vix-egui",
+        "title": "egui",
+        "summary": "Vix editor desktop GUI on egui",
+        "gui": True,
+        "needs": {},
+        "runtime": [WINDOWING, GPU_GL],
+    },
+    "vix-iced": {
+        "manifest": "gui/vix-iced/Cargo.toml",
+        "binary": "vix-iced",
+        "title": "iced",
+        "summary": "Vix editor desktop GUI on iced",
+        "gui": True,
+        "needs": {},
+        "runtime": [WINDOWING, GPU_VULKAN],
+    },
+    "vix-slint": {
+        "manifest": "gui/vix-slint/Cargo.toml",
+        "binary": "vix-slint",
+        "title": "Slint",
+        "summary": "Vix editor desktop GUI on Slint",
+        "gui": True,
+        "needs": {
+            "deb": ["libfontconfig1"],
+            "rpm": ["fontconfig"],
+            "archlinux": ["fontconfig"],
+        },
+        "runtime": [WINDOWING, GPU_GL],
+    },
+}
+
+# Release target → nfpm arch. Only glibc builds are packaged (see T670).
+TARGETS = {
+    "x86_64-unknown-linux-gnu": "amd64",
+    "aarch64-unknown-linux-gnu": "arm64",
+}
+
+
+def license_of(manifest):
+    """The package's `license`, following `license.workspace = true`."""
+    path = os.path.join(ROOT, manifest)
+    with open(path, "rb") as f:
+        package = tomllib.load(f)["package"]
+    lic = package.get("license")
+    if isinstance(lic, str):
+        return lic
+    # Inherited: the nearest workspace root above the manifest.
+    here = os.path.dirname(os.path.dirname(path))
+    while True:
+        candidate = os.path.join(here, "Cargo.toml")
+        if os.path.exists(candidate):
+            with open(candidate, "rb") as f:
+                ws = tomllib.load(f).get("workspace", {})
+            if "package" in ws and "license" in ws["package"]:
+                return ws["package"]["license"]
+        parent = os.path.dirname(here)
+        if parent == here:
+            sys.exit(f"no license found for {manifest}")
+        here = parent
+
+
+def builds(name, archives):
+    """(target, archive path) pairs to package for `name`."""
+    found = []
+    for target in TARGETS:
+        archive = os.path.join(archives, f"{name}-{target}.tar.xz")
+        if os.path.exists(archive):
+            found.append((target, archive))
+    return found
+
+
+def desktop_entry(binary, title, summary):
+    """A freedesktop .desktop file so the GUI shows up in app launchers."""
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name=Vix ({title})\n"
+        f"Comment={summary}\n"
+        f"Exec={binary} %F\n"
+        "Terminal=false\n"
+        "Categories=Development;TextEditor;\n"
+        "MimeType=text/plain;\n"
+    )
+
+
+def nfpm_config(name, spec, version, arch, stage, fmt):
+    """The nfpm YAML for one package, architecture and format."""
+    binary = spec["binary"]
+    lines = [
+        f"name: {name}",
+        f"arch: {arch}",
+        "platform: linux",
+        f'version: "{version}"',
+        "release: 1",
+        "section: editors",
+        "priority: optional",
+        f'maintainer: "{MAINTAINER}"',
+        f'description: "{spec["summary"]}"',
+        "vendor: Vix",
+        f"homepage: {HOMEPAGE}",
+        f'license: "{spec["license"]}"',
+        "contents:",
+        f"  - src: {stage}/{binary}",
+        f"    dst: /usr/bin/{binary}",
+        "    file_info:",
+        "      mode: 0755",
+        f"  - src: {stage}/LICENSE",
+        f"    dst: /usr/share/licenses/{name}/LICENSE",
+    ]
+    if fmt == "deb":
+        lines += [f"  - src: {stage}/LICENSE", f"    dst: /usr/share/doc/{name}/copyright"]
+    for doc in ("README.md", "CHANGELOG.md"):
+        if os.path.exists(os.path.join(stage, doc)):
+            lines += [f"  - src: {stage}/{doc}", f"    dst: /usr/share/doc/{name}/{doc}"]
+    if os.path.exists(os.path.join(stage, "vix.1.gz")):
+        lines += [f"  - src: {stage}/vix.1.gz", "    dst: /usr/share/man/man1/vix.1.gz"]
+    if spec["gui"]:
+        lines += [f"  - src: {stage}/{name}.desktop", f"    dst: /usr/share/applications/{name}.desktop"]
+    depends = deps(fmt, GLIBC, spec["needs"])
+    recommends = deps(fmt, *spec["runtime"])
+    if fmt == "rpm":
+        # rpm has weak dependencies but no alternatives, so a `|` choice
+        # becomes its first option.
+        recommends = [r.split(" | ")[0] for r in recommends]
+    if fmt == "archlinux":
+        # pacman has no "recommends": GUI runtime libraries are hard depends.
+        depends, recommends = depends + recommends, []
+    if depends:
+        lines.append("depends:")
+        lines += [f'  - "{d}"' for d in depends]
+    if recommends:
+        lines.append("recommends:")
+        lines += [f'  - "{r}"' for r in recommends]
+    return "\n".join(lines) + "\n"
+
+
+def nfpm_command():
+    """How to run nfpm here: the binary on PATH, or the pinned image."""
+    if shutil.which("nfpm"):
+        return lambda work, args: ["nfpm", *args]
+    engine = shutil.which("docker") or shutil.which("podman")
+    if not engine:
+        sys.exit("needs nfpm, or docker/podman to run " + NFPM_IMAGE)
+    return lambda work, args: [engine, "run", "--rm", "-v", f"{work}:{work}", "-w", work, NFPM_IMAGE, *args]
+
+
+def stage_archive(archive, stage, name, spec):
+    """Unpack one release archive into `stage` and add the generated files."""
+    with tarfile.open(archive) as tar:
+        tar.extractall(stage, filter="data")
+    # dist archives hold one top-level directory: flatten it.
+    (top,) = os.listdir(stage)
+    inner = os.path.join(stage, top)
+    for entry in os.listdir(inner):
+        shutil.move(os.path.join(inner, entry), stage)
+    os.rmdir(inner)
+    man = os.path.join(stage, "vix.1")
+    if os.path.exists(man):
+        # mtime=0 keeps the compressed page reproducible.
+        with open(man, "rb") as src, open(man + ".gz", "wb") as raw:
+            with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as dst:
+                shutil.copyfileobj(src, dst)
+    if spec["gui"]:
+        with open(os.path.join(stage, f"{name}.desktop"), "w") as f:
+            f.write(desktop_entry(spec["binary"], spec["title"], spec["summary"]))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--version", required=True, help="release version, e.g. 1.8.0")
+    parser.add_argument("--archives", required=True, help="directory with the release .tar.xz archives")
+    parser.add_argument("--out", required=True, help="directory for the packages")
+    parser.add_argument("--packages", nargs="*", default=list(PACKAGES), help="subset of packages")
+    args = parser.parse_args()
+
+    out = os.path.abspath(args.out)
+    os.makedirs(out, exist_ok=True)
+    run = nfpm_command()
+    made = 0
+    for name in args.packages:
+        spec = dict(PACKAGES[name], license=license_of(PACKAGES[name]["manifest"]))
+        for target, archive in builds(name, os.path.abspath(args.archives)):
+            arch = TARGETS[target]
+            # A temp dir under `out` so a container can see it through the
+            # one mount.
+            work = tempfile.mkdtemp(prefix=f".{name}-{arch}-", dir=out)
+            stage = os.path.join(work, "stage")
+            os.makedirs(stage)
+            stage_archive(archive, stage, name, spec)
+            formats = ["deb", "rpm", "archlinux"]
+            for fmt in formats:
+                config = os.path.join(work, f"nfpm-{fmt}.yaml")
+                with open(config, "w") as f:
+                    f.write(nfpm_config(name, spec, args.version, arch, stage, fmt))
+                cmd = run(out, ["package", "--config", config, "--packager", fmt, "--target", out])
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                if result.returncode != 0:
+                    sys.exit(f"nfpm failed for {name} {arch} {fmt}:\n{result.stdout}{result.stderr}")
+                made += 1
+            shutil.rmtree(work)
+    if made == 0:
+        sys.exit(f"no Linux archives for {', '.join(args.packages)} in {args.archives}")
+    for entry in sorted(os.listdir(out)):
+        print(entry)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

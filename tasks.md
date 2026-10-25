@@ -7844,6 +7844,64 @@ widgets, and a markup-hiding Markdown "compose" mode.
 
 ---
 
+## Linux packaging (2026-10-25)
+
+- [x] **T668: native Linux packages for every release.** Done on
+  2026-10-25 (`feat/linux-packages`).
+  - **Builder.** `scripts/build-linux-packages` repackages the release's own
+    Linux archives with nfpm (pinned `goreleaser/nfpm:v2.47.0`):
+    - formats: `.deb`, `.rpm` and Arch, from the glibc builds only (see
+      T670 for why there is no musl-based `.apk`)
+    - packages: `vix-tui` and the four released GUIs, on x86_64 and aarch64
+    - library dependencies from each binary's ELF `NEEDED` entries, plus
+      the windowing/GPU libraries it loads with dlopen (as recommends)
+  - **Pipeline.** `.github/workflows/linux-packages.yml` is a dist custom
+    publish job (with `contents: write` via
+    `github-custom-job-permissions`). It install-tests on Debian, Ubuntu,
+    Fedora and Arch, then uploads to the release.
+  - **Verified locally** on 2026-10-25 against the real 1.8.0 archives:
+    - arm64: Debian 12, Ubuntu 22.04, Fedora 41. The packages installed
+      with their dependencies resolved, `vix --version` ran, and no GUI
+      showed `ldd` "not found".
+    - x86_64 under emulation: Debian, Fedora, Arch. Arch needs pacman's
+      `--disable-sandbox` under QEMU. This testing is what found T670.
+  - **Spec:** `spec/linux-packages/index.md`.
+- [ ] **T670: the musl release build is dynamically linked and crashes.**
+  **High if it reproduces on real x86_64.**
+  - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)
+    holds a PIE with `INTERP /lib/ld-musl-x86_64.so.1`, not a static
+    binary. On glibc distributions it doesn't start ("Could not open
+    /lib/ld-musl-x86_64.so.1").
+  - **The crash.** On Alpine under QEMU it segfaults at startup, while the
+    glibc build runs fine under the same emulation. The installer script
+    gives Alpine users exactly this build.
+  - **Likely cause.** Static-PIE linking through Ubuntu's `musl-gcc`
+    wrapper (see `.github/dist/build-setup.yml` and `.cargo/config.toml`).
+  - **First, confirm** on real x86_64 Alpine, for example with a one-off CI
+    job.
+  - **Fix.** Force a static, non-PIE link for that target: rustflags
+    `-C target-feature=+crt-static -C relocation-model=static`, or link with
+    `rust-lld`. Then check that `file` reports "statically linked".
+  - **After the fix:** add the `.apk` back to `scripts/build-linux-packages`,
+    and use the static `vix-tui` for the x86_64 `.rpm`, so RHEL/Rocky 8 and
+    9 work.
+- [ ] **T669 — apt and dnf/yum repositories.** Today a user downloads a
+  package file, so there is no `apt install vix-tui` from a configured
+  source and no updates through `apt upgrade`/`dnf upgrade`.
+  - **Repositories.** Publish a signed APT repository (`dists/`, `pool/`,
+    `Release`/`InRelease`) and a signed RPM repository (`repodata/` from
+    `createrepo_c`).
+  - **Hosting.** Use a static host, for example a `packages/` path served
+    by GitHub Pages or a dedicated `vixide/packages` repository.
+  - **CI.** Regenerate them in the linux-packages job after each upload.
+  - **Signatures.** Sign the `.rpm`s (nfpm `rpm.signature`).
+  - **Needs from the maintainer:** a GPG signing key (private key and
+    passphrase as Actions secrets, public key published for
+    `signed-by=`), and a decision on the host.
+  - **Size: M.**
+
+---
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet

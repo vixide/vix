@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Linux packages** (T668): every release now carries native `.deb`, `.rpm` and Arch `.pkg.tar.zst` packages of `vix-tui` and the four released desktop GUIs, for x86_64 and aarch64. Install with `sudo apt install ./vix-tui_*_amd64.deb`, `sudo dnf install ./vix-tui-*.x86_64.rpm` or `sudo pacman -U ./vix-tui-*.pkg.tar.zst`. They need glibc 2.35+ (Ubuntu 22.04+, Debian 12+, Fedora 36+). Each package is install-tested on Debian, Ubuntu, Fedora and Arch before upload. See `spec/linux-packages/index.md`.
 - **File → Save All** (T654): saves every modified file tab (also in the command palette), reports how many were saved, and stops at the first failure. The `save_all` action used to save only the active tab.
 - **`vix-lsp`: `Lsp::take_edit_replies()`** (T652) returns formatting and linked-editing replies as `EditReply`, tied to the document they were requested for and version-checked; `LspEvent::Edits` and `LspEvent::LinkedRanges` are no longer emitted. `vix-editor` gains `Editor::reload_clean_from_disk_checked`, which reports refused files.
 
