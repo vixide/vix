@@ -17,11 +17,38 @@
 //! sqlx does not read `~/.pgpass` / `~/.my.cnf`, so those are deliberately not
 //! part of the waterfall. The command *construction* is pure and unit-tested;
 //! only [`run`] and the keyring backends touch the OS.
+//!
+//! **The OS keyring is opt-in** (T639). Until [`use_system_keyring`] is
+//! called, [`keyring_get`] finds nothing and [`keyring_set`] stores nothing,
+//! so a server connection falls through to the password prompt. The binaries
+//! opt in at startup; the test suite does not, so a test never waits on the
+//! host's keyring (a Keychain lookup can take seconds) or reads a real
+//! credential.
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::connect::Connection;
 
 /// The keyring service name under which Vix stores database passwords.
 const SERVICE: &str = "vix-db";
+
+/// Whether [`keyring_get`] / [`keyring_set`] reach the OS keyring. Off until
+/// [`use_system_keyring`] turns it on.
+static SYSTEM_KEYRING: AtomicBool = AtomicBool::new(false);
+
+/// Route [`keyring_get`] / [`keyring_set`] to the OS keyring for the rest of
+/// the process. The `vix` binary and the desktop GUIs call this once at
+/// startup; anything that does not (the test suite above all) never touches
+/// the keyring.
+pub fn use_system_keyring() {
+    SYSTEM_KEYRING.store(true, Ordering::Relaxed);
+}
+
+/// Whether the OS keyring is in use (see [`use_system_keyring`]).
+#[must_use]
+pub fn is_system_keyring() -> bool {
+    SYSTEM_KEYRING.load(Ordering::Relaxed)
+}
 
 /// One external command to run: the program, its arguments, and an optional
 /// value piped to its stdin.
@@ -75,13 +102,17 @@ fn secret_tool_store(conn: &Connection, password: &str) -> Cmd {
     }
 }
 
-/// Read `conn`'s password from the OS keyring, or `None` when it is absent or
-/// the platform has no supported keyring. On macOS this uses the native
+/// Read `conn`'s password from the OS keyring, or `None` when it is absent,
+/// the platform has no supported keyring, or the keyring is not opted into
+/// ([`use_system_keyring`]). On macOS this uses the native
 /// Security framework, on Windows the native Credential Manager (no secret on
 /// the process argument list either way); on Linux it runs `secret-tool
 /// lookup`.
 #[must_use]
 pub fn keyring_get(conn: &Connection) -> Option<String> {
+    if !is_system_keyring() {
+        return None;
+    }
     #[cfg(any(target_os = "macos", windows))]
     {
         keyring::Entry::new(SERVICE, &account(conn))
@@ -104,9 +135,13 @@ pub fn keyring_get(conn: &Connection) -> Option<String> {
 /// Store `password` for `conn` in the OS keyring; `true` on success. macOS
 /// and Windows use their native credential stores (the secret is never a
 /// process argument); Linux runs `secret-tool store` with the secret on
-/// stdin. Unsupported platforms return `false`.
+/// stdin. Unsupported platforms, and a process that has not opted in with
+/// [`use_system_keyring`], return `false`.
 #[must_use]
 pub fn keyring_set(conn: &Connection, password: &str) -> bool {
+    if !is_system_keyring() {
+        return false;
+    }
     #[cfg(any(target_os = "macos", windows))]
     {
         keyring::Entry::new(SERVICE, &account(conn))
@@ -184,6 +219,16 @@ mod tests {
             name: name.into(),
             ..Connection::default()
         }
+    }
+
+    // Tests never opt into the OS keyring (T639), so the keyring is never
+    // read or written and a lookup can't wait on the host's Keychain.
+    #[test]
+    fn keyring_is_off_until_opted_into() {
+        assert!(!is_system_keyring());
+        let c = conn("vix-test-t639-not-opted-in");
+        assert_eq!(keyring_get(&c), None);
+        assert!(!keyring_set(&c, "hunter2"));
     }
 
     // On Linux the keyring store command must carry the secret on stdin, never

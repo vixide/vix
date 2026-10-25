@@ -82,14 +82,22 @@ is pure and unit-tested; only `open` spawns a process. See
 `tui/tests/db_smoke.rs`/`db::tunnel` tests.
 
 **Credential waterfall (M7) — done.** A server connection resolves its
-password before prompting (`db::secret::resolve`, called from `start_connect`):
-first the per-connection `password_command` (any command that prints the
-secret — `pass show db/prod`, `op read …`), then the OS keyring via its CLI
-(`security find-generic-password` on macOS, `secret-tool lookup` on Linux);
-only on a miss does it fall back to the prompt. The connection form adds a
-**Password cmd** field and a **Save to keyring** toggle — when set, a prompted
-password is stored back (`security add-generic-password` / `secret-tool store`)
-on a successful connect, so later connects skip the prompt. The command
-*construction* (`keyring_lookup` / `keyring_store`) is pure and unit-tested;
-only `run` touches the process table. sqlx does not read `~/.pgpass` /
+password before prompting (`db::secret::resolve`, called from the background
+connect worker): first the per-connection `password_command` (any command that
+prints the secret — `pass show db/prod`, `op read …`), then the OS keyring —
+the native Security framework on macOS, Credential Manager on Windows, and
+`secret-tool lookup` on Linux; only on a miss does it fall back to the prompt.
+The connection form adds a **Password cmd** field and a **Save to keyring**
+toggle — when set, a prompted password is stored back (natively, or
+`secret-tool store` with the secret on stdin) on a successful connect, so later
+connects skip the prompt. No backend puts the secret on a process argument
+list. The Linux command *construction* (`secret_tool_lookup` /
+`secret_tool_store`) is pure and unit-tested. sqlx does not read `~/.pgpass` /
 `~/.my.cnf`, so those are deliberately not part of the waterfall.
+
+**The OS keyring is opt-in (T639).** Until `db::secret::use_system_keyring` is
+called, keyring lookups find nothing and stores save nothing, so a server
+connection goes straight to the prompt. `vix` and each desktop GUI call it at
+startup, beside `clipboard::use_system`; the test suite never does, so no test
+waits on the host's keyring (a macOS Keychain lookup can take seconds) or
+reads a real credential.

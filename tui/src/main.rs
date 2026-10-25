@@ -109,6 +109,8 @@ fn main() -> io::Result<()> {
     // in-memory clipboard instead, so running the tests cannot overwrite what
     // the user had on their pasteboard.
     vix::clipboard::use_system();
+    // Likewise the OS keyring for saved database passwords (T639).
+    vix::db::secret::use_system_keyring();
 
     // T537 (Run H): `Settings::load()`'s own fallback silently discarded a
     // genuine load failure (a missing file is *not* one -- `confy` already
