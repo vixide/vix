@@ -22,6 +22,21 @@
     { href: '/install/', label: 'Install' }
   ];
 
+  // The Vix documentation (the main repo's docs/, built with mdBook) is
+  // published at /vix/ on this same host. PickerBar's search box sends its
+  // query there: mdBook opens its own search with the terms from a
+  // `?search=` parameter, so a header search lands on real results instead
+  // of a search page this static site would have to build itself.
+  const docsUrl = 'https://vixide.github.io/vix/';
+
+  // SearchPicker hands `navigate` its default href, `${action}?<encoded
+  // query>` (a bare query, no parameter name), so the query is read back
+  // from that and re-sent under the name mdBook reads.
+  function searchDocs(href: string): void {
+    const query = decodeURIComponent(href.slice(href.indexOf('?') + 1));
+    location.assign(`${docsUrl}?search=${encodeURIComponent(query)}`);
+  }
+
   function isCurrent(href: string): boolean {
     return page.url.pathname === href;
   }
@@ -89,22 +104,30 @@
             {link.label}
           </a>
         {/each}
+        <a href={docsUrl}>Docs</a>
         <a href="https://github.com/vixide/vix">GitHub</a>
       </NavigationMenu>
       <!--
         themes/sizes are deliberately not passed — PickerBar defaults to
-        DEFAULT_THEMES (all 45 Lily reference themes, alphabetical, UK/US
+        DEFAULT_THEMES (all 57 Lily reference themes, alphabetical, UK/US
         government themes grouped last) and DEFAULT_SIZES (the 7-step text
         size scale), which is exactly the "Lily default themes/sizes, not
         any application-specific custom set" this header is required to use.
+        The bar's optional link picker (`links`) and time-zone picker
+        (`timeZoneProps.locale`) are left off: the nav beside it already
+        lists every page, and nothing on this site shows a time.
       -->
       <PickerBar
         labels={{
+          search: 'Search the documentation',
+          searchInput: 'Search terms',
+          searchSubmit: 'Search',
           theme: 'Theme',
           locale: 'Language',
           textSize: 'Text size',
           share: 'Share this page'
         }}
+        searchProps={{ action: docsUrl, navigate: searchDocs, placeholder: 'Search the docs…' }}
         themesUrl="/assets/themes/"
         locales={siteLocales}
         shareTargets={shareTargets}
@@ -135,6 +158,7 @@
     <p class="site-footer-trademark">Vix™ and Vix IDE™ are trademarks.</p>
     <nav class="site-footer-links" aria-label="Footer">
       <a href="https://github.com/vixide/vix">GitHub</a>
+      <a href={docsUrl}>Documentation</a>
       <a href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">Changelog</a>
       <a href="/features/">Features</a>
       <a href="/install/">Install</a>

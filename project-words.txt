@@ -83,6 +83,7 @@ cyclonedx
 codeql
 
 # Themes / palettes / proper nouns
+catppuccin
 monokai
 nord
 sindarin
@@ -92,6 +93,7 @@ nodeify
 transclude
 transclusion
 zettelkasten
+tblfm
 skinparam
 archimate
 gantt
