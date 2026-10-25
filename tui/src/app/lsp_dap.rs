@@ -749,6 +749,20 @@ impl App {
         }
     }
 
+    /// Act on one edit-returning LSP reply (T652): formatting edits go to the
+    /// tab of the file they were requested for, linked ranges start a linked
+    /// edit, and a stale reply is dropped.
+    pub(super) fn apply_edit_reply(&mut self, reply: crate::lsp::EditReply) {
+        use crate::lsp::EditReplyKind;
+        match reply.kind {
+            EditReplyKind::Edits(edits) => self.apply_lsp_edits(&reply.path, &edits),
+            EditReplyKind::LinkedRanges(ranges) => self.begin_linked_edit(&reply.path, &ranges),
+            // `Stale`, and any kind a later vix-lsp adds that this host
+            // doesn't know how to apply.
+            _ => self.drop_stale_lsp_edits(&reply.path),
+        }
+    }
+
     /// Whether `path`'s open tab still holds exactly the text last synced to
     /// the language server -- the text an in-flight request's reply was
     /// computed against (T652). `None` when `path` has no open tab.

@@ -16,7 +16,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use vix::app::App;
-use vix::lsp::{Lsp, LspEvent, RenamePrepared};
+use vix::lsp::{EditReply, EditReplyKind, Lsp, LspEvent, RenamePrepared};
 use vix::settings::{LspServer, Settings};
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -1136,10 +1136,11 @@ fn format_on_save_then_tab_switch_formats_and_saves_the_saved_file() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// T652, at the client layer: a reply for a document whose version moved on
-/// surfaces as `StaleEdits`, never as `Edits`.
+/// T652, at the client layer: a formatting reply is handed back by
+/// `take_edit_replies` naming its document -- its edits while the document is
+/// unchanged, `Stale` once the version moved on -- and never as an `LspEvent`.
 #[test]
-fn mock_server_formatting_reply_for_a_changed_document_is_stale() {
+fn mock_server_formatting_replies_name_their_document_and_go_stale() {
     if !tool_available("python3") {
         eprintln!("python3 not available; skipping");
         return;
@@ -1159,25 +1160,47 @@ fn mock_server_formatting_reply_for_a_changed_document_is_stale() {
     let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "a\n");
 
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let (mut asked, mut stale, mut applied) = (false, None, false);
-    while Instant::now() < deadline && stale.is_none() && !applied {
-        for ev in lsp.poll() {
-            match ev {
-                LspEvent::StaleEdits(path) => stale = Some(path),
-                LspEvent::Edits { .. } => applied = true,
-                _ => {}
+    // Poll until a reply arrives (asking once the handshake is done).
+    let next_reply = |lsp: &mut Lsp, ask: &dyn Fn(&mut Lsp)| -> Option<EditReply> {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut asked = false;
+        while Instant::now() < deadline {
+            for ev in lsp.poll() {
+                assert!(
+                    !matches!(ev, LspEvent::Edits(_) | LspEvent::LinkedRanges(_)),
+                    "edit replies no longer arrive as events"
+                );
             }
+            if let Some(reply) = lsp.take_edit_replies().into_iter().next() {
+                return Some(reply);
+            }
+            if !asked && !lsp.diagnostics_for(&file).is_empty() {
+                ask(lsp);
+                asked = true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
         }
-        if !asked && !lsp.diagnostics_for(&file).is_empty() {
-            lsp.request_formatting(&file, 4);
-            lsp.did_change(&file, "ab\n"); // the document moves on
-            asked = true;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
+        None
+    };
+    let fresh = next_reply(&mut lsp, &|lsp| lsp.request_formatting(&file, 4));
+    let stale = next_reply(&mut lsp, &|lsp| {
+        lsp.request_formatting(&file, 4);
+        lsp.did_change(&file, "ab\n"); // the document moves on
+    });
     lsp.shutdown();
     let _ = std::fs::remove_dir_all(&root);
-    assert!(!applied, "edits for an old version must not be delivered");
-    assert_eq!(stale, Some(file), "the drop is reported for that file");
+
+    let fresh = fresh.expect("a reply for the unchanged document");
+    assert_eq!(fresh.path, file);
+    assert!(
+        matches!(&fresh.kind, EditReplyKind::Edits(e) if e.len() == 1),
+        "its edits are delivered: {fresh:?}"
+    );
+    let stale = stale.expect("a reply for the changed document");
+    assert_eq!(stale.path, file);
+    assert_eq!(
+        stale.kind,
+        EditReplyKind::Stale,
+        "edits for an old version are dropped"
+    );
 }

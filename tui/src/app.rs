@@ -6889,7 +6889,12 @@ impl App {
         self.lsp_sync_active();
         for event in self.lsp.poll() {
             match event {
-                crate::lsp::LspEvent::Diagnostics(_) => {}
+                // `Edits`/`LinkedRanges` are no longer emitted (T652): those
+                // replies arrive, tied to their document, from
+                // `take_edit_replies` below.
+                crate::lsp::LspEvent::Diagnostics(_)
+                | crate::lsp::LspEvent::Edits(_)
+                | crate::lsp::LspEvent::LinkedRanges(_) => {}
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
@@ -6921,8 +6926,6 @@ impl App {
                         self.lsp.request_incoming_calls(&path, item);
                     }
                 }
-                crate::lsp::LspEvent::Edits { path, edits } => self.apply_lsp_edits(&path, &edits),
-                crate::lsp::LspEvent::StaleEdits(path) => self.drop_stale_lsp_edits(&path),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
@@ -6943,9 +6946,6 @@ impl App {
                 }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
-                crate::lsp::LspEvent::LinkedRanges { path, ranges } => {
-                    self.begin_linked_edit(&path, &ranges);
-                }
                 crate::lsp::LspEvent::FoldingRanges(ranges) => self.apply_folding_ranges(&ranges),
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();
@@ -6979,6 +6979,9 @@ impl App {
                     self.apply_semantic_tokens(&tokens);
                 }
             }
+        }
+        for reply in self.lsp.take_edit_replies() {
+            self.apply_edit_reply(reply);
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
         // stay correct across new publishes and tab switches alike (cheap — it

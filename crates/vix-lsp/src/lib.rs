@@ -105,20 +105,13 @@ pub enum LspEvent {
     References(Vec<(PathBuf, u32, u32)>),
     /// A `prepareCallHierarchy` result: the symbol item to query calls for.
     CallHierarchyPrepared(serde_json::Value),
-    /// A formatting response: text edits (range + replacement) for `path`, in
-    /// document order. Only sent while the server still has the version the
-    /// request was made against (T652); the host applies them to `path`'s
-    /// tab, whichever tab is active.
-    Edits {
-        /// The file the formatting request was for.
-        path: PathBuf,
-        /// The edits, in that file's offsets.
-        edits: Vec<(vix_lsp_core::Range, String)>,
-    },
-    /// An edit-returning reply (formatting, linked editing) arrived after its
-    /// document changed or closed (T652): it was dropped rather than applied
-    /// against text it wasn't computed for.
-    StaleEdits(PathBuf),
+    /// A formatting response: text edits (range + replacement) for the active
+    /// file, in document order.
+    ///
+    /// No longer emitted since 1.9.0 (T652): formatting replies now arrive,
+    /// tied to their document and version-checked, from
+    /// [`Lsp::take_edit_replies`]. Kept so existing matches still compile.
+    Edits(Vec<(vix_lsp_core::Range, String)>),
     /// A document-symbol response for the active file: `(0-based line, character,
     /// name)`.
     DocumentSymbols(Vec<(u32, u32, String)>),
@@ -145,15 +138,13 @@ pub enum LspEvent {
     /// An inlay-hint response: `(line, character, label)` hints for the active
     /// file (0-based; `character` in the server's encoding units).
     InlayHints(Vec<(u32, u32, String)>),
-    /// A linked-editing response: ranges in `path` that should be edited
-    /// together (e.g. an open/close tag pair). Version-checked like
-    /// [`LspEvent::Edits`] (T652).
-    LinkedRanges {
-        /// The file the request was for.
-        path: PathBuf,
-        /// The linked ranges, in that file's offsets.
-        ranges: Vec<vix_lsp_core::Range>,
-    },
+    /// A linked-editing response: ranges in the active file that should be edited
+    /// together (e.g. an open/close tag pair).
+    ///
+    /// No longer emitted since 1.9.0 (T652): linked-editing replies now
+    /// arrive from [`Lsp::take_edit_replies`]. Kept so existing matches still
+    /// compile.
+    LinkedRanges(Vec<vix_lsp_core::Range>),
     /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
     CodeLenses(Vec<vix_lsp_core::message::CodeLens>),
     /// The server replied to a request with a JSON-RPC `error` object instead
@@ -190,6 +181,32 @@ pub enum LspEvent {
     /// active when the response arrives, same established limitation those
     /// already have under rapid tab switching.
     SemanticTokens(Vec<vix_lsp_core::SemanticToken>),
+}
+
+/// A reply to an edit-returning request (formatting, range formatting, linked
+/// editing), tied to the document it was requested for (T652). Collected
+/// during [`Lsp::poll`]; drain them with [`Lsp::take_edit_replies`]. The host
+/// applies one to `path`'s tab, not to whichever tab is active by then.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EditReply {
+    /// The file the request was for, exactly as the host passed it in.
+    pub path: PathBuf,
+    /// What the reply carries.
+    pub kind: EditReplyKind,
+}
+
+/// What an [`EditReply`] carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EditReplyKind {
+    /// Formatting edits (range + replacement) for the file, in document order.
+    Edits(Vec<(vix_lsp_core::Range, String)>),
+    /// Ranges in the file to edit together (e.g. an open/close tag pair).
+    LinkedRanges(Vec<vix_lsp_core::Range>),
+    /// The reply arrived after its document changed or closed, so the server
+    /// computed it against other text: it was dropped, not delivered.
+    Stale,
 }
 
 /// Outcome of `textDocument/prepareRename`, sent before the rename prompt
@@ -320,6 +337,9 @@ pub struct Lsp {
     restart_attempts: HashMap<String, u32>,
     /// Recent stderr per language id (T576), shared with reader threads.
     logs: HashMap<String, LogBuf>,
+    /// Edit-returning replies received by [`Lsp::poll`] and not yet taken by
+    /// [`Lsp::take_edit_replies`] (T652).
+    edit_replies: Vec<EditReply>,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -346,6 +366,7 @@ impl Lsp {
             diagnostics: HashMap::new(),
             restart_attempts: HashMap::new(),
             logs: HashMap::new(),
+            edit_replies: Vec::new(),
         }
     }
 
@@ -1344,39 +1365,45 @@ impl Lsp {
             return;
         }
         if let Some((target, current)) = target {
-            if current {
-                Self::targeted_response_to_events(kind, target.path, result, events);
+            let reply = if current {
+                Self::targeted_reply(kind, target.path, result)
             } else {
-                events.push(LspEvent::StaleEdits(target.path));
-            }
+                Some(EditReply {
+                    path: target.path,
+                    kind: EditReplyKind::Stale,
+                })
+            };
+            self.edit_replies.extend(reply);
             return;
         }
         Self::response_to_events(kind, result, events);
     }
 
     /// Parse an edit-returning reply already checked against its document's
-    /// version (T652) into an event naming that document.
-    fn targeted_response_to_events(
-        kind: Pending,
-        path: PathBuf,
-        result: &Value,
-        events: &mut Vec<LspEvent>,
-    ) {
-        match kind {
+    /// version (T652) into an [`EditReply`] naming that document, or `None`
+    /// when it carries nothing to apply.
+    fn targeted_reply(kind: Pending, path: PathBuf, result: &Value) -> Option<EditReply> {
+        let kind = match kind {
             Pending::Formatting => {
                 let edits = message::parse_text_edits(result);
-                if !edits.is_empty() {
-                    events.push(LspEvent::Edits { path, edits });
-                }
+                (!edits.is_empty()).then_some(EditReplyKind::Edits(edits))
             }
             Pending::LinkedEditing => {
                 let ranges = message::parse_linked_editing_ranges(result);
-                if ranges.len() > 1 {
-                    events.push(LspEvent::LinkedRanges { path, ranges });
-                }
+                (ranges.len() > 1).then_some(EditReplyKind::LinkedRanges(ranges))
             }
-            _ => {}
-        }
+            _ => None,
+        }?;
+        Some(EditReply { path, kind })
+    }
+
+    /// Take the edit-returning replies (formatting, range formatting, linked
+    /// editing) that [`Lsp::poll`] has received since the last call, oldest
+    /// first (T652). Each names the document it was requested for; a reply
+    /// whose document changed or closed meanwhile comes back as
+    /// [`EditReplyKind::Stale`] instead of its edits. Call after `poll`.
+    pub fn take_edit_replies(&mut self) -> Vec<EditReply> {
+        std::mem::take(&mut self.edit_replies)
     }
 
     /// Parse a (non-null) response `result` for the request `kind` into events.
