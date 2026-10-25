@@ -136,16 +136,16 @@ vix-convert-from-tsv-into-csv-tool = { workspace = true }
 # Convert: TSV text into a JSON array of objects.
 vix-convert-from-tsv-into-json-tool = { workspace = true }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
-vix-dap = { path = "../crates/vix-dap", version = "1.7.1", default-features = false }
+vix-dap = { path = "../crates/vix-dap", version = "1.8.0", default-features = false }
 # DB workbench: connection management, schema browsing, and SQL queries.
 vix-db = { workspace = true, optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
-vix-editor = { path = "../crates/vix-editor", version = "1.7.1", default-features = false }
+vix-editor = { path = "../crates/vix-editor", version = "1.8.0", default-features = false }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
 # default-features = false leaves grammar selection to the root `lang-*` features.
-vix-editor-core = { path = "../crates/vix-editor-core", version = "1.7.1", default-features = false }
+vix-editor-core = { path = "../crates/vix-editor-core", version = "1.8.0", default-features = false }
 # LSP client: process management and document sync over `vix_lsp_core`.
-vix-lsp = { path = "../crates/vix-lsp", version = "1.7.1", default-features = false }
+vix-lsp = { path = "../crates/vix-lsp", version = "1.8.0", default-features = false }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
 vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
@@ -229,7 +229,7 @@ vix-coverage = { workspace = true }
 # Read-only side-by-side comparison: a unified diff between two texts.
 vix-diff-view = { workspace = true }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
-vix-doctor = { path = "../crates/vix-doctor", version = "1.7.1", default-features = false }
+vix-doctor = { path = "../crates/vix-doctor", version = "1.8.0", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { workspace = true }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
@@ -256,7 +256,7 @@ vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
 vix-format-tool = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "../crates/vix-git", version = "1.7.1", default-features = false }
+vix-git = { path = "../crates/vix-git", version = "1.8.0", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { workspace = true }
 # A minimal HTTP client driven by a `.http`-style buffer.
@@ -320,7 +320,7 @@ vix-settings-bundle = { workspace = true }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { workspace = true }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
-vix-spellcheck = { path = "../crates/vix-spellcheck", version = "1.7.1", default-features = false }
+vix-spellcheck = { path = "../crates/vix-spellcheck", version = "1.8.0", default-features = false }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { workspace = true }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
