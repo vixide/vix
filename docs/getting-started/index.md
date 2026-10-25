@@ -8,20 +8,20 @@ requires a Rust toolchain except building from source.
 **macOS or Linux, via Homebrew:**
 
 ```sh
-brew install vixide/homebrew-tap/vix
+brew install vixide/homebrew-tap/vix-tui
 ```
 
 **macOS or Linux, via the installer script** (downloads the right prebuilt
 archive for your platform and puts `vix` on your `PATH`):
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-tui-installer.sh | sh
 ```
 
 **Windows, via PowerShell:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-tui-installer.ps1 | iex"
 ```
 
 **Via npm** (any platform npm supports):
@@ -29,6 +29,23 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/release
 ```sh
 npm install -g @vixide/vix
 ```
+
+The terminal app's package is `vix-tui` (Homebrew formula, installers,
+release archives); the command it installs is still `vix`. The npm package
+keeps its name, `@vixide/vix`.
+
+**Desktop GUIs:** `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` ship
+from the same release, each installed the same way under its own name, for
+example:
+
+```sh
+brew install vixide/homebrew-tap/vix-gpui
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.sh | sh
+```
+
+`vix-slint` is GPL-3.0-only, and `vix-gtk4` is source-only for now. See
+[`gui/spec/index.md`](../../gui/spec/index.md) (Distribution) for platforms
+and run-time libraries.
 
 **Direct download:** prebuilt archives (`.tar.xz` for macOS/Linux, `.msi`/
 `.zip` for Windows) are attached to every
