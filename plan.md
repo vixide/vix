@@ -433,6 +433,55 @@ collaborative editing, runtime grammars, remote-control socket). Duplicate
 dependency versions all come from third-party crates, and `deny.toml`
 already warns on them.
 
+### Comparator scans — Fresh and ttt (2026-10-25)
+
+Two read-only passes, each checked against Vix's code and against every
+earlier run and the Ideas backlog:
+- **ttt:** a delta scan of v1.8.0–v1.9.0 (~210 PRs merged after Run K's
+  cut-off, plus open issues).
+- **Fresh** ([sinelaw/fresh](https://github.com/sinelaw/fresh), a Rust
+  CUA-style terminal IDE): its first dedicated pass, covering its whole
+  `docs/` tree and its last 100 PRs.
+
+**The finding in one line:** Vix's breadth already matches both. What
+they add is correctness at the edges, and a few editing primitives Vix
+lacks.
+
+1. **Run N, from ttt (T650–T658).** Following ttt's git and LSP fixes
+   through Vix's code turned up real bugs, four of them reproduced with
+   real `git`:
+   - **High (T650).** Starting Vix in a repo subdirectory breaks the
+     gutter, and Stage Hunk can overwrite a *different* file's index
+     entry, because paths relative to Vix's root reach git, which reads
+     them relative to the repository root.
+   - **Medium (T651–T654).** Paths with brackets are read as globs.
+     Format-on-save edits can land on another tab. Editable search
+     results can overwrite a line that changed underneath them, and
+     they turn CRLF into LF. "Save All" saves only the active tab.
+   - **Small (T655–T658).** Hardening (the trust prompt, guarded
+     reload), Git panel Open Changes, and parity items.
+2. **Run O, from Fresh (T659–T667).**
+   - Piping the selection through a shell command, the most-missed basic
+     primitive (T659).
+   - Editable side-by-side diff, making `vix --diff` a real difftool
+     (T660).
+   - Legacy encodings and BOMs, a real gap for an editor with ~15 locales
+     (T661).
+   - Auto read-only for dependency paths, safe saving of hard-linked
+     files, and a selectable gutter diff base (T662–T664).
+   - Branch-range review with comments (T665).
+   - A terminal-to-editor bridge (T666).
+   - Trust-gated project environment activation (T667).
+
+Larger or speculative ideas go to the Ideas backlog: code tours,
+self-update, color-aware theme snapshots, lazy loading of huge files,
+Fresh's Orchestrator and daemon mode, and small polish from both. The
+remote/SSH and remote-control-socket entries now carry Fresh's designs.
+
+**Sequencing.** T650 first. The rest of Run N is a run of small
+independent fixes and should come before Run O's features. In Run O,
+T659 comes first. T663, T666 and T667 wait on T629, T631 and T627.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on
