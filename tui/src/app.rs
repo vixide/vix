@@ -691,9 +691,6 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
-    /// Save the active buffer as [`Confirm::paths`] (one file), replacing
-    /// the existing file there (T654).
-    OverwriteSaveAs,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -1734,6 +1731,10 @@ pub struct App {
     pub paste: Option<PasteOp>,
     /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// The Save As target an open [`App::confirm`] asks to overwrite (T654).
+    /// Kept outside [`ConfirmKind`] so that published enum keeps its 1.x
+    /// variants; it only counts while the confirm still names this path.
+    save_as_overwrite: Option<PathBuf>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub script_trust: Option<ScriptTrustPrompt>,
     /// When [`App::script_trust`] last opened. Keys arriving sooner than
@@ -2353,6 +2354,7 @@ impl App {
             prompt: None,
             paste: None,
             confirm: None,
+            save_as_overwrite: None,
             script_trust: None,
             script_trust_opened_at: None,
             replace_confirm: None,
@@ -7475,25 +7477,29 @@ impl App {
             }
             return;
         }
-        if self
-            .confirm
-            .as_ref()
-            .is_some_and(|c| c.kind == ConfirmKind::OverwriteSaveAs)
-        {
-            match key.code {
-                KeyCode::Char('y' | 'Y') => {
-                    if let Some(path) = self.confirm.take().and_then(|c| c.paths.into_iter().next())
-                    {
-                        self.save_active_as_now(path);
+        if let Some(target) = self.save_as_overwrite.clone() {
+            if self
+                .confirm
+                .as_ref()
+                .is_some_and(|c| c.paths.as_slice() == std::slice::from_ref(&target))
+            {
+                match key.code {
+                    KeyCode::Char('y' | 'Y') => {
+                        self.confirm = None;
+                        self.save_as_overwrite = None;
+                        self.save_active_as_now(target);
                     }
+                    KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                        self.confirm = None;
+                        self.save_as_overwrite = None;
+                        self.status = t!("status.save_as_cancelled").into();
+                    }
+                    _ => {}
                 }
-                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                    self.confirm = None;
-                    self.status = t!("status.save_as_cancelled").into();
-                }
-                _ => {}
+                return;
             }
-            return;
+            // A different confirm replaced it: forget the stale target.
+            self.save_as_overwrite = None;
         }
         if self
             .confirm
@@ -12806,10 +12812,13 @@ impl App {
                 .is_ok_and(|c| c == o.canonicalize().unwrap_or(o))
         });
         if (is_link || path.exists()) && !same {
+            self.save_as_overwrite = Some(path.clone());
             self.confirm = Some(Confirm {
                 message: t!("confirm.save_as_overwrite", path = path.display()).to_string(),
                 paths: vec![path],
-                kind: ConfirmKind::OverwriteSaveAs,
+                // Answered by the `save_as_overwrite` branch of `confirm_key`,
+                // which runs before the kind is looked at.
+                kind: ConfirmKind::Delete,
             });
             return;
         }
