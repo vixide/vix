@@ -4,7 +4,6 @@
 //! The code editor addresses the cursor as a flat character offset; this module
 //! converts to/from 1-based line/column for the status bar and go-to-line.
 
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -63,6 +62,16 @@ fn word_starts(text: &str) -> Vec<usize> {
         prev_word = word;
     }
     starts
+}
+
+/// What [`Editor::reload_clean_from_disk`] did (T656).
+#[derive(Debug, Default)]
+pub struct Reload {
+    /// How many buffers were replaced with their file's new content.
+    pub reloaded: usize,
+    /// Buffers whose file the open-time guard refused (a FIFO or device, too
+    /// large, binary), kept unchanged: `(path, why)`.
+    pub refused: Vec<(PathBuf, vix_fileops::TextReadError)>,
 }
 
 /// On-save text-normalization options (from `Settings` in `vix-settings`).
@@ -660,9 +669,19 @@ impl Editor {
     /// Reload every clean (non-dirty) file-backed buffer from disk, preserving the
     /// cursor where it still fits. Used after an external change to the working
     /// tree (e.g. a git branch switch). Dirty buffers are left untouched so unsaved
-    /// edits are never discarded. Returns the number of buffers reloaded.
-    pub fn reload_clean_from_disk(&mut self) -> usize {
-        let mut reloaded = 0;
+    /// edits are never discarded.
+    ///
+    /// Each file is read through the same guard as [`Editor::open`]
+    /// (`vix_fileops::read_text_guarded`, T571/T656): a path a checkout replaced
+    /// with a FIFO or device, a file that grew past the size limit, or one that
+    /// turned binary is *not* reloaded — its buffer is kept as it was and the
+    /// refusal is returned for the host to report. Non-UTF-8 text reloads
+    /// lossily and marks the buffer read-only, as on open. A buffer that was
+    /// already past the limit (the user confirmed opening it large) keeps that
+    /// confirmation: it is re-read under the hard ceiling instead. Other read
+    /// errors (the file vanished) skip the buffer silently, as before.
+    pub fn reload_clean_from_disk(&mut self) -> Reload {
+        let mut out = Reload::default();
         for tab in &mut self.tabs {
             if tab.dirty || tab.image.is_some() {
                 continue;
@@ -670,19 +689,34 @@ impl Editor {
             let Some(path) = tab.path.clone() else {
                 continue;
             };
-            let Ok(content) = fs::read_to_string(&path) else {
-                continue;
+            let current = tab.editor.get_content();
+            let limit = if current.len() as u64 > self.max_text_bytes {
+                vix_fileops::HARD_MAX_TEXT_BYTES
+            } else {
+                self.max_text_bytes
             };
-            if content == tab.editor.get_content() {
+            let (content, lossy) = match vix_fileops::read_text_guarded(&path, limit) {
+                Ok(read) => read,
+                Err(e) => {
+                    if let Some(why) = vix_fileops::TextReadError::from_io(&e) {
+                        out.refused.push((path, why));
+                    }
+                    continue;
+                }
+            };
+            if content == current {
                 continue;
             }
             let cursor = tab.editor.get_cursor();
             tab.editor.set_content(&content);
             tab.editor.set_cursor(cursor.min(content.chars().count()));
             tab.dirty = false;
-            reloaded += 1;
+            if lossy {
+                tab.read_only = true;
+            }
+            out.reloaded += 1;
         }
-        reloaded
+        out
     }
 
     /// Promote the active preview tab to a permanent tab.
@@ -1596,6 +1630,7 @@ mod nav_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     /// T572: a filesystem-read-only tab shows a lock in its title; a
     /// writable one doesn't, and toggling View-only doesn't touch it.
@@ -1609,5 +1644,73 @@ mod tests {
         tab.read_only = true;
         tab.read_only = false;
         assert_eq!(tab.fs_access, FsAccess::ReadOnly);
+    }
+
+    /// A fresh scratch directory for one reload test.
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-editor-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir.canonicalize().unwrap()
+    }
+
+    /// An editor with `path` open (clean) and `limit` as its open/reload cap.
+    fn editor_with(path: &Path, limit: u64) -> Editor {
+        let mut e = Editor::new(Flags::LINE_NUMBERS, "    ".into());
+        e.max_text_bytes = limit;
+        e.open(path, false).unwrap();
+        e
+    }
+
+    #[test]
+    fn reload_picks_up_a_changed_clean_file() {
+        let dir = scratch("reload-ok");
+        let path = dir.join("a.txt");
+        fs::write(&path, "old\n").unwrap();
+        let mut e = editor_with(&path, 1024);
+        fs::write(&path, "new\n").unwrap();
+        let out = e.reload_clean_from_disk();
+        assert_eq!(out.reloaded, 1);
+        assert_eq!(out.refused, []);
+        assert_eq!(e.active_tab().unwrap().text(), "new\n");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T656: a file a checkout grew past the limit is refused, not read, and
+    /// the buffer keeps its old text.
+    #[test]
+    fn reload_refuses_a_file_that_grew_past_the_limit() {
+        let dir = scratch("reload-big");
+        let path = dir.join("a.txt");
+        fs::write(&path, "small\n").unwrap();
+        let mut e = editor_with(&path, 16);
+        fs::write(&path, "x".repeat(64)).unwrap();
+        let out = e.reload_clean_from_disk();
+        assert_eq!(out.reloaded, 0);
+        assert_eq!(
+            out.refused,
+            vec![(path, vix_fileops::TextReadError::TooLarge)]
+        );
+        assert_eq!(e.active_tab().unwrap().text(), "small\n");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T656: a non-UTF-8 file reloads lossily and read-only, as on open.
+    #[test]
+    fn reload_of_non_utf8_text_marks_the_buffer_read_only() {
+        let dir = scratch("reload-lossy");
+        let path = dir.join("a.txt");
+        fs::write(&path, "ok\n").unwrap();
+        let mut e = editor_with(&path, 1024);
+        fs::write(&path, b"caf\xe9\n").unwrap();
+        let out = e.reload_clean_from_disk();
+        assert_eq!(out.reloaded, 1);
+        let tab = e.active_tab().unwrap();
+        assert!(
+            tab.read_only,
+            "lossy text must not be saved back over the file"
+        );
+        assert!(!tab.dirty);
+        fs::remove_dir_all(&dir).ok();
     }
 }
