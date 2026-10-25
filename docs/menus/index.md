@@ -46,7 +46,8 @@ Tools · Help**.
 | Open…             | `Ctrl+O`       | Open an existing file                   |
 | Open Recent…      | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
 | Save              | `Ctrl+S`       | Save the file                           |
-| Save As…          | `Ctrl+Shift+S` | Save under a different name             |
+| Save As…          | `Ctrl+Shift+S` | Save under a different name (asks before overwriting) |
+| Save All          |                | Save every tab with unsaved edits       |
 | Rename…           |                | Rename the active file on disk          |
 | Close             | `Ctrl+W`       | Close the active buffer                 |
 | Close All Tabs    |                | Close every buffer (leaves one empty)   |

@@ -144,6 +144,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `file.reopen_closed` | Reopen Closed Tab | Menu |
 | `file.revert` | Revert | Menu |
 | `file.save` | Save | Menu |
+| `file.save_all` | Save All | Menu |
 | `file.save_as` | Save As… | Menu |
 | `file.scratch` | New Scratch Buffer | Menu |
 | `file.switch_project` | Switch Project… | Menu |
@@ -674,4 +675,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**667 actions.**
+**668 actions.**

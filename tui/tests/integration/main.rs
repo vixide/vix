@@ -29,6 +29,7 @@ mod modal;
 mod org;
 mod palette;
 mod panels;
+mod save;
 #[cfg(feature = "script")]
 mod scripting;
 mod structural_replace;

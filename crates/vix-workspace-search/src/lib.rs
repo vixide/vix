@@ -65,6 +65,100 @@ pub fn parse_result_line(line: &str) -> Option<(&str, usize, &str)> {
     Some((rel, n, text))
 }
 
+/// How many characters of a matching line (after its leading whitespace)
+/// a [`Hit::text`] keeps.
+pub const CLIP_CHARS: usize = 120;
+
+/// A matching line as [`Hit::text`] shows it: leading whitespace trimmed and
+/// clipped to [`CLIP_CHARS`] characters. The editable-results buffer
+/// compares a file's *current* line through this same function, so the
+/// stale-line check (T653) and the scan can never disagree on the shape.
+#[must_use]
+pub fn clip(line: &str) -> String {
+    line.trim_start().chars().take(CLIP_CHARS).collect()
+}
+
+/// One edited line to write back from an editable-results buffer (T653).
+pub struct LineEdit {
+    /// 1-based line number in the target file.
+    pub line: usize,
+    /// The line's [`clip`]ped text when the results were gathered.
+    pub baseline: String,
+    /// The replacement for that clipped text.
+    pub new_text: String,
+}
+
+/// What [`rewrite_lines`] did to one file's text.
+pub struct LineRewrite {
+    /// The file's new contents.
+    pub content: String,
+    /// Line numbers that were rewritten.
+    pub applied: Vec<usize>,
+    /// Line numbers left alone because the file's line no longer matches
+    /// its baseline (or no longer exists): the file changed after the
+    /// search, so writing there could replace the wrong text.
+    pub drifted: Vec<usize>,
+}
+
+/// Apply `edits` to `content`, line by line (T653).
+///
+/// Each target line is first checked against its baseline: only a line
+/// whose current [`clip`] still equals [`LineEdit::baseline`] is rewritten;
+/// any other is reported in [`LineRewrite::drifted`] and left as is. A
+/// rewritten line keeps its own leading whitespace and any text past the
+/// [`CLIP_CHARS`] the buffer showed, so only the visible part changes. Every
+/// line keeps its own terminator (`\r\n` or `\n`), and the file keeps its
+/// final-newline state, so a CRLF file stays CRLF.
+#[must_use]
+pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
+    let mut segments: Vec<(String, &str)> = content
+        .split_inclusive('\n')
+        .map(|seg| {
+            let body_len = if seg.ends_with("\r\n") {
+                seg.len() - 2
+            } else if seg.ends_with('\n') {
+                seg.len() - 1
+            } else {
+                seg.len()
+            };
+            (seg[..body_len].to_string(), &seg[body_len..])
+        })
+        .collect();
+    let mut applied = Vec::new();
+    let mut drifted = Vec::new();
+    for edit in edits {
+        let Some((body, _)) = edit.line.checked_sub(1).and_then(|i| segments.get_mut(i)) else {
+            drifted.push(edit.line);
+            continue;
+        };
+        if clip(body) != edit.baseline {
+            drifted.push(edit.line);
+            continue;
+        }
+        let trimmed = body.trim_start();
+        let indent = &body[..body.len() - trimmed.len()];
+        let tail = trimmed
+            .char_indices()
+            .nth(CLIP_CHARS)
+            .map_or("", |(at, _)| &trimmed[at..]);
+        *body = format!("{indent}{}{tail}", edit.new_text);
+        applied.push(edit.line);
+    }
+    let content = segments.iter().fold(
+        String::with_capacity(content.len()),
+        |mut acc, (body, end)| {
+            acc.push_str(body);
+            acc.push_str(end);
+            acc
+        },
+    );
+    LineRewrite {
+        content,
+        applied,
+        drifted,
+    }
+}
+
 bitflags::bitflags! {
     /// [`WorkspaceSearch`]'s independent search toggles (T149): each bit is a
     /// distinct, freely-combinable preference, not one of several
@@ -193,6 +287,43 @@ impl WorkspaceSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn edit(line: usize, baseline: &str, new_text: &str) -> LineEdit {
+        LineEdit {
+            line,
+            baseline: baseline.to_string(),
+            new_text: new_text.to_string(),
+        }
+    }
+
+    #[test]
+    fn rewrite_lines_keeps_crlf_endings_and_final_newline_state() {
+        let out = rewrite_lines("a\r\nneedle\r\nb", &[edit(2, "needle", "pin")]);
+        assert_eq!(out.content, "a\r\npin\r\nb");
+        assert_eq!(out.applied, vec![2]);
+        let out = rewrite_lines("needle\n", &[edit(1, "needle", "pin")]);
+        assert_eq!(out.content, "pin\n");
+    }
+
+    #[test]
+    fn rewrite_lines_skips_a_line_that_drifted_from_its_baseline() {
+        let out = rewrite_lines("inserted\nneedle\n", &[edit(1, "needle", "pin")]);
+        assert_eq!(out.content, "inserted\nneedle\n");
+        assert_eq!(out.applied, Vec::<usize>::new());
+        assert_eq!(out.drifted, vec![1]);
+        let out = rewrite_lines("one\n", &[edit(5, "needle", "pin")]);
+        assert_eq!(out.drifted, vec![5]);
+    }
+
+    #[test]
+    fn rewrite_lines_keeps_indent_and_the_clipped_tail() {
+        let out = rewrite_lines("    needle x\n", &[edit(1, "needle x", "pin x")]);
+        assert_eq!(out.content, "    pin x\n");
+        let long = format!("{}TAIL", "n".repeat(CLIP_CHARS));
+        let base = clip(&long);
+        let out = rewrite_lines(&long, &[edit(1, &base, "short")]);
+        assert_eq!(out.content, "shortTAIL");
+    }
 
     #[test]
     fn parse_result_line_splits_rel_line_and_text() {
