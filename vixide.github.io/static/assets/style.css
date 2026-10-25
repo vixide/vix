@@ -1,17 +1,21 @@
 /* Vix — site stylesheet
  *
  * Built on Lily Design System's class hooks (headless: no CSS ships with
- * the components — this file supplies all of it). Pages are prerendered
- * static HTML served from GitHub Pages.
+ * the components — this file supplies the page's own look). Pages are
+ * prerendered static HTML served from GitHub Pages.
  *
  * Colour/radius/font primitives (--color-*, --radius-*, --lily-*) are NOT
- * declared here: they live in assets/themes/<slug>.css, one of Lily's 45
- * unmodified reference theme stylesheets, loaded exclusively by
- * PickerBar's ThemePicker via its managed <link> — see src/app.html and
- * +layout.svelte. This file only owns the tokens that don't vary by
- * theme, a small set of --vix-* aliases onto the active theme's tokens
- * (kept so the rules below read one consistent vocabulary), and every
- * rule that consumes tokens by var().
+ * declared here: they live in assets/themes/<slug>.css, one of Lily's 57
+ * reference theme stylesheets from the @lilydesignsystem/themes package
+ * (copied in at build time by scripts/copy-lily-themes.js), loaded
+ * exclusively by PickerBar's ThemePicker via its managed <link> — see
+ * src/app.html and +layout.svelte. Each theme also styles Lily's own
+ * components inside `@layer lily` with zero-specificity :where() rules,
+ * which is what draws the header's pickers. This file only owns the tokens
+ * that don't vary by theme, a small set of --vix-* aliases onto the active
+ * theme's tokens (kept so the rules below read one consistent vocabulary),
+ * and every page rule that consumes tokens by var(); being unlayered, any
+ * rule here wins over a theme's layered one.
  */
 
 :root {
@@ -191,17 +195,17 @@ pre code {
 
 /* Hero */
 
-.hero {
+.site-hero {
   text-align: center;
   padding: 2.5rem 1rem 1rem;
   max-width: 48rem;
   margin: 0 auto;
 }
-.hero h1 {
+.site-hero h1 {
   font-size: clamp(2.25rem, 5vw, 3.5rem);
   margin: 0.5rem 0 1rem;
 }
-.hero-tagline {
+.site-hero-tagline {
   font-size: 1.25rem;
   color: var(--vix-text-muted);
   margin: 0 auto 2rem;
@@ -304,6 +308,142 @@ a.card:hover { color: inherit; }
   margin: 0;
 }
 
+/* Keys */
+
+kbd {
+  font-family: var(--vix-font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--vix-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--vix-card-bg);
+  color: var(--vix-text);
+  white-space: nowrap;
+}
+
+/* Copyable command (src/lib/CopyCommand.svelte) */
+
+.copy-command {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  text-align: start;
+}
+.copy-command pre {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.clipboard-copy-button {
+  flex: none;
+  font: inherit;
+  font-weight: 600;
+  padding: 0 1rem;
+  border: 2px solid var(--vix-primary);
+  border-radius: var(--vix-radius);
+  background: var(--vix-card-bg);
+  color: var(--vix-primary);
+  cursor: pointer;
+}
+.clipboard-copy-button:hover { background: var(--vix-tint-bg); }
+.clipboard-copy-button:focus-visible {
+  outline: 3px solid var(--vix-primary);
+  outline-offset: 2px;
+}
+
+.site-hero-install {
+  max-width: 40rem;
+  margin: 0 auto;
+}
+.site-hero-install-note {
+  font-size: 0.95rem;
+  color: var(--vix-text-muted);
+}
+
+/* Screenshots and demos */
+
+.screenshot,
+.demo {
+  margin: 0;
+}
+.screenshot img,
+.demo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--vix-border-strong);
+  border-radius: var(--vix-radius);
+  box-shadow: var(--vix-shadow-lg);
+  background: #262626;
+}
+.screenshot {
+  max-width: 60rem;
+  margin: 1rem auto 0;
+}
+.screenshot figcaption,
+.demo figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--vix-text-muted);
+}
+.screenshot figcaption { text-align: center; }
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 2rem;
+}
+
+/* Small layout helpers */
+
+.centered { margin-left: auto; margin-right: auto; }
+.section-more { text-align: center; margin-top: 1.5rem; }
+.small-print { font-size: 0.95rem; color: var(--vix-text-muted); }
+
+.key-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1rem;
+}
+.key-table th,
+.key-table td {
+  text-align: start;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--vix-border);
+}
+.key-table td:first-child { white-space: nowrap; }
+
+.link-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  max-width: 48rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+.link-grid a {
+  display: block;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--vix-border);
+  border-radius: var(--vix-radius);
+  background: var(--vix-card-bg);
+  font-weight: 600;
+  text-decoration: none;
+}
+.link-grid a:hover { background: var(--vix-tint-bg); }
+
+.toc ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
 /* Footer */
 
 .site-footer {
@@ -326,129 +466,28 @@ a.card:hover { color: inherit; }
 .site-footer p { margin: 0; }
 .site-footer-links { display: flex; gap: 1rem; flex-wrap: wrap; }
 
-/* PickerBar (header controls: theme, language, text size, share)
+/* PickerBar (header controls: search, theme, language, text size, share)
  *
- * PickerBar itself ships only a `.picker-bar` flex-row wrapper — every
- * picker it composes ships no CSS of its own beyond that, per each
- * package's docs/styling.md. All four share one class-hook vocabulary
- * (`<kind>-picker`, `-picker-button`, `-picker-icon`, `-picker-list`,
- * `-picker-option`), so one attribute-selector block styles all four —
- * mirrors the convention Lily's own theme CSS uses for e.g. its shared
- * focus-ring rule. SharePicker is the one exception: its list holds
- * `-list-item`s wrapping a `-target`/`-copy` button rather than a plain
- * `-option`, and it (with ThemePicker) also renders a visually-hidden
- * `aria-live` status line the other two don't.
+ * Every picker's button, popup, option, tooltip and search field is styled
+ * by the active Lily theme stylesheet (its `@layer lily` picker rules), so
+ * the bar follows the chosen theme without overrides here. This file only
+ * lays the bar out in the header and visually hides the theme and share
+ * pickers' status lines, which would otherwise push the row out of line.
  */
 
 .picker-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--lily-space-sm);
 }
 
-[class$="-picker"] {
-  position: relative;
-  display: inline-block;
-}
-
-[class$="-picker-button"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 2rem;
-  block-size: 2rem;
-  padding: 0;
-  border: 1px solid var(--vix-border-strong);
-  border-radius: var(--vix-radius);
-  background: var(--vix-card-bg);
-  color: inherit;
-  cursor: pointer;
-  line-height: 1;
-}
-[class$="-picker-button"]:hover {
-  background: var(--vix-tint-bg);
-}
-[class$="-picker-button"]:focus-visible {
-  outline: 3px solid var(--vix-primary);
-  outline-offset: 2px;
-}
-
-[class$="-picker-list"] {
-  position: absolute;
-  z-index: 60;
-  inset-block-start: calc(100% + 0.25rem);
-  inset-inline-end: 0;
-  margin: 0;
-  padding: 0.25rem;
-  list-style: none;
-  min-inline-size: 10rem;
-  max-block-size: 20rem;
-  overflow-y: auto;
-  background: var(--vix-card-bg);
-  border: 1px solid var(--vix-border);
-  border-radius: var(--vix-radius);
-  box-shadow: var(--vix-shadow-lg);
-}
-[class$="-picker-list"][hidden] {
-  display: none;
-}
-
-/* The locale picker flips the page to RTL for some choices — its own
-   listbox should read in whichever direction the ambient document is
-   in at the moment it's open (the page's current direction), not force
-   LTR back onto itself. */
-[dir="rtl"] .locale-picker-list {
-  inset-inline-end: auto;
-  inset-inline-start: 0;
-}
-
-.theme-picker-option,
-.locale-picker-option,
-.text-size-picker-option,
-.share-picker-list-item {
-  border-radius: var(--vix-radius);
-}
-.theme-picker-option,
-.locale-picker-option,
-.text-size-picker-option {
-  padding: 0.375rem 0.625rem;
-  cursor: pointer;
-}
-.theme-picker-option[data-active],
-.locale-picker-option[data-active],
-.text-size-picker-option[data-active] {
-  background: var(--vix-tint-bg);
-}
-.theme-picker-option[aria-selected="true"],
-.locale-picker-option[aria-selected="true"],
-.text-size-picker-option[aria-selected="true"] {
-  font-weight: 600;
-}
-
-.share-picker-target,
-.share-picker-copy {
-  display: block;
-  width: 100%;
-  padding: 0.375rem 0.625rem;
-  border: 0;
-  border-radius: var(--vix-radius);
-  background: none;
-  color: var(--vix-text);
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
-.share-picker-target:hover,
-.share-picker-copy:hover {
-  background: var(--vix-tint-bg);
-}
-
-/* Both statuses are informative, not primary page content, and the header
-   is tight on space — kept in the accessibility tree (aria-live) but
-   visually hidden rather than dropped, per each package's styling guide. */
+/* The theme and share pickers' aria-live statuses: informative, not page content, and the
+   header is tight on space — kept in the accessibility tree but visually
+   hidden rather than dropped. */
 .theme-picker-status,
-.share-picker-status {
+.share-picker-status,
+.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -499,7 +538,11 @@ a.card:hover { color: inherit; }
   .site-header-right { width: 100%; justify-content: space-between; }
   .site-nav { width: 100%; justify-content: flex-start; }
   .site-main { padding: 2rem 1rem; }
-  .hero { padding: 2rem 1rem 1rem; }
+  .site-hero { padding: 2rem 1rem 1rem; }
+  .copy-command { flex-direction: column; }
+  .clipboard-copy-button { padding: 0.5rem 1rem; }
+  .demo-grid { grid-template-columns: 1fr; }
+  .key-table td:first-child { white-space: normal; }
 }
 
 /* Reduced motion */
