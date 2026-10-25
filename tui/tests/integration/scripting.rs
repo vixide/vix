@@ -195,6 +195,63 @@ fn script_trust_prompt_shows_the_count_and_defers_loading() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T655: Enter no longer approves the trust prompt -- only an explicit `y`.
+#[test]
+fn script_trust_prompt_ignores_enter() {
+    let dir = unique_dir("script-trust-enter");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/a.rhai"),
+        r#"register_command("a", "A", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.maybe_prompt_script_trust();
+    arm_script_trust(&mut app);
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(
+        app.script_trust.is_some(),
+        "Enter must not answer the prompt"
+    );
+    assert_eq!(loaded_script_command_count(&mut app), 0, "still untrusted");
+    app.on_key(key('y'));
+    assert!(app.script_trust.is_none(), "an explicit y answers it");
+    assert_eq!(loaded_script_command_count(&mut app), 1, "now trusted");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T655: a key arriving right as the prompt opens (typed ahead of a startup
+/// or reload prompt) is dropped, even an explicit `y`.
+#[test]
+fn script_trust_prompt_ignores_keys_typed_ahead_of_it() {
+    let dir = unique_dir("script-trust-typeahead");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/a.rhai"),
+        r#"register_command("a", "A", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.maybe_prompt_script_trust();
+    // Pin the open time to "now" so the guard is certainly still running,
+    // however slow the machine was getting here.
+    if let Some(p) = app.script_trust.as_mut() {
+        p.opened_at = std::time::Instant::now();
+    }
+    app.on_key(key('y'));
+    assert!(
+        app.script_trust.is_some(),
+        "a y inside the guard window is ignored"
+    );
+    assert_eq!(loaded_script_command_count(&mut app), 0, "still untrusted");
+    arm_script_trust(&mut app);
+    app.on_key(key('y'));
+    assert!(app.script_trust.is_none(), "after the guard, y answers it");
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn no_project_scripts_means_no_trust_prompt() {
     let dir = unique_dir("script-trust-empty");

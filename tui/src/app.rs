@@ -709,7 +709,16 @@ pub struct ScriptTrustPrompt {
     /// How many `.rhai` files are waiting under `.vix/scripts/`, unloaded
     /// until this prompt is answered.
     pub count: usize,
+    /// When the prompt opened. Keys arriving sooner than
+    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
+    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
+    /// can backdate it instead of sleeping.
+    pub opened_at: std::time::Instant,
 }
+
+/// How long after the script-trust prompt opens its keys are ignored (T655):
+/// long enough to swallow a typed-ahead key, short enough not to be noticed.
+pub const SCRIPT_TRUST_KEY_GUARD: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// A previewed project-wide replace awaiting confirmation. Holds the computed
 /// per-file results so applying writes exactly what was previewed.

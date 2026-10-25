@@ -136,7 +136,10 @@ impl App {
         let project = self.root.join(".vix").join("scripts");
         let count = vix_script::discover(None, Some(&project)).len();
         if count > 0 {
-            self.script_trust = Some(ScriptTrustPrompt { count });
+            self.script_trust = Some(ScriptTrustPrompt {
+                count,
+                opened_at: std::time::Instant::now(),
+            });
         }
     }
 
@@ -173,11 +176,22 @@ impl App {
         self.store_session_or_warn(&session);
     }
 
-    /// Keys for the script-trust prompt: `y`/`Enter` trusts and loads, `n`/
-    /// `Esc` declines.
+    /// Keys for the script-trust prompt: only an explicit `y` trusts and
+    /// loads; `n`/`Esc` declines; anything else (Enter included) is ignored.
+    /// Keys within [`SCRIPT_TRUST_KEY_GUARD`](super::SCRIPT_TRUST_KEY_GUARD) of the prompt opening are
+    /// dropped too (T655): the prompt appears at startup or on reload, so an
+    /// Enter or `y` typed ahead of it must not approve a hostile clone's
+    /// `.vix/scripts/`.
     pub(super) fn script_trust_key(&mut self, key: KeyEvent) {
+        if self
+            .script_trust
+            .as_ref()
+            .is_some_and(|p| p.opened_at.elapsed() < super::SCRIPT_TRUST_KEY_GUARD)
+        {
+            return;
+        }
         match key.code {
-            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.accept_script_trust(),
+            KeyCode::Char('y' | 'Y') => self.accept_script_trust(),
             KeyCode::Char('n' | 'N') | KeyCode::Esc => self.decline_script_trust(),
             _ => {}
         }
