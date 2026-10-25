@@ -24,6 +24,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - **The workspace script-trust prompt needs an explicit `y`** (T655): it no longer accepts Enter, and ignores keys pressed within 250 ms of opening, so an Enter typed ahead of the startup or reload prompt can't approve a cloned repository's `.vix/scripts`.
+- **Dependabot alerts cleared.** The website moves from a SvelteKit 3 prerelease to stable 3.1.0 (and adapter-static 4.0.0), fixing two SvelteKit advisories (enhanced-form open redirect; cache-control XSS in prerendered pages). `vix-egui` and `vix-iced` turn off muda's default `gtk3` feature: muda is macOS-only here, but the feature still put GTK 3 and the unsound glib 0.18 (GHSA-wrw7-89jp-8q8g) into `gui/Cargo.lock`.
 
 ### Changed
 
