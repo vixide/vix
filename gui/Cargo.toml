@@ -54,3 +54,13 @@ dbg_macro = "warn"
 todo = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
+
+# The profile `dist` builds release artifacts with (`dist-workspace.toml`
+# builds this workspace as `cargo:gui`). Profiles aren't inherited across
+# workspaces, so it is defined here too; without it every GUI release build
+# fails with "profile `dist` is not defined". Unlike the terminal app's
+# `opt-level = "z"`, a GUI keeps the default speed-optimized release level.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+strip = true
