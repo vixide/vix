@@ -1,6 +1,6 @@
 # Monorepo GitHub pages
 
-Goal: publish Monorope GitHub pages by using the monorepo git subtree to export a sibling read-only repo.
+Goal: publish monorepo GitHub pages by using the monorepo git subtree to export a sibling read-only repo.
 
 This project is a monorepo: `~/git/<organization>/<repo>`
 

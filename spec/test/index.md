@@ -17,7 +17,7 @@ no sleeps, no screen scraping.
 | **Smoke** | `tui/tests/db_smoke.rs`, `tui/tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
 | **Fuzz** | `fuzz/fuzz_targets/` | Parsers and text transforms against input nobody thought of | `cargo +nightly fuzz run <target>` |
 | **Benchmark** | `tui/benches/` | The per-keystroke and per-frame paths, so latency regressions are visible | `cargo bench` |
-| **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match | `scripts/check` |
+| **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match, CSpell finds no unknown word in the markdown | `scripts/check` |
 
 `scripts/check` runs the gate the way CI does: fmt, build, clippy at pedantic
 with `-D warnings`, the test suite, `cargo doc` with `-D warnings`, and the

@@ -711,6 +711,10 @@ pub struct ScriptTrustPrompt {
     pub count: usize,
 }
 
+/// How long after the script-trust prompt opens its keys are ignored (T655):
+/// long enough to swallow a typed-ahead key, short enough not to be noticed.
+pub const SCRIPT_TRUST_KEY_GUARD: std::time::Duration = std::time::Duration::from_millis(250);
+
 /// A previewed project-wide replace awaiting confirmation. Holds the computed
 /// per-file results so applying writes exactly what was previewed.
 pub struct ReplaceConfirm {
@@ -1727,8 +1731,19 @@ pub struct App {
     pub paste: Option<PasteOp>,
     /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// The Save As target an open [`App::confirm`] asks to overwrite (T654).
+    /// Kept outside [`ConfirmKind`] so that published enum keeps its 1.x
+    /// variants; it only counts while the confirm still names this path.
+    save_as_overwrite: Option<PathBuf>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub script_trust: Option<ScriptTrustPrompt>,
+    /// When [`App::script_trust`] last opened. Keys arriving sooner than
+    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
+    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
+    /// can backdate it instead of sleeping. (Kept here rather than on
+    /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
+    /// change.)
+    pub script_trust_opened_at: Option<std::time::Instant>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub replace_confirm: Option<ReplaceConfirm>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
@@ -2339,7 +2354,9 @@ impl App {
             prompt: None,
             paste: None,
             confirm: None,
+            save_as_overwrite: None,
             script_trust: None,
+            script_trust_opened_at: None,
             replace_confirm: None,
             wgrep_baseline: None,
             wgrep_confirm: None,
@@ -2663,6 +2680,7 @@ impl App {
             "bookmark.prev" => self.bookmark_goto(false),
             "bookmark.list" => self.list_bookmarks(),
             "file.save" => self.save(),
+            "file.save_all" => self.save_all(),
             "file.save_as" => {
                 let cur = self
                     .editor
@@ -3607,7 +3625,8 @@ impl App {
             }
             "toggle_highlight_search" => self.toggle_search_highlight(),
             // files
-            "save" | "save_all" => self.save(),
+            "save" => self.save(),
+            "save_all" => self.run_action("file.save_all"),
             "save_as" => self.run_action("file.save_as"),
             "open_file" => self.run_action("file.open"),
             // tabs
@@ -3795,9 +3814,59 @@ impl App {
             && self.lsp.handles(&p)
         {
             self.format_save_pending = Some(p.clone());
+            // Sync first, so the request carries the version that was just
+            // saved and its reply isn't judged stale against it (T652).
+            self.lsp_sync_active();
             let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
             self.lsp.request_formatting(&p, tab_size);
         }
+    }
+
+    /// `file.save_all` (T654): save every dirty, file-backed tab.
+    ///
+    /// Untitled and scratch buffers (no path), the editable search-results
+    /// buffer, images, read-only tabs and files this user can't write are
+    /// skipped and counted, since none can be saved in place. Saving stops
+    /// at the first failure, leaving that tab active so the error is next
+    /// to its cause; otherwise the original tab is re-activated. Format on
+    /// save is not run: it is a per-file language-server round trip that
+    /// [`App::save`] owns for the active buffer.
+    fn save_all(&mut self) {
+        let original = self.editor.active;
+        let wgrep = Path::new(Self::WGREP_RESULTS_PATH);
+        let mut targets = Vec::new();
+        let mut skipped = 0usize;
+        for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
+            let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
+                && !t.is_image()
+                && !t.read_only
+                && t.fs_access != crate::editor::FsAccess::ReadOnly;
+            if savable {
+                targets.push(i);
+            } else {
+                skipped += 1;
+            }
+        }
+        let mut saved = 0usize;
+        for i in targets {
+            self.editor.active = i;
+            if !self.write_active_to_disk() {
+                let path = self
+                    .editor
+                    .active_tab()
+                    .map(Tab::display_path)
+                    .unwrap_or_default();
+                self.status = t!("status.save_all_stopped", count = saved, path = path).to_string();
+                return;
+            }
+            saved += 1;
+        }
+        self.editor.active = original;
+        self.status = if skipped == 0 {
+            t!("status.saved_all", count = saved).to_string()
+        } else {
+            t!("status.saved_all_skipped", count = saved, skipped = skipped).to_string()
+        };
     }
 
     /// Write the active buffer to its file (applying the on-save options) and
@@ -5114,7 +5183,7 @@ impl App {
             }
         }
         if reload_clean {
-            let n = self.editor.reload_clean_from_disk();
+            let n = self.reload_clean_buffers();
             if n > 0 {
                 self.status = t!("status.reloaded_external", count = n).to_string();
             }
@@ -6877,7 +6946,12 @@ impl App {
         self.lsp_sync_active();
         for event in self.lsp.poll() {
             match event {
-                crate::lsp::LspEvent::Diagnostics(_) => {}
+                // `Edits`/`LinkedRanges` are no longer emitted (T652): those
+                // replies arrive, tied to their document, from
+                // `take_edit_replies` below.
+                crate::lsp::LspEvent::Diagnostics(_)
+                | crate::lsp::LspEvent::Edits(_)
+                | crate::lsp::LspEvent::LinkedRanges(_) => {}
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
@@ -6909,7 +6983,6 @@ impl App {
                         self.lsp.request_incoming_calls(&path, item);
                     }
                 }
-                crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
@@ -6930,16 +7003,7 @@ impl App {
                 }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
-                crate::lsp::LspEvent::LinkedRanges(ranges) => self.begin_linked_edit(&ranges),
-                crate::lsp::LspEvent::FoldingRanges(ranges) => {
-                    let ranges: Vec<(usize, usize)> = ranges
-                        .iter()
-                        .map(|&(s, e)| (s as usize, e as usize))
-                        .collect();
-                    if let Some(t) = self.editor.active_tab_mut() {
-                        t.editor.set_fold_ranges(ranges);
-                    }
-                }
+                crate::lsp::LspEvent::FoldingRanges(ranges) => self.apply_folding_ranges(&ranges),
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();
                 }
@@ -6972,6 +7036,9 @@ impl App {
                     self.apply_semantic_tokens(&tokens);
                 }
             }
+        }
+        for reply in self.lsp.take_edit_replies() {
+            self.apply_edit_reply(reply);
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
         // stay correct across new publishes and tab switches alike (cheap — it
@@ -7410,6 +7477,30 @@ impl App {
             }
             return;
         }
+        if let Some(target) = self.save_as_overwrite.clone() {
+            if self
+                .confirm
+                .as_ref()
+                .is_some_and(|c| c.paths.as_slice() == std::slice::from_ref(&target))
+            {
+                match key.code {
+                    KeyCode::Char('y' | 'Y') => {
+                        self.confirm = None;
+                        self.save_as_overwrite = None;
+                        self.save_active_as_now(target);
+                    }
+                    KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                        self.confirm = None;
+                        self.save_as_overwrite = None;
+                        self.status = t!("status.save_as_cancelled").into();
+                    }
+                    _ => {}
+                }
+                return;
+            }
+            // A different confirm replaced it: forget the stale target.
+            self.save_as_overwrite = None;
+        }
         if self
             .confirm
             .as_ref()
@@ -7603,6 +7694,33 @@ impl App {
             }
             Err(e) => self.report_open_failure(path, preview, &e),
         }
+    }
+
+    /// Reload every clean buffer whose file changed on disk (after a branch
+    /// switch, an external edit, an agenda write), through the same guard an
+    /// open uses (T656). A file the guard refuses — now a FIFO or device, past
+    /// the size limit, or binary — keeps its buffer and is reported as a
+    /// warning, instead of stalling the UI thread on the read. Returns how many
+    /// buffers were reloaded.
+    pub(super) fn reload_clean_buffers(&mut self) -> usize {
+        use crate::fileops::TextReadError;
+        let outcome = self.editor.reload_clean_from_disk_checked();
+        for (path, why) in outcome.refused {
+            let reason = match why {
+                TextReadError::NotRegular => t!("msg.open_not_regular"),
+                TextReadError::TooLarge => t!("msg.open_too_large"),
+                TextReadError::Binary => t!("msg.open_binary"),
+            };
+            self.messages.warn(
+                t!(
+                    "msg.reload_refused_path",
+                    path = path.display(),
+                    error = reason
+                )
+                .to_string(),
+            );
+        }
+        outcome.reloaded
     }
 
     /// Say why `path` did not open. A file over the size limit, or a binary one,
@@ -11418,6 +11536,7 @@ impl App {
         if let Some(path) = self.active_path()
             && self.lsp.handles(&path)
         {
+            self.lsp_sync_active(); // T652: ask about the text as it is now
             let (line, character) = self.cursor_lsp_position(&path);
             self.lsp.request_linked_editing(&path, line, character);
         } else {
@@ -11796,7 +11915,7 @@ impl App {
             for (i, line) in content.lines().enumerate() {
                 if let Some(m) = re.find(line) {
                     file_had_hit = true;
-                    let clipped: String = line.trim_start().chars().take(120).collect();
+                    let clipped = crate::workspace_search::clip(line);
                     hits.push(Hit {
                         path: path.clone(),
                         rel: rel.clone(),
@@ -11895,22 +12014,7 @@ impl App {
             return;
         };
         let replaced = rc.replaced;
-        let mut files = 0usize;
-        for (path, new) in &rc.plan {
-            if let Err(e) = std::fs::write(path, new) {
-                self.messages
-                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
-                continue;
-            }
-            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
-            for tab in &mut self.editor.tabs {
-                if tab.path.as_deref() == Some(canon.as_path()) {
-                    tab.editor.set_content(new);
-                    tab.dirty = false;
-                }
-            }
-            files += 1;
-        }
+        let files = self.apply_file_plan(&rc.plan).len();
         self.run_workspace_search();
         let note = t!(
             "status.replaced_in_files",
@@ -11922,6 +12026,62 @@ impl App {
             p.status.clone_from(&note);
         }
         self.messages.info(note);
+    }
+
+    /// Apply a confirmed per-file plan (Replace in Files, editable search
+    /// results) and return the paths it changed (T653).
+    ///
+    /// - A path open in a **read-only** tab (the View-only toggle, a lossy
+    ///   or synthetic buffer) is refused and reported, never written.
+    /// - A path open in a **dirty** tab is changed in that buffer only and
+    ///   left dirty: writing it to disk would also save the tab's unrelated
+    ///   unsaved edits.
+    /// - Everything else is written with `write_atomic`, and a clean open
+    ///   tab on it is refreshed to match.
+    ///
+    /// The on-save normalizations (trim trailing whitespace, final newline)
+    /// are deliberately not applied: the preview showed exactly these
+    /// contents, and a targeted replace must not rewrite unrelated lines.
+    fn apply_file_plan(&mut self, plan: &[(PathBuf, String)]) -> Vec<PathBuf> {
+        let mut changed = Vec::new();
+        let mut buffer_only = 0usize;
+        for (path, new) in plan {
+            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+            let open = self
+                .editor
+                .tabs
+                .iter()
+                .position(|t| t.path.as_deref() == Some(canon.as_path()));
+            if let Some(tab) = open.and_then(|i| self.editor.tabs.get_mut(i)) {
+                if tab.read_only || tab.is_image() {
+                    self.messages.error(
+                        t!("msg.replace_read_only_skipped", path = path.display()).to_string(),
+                    );
+                    continue;
+                }
+                if tab.dirty {
+                    tab.editor.set_content(new);
+                    buffer_only += 1;
+                    changed.push(path.clone());
+                    continue;
+                }
+            }
+            if let Err(e) = crate::fileops::write_atomic(path, new.as_bytes()) {
+                self.messages
+                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
+                continue;
+            }
+            if let Some(tab) = open.and_then(|i| self.editor.tabs.get_mut(i)) {
+                tab.editor.set_content(new);
+                tab.dirty = false;
+            }
+            changed.push(path.clone());
+        }
+        if buffer_only > 0 {
+            self.messages
+                .warn(t!("msg.replace_buffer_only", count = buffer_only).to_string());
+        }
+        changed
     }
 
     /// Handle a key in the project-wide replace preview: `y`/Enter applies,
@@ -12020,8 +12180,10 @@ impl App {
             .map(|b| ((b.rel.as_str(), b.line), b))
             .collect();
         // Group surviving, actually-changed lines by the file they belong to.
-        let mut by_path: std::collections::BTreeMap<PathBuf, Vec<(usize, String)>> =
-            std::collections::BTreeMap::new();
+        let mut by_path: std::collections::BTreeMap<
+            PathBuf,
+            Vec<crate::workspace_search::LineEdit>,
+        > = std::collections::BTreeMap::new();
         for line in text.lines() {
             let Some((rel, n, new_text)) = crate::workspace_search::parse_result_line(line) else {
                 continue;
@@ -12030,43 +12192,49 @@ impl App {
                 continue;
             };
             if new_text != b.text {
-                by_path
-                    .entry(b.path.clone())
-                    .or_default()
-                    .push((n, new_text.to_string()));
+                by_path.entry(b.path.clone()).or_default().push(
+                    crate::workspace_search::LineEdit {
+                        line: n,
+                        baseline: b.text.clone(),
+                        new_text: new_text.to_string(),
+                    },
+                );
             }
         }
         let mut plan: Vec<(PathBuf, String)> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
         let mut pending_edits: Vec<(PathBuf, usize, String)> = Vec::new();
         let mut edited = 0usize;
+        let mut drifted = 0usize;
         for (path, changes) in by_path {
             let Some(content) = self.current_text(&path) else {
                 continue;
             };
-            let mut file_lines: Vec<String> = content.lines().map(str::to_string).collect();
-            let mut applied = 0usize;
-            for (n, new_text) in &changes {
-                if let Some(slot) = n.checked_sub(1).and_then(|i| file_lines.get_mut(i)) {
-                    slot.clone_from(new_text);
-                    applied += 1;
-                    pending_edits.push((path.clone(), *n, new_text.clone()));
-                }
+            let rewrite = crate::workspace_search::rewrite_lines(&content, &changes);
+            let rel = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
+            for n in &rewrite.drifted {
+                self.messages
+                    .warn(t!("msg.wgrep_line_drifted", path = rel.display(), line = n).to_string());
             }
-            if applied == 0 {
+            drifted += rewrite.drifted.len();
+            if rewrite.applied.is_empty() {
                 continue;
             }
-            let mut new_content = file_lines.join("\n");
-            if content.ends_with('\n') {
-                new_content.push('\n');
+            for change in changes.iter().filter(|c| rewrite.applied.contains(&c.line)) {
+                pending_edits.push((path.clone(), change.line, change.new_text.clone()));
             }
-            let rel = path.strip_prefix(&self.root).unwrap_or(&path);
+            let applied = rewrite.applied.len();
             lines.push(format!("{} ({applied})", rel.display()));
-            plan.push((path, new_content));
+            plan.push((path, rewrite.content));
             edited += applied;
         }
+        if drifted > 0 {
+            self.status = t!("status.wgrep_drifted", count = drifted).to_string();
+        }
         if plan.is_empty() {
-            self.status = t!("status.wgrep_no_changes").into();
+            if drifted == 0 {
+                self.status = t!("status.wgrep_no_changes").into();
+            }
             return;
         }
         self.wgrep_pending_edits = pending_edits;
@@ -12085,26 +12253,12 @@ impl App {
         let Some(wc) = self.wgrep_confirm.take() else {
             return;
         };
-        let edited = wc.replaced;
-        let mut files = 0usize;
-        for (path, new) in &wc.plan {
-            if let Err(e) = std::fs::write(path, new) {
-                self.messages
-                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
-                continue;
-            }
-            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
-            for tab in &mut self.editor.tabs {
-                if tab.path.as_deref() == Some(canon.as_path()) {
-                    tab.editor.set_content(new);
-                    tab.dirty = false;
-                }
-            }
-            files += 1;
-        }
+        let changed = self.apply_file_plan(&wc.plan);
+        let files = changed.len();
         let pending = std::mem::take(&mut self.wgrep_pending_edits);
+        let edited = pending.iter().filter(|(p, ..)| changed.contains(p)).count();
         if let Some(baseline) = self.wgrep_baseline.as_mut() {
-            for (path, line, text) in &pending {
+            for (path, line, text) in pending.iter().filter(|(p, ..)| changed.contains(p)) {
                 if let Some(b) = baseline
                     .iter_mut()
                     .find(|b| &b.path == path && b.line == *line)
@@ -12633,18 +12787,55 @@ impl App {
                     return;
                 }
                 let path = self.resolve(raw);
-                let opts = self.save_options();
-                match self.editor.save_active_as(path, opts) {
-                    Ok(p) => {
-                        self.status = t!("status.saved", path = p.display()).to_string();
-                        self.explorer.rebuild();
-                    }
-                    Err(e) => self
-                        .messages
-                        .error(t!("msg.save_failed", error = e).to_string()),
-                }
+                self.request_save_as(path);
             }
             _ => {}
+        }
+    }
+
+    /// Save As to `path`, guarding the target first (T654): a dangling
+    /// symlink is refused (writing would create a file wherever it points),
+    /// and an existing file other than the buffer's own asks for a y/n
+    /// overwrite confirmation instead of being replaced silently.
+    fn request_save_as(&mut self, path: PathBuf) {
+        let is_link = path
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink());
+        if is_link && !path.exists() {
+            self.messages
+                .error(t!("msg.save_as_dangling_symlink", path = path.display()).to_string());
+            return;
+        }
+        let own = self.editor.active_tab().and_then(|t| t.path.clone());
+        let same = own.is_some_and(|o| {
+            path.canonicalize()
+                .is_ok_and(|c| c == o.canonicalize().unwrap_or(o))
+        });
+        if (is_link || path.exists()) && !same {
+            self.save_as_overwrite = Some(path.clone());
+            self.confirm = Some(Confirm {
+                message: t!("confirm.save_as_overwrite", path = path.display()).to_string(),
+                paths: vec![path],
+                // Answered by the `save_as_overwrite` branch of `confirm_key`,
+                // which runs before the kind is looked at.
+                kind: ConfirmKind::Delete,
+            });
+            return;
+        }
+        self.save_active_as_now(path);
+    }
+
+    /// Write the active buffer to `path` and adopt it as the buffer's path.
+    fn save_active_as_now(&mut self, path: PathBuf) {
+        let opts = self.save_options();
+        match self.editor.save_active_as(path, opts) {
+            Ok(p) => {
+                self.status = t!("status.saved", path = p.display()).to_string();
+                self.explorer.rebuild();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.save_failed", error = e).to_string()),
         }
     }
 
@@ -14335,6 +14526,50 @@ mod tests {
         assert!(
             text.contains("changed externally"),
             "clean buffer reloaded: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// T656: a reload goes through the open-time guard -- a file that grew
+    /// past the size limit is not read, the buffer keeps its text, and a
+    /// warning says why.
+    #[test]
+    fn external_change_past_the_size_limit_keeps_the_buffer_and_warns() {
+        let dir = std::env::temp_dir().join(format!("vix-reload-big-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+        std::fs::write(&path, "original\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        app.editor.max_text_bytes = 32;
+        app.poll_file_changes();
+
+        std::fs::write(&path, "x".repeat(256)).unwrap();
+        app.disk_mtimes
+            .insert(path.clone(), std::time::SystemTime::UNIX_EPOCH);
+        app.last_disk_poll = None;
+        let warnings_before = app
+            .messages
+            .items
+            .iter()
+            .filter(|m| m.level == Level::Warn)
+            .count();
+        app.poll_file_changes();
+
+        assert_eq!(app.editor.active_tab().unwrap().text(), "original\n");
+        let warnings_after = app
+            .messages
+            .items
+            .iter()
+            .filter(|m| m.level == Level::Warn)
+            .count();
+        assert_eq!(
+            warnings_after,
+            warnings_before + 1,
+            "the refusal is reported"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

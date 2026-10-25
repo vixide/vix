@@ -16,7 +16,7 @@ same-named theme of your own, to change them.
 
 Set `theme = "auto"` and Vix picks `theme_light` or `theme_dark` (defaults `"light"`
 and `"dark"`) to match your terminal. At startup it asks the terminal for its background
-colour (OSC 11) and waits up to 200 ms for the answer; if the terminal doesn't answer it
+color (OSC 11) and waits up to 200 ms for the answer; if the terminal doesn't answer it
 reads `COLORFGBG`, and if that is missing too it uses `theme_dark`. It asks once, at
 startup, so changing your terminal's appearance mid-session takes effect on the next
 launch. Nothing is asked unless `theme` is `"auto"`.

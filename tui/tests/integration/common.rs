@@ -173,7 +173,19 @@ pub(crate) fn wait_for_ai_replace(app: &mut App, pred: impl FnMut(&App) -> bool)
 #[cfg(feature = "script")]
 pub(crate) fn trust_scripts_if_prompted(app: &mut App) {
     if app.script_trust.is_some() {
+        arm_script_trust(app);
         app.on_key(key('y'));
+    }
+}
+
+/// Backdate a pending script-trust prompt past its typed-ahead key guard
+/// (T655), so the next key counts -- instead of sleeping in the test.
+#[cfg(feature = "script")]
+pub(crate) fn arm_script_trust(app: &mut App) {
+    if app.script_trust.is_some() {
+        app.script_trust_opened_at = std::time::Instant::now()
+            .checked_sub(vix::app::SCRIPT_TRUST_KEY_GUARD * 2)
+            .or(app.script_trust_opened_at);
     }
 }
 

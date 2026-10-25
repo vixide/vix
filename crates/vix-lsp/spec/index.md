@@ -191,6 +191,30 @@ event-loop tick the active document is compared to the last value synced, and a
 `didChange` (full text) is sent only when it actually changed. The first sync of a
 file sends `didOpen`; closing its tab sends `didClose`.
 
+**Edit-returning replies are tied to their document (T652).** Formatting,
+range formatting and linked-editing requests record the path, URI and the
+document version each server had when the request was sent. Their replies do
+not arrive as `LspEvent`s. `Lsp::poll` queues them as `EditReply { path, kind }`
+values, and the host drains the queue with `Lsp::take_edit_replies()` right
+after `poll`. A reply is delivered as `EditReplyKind::Edits` /
+`EditReplyKind::LinkedRanges` only if that server still has the recorded
+version. If the document changed or closed in the meantime, it comes back as
+`EditReplyKind::Stale` instead. Both types are `#[non_exhaustive]`. The older
+`LspEvent::Edits` / `LspEvent::LinkedRanges` variants stay in the enum for 1.x
+semver compatibility, but nothing emits them any more.
+
+The host applies `Edits` to the tab open on `path`, not to the active tab. It
+also treats the reply as stale if that tab's buffer has changed since its
+last sync, which catches a keystroke followed by a tab switch before the next
+sync tick. A format-on-save writes the formatted tab back to its own file,
+even when another tab is active by then. A stale reply cancels that re-save;
+the plain save already wrote the file. Linked ranges are used only while
+`path` is still the active tab. The host syncs the active document just
+before sending these requests, so the version the reply is checked against
+is the text the user sees. Rename, code-action and `workspace/applyEdit`
+edits already name their files (`FileEdits`) and are applied by path, so a
+tab switch cannot misroute them.
+
 ## Restart and server log (T576)
 
 Each server's stderr is captured on a reader thread into a per-language ring buffer of the last 2,000 lines, which survives restarts. `Lsp::server_log(path)` returns it under a `== language (command) ==` heading; **LSP → Show Server Log** opens it in a read-only tab. `Lsp::restart(path)` shuts the server(s) for `path` down, drops the diagnostics they published, resets the crash-respawn budget, spawns fresh ones and returns the files that were open on them; the host forgets their sync state so `didOpen` is replayed with current content on the next tick. **LSP → Restart Server** drives it.

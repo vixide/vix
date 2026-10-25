@@ -212,7 +212,7 @@ The same surus round added three companion features the AI surface builds on:
   `read-only` / `read-write` badge.
 - **Query log** (`Ctrl+L`, `db::store::Log`) — an in-memory, session-scoped log
   of every execution with its duration, row count, outcome, and origin
-  (`user` vs `app` for background catalog queries), colour-coded by latency;
+  (`user` vs `app` for background catalog queries), color-coded by latency;
   `Enter` reloads a statement into the editor.
 - **ER diagram** (`Ctrl+E`, `db::erd`) — builds a Mermaid `erDiagram` from the
   live schema (typed entity blocks plus crow's-foot foreign-key edges) in a

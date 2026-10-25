@@ -6,6 +6,29 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Save All** (T654): saves every modified file tab (also in the command palette), reports how many were saved, and stops at the first failure. The `save_all` action used to save only the active tab.
+- **`vix-lsp`: `Lsp::take_edit_replies()`** (T652) returns formatting and linked-editing replies as `EditReply`, tied to the document they were requested for and version-checked; `LspEvent::Edits` and `LspEvent::LinkedRanges` are no longer emitted. `vix-editor` gains `Editor::reload_clean_from_disk_checked`, which reports refused files.
+
+### Fixed
+
+- **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.
+- **Git paths are literal** (T651): staging a path such as `app/[id]/page.tsx` no longer also stages `app/i/page.tsx`.
+- **LSP formatting edits go to the right file** (T652): formatting and format-on-save edits apply to the file they were requested for, not whichever tab is active when the server replies. Edits computed against text that has since changed are dropped with a status message instead of corrupting the file. Linked-editing ranges get the same check.
+- **Editable search results and Replace in Files** (T653): a line that changed after the search is skipped and reported instead of being overwritten. Writes keep CRLF line endings, the final-newline state, indentation and text past the 120-character preview, go through the atomic writer, refuse files open in read-only tabs, and change a file open with unsaved edits in its buffer only, instead of silently saving those edits.
+- **Save As asks before overwriting** (T654) an existing file, and refuses a target that is a dangling symlink.
+- **Reloading after a branch switch or external change** (T656) applies the same guards as opening a file: a path replaced by a FIFO or device, a file past the size limit, or a binary file is not read; the buffer keeps its text and a warning says why. Non-UTF-8 files reload read-only.
+
+### Security
+
+- **The workspace script-trust prompt needs an explicit `y`** (T655): it no longer accepts Enter, and ignores keys pressed within 250 ms of opening, so an Enter typed ahead of the startup or reload prompt can't approve a cloned repository's `.vix/scripts`.
+
+### Changed
+
+- **Docs are spell-checked** in `scripts/check-docs` (CSpell; required in GitHub and Codeberg CI), and the existing spelling findings are fixed.
+- **README and website rewritten for new visitors**, and the website now uses the current Lily design system (PickerBar 0.5 with docs search, theme, language, text size and share pickers; 57 themes from `@lilydesignsystem/themes`).
+
 ## [1.8.0] - 2026-10-25
 
 ### Added
@@ -1228,7 +1251,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR
   GPL-3.0-only", so that dependency took the licensing choice away from anyone
   distributing a build. The Calculator now uses 11.3.1, the last MIT release;
-  its behaviour and tests are unchanged. **Anyone who built from 1.4.0 should
+  its behavior and tests are unchanged. **Anyone who built from 1.4.0 should
   upgrade.**
 - **`portable-pty` 0.8 → 0.9**, which replaces the unmaintained `serial`
   crate (RUSTSEC-2017-0008) with `serial2`.
@@ -1282,7 +1305,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **Mark Done with Note…** (`org.close_note`, in the Org menu and `C-u C-c
     C-t`): prompts for a note, then marks the headline `DONE`, stamps
     `CLOSED: [now]` under it, and logs the note into its `:LOGBOOK:` drawer —
-    Emacs `org-log-done` behaviour. New pure `org::close_headline`.
+    Emacs `org-log-done` behavior. New pure `org::close_headline`.
   - The **Agenda Tracker** is now interactive: it opens read-only, and pressing
     `t` on a task line cycles that task's TODO state directly in its source
     `.org` file, reloads any open buffer for it, and rebuilds the agenda in

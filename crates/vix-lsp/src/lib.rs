@@ -59,6 +59,20 @@ enum Pending {
     SemanticTokens,
 }
 
+/// The document an edit-returning request (formatting, linked editing) was
+/// asked about, and its version when sent (T652). Its reply is applied to
+/// that document only, and only while the server still has that version:
+/// the edits' offsets are meaningless against any other text.
+struct Target {
+    /// The path the host asked about, handed back unchanged in the event so
+    /// the host can match it against its own tab paths.
+    path: PathBuf,
+    /// `path`'s URI, the key into `Server::docs`.
+    uri: String,
+    /// The document version the server had when the request was sent.
+    version: i64,
+}
+
 /// A message handed back from a server's stdout reader thread.
 enum Incoming {
     Message(Value),
@@ -93,6 +107,10 @@ pub enum LspEvent {
     CallHierarchyPrepared(serde_json::Value),
     /// A formatting response: text edits (range + replacement) for the active
     /// file, in document order.
+    ///
+    /// No longer emitted since 1.9.0 (T652): formatting replies now arrive,
+    /// tied to their document and version-checked, from
+    /// [`Lsp::take_edit_replies`]. Kept so existing matches still compile.
     Edits(Vec<(vix_lsp_core::Range, String)>),
     /// A document-symbol response for the active file: `(0-based line, character,
     /// name)`.
@@ -122,6 +140,10 @@ pub enum LspEvent {
     InlayHints(Vec<(u32, u32, String)>),
     /// A linked-editing response: ranges in the active file that should be edited
     /// together (e.g. an open/close tag pair).
+    ///
+    /// No longer emitted since 1.9.0 (T652): linked-editing replies now
+    /// arrive from [`Lsp::take_edit_replies`]. Kept so existing matches still
+    /// compile.
     LinkedRanges(Vec<vix_lsp_core::Range>),
     /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
     CodeLenses(Vec<vix_lsp_core::message::CodeLens>),
@@ -159,6 +181,32 @@ pub enum LspEvent {
     /// active when the response arrives, same established limitation those
     /// already have under rapid tab switching.
     SemanticTokens(Vec<vix_lsp_core::SemanticToken>),
+}
+
+/// A reply to an edit-returning request (formatting, range formatting, linked
+/// editing), tied to the document it was requested for (T652). Collected
+/// during [`Lsp::poll`]; drain them with [`Lsp::take_edit_replies`]. The host
+/// applies one to `path`'s tab, not to whichever tab is active by then.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EditReply {
+    /// The file the request was for, exactly as the host passed it in.
+    pub path: PathBuf,
+    /// What the reply carries.
+    pub kind: EditReplyKind,
+}
+
+/// What an [`EditReply`] carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EditReplyKind {
+    /// Formatting edits (range + replacement) for the file, in document order.
+    Edits(Vec<(vix_lsp_core::Range, String)>),
+    /// Ranges in the file to edit together (e.g. an open/close tag pair).
+    LinkedRanges(Vec<vix_lsp_core::Range>),
+    /// The reply arrived after its document changed or closed, so the server
+    /// computed it against other text: it was dropped, not delivered.
+    Stale,
 }
 
 /// Outcome of `textDocument/prepareRename`, sent before the rename prompt
@@ -206,6 +254,9 @@ struct Server {
     next_id: i64,
     /// In-flight requests awaiting a response.
     pending: HashMap<i64, Pending>,
+    /// For the in-flight edit-returning requests, the document and version
+    /// each was made against (T652), keyed like `pending`.
+    targets: HashMap<i64, Target>,
     /// Open documents, `uri` → last sent version.
     docs: HashMap<String, i64>,
     /// Position encoding negotiated at `initialize` (default UTF-16).
@@ -286,6 +337,9 @@ pub struct Lsp {
     restart_attempts: HashMap<String, u32>,
     /// Recent stderr per language id (T576), shared with reader threads.
     logs: HashMap<String, LogBuf>,
+    /// Edit-returning replies received by [`Lsp::poll`] and not yet taken by
+    /// [`Lsp::take_edit_replies`] (T652).
+    edit_replies: Vec<EditReply>,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -312,6 +366,7 @@ impl Lsp {
             diagnostics: HashMap::new(),
             restart_attempts: HashMap::new(),
             logs: HashMap::new(),
+            edit_replies: Vec::new(),
         }
     }
 
@@ -825,12 +880,11 @@ impl Lsp {
 
     /// Request the linked-editing ranges at `(line, character)`.
     pub fn request_linked_editing(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(
+        self.send_targeted(
             path,
             "textDocument/linkedEditingRange",
-            line,
-            character,
             Pending::LinkedEditing,
+            |uri| message::position_params(uri, line, character),
         );
     }
 
@@ -971,7 +1025,7 @@ impl Lsp {
 
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
-        self.send_request(
+        self.send_targeted(
             path,
             "textDocument/formatting",
             Pending::Formatting,
@@ -987,7 +1041,7 @@ impl Lsp {
         end: (u32, u32),
         tab_size: u32,
     ) {
-        self.send_request(
+        self.send_targeted(
             path,
             "textDocument/rangeFormatting",
             Pending::Formatting,
@@ -1016,6 +1070,39 @@ impl Lsp {
             }
             let id = server.alloc_id();
             server.pending.insert(id, kind);
+            server.send(message::request(id, method, &params(&uri)));
+        }
+    }
+
+    /// [`Lsp::send_request`] for a request whose reply edits `path` (T652):
+    /// each server's request also records `path` and the version that server
+    /// last saw, so [`Lsp::handle_response`] can route the reply to `path`
+    /// and drop it if the document moved on in the meantime.
+    fn send_targeted(
+        &mut self,
+        path: &Path,
+        method: &str,
+        kind: Pending,
+        params: impl Fn(&str) -> Value,
+    ) {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            let id = server.alloc_id();
+            server.pending.insert(id, kind);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
             server.send(message::request(id, method, &params(&uri)));
         }
     }
@@ -1190,6 +1277,13 @@ impl Lsp {
         let Some(kind) = server.pending.remove(&id) else {
             return;
         };
+        // T652: an edit-returning request's document, plus whether the server
+        // still has the version it was asked about (it may have changed, or
+        // closed, while the request was out).
+        let target = server.targets.remove(&id).map(|t| {
+            let current = server.docs.get(&t.uri) == Some(&t.version);
+            (t, current)
+        });
         // Grabbed now, while `server` is still borrowed -- `Pending::
         // SemanticTokens` below needs it, but only after `self.diagnostics`
         // (a different field) is free to borrow too, past `server`'s own
@@ -1270,7 +1364,46 @@ impl Lsp {
         if result.is_null() {
             return;
         }
+        if let Some((target, current)) = target {
+            let reply = if current {
+                Self::targeted_reply(kind, target.path, result)
+            } else {
+                Some(EditReply {
+                    path: target.path,
+                    kind: EditReplyKind::Stale,
+                })
+            };
+            self.edit_replies.extend(reply);
+            return;
+        }
         Self::response_to_events(kind, result, events);
+    }
+
+    /// Parse an edit-returning reply already checked against its document's
+    /// version (T652) into an [`EditReply`] naming that document, or `None`
+    /// when it carries nothing to apply.
+    fn targeted_reply(kind: Pending, path: PathBuf, result: &Value) -> Option<EditReply> {
+        let kind = match kind {
+            Pending::Formatting => {
+                let edits = message::parse_text_edits(result);
+                (!edits.is_empty()).then_some(EditReplyKind::Edits(edits))
+            }
+            Pending::LinkedEditing => {
+                let ranges = message::parse_linked_editing_ranges(result);
+                (ranges.len() > 1).then_some(EditReplyKind::LinkedRanges(ranges))
+            }
+            _ => None,
+        }?;
+        Some(EditReply { path, kind })
+    }
+
+    /// Take the edit-returning replies (formatting, range formatting, linked
+    /// editing) that [`Lsp::poll`] has received since the last call, oldest
+    /// first (T652). Each names the document it was requested for; a reply
+    /// whose document changed or closed meanwhile comes back as
+    /// [`EditReplyKind::Stale`] instead of its edits. Call after `poll`.
+    pub fn take_edit_replies(&mut self) -> Vec<EditReply> {
+        std::mem::take(&mut self.edit_replies)
     }
 
     /// Parse a (non-null) response `result` for the request `kind` into events.
@@ -1310,12 +1443,6 @@ impl Lsp {
                     .collect();
                 if !locs.is_empty() {
                     events.push(LspEvent::References(locs));
-                }
-            }
-            Pending::Formatting => {
-                let edits = message::parse_text_edits(result);
-                if !edits.is_empty() {
-                    events.push(LspEvent::Edits(edits));
                 }
             }
             _ => Self::response_to_events_more(kind, result, events),
@@ -1396,7 +1523,7 @@ impl Lsp {
     }
 
     /// The remaining `Pending` response kinds (selection ranges, highlights,
-    /// folding, completion-resolve, inlay hints, linked editing, code lenses).
+    /// folding, completion-resolve, inlay hints, code lenses).
     /// Split from [`Server::response_to_events_more`] to keep it within the line
     /// limit.
     fn response_to_events_last(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
@@ -1427,12 +1554,6 @@ impl Lsp {
                 let hints = message::parse_inlay_hints(result);
                 if !hints.is_empty() {
                     events.push(LspEvent::InlayHints(hints));
-                }
-            }
-            Pending::LinkedEditing => {
-                let ranges = message::parse_linked_editing_ranges(result);
-                if ranges.len() > 1 {
-                    events.push(LspEvent::LinkedRanges(ranges));
                 }
             }
             Pending::CodeLens => {
@@ -1534,6 +1655,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         rx,
         next_id: INITIALIZE_ID + 1,
         pending: HashMap::new(),
+        targets: HashMap::new(),
         docs: HashMap::new(),
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),

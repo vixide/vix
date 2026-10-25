@@ -1029,6 +1029,7 @@ fn accepting_trust_persists_and_loads_automatically_next_launch() {
     app1.load_scripts();
     app1.maybe_prompt_script_trust();
     assert!(app1.script_trust.is_some(), "should be prompted");
+    arm_script_trust(&mut app1);
     app1.on_key(key('y'));
     assert!(app1.script_trust.is_none(), "answered");
     assert_eq!(
@@ -1068,6 +1069,7 @@ fn declining_trust_persists_but_a_manual_reload_asks_again() {
         App::new(dir.clone(), Settings::default()).with_session_path(session_path.clone());
     app1.load_scripts();
     app1.maybe_prompt_script_trust();
+    arm_script_trust(&mut app1);
     app1.on_key(key('n'));
     assert_eq!(
         loaded_script_command_count(&mut app1),

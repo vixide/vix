@@ -1612,7 +1612,7 @@ impl App {
             return true;
         }
         // Refresh any open, clean buffer for the edited file, then rebuild.
-        self.editor.reload_clean_from_disk();
+        self.reload_clean_buffers();
         self.rebuild_agenda(line);
         self.status = t!("status.org_agenda_toggled").to_string();
         true

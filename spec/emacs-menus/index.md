@@ -1,6 +1,6 @@
 # Emacs menus
 
-This page is a teference listing of emacs menus. 
+This page is a reference listing of emacs menus. 
 
 Vix considers these as suggestions and ideas. NOT must-haves.
 

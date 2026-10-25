@@ -871,3 +871,143 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
     assert!(app.dashboard.is_none(), "Esc closes the dashboard");
     fs::remove_dir_all(&dir).ok();
 }
+
+// ----- T653: editable results / Replace in Files write safety --------------
+
+/// Open the editable results for `needle` and append `suffix` to its first
+/// (only) line.
+fn wgrep_append(app: &mut App, needle: &str, suffix: &str) {
+    app.run_action("search.workspace");
+    for c in needle.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+    let content = app.editor.active_tab().unwrap().text();
+    let end = content.lines().next().unwrap().chars().count();
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(end);
+    for c in suffix.chars() {
+        app.on_key(key(c));
+    }
+}
+
+/// Run Replace in Files for `find` → `with` and confirm it.
+fn replace_in_files(app: &mut App, find: &str, with: &str) {
+    app.run_action("search.workspace_replace");
+    for c in find.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    for c in with.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.on_key(key('y'));
+}
+
+#[test]
+fn wgrep_skips_a_line_that_changed_on_disk_after_the_search() {
+    let dir = unique_dir("wgrep-drift");
+    fs::write(dir.join("a.txt"), "keep\nneedle line\n").unwrap();
+    let mut app = app_at(&dir);
+    wgrep_append(&mut app, "needle", " EDITED");
+
+    // The file changes under the results buffer: line 2 is now other text.
+    fs::write(dir.join("a.txt"), "inserted\nkeep\nneedle line\n").unwrap();
+    app.run_action("file.save");
+
+    assert!(app.wgrep_confirm.is_none(), "nothing safe left to write");
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "inserted\nkeep\nneedle line\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_keeps_crlf_line_endings_and_a_missing_final_newline() {
+    let dir = unique_dir("wgrep-crlf");
+    fs::write(dir.join("a.txt"), "keep\r\n    needle line\r\nlast").unwrap();
+    let mut app = app_at(&dir);
+    wgrep_append(&mut app, "needle", " EDITED");
+    app.run_action("file.save");
+    app.on_key(key('y'));
+
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "keep\r\n    needle line EDITED\r\nlast"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_refuses_a_file_open_in_a_read_only_tab() {
+    let dir = unique_dir("wgrep-ro");
+    fs::write(dir.join("a.txt"), "needle line\n").unwrap();
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("a.txt"), false).unwrap();
+    app.editor.active_tab_mut().unwrap().read_only = true;
+    wgrep_append(&mut app, "needle", " EDITED");
+    app.run_action("file.save");
+    app.on_key(key('y'));
+
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "needle line\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn replace_in_files_refuses_a_file_open_in_a_read_only_tab() {
+    let dir = unique_dir("preplace-ro");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    fs::write(dir.join("b.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("a.txt"), false).unwrap();
+    app.editor.active_tab_mut().unwrap().read_only = true;
+    replace_in_files(&mut app, "beta", "ZZ");
+
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta\n");
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "ZZ\n");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn replace_in_files_changes_a_dirty_open_tab_in_its_buffer_only() {
+    let dir = unique_dir("preplace-dirty");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("a.txt"), false).unwrap();
+    {
+        let tab = app.editor.active_tab_mut().unwrap();
+        tab.editor.set_content("beta\nunsaved work\n");
+        tab.dirty = true;
+    }
+    replace_in_files(&mut app, "beta", "ZZ");
+
+    // Disk is untouched: writing would also have saved "unsaved work".
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta\n");
+    let canon = dir.join("a.txt").canonicalize().unwrap();
+    let tab = app
+        .editor
+        .tabs
+        .iter()
+        .find(|t| t.path.as_deref() == Some(canon.as_path()))
+        .unwrap();
+    assert_eq!(tab.text(), "ZZ\nunsaved work\n");
+    assert!(tab.dirty, "the buffer still has unsaved edits");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn replace_in_files_keeps_crlf_line_endings() {
+    let dir = unique_dir("preplace-crlf");
+    fs::write(dir.join("a.txt"), "beta\r\ngamma beta\r\n").unwrap();
+    let mut app = app_at(&dir);
+    replace_in_files(&mut app, "beta", "ZZ");
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "ZZ\r\ngamma ZZ\r\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}

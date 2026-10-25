@@ -16,9 +16,11 @@ use std::ffi::OsString;
 #[cfg(feature = "process")]
 use std::path::Path;
 #[cfg(feature = "process")]
+use std::path::PathBuf;
+#[cfg(feature = "process")]
 use std::process::Command;
 #[cfg(feature = "process")]
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// A kind of change to a file (in the index or the working tree).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -69,7 +71,9 @@ impl Change {
 /// (working-tree) change, if any.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FileStatus {
-    /// Path relative to the repository root.
+    /// Path relative to the directory [`status`] was asked about (the
+    /// workspace root), not to the repository root (T650): a changed file
+    /// outside that directory but inside the repository reads `../other`.
     pub path: String,
     /// The staged (index) change, if any.
     pub staged: Option<Change>,
@@ -382,9 +386,10 @@ fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
 #[must_use]
 pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> {
     let spec = format!("{line},{line}");
+    let (cwd, path) = repo_target(dir, rel_path);
     let out = git_stdout(
-        dir,
-        &["blame", "--line-porcelain", "-L", &spec, "--", rel_path],
+        &cwd,
+        &["blame", "--line-porcelain", "-L", &spec, "--", &path],
     )?;
     parse_blame_porcelain(&out)
 }
@@ -450,8 +455,97 @@ fn valid_ref_name(name: &str) -> bool {
 fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     Command::new(git_program())
         .current_dir(dir)
+        // T651: every path Vix hands git is a literal file name, never a
+        // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.
+        .env("GIT_LITERAL_PATHSPECS", "1")
         .args(args)
         .output()
+}
+
+#[cfg(feature = "process")]
+/// Where a directory sits inside its git working tree: the tree's top level
+/// and the directory's own path below it (`git rev-parse --show-prefix`,
+/// e.g. `"sub/"`, empty at the top level).
+#[derive(Clone, Debug)]
+struct RepoLoc {
+    top: PathBuf,
+    prefix: String,
+}
+
+#[cfg(feature = "process")]
+/// Locate `dir` inside its working tree (T650), cached per directory next to
+/// the repo check: one `git rev-parse` the first time, a map lookup after.
+/// Only successes are cached, so a directory that later becomes a repository
+/// (`git init`) is found on the next call. `None` outside a working tree.
+fn locate(dir: &Path) -> Option<RepoLoc> {
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<PathBuf, RepoLoc>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Mutex::default);
+    if let Some(loc) = cache.lock().ok()?.get(dir) {
+        return Some(loc.clone());
+    }
+    let out = git(dir, &["rev-parse", "--show-toplevel", "--show-prefix"]).ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut lines = text.lines();
+    let top = PathBuf::from(lines.next().filter(|t| !t.is_empty())?);
+    let prefix = lines.next().unwrap_or("").to_string();
+    let loc = RepoLoc { top, prefix };
+    if let Ok(mut map) = cache.lock() {
+        map.insert(dir.to_path_buf(), loc.clone());
+    }
+    Some(loc)
+}
+
+#[cfg(feature = "process")]
+/// Join `prefix` (a `--show-prefix` value) and `rel` (relative to the
+/// directory that prefix names) into a repository-root-relative path,
+/// resolving `.` and `..` lexically. `None` when the result would climb
+/// above the repository root or `rel` is absolute.
+fn join_repo_path(prefix: &str, rel: &str) -> Option<String> {
+    let rel = rel.replace('\\', "/");
+    if rel.starts_with('/') || Path::new(&rel).is_absolute() {
+        return None;
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for part in prefix.split('/').chain(rel.split('/')) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            p => parts.push(p),
+        }
+    }
+    Some(parts.join("/"))
+}
+
+#[cfg(feature = "process")]
+/// The inverse of [`join_repo_path`]: re-express a repository-root-relative
+/// `path` (as `git status --porcelain` prints it) relative to the directory
+/// whose `--show-prefix` is `prefix`, climbing with `..` when it lies outside.
+fn relative_to_prefix(prefix: &str, path: &str) -> String {
+    let base: Vec<&str> = prefix.split('/').filter(|p| !p.is_empty()).collect();
+    let target: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+    let common = base.iter().zip(&target).take_while(|(a, b)| a == b).count();
+    let mut parts: Vec<&str> = vec![".."; base.len() - common];
+    parts.extend(&target[common..]);
+    parts.join("/")
+}
+
+#[cfg(feature = "process")]
+/// Where to run a git command naming `rel_path` (relative to `dir`, the
+/// workspace root), and the path to give it (T650). Inside a working tree
+/// that is the tree's top level and the root-relative path, so every git
+/// syntax agrees on it: pathspecs after `--`, `HEAD:<path>`/`:<path>` blob
+/// names (always root-relative), and `update-index --cacheinfo`. Outside
+/// one -- or for a path that can't be mapped -- it is `dir` and `rel_path`
+/// unchanged, so git reports its own error.
+fn repo_target(dir: &Path, rel_path: &str) -> (PathBuf, String) {
+    locate(dir)
+        .and_then(|loc| join_repo_path(&loc.prefix, rel_path).map(|p| (loc.top, p)))
+        .unwrap_or_else(|| (dir.to_path_buf(), rel_path.to_string()))
 }
 
 #[cfg(feature = "process")]
@@ -497,19 +591,28 @@ pub fn is_dirty(dir: &Path) -> bool {
 /// The changed files reported by `git status --porcelain`.
 #[must_use]
 pub fn status(dir: &Path) -> Vec<FileStatus> {
-    git_stdout(dir, &["status", "--porcelain"])
+    let mut rows = git_stdout(dir, &["status", "--porcelain"])
         .map(|s| parse_status(&s))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Porcelain paths are always repository-root-relative; callers work
+    // relative to `dir` (T650).
+    if let Some(loc) = locate(dir).filter(|l| !l.prefix.is_empty()) {
+        for row in &mut rows {
+            row.path = relative_to_prefix(&loc.prefix, &row.path);
+        }
+    }
+    rows
 }
 
 #[cfg(feature = "process")]
-/// The committed (`HEAD`) contents of a repo-relative path, or `None` if the path
-/// is not in HEAD (newly added/untracked) or on any error.
+/// The committed (`HEAD`) contents of `rel_path` (relative to `dir`), or `None`
+/// if the path is not in HEAD (newly added/untracked) or on any error.
 #[must_use]
 pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
     // Use the raw (untrimmed) output: a blob's trailing newline is significant
     // for line-accurate diffing, gutter marks, and hunk revert.
-    let out = git(dir, &["show", &format!("HEAD:{rel_path}")]).ok()?;
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["show", &format!("HEAD:{path}")]).ok()?;
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
@@ -540,7 +643,8 @@ pub fn stage_all(dir: &Path) -> Result<(), String> {
 /// with no reason, inconsistent with the sibling [`stage_content`], which
 /// already reports the real error).
 pub fn stage(dir: &Path, rel_path: &str) -> Result<(), String> {
-    let out = git(dir, &["add", "--", rel_path]).map_err(|e| e.to_string())?;
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["add", "--", &path]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {
@@ -553,7 +657,8 @@ pub fn stage(dir: &Path, rel_path: &str) -> Result<(), String> {
 /// preserved. `None` when the file is not in the index.
 #[must_use]
 pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
-    let out = git(dir, &["show", &format!(":{rel_path}")]).ok()?;
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["show", &format!(":{path}")]).ok()?;
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
@@ -567,20 +672,23 @@ pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
 /// # Errors
 /// Returns an error when the git plumbing commands fail.
 pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), String> {
+    // T650: `--cacheinfo` takes a repository-root-relative path whatever the
+    // cwd, so run from the top level with the root-relative path throughout.
+    let (cwd, path) = repo_target(dir, rel_path);
     let hash = git_stdin(
-        dir,
-        &["hash-object", "-w", "--path", rel_path, "--stdin"],
+        &cwd,
+        &["hash-object", "-w", "--path", &path, "--stdin"],
         content,
     )?;
     let sha = hash.trim();
     // Preserve the file's existing index mode when known; default to a regular
     // non-executable file.
-    let mode = git_stdout(dir, &["ls-files", "-s", "--", rel_path])
+    let mode = git_stdout(&cwd, &["ls-files", "-s", "--", &path])
         .and_then(|s| s.split_whitespace().next().map(str::to_string))
         .unwrap_or_else(|| "100644".to_string());
-    let info = format!("{mode},{sha},{rel_path}");
+    let info = format!("{mode},{sha},{path}");
     let out =
-        git(dir, &["update-index", "--add", "--cacheinfo", &info]).map_err(|e| e.to_string())?;
+        git(&cwd, &["update-index", "--add", "--cacheinfo", &info]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {
@@ -595,6 +703,7 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
     use std::process::Stdio;
     let mut child = Command::new(git_program())
         .current_dir(dir)
+        .env("GIT_LITERAL_PATHSPECS", "1") // T651, as in `git`
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -623,7 +732,8 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
 /// Returns git's own stderr on failure (Run H, T540 — see [`stage`]'s doc
 /// comment for why).
 pub fn unstage(dir: &Path, rel_path: &str) -> Result<(), String> {
-    let out = git(dir, &["restore", "--staged", "--", rel_path]).map_err(|e| e.to_string())?;
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["restore", "--staged", "--", &path]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {
@@ -940,8 +1050,9 @@ pub fn log(dir: &Path, max: usize) -> Vec<LogEntry> {
 pub fn file_log(dir: &Path, rel_path: &str, max: usize) -> Vec<LogEntry> {
     let n = max.to_string();
     let fmt = log_format_arg();
+    let (cwd, path) = repo_target(dir, rel_path);
     git_stdout(
-        dir,
+        &cwd,
         &[
             "log",
             &fmt,
@@ -950,7 +1061,7 @@ pub fn file_log(dir: &Path, rel_path: &str, max: usize) -> Vec<LogEntry> {
             "-n",
             &n,
             "--",
-            rel_path,
+            &path,
         ],
     )
     .map(|s| parse_log(&s))
@@ -969,11 +1080,16 @@ pub fn show_commit(dir: &Path, sha: &str, rel_path: Option<&str>) -> Option<Stri
     // `--end-of-options` guarantees `sha` can never be read as a flag, even
     // if it slipped past `valid_ref_name` (the same defense `checkout` uses).
     let mut args = vec!["show", "--end-of-options", sha];
-    if let Some(p) = rel_path {
-        args.push("--");
-        args.push(p);
-    }
-    git_stdout(dir, &args)
+    let target = rel_path.map(|p| repo_target(dir, p));
+    let cwd = match &target {
+        Some((cwd, path)) => {
+            args.push("--");
+            args.push(path);
+            cwd.as_path()
+        }
+        None => dir,
+    };
+    git_stdout(cwd, &args)
 }
 
 #[cfg(feature = "process")]
@@ -986,13 +1102,10 @@ pub fn show_file_at(dir: &Path, revision: &str, rel_path: &str) -> Option<String
     if !valid_ref_name(revision) {
         return None;
     }
+    let (cwd, path) = repo_target(dir, rel_path);
     let out = git(
-        dir,
-        &[
-            "show",
-            "--end-of-options",
-            &format!("{revision}:{rel_path}"),
-        ],
+        &cwd,
+        &["show", "--end-of-options", &format!("{revision}:{path}")],
     )
     .ok()?;
     out.status
@@ -1372,6 +1485,153 @@ mod tests {
     fn change_letters() {
         assert_eq!(Change::Modified.letter(), 'M');
         assert_eq!(Change::Untracked.letter(), '?');
+    }
+
+    #[cfg(feature = "process")]
+    #[test]
+    fn join_repo_path_resolves_dots_and_refuses_to_escape() {
+        assert_eq!(join_repo_path("sub/", "f").as_deref(), Some("sub/f"));
+        assert_eq!(join_repo_path("", "a/b").as_deref(), Some("a/b"));
+        assert_eq!(join_repo_path("sub/", "../f").as_deref(), Some("f"));
+        assert_eq!(join_repo_path("a/b/", "./c/../d").as_deref(), Some("a/b/d"));
+        assert_eq!(join_repo_path("sub/", "a\\b").as_deref(), Some("sub/a/b"));
+        assert_eq!(join_repo_path("sub/", "../../f"), None);
+        assert_eq!(join_repo_path("sub/", "/etc/passwd"), None);
+    }
+
+    #[cfg(feature = "process")]
+    #[test]
+    fn relative_to_prefix_inverts_join_repo_path() {
+        assert_eq!(relative_to_prefix("sub/", "sub/f"), "f");
+        assert_eq!(relative_to_prefix("sub/", "f"), "../f");
+        assert_eq!(relative_to_prefix("a/b/", "a/c/f"), "../c/f");
+        assert_eq!(relative_to_prefix("", "a/f"), "a/f");
+        for (prefix, path) in [("sub/", "f"), ("a/b/", "a/c/f"), ("x/", "x/y/z")] {
+            let rel = relative_to_prefix(prefix, path);
+            assert_eq!(join_repo_path(prefix, &rel).as_deref(), Some(path));
+        }
+    }
+
+    /// A throwaway repository: `f` and `sub/f` at the top level and in a
+    /// subdirectory, with distinct contents, committed. Returns the top level.
+    #[cfg(feature = "process")]
+    fn scratch_repo(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-git-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("f"), "root one\nroot two\n").unwrap();
+        std::fs::write(dir.join("sub/f"), "sub one\nsub two\n").unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["add", "."],
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=t@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "-m",
+                "seed",
+            ],
+        ] {
+            let ok = Command::new("git")
+                .current_dir(&dir)
+                .env("GIT_TERMINAL_PROMPT", "0")
+                .args(args)
+                .status()
+                .unwrap()
+                .success();
+            assert!(ok, "git {args:?}");
+        }
+        dir
+    }
+
+    #[cfg(feature = "process")]
+    #[test]
+    #[ignore = "needs git; creates a throwaway repo"]
+    fn runners_resolve_paths_from_a_subdirectory_root() {
+        // T650: Vix rooted at `sub/` names files relative to `sub/`, but git
+        // reads `HEAD:<p>`, `:<p>` and `--cacheinfo` paths from the top level.
+        let top = scratch_repo("subdir");
+        let sub = top.join("sub");
+        assert_eq!(head_blob(&sub, "f").as_deref(), Some("sub one\nsub two\n"));
+        assert_eq!(index_blob(&sub, "f").as_deref(), Some("sub one\nsub two\n"));
+        assert_eq!(
+            head_blob(&sub, "../f").as_deref(),
+            Some("root one\nroot two\n")
+        );
+
+        // Stage Hunk's plumbing must write `sub/f`, leaving the root `f` alone.
+        stage_content(&sub, "f", "sub one\nstaged\n").unwrap();
+        assert_eq!(index_blob(&sub, "f").as_deref(), Some("sub one\nstaged\n"));
+        assert_eq!(
+            index_blob(&top, "f").as_deref(),
+            Some("root one\nroot two\n")
+        );
+        let rows = status(&sub);
+        assert_eq!(rows.len(), 1, "only sub/f changed: {rows:?}");
+        assert_eq!(rows[0].path, "f", "reported relative to the subdirectory");
+        assert_eq!(status(&top)[0].path, "sub/f");
+
+        // Stage/unstage take the paths `status` reports, including `../`.
+        std::fs::write(top.join("f"), "root edited\n").unwrap();
+        unstage(&sub, "f").unwrap();
+        let rows = status(&sub);
+        let root_row = rows
+            .iter()
+            .find(|r| r.path == "../f")
+            .expect("root f listed");
+        assert!(!root_row.is_staged());
+        stage(&sub, &root_row.path).unwrap();
+        assert!(
+            status(&sub)
+                .iter()
+                .any(|r| r.path == "../f" && r.is_staged())
+        );
+
+        // History and blame resolve the subdirectory's file, not the root one.
+        assert_eq!(file_log(&sub, "f", 10).len(), 1);
+        assert_eq!(
+            show_file_at(&sub, "HEAD", "f").as_deref(),
+            Some("sub one\nsub two\n")
+        );
+        let sha = log(&sub, 1)[0].sha.clone();
+        let patch = show_commit(&sub, &sha, Some("f")).unwrap();
+        assert!(patch.contains("sub one") && !patch.contains("root one"));
+        assert_eq!(blame_line(&sub, "f", 1).unwrap().summary, "seed");
+        let _ = std::fs::remove_dir_all(&top);
+    }
+
+    #[cfg(feature = "process")]
+    #[test]
+    #[ignore = "needs git; creates a throwaway repo"]
+    fn file_paths_are_literal_not_globs() {
+        // T651: `app/[id]/p` (a Next.js-style route folder) used to match
+        // `app/i/p` as a glob character class.
+        let top = scratch_repo("literal");
+        std::fs::create_dir_all(top.join("app/[id]")).unwrap();
+        std::fs::create_dir_all(top.join("app/i")).unwrap();
+        std::fs::write(top.join("app/[id]/p"), "a\n").unwrap();
+        std::fs::write(top.join("app/i/p"), "b\n").unwrap();
+        stage(&top, "app/[id]/p").unwrap();
+        let staged: Vec<String> = status(&top)
+            .into_iter()
+            .filter(FileStatus::is_staged)
+            .map(|r| r.path)
+            .collect();
+        assert_eq!(staged, ["app/[id]/p"]);
+        stage(&top, "app/i/p").unwrap();
+        unstage(&top, "app/[id]/p").unwrap();
+        let staged: Vec<String> = status(&top)
+            .into_iter()
+            .filter(FileStatus::is_staged)
+            .map(|r| r.path)
+            .collect();
+        assert_eq!(staged, ["app/i/p"]);
+        let _ = std::fs::remove_dir_all(&top);
     }
 
     // Runner smoke test against this very repository. Ignored by default because

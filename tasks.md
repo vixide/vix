@@ -7522,7 +7522,15 @@ Vix or already planned, so deliberately **not** tasks:
 
 ### Correctness & hardening
 
-- [ ] **T650 — Git breaks when Vix starts in a repo subdirectory, and
+T650–T656 were done on 2026-10-25, on three branches merged through
+`integrate/run-n-fixes`:
+- `fix/t650-t651-git-paths`: path conversion lives in `vix-git`, and
+  `status()` paths are relative to the workspace root.
+- `fix/t653-t654-save-safety`: this also fixed wgrep writing back the
+  preview's clipped line.
+- `fix/t652-t655-t656`: T652's `vix-lsp` API stays additive for semver.
+
+- [x] **T650 — Git breaks when Vix starts in a repo subdirectory, and
   Stage Hunk can corrupt another file's index entry.** **High.**
   - **Cause.** Vix roots itself at the current directory
     (`tui/src/main.rs:163`) and never runs `git rev-parse
@@ -7551,7 +7559,7 @@ Vix or already planned, so deliberately **not** tasks:
     index entry is untouched), Stage Selected, and blame.
   - **jj.** Check `tui/src/app/jj.rs` for the same class, since `jj` also
     resolves paths against the repository root. **S–M.**
-- [ ] **T651 — Git reads file paths as glob patterns.** **Medium.**
+- [x] **T651 — Git reads file paths as glob patterns.** **Medium.**
   - **Problem.** `stage`, `unstage`, `ls-files`, `blame`, `file_log` and
     `show_commit` pass `-- <path>` without `--literal-pathspecs`
     (`crates/vix-git/src/lib.rs:387, 543, 578, 626, 952, 973`). This was
@@ -7562,7 +7570,7 @@ Vix or already planned, so deliberately **not** tasks:
     `git_stdin()` helpers (`lib.rs:450`). Any caller that really wants a
     pattern opts back in with `:(glob)`.
   - **Test.** The bracket case above. ttt #877. **S.**
-- [ ] **T652 — LSP formatting edits land on whichever tab is active when
+- [x] **T652 — LSP formatting edits land on whichever tab is active when
   the reply arrives.** **Medium.**
   - **Problem.** `Pending::Formatting` records neither the document nor
     its version (`crates/vix-lsp/src/lib.rs:42, 1315`).
@@ -7576,7 +7584,7 @@ Vix or already planned, so deliberately **not** tasks:
     moved on. Audit the other edit-returning replies (code action, rename,
     on-type formatting, T624) for the same gap.
   - **Test.** Use the mock-server harness. ttt #1089. **S.**
-- [ ] **T653 — Editable search results and Replace in Files can write the
+- [x] **T653 — Editable search results and Replace in Files can write the
   wrong line and lose CRLF.** **Medium.**
   - **Stale baseline.** `prepare_wgrep_confirm` writes line N without
     checking that the file's line N still equals `WgrepBaseline.text`
@@ -7595,7 +7603,7 @@ Vix or already planned, so deliberately **not** tasks:
     endings. Write through `write_atomic`, and refuse read-only tabs.
     Apply dirty open tabs in the buffer only, leaving them dirty.
   - **Tests.** One per case. ttt #891/#964/#1055. **S.**
-- [ ] **T654 — "Save All" saves only the active tab, and Save As
+- [x] **T654 — "Save All" saves only the active tab, and Save As
   overwrites without asking.** **Medium.**
   - **Save All.** `tui/src/app.rs:3610` has `"save" | "save_all" =>
     self.save()`, but the catalog titles `save_all` "Save All"
@@ -7609,7 +7617,7 @@ Vix or already planned, so deliberately **not** tasks:
     Save As (the `ReplaceConfirm`-style y/n flow), and a dangling-symlink
     refusal.
   - **Tests.** Assert on state. ttt #977/#910/#926. **S.**
-- [ ] **T655 — The script-trust prompt accepts a stray Enter.**
+- [x] **T655 — The script-trust prompt accepts a stray Enter.**
   **Low–medium.**
   - **Problem.** `script_trust_key` takes Enter as well as `y`
     (`tui/src/app/scripts.rs:180`). The prompt opens at startup or on
@@ -7619,7 +7627,7 @@ Vix or already planned, so deliberately **not** tasks:
     ~250 ms of the prompt opening. Apply the same rule to T627's
     project-settings trust prompt when it lands.
   - **Test.** ttt #1057. **S.**
-- [ ] **T656 — Reloading after a branch switch skips T571's open-time
+- [x] **T656 — Reloading after a branch switch skips T571's open-time
   guards.**
   - **Problem.** `reload_clean_from_disk` uses plain
     `fs::read_to_string` (`crates/vix-editor/src/editor.rs:673`). A file

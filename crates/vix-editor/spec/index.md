@@ -70,6 +70,16 @@ Capabilities:
 Image files (`.png`, `.jpg`, `.gif`, and similar) open in a view-only image tab
 rather than the text editor; editing commands are no-ops on those tabs.
 
+**Reloading clean buffers** (`Editor::reload_clean_from_disk_checked`, after
+a branch switch or an external change) reads each file through the same guard
+as open (`vix_fileops::read_text_guarded`, T571/T656). The older
+`reload_clean_from_disk` does the same but returns only the count. A path now a FIFO or device, a
+file past the size limit, or a binary file is not reloaded: the buffer keeps
+its text and the refusal is returned in `Reload::refused` for the App to
+report as a warning. Non-UTF-8 text reloads lossily and read-only, as on open.
+A buffer already past the limit (the user confirmed opening it large) is
+re-read under the hard ceiling instead. Dirty buffers are never reloaded.
+
 ## Editing commands
 
 The **Edit** menu groups the commands that act on the active buffer. Leaf

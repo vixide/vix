@@ -76,6 +76,10 @@ scripts_trusted: Option<bool>` — `None` not yet asked, mirroring VS Code's
 Workspace Trust model but binary rather than a "restricted mode"). A
 decline isn't a permanent lockout: `script.reload` re-checks trust every
 time, so a user who changes their mind can just reload to be asked again.
+Only an explicit `y` trusts; `n`/`Esc` decline; Enter and every other key
+are ignored. Because the prompt opens at startup or on reload, keys arriving
+within 250 ms of it opening (`SCRIPT_TRUST_KEY_GUARD`) are dropped as well
+(T655), so a key typed ahead of the prompt can never answer it.
 This crate's own `discover`/`load_all` know nothing about trust at all —
 gating which directories get passed in is host wiring (`App::load_scripts`),
 the same "resolving real paths is the host's job" split this section
