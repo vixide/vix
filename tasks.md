@@ -7364,6 +7364,12 @@ new action.
   add a Vix → Plugins chooser. Installed scripts keep the existing
   sandbox, with no new capabilities. Tests: a lockfile round trip, and an
   install from a local `file://` bare repo. **Medium.**
+  From ttt v1.8–v1.9 (Run N's scan), check these while building it:
+  - An update that changes a script's code must not inherit the old
+    trust decision (#992).
+  - Removing or disabling a plugin must drop its trust record, so it
+    can't be reused stale (#961/#1009).
+  - Symlinks in a cloned plugin must not escape `scripts_dir()` (#936).
 - [ ] **T638 — Undo tree visualizer.** `edit.undo_branch` only cycles
   branches (`crates/vix-editor-core/src/code.rs:1010`), and the tree in
   `history.rs:20` is never drawn. undotree and Emacs vundo both draw it.
@@ -7497,6 +7503,339 @@ new action.
 
 ---
 
+## Run N (comparator scan: ttt v1.8.0–v1.9.0, 2026-10-25)
+
+Source: [eugenioenko/ttt](https://github.com/eugenioenko/ttt) v1.8.0
+(2026-10-15) and v1.9.0 (2026-10-23): every PR merged after Run K's
+cut-off (about #764–#1122, ~210 PRs) plus its 50 open issues. As in Run K,
+each ttt hardening thread was followed through Vix's own code. Four of the
+findings below were reproduced with real `git` in a scratch repo. File:line
+references are as of `00ecec1`; re-check them before starting. Already in
+Vix or already planned, so deliberately **not** tasks:
+- pull diagnostics (T619), scrollbar git marks (T578), multi-cursor
+  paste (T622), AI inline suggestions (T618), stdin into a tab (T208),
+  multiple terminals (T631)
+- bookmarks, reopen closed tab, merge-conflict UI (T556), jj, the
+  `auto_pair` setting, Ctrl+D seeded from the selection
+- LSP `documentChanges`, string request ids, `workspace/configuration`
+- reaping the terminal's child on close, images
+
+### Correctness & hardening
+
+- [ ] **T650 — Git breaks when Vix starts in a repo subdirectory, and
+  Stage Hunk can corrupt another file's index entry.** **High.**
+  - **Cause.** Vix roots itself at the current directory
+    (`tui/src/main.rs:163`) and never runs `git rev-parse
+    --show-toplevel`. Paths relative to that root reach git, which reads
+    them relative to the repository root.
+  - **`head_blob`.** `head_blob`'s `HEAD:{rel}`
+    (`crates/vix-git/src/lib.rs:512`) fails with "path 'sub/f' exists, but
+    not 'f'". The gutter and hunk list then treat the whole file as added
+    (`tui/src/app/git.rs:171-178`, `:205-211`).
+  - **`index_blob`.** `index_blob`'s `:{rel}` (`lib.rs:556`) resolves to a
+    root-level file of the same name.
+  - **`stage_content`.** `stage_content`'s `update-index --cacheinfo
+    …,{rel}` (`lib.rs:581`) writes that root-level entry. Stage Hunk on
+    `pkg/README.md` therefore replaces the root `README.md` in the index,
+    and the next commit is wrong. This was reproduced: `AD f` appeared at
+    the root.
+  - **Stage Selected.** `git status --porcelain` paths are
+    root-relative, but `git_stage_selected` hands them back to `git add`
+    from the subdirectory (`tui/src/app/git.rs:707-714`), which fails with
+    "pathspec did not match".
+  - **Fix.** Resolve the top level once in `vix-git` (cache it next to
+    the repo check) and run every git command with that as its working
+    directory. Convert paths at the App boundary in both directions.
+  - **Tests.** A scratch repo with `sub/f` and a root `f`. Open Vix rooted
+    at `sub/`, then check gutter marks, Stage Hunk (assert the root `f`'s
+    index entry is untouched), Stage Selected, and blame.
+  - **jj.** Check `tui/src/app/jj.rs` for the same class, since `jj` also
+    resolves paths against the repository root. **S–M.**
+- [ ] **T651 — Git reads file paths as glob patterns.** **Medium.**
+  - **Problem.** `stage`, `unstage`, `ls-files`, `blame`, `file_log` and
+    `show_commit` pass `-- <path>` without `--literal-pathspecs`
+    (`crates/vix-git/src/lib.rs:387, 543, 578, 626, 952, 973`). This was
+    reproduced: staging `app/[id]/p`, a Next.js-style folder, also staged
+    `app/i/p`. `stage_content`'s `ls-files -s` can pick up another file's
+    mode the same way.
+  - **Fix.** Set `GIT_LITERAL_PATHSPECS=1` in the `git()` and
+    `git_stdin()` helpers (`lib.rs:450`). Any caller that really wants a
+    pattern opts back in with `:(glob)`.
+  - **Test.** The bracket case above. ttt #877. **S.**
+- [ ] **T652 — LSP formatting edits land on whichever tab is active when
+  the reply arrives.** **Medium.**
+  - **Problem.** `Pending::Formatting` records neither the document nor
+    its version (`crates/vix-lsp/src/lib.rs:42, 1315`).
+    `apply_lsp_edits` applies the edits to the active tab
+    (`tui/src/app/lsp_dap.rs:739-772`). Format-on-save followed by Ctrl+Tab
+    before the server answers rewrites the other file using the first
+    file's offsets, then marks it dirty. Typing while the request is out
+    does the same to the right file.
+  - **Fix.** Carry the URI and document version in the pending request.
+    On reply, apply to the matching tab, or drop the edits if its version
+    moved on. Audit the other edit-returning replies (code action, rename,
+    on-type formatting, T624) for the same gap.
+  - **Test.** Use the mock-server harness. ttt #1089. **S.**
+- [ ] **T653 — Editable search results and Replace in Files can write the
+  wrong line and lose CRLF.** **Medium.**
+  - **Stale baseline.** `prepare_wgrep_confirm` writes line N without
+    checking that the file's line N still equals `WgrepBaseline.text`
+    (`tui/src/app.rs:12043-12055`). If the file changed after the results
+    buffer was built, the wrong line is silently replaced.
+  - **Line endings.** It rebuilds the file with `content.lines()…
+    join("\n")` (`:12059`), converting a CRLF file to LF throughout.
+  - **Plain writes.** `apply_replace_confirm` and `apply_wgrep_confirm`
+    write with plain `std::fs::write` (`:11900`, `:12091`). That skips
+    `write_atomic`, the user's read-only toggle and the save options.
+  - **Dirty tabs.** For an open tab, Replace in Files computes from the
+    buffer and writes the result to disk (`:11733-11742`). This silently
+    saves that tab's unrelated unsaved edits.
+  - **Fix.** Verify each target line against the baseline, and report the
+    ones that drifted rather than writing them. Keep each file's line
+    endings. Write through `write_atomic`, and refuse read-only tabs.
+    Apply dirty open tabs in the buffer only, leaving them dirty.
+  - **Tests.** One per case. ttt #891/#964/#1055. **S.**
+- [ ] **T654 — "Save All" saves only the active tab, and Save As
+  overwrites without asking.** **Medium.**
+  - **Save All.** `tui/src/app.rs:3610` has `"save" | "save_all" =>
+    self.save()`, but the catalog titles `save_all` "Save All"
+    (`crates/vix-action-catalog/src/lib.rs:419`).
+  - **Save As.** Save As goes straight to `save_active_as`
+    (`app.rs:12631-12644`), with no confirmation when the target exists
+    and no check for a dangling symlink there.
+  - **Fix.** Make a real `file.save_all` that saves every dirty file
+    tab, reports the count, and stops on the first failure. Wire it to the
+    File menu and the palette. Add a "File exists — overwrite?" prompt to
+    Save As (the `ReplaceConfirm`-style y/n flow), and a dangling-symlink
+    refusal.
+  - **Tests.** Assert on state. ttt #977/#910/#926. **S.**
+- [ ] **T655 — The script-trust prompt accepts a stray Enter.**
+  **Low–medium.**
+  - **Problem.** `script_trust_key` takes Enter as well as `y`
+    (`tui/src/app/scripts.rs:180`). The prompt opens at startup or on
+    reload, so an Enter typed ahead of it can approve a hostile clone's
+    `.vix/scripts`.
+  - **Fix.** Require an explicit `y`, and ignore keys that arrive within
+    ~250 ms of the prompt opening. Apply the same rule to T627's
+    project-settings trust prompt when it lands.
+  - **Test.** ttt #1057. **S.**
+- [ ] **T656 — Reloading after a branch switch skips T571's open-time
+  guards.**
+  - **Problem.** `reload_clean_from_disk` uses plain
+    `fs::read_to_string` (`crates/vix-editor/src/editor.rs:673`). A file
+    that a checkout made huge, or a path replaced by a FIFO, stalls or
+    blocks the UI thread.
+  - **Fix.** Route it through `read_text_guarded`, with the same
+    prompts, and apply the result the way an open would.
+  - **Test.** ttt #1025. **S.**
+
+### Features
+
+- [ ] **T657 — Git panel: Open Changes, and blame that follows unsaved
+  edits.**
+  - **Open Changes.** The Changes panel has no Enter action, no diff and
+    no discard (`tui/src/app/git.rs:648-675`). There is no action to diff
+    the working file against HEAD or the index, although `vix-diff-view`
+    exists. Add Enter (open the diff via `vix-diff-view`) and Discard
+    (with a confirmation) to the panel. Add matching
+    `git.diff_head`/`git.diff_index` actions.
+  - **Blame.** `blame_line` blames the copy on disk, so with unsaved
+    edits the cursor line points at the wrong commit
+    (`crates/vix-git/src/lib.rs:383-389`). Fix it by passing `--contents
+    -` with the buffer on stdin.
+  - **Staged hunks.** The gutter compares against HEAD while Stage Hunk
+    writes the index (ttt #951), so a staged hunk stays marked. Fold this
+    into T664's choice of diff base rather than fixing it twice.
+  - ttt #777/#815. **S–M.**
+- [ ] **T658 — Small parity items from the same scan.**
+  - **(a)** Explicit `editor.fold`/`editor.unfold` actions beside
+    `fold_toggle`/`fold_all` (ttt #808).
+  - **(b)** Shebang-based language detection (`#!/usr/bin/env python3`)
+    for files without an extension, in `vix-editor-core`'s language
+    lookup (ttt #822).
+  - **(c)** An `aarch64-pc-windows-msvc` release target in
+    `dist-workspace.toml`, if CI can build it (ttt #1106).
+  - Each is its own branch. **S each.**
+
+## Run O (comparator scan: Fresh, 2026-10-25)
+
+Source: [sinelaw/fresh](https://github.com/sinelaw/fresh), a Rust terminal
+IDE (GPL-3.0-or-later, ~9.3k stars, CUA-style like Vix). Sources read: its
+whole `docs/` tree (architecture, features, blog, QuickJS/WASM, theme
+screenshot diffs) and its last 100 merged PRs. Fresh was one of eight
+comparators in Run M's 2026-10-21 pass; this is the first pass devoted to
+it. Each idea was checked against Vix's code and against every earlier
+run and the Ideas backlog.
+
+Already in Vix or already planned, so deliberately **not** tasks:
+- preview tabs, the keybinding editor (T204), large-file and binary
+  prompts (T571), permission-based read-only (T572), `--diff` and stdin
+  (T208)
+- workspace trust (T132/T627), hot exit (T629), OSC 52 (T625), settings
+  reload (T626), multiple language servers (T123b), LSP restart/log (T576)
+- multi-cursor paste (T622), searching unsaved buffers, query-replace,
+  visible whitespace, word diff
+- markdown preview with TOC (T206), picker preview (T630), terminal
+  scrollback (T631), clickable task output (T632), worktrees/stash
+  (T634), ACP (T635)
+- plugin installer (T637), undo tree (T638), dashboard, theme editor
+  (T202), git log/file history (T207)
+
+Skipped as poor fits: the screensaver and animations, the web/WASM build
+(Vix has five desktop GUIs), the Kubernetes backend, dashboard network
+widgets, and a markup-hiding Markdown "compose" mode.
+
+- [ ] **T659 — Pipe the selection through a shell command.** Fresh has
+  `Alt+|` (replace the selection with the output) and `Alt+Shift+|`
+  (insert the output at the cursor). Emacs `M-|`/`C-u M-|`, Vim `!` and
+  Helix `|` all do this.
+  - **Vix today.** `shell_mode` and `tools.run_command` send output only
+    to the bottom dock (`tui/src/app.rs:3738`, `:12800`).
+  - **Fix.** Add `edit.pipe_selection` and `edit.insert_command_output`.
+    Each prompts for a command and feeds the selection (or the whole
+    buffer if nothing is selected) on stdin, through the existing
+    `spawn_shell` path, on a worker thread with a timeout.
+  - **Result.** On success the output replaces the selection, or is
+    inserted, as one undo step. On a non-zero exit nothing changes and
+    stderr shows in the dock.
+  - **Gating.** Use the same feature as `tasks`, so the minimal build
+    leaves it out. This is a prompt, not ex-command scripting, so it
+    fits the `vix-modal` rules.
+  - **Tests.** `sort`, `tr a-z A-Z`, a failing command, CRLF input.
+    **S.**
+- [ ] **T660 — Editable side-by-side Compare Files.**
+  - **Vix today.** `crates/vix-diff-view/spec/index.md` is a read-only
+    unified overlay (despite its "side-by-side" heading), and `vix
+    --diff` (`App::open_diff_files`, `tui/src/app.rs:2603`) reuses it.
+  - **Fresh.** Both sides are real editable buffers, aligned with filler
+    rows, with locked scrolling, Next/Previous Difference, and Copy
+    Change Left/Right like vimdiff `dp`/`do` (compare-files.md, PR
+    #3611). Fresh's `--diff` doubles as `git difftool`.
+  - **Fix.** Add an aligned two-pane model to `vix-diff-view` over two
+    real `Tab`s: a row map that recomputes on edit and filler rows on the
+    shorter side. Add actions `diff.next`, `diff.prev`,
+    `diff.copy_to_left` and `diff.copy_to_right`. Saving either side
+    saves that file.
+  - **Docs.** Document `git config difftool.vix.cmd 'vix --diff
+    "$LOCAL" "$REMOTE"'`. Keep the unified view as an option. **M.**
+- [ ] **T661 — Legacy text encodings and BOM round-trip.**
+  - **Vix today.** Non-UTF-8 files decode lossily and open read-only
+    (`crates/vix-fileops/spec/index.md:114`). Vix has no BOM handling and
+    no `encoding_rs` anywhere.
+  - **Fresh.** It covers UTF-16 LE/BE, Latin-1, Windows-125x,
+    GBK/GB18030, Shift-JIS and EUC-KR, with a status-bar indicator,
+    Reload with Encoding, and saving back in the original encoding
+    (encoding.md). With ~15 shipped locales, CJK and Windows users hit
+    exactly these files.
+  - **Fix.** Add a new `vix-encoding` crate (`encoding_rs` + `chardetng`,
+    both safe Rust, so check them with `cargo deny`), called from
+    `read_text_guarded` and from save.
+  - **Behavior.** Remember each tab's encoding and BOM, and write back
+    the same way. Add a status-bar segment, plus `file.reopen_with_encoding`
+    and `file.save_with_encoding` choosers.
+  - **Fallback.** Detection that isn't confident keeps today's lossy,
+    read-only path, so it can't silently corrupt a file.
+  - **Tests.** Byte-exact round trips for each encoding, with and without
+    a BOM. **M.**
+- [ ] **T662 — Auto read-only for dependency and toolchain paths; no
+  session state for "ephemeral" files.**
+  - **Read-only paths.** Go to Definition into `~/.cargo/registry`,
+    `~/.rustup`, `/nix/store`, Homebrew's Cellar, `node_modules` or
+    `site-packages` makes it easy to edit a dependency by accident. T572
+    flags only files without write permission. Add a
+    `read_only_paths` glob list in `vix-settings` with those defaults,
+    checked on open, plus a lock on the tab. The existing read-only
+    toggle overrides it.
+  - **Ephemeral files.** `vix-session` restores cursor and scroll
+    positions for every file (`crates/vix-session/spec/index.md:6`), so
+    `COMMIT_EDITMSG` and other `**/.git/**` files reopen at a stale spot.
+    Add an `ephemeral_paths` list that is never recorded.
+  - From Fresh (editing.md "Read-Only Mode", session-persistence.md
+    "Ephemeral files"). **S.**
+- [ ] **T663 — Saving keeps hard links and ownership, and an interrupted
+  save can be recovered.**
+  - **Problem.** `write_atomic` (`crates/vix-fileops/src/lib.rs:187`)
+    renames a temp file over the target. That silently splits a hard
+    link and resets the owner when saving another user's file (the spec
+    documents the hard-link loss at `:174`). Its in-place fallback keeps
+    no copy, so a crash mid-write loses the file.
+  - **Fix.** Check the link count and owner before saving. When an
+    atomic rename would change either, write in place, after first
+    copying the original to the recovery directory. On the next start,
+    a leftover copy offers Restore, Diff (via `vix-diff-view`) or
+    Discard.
+  - **Order.** Share the recovery directory and prompt with T629 (hot
+    exit), and land this after it.
+  - From Fresh (editing.md "Interrupted Saves"). **S–M.**
+- [ ] **T664 — Choose what the change gutter compares against.**
+  - **Vix today.** The gutter diffs the buffer against HEAD only
+    (`crates/vix-git/spec/index.md:9`).
+  - **Fresh.** Its live diff can compare against HEAD, the index, the
+    file on disk, or any branch (git.md "Live Diff"). Comparing against
+    disk shows exactly what is unsaved, and comparing against a branch
+    shows an agent's or a feature's whole change as you scroll.
+  - **Fix.** Add a `git_gutter_base` setting (`head` | `index` | `disk` |
+    `branch:<name>`) and a chooser action. Reuse the existing cache key
+    (add the base to it) and word diff.
+  - **Also fixes.** It resolves T657's staged-hunk marking: the `index`
+    base, or a rule of "HEAD unless staged", decides that. **S–M.**
+- [ ] **T665 — Review a branch or commit range, with saved line
+  comments.**
+  - **Vix today.** The git panel shows working-tree changes, and git
+    history opens one file at a revision
+    (`crates/vix-git/spec/git-history/index.md:29`).
+  - **Fresh.** Its Review Diff opens any range (`main..feature`, a
+    commit, a stash) as one multi-file buffer with hunk navigation,
+    stage/discard and line comments. Comments persist per repository and
+    export to Markdown or JSON (git.md, 0.4.0 blog). The main use is
+    reviewing branches an agent wrote, which pairs with T635 (ACP).
+  - **Fix.** A new `vix-review` crate that builds the multi-file model
+    from `vix-git` and `vix-diff-view` (the T660 two-pane model can come
+    later). Store comments in `.vix/review/<range>.json`, and export them
+    to Markdown so they can be pasted into a PR or an agent prompt.
+    Rendering stays in `tui/src/ui/`. **M.**
+- [ ] **T666 — Terminal-to-editor bridge (after T631).**
+  - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
+    when the shell exits (`crates/vix-terminal/spec/index.md`), and T632
+    makes `path:line` clickable only in the task dock. Vix doesn't
+    handle OSC 7 (the only OSC handling is font size, OSC 50/720).
+  - **Fresh.** From terminal.md and the 0.4.0 blog:
+    - **Open from output.** Ctrl+click a `path:line` in terminal output
+      or scrollback to open it, resolved against the shell's
+      working directory, which is tracked via OSC 7.
+    - **Send to Terminal.** Send the selection or the current line to
+      the terminal.
+    - **Restart in place.** Restart an exited terminal in place,
+      keeping its transcript.
+    - **Key capture toggle.** Choose whether editor chords reach the
+      editor or the shell.
+  - **Fix.** Extend `vix-terminal` with OSC 7 tracking and a
+    `path:line` matcher shared with T632, so there is one parser.
+    Add `terminal.send_selection` and `terminal.restart`, plus a
+    capture toggle shown in the overlay title. **M.**
+- [ ] **T667 — Project environment activation, gated by trust (after
+  T627).**
+  - **Problem.** Python and Node language servers, tasks and the
+    terminal start with Vix's own environment. A project's `.venv`,
+    direnv `.envrc`, mise/asdf, pipenv or poetry environment is ignored,
+    so they find the wrong interpreter and packages. Vix has no
+    `VIRTUAL_ENV` or `.envrc` handling anywhere.
+  - **Fresh.** It detects these, applies the environment to everything
+    it spawns, and lets users add detectors (workspace-trust.md
+    "Environments").
+  - **Fix.** A new `vix-project-env` crate that resolves an environment
+    once per workspace: `direnv export json`, `mise env --json`, or the
+    activation variables of `.venv/bin` (`VIRTUAL_ENV`, `PATH` prefix).
+    It is applied where `vix-lsp`, `vix-tasks` and `vix-terminal` build
+    their `Command`.
+  - **Trust.** Running `direnv`/`mise` executes project-controlled code,
+    so it happens only for a trusted workspace (T627's trust store). The
+    `.venv` case reads files only and can always run.
+  - **UI.** Add a status-bar indicator and a `project.reload_env`
+    action. **M.**
+
+---
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -7511,7 +7850,10 @@ scratch each time they come up.
   `Project → Compile`, terminal) with a thin local UI. Large: a real
   remote-fs/remote-process protocol, not a small feature. Vix's
   local-only model (direct `std::fs`, `Command::new` everywhere) would
-  need a real abstraction layer first.
+  need a real abstraction layer first. Fresh's design is the model to
+  copy: a single "authority" slot that owns file access and process
+  spawning, shared by SSH, devcontainers and Kubernetes, so
+  devcontainer support falls out of the same abstraction.
 - **Collaborative editing.** Multiple people editing the same buffer
   live (CRDT or OT-based). Large scope, a genuinely different product
   direction (network sync, presence, conflict resolution beyond git) —
@@ -7548,7 +7890,41 @@ scratch each time they come up.
 - **Remote-control socket** for terminal-multiplexer integration (ttt's
   `--listen` and its herdr plugin: open `file:line` in a running editor
   from another pane). Before scoping, define a trust model for who can
-  connect to the socket.
+  connect to the socket. Fresh (Run O) gives it a concrete first use:
+  a nested `vix` (`$EDITOR`, `git commit`) run inside Vix's own terminal
+  opens the file in the parent editor, with `open path:line --wait`.
+- **Guided code tours** (Fresh code-tours.md; VS Code CodeTour's JSON
+  format). A manifest of steps (file, line range, Markdown) walked in a
+  dock panel that highlights each step in a real buffer and warns when the
+  code has moved on. Agents can write the manifests. A new
+  `vix-code-tour` crate. **M.**
+- **Self-update** (Fresh #3614). Turn on dist's updater
+  (`install-updater = false` today, `dist-workspace.toml`) for
+  installer-script installs, and have `vix --update` print the right
+  command for Homebrew, npm and cargo installs instead. Needs a decision
+  on update checks and privacy first.
+- **Color-aware theme snapshots** (Fresh theme-screenshot-diff.md):
+  before/after screenshots of each theme in CI. Today's snapshot tests
+  are plain text, so color regressions are invisible (T203's note); could
+  be a variant of T609.
+- **Small polish from Fresh:** theme `extends` inheritance; configurable
+  status-bar segments; compact single-child folders and sticky parent
+  folders in the explorer; "promote macro to Rhai script" from
+  `vix-macros`.
+- **Small polish from ttt v1.8–v1.9:** a follow/tail mode for logs
+  (#944), icon overrides (#963), a right-side sidebar (#1088), favorite
+  folders (#729), dragging a path into the terminal (#662).
+- **Editable live diff** (ttt #795): edit in the diff view itself. Wait
+  for T660, which makes both sides real buffers. **L.**
+- **Very large files without loading them** (Fresh's lazy loading): a
+  read-only, chunked viewer with a byte-offset gutter and an on-demand
+  line index for multi-gigabyte logs. Today Vix loads the whole file, up
+  to its 1 GiB ceiling (T571). **L.**
+- **Workspaces as live sessions** (Fresh's Orchestrator): several
+  worktrees open in one process, each with its own terminals and agent.
+  Build on T634 (worktrees) and T635 (ACP). **L.**
+- **Detach and reattach** (Fresh's `-a` daemon mode). tmux mostly covers
+  it. **L.**
 
 ---
 
@@ -7627,6 +8003,12 @@ CI-discovered rounds to get genuinely right on Windows).
     Run B's T112–T115, and T608 before T617. The large items (T611, T618,
     T635) come last, each after its spec is agreed. T602 needs a policy
     decision from the user first.
+14. **Run N (comparator scan: ttt v1.8–v1.9, 2026-10-25):** T650 first
+    (high: corrupts the index in a monorepo subdirectory), then T651–T656
+    (small correctness fixes, any order), then T657 and T658.
+15. **Run O (comparator scan: Fresh, 2026-10-25):** T659 first (small,
+    high value), then T660 and T661, then T662 and T664. T663 after T629,
+    T666 after T631, T667 after T627, and T665 after T660.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

@@ -335,3 +335,15 @@ Pango
 Slint
 slint
 winit
+cacheinfo
+chardetng
+direnv
+EDITMSG
+envrc
+pathspec
+pathspecs
+PATHSPECS
+pipenv
+toplevel
+venv
+vimdiff
