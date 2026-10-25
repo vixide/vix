@@ -7623,7 +7623,7 @@ impl App {
     /// buffers were reloaded.
     pub(super) fn reload_clean_buffers(&mut self) -> usize {
         use crate::fileops::TextReadError;
-        let outcome = self.editor.reload_clean_from_disk();
+        let outcome = self.editor.reload_clean_from_disk_checked();
         for (path, why) in outcome.refused {
             let reason = match why {
                 TextReadError::NotRegular => t!("msg.open_not_regular"),

@@ -64,7 +64,7 @@ fn word_starts(text: &str) -> Vec<usize> {
     starts
 }
 
-/// What [`Editor::reload_clean_from_disk`] did (T656).
+/// What [`Editor::reload_clean_from_disk_checked`] did (T656).
 #[derive(Debug, Default)]
 pub struct Reload {
     /// How many buffers were replaced with their file's new content.
@@ -680,7 +680,7 @@ impl Editor {
     /// already past the limit (the user confirmed opening it large) keeps that
     /// confirmation: it is re-read under the hard ceiling instead. Other read
     /// errors (the file vanished) skip the buffer silently, as before.
-    pub fn reload_clean_from_disk(&mut self) -> Reload {
+    pub fn reload_clean_from_disk_checked(&mut self) -> Reload {
         let mut out = Reload::default();
         for tab in &mut self.tabs {
             if tab.dirty || tab.image.is_some() {
@@ -717,6 +717,14 @@ impl Editor {
             out.reloaded += 1;
         }
         out
+    }
+
+    /// [`Editor::reload_clean_from_disk_checked`], returning only how many
+    /// buffers were reloaded. Refusals are still applied (the buffer is kept)
+    /// but not reported. Kept for API compatibility; hosts that should tell
+    /// the user why a file was not reloaded call the checked variant.
+    pub fn reload_clean_from_disk(&mut self) -> usize {
+        self.reload_clean_from_disk_checked().reloaded
     }
 
     /// Promote the active preview tab to a permanent tab.
@@ -1669,7 +1677,7 @@ mod tests {
         fs::write(&path, "old\n").unwrap();
         let mut e = editor_with(&path, 1024);
         fs::write(&path, "new\n").unwrap();
-        let out = e.reload_clean_from_disk();
+        let out = e.reload_clean_from_disk_checked();
         assert_eq!(out.reloaded, 1);
         assert_eq!(out.refused, []);
         assert_eq!(e.active_tab().unwrap().text(), "new\n");
@@ -1685,7 +1693,7 @@ mod tests {
         fs::write(&path, "small\n").unwrap();
         let mut e = editor_with(&path, 16);
         fs::write(&path, "x".repeat(64)).unwrap();
-        let out = e.reload_clean_from_disk();
+        let out = e.reload_clean_from_disk_checked();
         assert_eq!(out.reloaded, 0);
         assert_eq!(
             out.refused,
@@ -1703,7 +1711,7 @@ mod tests {
         fs::write(&path, "ok\n").unwrap();
         let mut e = editor_with(&path, 1024);
         fs::write(&path, b"caf\xe9\n").unwrap();
-        let out = e.reload_clean_from_disk();
+        let out = e.reload_clean_from_disk_checked();
         assert_eq!(out.reloaded, 1);
         let tab = e.active_tab().unwrap();
         assert!(
