@@ -37,7 +37,7 @@ fn reload_refuses_a_fifo_without_blocking() {
         return;
     }
     // Without the guard this read would block forever (no writer).
-    let out = e.reload_clean_from_disk();
+    let out = e.reload_clean_from_disk_checked();
     assert_eq!(out.reloaded, 0);
     assert_eq!(out.refused, vec![(path, TextReadError::NotRegular)]);
     assert_eq!(e.active_tab().unwrap().text(), "text\n");

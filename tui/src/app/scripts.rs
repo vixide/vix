@@ -136,10 +136,8 @@ impl App {
         let project = self.root.join(".vix").join("scripts");
         let count = vix_script::discover(None, Some(&project)).len();
         if count > 0 {
-            self.script_trust = Some(ScriptTrustPrompt {
-                count,
-                opened_at: std::time::Instant::now(),
-            });
+            self.script_trust = Some(ScriptTrustPrompt { count });
+            self.script_trust_opened_at = Some(std::time::Instant::now());
         }
     }
 
@@ -184,9 +182,8 @@ impl App {
     /// `.vix/scripts/`.
     pub(super) fn script_trust_key(&mut self, key: KeyEvent) {
         if self
-            .script_trust
-            .as_ref()
-            .is_some_and(|p| p.opened_at.elapsed() < super::SCRIPT_TRUST_KEY_GUARD)
+            .script_trust_opened_at
+            .is_some_and(|t| t.elapsed() < super::SCRIPT_TRUST_KEY_GUARD)
         {
             return;
         }

@@ -712,11 +712,6 @@ pub struct ScriptTrustPrompt {
     /// How many `.rhai` files are waiting under `.vix/scripts/`, unloaded
     /// until this prompt is answered.
     pub count: usize,
-    /// When the prompt opened. Keys arriving sooner than
-    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
-    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
-    /// can backdate it instead of sleeping.
-    pub opened_at: std::time::Instant,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):
@@ -1741,6 +1736,13 @@ pub struct App {
     pub confirm: Option<Confirm>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub script_trust: Option<ScriptTrustPrompt>,
+    /// When [`App::script_trust`] last opened. Keys arriving sooner than
+    /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
+    /// typed ahead of a startup/reload prompt can't answer it. Public so tests
+    /// can backdate it instead of sleeping. (Kept here rather than on
+    /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
+    /// change.)
+    pub script_trust_opened_at: Option<std::time::Instant>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub replace_confirm: Option<ReplaceConfirm>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
@@ -2352,6 +2354,7 @@ impl App {
             paste: None,
             confirm: None,
             script_trust: None,
+            script_trust_opened_at: None,
             replace_confirm: None,
             wgrep_baseline: None,
             wgrep_confirm: None,
@@ -6941,7 +6944,12 @@ impl App {
         self.lsp_sync_active();
         for event in self.lsp.poll() {
             match event {
-                crate::lsp::LspEvent::Diagnostics(_) => {}
+                // `Edits`/`LinkedRanges` are no longer emitted (T652): those
+                // replies arrive, tied to their document, from
+                // `take_edit_replies` below.
+                crate::lsp::LspEvent::Diagnostics(_)
+                | crate::lsp::LspEvent::Edits(_)
+                | crate::lsp::LspEvent::LinkedRanges(_) => {}
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
@@ -6973,8 +6981,6 @@ impl App {
                         self.lsp.request_incoming_calls(&path, item);
                     }
                 }
-                crate::lsp::LspEvent::Edits { path, edits } => self.apply_lsp_edits(&path, &edits),
-                crate::lsp::LspEvent::StaleEdits(path) => self.drop_stale_lsp_edits(&path),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
@@ -6995,9 +7001,6 @@ impl App {
                 }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
-                crate::lsp::LspEvent::LinkedRanges { path, ranges } => {
-                    self.begin_linked_edit(&path, &ranges);
-                }
                 crate::lsp::LspEvent::FoldingRanges(ranges) => self.apply_folding_ranges(&ranges),
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();
@@ -7031,6 +7034,9 @@ impl App {
                     self.apply_semantic_tokens(&tokens);
                 }
             }
+        }
+        for reply in self.lsp.take_edit_replies() {
+            self.apply_edit_reply(reply);
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
         // stay correct across new publishes and tab switches alike (cheap — it
@@ -7692,7 +7698,7 @@ impl App {
     /// buffers were reloaded.
     pub(super) fn reload_clean_buffers(&mut self) -> usize {
         use crate::fileops::TextReadError;
-        let outcome = self.editor.reload_clean_from_disk();
+        let outcome = self.editor.reload_clean_from_disk_checked();
         for (path, why) in outcome.refused {
             let reason = match why {
                 TextReadError::NotRegular => t!("msg.open_not_regular"),
