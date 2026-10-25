@@ -7442,9 +7442,8 @@ new action.
   Result<()>` to return `()`, a major-version break that failed the semver
   gate. The `()`-returning method is now `Editor::copy_to_clipboard` (all
   callers moved), and `set_clipboard` is back with its 1.x signature as a
-  thin compatibility wrapper (always `Ok`). Follow-up: mark it
-  `#[deprecated]` at the next minor release (a deprecation is itself a
-  minor change), remove it at 2.0.
+  thin compatibility wrapper (always `Ok`), `#[deprecated]` since 1.8.0
+  (a deprecation is itself a minor change). Follow-up: remove it at 2.0.
 
 - [x] **T648 — Per-framework binary licenses.** Each distributed binary
   (`vix-tui` and every `gui/` front end) declares in `license`, and ships

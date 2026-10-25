@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-25
+
 ### Added
 
 - **Desktop GUIs, experimental** (T641, T642, T646): `gui/` builds two front ends that run the whole of Vix — every panel, overlay and dock — in a native window on macOS, Windows and Linux, so the toolkits can be compared: `vix-gpui` (GPUI Kit) and `vix-egui` (egui/eframe, with IME input), each a complete implementation with no common GUI library. Both have a native menu bar (egui: macOS) with a system open-file dialog, and closing the window runs Vix's own quit flow. Run with `cargo run --manifest-path gui/Cargo.toml --release -p vix-gpui` or `-p vix-egui`. See `gui/spec/index.md`.
@@ -19,6 +21,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Backend-neutral input** (T640): key and mouse handling throughout Vix now uses the new `vix-input` crate's event types instead of crossterm's; only the terminal event loop converts crossterm events. No behavior change in the terminal.
 - **No unchecked `unwrap`/`expect` in shipped code** (T603): draw functions now bail out with `let … else` instead of unwrapping an `Option` they just checked, and `clippy::unwrap_used`/`expect_used` are enforced workspace-wide (tests exempt via `clippy.toml`; the remaining provably-safe sites carry `#[expect(.., reason)]`).
 - **One lint policy** (T599): `unsafe_code`, `missing_docs` and `clippy::pedantic` now live in `[workspace.lints]`, and every crate and target (tests, benches, examples, build scripts) inherits them; `allow` attributes now need a `reason`.
+- **`Editor::set_clipboard` is deprecated** (T649) in `vix-editor-core`: use `Editor::copy_to_clipboard`, which cannot fail and returns nothing. `set_clipboard` keeps its 1.x signature and will be removed at 2.0.
 - **Smaller crate**: the published `vix` package no longer includes the project website
   (`vixide.github.io/`), CI definitions or agent settings; none are read by the build or tests.
 
