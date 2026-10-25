@@ -6,6 +6,29 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Save All** (T654): saves every modified file tab (also in the command palette), reports how many were saved, and stops at the first failure. The `save_all` action used to save only the active tab.
+- **`vix-lsp`: `Lsp::take_edit_replies()`** (T652) returns formatting and linked-editing replies as `EditReply`, tied to the document they were requested for and version-checked; `LspEvent::Edits` and `LspEvent::LinkedRanges` are no longer emitted. `vix-editor` gains `Editor::reload_clean_from_disk_checked`, which reports refused files.
+
+### Fixed
+
+- **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.
+- **Git paths are literal** (T651): staging a path such as `app/[id]/page.tsx` no longer also stages `app/i/page.tsx`.
+- **LSP formatting edits go to the right file** (T652): formatting and format-on-save edits apply to the file they were requested for, not whichever tab is active when the server replies. Edits computed against text that has since changed are dropped with a status message instead of corrupting the file. Linked-editing ranges get the same check.
+- **Editable search results and Replace in Files** (T653): a line that changed after the search is skipped and reported instead of being overwritten. Writes keep CRLF line endings, the final-newline state, indentation and text past the 120-character preview, go through the atomic writer, refuse files open in read-only tabs, and change a file open with unsaved edits in its buffer only, instead of silently saving those edits.
+- **Save As asks before overwriting** (T654) an existing file, and refuses a target that is a dangling symlink.
+- **Reloading after a branch switch or external change** (T656) applies the same guards as opening a file: a path replaced by a FIFO or device, a file past the size limit, or a binary file is not read; the buffer keeps its text and a warning says why. Non-UTF-8 files reload read-only.
+
+### Security
+
+- **The workspace script-trust prompt needs an explicit `y`** (T655): it no longer accepts Enter, and ignores keys pressed within 250 ms of opening, so an Enter typed ahead of the startup or reload prompt can't approve a cloned repository's `.vix/scripts`.
+
+### Changed
+
+- **Docs are spell-checked** in `scripts/check-docs` (CSpell; required in GitHub and Codeberg CI), and the existing spelling findings are fixed.
+- **README and website rewritten for new visitors**, and the website now uses the current Lily design system (PickerBar 0.5 with docs search, theme, language, text size and share pickers; 57 themes from `@lilydesignsystem/themes`).
+
 ## [1.8.0] - 2026-10-25
 
 ### Added
