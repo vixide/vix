@@ -20,6 +20,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Editable search results and Replace in Files** (T653): a line that changed after the search is skipped and reported instead of being overwritten. Writes keep CRLF line endings, the final-newline state, indentation and text past the 120-character preview, go through the atomic writer, refuse files open in read-only tabs, and change a file open with unsaved edits in its buffer only, instead of silently saving those edits.
 - **Save As asks before overwriting** (T654) an existing file, and refuses a target that is a dangling symlink.
 - **Reloading after a branch switch or external change** (T656) applies the same guards as opening a file: a path replaced by a FIFO or device, a file past the size limit, or a binary file is not read; the buffer keeps its text and a warning says why. Non-UTF-8 files reload read-only.
+- **The `vix-db` tests no longer touch the OS keyring** (T639). The keyring is now opt-in (`vix_db::secret::use_system_keyring`), which `vix` and the desktop GUIs turn on at startup, so a slow macOS Keychain lookup can't time out a test, and a test can't read a real saved password.
 
 ### Security
 

@@ -19,11 +19,13 @@ pub struct Loaded {
     pub error: Option<String>,
 }
 
-/// Opt into the system clipboard, load settings, and set the locale. Call
-/// first, before anything translates text (the native menu bar included).
+/// Opt into the system clipboard and OS keyring, load settings, and set the
+/// locale. Call first, before anything translates text (the native menu bar
+/// included).
 #[must_use]
 pub fn load(cli: &Cli) -> Loaded {
     vix::clipboard::use_system();
+    vix::db::secret::use_system_keyring();
     let (settings, error) = match Settings::try_load() {
         Ok(s) => (s, None),
         Err(e) => (Settings::default(), Some(e.to_string())),

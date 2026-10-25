@@ -7074,7 +7074,7 @@ new action.
   Step 2, later, after a spec: an `Overlay` enum for the modals that are
   mutually exclusive. **Large (step 1 is medium).**
 
-- [ ] **T639 — `password_prompt_gates_server_connections` does a real OS
+- [x] **T639 — `password_prompt_gates_server_connections` does a real OS
   keyring lookup, so it flakes under load.** Found 2026-10-22 while
   landing T597's follow-up. The test (`crates/vix-db/src/lib.rs`, ~743)
   selects a Postgres connection, and `wait_for_connect` gives the
@@ -7088,6 +7088,11 @@ new action.
   T596 isolated the clipboard, so the test no longer depends on the host's
   keyring. Test: the same assertions run with a lookup that returns
   "no password" instantly. **Small.**
+  - Done 2026-10-25: by 2026-10-25 it failed 4 of 5 runs even unloaded.
+    `vix_db::secret` now has an opt-in switch like T596's clipboard:
+    `use_system_keyring()` (off by default) gates `keyring_get` /
+    `keyring_set`, `vix` and each GUI call it at startup, and tests never
+    do. Spec: `crates/vix-db/spec/session.md`.
 
 ### Language intelligence & editing
 
