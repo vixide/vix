@@ -23,6 +23,10 @@ github-build-setup = "../dist/build-setup.yml"
 install-path = "CARGO_HOME"
 # Where to host releases
 hosting = "github"
+# Build only the packages dist releases (`cargo build -p …`), not
+# `--workspace`: the gui workspace also holds vix-gtk4, which isn't released
+# (it needs the system GTK 4) and fails to build on the release runners.
+precise-builds = true
 # Whether to install an updater program
 install-updater = false
 # A GitHub repo to push Homebrew formulas to
