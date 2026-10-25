@@ -7421,9 +7421,10 @@ new action.
   forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
   `tui/` and `gui/*` packages). **Done.**
 - [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
-  release).** (1) Publish the new crates in dependency order: `vix-input`
+  release).** (1) ~~Publish the new crates in dependency order: `vix-input`
   first (new in T640), then the members, then `vix-tui`; drop
-  `--exclude vix-input --exclude vix-tui` from the semver step afterwards. (2) The moment the
+  `--exclude vix-input --exclude vix-tui` from the semver step afterwards.~~
+  Done: all 125 crates published at 1.8.0 (2026-10-25), excludes dropped. (2) The moment the
   release is out, change `docs/getting-started/index.md`'s install
   one-liners (and the site's install page) from `vix-installer.sh`/`.ps1`
   to `vix-tui-installer.sh`/`.ps1` — `latest/download` resolves to the new
