@@ -30,6 +30,23 @@
     label="Copy the installer script command"
   />
 
+  <h2 id="linux">Linux packages (apt, dnf, pacman)</h2>
+  <p>
+    Every release carries native packages of <code>vix-tui</code> and the
+    desktop GUIs for x86_64 and aarch64. Download the one for your
+    distribution from the
+    <a href="https://github.com/vixide/vix/releases/latest">latest release</a>,
+    then install it:
+  </p>
+  <CopyCommand command="sudo apt install ./vix-tui_*_amd64.deb" label="Copy the Debian and Ubuntu install command" />
+  <CopyCommand command="sudo dnf install ./vix-tui-*.x86_64.rpm" label="Copy the Fedora and RHEL install command" />
+  <CopyCommand command="sudo pacman -U ./vix-tui-*-x86_64.pkg.tar.zst" label="Copy the Arch Linux install command" />
+  <p>
+    They need glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+,
+    RHEL/Rocky 10). There is no apt or dnf repository yet, so updating means
+    installing the next release's package.
+  </p>
+
   <h2 id="windows">Windows (PowerShell)</h2>
   <CopyCommand
     command={`powershell -ExecutionPolicy Bypass -c "irm ${release}/vix-tui-installer.ps1 | iex"`}
