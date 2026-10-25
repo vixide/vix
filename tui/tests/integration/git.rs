@@ -619,3 +619,101 @@ fn conflict_list_renders_without_panicking() {
         .collect();
     assert!(screen.contains("ours1"), "a conflict preview is shown");
 }
+
+/// T650: a throwaway repo with distinct `f` and `sub/f`, committed, and an
+/// App rooted at `sub/` (Vix started in a repository subdirectory).
+fn app_in_repo_subdir(tag: &str) -> (PathBuf, App) {
+    let dir = unique_dir(tag);
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Ada Lovelace");
+    fs::write(dir.join("f"), "root one\nroot two\n").unwrap();
+    fs::write(dir.join("sub/f"), "sub one\nsub two\n").unwrap();
+    for args in [
+        &["add", "."][..],
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
+    ] {
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
+    }
+    let mut app = app_at(&dir.join("sub"));
+    app.refresh_git();
+    (dir, app)
+}
+
+/// The staged (index) content of `path` in the repo at `dir`.
+fn index_content(dir: &Path, path: &str) -> String {
+    let out = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["show", &format!(":{path}")])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_works_when_vix_is_rooted_in_a_repo_subdirectory() {
+    let (dir, mut app) = app_in_repo_subdir("gitsubdir");
+    assert!(app.flags.contains(AppFlags::GIT_REPO));
+    app.open_initial(&dir.join("sub/f"));
+
+    // Gutter: an untouched file has no marks (it used to diff against the
+    // root `f`'s HEAD blob); one edit marks exactly one line.
+    app.refresh_git_gutter();
+    let marks = |app: &App| {
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(marks(&app).is_empty(), "unchanged file: {:?}", marks(&app));
+    app.on_key(key('x'));
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app).len(), 1, "one edited line: {:?}", marks(&app));
+
+    // Stage Hunk writes `sub/f`'s index entry and leaves the root `f`'s alone.
+    app.run_action("git.stage_hunk");
+    assert_eq!(index_content(&dir, "sub/f"), "xsub one\nsub two\n");
+    assert_eq!(index_content(&dir, "f"), "root one\nroot two\n");
+
+    // Blame names the subdirectory file's commit.
+    app.run_action("git.blame");
+    assert!(app.status.contains("Ada Lovelace"), "{}", app.status);
+
+    // The status rows are relative to the root, so the explorer badge and
+    // the panel agree on the file.
+    assert!(app.git_change_for(&dir.join("sub/f")).is_some());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_panel_stage_selected_works_from_a_repo_subdirectory() {
+    let (dir, mut app) = app_in_repo_subdir("gitsubpanel");
+    fs::write(dir.join("sub/f"), "sub changed\n").unwrap();
+    fs::write(dir.join("f"), "root changed\n").unwrap();
+    app.run_action("git.changes");
+    let paths: Vec<&str> = app.git_status.iter().map(|s| s.path.as_str()).collect();
+    assert_eq!(paths, ["../f", "f"], "paths relative to the Vix root");
+    // Stage both rows ('s'), moving down between them.
+    app.on_key(keycode(KeyCode::Char('s')));
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Char('s')));
+    assert!(
+        app.git_status.iter().all(vix::git::FileStatus::is_staged),
+        "both staged: {:?} (messages: {:?})",
+        app.git_status,
+        app.status
+    );
+    assert_eq!(index_content(&dir, "sub/f"), "sub changed\n");
+    assert_eq!(index_content(&dir, "f"), "root changed\n");
+    fs::remove_dir_all(&dir).ok();
+}

@@ -272,7 +272,7 @@ result exactly as you would after resolving by hand.
 
 ## Jujutsu (jj), briefly
 
-If a workspace has a `.jj` directory, the **JJ** menu mirrors the Git
+If a workspace (or a folder above it) has a `.jj` directory, the **JJ** menu mirrors the Git
 menu's shape for [Jujutsu](https://github.com/jj-vcs/jj) instead — log
 views, `New Change`, `Describe…`, `Commit…`, bookmarks (jj's equivalent of
 branches), and `jj git push`/`fetch` for repos colocated with git. Every
