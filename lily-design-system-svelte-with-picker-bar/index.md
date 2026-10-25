@@ -15,7 +15,7 @@ In global top header navigation area use:
 
 In Lily ThemePicker use:
 - all Lily default themes (not any application-specific custom themes)
-- sort themes alphabetetically
+- sort themes alphabetically
 - sort UK & US themes at the end, after all the non-national themes
 
 In Lily SharePicker use:
