@@ -1397,7 +1397,7 @@ impl App {
                 // Files on disk may now differ; refresh the explorer tree and
                 // reload any open clean buffers so they reflect the new branch.
                 self.explorer.rebuild();
-                let n = self.editor.reload_clean_from_disk();
+                let n = self.reload_clean_buffers();
                 if n > 0 {
                     self.messages
                         .info(t!("status.git_reloaded", count = n).to_string());

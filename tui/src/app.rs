@@ -5123,7 +5123,7 @@ impl App {
             }
         }
         if reload_clean {
-            let n = self.editor.reload_clean_from_disk();
+            let n = self.reload_clean_buffers();
             if n > 0 {
                 self.status = t!("status.reloaded_external", count = n).to_string();
             }
@@ -7612,6 +7612,33 @@ impl App {
             }
             Err(e) => self.report_open_failure(path, preview, &e),
         }
+    }
+
+    /// Reload every clean buffer whose file changed on disk (after a branch
+    /// switch, an external edit, an agenda write), through the same guard an
+    /// open uses (T656). A file the guard refuses — now a FIFO or device, past
+    /// the size limit, or binary — keeps its buffer and is reported as a
+    /// warning, instead of stalling the UI thread on the read. Returns how many
+    /// buffers were reloaded.
+    pub(super) fn reload_clean_buffers(&mut self) -> usize {
+        use crate::fileops::TextReadError;
+        let outcome = self.editor.reload_clean_from_disk();
+        for (path, why) in outcome.refused {
+            let reason = match why {
+                TextReadError::NotRegular => t!("msg.open_not_regular"),
+                TextReadError::TooLarge => t!("msg.open_too_large"),
+                TextReadError::Binary => t!("msg.open_binary"),
+            };
+            self.messages.warn(
+                t!(
+                    "msg.reload_refused_path",
+                    path = path.display(),
+                    error = reason
+                )
+                .to_string(),
+            );
+        }
+        outcome.reloaded
     }
 
     /// Say why `path` did not open. A file over the size limit, or a binary one,
@@ -14344,6 +14371,50 @@ mod tests {
         assert!(
             text.contains("changed externally"),
             "clean buffer reloaded: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// T656: a reload goes through the open-time guard -- a file that grew
+    /// past the size limit is not read, the buffer keeps its text, and a
+    /// warning says why.
+    #[test]
+    fn external_change_past_the_size_limit_keeps_the_buffer_and_warns() {
+        let dir = std::env::temp_dir().join(format!("vix-reload-big-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+        std::fs::write(&path, "original\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        app.editor.max_text_bytes = 32;
+        app.poll_file_changes();
+
+        std::fs::write(&path, "x".repeat(256)).unwrap();
+        app.disk_mtimes
+            .insert(path.clone(), std::time::SystemTime::UNIX_EPOCH);
+        app.last_disk_poll = None;
+        let warnings_before = app
+            .messages
+            .items
+            .iter()
+            .filter(|m| m.level == Level::Warn)
+            .count();
+        app.poll_file_changes();
+
+        assert_eq!(app.editor.active_tab().unwrap().text(), "original\n");
+        let warnings_after = app
+            .messages
+            .items
+            .iter()
+            .filter(|m| m.level == Level::Warn)
+            .count();
+        assert_eq!(
+            warnings_after,
+            warnings_before + 1,
+            "the refusal is reported"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
