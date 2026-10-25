@@ -29,6 +29,10 @@ In Workspace…**.
   surviving line was actually edited); `parse_result_line` parses one
   buffer line back into `(rel, line, text)`, the inverse of `Hit::display`'s
   own format.
+- `clip` / `CLIP_CHARS` / `LineEdit` / `LineRewrite` / `rewrite_lines`
+  (T653) — the shared clip a `Hit::text` uses, and the pure,
+  baseline-checked, line-ending-preserving rewrite an editable-results save
+  applies to each file (see *Write safety* below).
 
 ## What lives where
 
@@ -71,6 +75,29 @@ wording, since "N edits written" and "N replaced" are different claims.
 Applying writes each affected file whole (not just the changed lines) and
 re-baselines exactly the lines that changed, so saving again without
 further edits is a no-op.
+
+### Write safety (T653)
+
+The line rewrite is `rewrite_lines`, a pure function over one file's text:
+
+- **Stale lines are not written.** Each target line's current text is passed
+  through `clip` (the same left-trim and `CLIP_CHARS` cut a `Hit` uses) and
+  compared to its baseline. A line that no longer matches — or no longer
+  exists — is reported as drifted (a warning per line, a count in the status
+  line) and skipped, so a file changed since the search never has the wrong
+  line replaced.
+- **Only the visible part changes.** A rewritten line keeps its leading
+  whitespace and any text past `CLIP_CHARS` the buffer didn't show.
+- **Line endings are kept.** Each line keeps its own `\r\n` or `\n`, and
+  the file keeps its final-newline state.
+
+Applying a plan — here and in **Replace in Files**, which shares the step
+(`App::apply_file_plan`) — writes with `vix_fileops::write_atomic`, refuses a
+file open in a **read-only** tab (reported, not written), and changes a file
+open in a **dirty** tab in that buffer only, leaving it dirty: writing it to
+disk would also save that tab's unrelated unsaved edits. The on-save
+normalizations are not applied, since the preview showed exactly what is
+written.
 
 **Known limitation**: a `rel` (workspace-relative path) containing a
 literal `:` would parse wrong — essentially never seen in practice, and

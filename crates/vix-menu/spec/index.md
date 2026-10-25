@@ -64,7 +64,8 @@ Help**.
 | Open Recent… | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
 | Insert File… | | Insert another file's contents at the cursor |
 | Save         | `Ctrl+S`       | Save the file               |
-| Save As… | `Ctrl+Shift+S` | Save under a different name |
+| Save As… | `Ctrl+Shift+S` | Save under a different name; asks before overwriting an existing file and refuses a dangling symlink |
+| Save All | | Save every dirty file-backed tab; stops at the first failure |
 | Rename…  | | Rename the active file on disk (bare name keeps the directory) |
 | Revert   | | Reload the file from disk, discarding unsaved edits (undoable) |
 | *— separator —* | | |

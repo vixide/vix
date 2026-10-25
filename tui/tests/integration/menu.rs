@@ -656,7 +656,7 @@ fn menu_type_ahead_selects_by_first_letter() {
         app.on_key(keycode(KeyCode::Right));
     }
     // Open File, type S to cycle the "S" items in menu order:
-    // Switch Project → Save Workspace → Save → Save As → wraps around.
+    // Switch Project → Save Workspace → Save → Save As → Save All → wraps around.
     app.on_key(key('s'));
     assert_eq!(app.menu.selected_action(), Some("file.switch_project"));
     app.on_key(key('s'));
@@ -665,6 +665,8 @@ fn menu_type_ahead_selects_by_first_letter() {
     assert_eq!(app.menu.selected_action(), Some("file.save"));
     app.on_key(key('s'));
     assert_eq!(app.menu.selected_action(), Some("file.save_as"));
+    app.on_key(key('s'));
+    assert_eq!(app.menu.selected_action(), Some("file.save_all"));
     app.on_key(key('s'));
     assert_eq!(
         app.menu.selected_action(),
