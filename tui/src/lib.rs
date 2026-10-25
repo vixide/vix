@@ -152,6 +152,12 @@ pub use vix_db as db;
 pub mod db {
     /// The (absent) DB workbench; uninhabited.
     pub enum Browser {}
+    /// Stand-in for `vix_db::secret`: with no DB workbench there are no
+    /// saved database passwords, so there is no keyring to opt into.
+    pub mod secret {
+        /// No-op; see `vix_db::secret::use_system_keyring` (T639).
+        pub fn use_system_keyring() {}
+    }
 }
 pub use vix_diff_view as diff_view;
 pub use vix_doctor as doctor;
