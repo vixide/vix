@@ -1,21 +1,35 @@
-# Compare With File
+# Compare Files
 
-Quickly see how the file you're editing differs from another file — a backup, a
-sibling config, the version on another path — without leaving Vix™.
+See how two files differ, and move changes between them, without leaving Vix™.
+Both sides are real, editable buffers.
 
-## Using it
+## Opening a comparison
 
-Open **Tools → Compare With File…** (or the command palette), then type the path
-to compare against (relative paths resolve from the workspace root). Vix shows a
-read-only unified diff between that file and your **current buffer** (including
-unsaved edits):
+- **Tools → Compare → Compare With File…** (or the command palette): type the
+  path of the file to compare the current file against (relative paths resolve
+  from the workspace root). The other file opens on the left, the current file
+  on the right, in a side-by-side split.
+- From the shell: `vix --diff OLD NEW`, which is also how `git difftool` runs
+  Vix (see [the CLI page](../cli/index.md)).
 
-- **Green `+`** lines are in your buffer but not the other file.
-- **Red `-`** lines are in the other file but not your buffer.
-- Dimmed lines are unchanged context; a `⋯` marks a gap between changes.
+## Working in it
 
-Scroll with `↑` / `↓` or `PageUp` / `PageDown`, and close with `Esc` (or `q`). If
-the two are identical, Vix says so in the status bar instead of opening the view.
+- The gutter marks each side's changes: yellow for a changed line, green for a
+  line only on that side, red where lines exist only on the other side.
+- The two panes scroll together: the other pane follows the one you're in.
+- **Next Difference** and **Previous Difference** move the cursor between changes.
+- **Copy Change to Left** and **Copy Change to Right** copy the change at the
+  cursor to the other side, as one undo step there (like vimdiff `do`/`dp`).
+- Edit either side as normal. Saving a side saves that file, and the comparison
+  updates as you type.
+- **Show as Unified Diff** opens the read-only unified view (green `+` added,
+  red `-` removed, `⋯` between changes). Scroll it with `↑`/`↓` or
+  `PageUp`/`PageDown`, and close it with `Esc` or `q`.
+- **Close Comparison** removes the split. Both files stay open. Closing either
+  tab also ends the comparison.
+
+An unsaved, untitled buffer has no file to put in a pane, so comparing one
+opens the unified view instead.
 
 See the specification at `crates/vix-diff-view/spec/index.md`. For changes against the Git
 HEAD version of a file, use the [diff gutter and per-hunk tools](../git-panel/index.md)

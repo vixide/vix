@@ -14,6 +14,7 @@
 mod ai;
 mod catalog;
 mod common;
+mod compare;
 mod coverage;
 #[cfg(feature = "sql")]
 mod db;

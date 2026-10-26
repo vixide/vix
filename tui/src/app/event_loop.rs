@@ -53,13 +53,13 @@ impl App {
             }
         }
 
-        // `--diff OLD NEW`: a read-only comparison overlay, independent of
-        // whatever else just opened — the shape a `git difftool` driver invokes
-        // with. `num_args = 2` on the arg guarantees exactly two paths here.
+        // `--diff OLD NEW`: an editable side-by-side comparison (T660) — the
+        // shape a `git difftool` driver invokes with. `num_args = 2` on the arg
+        // guarantees exactly two paths here.
         if let Some(paths) = &cli.diff
             && let [old, new] = paths.as_slice()
         {
-            self.open_diff_files(old, new);
+            self.open_compare_files(old, new);
         }
         Ok(())
     }

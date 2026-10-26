@@ -17,7 +17,7 @@ list; this page adds usage detail and the `git` integration snippets.
 | Flag | Effect |
 | ---- | ------ |
 | `-l, --locale <LOCALE>` | UI language for this run only (e.g. `en`, `es`, `fr`, `de`, `cy`) — overrides the saved `locale` setting without persisting the change. |
-| `--diff <OLD> <NEW>` | Open a read-only unified-diff overlay comparing the two files directly, independent of any open buffer. This is the shape a `git difftool` driver invokes with (`$LOCAL $REMOTE`) — see below. |
+| `--diff <OLD> <NEW>` | Compare the two files side by side, both editable (Tools → Compare). This is the shape a `git difftool` driver invokes with (`$LOCAL $REMOTE`) — see below. |
 | `--tutor` | Launch straight into the interactive tutorial (also reachable from a running session via **Help → Tutorial**), in place of any files also passed — see `crates/vix-tutor/spec/index.md`. |
 | `--doctor` | Check the environment for common setup friction (`git` on `PATH`, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support) and print a plain pass/fail report, then exit without starting the editor. Also reachable via **Help → Run Diagnostics** — see `crates/vix-doctor/spec/index.md`. |
 | `--export-settings <PATH>` | Bundle `config.toml`, macros, keybindings, the user dictionary, and the active custom theme into one file at `PATH`, then exit. Also reachable via **Vix → Export Settings…** — see `crates/vix-settings-bundle/spec/index.md`. |
@@ -44,9 +44,12 @@ git difftool HEAD~1          # against a specific revision
 git difftool --dir-diff       # not applicable — vix compares one file pair
 ```
 
-Vix's diff overlay is read-only (`Esc`/`q` closes it, `↑`/`↓` scroll) — it's a
-viewer, not an editor for the diff itself. To edit, open the file normally
-(`vix "$LOCAL"`) instead.
+Both sides open as ordinary, editable tabs side by side: **Tools → Compare →
+Next/Previous Difference** step through the changes, **Copy Change to
+Left/Right** copy the change at the cursor across (like vimdiff `do`/`dp`), and
+saving a side saves that file. Git passes the old version as a temporary copy
+(`$LOCAL`), so edits worth keeping go on the right (`$REMOTE`, your working-tree
+file). **Show as Unified Diff** opens the read-only unified view.
 
 ## `git mergetool`
 

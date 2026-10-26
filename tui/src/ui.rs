@@ -174,7 +174,11 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.flags.contains(AppFlags::SPELLCHECK) {
         app.refresh_spellcheck_if_stale();
     }
-    if app.coverage_gutter_active() {
+    // A compared tab's gutter shows the comparison instead (T660).
+    let comparing = app.refresh_compare();
+    if comparing {
+        // Both compared tabs already carry their compare marks.
+    } else if app.coverage_gutter_active() {
         app.refresh_coverage_gutter_if_stale();
     } else if app.flags.contains(AppFlags::GIT_REPO) {
         app.refresh_git_gutter();

@@ -475,6 +475,19 @@ const EDIT_MOVE: &[Item] = &[
     Item::sub("menu.item.edit.eol_menu", EDIT_EOL),
 ];
 
+/// Side-by-side Compare Files (T660), grouped under Tools → Compare.
+const TOOLS_COMPARE: &[Item] = &[
+    Item::leaf("menu.item.tools.diff", "tools.diff", ""),
+    SEP,
+    Item::leaf("menu.item.diff.next", "diff.next", ""),
+    Item::leaf("menu.item.diff.prev", "diff.prev", ""),
+    Item::leaf("menu.item.diff.copy_to_left", "diff.copy_to_left", ""),
+    Item::leaf("menu.item.diff.copy_to_right", "diff.copy_to_right", ""),
+    SEP,
+    Item::leaf("menu.item.diff.unified", "diff.unified", ""),
+    Item::leaf("menu.item.diff.close", "diff.close", ""),
+];
+
 /// Line-ending conversion, grouped under Edit → Lines → Line Endings.
 const EDIT_EOL: &[Item] = &[
     Item::leaf("menu.item.edit.eol_lf", "edit.eol_lf", ""),
@@ -1261,7 +1274,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.test", "tools.test", ""),
     Item::leaf("menu.item.tools.test_panel", "tools.test_panel", ""),
     Item::leaf("menu.item.tools.terminal", "tools.terminal", ""),
-    Item::leaf("menu.item.tools.diff", "tools.diff", ""),
+    Item::sub("menu.item.tools.compare", TOOLS_COMPARE),
     SEP,
     Item::sub("menu.item.tools.about", TOOLS_ABOUT),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
