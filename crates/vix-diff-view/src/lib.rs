@@ -1,9 +1,12 @@
-//! Read-only side-by-comparison: a unified diff between two texts, for the
-//! "Compare With File…" overlay.
+//! Compare two texts: [`compare`] is the aligned two-pane model behind
+//! side-by-side Compare Files (T660), and [`build`] is the unified diff for the
+//! read-only overlay.
 //!
 //! Built on `similar`'s line diff with a small context radius, grouped into
 //! hunks. Pure data (no IO, no terminal) so the layout is unit-testable; the host
 //! owns scrolling and `ui` renders the colored lines.
+
+pub mod compare;
 
 /// The kind of a rendered diff line, selecting its color/prefix.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

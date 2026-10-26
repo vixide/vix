@@ -5,6 +5,7 @@ mod ai;
 #[cfg(not(feature = "ai"))]
 mod ai_off;
 mod command_palette;
+mod compare;
 mod coverage;
 #[cfg(feature = "sql")]
 mod db;
@@ -2162,6 +2163,8 @@ pub struct App {
     /// it (T659). A field rather than new `PromptKind` variants, which would
     /// break the published API (T602).
     pending_pipe: Option<bool>,
+    /// The open side-by-side comparison, if any (T660).
+    compare: Option<compare::CompareState>,
     /// A background AI transform whose result will replace editor text, if any.
     ai_replace: Option<AiReplace>,
     /// The theme name currently applied as a menu hover/keyboard preview (reverted
@@ -2528,6 +2531,7 @@ impl App {
             closed_tabs: Vec::new(),
             running_command: None,
             pending_pipe: None,
+            compare: None,
             ai_replace: None,
             ai_panel: None,
             terminal: None,
@@ -2850,6 +2854,7 @@ impl App {
             "view.zoom_reset" => self.terminal_zoom(0),
             "spell.suggest" => self.open_spell_suggest(),
             a if self.run_ai_action(a) => {}
+            a if self.run_compare_action(a) => {}
             a if self.db_action(a) => {}
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),

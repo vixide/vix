@@ -7723,7 +7723,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     the text it was computed from. A trailing newline the command adds to
     input that had none is dropped. Spec:
     `crates/vix-editor/spec/pipe-selection/index.md`.
-- [ ] **T660 — Editable side-by-side Compare Files.**
+- [x] **T660 — Editable side-by-side Compare Files.**
   - **Vix today.** `crates/vix-diff-view/spec/index.md` is a read-only
     unified overlay (despite its "side-by-side" heading), and `vix
     --diff` (`App::open_diff_files`, `tui/src/app.rs:2603`) reuses it.
@@ -7738,6 +7738,15 @@ widgets, and a markup-hiding Markdown "compose" mode.
     saves that file.
   - **Docs.** Document `git config difftool.vix.cmd 'vix --diff
     "$LOCAL" "$REMOTE"'`. Keep the unified view as an option. **M.**
+  - **Done 2026-10-26** on `feat/t660-compare-files`, without filler rows.
+    The pure model is `vix_diff_view::compare`; the host is
+    `tui/src/app/compare.rs`. Scrolling is locked by mapping the focused
+    pane's top line, not row by row. Filler rows touch every render layer of
+    `vix-editor-core` (text, syntax, selections, marks, guides, cursor, click
+    mapping, soft wrap), which is well past **M**, so they are T671. Tabs
+    are tracked by path, and the comparison ends when either one closes. To
+    stay semver-compatible (T602), nothing public changed shape: the state is
+    a private `App` field, and `open_diff_files` still opens the unified view.
 - [ ] **T661 — Legacy text encodings and BOM round-trip.**
   - **Vix today.** Non-UTF-8 files decode lossily and open read-only
     (`crates/vix-fileops/spec/index.md:114`). Vix has no BOM handling and
@@ -7878,6 +7887,18 @@ widgets, and a markup-hiding Markdown "compose" mode.
     - x86_64 under emulation: Debian, Fedora, Arch. Arch needs pacman's
       `--disable-sandbox` under QEMU. This testing is what found T670.
   - **Spec:** `spec/linux-packages/index.md`.
+- [ ] **T671 — Filler rows for side-by-side Compare Files (after T660).**
+  - **Today.** T660's two panes are aligned at their top lines only. Below a
+    change that gives one side more lines, the rows no longer line up.
+  - **Fix.** Let `vix-editor-core`'s `Editor` take a list of virtual blank
+    rows (`after line N, draw K filler rows`) and honor it in every layer:
+    `render_nowrap`, `render_wrapped`, syntax, selection and mark
+    highlighting, indent guides, the cursor position, `click.rs` mouse
+    mapping, and the scroll math (`focus`, page up/down). The compare host
+    then gives the shorter side of each hunk filler rows, and locked
+    scrolling becomes a plain shared row offset.
+  - **Tests.** Render snapshots of an aligned pair; a click on a filler row
+    lands on the next real line; the cursor never enters a filler row. **L.**
 - [ ] **T670: the musl release build is dynamically linked and crashes.**
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)
@@ -8086,7 +8107,8 @@ CI-discovered rounds to get genuinely right on Windows).
     (small correctness fixes, any order), then T657 and T658.
 15. **Run O (comparator scan: Fresh, 2026-10-25):** T659 first (small,
     high value), then T660 and T661, then T662 and T664. T663 after T629,
-    T666 after T631, T667 after T627, and T665 after T660.
+    T666 after T631, T667 after T627, and T665 and T671 after T660. T659
+    and T660 are done (2026-10-26).
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
