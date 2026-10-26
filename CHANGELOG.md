@@ -14,6 +14,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 - **`PromptKind::PipeSelection` and `PromptKind::InsertCommandOutput`** replace the private flag the Pipe Through Command prompts used.
 - **Removed:** the deprecated empty module `vix_editor_core::editor_crossterm` (use `editor_input`), the deprecated `vix_editor_core::Editor::set_clipboard` (use `copy_to_clipboard`), and `LspEvent::Edits` / `LspEvent::LinkedRanges`, which nothing has emitted since T652 (use `Lsp::take_edit_replies`).
 - **`vix_fileops::read_text_guarded`** returns a `#[non_exhaustive]` `TextFile { text, lossy }` instead of `(String, bool)`.
+- **Typed errors** (T673) in place of `Result<_, String>`: `vix_git::GitError` (`NotInstalled`, `Io`, `Failed { code, stderr }`, `InvalidArgument`) for the staging, commit, branch and stash functions; `vix_http_client::HttpError` (`UnsupportedScheme`, `InvalidRequest`, `Transport`) for `send`; and `vix_ai_core::AiError` (`Transport`, `NotJson`, `Api`, `NoContent`) for `complete` and each provider's `parse_response`. Each implements `Display` with the old message text. In Vix, a git action run without git installed now shows how to install it instead of an OS error.
 
 ### Added
 

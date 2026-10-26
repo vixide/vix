@@ -7056,7 +7056,8 @@ new action.
   insta snapshot per family: DB workbench, AI diff, edit-value, edit-bytes,
   edit-outline, choosers, info panels, calculator/converters, and the
   merge-conflict overlay. **Medium.**
-- [ ] **T610 — Typed errors in the library crates.** 45 public fns in 31
+- [ ] **T610 — Typed errors in the library crates.** (vix-git,
+  vix-http-client and vix-ai-core are done as T673; the rest remain.) 45 public fns in 31
   files return `Result<_, String>`. vix-git alone has 10 of them
   (`lib.rs:528-1024`), and the ai-core providers and every
   `convert-*-tool` crate do the same. Callers can't tell "git not

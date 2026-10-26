@@ -468,7 +468,7 @@ impl App {
 
     /// Run a workspace-level git op (stash/amend), then refresh state and report
     /// success with `ok_key` or the error in the status line.
-    fn git_op(&mut self, op: fn(&Path) -> Result<(), String>, ok_key: &str) {
+    fn git_op(&mut self, op: fn(&Path) -> Result<(), crate::git::GitError>, ok_key: &str) {
         if !self.flags.contains(AppFlags::GIT_REPO) {
             self.status = t!("status.git_not_repo").to_string();
             return;
@@ -479,7 +479,9 @@ impl App {
                 self.refresh_git_gutter();
                 self.status = t!(ok_key).to_string();
             }
-            Err(e) => self.status = t!("msg.git_failed_reason", error = e).to_string(),
+            Err(e) => {
+                self.status = t!("msg.git_failed_reason", error = git_error_text(&e)).to_string();
+            }
         }
     }
 
@@ -528,7 +530,7 @@ impl App {
                 self.refresh_git();
                 self.status = t!(ok_key).to_string();
             }
-            Err(e) => self.status = t!(err_key, error = e).to_string(),
+            Err(e) => self.status = t!(err_key, error = git_error_text(&e)).to_string(),
         }
     }
 
@@ -719,7 +721,7 @@ impl App {
         // only show the generic, non-interpolated `msg.git_failed`.
         if let Err(e) = result {
             self.messages
-                .error(t!("msg.git_failed_reason", error = e).to_string());
+                .error(t!("msg.git_failed_reason", error = git_error_text(&e)).to_string());
         }
         self.refresh_git();
         self.clamp_git_selection();
@@ -779,7 +781,7 @@ impl App {
             }
             Err(e) => {
                 self.messages
-                    .error(t!("msg.git_stage_failed", error = e).to_string());
+                    .error(t!("msg.git_stage_failed", error = git_error_text(&e)).to_string());
             }
         }
     }
@@ -843,7 +845,7 @@ impl App {
             Ok(()) => self.status = t!("status.git_committed").into(),
             Err(e) => self
                 .messages
-                .error(t!("msg.git_commit_failed", error = e).to_string()),
+                .error(t!("msg.git_commit_failed", error = git_error_text(&e)).to_string()),
         }
         self.refresh_git();
     }
@@ -876,7 +878,7 @@ impl App {
             }
             Err(e) => self
                 .messages
-                .error(t!("msg.git_branch_failed", error = e).to_string()),
+                .error(t!("msg.git_branch_failed", error = git_error_text(&e)).to_string()),
         }
     }
 
@@ -1405,7 +1407,7 @@ impl App {
             }
             Err(e) => self
                 .messages
-                .error(t!("msg.git_checkout_failed", error = e).to_string()),
+                .error(t!("msg.git_checkout_failed", error = git_error_text(&e)).to_string()),
         }
     }
 }
@@ -1430,4 +1432,13 @@ fn rebuild_with_resolution(
         .map(|l| l.chars().count())
         .sum();
     (rebuilt, caret)
+}
+
+/// The text to show for a failed git command: a translated install hint when
+/// git isn't there at all (T673), otherwise git's own message.
+fn git_error_text(e: &crate::git::GitError) -> String {
+    match e {
+        crate::git::GitError::NotInstalled => t!("msg.git_not_installed").to_string(),
+        other => other.to_string(),
+    }
 }

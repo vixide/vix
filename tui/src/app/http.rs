@@ -27,7 +27,7 @@ impl App {
         self.status = t!("status.http_sending", url = req.url).to_string();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = tx.send(crate::http_client::send(&req));
+            let _ = tx.send(crate::http_client::send(&req).map_err(|e| e.to_string()));
         });
         self.http_rx = Some(rx);
     }

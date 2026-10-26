@@ -83,7 +83,7 @@ fn a_successful_response_round_trips_over_a_real_socket() {
     );
 
     let request_body = server.join().expect("server thread");
-    assert_eq!(reply, Ok("mock summary".to_string()));
+    assert_eq!(reply.expect("a reply"), "mock summary");
     // The request really carried the instruction/input this call was given.
     assert!(request_body.contains("\"system\":\"Summarize this.\""));
     assert!(request_body.contains("\"prompt\":\"some input text\""));
@@ -111,7 +111,11 @@ fn a_non_2xx_status_is_still_parsed_as_a_real_error_message() {
     );
 
     server.join().expect("server thread");
-    assert_eq!(reply, Err("model 'llama3.2' not found".to_string()));
+    // T673: the provider's own error arrives as `AiError::Api`.
+    assert!(
+        matches!(&reply, Err(vix_ai_core::AiError::Api(m)) if m == "model 'llama3.2' not found"),
+        "{reply:?}"
+    );
 }
 
 #[test]
