@@ -290,6 +290,16 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     draw_overlays(app, frame, area, rows[0]);
     right_to_left_passes(app, frame);
+    single_color_pass(frame);
+}
+
+/// A single-color theme repaints the whole finished frame in its one color,
+/// including colors drawn outside the theme (gutters, spell check, the
+/// terminal pane). See `crates/vix-theme/spec/index.md`.
+fn single_color_pass(frame: &mut Frame) {
+    if let Some((fg, bg)) = crate::theme_model::single_color::active() {
+        crate::theme_model::single_color::flatten(frame.buffer_mut(), fg, bg);
+    }
 }
 
 /// The end-of-frame right-to-left passes: reorder bidirectional text, then

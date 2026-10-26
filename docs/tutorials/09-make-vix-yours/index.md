@@ -31,8 +31,9 @@ Vix ships a lot of themes to browse: `Dark` and `Light` (the two
 defaults), `Darker`, `Darkest`, `Lighter`, `Lightest`, `Turbo`,
 `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
 `Monokai`, `One Dark`, `Tokyo Night`, `Catppuccin Mocha`, `High Contrast`
-(WCAG AA, 11:1 or better everywhere), `Phosphor Amber`, `Phosphor Green`,
-`Safelight Red` — plus a full set of `Base16 …`-prefixed themes generated
+(WCAG AA, 11:1 or better everywhere), `Phosphor Amber Monochrome`,
+`Phosphor Green Monochrome`, `Phosphor White Monochrome`,
+`Safelight Red Monochrome` — plus a full set of `Base16 …`-prefixed themes generated
 from bundled [base16](https://github.com/chriskempson/base16) palettes,
 in the same list. See [`docs/themes/index.md`](../../themes/index.md) for
 the complete set and the underlying JSON format.
