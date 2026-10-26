@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 #[test]
 fn org_capture_inserts_todo_and_time_report_tabulates() {

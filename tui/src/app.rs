@@ -120,6 +120,7 @@ enum HBar {
 
 /// Which pane currently has keyboard focus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
 pub enum Focus {
     /// The center editor.
     Editor,
@@ -133,6 +134,7 @@ pub enum Focus {
 
 /// Which kind of single-line prompt is open.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PromptKind {
     /// Open-file prompt.
     Open,
@@ -140,9 +142,14 @@ pub enum PromptKind {
     SaveAs,
     /// Rename the active file (input seeded with its current name).
     Rename,
-    /// Run a shell command, streaming its output to the bottom dock. Also the
-    /// kind of the Pipe Through Command prompts (`App::pending_pipe`, T659).
+    /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Pipe the selection (or buffer) through a shell command, replacing it
+    /// with the output (T659).
+    PipeSelection,
+    /// Pipe the selection (or buffer) through a shell command, inserting the
+    /// output at the cursor (T659).
+    InsertCommandOutput,
     /// Search the workspace, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
     /// Enter a git commit message for the staged changes.
@@ -684,6 +691,7 @@ pub struct PasteOp {
 
 /// What a [`Confirm`] does when answered yes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConfirmKind {
     /// Delete [`Confirm::paths`] (explorer Delete).
     #[default]
@@ -694,6 +702,9 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
+    /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
+    /// file) from the Git panel (T657).
+    GitDiscard,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -1596,7 +1607,7 @@ pub enum EmacsChord {
 }
 
 /// Whether a keyboard macro is being recorded or replayed right now (T149)
-/// — see [`App::macro_state`].
+/// — see `App::macro_state`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MacroState {
     /// Neither recording nor replaying.
@@ -1695,17 +1706,18 @@ bitflags::bitflags! {
 }
 
 /// The whole application state.
+#[non_exhaustive]
 pub struct App {
     /// Workspace root directory.
     pub root: PathBuf,
     /// All folders in the current workspace (the first is `root`). The fuzzy file
     /// finder and project search span every folder; folders are added via
     /// File → Add Folder to Workspace and persisted in a `.vix-workspace` file.
-    pub workspace_folders: Vec<PathBuf>,
+    pub(crate) workspace_folders: Vec<PathBuf>,
     /// Tabbed text editor.
     pub editor: Editor,
     /// File explorer pane.
-    pub explorer: Explorer,
+    pub(crate) explorer: Explorer,
     /// Message drawer.
     pub messages: Messages,
     /// Menu-bar state.
@@ -1713,42 +1725,43 @@ pub struct App {
     /// Command palette, when open.
     pub palette: Option<Palette>,
     /// Find / replace toolbar, when open.
-    pub search: Option<SearchBar>,
+    pub(crate) search: Option<SearchBar>,
     /// Interactive query-replace session, when active.
-    pub query_replace: Option<QueryReplace>,
+    pub(crate) query_replace: Option<QueryReplace>,
     /// Interactive structural (T201) query-replace session, when active.
-    pub structural_replace: Option<StructuralReplace>,
+    pub(crate) structural_replace: Option<StructuralReplace>,
     /// The in-progress structural-replace prompt sequence: whether it's
     /// for the workspace-wide flow rather than buffer/selection, and (once
     /// the pattern prompt is answered) the compiled pattern plus its
     /// original text, awaiting the replacement-template prompt.
     pending_structural: (bool, Option<(vix_structural_replace::Pattern, String)>),
     /// Workspace-wide search panel, when open.
-    pub workspace_search: Option<WorkspaceSearch>,
+    pub(crate) workspace_search: Option<WorkspaceSearch>,
     /// Active jump-to-line labels: `(label, 0-based line)` for each visible line,
     /// with the label prefix typed so far. `None` when jump mode is off.
-    pub jump: Option<JumpMode>,
+    pub(crate) jump: Option<JumpMode>,
     /// Single-line prompt, when open.
     pub prompt: Option<Prompt>,
     /// In-progress paste operation, when active.
-    pub paste: Option<PasteOp>,
+    pub(crate) paste: Option<PasteOp>,
     /// Pending confirmation, when active.
-    pub confirm: Option<Confirm>,
+    pub(crate) confirm: Option<Confirm>,
     /// The Save As target an open [`App::confirm`] asks to overwrite (T654).
     /// Kept outside [`ConfirmKind`] so that published enum keeps its 1.x
     /// variants; it only counts while the confirm still names this path.
     save_as_overwrite: Option<PathBuf>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
-    pub script_trust: Option<ScriptTrustPrompt>,
+    pub(crate) script_trust: Option<ScriptTrustPrompt>,
     /// When [`App::script_trust`] last opened. Keys arriving sooner than
     /// [`SCRIPT_TRUST_KEY_GUARD`] after this are ignored (T655), so a key
     /// typed ahead of a startup/reload prompt can't answer it. Public so tests
     /// can backdate it instead of sleeping. (Kept here rather than on
     /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
     /// change.)
-    pub script_trust_opened_at: Option<std::time::Instant>,
+    #[cfg(feature = "script")]
+    pub(crate) script_trust_opened_at: Option<std::time::Instant>,
     /// Project-wide replace preview awaiting confirmation, when open.
-    pub replace_confirm: Option<ReplaceConfirm>,
+    pub(crate) replace_confirm: Option<ReplaceConfirm>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
     /// workspace search, or `search.edit_results`), if one is open: one row
     /// per line the buffer started with, diffed against the buffer's current
@@ -1759,28 +1772,28 @@ pub struct App {
     /// per-file new contents, a summary line per file, a scroll offset --
     /// but is a distinct field from `replace_confirm` since the two confirms
     /// have different wording and are never open at the same time).
-    pub wgrep_confirm: Option<ReplaceConfirm>,
+    pub(crate) wgrep_confirm: Option<ReplaceConfirm>,
     /// `(path, 1-based line, new text)` for each line the pending
     /// `wgrep_confirm` will write, so applying it can re-baseline those
     /// exact lines afterward without re-reading anything back off disk.
     wgrep_pending_edits: Vec<(PathBuf, usize, String)>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
-    pub unsaved: Option<UnsavedPrompt>,
+    pub(crate) unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
-    pub spell_suggest: Option<SpellSuggest>,
+    pub(crate) spell_suggest: Option<SpellSuggest>,
     /// Editor right-click context menu, when open.
-    pub context_menu: Option<ContextMenu>,
+    pub(crate) context_menu: Option<ContextMenu>,
     /// Git changes panel (stage/unstage/commit), when open.
-    pub git_panel: Option<GitPanel>,
+    pub(crate) git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
-    pub branch_chooser: Option<BranchChooser>,
+    pub(crate) branch_chooser: Option<BranchChooser>,
     /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
     /// **File History**), when open.
-    pub git_log: Option<crate::git::LogPanel>,
+    pub(crate) git_log: Option<crate::git::LogPanel>,
     /// Task chooser overlay (Tools → Tasks…), when open.
-    pub task_chooser: Option<TaskChooser>,
+    pub(crate) task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
-    pub macro_chooser: Option<MacroChooser>,
+    pub(crate) macro_chooser: Option<MacroChooser>,
     /// The Rhai scripting engine (`crates/vix-script`), built once at
     /// startup. Loading/reloading scripts rebuilds `scripts`, not this.
     #[cfg(feature = "script")]
@@ -1798,30 +1811,30 @@ pub struct App {
     /// the `on_key` choke point every keymap's own dispatch runs after.
     key_overrides: std::collections::HashMap<String, String>,
     /// Script-command chooser overlay (Tools → Scripts → Run…), when open.
-    pub script_chooser: Option<ScriptChooser>,
+    pub(crate) script_chooser: Option<ScriptChooser>,
     /// A script's `prompt(...)` request awaiting an answer, while
     /// `App::prompt` (`PromptKind::Script`) is open.
     #[cfg(feature = "script")]
     pending_script_prompt: Option<PendingScriptPrompt>,
     /// Recent clipboard entries (copies/cuts), most-recent first, for the
     /// paste-from-history picker.
-    pub clipboard_ring: Vec<String>,
+    pub(crate) clipboard_ring: Vec<String>,
     /// Clipboard-history picker overlay (Edit → Paste from History…), when open.
-    pub clipboard_chooser: Option<ClipboardChooser>,
+    pub(crate) clipboard_chooser: Option<ClipboardChooser>,
     /// Recent-projects chooser overlay (File → Switch Project…), when open.
-    pub workspace_chooser: Option<WorkspaceChooser>,
+    pub(crate) workspace_chooser: Option<WorkspaceChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
-    pub diff_view: Option<DiffViewState>,
+    pub(crate) diff_view: Option<DiffViewState>,
     /// File browser overlay (File → Open…), when open.
-    pub file_browser: Option<crate::file_browser_panel::Panel>,
+    pub(crate) file_browser: Option<crate::file_browser_panel::Panel>,
     /// Recent-files chooser overlay, when open.
-    pub recent_chooser: Option<RecentChooser>,
+    pub(crate) recent_chooser: Option<RecentChooser>,
     /// Recent-locations (jump list) chooser overlay, when open.
-    pub location_chooser: Option<LocationChooser>,
+    pub(crate) location_chooser: Option<LocationChooser>,
     /// Org-capture template chooser overlay, when open.
-    pub capture_chooser: Option<CaptureChooser>,
+    pub(crate) capture_chooser: Option<CaptureChooser>,
     /// Org refile-target chooser overlay, when open.
-    pub refile_chooser: Option<RefileChooser>,
+    pub(crate) refile_chooser: Option<RefileChooser>,
     /// State for an in-progress Org-capture wizard, while its prompts are
     /// being answered.
     pending_capture: Option<PendingCapture>,
@@ -1829,82 +1842,82 @@ pub struct App {
     /// that prompt is open.
     capture_review: Option<vix_org_capture::CaptureTemplate>,
     /// Nerd Font palette (character picker) overlay, when open.
-    pub nerd_palette: Option<NerdPalette>,
+    pub(crate) nerd_palette: Option<NerdPalette>,
     /// ASCII panel (reference table) overlay, when open.
-    pub ascii_panel: Option<AsciiPanel>,
+    pub(crate) ascii_panel: Option<AsciiPanel>,
     /// Table editor (CSV/TSV spreadsheet) overlay, when open.
     pub edit_table: Option<crate::edit_table::Grid>,
     /// Interactive Org Column View overlay, when open.
-    pub column_view: Option<crate::column_view::ColumnView>,
+    pub(crate) column_view: Option<crate::column_view::ColumnView>,
     /// Outline editor (prose hierarchy) overlay, when open.
-    pub edit_outline: Option<crate::edit_outline::Tree>,
+    pub(crate) edit_outline: Option<crate::edit_outline::Tree>,
     /// Structured-value editor (JSON/YAML tree) overlay, when open.
-    pub edit_value: Option<crate::edit_value::Tree>,
+    pub(crate) edit_value: Option<crate::edit_value::Tree>,
     /// Byte editor (hex view) overlay, when open.
-    pub edit_bytes: Option<crate::edit_bytes::Hex>,
+    pub(crate) edit_bytes: Option<crate::edit_bytes::Hex>,
     /// The file the byte editor edits directly (a binary file opened from the
     /// confirmation, T571), or `None` when it edits the active text buffer.
     edit_bytes_file: Option<PathBuf>,
     /// SQL statement editor overlay, when open.
-    pub edit_sql: Option<crate::edit_sql::Editor>,
+    pub(crate) edit_sql: Option<crate::edit_sql::Editor>,
     /// DB workbench overlay (`spec/db`), when open.
     pub db: Option<crate::db::Browser>,
     /// X11 color palette overlay, when open.
-    pub x11_panel: Option<X11Panel>,
+    pub(crate) x11_panel: Option<X11Panel>,
     /// Theme editor overlay (T202), when open.
-    pub theme_editor: Option<vix_theme_editor_panel::Panel>,
+    pub(crate) theme_editor: Option<vix_theme_editor_panel::Panel>,
     /// The theme editor's committed baseline, to revert to if the editor is
     /// closed (`Esc`) without saving. `None` when the editor is closed.
     theme_editor_baseline: Option<String>,
     /// Media-type (MIME) picker overlay, when open.
-    pub media_type_panel: Option<crate::media_type::Panel>,
+    pub(crate) media_type_panel: Option<crate::media_type::Panel>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
     #[cfg(feature = "http")]
     http_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// HTML character palette overlay, when open.
-    pub html_panel: Option<HtmlPanel>,
+    pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
-    pub system_info: Option<SystemInfoPanel>,
+    pub(crate) system_info: Option<SystemInfoPanel>,
     /// Workspace Dashboard overlay, when open.
-    pub dashboard: Option<Dashboard>,
+    pub(crate) dashboard: Option<Dashboard>,
     /// QR code overlay (rendered Unicode art), when open.
-    pub qrcode: Option<String>,
+    pub(crate) qrcode: Option<String>,
     /// AI chat panel overlay (conversation with the configured assistant), when open.
-    pub ai_panel: Option<crate::ai_panel::Panel>,
+    pub(crate) ai_panel: Option<crate::ai_panel::Panel>,
     /// Integrated terminal overlay (a PTY shell), when open.
-    pub terminal: Option<crate::terminal::Terminal>,
+    pub(crate) terminal: Option<crate::terminal::Terminal>,
     /// AI diff-review overlay (accept/reject an Annotate/Improve transform), when open.
     ai_diff: Option<AiDiffState>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
-    pub outline: Option<Outline>,
+    pub(crate) outline: Option<Outline>,
     /// Conflict overlay (T556, `git.conflict_list`): every merge conflict in
     /// the active buffer, when open.
-    pub conflict_list: Option<crate::conflict_tool::List>,
+    pub(crate) conflict_list: Option<crate::conflict_tool::List>,
     /// Persistent code-outline sidebar (symbol list following the cursor), when
     /// the dock is shown. Rebuilt by `refresh_outline_dock`.
-    pub outline_dock: Option<Outline>,
+    pub(crate) outline_dock: Option<Outline>,
     /// Cache key for the outline sidebar: `(active tab index, buffer revision)`,
     /// so symbols are rescanned only when the buffer changes.
     outline_dock_key: Option<(usize, u64)>,
     /// First-run welcome overlay, when shown.
     pub welcome: Option<WelcomePanel>,
     /// File Information overlay, when open.
-    pub file_info: Option<FileInfoPanel>,
+    pub(crate) file_info: Option<FileInfoPanel>,
     /// Text Information overlay, when open.
-    pub text_info: Option<TextInfoPanel>,
+    pub(crate) text_info: Option<TextInfoPanel>,
     /// Markdown preview overlay, when open.
-    pub markdown_preview: Option<MarkdownPreview>,
+    pub(crate) markdown_preview: Option<MarkdownPreview>,
     /// The preview's table-of-contents jump list (T206), when open over it --
     /// built from `markdown_preview`'s own `toc`, so it only ever opens while
     /// the preview is also open.
-    pub markdown_toc: Option<Outline>,
+    pub(crate) markdown_toc: Option<Outline>,
     /// Snippets picker overlay, when open.
-    pub snippets: Option<crate::snippets::Picker>,
+    pub(crate) snippets: Option<crate::snippets::Picker>,
     /// The in-scope snippet library (bundled + global + media-type + project),
     /// rebuilt for the active buffer's media type.
-    pub snippet_library: Vec<crate::snippets::Snippet>,
+    pub(crate) snippet_library: Vec<crate::snippets::Snippet>,
     /// The media-type key the `snippet_library` was last built for (cache guard).
     snippet_library_key: Option<String>,
     /// Active snippet tabstop session (Tab navigates the fields), when expanding.
@@ -1913,9 +1926,9 @@ pub struct App {
     /// (T205), waiting on the prefix prompt's answer.
     pending_snippet_body: Option<String>,
     /// Contact-browser overlay, when open.
-    pub contacts: Option<ContactPanel>,
+    pub(crate) contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
-    pub vcard: Option<VcardPanel>,
+    pub(crate) vcard: Option<VcardPanel>,
     /// LSP client: language-server process management and document sync.
     pub lsp: crate::lsp::Lsp,
     /// Last document revision pushed to a language server, keyed by file path, so
@@ -1926,44 +1939,44 @@ pub struct App {
     #[cfg(feature = "git")]
     blame_cache: Option<(PathBuf, usize)>,
     /// Debug Adapter Protocol client (one active session).
-    pub dap: crate::dap::Dap,
+    pub(crate) dap: crate::dap::Dap,
     /// Breakpoints per file: absolute path → set of 1-based lines.
     breakpoints: std::collections::HashMap<PathBuf, std::collections::BTreeSet<usize>>,
     /// Where the debugger is currently stopped: `(path, 1-based line)`.
     dap_stopped: Option<(PathBuf, usize)>,
     /// Latest call stack from the debugger.
-    pub dap_stack: Vec<crate::dap::Frame>,
+    pub(crate) dap_stack: Vec<crate::dap::Frame>,
     /// Latest variables (top frame, first scope) from the debugger.
-    pub dap_variables: Vec<crate::dap::Variable>,
+    pub(crate) dap_variables: Vec<crate::dap::Variable>,
     /// Watch expressions and their last results: `(expr, result)`.
-    pub dap_watches: Vec<(String, String)>,
+    pub(crate) dap_watches: Vec<(String, String)>,
     /// Buffered output of the running test command, parsed on completion.
     test_buffer: Vec<String>,
     /// Parsed results of the last test run.
-    pub test_results: Vec<crate::test_runner::TestResult>,
+    pub(crate) test_results: Vec<crate::test_runner::TestResult>,
     /// Highlighted row in the test panel.
-    pub test_selected: usize,
+    pub(crate) test_selected: usize,
     /// LSP hover tooltip overlay, when shown.
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
-    pub completion: Option<CompletionPopup>,
+    pub(crate) completion: Option<CompletionPopup>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Color Converter dialog (Tools → Color Converter…), when open.
-    pub color_converter: Option<crate::color_converter_tool::Converter>,
+    pub(crate) color_converter: Option<crate::color_converter_tool::Converter>,
     /// Unit Converter dialog (Tools → Convert → Unit Converter…), when open.
-    pub unit_converter: Option<crate::unit_converter_tool::Converter>,
+    pub(crate) unit_converter: Option<crate::unit_converter_tool::Converter>,
     /// Calculator dialog (Tools → Calculator…), when open.
-    pub calculator: Option<crate::calculator_tool::Calculator>,
+    pub(crate) calculator: Option<crate::calculator_tool::Calculator>,
     /// Regex tester dialog (Tools → Regex Tester…), when open.
-    pub regex_tester: Option<crate::regex_tool::Tester>,
+    pub(crate) regex_tester: Option<crate::regex_tool::Tester>,
     /// Code-action chooser (LSP quick fixes / refactors), when open.
-    pub code_actions: Option<CodeActionMenu>,
+    pub(crate) code_actions: Option<CodeActionMenu>,
     /// Code-lens chooser (LSP), when open.
-    pub code_lens: Option<CodeLensMenu>,
+    pub(crate) code_lens: Option<CodeLensMenu>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Visible::POMODORO`].
-    pub pomodoro: Option<crate::pomodoro_tool::Timer>,
+    pub(crate) pomodoro: Option<crate::pomodoro_tool::Timer>,
     /// Wall-clock anchor for the running Pomodoro countdown; `None` while idle.
     pomodoro_last_tick: Option<std::time::Instant>,
     /// Last-seen on-disk modification time per open file path, for detecting
@@ -1986,13 +1999,13 @@ pub struct App {
     /// `(active tab, revision)` the coverage gutter was last built for (T597).
     coverage_key: Option<(usize, u64)>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
-    pub clip: Vec<PathBuf>,
+    pub(crate) clip: Vec<PathBuf>,
     /// Position-history jump list (Alt+Left / Alt+Right).
-    pub nav_history: Vec<Location>,
+    pub(crate) nav_history: Vec<Location>,
     /// User bookmarks (file + line), toggled per line and navigable as a set.
-    pub bookmarks: Vec<Location>,
+    pub(crate) bookmarks: Vec<Location>,
     /// Current index into [`App::nav_history`].
-    pub nav_idx: usize,
+    pub(crate) nav_idx: usize,
     /// Terminal image picker; `None` until set from a real terminal (so tests
     /// and headless use construct fine), and on terminals without graphics.
     pub picker: Option<ImagePicker>,
@@ -2001,16 +2014,16 @@ pub struct App {
     /// Settings file this app persists to. `None` — the normal case — uses the
     /// user's config directory; set via [`App::with_settings_path`] to keep a
     /// run's settings out of it (tests, embedders).
-    pub settings_path: Option<PathBuf>,
+    pub(crate) settings_path: Option<PathBuf>,
     /// Session file this app persists to (open files, script trust, …).
     /// `None` — the normal case — uses the user's config directory; set via
     /// [`App::with_session_path`] to keep a run's session out of it (tests,
     /// embedders) — same shape as [`App::settings_path`].
-    pub session_path: Option<PathBuf>,
+    pub(crate) session_path: Option<PathBuf>,
     /// Which pane has focus.
     pub focus: Focus,
     /// Which UI surfaces are currently shown (T149 — see [`Visible`]).
-    pub visible: Visible,
+    pub(crate) visible: Visible,
     /// The last 14 single-purpose, mutually-independent toggles (T149 —
     /// see [`AppFlags`]).
     pub flags: AppFlags,
@@ -2018,7 +2031,7 @@ pub struct App {
     /// (T149 — recording and playing are mutually exclusive: `play_macro`
     /// refuses to start while recording, so an enum replaces what were two
     /// separate bools).
-    pub macro_state: MacroState,
+    pub(crate) macro_state: MacroState,
     /// The recorded editor key sequence, replayed by `macro.play`.
     macro_keys: Vec<KeyEvent>,
     /// In-progress word-completion cycle (buffer-word autocomplete).
@@ -2054,9 +2067,9 @@ pub struct App {
     /// the linked-edit prompt was opened, replaced together on submit.
     linked_ranges: Option<Vec<(usize, usize)>>,
     /// Cached current git branch (or short hash when detached), when in a repo.
-    pub git_branch: Option<String>,
+    pub(crate) git_branch: Option<String>,
     /// Cached `git status` rows (changed files), refreshed on save / git actions.
-    pub git_status: Vec<crate::git::FileStatus>,
+    pub(crate) git_status: Vec<crate::git::FileStatus>,
     /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
     /// on save / git actions so it refetches.
     #[cfg(feature = "git")]
@@ -2078,7 +2091,7 @@ pub struct App {
     coverage: Option<vix_coverage::Report>,
     /// Loaded spell checker for the active locale, when spell-checking is on and
     /// a dictionary was found.
-    pub speller: Option<crate::spellcheck::SpellChecker>,
+    pub(crate) speller: Option<crate::spellcheck::SpellChecker>,
     /// Locale the loaded (or last-attempted) [`speller`](Self::speller) is for, so
     /// it is reloaded only on a locale change.
     speller_locale: Option<String>,
@@ -2093,27 +2106,27 @@ pub struct App {
     speller_error: Option<String>,
     /// Saved dock/status visibility while zen (focus) mode is active, restored on
     /// exit. `Some` iff zen mode is on. Holds (explorer, messages, bottom, status).
-    pub zen_saved: Option<(bool, bool, bool, bool)>,
+    pub(crate) zen_saved: Option<(bool, bool, bool, bool)>,
     /// Bottom-dock line buffer.
     pub bottom_dock: crate::bottom_dock::BottomDock,
     /// Horizontal scroll offset (chars) of the bottom dock.
-    pub bottom_hscroll: usize,
+    pub(crate) bottom_hscroll: usize,
     /// Horizontal scroll offset (chars) of the file explorer.
-    pub explorer_hscroll: usize,
+    pub(crate) explorer_hscroll: usize,
     /// Horizontal scroll offset (chars) of the message drawer.
-    pub messages_hscroll: usize,
+    pub(crate) messages_hscroll: usize,
     /// Month navigation state for the calendar box.
-    pub calendar: crate::calendar::Calendar,
+    pub(crate) calendar: crate::calendar::Calendar,
     /// Row-selection state for the clock box.
-    pub clock: crate::clock::Clock,
+    pub(crate) clock: crate::clock::Clock,
     /// Keyboard-shortcut overlay (Help → Keyboard Shortcuts…, F1), when open:
     /// a filterable, header-sortable action/shortcut table.
-    pub help: Option<crate::keyboard_shortcut_panel::Panel>,
+    pub(crate) help: Option<crate::keyboard_shortcut_panel::Panel>,
     /// Keybinding editor overlay (Vix → Keybindings…), when open: a
     /// filterable, header-sortable, *selectable* action/shortcut table
     /// (T204) that also supports rebind and reset, unlike the read-only
     /// [`App::help`] panel it's a sibling of.
-    pub keybinding_editor: Option<vix_keybinding_editor_panel::Panel>,
+    pub(crate) keybinding_editor: Option<vix_keybinding_editor_panel::Panel>,
     /// The `action_id` a `PromptKind::RebindKey` prompt (opened from the
     /// keybinding editor) is currently rebinding, stashed while the prompt
     /// is open — mirrors [`PendingScriptPrompt`]'s "extra context lives in
@@ -2158,11 +2171,6 @@ pub struct App {
     closed_tabs: Vec<PathBuf>,
     /// The command currently streaming into the bottom dock, if any.
     running_command: Option<RunningCommand>,
-    /// Set while the open `RunCommand` prompt is a Pipe Through Command one:
-    /// `Some(true)` replaces the input with the output, `Some(false)` inserts
-    /// it (T659). A field rather than new `PromptKind` variants, which would
-    /// break the published API (T602).
-    pending_pipe: Option<bool>,
     /// The open side-by-side comparison, if any (T660).
     compare: Option<compare::CompareState>,
     /// A background AI transform whose result will replace editor text, if any.
@@ -2174,13 +2182,13 @@ pub struct App {
     hbar_active: Option<HBar>,
     /// Max horizontal scroll (`content_width − viewport`) recorded each render for
     /// the editor, explorer, message drawer, and bottom dock, for scrollbar drag.
-    pub editor_hmax: usize,
+    pub(crate) editor_hmax: usize,
     /// See [`Self::editor_hmax`].
-    pub explorer_hmax: usize,
+    pub(crate) explorer_hmax: usize,
     /// See [`Self::editor_hmax`].
-    pub messages_hmax: usize,
+    pub(crate) messages_hmax: usize,
     /// See [`Self::editor_hmax`].
-    pub bottom_hmax: usize,
+    pub(crate) bottom_hmax: usize,
     /// Which dock (if any) is being resized by an in-progress edge drag.
     dock_resize: Option<DockResize>,
     /// Which Emacs chord prefix is pending, if any (T149 — see [`EmacsChord`]).
@@ -2366,6 +2374,7 @@ impl App {
             confirm: None,
             save_as_overwrite: None,
             script_trust: None,
+            #[cfg(feature = "script")]
             script_trust_opened_at: None,
             replace_confirm: None,
             wgrep_baseline: None,
@@ -2530,7 +2539,6 @@ impl App {
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
-            pending_pipe: None,
             compare: None,
             ai_replace: None,
             ai_panel: None,
@@ -6951,12 +6959,6 @@ impl App {
         self.lsp_sync_active();
         for event in self.lsp.poll() {
             match event {
-                // `Edits`/`LinkedRanges` are no longer emitted (T652): those
-                // replies arrive, tied to their document, from
-                // `take_edit_replies` below.
-                crate::lsp::LspEvent::Diagnostics(_)
-                | crate::lsp::LspEvent::Edits(_)
-                | crate::lsp::LspEvent::LinkedRanges(_) => {}
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
@@ -7040,6 +7042,11 @@ impl App {
                 crate::lsp::LspEvent::SemanticTokens(tokens) => {
                     self.apply_semantic_tokens(&tokens);
                 }
+                // `Diagnostics` are read from the client directly, formatting
+                // and linked-editing replies arrive from `take_edit_replies`
+                // below (T652), and `LspEvent` is `#[non_exhaustive]`, so any
+                // other variant is ignored.
+                _ => {}
             }
         }
         for reply in self.lsp.take_edit_replies() {
@@ -7506,22 +7513,13 @@ impl App {
             // A different confirm replaced it: forget the stale target.
             self.save_as_overwrite = None;
         }
-        if self
+        if let Some(kind) = self
             .confirm
             .as_ref()
-            .is_some_and(|c| c.kind == ConfirmKind::StageAllAndCommit)
+            .map(|c| c.kind)
+            .filter(|k| matches!(k, ConfirmKind::GitDiscard | ConfirmKind::StageAllAndCommit))
         {
-            match key.code {
-                KeyCode::Char('y' | 'Y') => {
-                    self.confirm = None;
-                    self.git_stage_all_then_commit();
-                }
-                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                    self.confirm = None;
-                    self.status = t!("status.git_nothing_staged").into();
-                }
-                _ => {}
-            }
+            self.git_confirm_key(kind, key);
             return;
         }
         match key.code {
@@ -12574,7 +12572,6 @@ impl App {
                 {
                     self.pending_script_prompt = None;
                 }
-                self.pending_pipe = None;
                 self.pending_rebind_action_id = None;
             }
             // Alt+Enter inserts a newline in the multi-line git-commit prompt;
@@ -12635,10 +12632,9 @@ impl App {
                 self.accept_file_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
-            PromptKind::RunCommand => match self.pending_pipe.take() {
-                Some(replace) => self.pipe_selection(&prompt.input, replace),
-                None => self.run_command(&prompt.input),
-            },
+            PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
+            PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
@@ -13985,12 +13981,10 @@ mod tests {
     /// other value is used as is.
     #[test]
     fn auto_theme_falls_back_to_the_dark_theme() {
-        let mut s = Settings {
-            theme: "auto".to_string(),
-            theme_dark: "nord".to_string(),
-            theme_light: "solarized-light".to_string(),
-            ..Settings::default()
-        };
+        let mut s = Settings::default();
+        s.theme = "auto".to_string();
+        s.theme_dark = "nord".to_string();
+        s.theme_light = "solarized-light".to_string();
         assert_eq!(App::effective_theme(&s), "nord");
         s.theme = "dracula".to_string();
         assert_eq!(App::effective_theme(&s), "dracula");

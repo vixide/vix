@@ -47,9 +47,10 @@ impl App {
         self.status = t!("status.no_changes").to_string();
     }
 
-    /// The stage-all confirm can't be open.
-    pub(super) fn git_stage_all_then_commit(&mut self) {
+    /// A git confirm can't be open; drop one defensively.
+    pub(super) fn git_confirm_key(&mut self, _kind: super::ConfirmKind, _key: KeyEvent) {
         debug_assert!(self.git_branch.is_none());
+        self.confirm = None;
     }
 
     /// The Git changes panel can't be open.

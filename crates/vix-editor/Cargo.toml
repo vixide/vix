@@ -18,7 +18,7 @@ bitflags = { workspace = true }
 ratatui = { workspace = true }
 ratatui-core = { workspace = true }
 ratatui-image = { workspace = true, optional = true }
-vix-editor-core = { path = "../vix-editor-core", version = "1.8.0", default-features = false }
+vix-editor-core = { path = "../vix-editor-core", version = "2.0.0", default-features = false }
 vix-fileops = { workspace = true }
 vix-textops = { workspace = true }
 vix-theme = { workspace = true }

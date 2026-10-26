@@ -3,7 +3,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 // Each call needs its own `unique_dir` tag -- these tests run in parallel by
 // default, and `unique_dir("x")` is `vix-x-<pid>`, identical for every call
@@ -11,13 +11,11 @@ use crate::common::*;
 // the same file path (caught exactly this way: cross-test garbage in a
 // buffer's content).
 fn vi_app(tag: &str, text: &str, modal_engine: bool) -> App {
-    let mut app = app_with(Settings {
-        keymap: "vi".to_string(),
-        subsystems: SubsystemSettings {
-            modal_engine,
-            ..SubsystemSettings::default()
-        },
-        ..Settings::default()
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.keymap = "vi".to_string();
+        s.subsystems.modal_engine = modal_engine;
+        s
     });
     let dir = unique_dir(tag);
     let file = dir.join("a.txt");

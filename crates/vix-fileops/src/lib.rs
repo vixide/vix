@@ -434,16 +434,26 @@ impl TextReadError {
     }
 }
 
+/// A text file read by [`read_text_guarded`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TextFile {
+    /// The decoded text.
+    pub text: String,
+    /// The file wasn't valid UTF-8 and was decoded lossily, so the caller
+    /// should open it read-only rather than corrupt it on save.
+    pub lossy: bool,
+}
+
 /// Read a text file, refusing anything that would hang, exhaust memory, or
-/// isn't text (T571). Non-UTF-8 text is decoded lossily; the returned flag is
-/// `true` then, so the caller can open it read-only rather than corrupt it on
-/// save.
+/// isn't text (T571). Non-UTF-8 text is decoded lossily, with
+/// [`TextFile::lossy`] set.
 ///
 /// # Errors
 ///
 /// An `InvalidData` error wrapping a [`TextReadError`] for a non-regular,
 /// oversized, or binary file; otherwise the underlying I/O error.
-pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<(String, bool)> {
+pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     use io::Read as _;
     let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
     // `metadata` follows symlinks, so a link to a regular file is fine.
@@ -465,10 +475,13 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<(String, boo
     if bytes.iter().take(8192).any(|&b| b == 0) {
         return Err(refuse(TextReadError::Binary));
     }
-    match String::from_utf8(bytes) {
-        Ok(s) => Ok((s, false)),
-        Err(e) => Ok((String::from_utf8_lossy(e.as_bytes()).into_owned(), true)),
-    }
+    Ok(match String::from_utf8(bytes) {
+        Ok(text) => TextFile { text, lossy: false },
+        Err(e) => TextFile {
+            text: String::from_utf8_lossy(e.as_bytes()).into_owned(),
+            lossy: true,
+        },
+    })
 }
 
 /// Read a user-chosen text file for a feature that only wants its contents
@@ -480,7 +493,7 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<(String, boo
 ///
 /// As [`read_text_guarded`].
 pub fn read_to_string_guarded(path: &Path) -> io::Result<String> {
-    read_text_guarded(path, MAX_TEXT_BYTES).map(|(text, _)| text)
+    read_text_guarded(path, MAX_TEXT_BYTES).map(|f| f.text)
 }
 
 #[cfg(test)]
@@ -796,13 +809,19 @@ mod tests {
         fs::write(&latin, b"caf\xe9").unwrap();
         assert_eq!(
             read_text_guarded(&latin, 100).unwrap(),
-            ("caf\u{fffd}".to_string(), true)
+            TextFile {
+                text: "caf\u{fffd}".to_string(),
+                lossy: true
+            }
         );
         let ok = dir.join("ok");
         fs::write(&ok, "héllo").unwrap();
         assert_eq!(
             read_text_guarded(&ok, 100).unwrap(),
-            ("héllo".to_string(), false)
+            TextFile {
+                text: "héllo".to_string(),
+                lossy: false
+            }
         );
         let _ = fs::remove_dir_all(&dir);
     }

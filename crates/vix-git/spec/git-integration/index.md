@@ -36,10 +36,24 @@ letter:
 - `c` — commit: prompts for a message and runs `git commit` (only when something
   is staged). The prompt is **multi-line**: `Alt+Enter` inserts a newline, plain
   `Enter` submits, so subject + body messages are supported.
+- `Enter` — open the selected file's changes against HEAD as a unified diff
+  (the diff view, `vix-diff-view`). An open buffer's unsaved edits are
+  included; a file that isn't in HEAD diffs against nothing (T657).
+- `d` — discard the selected file's **unstaged** changes after a yes/no
+  confirm (`vix_git::discard`, `git restore --worktree`); staged changes stay.
+  An untracked file is refused, never deleted. Clean open buffers of the file
+  reload from disk.
 - `r` — refresh the status.
 - `Esc` — close.
 
 A left click on a row toggles its staged state.
+
+## Diff against HEAD / the index (actions `git.diff_head`, `git.diff_index`)
+
+**Git → Diff with HEAD** and **Git → Diff with Staged** (also in the
+command palette) open the active file's unified diff against its committed or
+its staged version, using the buffer's text so unsaved edits show (T657). An
+identical file reports so in the status bar instead of opening an empty view.
 
 ## Blame (Git → Blame Line, action `git.blame`)
 
@@ -62,6 +76,10 @@ symlinked workspace roots such as macOS `/var` → `/private/var`). The porcelai
 output is parsed by `vix_git::parse_blame_porcelain` into a `BlameLine`
 (`hash`, `author`, `date`, `summary`); the authored date is rendered in the
 author's own time zone via a dependency-free epoch→civil-date conversion.
+
+When the buffer has unsaved edits, both blames pass its text on stdin with
+`--contents -`, so `<n>` is the line the user sees and edited lines report
+"not committed yet" rather than another line's commit (T657).
 
 ## Branches and remotes (Git menu / command palette)
 

@@ -18,10 +18,6 @@ pub mod editor;
 /// Key and mouse input handling for the editor, over backend-neutral
 /// `vix-input` events (always compiled).
 pub mod editor_input;
-/// Former name of [`editor_input`], kept so the path still resolves for
-/// existing users (it only ever held `impl Editor` blocks, so nothing moves).
-#[deprecated(note = "renamed to `editor_input` when input became backend-neutral")]
-pub mod editor_crossterm {}
 /// Undo/redo history of edit batches.
 pub mod history;
 /// Multiple cursors ("carets") and the operations applied across them.

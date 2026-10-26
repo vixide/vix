@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 // ----- vix-script host wiring (improvement plan T103) ----------------------
 

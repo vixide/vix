@@ -41,6 +41,7 @@ const CONFIG_NAME: &str = "config";
 /// were still declared directly on `Settings`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct Settings {
     /// Line-number gutter and inline whitespace-glyph display (T149).
     #[serde(flatten)]
@@ -236,6 +237,7 @@ pub struct Settings {
 /// see [`Settings`]'s own doc comment for why these are grouped).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct GutterSettings {
     /// Show the line-number gutter.
     pub line_numbers: bool,
@@ -259,6 +261,7 @@ impl Default for GutterSettings {
 /// highlighted while editing (T149).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct EditorVisualSettings {
     /// Wrap long lines across screen rows instead of scrolling horizontally.
     pub soft_wrap: bool,
@@ -272,6 +275,7 @@ pub struct EditorVisualSettings {
 /// and bottom dock (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct PanelSettings {
     /// Show the file explorer on startup.
     pub show_explorer: bool,
@@ -295,6 +299,7 @@ impl Default for PanelSettings {
 /// code-outline sidebar (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct SecondaryPanelSettings {
     /// Show the bottom status bar.
     pub show_status_bar: bool,
@@ -319,6 +324,7 @@ impl Default for SecondaryPanelSettings {
 /// limit of three.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct ScrollbarSettings {
     /// Mark the scroll bar track where git changes, diagnostics and search
     /// matches are.
@@ -337,6 +343,7 @@ impl Default for ScrollbarSettings {
 /// tooltips (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct ViewportSettings {
     /// Show the editor's right-side scroll bar.
     pub show_scrollbar: bool,
@@ -360,6 +367,7 @@ impl Default for ViewportSettings {
 /// ephemeral preview tabs, sticky search highlights, and AI diff review.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct MiscSettings {
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
@@ -388,6 +396,7 @@ impl Default for MiscSettings {
 /// it isn't a small-settings-field fix.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct AccessibilitySettings {
     /// Ring the terminal bell (`\x07`) when a background command started
     /// via `run_command_in` (Project → Compile/Run/Test, "Run shell
@@ -401,6 +410,7 @@ pub struct AccessibilitySettings {
 /// What happens to a file's content on save, before it's written (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct SaveSettings {
     /// On save, strip trailing spaces/tabs from every line.
     pub trim_trailing_whitespace: bool,
@@ -424,6 +434,7 @@ impl Default for SaveSettings {
 /// cross-session persistent undo (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct EditorBehaviorSettings {
     /// Periodically save the active dirty file-backed buffer (every few seconds).
     pub auto_save: bool,
@@ -453,6 +464,7 @@ impl Default for EditorBehaviorSettings {
 /// auto-pairing, and spellcheck underlines (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct TypingSettings {
     /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
     /// for opened files, overriding the global settings per file. On by default.
@@ -478,6 +490,7 @@ impl Default for TypingSettings {
 /// showing the first-run welcome dialog.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct StartupSettings {
     /// Reopen the previous session (open files, focused tab, cursor positions)
     /// when Vix is launched in a workspace with no file given on the command
@@ -502,6 +515,7 @@ impl Default for StartupSettings {
 /// (Vim-style) editing engine, and inline git blame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct SubsystemSettings {
     /// Master switch for Language Server Protocol features (diagnostics, hover,
     /// go-to-definition, completion). When off, no servers are launched.

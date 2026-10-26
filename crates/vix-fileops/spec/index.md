@@ -111,8 +111,10 @@ sensitive, so it keeps its original plain, non-private write.
 would freeze or exhaust Vix with a typed `TextReadError` (inside an `InvalidData`
 `io::Error`; recover it with `TextReadError::from_io`): `NotRegular` (a FIFO, socket,
 device or directory), `TooLarge` (over `max_bytes`, bounded even if the file grows after the
-stat) and `Binary` (a NUL in the first 8 KiB). Non-UTF-8 text decodes lossily and the
-returned flag makes the caller open it read-only. `MAX_TEXT_BYTES` (50 MiB) is the default
+stat) and `Binary` (a NUL in the first 8 KiB). It returns a `TextFile` (`text`, and
+`lossy`, set when non-UTF-8 text was decoded lossily, so the caller opens it read-only).
+`TextFile` is `#[non_exhaustive]`, so it can gain fields (such as an encoding) without a
+breaking change. `MAX_TEXT_BYTES` (50 MiB) is the default
 limit and `HARD_MAX_TEXT_BYTES` (1 GiB) the ceiling that applies even after the user
 confirms. `read_to_string_guarded(path)` is the same guard for features that only want the
 text (insert file, revert, compare, the TODO finder). `which_on_path` resolves a program

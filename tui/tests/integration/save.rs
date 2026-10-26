@@ -4,7 +4,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 /// Open `path` and replace its buffer with `text`, marking it dirty.
 fn open_dirty(app: &mut App, path: &Path, text: &str) {

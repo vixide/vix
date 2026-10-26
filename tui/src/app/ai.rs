@@ -414,7 +414,7 @@ impl App {
                 vix_ai_core::complete(provider, &endpoint, &model, &api_key, &instruction, &input);
             let _ = tx.send(match result {
                 Ok(text) => AiMsg::Done(text),
-                Err(reason) => AiMsg::Failed(Some(reason)),
+                Err(reason) => AiMsg::Failed(Some(reason.to_string())),
             });
         });
         Some(rx)

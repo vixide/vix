@@ -136,6 +136,7 @@ pub enum Region {
 /// Foreground/background colors and font attributes for a region (each optional;
 /// a missing value falls back to the primary editor color).
 #[derive(Deserialize, Serialize, Clone, Default)]
+#[non_exhaustive]
 pub struct RegionColors {
     /// Foreground color.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -161,6 +162,7 @@ pub struct RegionColors {
 
 /// Editor colors, including an optional cursor color and font attributes.
 #[derive(Deserialize, Serialize, Clone, Default)]
+#[non_exhaustive]
 pub struct EditorColors {
     /// Text foreground.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -189,6 +191,7 @@ pub struct EditorColors {
 
 /// Optional syntax-highlight colors.
 #[derive(Deserialize, Serialize, Clone, Default)]
+#[non_exhaustive]
 pub struct SyntaxColors {
     /// Keywords.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -207,6 +210,7 @@ pub struct SyntaxColors {
 /// A theme loaded from a JSON file (bundled in the binary or installed in
 /// `~/.config/vix/themes/`).
 #[derive(Deserialize, Serialize, Clone)]
+#[non_exhaustive]
 pub struct CustomTheme {
     /// Display name (also the value persisted in settings).
     pub name: String,

@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 #[test]
 fn vix_menu_license_shows_trademark_info() {

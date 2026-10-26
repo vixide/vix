@@ -112,6 +112,8 @@ impl App {
                     self.git_op(crate::git::commit_amend, "status.git_amended");
                 }
             }
+            "git.diff_head" => self.git_diff_active(DiffBase::Head),
+            "git.diff_index" => self.git_diff_active(DiffBase::Index),
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
             _ => return false,
@@ -468,7 +470,7 @@ impl App {
 
     /// Run a workspace-level git op (stash/amend), then refresh state and report
     /// success with `ok_key` or the error in the status line.
-    fn git_op(&mut self, op: fn(&Path) -> Result<(), String>, ok_key: &str) {
+    fn git_op(&mut self, op: fn(&Path) -> Result<(), crate::git::GitError>, ok_key: &str) {
         if !self.flags.contains(AppFlags::GIT_REPO) {
             self.status = t!("status.git_not_repo").to_string();
             return;
@@ -479,7 +481,9 @@ impl App {
                 self.refresh_git_gutter();
                 self.status = t!(ok_key).to_string();
             }
-            Err(e) => self.status = t!("msg.git_failed_reason", error = e).to_string(),
+            Err(e) => {
+                self.status = t!("msg.git_failed_reason", error = git_error_text(&e)).to_string();
+            }
         }
     }
 
@@ -528,7 +532,7 @@ impl App {
                 self.refresh_git();
                 self.status = t!(ok_key).to_string();
             }
-            Err(e) => self.status = t!(err_key, error = e).to_string(),
+            Err(e) => self.status = t!(err_key, error = git_error_text(&e)).to_string(),
         }
     }
 
@@ -664,6 +668,13 @@ impl App {
             KeyCode::Char('s' | 'S') => self.git_stage_selected(true),
             KeyCode::Char('u' | 'U') => self.git_stage_selected(false),
             KeyCode::Char('c' | 'C') => self.git_begin_commit(),
+            // T657: open the selected file's changes, or discard them.
+            KeyCode::Enter => {
+                if let Some(rel) = self.git_selected_path() {
+                    self.git_show_diff(&rel, DiffBase::Head);
+                }
+            }
+            KeyCode::Char('d' | 'D') => self.git_confirm_discard(),
             #[cfg(feature = "ai")]
             KeyCode::Char('g' | 'G') => self.git_generate_commit_message(),
             KeyCode::Char('r' | 'R') => {
@@ -719,7 +730,7 @@ impl App {
         // only show the generic, non-interpolated `msg.git_failed`.
         if let Err(e) = result {
             self.messages
-                .error(t!("msg.git_failed_reason", error = e).to_string());
+                .error(t!("msg.git_failed_reason", error = git_error_text(&e)).to_string());
         }
         self.refresh_git();
         self.clamp_git_selection();
@@ -779,7 +790,7 @@ impl App {
             }
             Err(e) => {
                 self.messages
-                    .error(t!("msg.git_stage_failed", error = e).to_string());
+                    .error(t!("msg.git_stage_failed", error = git_error_text(&e)).to_string());
             }
         }
     }
@@ -843,7 +854,7 @@ impl App {
             Ok(()) => self.status = t!("status.git_committed").into(),
             Err(e) => self
                 .messages
-                .error(t!("msg.git_commit_failed", error = e).to_string()),
+                .error(t!("msg.git_commit_failed", error = git_error_text(&e)).to_string()),
         }
         self.refresh_git();
     }
@@ -876,7 +887,7 @@ impl App {
             }
             Err(e) => self
                 .messages
-                .error(t!("msg.git_branch_failed", error = e).to_string()),
+                .error(t!("msg.git_branch_failed", error = git_error_text(&e)).to_string()),
         }
     }
 
@@ -1223,7 +1234,8 @@ impl App {
             return;
         };
         let rel = name.to_string_lossy();
-        match crate::git::blame_line(dir, &rel, line) {
+        let unsaved = self.active_unsaved_text();
+        match crate::git::blame_line(dir, &rel, line, unsaved.as_deref()) {
             Some(b) if b.is_uncommitted() => {
                 self.status = t!("status.blame_uncommitted", line = line).to_string();
             }
@@ -1289,9 +1301,11 @@ impl App {
             return;
         }
         self.blame_cache = Some((path.clone(), line));
+        let unsaved = self.active_unsaved_text();
         let note = match (path.parent(), path.file_name()) {
             (Some(dir), Some(name)) => {
-                match crate::git::blame_line(dir, &name.to_string_lossy(), line) {
+                match crate::git::blame_line(dir, &name.to_string_lossy(), line, unsaved.as_deref())
+                {
                     Some(b) if b.is_uncommitted() => t!("blame.uncommitted").to_string(),
                     Some(b) => t!(
                         "blame.inline",
@@ -1405,7 +1419,7 @@ impl App {
             }
             Err(e) => self
                 .messages
-                .error(t!("msg.git_checkout_failed", error = e).to_string()),
+                .error(t!("msg.git_checkout_failed", error = git_error_text(&e)).to_string()),
         }
     }
 }
@@ -1430,4 +1444,147 @@ fn rebuild_with_resolution(
         .map(|l| l.chars().count())
         .sum();
     (rebuilt, caret)
+}
+
+/// The text to show for a failed git command: a translated install hint when
+/// git isn't there at all (T673), otherwise git's own message.
+fn git_error_text(e: &crate::git::GitError) -> String {
+    match e {
+        crate::git::GitError::NotInstalled => t!("msg.git_not_installed").to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// What [`App::git_show_diff`] compares the working file against (T657).
+#[derive(Clone, Copy)]
+enum DiffBase {
+    /// The last commit.
+    Head,
+    /// The staged (index) version.
+    Index,
+}
+
+impl App {
+    /// The active buffer's text when it has unsaved edits, for blaming what the
+    /// user sees rather than the copy on disk (T657).
+    fn active_unsaved_text(&self) -> Option<String> {
+        self.editor
+            .active_tab()
+            .filter(|t| t.dirty && !t.is_image())
+            .map(crate::editor::Tab::text)
+    }
+
+    /// `git.diff_head` / `git.diff_index`: diff the active file against HEAD or
+    /// the index.
+    fn git_diff_active(&mut self, base: DiffBase) {
+        if !self.require_git_repo() {
+            return;
+        }
+        let Some(rel) = self
+            .active_path()
+            .and_then(|p| p.strip_prefix(&self.root).ok().map(Path::to_path_buf))
+        else {
+            self.status = t!("status.blame_no_file").into();
+            return;
+        };
+        self.git_show_diff(&rel.to_string_lossy().replace('\\', "/"), base);
+    }
+
+    /// Open the unified diff of root-relative `rel` against `base`: the open
+    /// buffer's text (unsaved edits included) when the file is open, else the
+    /// file on disk. A file that isn't in `base` diffs against nothing.
+    fn git_show_diff(&mut self, rel: &str, base: DiffBase) {
+        let abs = self.root.join(rel);
+        let canon = abs.canonicalize().unwrap_or_else(|_| abs.clone());
+        let current = self
+            .editor
+            .tabs
+            .iter()
+            .find(|t| t.path.as_deref() == Some(canon.as_path()))
+            .map(crate::editor::Tab::text)
+            .or_else(|| crate::fileops::read_to_string_guarded(&abs).ok())
+            .unwrap_or_default();
+        let (old, label) = match base {
+            DiffBase::Head => (crate::git::head_blob(&self.root, rel), "HEAD".to_string()),
+            DiffBase::Index => (
+                crate::git::index_blob(&self.root, rel),
+                t!("ui.git_diff_staged").to_string(),
+            ),
+        };
+        let lines = crate::diff_view::build(&old.unwrap_or_default(), &current);
+        if lines.is_empty() {
+            self.status = t!("status.diff_identical").to_string();
+            return;
+        }
+        self.diff_view = Some(crate::app::DiffViewState {
+            title: format!("{label} ↔ {rel}"),
+            lines,
+            scroll: 0,
+        });
+    }
+
+    /// `d` in the Changes panel: ask before discarding the selected file's
+    /// unstaged changes. An untracked file has nothing to restore, so it is
+    /// refused rather than deleted.
+    fn git_confirm_discard(&mut self) {
+        let Some(idx) = self.git_panel.as_ref().map(|p| p.selected) else {
+            return;
+        };
+        let Some(row) = self.git_status.get(idx) else {
+            return;
+        };
+        if row.unstaged == Some(crate::git::Change::Untracked) {
+            self.status = t!("status.git_discard_untracked").to_string();
+            return;
+        }
+        let rel = row.path.clone();
+        self.confirm = Some(Confirm {
+            message: t!("confirm.git_discard", path = rel).to_string(),
+            paths: vec![PathBuf::from(rel)],
+            kind: ConfirmKind::GitDiscard,
+        });
+    }
+
+    /// A key in a git confirm: `y` discards the file (T657) or stages
+    /// everything and commits (smart commit); `n`/`Esc` cancels.
+    pub(super) fn git_confirm_key(&mut self, kind: ConfirmKind, key: KeyEvent) {
+        match (key.code, kind) {
+            (KeyCode::Char('y' | 'Y'), ConfirmKind::GitDiscard) => {
+                if let Some(rel) = self.confirm.take().and_then(|c| c.paths.into_iter().next()) {
+                    self.git_discard_confirmed(&rel);
+                }
+            }
+            (KeyCode::Char('y' | 'Y'), _) => {
+                self.confirm = None;
+                self.git_stage_all_then_commit();
+            }
+            (KeyCode::Char('n' | 'N') | KeyCode::Esc, ConfirmKind::GitDiscard) => {
+                self.confirm = None;
+            }
+            (KeyCode::Char('n' | 'N') | KeyCode::Esc, _) => {
+                self.confirm = None;
+                self.status = t!("status.git_nothing_staged").into();
+            }
+            _ => {}
+        }
+    }
+
+    /// The confirmed discard: restore the file from the index and reload its
+    /// buffer if one is open and clean.
+    fn git_discard_confirmed(&mut self, rel: &Path) {
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        match crate::git::discard(&self.root, &rel) {
+            Ok(()) => {
+                self.status = t!("status.git_discarded", path = rel).to_string();
+                self.reload_clean_buffers();
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.clamp_git_selection();
+            }
+            Err(e) => {
+                self.messages
+                    .error(t!("msg.git_failed_reason", error = git_error_text(&e)).to_string());
+            }
+        }
+    }
 }

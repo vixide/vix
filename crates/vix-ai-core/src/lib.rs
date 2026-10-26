@@ -114,7 +114,7 @@ impl Provider {
         }
     }
 
-    fn parse_response(self, body: &serde_json::Value) -> Result<String, String> {
+    fn parse_response(self, body: &serde_json::Value) -> Result<String, AiError> {
         match self {
             Provider::Anthropic => anthropic::parse_response(body),
             Provider::OpenAi => openai::parse_response(body),
@@ -122,6 +122,32 @@ impl Provider {
         }
     }
 }
+
+/// Why an AI request failed (T673).
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum AiError {
+    /// The request never got a reply: DNS, connection or TLS failure.
+    Transport(String),
+    /// The provider replied with something that isn't JSON.
+    NotJson(String),
+    /// The provider reported an error; this is its own message (a bad API
+    /// key, an unknown model, a rate limit).
+    Api(String),
+    /// The reply had no usable text; says what was missing.
+    NoContent(&'static str),
+}
+
+impl std::fmt::Display for AiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transport(why) | Self::NotJson(why) | Self::Api(why) => f.write_str(why),
+            Self::NoContent(what) => f.write_str(what),
+        }
+    }
+}
+
+impl std::error::Error for AiError {}
 
 /// Send `instruction` (the fixed system-level directions — what the CLI path
 /// puts in `{prompt}`) and `input` (the schema/selection/question — what the
@@ -136,10 +162,10 @@ impl Provider {
 ///
 /// # Errors
 ///
-/// Returns `Err` with a human-readable reason on a transport failure (DNS,
-/// connection, TLS), a non-JSON body, or a JSON body the provider's own
-/// [`parse_response`](Provider) rejects (an `error` field, no content, or an
-/// empty reply).
+/// [`AiError::Transport`] on a transport failure (DNS, connection, TLS),
+/// [`AiError::NotJson`] for a non-JSON body, [`AiError::Api`] when the
+/// provider reports an error, and [`AiError::NoContent`] for a reply with no
+/// usable text.
 pub fn complete(
     provider: Provider,
     endpoint: &str,
@@ -147,7 +173,7 @@ pub fn complete(
     api_key: &str,
     instruction: &str,
     input: &str,
-) -> Result<String, String> {
+) -> Result<String, AiError> {
     let body = provider.request_body(model, instruction, input);
     // A provider's HTTP error status carries a JSON error body that
     // `parse_response` reports, so a status is not a transport error.
@@ -166,8 +192,8 @@ pub fn complete(
         Ok(mut resp) => resp
             .body_mut()
             .read_json::<serde_json::Value>()
-            .map_err(|e| e.to_string())?,
-        Err(e) => return Err(e.to_string()),
+            .map_err(|e| AiError::NotJson(e.to_string()))?,
+        Err(e) => return Err(AiError::Transport(e.to_string())),
     };
     provider.parse_response(&json)
 }

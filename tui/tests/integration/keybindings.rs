@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 #[test]
 fn keybindings_reload_action_reports_a_summary() {
@@ -55,9 +55,10 @@ fn keybinding_editor_lists_built_in_rows_and_filters() {
     // machine with a real `keybindings.toml` a builtin token could
     // legitimately show as `User` here. The row's presence and key
     // display are host-independent; its source is not.
-    let mut app = app_with(Settings {
-        keymap: "apple".to_string(),
-        ..Settings::default()
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.keymap = "apple".to_string();
+        s
     });
     app.run_action("keybindings.editor");
     let p = app.keybinding_editor.as_ref().expect("open");

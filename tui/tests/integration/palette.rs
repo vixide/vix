@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 #[test]
 fn palette_goto_line_previews_and_reverts_on_esc() {
@@ -158,9 +158,10 @@ fn palette_files_mode_empty_query_lists_alphabetically() {
 
 #[test]
 fn palette_recents_seed_from_persisted_settings() {
-    let settings = Settings {
-        command_recents: vec!["edit.select_all".to_string()],
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.command_recents = vec!["edit.select_all".to_string()];
+        s
     };
     let mut app = app_with(settings);
     app.on_key(ctrl('p'));

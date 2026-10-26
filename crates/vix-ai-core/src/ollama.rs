@@ -38,16 +38,18 @@ pub fn headers(api_key: &str) -> Vec<(&'static str, String)> {
 ///
 /// Returns `Err` when the body carries an `error` string, has no usable
 /// `response` string, or that string is empty.
-pub fn parse_response(body: &Value) -> Result<String, String> {
+pub fn parse_response(body: &Value) -> Result<String, crate::AiError> {
     if let Some(error) = body.get("error").and_then(Value::as_str) {
-        return Err(error.to_string());
+        return Err(crate::AiError::Api(error.to_string()));
     }
     let text = body
         .get("response")
         .and_then(Value::as_str)
-        .ok_or_else(|| "response had no `response` field".to_string())?;
+        .ok_or(crate::AiError::NoContent(
+            "response had no `response` field",
+        ))?;
     if text.trim().is_empty() {
-        return Err("response had no text content".to_string());
+        return Err(crate::AiError::NoContent("response had no text content"));
     }
     Ok(text.to_string())
 }
@@ -84,7 +86,7 @@ mod tests {
     fn parse_response_surfaces_a_bare_string_error() {
         let body = json!({"error": "model 'llama3.2' not found"});
         assert_eq!(
-            parse_response(&body).unwrap_err(),
+            parse_response(&body).unwrap_err().to_string(),
             "model 'llama3.2' not found"
         );
     }

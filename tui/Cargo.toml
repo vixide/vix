@@ -19,6 +19,9 @@ homepage.workspace = true
 readme = "../README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
+# The integration tests compile inside the library (`src/lib.rs`, T674) so they
+# can read `pub(crate)` state; the other test files are listed below.
+autotests = false
 # The library keeps the crate name `vix` (so `use vix::…` is unchanged for
 # tests, examples, benches and the GUIs), and the command is still `vix`.
 [lib]
@@ -136,16 +139,16 @@ vix-convert-from-tsv-into-csv-tool = { workspace = true }
 # Convert: TSV text into a JSON array of objects.
 vix-convert-from-tsv-into-json-tool = { workspace = true }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
-vix-dap = { path = "../crates/vix-dap", version = "1.8.0", default-features = false }
+vix-dap = { path = "../crates/vix-dap", version = "2.0.0", default-features = false }
 # DB workbench: connection management, schema browsing, and SQL queries.
 vix-db = { workspace = true, optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
-vix-editor = { path = "../crates/vix-editor", version = "1.8.0", default-features = false }
+vix-editor = { path = "../crates/vix-editor", version = "2.0.0", default-features = false }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
 # default-features = false leaves grammar selection to the root `lang-*` features.
-vix-editor-core = { path = "../crates/vix-editor-core", version = "1.8.0", default-features = false }
+vix-editor-core = { path = "../crates/vix-editor-core", version = "2.0.0", default-features = false }
 # LSP client: process management and document sync over `vix_lsp_core`.
-vix-lsp = { path = "../crates/vix-lsp", version = "1.8.0", default-features = false }
+vix-lsp = { path = "../crates/vix-lsp", version = "2.0.0", default-features = false }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
 vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
@@ -229,7 +232,7 @@ vix-coverage = { workspace = true }
 # Read-only side-by-side comparison: a unified diff between two texts.
 vix-diff-view = { workspace = true }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
-vix-doctor = { path = "../crates/vix-doctor", version = "1.8.0", default-features = false }
+vix-doctor = { path = "../crates/vix-doctor", version = "2.0.0", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { workspace = true }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
@@ -256,7 +259,7 @@ vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
 vix-format-tool = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "../crates/vix-git", version = "1.8.0", default-features = false }
+vix-git = { path = "../crates/vix-git", version = "2.0.0", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { workspace = true }
 # A minimal HTTP client driven by a `.http`-style buffer.
@@ -320,7 +323,7 @@ vix-settings-bundle = { workspace = true }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { workspace = true }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
-vix-spellcheck = { path = "../crates/vix-spellcheck", version = "1.8.0", default-features = false }
+vix-spellcheck = { path = "../crates/vix-spellcheck", version = "2.0.0", default-features = false }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { workspace = true }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
@@ -433,3 +436,35 @@ mimalloc = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "action_catalog"
+path = "tests/action_catalog.rs"
+
+[[test]]
+name = "ai_provider_smoke"
+path = "tests/ai_provider_smoke.rs"
+
+[[test]]
+name = "db_smoke"
+path = "tests/db_smoke.rs"
+
+[[test]]
+name = "example_scripts"
+path = "tests/example_scripts.rs"
+
+[[test]]
+name = "i18n_keys"
+path = "tests/i18n_keys.rs"
+
+[[test]]
+name = "lsp_smoke"
+path = "tests/lsp_smoke.rs"
+
+[[test]]
+name = "snapshots"
+path = "tests/snapshots.rs"
+
+[[test]]
+name = "spawn_sites"
+path = "tests/spawn_sites.rs"

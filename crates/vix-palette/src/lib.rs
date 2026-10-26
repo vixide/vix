@@ -298,6 +298,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("menu.item.git.stage_hunk", "git.stage_hunk"),
     ("menu.item.git.unstage_hunk", "git.unstage_hunk"),
     ("cmd.git_log", "git.log"),
+    ("cmd.git_diff_head", "git.diff_head"),
+    ("cmd.git_diff_index", "git.diff_index"),
     ("cmd.git_clone", "git.clone"),
     ("cmd.git_switch_branch", "git.switch_branch"),
     ("cmd.git_new_branch", "git.new_branch"),

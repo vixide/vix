@@ -42,24 +42,24 @@ pub fn headers(api_key: &str) -> Vec<(&'static str, String)> {
 ///
 /// Returns `Err` when the body carries an `error` object, has no usable
 /// `content` array, or the concatenated text is empty.
-pub fn parse_response(body: &Value) -> Result<String, String> {
+pub fn parse_response(body: &Value) -> Result<String, crate::AiError> {
     if let Some(error) = body.get("error") {
         let message = error
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("the server returned an error");
-        return Err(message.to_string());
+        return Err(crate::AiError::Api(message.to_string()));
     }
     let content = body
         .get("content")
         .and_then(Value::as_array)
-        .ok_or_else(|| "response had no content array".to_string())?;
+        .ok_or(crate::AiError::NoContent("response had no content array"))?;
     let text: String = content
         .iter()
         .filter_map(|block| block.get("text").and_then(Value::as_str))
         .collect();
     if text.is_empty() {
-        return Err("response had no text content".to_string());
+        return Err(crate::AiError::NoContent("response had no text content"));
     }
     Ok(text)
 }
@@ -94,7 +94,10 @@ mod tests {
     fn parse_response_surfaces_the_error_message() {
         let body =
             json!({"error": {"type": "authentication_error", "message": "invalid x-api-key"}});
-        assert_eq!(parse_response(&body).unwrap_err(), "invalid x-api-key");
+        assert_eq!(
+            parse_response(&body).unwrap_err().to_string(),
+            "invalid x-api-key"
+        );
     }
 
     #[test]

@@ -31,13 +31,13 @@ pub fn headers(api_key: &str) -> Vec<(&'static str, String)> {
 ///
 /// Returns `Err` when the body carries an `error` object, has no usable
 /// `choices[0].message.content` string, or that string is empty.
-pub fn parse_response(body: &Value) -> Result<String, String> {
+pub fn parse_response(body: &Value) -> Result<String, crate::AiError> {
     if let Some(error) = body.get("error") {
         let message = error
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("the server returned an error");
-        return Err(message.to_string());
+        return Err(crate::AiError::Api(message.to_string()));
     }
     let text = body
         .get("choices")
@@ -46,9 +46,11 @@ pub fn parse_response(body: &Value) -> Result<String, String> {
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"))
         .and_then(Value::as_str)
-        .ok_or_else(|| "response had no choices[0].message.content".to_string())?;
+        .ok_or(crate::AiError::NoContent(
+            "response had no choices[0].message.content",
+        ))?;
     if text.trim().is_empty() {
-        return Err("response had no text content".to_string());
+        return Err(crate::AiError::NoContent("response had no text content"));
     }
     Ok(text.to_string())
 }
@@ -86,7 +88,10 @@ mod tests {
     fn parse_response_surfaces_the_error_message() {
         let body =
             json!({"error": {"message": "invalid api key", "type": "invalid_request_error"}});
-        assert_eq!(parse_response(&body).unwrap_err(), "invalid api key");
+        assert_eq!(
+            parse_response(&body).unwrap_err().to_string(),
+            "invalid api key"
+        );
     }
 
     #[test]

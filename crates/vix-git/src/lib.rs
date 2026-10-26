@@ -383,14 +383,40 @@ fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
 #[cfg(feature = "process")]
 /// `git blame` for a single 1-based line of a repo-relative path, parsed into a
 /// [`BlameLine`]. `None` when not a repo, the path is untracked, or on error.
+///
+/// `contents` is the buffer's text when it has unsaved edits (T657): git then
+/// blames that text (`--contents -`) instead of the copy on disk, so `line`
+/// means the same line the user sees, and edited lines come back uncommitted.
 #[must_use]
-pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> {
+pub fn blame_line(
+    dir: &Path,
+    rel_path: &str,
+    line: usize,
+    contents: Option<&str>,
+) -> Option<BlameLine> {
     let spec = format!("{line},{line}");
     let (cwd, path) = repo_target(dir, rel_path);
-    let out = git_stdout(
-        &cwd,
-        &["blame", "--line-porcelain", "-L", &spec, "--", &path],
-    )?;
+    let out = match contents {
+        None => git_stdout(
+            &cwd,
+            &["blame", "--line-porcelain", "-L", &spec, "--", &path],
+        )?,
+        Some(text) => git_stdin(
+            &cwd,
+            &[
+                "blame",
+                "--line-porcelain",
+                "-L",
+                &spec,
+                "--contents",
+                "-",
+                "--",
+                &path,
+            ],
+            text,
+        )
+        .ok()?,
+    };
     parse_blame_porcelain(&out)
 }
 
@@ -449,6 +475,73 @@ fn valid_ref_name(name: &str) -> bool {
     !name.is_empty()
         && !name.starts_with('-')
         && !name.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+#[cfg(feature = "process")]
+/// Why a git command failed (T673).
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum GitError {
+    /// `git` could not be found: it isn't installed, or isn't on `PATH`.
+    NotInstalled,
+    /// `git` could not be started or talked to for another reason.
+    Io(std::io::Error),
+    /// git ran and exited unsuccessfully.
+    Failed {
+        /// The exit code, when the process wasn't killed by a signal.
+        code: Option<i32>,
+        /// git's own error output, trimmed.
+        stderr: String,
+    },
+    /// An argument was refused before running git (an option-shaped or
+    /// malformed branch name).
+    InvalidArgument(String),
+}
+
+#[cfg(feature = "process")]
+impl std::fmt::Display for GitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotInstalled => f.write_str("git is not installed (or not on PATH)"),
+            Self::Io(e) => write!(f, "{e}"),
+            Self::Failed { stderr, .. } if !stderr.is_empty() => f.write_str(stderr),
+            Self::Failed { code: Some(c), .. } => write!(f, "git exited with status {c}"),
+            Self::Failed { code: None, .. } => f.write_str("git was terminated"),
+            Self::InvalidArgument(why) => f.write_str(why),
+        }
+    }
+}
+
+#[cfg(feature = "process")]
+impl std::error::Error for GitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "process")]
+impl From<std::io::Error> for GitError {
+    fn from(e: std::io::Error) -> Self {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Self::NotInstalled
+        } else {
+            Self::Io(e)
+        }
+    }
+}
+
+#[cfg(feature = "process")]
+impl GitError {
+    /// The error for a git run that exited unsuccessfully.
+    fn from_output(out: &std::process::Output) -> Self {
+        Self::Failed {
+            code: out.status.code(),
+            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        }
+    }
 }
 
 #[cfg(feature = "process")]
@@ -624,12 +717,12 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
 /// # Errors
 ///
 /// Returns git's own stderr on failure.
-pub fn stage_all(dir: &Path) -> Result<(), String> {
-    let out = git(dir, &["add", "-A"]).map_err(|e| e.to_string())?;
+pub fn stage_all(dir: &Path) -> Result<(), GitError> {
+    let out = git(dir, &["add", "-A"])?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(GitError::from_output(&out))
     }
 }
 
@@ -642,13 +735,13 @@ pub fn stage_all(dir: &Path) -> Result<(), String> {
 /// to a bare `bool`, so the caller could only show a static "git failed"
 /// with no reason, inconsistent with the sibling [`stage_content`], which
 /// already reports the real error).
-pub fn stage(dir: &Path, rel_path: &str) -> Result<(), String> {
+pub fn stage(dir: &Path, rel_path: &str) -> Result<(), GitError> {
     let (cwd, path) = repo_target(dir, rel_path);
-    let out = git(&cwd, &["add", "--", &path]).map_err(|e| e.to_string())?;
+    let out = git(&cwd, &["add", "--", &path])?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(GitError::from_output(&out))
     }
 }
 
@@ -671,7 +764,7 @@ pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
 ///
 /// # Errors
 /// Returns an error when the git plumbing commands fail.
-pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), String> {
+pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), GitError> {
     // T650: `--cacheinfo` takes a repository-root-relative path whatever the
     // cwd, so run from the top level with the root-relative path throughout.
     let (cwd, path) = repo_target(dir, rel_path);
@@ -687,18 +780,17 @@ pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), St
         .and_then(|s| s.split_whitespace().next().map(str::to_string))
         .unwrap_or_else(|| "100644".to_string());
     let info = format!("{mode},{sha},{path}");
-    let out =
-        git(&cwd, &["update-index", "--add", "--cacheinfo", &info]).map_err(|e| e.to_string())?;
+    let out = git(&cwd, &["update-index", "--add", "--cacheinfo", &info])?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(GitError::from_output(&out))
     }
 }
 
 #[cfg(feature = "process")]
 /// Run a git command feeding `input` on stdin; return its stdout on success.
-fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
+fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, GitError> {
     use std::io::Write;
     use std::process::Stdio;
     let mut child = Command::new(git_program())
@@ -708,19 +800,34 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .spawn()?;
     child
         .stdin
         .take()
-        .ok_or_else(|| "no stdin".to_string())?
-        .write_all(input.as_bytes())
-        .map_err(|e| e.to_string())?;
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+        .ok_or_else(|| GitError::Io(std::io::Error::other("no stdin")))?
+        .write_all(input.as_bytes())?;
+    let out = child.wait_with_output()?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(GitError::from_output(&out))
+    }
+}
+
+#[cfg(feature = "process")]
+/// Discard a path's unstaged changes: restore the working-tree file from the
+/// index (`git restore --worktree -- <path>`, T657). Staged changes stay.
+///
+/// # Errors
+///
+/// [`GitError::Failed`] when git refuses (for example, an untracked path).
+pub fn discard(dir: &Path, rel_path: &str) -> Result<(), GitError> {
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["restore", "--worktree", "--", &path])?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(GitError::from_output(&out))
     }
 }
 
@@ -731,13 +838,13 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
 ///
 /// Returns git's own stderr on failure (Run H, T540 — see [`stage`]'s doc
 /// comment for why).
-pub fn unstage(dir: &Path, rel_path: &str) -> Result<(), String> {
+pub fn unstage(dir: &Path, rel_path: &str) -> Result<(), GitError> {
     let (cwd, path) = repo_target(dir, rel_path);
-    let out = git(&cwd, &["restore", "--staged", "--", &path]).map_err(|e| e.to_string())?;
+    let out = git(&cwd, &["restore", "--staged", "--", &path])?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(GitError::from_output(&out))
     }
 }
 
@@ -787,16 +894,18 @@ pub fn local_branches(dir: &Path) -> Vec<String> {
 ///
 /// # Errors
 /// Returns the trimmed stderr text when `git switch` exits non-zero or cannot run.
-pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
+pub fn checkout(dir: &Path, branch: &str) -> Result<(), GitError> {
     if !valid_ref_name(branch) {
-        return Err(format!("invalid branch name: {branch:?}"));
+        return Err(GitError::InvalidArgument(format!(
+            "invalid branch name: {branch:?}"
+        )));
     }
     // `--end-of-options` guarantees the ref can never be read as a flag, even
     // if it slipped past `valid_ref_name`.
     match git(dir, &["switch", "--end-of-options", branch]) {
         Ok(o) if o.status.success() => Ok(()),
-        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
-        Err(e) => Err(e.to_string()),
+        Ok(o) => Err(GitError::from_output(&o)),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -807,14 +916,16 @@ pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
 ///
 /// # Errors
 /// Returns the trimmed stderr text when `git switch -c` exits non-zero or cannot run.
-pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
+pub fn create_branch(dir: &Path, name: &str) -> Result<(), GitError> {
     if !valid_ref_name(name) {
-        return Err(format!("invalid branch name: {name:?}"));
+        return Err(GitError::InvalidArgument(format!(
+            "invalid branch name: {name:?}"
+        )));
     }
     match git(dir, &["switch", "-c", name]) {
         Ok(o) if o.status.success() => Ok(()),
-        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
-        Err(e) => Err(e.to_string()),
+        Ok(o) => Err(GitError::from_output(&o)),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -824,7 +935,7 @@ pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
 ///
 /// # Errors
 /// Returns the trimmed stderr text when `git commit` exits non-zero or cannot run.
-pub fn commit(dir: &Path, message: &str) -> Result<(), String> {
+pub fn commit(dir: &Path, message: &str) -> Result<(), GitError> {
     run_ok(dir, &["commit", "-m", message])
 }
 
@@ -880,7 +991,7 @@ pub fn commit_signing_needs_tty(dir: &Path) -> bool {
 ///
 /// # Errors
 /// Returns git's stderr on failure (e.g. no commit to amend).
-pub fn commit_amend(dir: &Path) -> Result<(), String> {
+pub fn commit_amend(dir: &Path) -> Result<(), GitError> {
     run_ok(dir, &["commit", "--amend", "--no-edit"])
 }
 
@@ -889,7 +1000,7 @@ pub fn commit_amend(dir: &Path) -> Result<(), String> {
 ///
 /// # Errors
 /// Returns git's stderr on failure.
-pub fn stash_push(dir: &Path) -> Result<(), String> {
+pub fn stash_push(dir: &Path) -> Result<(), GitError> {
     run_ok(dir, &["stash", "push"])
 }
 
@@ -1130,17 +1241,17 @@ pub fn resolve_short_sha(dir: &Path, revision: &str) -> Option<String> {
 ///
 /// # Errors
 /// Returns git's stderr on failure (e.g. no stash, or a conflict).
-pub fn stash_pop(dir: &Path) -> Result<(), String> {
+pub fn stash_pop(dir: &Path) -> Result<(), GitError> {
     run_ok(dir, &["stash", "pop"])
 }
 
 #[cfg(feature = "process")]
-/// Run a git command, mapping a non-zero exit to its trimmed stderr.
-fn run_ok(dir: &Path, args: &[&str]) -> Result<(), String> {
+/// Run a git command, mapping a non-zero exit to [`GitError::Failed`].
+fn run_ok(dir: &Path, args: &[&str]) -> Result<(), GitError> {
     match git(dir, args) {
         Ok(o) if o.status.success() => Ok(()),
-        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
-        Err(e) => Err(e.to_string()),
+        Ok(o) => Err(GitError::from_output(&o)),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -1194,11 +1305,35 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vix-git-notrepo-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let err = stage(&dir, "a.txt").expect_err("not a repo, so this must fail");
-        assert!(!err.is_empty(), "a real message, not silently discarded");
-        let err = unstage(&dir, "a.txt").expect_err("not a repo, so this must fail");
-        assert!(!err.is_empty(), "a real message, not silently discarded");
+        for err in [
+            stage(&dir, "a.txt").expect_err("not a repo, so this must fail"),
+            unstage(&dir, "a.txt").expect_err("not a repo, so this must fail"),
+        ] {
+            assert!(
+                matches!(&err, GitError::Failed { stderr, .. } if !stderr.is_empty()),
+                "a real message, not silently discarded: {err:?}"
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "process")]
+    #[test]
+    fn a_missing_git_is_not_installed_rather_than_a_failure() {
+        // T673: callers can tell "git isn't there" from "git failed".
+        let missing = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
+        assert!(matches!(GitError::from(missing), GitError::NotInstalled));
+        let other = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        assert!(matches!(GitError::from(other), GitError::Io(_)));
+        let failed = GitError::Failed {
+            code: Some(128),
+            stderr: String::new(),
+        };
+        assert_eq!(failed.to_string(), "git exited with status 128");
+        assert!(matches!(
+            checkout(Path::new("."), "--evil"),
+            Err(GitError::InvalidArgument(_))
+        ));
     }
 
     #[cfg(feature = "process")]
@@ -1601,7 +1736,29 @@ mod tests {
         let sha = log(&sub, 1)[0].sha.clone();
         let patch = show_commit(&sub, &sha, Some("f")).unwrap();
         assert!(patch.contains("sub one") && !patch.contains("root one"));
-        assert_eq!(blame_line(&sub, "f", 1).unwrap().summary, "seed");
+        assert_eq!(blame_line(&sub, "f", 1, None).unwrap().summary, "seed");
+        // T657: with unsaved edits, the edited text is blamed, so a new first
+        // line is uncommitted and the old first line is still `seed` on line 2.
+        let edited = format!(
+            "new line\n{}",
+            std::fs::read_to_string(sub.join("f")).unwrap()
+        );
+        assert!(
+            blame_line(&sub, "f", 1, Some(&edited))
+                .unwrap()
+                .is_uncommitted()
+        );
+        assert_eq!(
+            blame_line(&sub, "f", 2, Some(&edited)).unwrap().summary,
+            "seed"
+        );
+        // Discard restores the file from the index.
+        std::fs::write(sub.join("f"), "scribble\n").unwrap();
+        discard(&sub, "f").unwrap();
+        assert_ne!(
+            std::fs::read_to_string(sub.join("f")).unwrap(),
+            "scribble\n"
+        );
         let _ = std::fs::remove_dir_all(&top);
     }
 

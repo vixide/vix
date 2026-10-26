@@ -6,8 +6,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
+
+### Breaking
+
+- **`#[non_exhaustive]`** on the public types that keep growing: `PromptKind`, `App`, `Focus`, `Capability`, `Tab`, `vix_editor::Editor`, `LspEvent`, `Settings` and its section structs, and the theme structs (`CustomTheme`, `RegionColors`, `EditorColors`, `SyntaxColors`). Outside their crate they can no longer be built with a struct literal (start from `Default::default()` and assign fields) or matched exhaustively (add a `_` arm). Adding a field or variant to them is no longer a breaking change.
+- **`PromptKind::PipeSelection` and `PromptKind::InsertCommandOutput`** replace the private flag the Pipe Through Command prompts used.
+- **Removed:** the deprecated empty module `vix_editor_core::editor_crossterm` (use `editor_input`), the deprecated `vix_editor_core::Editor::set_clipboard` (use `copy_to_clipboard`), and `LspEvent::Edits` / `LspEvent::LinkedRanges`, which nothing has emitted since T652 (use `Lsp::take_edit_replies`).
+- **`vix_fileops::read_text_guarded`** returns a `#[non_exhaustive]` `TextFile { text, lossy }` instead of `(String, bool)`.
+- **`App`'s public surface** (T674): 95 of its 114 public fields are now `pub(crate)`. The 19 that stay public are the ones the GUIs, examples and benchmarks use (`root`, `editor`, `settings`, `menu`, `palette`, `prompt`, `dialog`, `picker`, `focus`, `flags`, `layout`, `status`, `messages`, `bottom_dock`, `db`, `lsp`, `hover`, `edit_table`, `welcome`). The integration tests now compile inside the library.
+- **Typed errors** (T673) in place of `Result<_, String>`: `vix_git::GitError` (`NotInstalled`, `Io`, `Failed { code, stderr }`, `InvalidArgument`) for the staging, commit, branch and stash functions; `vix_http_client::HttpError` (`UnsupportedScheme`, `InvalidRequest`, `Transport`) for `send`; and `vix_ai_core::AiError` (`Transport`, `NotJson`, `Api`, `NoContent`) for `complete` and each provider's `parse_response`. Each implements `Display` with the old message text. In Vix, a git action run without git installed now shows how to install it instead of an OS error.
+- **`vix_git::blame_line`** takes a fourth argument, `contents: Option<&str>`: the buffer's unsaved text to blame instead of the file on disk (T657). Pass `None` for the old behavior. `vix_git::discard` is new.
+
 ### Added
 
+- **Open and discard changes from the Git panel** (T657): in **Git → Changes…**, `Enter` opens the selected file's diff against HEAD and `d` discards its unstaged changes after a confirm (staged changes stay; untracked files are refused, never deleted). New **Git → Diff with HEAD** / **Diff with Staged** actions (`git.diff_head`, `git.diff_index`) diff the active file, unsaved edits included.
 - **Phosphor White Monochrome** theme: warm P4 white (`[230, 230, 215]`) on black, all one color like the other single-color themes.
 - **Editable side-by-side Compare Files** (T660): **Tools → Compare → Compare With File…** and `vix --diff OLD NEW` (so also `git difftool`) now open both files as real, editable tabs side by side. The panes scroll together, the gutter marks each side's changes, **Next/Previous Difference** step through them, and **Copy Change to Left/Right** copy the change at the cursor across as one undo step (like vimdiff `do`/`dp`). Saving a side saves that file. **Show as Unified Diff** keeps the read-only unified view, which an untitled buffer still gets. Rows are aligned at the top of the panes; filler rows are not drawn yet (T671). See `docs/diff-view/index.md`.
 - **Pipe the selection through a shell command** (T659): **Edit → Lines → Pipe Through Command…** replaces the selection (or the whole buffer) with a command's output, as one undo step, and **Insert Command Output…** inserts the output at the cursor. Both are in the command palette, and the Emacs keymap binds `M-|`. A command that fails or runs past 10 seconds leaves the buffer unchanged and shows its stderr in the bottom dock. Builds without the `tasks` feature leave both out. See `crates/vix-editor/spec/pipe-selection/index.md`.
@@ -17,6 +30,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Blame with unsaved edits** (T657): Blame Line and inline blame now blame the buffer as shown (`git blame --contents -`), so after inserting or deleting lines they no longer report another line's commit.
 - **The single-color themes are all one color**: they no longer highlight code in another theme's blue, orange and green, draw a blue cursor, or show gutter marks, spell-check underlines, diagnostics or the terminal pane in other colors. Each now draws the whole screen in its own color on black, with a reverse-video cursor. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
 - **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.
 - **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.

@@ -199,9 +199,8 @@ values, and the host drains the queue with `Lsp::take_edit_replies()` right
 after `poll`. A reply is delivered as `EditReplyKind::Edits` /
 `EditReplyKind::LinkedRanges` only if that server still has the recorded
 version. If the document changed or closed in the meantime, it comes back as
-`EditReplyKind::Stale` instead. Both types are `#[non_exhaustive]`. The older
-`LspEvent::Edits` / `LspEvent::LinkedRanges` variants stay in the enum for 1.x
-semver compatibility, but nothing emits them any more.
+`EditReplyKind::Stale` instead. Both types are `#[non_exhaustive]`. (The old
+`LspEvent::Edits` / `LspEvent::LinkedRanges` variants were removed in 2.0.)
 
 The host applies `Edits` to the tab open on `path`, not to the active tab. It
 also treats the reply as stale if that tab's buffer has changed since its

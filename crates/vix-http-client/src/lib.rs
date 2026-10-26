@@ -87,6 +87,31 @@ pub fn parse_request(text: &str) -> Option<Request> {
     })
 }
 
+/// Why [`send`] couldn't complete a request (T673).
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum HttpError {
+    /// The URL isn't `http`/`https`; holds the URL.
+    UnsupportedScheme(String),
+    /// The request couldn't be built (a malformed method, URL or header).
+    InvalidRequest(String),
+    /// The request never got a reply: DNS, connection or TLS failure.
+    Transport(String),
+}
+
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnsupportedScheme(url) => {
+                write!(f, "unsupported URL scheme (only http/https): {url}")
+            }
+            Self::InvalidRequest(why) | Self::Transport(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for HttpError {}
+
 /// Perform `req` (blocking) and format the response as text: a status line, the
 /// response headers, a blank line, then the body. On a transport error, returns
 /// `Err` with the message; on an HTTP error status (4xx/5xx), returns the
@@ -95,19 +120,18 @@ pub fn parse_request(text: &str) -> Option<Request> {
 /// Call from a background thread — this blocks on network I/O.
 ///
 /// # Errors
-/// Returns `Err` with the transport error message when the request cannot be
-/// completed (DNS, connection, TLS). An HTTP error *status* is not an error here:
-/// the formatted error response is returned as `Ok`.
-pub fn send(req: &Request) -> Result<String, String> {
+/// [`HttpError::UnsupportedScheme`] for a non-`http(s)` URL,
+/// [`HttpError::InvalidRequest`] when the request can't be built, and
+/// [`HttpError::Transport`] when it can't be completed (DNS, connection, TLS).
+/// An HTTP error *status* is not an error here: the formatted error response is
+/// returned as `Ok`.
+pub fn send(req: &Request) -> Result<String, HttpError> {
     // Only http(s) may be requested. A `.http` buffer can be an opened file, so
     // restricting the scheme keeps a crafted request from reaching other URL
     // handlers (e.g. `file://`); ureq itself doesn't implement such schemes, but
     // rejecting them explicitly is defense-in-depth and a clear error.
     if !scheme_is_http(&req.url) {
-        return Err(format!(
-            "unsupported URL scheme (only http/https): {}",
-            req.url
-        ));
+        return Err(HttpError::UnsupportedScheme(req.url.clone()));
     }
     // An HTTP error *status* carries a response worth showing, so it must not
     // surface as an `Err`.
@@ -121,10 +145,12 @@ pub fn send(req: &Request) -> Result<String, String> {
     for (name, value) in &req.headers {
         builder = builder.header(name, value);
     }
-    let request = builder.body(req.body.clone()).map_err(|e| e.to_string())?;
+    let request = builder
+        .body(req.body.clone())
+        .map_err(|e| HttpError::InvalidRequest(e.to_string()))?;
     match agent.run(request) {
         Ok(resp) => Ok(format_response(resp)),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(HttpError::Transport(e.to_string())),
     }
 }
 
@@ -243,7 +269,10 @@ mod tests {
                 body: String::new(),
             };
             if !scheme_is_http(&url) {
-                prop_assert!(send(&req).is_err(), "non-http not refused: {url}");
+                prop_assert!(
+                    matches!(send(&req), Err(HttpError::UnsupportedScheme(_))),
+                    "non-http not refused: {url}"
+                );
             }
         }
     }

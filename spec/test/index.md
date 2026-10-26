@@ -24,14 +24,19 @@ with `-D warnings`, the test suite, `cargo doc` with `-D warnings`, and the
 documentation checks. Fuzzing and benchmarks are deliberately outside it — one
 needs nightly, the other needs a quiet machine.
 
-The integration layer is one test binary (`cargo test --test integration`)
-split across `tui/tests/integration/` (T143): `common.rs` holds the shared
+The integration layer lives in `tui/tests/integration/` (T143) but compiles
+inside the `vix` library's own test build (T674: `src/lib.rs` includes it as
+`#[cfg(test)] mod integration`, with `extern crate self as vix` so its
+`vix::…` paths still resolve). That lets the tests read `App` state that is
+`pub(crate)` rather than public API. `tui/Cargo.toml` sets `autotests = false`
+and lists the other files in `tui/tests/` as their own test targets. It is
+split by area: `common.rs` holds the shared
 fixtures/helpers (`app_at`, `key`/`ctrl`, `type_str`, `buffer_with`, …), and
 each area gets its own file — `catalog.rs`, `db.rs`, `editing.rs`, `find.rs`,
 `git.rs`, `keybindings.rs`, `keymaps.rs`, `lsp.rs`, `menu.rs`, `org.rs`,
 `palette.rs`, `panels.rs`, `scripting.rs`, `workspace.rs` — so a change stays a
-small diff and `cargo test --test integration <area>::` targets just that
-slice. The split is by rough topic, not a strict taxonomy; a test that doesn't
+small diff and `cargo test -p vix-tui --lib integration::<area>::` targets
+just that slice. The split is by rough topic, not a strict taxonomy; a test that doesn't
 obviously belong anywhere lands in `editing.rs`, the catch-all.
 
 ## Writing an integration test

@@ -79,9 +79,17 @@ appears in the panel title (and in the status bar).
 | `Space`   | Toggle the selected file staged / unstaged                 |
 | `s`       | Stage the selected file                                    |
 | `u`       | Unstage the selected file                                  |
+| `Enter`   | Open the selected file's changes as a diff against HEAD    |
+| `d`       | Discard the selected file's unstaged changes (asks first)  |
 | `c`       | Commit (prompts for a one-line message; runs `git commit`) |
 | `r`       | Refresh the status                                         |
 | `Esc`     | Close the panel                                            |
+
+Discard restores the file from the index (`git restore --worktree`), so staged
+changes are kept. It refuses an untracked file rather than deleting it.
+
+**Git → Diff with HEAD** and **Git → Diff with Staged** open the active
+file's diff against its committed or staged version, including unsaved edits.
 
 Commit is available only when something is staged. The commit prompt accepts a
 **multi-line** message: press `Enter` to commit, or `Alt+Enter` to start a new
@@ -149,7 +157,9 @@ for the hunk's region. See `crates/vix-git/spec/stage-hunk/index.md` and
 in the status bar. **Git → Toggle Inline Blame** turns on a dimmed end-of-line
 annotation for the cursor's line (`author, date · summary`) that follows the
 cursor as it moves between lines; it persists in the `inline_blame` setting (off
-by default) and is shown in the normal, non-wrapped view.
+by default) and is shown in the normal, non-wrapped view. Both blame the
+buffer as you see it, so with unsaved edits the line numbers still match and
+edited lines show as not committed yet.
 
 ## History
 
