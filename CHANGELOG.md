@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Phosphor White Monochrome** theme: warm P4 white (`[230, 230, 215]`) on black, all one color like the other single-color themes.
 - **Editable side-by-side Compare Files** (T660): **Tools → Compare → Compare With File…** and `vix --diff OLD NEW` (so also `git difftool`) now open both files as real, editable tabs side by side. The panes scroll together, the gutter marks each side's changes, **Next/Previous Difference** step through them, and **Copy Change to Left/Right** copy the change at the cursor across as one undo step (like vimdiff `do`/`dp`). Saving a side saves that file. **Show as Unified Diff** keeps the read-only unified view, which an untitled buffer still gets. Rows are aligned at the top of the panes; filler rows are not drawn yet (T671). See `docs/diff-view/index.md`.
 - **Pipe the selection through a shell command** (T659): **Edit → Lines → Pipe Through Command…** replaces the selection (or the whole buffer) with a command's output, as one undo step, and **Insert Command Output…** inserts the output at the cursor. Both are in the command palette, and the Emacs keymap binds `M-|`. A command that fails or runs past 10 seconds leaves the buffer unchanged and shows its stderr in the bottom dock. Builds without the `tasks` feature leave both out. See `crates/vix-editor/spec/pipe-selection/index.md`.
 - **Linux packages** (T668): every release now carries native `.deb`, `.rpm` and Arch `.pkg.tar.zst` packages of `vix-tui` and the four released desktop GUIs, for x86_64 and aarch64. Install with `sudo apt install ./vix-tui_*_amd64.deb`, `sudo dnf install ./vix-tui-*.x86_64.rpm` or `sudo pacman -U ./vix-tui-*.pkg.tar.zst`. They need glibc 2.35+ (Ubuntu 22.04+, Debian 12+, Fedora 36+). Each package is install-tested on Debian, Ubuntu, Fedora and Arch before upload. See `spec/linux-packages/index.md`.
@@ -16,7 +17,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Phosphor Green, Phosphor Amber and Safelight Red are all one color**: they no longer highlight code in another theme's blue, orange and green, or draw a blue cursor. Each now shows all code in its own color, with a reverse-video cursor in that color. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
+- **The single-color themes are all one color**: they no longer highlight code in another theme's blue, orange and green, draw a blue cursor, or show gutter marks, spell-check underlines, diagnostics or the terminal pane in other colors. Each now draws the whole screen in its own color on black, with a reverse-video cursor. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
 - **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.
 - **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.
 - **Git paths are literal** (T651): staging a path such as `app/[id]/page.tsx` no longer also stages `app/i/page.tsx`.
@@ -33,6 +34,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Single-color themes renamed**: `Phosphor Green` → `Phosphor Green Monochrome`, `Phosphor Amber` → `Phosphor Amber Monochrome`, `Safelight Red` → `Safelight Red Monochrome`. A saved setting that names an old theme still finds it.
 - **Docs are spell-checked** in `scripts/check-docs` (CSpell; required in GitHub and Codeberg CI), and the existing spelling findings are fixed.
 - **README and website rewritten for new visitors**, and the website now uses the current Lily design system (PickerBar 0.5 with docs search, theme, language, text size and share pickers; 57 themes from `@lilydesignsystem/themes`).
 

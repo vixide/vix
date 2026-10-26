@@ -1,0 +1,33 @@
+{
+  "name": "Phosphor Green Monochrome",
+  "menu-bar": {
+    "foreground": [65, 255, 0],
+    "background": [0, 0, 0],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [65, 255, 0],
+    "background": [0, 0, 0],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [65, 255, 0],
+    "background": [0, 0, 0],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [65, 255, 0],
+    "background": [0, 0, 0],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [65, 255, 0],
+    "background": [0, 0, 0],
+    "font-style": "normal",
+    "font-weight": "normal"
+  }
+}

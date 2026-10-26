@@ -12,6 +12,7 @@
 //! crate stays free of any localization dependency.
 
 pub mod background;
+pub mod single_color;
 
 use std::path::Path;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};

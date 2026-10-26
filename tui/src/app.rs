@@ -9399,6 +9399,7 @@ impl App {
     /// the View → Theme submenu, and scanning the themes directory (real
     /// filesystem I/O, T122) is wasted work to do twice on the startup path.
     fn apply_saved_theme_from(value: &str, themes: &[crate::theme::CustomTheme]) {
+        let value = crate::theme_model::single_color::current_name(value);
         let chosen = themes
             .iter()
             .find(|t| t.name.eq_ignore_ascii_case(value))

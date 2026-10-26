@@ -52,14 +52,15 @@ query editor (`crates/vix-db/spec`).
 
 ## Single-color themes
 
-Three bundled themes imitate single-color displays, and each uses one color
+Four bundled themes imitate single-color displays, and each uses one color
 only:
 
 | Theme | Color (RGB) |
 | ----- | ----------- |
-| Phosphor Green | `[65, 255, 0]` |
-| Phosphor Amber | `[255, 191, 0]` |
-| Safelight Red | `[255, 0, 0]` |
+| Phosphor Green Monochrome | `[65, 255, 0]` |
+| Phosphor Amber Monochrome | `[255, 191, 0]` |
+| Phosphor White Monochrome | `[230, 230, 215]` (warm P4 white) |
+| Safelight Red Monochrome | `[255, 0, 0]` |
 
 - **One color.** Every region's foreground is that color, on a black
   background.
@@ -67,8 +68,24 @@ only:
   all code in the one color.
 - **Reverse-video cursor.** The theme has no `cursor` color, so the cursor is a
   reversed block: a block of that color with the glyph in black.
+- **The whole screen too.** Colors drawn outside the theme (the git, coverage
+  and compare gutters, spell-check underlines, diagnostics, the terminal pane,
+  half-block images) are repainted as well: each finished frame passes through
+  `single_color::flatten`, in the terminal UI and in every GUI front end. A
+  color within a small distance of the background stays background; every
+  other color becomes the theme color; a colored highlight under colored text
+  becomes reverse video.
 
-`tui/tests/integration/themes.rs` pins all three rules for each theme.
+A theme is treated as single-color when all five regions set the same
+foreground and background and it sets no syntax and no cursor colors, so a
+user theme of that shape gets the same treatment.
+
+**Renamed in 2.0.** These were `Phosphor Green`, `Phosphor Amber` and
+`Safelight Red`. A saved setting that still names an old theme resolves to its
+new name (`single_color::current_name`).
+
+`tui/tests/integration/themes.rs` pins the theme files, and the
+`single_color` module's unit tests pin the repaint rule.
 
 ## As implemented in Vix
 

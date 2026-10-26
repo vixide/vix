@@ -238,7 +238,7 @@ fn save_theme_as_with_an_empty_name_is_a_no_op() {
     );
 }
 
-/// Phosphor Green, Phosphor Amber and Safelight Red are each all one color:
+/// The four `… Monochrome` themes are each all one color:
 /// every region's foreground is that color on black, there are no syntax
 /// colors, and no cursor color, so the cursor is a reversed block of that
 /// color (`crates/vix-theme/spec/index.md`, "Single-color themes").
@@ -246,18 +246,23 @@ fn save_theme_as_with_an_empty_name_is_a_no_op() {
 fn single_color_themes_use_one_color_only() {
     for (json, name, color) in [
         (
-            include_str!("../../themes/phosphor-green.json"),
-            "Phosphor Green",
+            include_str!("../../themes/phosphor-green-monochrome.json"),
+            "Phosphor Green Monochrome",
             [65, 255, 0],
         ),
         (
-            include_str!("../../themes/phosphor-amber.json"),
-            "Phosphor Amber",
+            include_str!("../../themes/phosphor-amber-monochrome.json"),
+            "Phosphor Amber Monochrome",
             [255, 191, 0],
         ),
         (
-            include_str!("../../themes/safelight-red.json"),
-            "Safelight Red",
+            include_str!("../../themes/phosphor-white-monochrome.json"),
+            "Phosphor White Monochrome",
+            [230, 230, 215],
+        ),
+        (
+            include_str!("../../themes/safelight-red-monochrome.json"),
+            "Safelight Red Monochrome",
             [255, 0, 0],
         ),
     ] {
@@ -281,5 +286,48 @@ fn single_color_themes_use_one_color_only() {
             "{name}: no syntax colors"
         );
         assert_eq!(t.editor.cursor, None, "{name}: reverse-video cursor");
+        assert_eq!(
+            t.single_color(),
+            Some((color, [0, 0, 0])),
+            "{name}: single-color"
+        );
     }
+}
+
+/// A real frame with colors drawn outside the theme (the compare gutter's
+/// yellow, green and red marks) comes out all one color after the
+/// single-color repaint. The repaint is applied to the buffer directly rather
+/// than by switching the process-wide theme, which would race other tests.
+#[test]
+fn single_color_repaint_leaves_only_the_theme_color() {
+    use ratatui::style::Color;
+    use ratatui::{Terminal, backend::TestBackend};
+    let dir = unique_dir("single-color-frame");
+    fs::write(dir.join("old.txt"), "a\nb\nc\n").unwrap();
+    fs::write(dir.join("new.txt"), "a\nB\nc\nd\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_compare_files(&dir.join("old.txt"), &dir.join("new.txt"));
+    let mut term = Terminal::new(TestBackend::new(100, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let mut buf = term.backend().buffer().clone();
+    let colors = |b: &ratatui::buffer::Buffer| {
+        let mut seen: Vec<Color> = b.content.iter().flat_map(|c| [c.fg, c.bg]).collect();
+        seen.sort_by_key(|c| format!("{c:?}"));
+        seen.dedup();
+        seen
+    };
+    assert!(
+        colors(&buf).len() > 2,
+        "the frame starts out in several colors"
+    );
+    let green = Color::Rgb(65, 255, 0);
+    let black = Color::Rgb(0, 0, 0);
+    vix::theme_model::single_color::flatten(&mut buf, green, black);
+    for c in colors(&buf) {
+        assert!(
+            c == green || c == black,
+            "only the theme color is left: {c:?}"
+        );
+    }
+    fs::remove_dir_all(&dir).ok();
 }
