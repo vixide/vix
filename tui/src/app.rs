@@ -139,14 +139,9 @@ pub enum PromptKind {
     SaveAs,
     /// Rename the active file (input seeded with its current name).
     Rename,
-    /// Run a shell command, streaming its output to the bottom dock.
+    /// Run a shell command, streaming its output to the bottom dock. Also the
+    /// kind of the Pipe Through Command prompts (`App::pending_pipe`, T659).
     RunCommand,
-    /// Pipe the selection (or buffer) through a shell command, replacing it
-    /// with the output (T659).
-    PipeSelection,
-    /// Pipe the selection (or buffer) through a shell command, inserting the
-    /// output at the cursor (T659).
-    InsertCommandOutput,
     /// Search the workspace, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
     /// Enter a git commit message for the staged changes.
@@ -2162,6 +2157,11 @@ pub struct App {
     closed_tabs: Vec<PathBuf>,
     /// The command currently streaming into the bottom dock, if any.
     running_command: Option<RunningCommand>,
+    /// Set while the open `RunCommand` prompt is a Pipe Through Command one:
+    /// `Some(true)` replaces the input with the output, `Some(false)` inserts
+    /// it (T659). A field rather than new `PromptKind` variants, which would
+    /// break the published API (T602).
+    pending_pipe: Option<bool>,
     /// A background AI transform whose result will replace editor text, if any.
     ai_replace: Option<AiReplace>,
     /// The theme name currently applied as a menu hover/keyboard preview (reverted
@@ -2527,6 +2527,7 @@ impl App {
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
+            pending_pipe: None,
             ai_replace: None,
             ai_panel: None,
             terminal: None,
@@ -2806,12 +2807,7 @@ impl App {
     /// [`App::run_action`] to keep that function within the line limit.
     fn run_view_action(&mut self, action: &str) -> bool {
         match action {
-            "tools.run_command" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::RunCommand,
-                    t!("prompt.run_command").to_string(),
-                ));
-            }
+            "tools.run_command" => self.begin_run_command(),
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
             #[cfg(feature = "script")]
@@ -3763,12 +3759,7 @@ impl App {
             "autocomplete" => self.autocomplete(true),
             "cycle_autocomplete_back" => self.autocomplete(false),
             "command_mode" => self.open_palette(),
-            "shell_mode" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::RunCommand,
-                    t!("prompt.run_command").to_string(),
-                ));
-            }
+            "shell_mode" => self.begin_run_command(),
             "suspend" => self.flags.insert(AppFlags::SUSPEND_REQUESTED),
             _ => return false,
         }
@@ -12577,6 +12568,7 @@ impl App {
                 {
                     self.pending_script_prompt = None;
                 }
+                self.pending_pipe = None;
                 self.pending_rebind_action_id = None;
             }
             // Alt+Enter inserts a newline in the multi-line git-commit prompt;
@@ -12637,9 +12629,10 @@ impl App {
                 self.accept_file_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
-            PromptKind::RunCommand => self.run_command(&prompt.input),
-            PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
-            PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
+            PromptKind::RunCommand => match self.pending_pipe.take() {
+                Some(replace) => self.pipe_selection(&prompt.input, replace),
+                None => self.run_command(&prompt.input),
+            },
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),

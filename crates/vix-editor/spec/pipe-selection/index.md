@@ -37,6 +37,14 @@ valid UTF-8 is decoded lossily.
 - The Emacs keymap binds `M-|` to `edit.pipe_selection`.
 - A read-only buffer refuses both, like every other edit.
 
+## Implementation note
+
+The pipe prompts reuse `PromptKind::RunCommand` with their own title, and a
+private `App::pending_pipe` field says which pipe action is pending. New
+`PromptKind` variants would break `vix-tui`'s published API (the enum isn't
+`#[non_exhaustive]`; see T602). Esc and the plain Run Command openers clear
+the field.
+
 ## Gating
 
 Both actions belong to the `tasks` Cargo feature (see

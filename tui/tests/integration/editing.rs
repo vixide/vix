@@ -4404,3 +4404,16 @@ fn insert_command_output_inserts_at_cursor() {
     pipe_through(&mut app, "edit.insert_command_output", "tr a-z A-Z");
     assert_eq!(app.editor.active_tab().unwrap().text(), "abcABC");
 }
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn run_command_after_a_cancelled_pipe_prompt_does_not_pipe() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "keep\n");
+    app.run_action("edit.pipe_selection");
+    app.on_key(keycode(KeyCode::Esc));
+    // Replace a pipe prompt without cancelling it, too.
+    app.run_action("edit.pipe_selection");
+    pipe_through(&mut app, "tools.run_command", "echo not-piped");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "keep\n");
+}
