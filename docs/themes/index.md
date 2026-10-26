@@ -37,7 +37,8 @@ needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`,
 `Turbo`, `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
 `Monokai`, `One Dark`, `Tokyo Night`, `Catppuccin Mocha`, `High Contrast`
 (WCAG AA, 11:1 or better on every text color), `Phosphor Amber`,
-`Phosphor Green`, and `Safelight Red` — plus every theme generated from a
+`Phosphor Green`, and `Safelight Red` (each all one color, with no syntax
+colors and a reverse-video cursor) — plus every theme generated from a
 bundled base16 palette, prefixed `Base16 …` in the same **View → Theme…** list
 (see `crates/vix-base16/spec/index.md`).
 

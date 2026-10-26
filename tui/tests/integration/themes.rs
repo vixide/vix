@@ -237,3 +237,49 @@ fn save_theme_as_with_an_empty_name_is_a_no_op() {
         "an empty name leaves the editor open, nothing saved"
     );
 }
+
+/// Phosphor Green, Phosphor Amber and Safelight Red are each all one color:
+/// every region's foreground is that color on black, there are no syntax
+/// colors, and no cursor color, so the cursor is a reversed block of that
+/// color (`crates/vix-theme/spec/index.md`, "Single-color themes").
+#[test]
+fn single_color_themes_use_one_color_only() {
+    for (json, name, color) in [
+        (
+            include_str!("../../themes/phosphor-green.json"),
+            "Phosphor Green",
+            [65, 255, 0],
+        ),
+        (
+            include_str!("../../themes/phosphor-amber.json"),
+            "Phosphor Amber",
+            [255, 191, 0],
+        ),
+        (
+            include_str!("../../themes/safelight-red.json"),
+            "Safelight Red",
+            [255, 0, 0],
+        ),
+    ] {
+        let t = theme(json);
+        assert_eq!(t.name, name);
+        let regions = [
+            (t.menu_bar.foreground, t.menu_bar.background),
+            (t.status_bar.foreground, t.status_bar.background),
+            (t.left_dock.foreground, t.left_dock.background),
+            (t.right_dock.foreground, t.right_dock.background),
+            (t.editor.foreground, t.editor.background),
+        ];
+        for (fg, bg) in regions {
+            assert_eq!(fg, Some(color), "{name}: one foreground");
+            assert_eq!(bg, Some([0, 0, 0]), "{name}: black background");
+        }
+        let s = &t.syntax;
+        assert_eq!(
+            (s.keyword, s.string, s.comment, s.number),
+            (None, None, None, None),
+            "{name}: no syntax colors"
+        );
+        assert_eq!(t.editor.cursor, None, "{name}: reverse-video cursor");
+    }
+}

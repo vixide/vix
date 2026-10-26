@@ -28,13 +28,6 @@
     "foreground": [255, 0, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
-    "font-weight": "normal",
-    "cursor": [82, 139, 255]
-  },
-  "syntax": {
-    "keyword": [86, 156, 214],
-    "string": [206, 145, 120],
-    "comment": [106, 153, 85],
-    "number": [181, 206, 168]
+    "font-weight": "normal"
   }
 }

@@ -50,6 +50,26 @@ query editor (`crates/vix-db/spec`).
 }
 ```
 
+## Single-color themes
+
+Three bundled themes imitate single-color displays, and each uses one color
+only:
+
+| Theme | Color (RGB) |
+| ----- | ----------- |
+| Phosphor Green | `[65, 255, 0]` |
+| Phosphor Amber | `[255, 191, 0]` |
+| Safelight Red | `[255, 0, 0]` |
+
+- **One color.** Every region's foreground is that color, on a black
+  background.
+- **No syntax colors.** The theme has no `syntax` block, so the editor shows
+  all code in the one color.
+- **Reverse-video cursor.** The theme has no `cursor` color, so the cursor is a
+  reversed block: a block of that color with the glyph in black.
+
+`tui/tests/integration/themes.rs` pins all three rules for each theme.
+
 ## As implemented in Vix
 
 `theme_model` owns the model (`CustomTheme`, `Region`), the style helpers
