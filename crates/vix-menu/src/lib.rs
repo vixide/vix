@@ -1475,6 +1475,8 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.blame", "git.blame", ""),
     Item::leaf("menu.item.git.blame_inline", "git.blame_inline", ""),
     SEP,
+    Item::leaf("menu.item.git.diff_head", "git.diff_head", ""),
+    Item::leaf("menu.item.git.diff_index", "git.diff_index", ""),
     Item::leaf("menu.item.git.diff_next", "git.diff_next", ""),
     Item::leaf("menu.item.git.diff_prev", "git.diff_prev", ""),
     Item::leaf("menu.item.git.stage_hunk", "git.stage_hunk", ""),

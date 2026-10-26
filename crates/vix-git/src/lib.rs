@@ -383,14 +383,40 @@ fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
 #[cfg(feature = "process")]
 /// `git blame` for a single 1-based line of a repo-relative path, parsed into a
 /// [`BlameLine`]. `None` when not a repo, the path is untracked, or on error.
+///
+/// `contents` is the buffer's text when it has unsaved edits (T657): git then
+/// blames that text (`--contents -`) instead of the copy on disk, so `line`
+/// means the same line the user sees, and edited lines come back uncommitted.
 #[must_use]
-pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> {
+pub fn blame_line(
+    dir: &Path,
+    rel_path: &str,
+    line: usize,
+    contents: Option<&str>,
+) -> Option<BlameLine> {
     let spec = format!("{line},{line}");
     let (cwd, path) = repo_target(dir, rel_path);
-    let out = git_stdout(
-        &cwd,
-        &["blame", "--line-porcelain", "-L", &spec, "--", &path],
-    )?;
+    let out = match contents {
+        None => git_stdout(
+            &cwd,
+            &["blame", "--line-porcelain", "-L", &spec, "--", &path],
+        )?,
+        Some(text) => git_stdin(
+            &cwd,
+            &[
+                "blame",
+                "--line-porcelain",
+                "-L",
+                &spec,
+                "--contents",
+                "-",
+                "--",
+                &path,
+            ],
+            text,
+        )
+        .ok()?,
+    };
     parse_blame_porcelain(&out)
 }
 
@@ -783,6 +809,23 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, GitError>
     let out = child.wait_with_output()?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(GitError::from_output(&out))
+    }
+}
+
+#[cfg(feature = "process")]
+/// Discard a path's unstaged changes: restore the working-tree file from the
+/// index (`git restore --worktree -- <path>`, T657). Staged changes stay.
+///
+/// # Errors
+///
+/// [`GitError::Failed`] when git refuses (for example, an untracked path).
+pub fn discard(dir: &Path, rel_path: &str) -> Result<(), GitError> {
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["restore", "--worktree", "--", &path])?;
+    if out.status.success() {
+        Ok(())
     } else {
         Err(GitError::from_output(&out))
     }
@@ -1693,7 +1736,29 @@ mod tests {
         let sha = log(&sub, 1)[0].sha.clone();
         let patch = show_commit(&sub, &sha, Some("f")).unwrap();
         assert!(patch.contains("sub one") && !patch.contains("root one"));
-        assert_eq!(blame_line(&sub, "f", 1).unwrap().summary, "seed");
+        assert_eq!(blame_line(&sub, "f", 1, None).unwrap().summary, "seed");
+        // T657: with unsaved edits, the edited text is blamed, so a new first
+        // line is uncommitted and the old first line is still `seed` on line 2.
+        let edited = format!(
+            "new line\n{}",
+            std::fs::read_to_string(sub.join("f")).unwrap()
+        );
+        assert!(
+            blame_line(&sub, "f", 1, Some(&edited))
+                .unwrap()
+                .is_uncommitted()
+        );
+        assert_eq!(
+            blame_line(&sub, "f", 2, Some(&edited)).unwrap().summary,
+            "seed"
+        );
+        // Discard restores the file from the index.
+        std::fs::write(sub.join("f"), "scribble\n").unwrap();
+        discard(&sub, "f").unwrap();
+        assert_ne!(
+            std::fs::read_to_string(sub.join("f")).unwrap(),
+            "scribble\n"
+        );
         let _ = std::fs::remove_dir_all(&top);
     }
 

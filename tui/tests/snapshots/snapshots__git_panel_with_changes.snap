@@ -13,7 +13,7 @@ expression: screen
                   ╭  Changes — vix-test ────────────────────────────────────────╮
                   │  [ ] M README.md                                             │
                   │                                                              │
-                  │↑↓ select   Space stage/unstage   c commit   r refresh   Esc c│
+                  │↑↓ select   Space stage/unstage   Enter diff   d discard   c c│
                   ╰──────────────────────────────────────────────────────────────╯
                              │                                     ││
                              │                                     ││

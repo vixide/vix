@@ -7645,7 +7645,7 @@ T650–T656 were done on 2026-10-25, on three branches merged through
 
 ### Features
 
-- [ ] **T657 — Git panel: Open Changes, and blame that follows unsaved
+- [x] **T657 — Git panel: Open Changes, and blame that follows unsaved
   edits.**
   - **Open Changes.** The Changes panel has no Enter action, no diff and
     no discard (`tui/src/app/git.rs:648-675`). There is no action to diff
@@ -7661,6 +7661,9 @@ T650–T656 were done on 2026-10-25, on three branches merged through
     writes the index (ttt #951), so a staged hunk stays marked. Fold this
     into T664's choice of diff base rather than fixing it twice.
   - ttt #777/#815. **S–M.**
+  - **Done 2026-10-26:** Open Changes (`Enter`), Discard (`d`, confirmed,
+    refuses untracked), `git.diff_head`/`git.diff_index`, and blame via
+    `--contents -`. The staged-hunk gutter is left to T664, as planned.
 - [ ] **T658 — Small parity items from the same scan.**
   - **(a)** Explicit `editor.fold`/`editor.unfold` actions beside
     `fold_toggle`/`fold_all` (ttt #808).

@@ -718,3 +718,100 @@ fn git_panel_stage_selected_works_from_a_repo_subdirectory() {
     assert_eq!(index_content(&dir, "f"), "root changed\n");
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T657: the Git panel opens a file's changes as a diff on Enter, and `d`
+/// discards them after a confirmation; `git.diff_index` diffs against the
+/// staged copy; an untracked file is never deleted by Discard.
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_panel_opens_and_discards_changes() {
+    let dir = unique_dir("gitpanel-open-changes");
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    for args in [
+        &["add", "."][..],
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
+    ] {
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
+    }
+    fs::write(dir.join("a.txt"), "one\nTWO\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("git.changes");
+    app.on_key(keycode(KeyCode::Enter));
+    let view = app.diff_view.take().expect("Enter opens the diff");
+    assert!(view.title.contains("HEAD") && view.title.contains("a.txt"));
+
+    // Nothing is staged, so the active file also differs from the index.
+    app.open_initial(&dir.join("a.txt"));
+    app.run_action("git.diff_index");
+    let view = app.diff_view.take().expect("git.diff_index opens the diff");
+    assert!(view.title.contains("Staged"));
+    app.git_panel = Some(vix::app::GitPanel { selected: 0 });
+    app.on_key(key('d'));
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(vix::app::ConfirmKind::GitDiscard)
+    );
+    app.on_key(key('y'));
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "one\ntwo\n");
+
+    // Untracked: refused, file kept.
+    fs::write(dir.join("new.txt"), "x\n").unwrap();
+    app.run_action("git.changes");
+    let idx = app
+        .git_status
+        .iter()
+        .position(|s| s.path == "new.txt")
+        .expect("listed");
+    app.git_panel = Some(vix::app::GitPanel { selected: idx });
+    app.on_key(key('d'));
+    assert!(app.confirm.is_none(), "no confirm for an untracked file");
+    assert!(dir.join("new.txt").exists());
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T657: inline/line blame follows unsaved edits rather than the copy on disk.
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn blame_follows_unsaved_edits() {
+    let dir = unique_dir("blame-unsaved");
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    for args in [
+        &["add", "."][..],
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
+    ] {
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
+    }
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("a.txt"));
+    // Insert a new first line without saving; the cursor stays on it.
+    type_str(&mut app, "inserted\n");
+    app.on_key(keycode(KeyCode::Up));
+    app.run_action("git.blame");
+    assert!(
+        !app.status.contains("seed"),
+        "line 1 is the unsaved line, not the committed one: {}",
+        app.status
+    );
+    app.on_key(keycode(KeyCode::Down));
+    app.run_action("git.blame");
+    assert!(
+        app.status.contains("seed"),
+        "line 2 is the committed first line: {}",
+        app.status
+    );
+    fs::remove_dir_all(&dir).ok();
+}

@@ -58,7 +58,7 @@ impl App {
     }
 
     /// Persist this app's settings to `path` instead of the user's config
-    /// directory. Builder form of [`App::settings_path`], for tests and
+    /// directory. Builder form of `App::settings_path`, for tests and
     /// embedders that need an isolated config file.
     #[must_use]
     pub fn with_settings_path(mut self, path: impl Into<PathBuf>) -> Self {
@@ -101,7 +101,7 @@ impl App {
     }
 
     /// Persist this app's session to `path` instead of the user's config
-    /// directory. Builder form of [`App::session_path`], for tests and
+    /// directory. Builder form of `App::session_path`, for tests and
     /// embedders that need an isolated session file (T132: this is what
     /// keeps a script-trust decision made in a test from ever touching the
     /// real developer's `session.toml`).

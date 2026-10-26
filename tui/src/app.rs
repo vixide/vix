@@ -691,6 +691,7 @@ pub struct PasteOp {
 
 /// What a [`Confirm`] does when answered yes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConfirmKind {
     /// Delete [`Confirm::paths`] (explorer Delete).
     #[default]
@@ -701,6 +702,9 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
+    /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
+    /// file) from the Git panel (T657).
+    GitDiscard,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -1603,7 +1607,7 @@ pub enum EmacsChord {
 }
 
 /// Whether a keyboard macro is being recorded or replayed right now (T149)
-/// — see [`App::macro_state`].
+/// — see `App::macro_state`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MacroState {
     /// Neither recording nor replaying.
@@ -1754,6 +1758,7 @@ pub struct App {
     /// can backdate it instead of sleeping. (Kept here rather than on
     /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
     /// change.)
+    #[cfg(feature = "script")]
     pub(crate) script_trust_opened_at: Option<std::time::Instant>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub(crate) replace_confirm: Option<ReplaceConfirm>,
@@ -2369,6 +2374,7 @@ impl App {
             confirm: None,
             save_as_overwrite: None,
             script_trust: None,
+            #[cfg(feature = "script")]
             script_trust_opened_at: None,
             replace_confirm: None,
             wgrep_baseline: None,
@@ -7507,22 +7513,13 @@ impl App {
             // A different confirm replaced it: forget the stale target.
             self.save_as_overwrite = None;
         }
-        if self
+        if let Some(kind) = self
             .confirm
             .as_ref()
-            .is_some_and(|c| c.kind == ConfirmKind::StageAllAndCommit)
+            .map(|c| c.kind)
+            .filter(|k| matches!(k, ConfirmKind::GitDiscard | ConfirmKind::StageAllAndCommit))
         {
-            match key.code {
-                KeyCode::Char('y' | 'Y') => {
-                    self.confirm = None;
-                    self.git_stage_all_then_commit();
-                }
-                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                    self.confirm = None;
-                    self.status = t!("status.git_nothing_staged").into();
-                }
-                _ => {}
-            }
+            self.git_confirm_key(kind, key);
             return;
         }
         match key.code {
