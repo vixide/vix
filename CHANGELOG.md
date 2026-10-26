@@ -16,6 +16,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Phosphor Green, Phosphor Amber and Safelight Red are all one color**: they no longer highlight code in another theme's blue, orange and green, or draw a blue cursor. Each now shows all code in its own color, with a reverse-video cursor in that color. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
 - **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.
 - **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.
 - **Git paths are literal** (T651): staging a path such as `app/[id]/page.tsx` no longer also stages `app/i/page.tsx`.
