@@ -81,10 +81,11 @@ fn ai_summarize_via_a_configured_http_provider_lands_in_a_new_tab() {
     let file = root.join("notes.txt");
     std::fs::write(&file, "Some text to summarize.\n").unwrap();
 
-    let settings = Settings {
-        ai_provider: "ollama".to_string(),
-        ai_endpoint: endpoint,
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.ai_provider = "ollama".to_string();
+        s.ai_endpoint = endpoint;
+        s
     };
 
     let session_path = std::env::temp_dir().join(format!(

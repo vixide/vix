@@ -9,6 +9,7 @@
 
 /// An optional area of Vix that a Cargo feature can compile out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Capability {
     /// The DB workbench and the SQL editor (`sql`).
     Sql,

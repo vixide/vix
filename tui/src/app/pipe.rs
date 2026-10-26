@@ -14,24 +14,23 @@ impl App {
     /// Open the command prompt for `edit.pipe_selection` (`replace`) or
     /// `edit.insert_command_output`.
     pub(super) fn begin_pipe_selection(&mut self, replace: bool) {
-        let label = if replace {
-            t!("prompt.pipe_selection")
+        let (kind, label) = if replace {
+            (PromptKind::PipeSelection, t!("prompt.pipe_selection"))
         } else {
-            t!("prompt.insert_command_output")
+            (
+                PromptKind::InsertCommandOutput,
+                t!("prompt.insert_command_output"),
+            )
         };
-        self.prompt = Some(Prompt::new(PromptKind::RunCommand, label.to_string()));
-        self.pending_pipe = Some(replace);
+        self.prompt = Some(Prompt::new(kind, label.to_string()));
     }
 
-    /// Open the plain Run Command prompt (`tools.run_command`, `shell_mode`),
-    /// clearing any pipe mode left by a pipe prompt that was replaced rather
-    /// than cancelled.
+    /// Open the plain Run Command prompt (`tools.run_command`, `shell_mode`).
     pub(super) fn begin_run_command(&mut self) {
         self.prompt = Some(Prompt::new(
             PromptKind::RunCommand,
             t!("prompt.run_command").to_string(),
         ));
-        self.pending_pipe = None;
     }
 
     /// Run `cmd` with the selection (or the whole buffer) on stdin. On success

@@ -187,9 +187,10 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
 
     // Deterministic `ai_command`: ignores its input, always prints the same
     // message -- no real assistant needed to exercise the wiring.
-    let settings = Settings {
-        ai_command: "printf '%s' 'Add a.txt with a greeting'".to_string(),
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.ai_command = "printf '%s' 'Add a.txt with a greeting'".to_string();
+        s
     };
     let mut app = app_at_with(&dir, settings);
 

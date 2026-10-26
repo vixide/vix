@@ -155,9 +155,10 @@ fn an_unrecognized_persisted_keymap_id_is_reported_and_corrected_at_startup() {
     // way `settings.keymap` holds an unrecognized id at all is a
     // hand-edited (or otherwise corrupted) `settings.toml` loaded fresh —
     // simulated here by constructing `Settings` directly.
-    let settings = Settings {
-        keymap: "intellij-mac".to_string(), // a real, once-made typo (T104d)
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.keymap = "intellij-mac".to_string(); // a real, once-made typo (T104d)
+        s
     };
     let app = app_with(settings);
     assert_eq!(

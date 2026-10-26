@@ -18,9 +18,10 @@ const RED: ratatui::style::Color = ratatui::style::Color::Rgb(0xf8, 0x51, 0x49);
 #[test]
 fn load_coverage_file_opens_a_prefilled_prompt() {
     let dir = unique_dir("coverage-prompt");
-    let mut app = app_with(Settings {
-        coverage_path: "coverage.info".to_string(),
-        ..Settings::default()
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.coverage_path = "coverage.info".to_string();
+        s
     });
     app.root = dir.clone();
     app.run_action("tools.load_coverage_file");

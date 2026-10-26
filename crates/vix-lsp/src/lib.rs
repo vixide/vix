@@ -85,6 +85,7 @@ pub type FileEdits = (PathBuf, Vec<(vix_lsp_core::Range, String)>);
 pub type CodeAction = (String, Vec<FileEdits>);
 
 /// Something a server told us, surfaced to the host from [`Lsp::poll`].
+#[non_exhaustive]
 pub enum LspEvent {
     /// Diagnostics for `path` were (re)published; the host should rebuild marks.
     Diagnostics(PathBuf),
@@ -105,13 +106,6 @@ pub enum LspEvent {
     References(Vec<(PathBuf, u32, u32)>),
     /// A `prepareCallHierarchy` result: the symbol item to query calls for.
     CallHierarchyPrepared(serde_json::Value),
-    /// A formatting response: text edits (range + replacement) for the active
-    /// file, in document order.
-    ///
-    /// No longer emitted since 1.9.0 (T652): formatting replies now arrive,
-    /// tied to their document and version-checked, from
-    /// [`Lsp::take_edit_replies`]. Kept so existing matches still compile.
-    Edits(Vec<(vix_lsp_core::Range, String)>),
     /// A document-symbol response for the active file: `(0-based line, character,
     /// name)`.
     DocumentSymbols(Vec<(u32, u32, String)>),
@@ -138,13 +132,6 @@ pub enum LspEvent {
     /// An inlay-hint response: `(line, character, label)` hints for the active
     /// file (0-based; `character` in the server's encoding units).
     InlayHints(Vec<(u32, u32, String)>),
-    /// A linked-editing response: ranges in the active file that should be edited
-    /// together (e.g. an open/close tag pair).
-    ///
-    /// No longer emitted since 1.9.0 (T652): linked-editing replies now
-    /// arrive from [`Lsp::take_edit_replies`]. Kept so existing matches still
-    /// compile.
-    LinkedRanges(Vec<vix_lsp_core::Range>),
     /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
     CodeLenses(Vec<vix_lsp_core::message::CodeLens>),
     /// The server replied to a request with a JSON-RPC `error` object instead

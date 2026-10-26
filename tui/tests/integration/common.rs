@@ -23,9 +23,7 @@ pub(crate) use vix::clock;
 pub(crate) use vix::fileops;
 pub(crate) use vix::palette::{fuzzy_match, parse_path_target};
 pub(crate) use vix::search::{Flags as SearchFlags, SearchBar};
-#[cfg(feature = "ai")]
-pub(crate) use vix::settings::MiscSettings;
-pub(crate) use vix::settings::{Settings, SubsystemSettings};
+pub(crate) use vix::settings::Settings;
 pub(crate) use vix::workspace_search::Flags as WorkspaceFlags;
 
 pub(crate) fn key(c: char) -> KeyEvent {

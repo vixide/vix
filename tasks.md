@@ -7899,6 +7899,25 @@ widgets, and a markup-hiding Markdown "compose" mode.
     scrolling becomes a plain shared row offset.
   - **Tests.** Render snapshots of an aligned pair; a click on a filler row
     lands on the next real line; the cursor never enters a filler row. **L.**
+- [ ] **T672 — 2.0: version bump and API cleanups.** Workspace version
+  1.8.0 → 2.0.0 (every internal pin). `#[non_exhaustive]` on the types that
+  keep growing (`PromptKind` grew 59 → 74 variants and `App` 174 → 194
+  fields between 1.5.0 and 1.7.1, each in a minor release). Real
+  `PromptKind` variants for the pipe prompts. Remove the deprecated
+  `editor_crossterm` module and `set_clipboard`, and the dead
+  `LspEvent::Edits`/`LinkedRanges`. `read_text_guarded` returns a
+  `TextFile` struct (T661 adds the encoding to it). **M.**
+- [ ] **T673 — Typed errors in vix-git, vix-http-client and vix-ai-core**
+  (the first slice of T610). Replace `Result<_, String>` with an error enum
+  that tells "not installed" (spawn failed) from "ran and failed", and show
+  a translated install hint for the first. **M.**
+- [ ] **T674 — Shrink `App`'s public surface.** Of 114 public fields, the
+  GUIs, examples and benches use about 12; 68 are public only for the
+  integration tests and 35 for nothing outside the crate. Compile the
+  integration tests inside the crate (`#[cfg(test)] #[path] mod
+  integration;` with `extern crate self as vix;`), then make every field
+  not used by a GUI, example or bench `pub(crate)`. Later refactors like
+  T611 step 2 then need no major version. **M.**
 - [ ] **T670: the musl release build is dynamically linked and crashes.**
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)
@@ -8109,6 +8128,12 @@ CI-discovered rounds to get genuinely right on Windows).
     high value), then T660 and T661, then T662 and T664. T663 after T629,
     T666 after T631, T667 after T627, and T665 and T671 after T660. T659
     and T660 are done (2026-10-26).
+
+16. **Run P (2.0, 2026-10-26):** the user chose a 2.0 release so public
+    types can stop blocking features (T602's semver gate made T659/T660
+    work around them). In order, one branch each: T672 (version bump and
+    API cleanups), T673 (typed errors), T674 (`App`'s public surface),
+    then T661 on top.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

@@ -120,6 +120,7 @@ enum HBar {
 
 /// Which pane currently has keyboard focus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
 pub enum Focus {
     /// The center editor.
     Editor,
@@ -133,6 +134,7 @@ pub enum Focus {
 
 /// Which kind of single-line prompt is open.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PromptKind {
     /// Open-file prompt.
     Open,
@@ -140,9 +142,14 @@ pub enum PromptKind {
     SaveAs,
     /// Rename the active file (input seeded with its current name).
     Rename,
-    /// Run a shell command, streaming its output to the bottom dock. Also the
-    /// kind of the Pipe Through Command prompts (`App::pending_pipe`, T659).
+    /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Pipe the selection (or buffer) through a shell command, replacing it
+    /// with the output (T659).
+    PipeSelection,
+    /// Pipe the selection (or buffer) through a shell command, inserting the
+    /// output at the cursor (T659).
+    InsertCommandOutput,
     /// Search the workspace, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
     /// Enter a git commit message for the staged changes.
@@ -1695,6 +1702,7 @@ bitflags::bitflags! {
 }
 
 /// The whole application state.
+#[non_exhaustive]
 pub struct App {
     /// Workspace root directory.
     pub root: PathBuf,
@@ -2158,11 +2166,6 @@ pub struct App {
     closed_tabs: Vec<PathBuf>,
     /// The command currently streaming into the bottom dock, if any.
     running_command: Option<RunningCommand>,
-    /// Set while the open `RunCommand` prompt is a Pipe Through Command one:
-    /// `Some(true)` replaces the input with the output, `Some(false)` inserts
-    /// it (T659). A field rather than new `PromptKind` variants, which would
-    /// break the published API (T602).
-    pending_pipe: Option<bool>,
     /// The open side-by-side comparison, if any (T660).
     compare: Option<compare::CompareState>,
     /// A background AI transform whose result will replace editor text, if any.
@@ -2530,7 +2533,6 @@ impl App {
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
-            pending_pipe: None,
             compare: None,
             ai_replace: None,
             ai_panel: None,
@@ -6951,12 +6953,6 @@ impl App {
         self.lsp_sync_active();
         for event in self.lsp.poll() {
             match event {
-                // `Edits`/`LinkedRanges` are no longer emitted (T652): those
-                // replies arrive, tied to their document, from
-                // `take_edit_replies` below.
-                crate::lsp::LspEvent::Diagnostics(_)
-                | crate::lsp::LspEvent::Edits(_)
-                | crate::lsp::LspEvent::LinkedRanges(_) => {}
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
@@ -7040,6 +7036,11 @@ impl App {
                 crate::lsp::LspEvent::SemanticTokens(tokens) => {
                     self.apply_semantic_tokens(&tokens);
                 }
+                // `Diagnostics` are read from the client directly, formatting
+                // and linked-editing replies arrive from `take_edit_replies`
+                // below (T652), and `LspEvent` is `#[non_exhaustive]`, so any
+                // other variant is ignored.
+                _ => {}
             }
         }
         for reply in self.lsp.take_edit_replies() {
@@ -12574,7 +12575,6 @@ impl App {
                 {
                     self.pending_script_prompt = None;
                 }
-                self.pending_pipe = None;
                 self.pending_rebind_action_id = None;
             }
             // Alt+Enter inserts a newline in the multi-line git-commit prompt;
@@ -12635,10 +12635,9 @@ impl App {
                 self.accept_file_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
-            PromptKind::RunCommand => match self.pending_pipe.take() {
-                Some(replace) => self.pipe_selection(&prompt.input, replace),
-                None => self.run_command(&prompt.input),
-            },
+            PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
+            PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
@@ -13985,12 +13984,10 @@ mod tests {
     /// other value is used as is.
     #[test]
     fn auto_theme_falls_back_to_the_dark_theme() {
-        let mut s = Settings {
-            theme: "auto".to_string(),
-            theme_dark: "nord".to_string(),
-            theme_light: "solarized-light".to_string(),
-            ..Settings::default()
-        };
+        let mut s = Settings::default();
+        s.theme = "auto".to_string();
+        s.theme_dark = "nord".to_string();
+        s.theme_light = "solarized-light".to_string();
         assert_eq!(App::effective_theme(&s), "nord");
         s.theme = "dracula".to_string();
         assert_eq!(App::effective_theme(&s), "dracula");

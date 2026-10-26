@@ -1216,9 +1216,10 @@ fn tab_inserts_spaces_by_default() {
 
 #[test]
 fn tab_width_setting_controls_space_count() {
-    let mut app = app_with(Settings {
-        tab_width: 2,
-        ..Settings::default()
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.tab_width = 2;
+        s
     });
     app.on_key(keycode(KeyCode::Tab));
     app.on_key(key('y'));
@@ -1231,9 +1232,10 @@ fn tab_width_setting_controls_space_count() {
 
 #[test]
 fn indent_style_tabs_inserts_a_tab() {
-    let mut app = app_with(Settings {
-        indent_style: "tabs".to_string(),
-        ..Settings::default()
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.indent_style = "tabs".to_string();
+        s
     });
     app.on_key(keycode(KeyCode::Tab));
     app.on_key(key('z'));
@@ -2298,11 +2300,10 @@ fn run_command_completes_normally_with_the_bell_setting_on() {
     // pipeline itself (hang, panic, or otherwise interfere) -- see
     // `bell_on_command_done_is_off_by_default` for why the actual bell
     // byte isn't asserted on directly.
-    let settings = Settings {
-        accessibility: vix::settings::AccessibilitySettings {
-            bell_on_command_done: true,
-        },
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.accessibility.bell_on_command_done = true;
+        s
     };
     let mut app = app_at_with(Path::new("."), settings);
     app.run_action("tools.run_command");
@@ -3826,9 +3827,10 @@ fn two_key_overrides_on_the_same_token_are_both_rejected() {
 
 #[test]
 fn wrap_fills_the_cursor_paragraph_or_the_selection() {
-    let settings = Settings {
-        wrap_column: 10,
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.wrap_column = 10;
+        s
     };
     let mut app = app_with(settings);
 
@@ -3876,9 +3878,10 @@ fn wrap_uses_the_wrap_column_setting() {
         "already inside the default 80-column wrap"
     );
 
-    let mut narrow = app_with(Settings {
-        wrap_column: 20,
-        ..Settings::default()
+    let mut narrow = app_with({
+        let mut s = Settings::default();
+        s.wrap_column = 20;
+        s
     });
     buffer_with(&mut narrow, text, 0);
     narrow.run_action("edit.wrap");

@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
+
+### Breaking
+
+- **`#[non_exhaustive]`** on the public types that keep growing: `PromptKind`, `App`, `Focus`, `Capability`, `Tab`, `vix_editor::Editor`, `LspEvent`, `Settings` and its section structs, and the theme structs (`CustomTheme`, `RegionColors`, `EditorColors`, `SyntaxColors`). Outside their crate they can no longer be built with a struct literal (start from `Default::default()` and assign fields) or matched exhaustively (add a `_` arm). Adding a field or variant to them is no longer a breaking change.
+- **`PromptKind::PipeSelection` and `PromptKind::InsertCommandOutput`** replace the private flag the Pipe Through Command prompts used.
+- **Removed:** the deprecated empty module `vix_editor_core::editor_crossterm` (use `editor_input`), the deprecated `vix_editor_core::Editor::set_clipboard` (use `copy_to_clipboard`), and `LspEvent::Edits` / `LspEvent::LinkedRanges`, which nothing has emitted since T652 (use `Lsp::take_edit_replies`).
+- **`vix_fileops::read_text_guarded`** returns a `#[non_exhaustive]` `TextFile { text, lossy }` instead of `(String, bool)`.
+
 ### Added
 
 - **Phosphor White Monochrome** theme: warm P4 white (`[230, 230, 215]`) on black, all one color like the other single-color themes.

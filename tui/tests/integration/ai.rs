@@ -25,13 +25,11 @@ fn app_with_canned_ai_reply(dir: &Path, output: &str, ai_diff_review: bool) -> A
     } else {
         format!("cat {}", canned.display())
     };
-    let settings = Settings {
-        ai_command: cmd,
-        misc: MiscSettings {
-            ai_diff_review,
-            ..MiscSettings::default()
-        },
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.ai_command = cmd;
+        s.misc.ai_diff_review = ai_diff_review;
+        s
     };
     app_at_with(dir, settings)
 }
@@ -96,13 +94,11 @@ fn edit_with_instruction_prompt_cannot_inject_shell_commands() {
     // appear.
     let dir = unique_dir("ai-edit-instr-injection");
     let marker = dir.join("injected.txt");
-    let settings = Settings {
-        ai_command: "echo {prompt}".to_string(),
-        misc: MiscSettings {
-            ai_diff_review: false,
-            ..MiscSettings::default()
-        },
-        ..Settings::default()
+    let settings = {
+        let mut s = Settings::default();
+        s.ai_command = "echo {prompt}".to_string();
+        s.misc.ai_diff_review = false;
+        s
     };
     let mut app = app_at_with(&dir, settings);
     buffer_with(&mut app, "hello world\n", 0);

@@ -205,6 +205,7 @@ pub enum FsAccess {
 }
 
 /// One open buffer shown as one tab.
+#[non_exhaustive]
 pub struct Tab {
     /// The underlying code-editor widget/state.
     pub editor: CodeEditor,
@@ -316,6 +317,7 @@ bitflags::bitflags! {
 }
 
 /// The tab strip: a stack of open buffers and the active index.
+#[non_exhaustive]
 pub struct Editor {
     /// Open buffers, left to right.
     pub tabs: Vec<Tab>,
@@ -640,7 +642,11 @@ impl Editor {
         // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
         // error; non-UTF-8 text opens lossily and read-only.
         let fs_read_only = vix_fileops::is_unwritable(&canon);
-        let (content, lossy) = vix_fileops::read_text_guarded(&canon, max_bytes)?;
+        let vix_fileops::TextFile {
+            text: content,
+            lossy,
+            ..
+        } = vix_fileops::read_text_guarded(&canon, max_bytes)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
             editor,
@@ -696,7 +702,7 @@ impl Editor {
                 self.max_text_bytes
             };
             let (content, lossy) = match vix_fileops::read_text_guarded(&path, limit) {
-                Ok(read) => read,
+                Ok(read) => (read.text, read.lossy),
                 Err(e) => {
                     if let Some(why) = vix_fileops::TextReadError::from_io(&e) {
                         out.refused.push((path, why));

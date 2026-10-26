@@ -662,19 +662,6 @@ impl Editor {
         }
     }
 
-    /// Set the clipboard text. Kept with its published 1.x signature for
-    /// compatibility; it never fails, so prefer [`Self::copy_to_clipboard`],
-    /// which returns nothing (no `let _ =` at the call site). Deprecated in
-    /// 1.8.0; removed at 2.0.
-    ///
-    /// # Errors
-    /// Never; the `Result` is kept only for compatibility.
-    #[deprecated(since = "1.8.0", note = "use `copy_to_clipboard`, which cannot fail")]
-    pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
-        self.copy_to_clipboard(text);
-        Ok(())
-    }
-
     /// Return the clipboard text, preferring the system clipboard and falling
     /// back to the in-memory clipboard.
     ///

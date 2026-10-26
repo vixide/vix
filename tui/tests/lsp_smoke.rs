@@ -1165,12 +1165,7 @@ fn mock_server_formatting_replies_name_their_document_and_go_stale() {
         let deadline = Instant::now() + Duration::from_secs(15);
         let mut asked = false;
         while Instant::now() < deadline {
-            for ev in lsp.poll() {
-                assert!(
-                    !matches!(ev, LspEvent::Edits(_) | LspEvent::LinkedRanges(_)),
-                    "edit replies no longer arrive as events"
-                );
-            }
+            let _ = lsp.poll();
             if let Some(reply) = lsp.take_edit_replies().into_iter().next() {
                 return Some(reply);
             }

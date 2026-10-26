@@ -14,7 +14,7 @@ resolver = "3"
 members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint"]
 
 [workspace.package]
-version = "1.8.0"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.96"
 # Each front end's binary license (T648, spec/license): the subset of Vix's
