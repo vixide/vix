@@ -30,6 +30,7 @@ mod modal;
 mod org;
 mod org_table;
 mod picker_panels;
+mod pipe;
 mod roam;
 #[cfg(feature = "script")]
 mod scripts;
@@ -140,6 +141,12 @@ pub enum PromptKind {
     Rename,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Pipe the selection (or buffer) through a shell command, replacing it
+    /// with the output (T659).
+    PipeSelection,
+    /// Pipe the selection (or buffer) through a shell command, inserting the
+    /// output at the cursor (T659).
+    InsertCommandOutput,
     /// Search the workspace, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
     /// Enter a git commit message for the staged changes.
@@ -3150,6 +3157,8 @@ impl App {
             "edit.eol_lf" => self.transform_selection_or_buffer(crate::textops::to_lf),
             "edit.eol_crlf" => self.transform_selection_or_buffer(crate::textops::to_crlf),
             "tools.convert.rot13" => self.transform_selection_or_buffer(crate::textops::rot13),
+            "edit.pipe_selection" => self.begin_pipe_selection(true),
+            "edit.insert_command_output" => self.begin_pipe_selection(false),
             "edit.sort_unique" => self.editor.sort_unique(),
             "edit.shuffle" => self.editor.shuffle_lines(),
             _ => return false,
@@ -12629,6 +12638,8 @@ impl App {
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
+            PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
@@ -13413,8 +13424,9 @@ fn shell_command(script: &str) -> std::process::Command {
 }
 
 /// Start `script` in the platform shell in `dir` with stdin closed, stdout
-/// piped and stderr discarded. `no_tty` also applies [`no_tty_prompts`]. This is
-/// the only place Vix starts a shell, so a build without `tasks` has none.
+/// piped and stderr discarded. `no_tty` also applies [`no_tty_prompts`]. This and
+/// [`run_shell_filter`] are the only places Vix starts a shell, so a build
+/// without `tasks` has none.
 #[cfg(feature = "tasks")]
 fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::process::Child> {
     let mut command = shell_command(script);
@@ -13427,6 +13439,93 @@ fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::p
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
+}
+
+/// What [`run_shell_filter`] collected from a command that ran to completion.
+struct FilterOutput {
+    /// Whether the command exited with status 0.
+    success: bool,
+    /// Everything the command wrote to stdout.
+    stdout: Vec<u8>,
+    /// Everything the command wrote to stderr.
+    stderr: Vec<u8>,
+}
+
+/// Run `script` in the platform shell in `dir` as a filter: `input` goes to its
+/// stdin, and its stdout and stderr are collected separately. Kills the command
+/// and returns a `TimedOut` error if it runs longer than `timeout` (T659).
+#[cfg(feature = "tasks")]
+fn run_shell_filter(
+    script: &str,
+    dir: &Path,
+    input: &[u8],
+    timeout: std::time::Duration,
+) -> std::io::Result<FilterOutput> {
+    use std::io::{Read, Write};
+    fn drain<R: Read + Send + 'static>(r: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut r) = r {
+                let _ = r.read_to_end(&mut buf);
+            }
+            buf
+        })
+    }
+    let mut command = shell_command(script);
+    no_tty_prompts(&mut command);
+    let mut child = command
+        .current_dir(dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    // Write stdin on its own thread so a command that fills its stdout pipe
+    // before reading all of its input can't deadlock us.
+    let stdin = child.stdin.take();
+    let owned = input.to_vec();
+    let writer = std::thread::spawn(move || {
+        if let Some(mut w) = stdin {
+            // A command that exits without reading its input closes the pipe;
+            // that is not an error here.
+            let _ = w.write_all(&owned);
+        }
+    });
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
+    let started = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                t!("msg.pipe_timed_out", seconds = timeout.as_secs()).to_string(),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    let _ = writer.join();
+    Ok(FilterOutput {
+        success: status.success(),
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
+/// Without `tasks` Vix never starts a shell.
+#[cfg(not(feature = "tasks"))]
+fn run_shell_filter(
+    _script: &str,
+    _dir: &Path,
+    _input: &[u8],
+    _timeout: std::time::Duration,
+) -> std::io::Result<FilterOutput> {
+    Err(std::io::Error::other(
+        t!("msg.capability_missing", name = "tasks").to_string(),
+    ))
 }
 
 /// Start `program` with `args` directly (no shell) in `dir`, its stdout and

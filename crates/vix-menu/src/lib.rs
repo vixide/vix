@@ -465,6 +465,13 @@ const EDIT_MOVE: &[Item] = &[
     ),
     Item::leaf("menu.item.edit.trim", "edit.trim_trailing_whitespace", ""),
     SEP,
+    Item::leaf("menu.item.edit.pipe_selection", "edit.pipe_selection", ""),
+    Item::leaf(
+        "menu.item.edit.insert_command_output",
+        "edit.insert_command_output",
+        "",
+    ),
+    SEP,
     Item::sub("menu.item.edit.eol_menu", EDIT_EOL),
 ];
 

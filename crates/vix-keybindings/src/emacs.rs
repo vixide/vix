@@ -120,6 +120,10 @@ const TOP_LEVEL: &[Binding] = &[
         key_token: "A->",
         action_id: "edit.go_last",
     },
+    Binding {
+        key_token: "A-|",
+        action_id: "edit.pipe_selection",
+    },
 ];
 
 /// The `Ctrl+X …` chord (the old `EMACS_CTRL_X`, corrected — see the module

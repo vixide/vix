@@ -7698,7 +7698,7 @@ Skipped as poor fits: the screensaver and animations, the web/WASM build
 (Vix has five desktop GUIs), the Kubernetes backend, dashboard network
 widgets, and a markup-hiding Markdown "compose" mode.
 
-- [ ] **T659 — Pipe the selection through a shell command.** Fresh has
+- [x] **T659 — Pipe the selection through a shell command.** Fresh has
   `Alt+|` (replace the selection with the output) and `Alt+Shift+|`
   (insert the output at the cursor). Emacs `M-|`/`C-u M-|`, Vim `!` and
   Helix `|` all do this.
@@ -7716,6 +7716,13 @@ widgets, and a markup-hiding Markdown "compose" mode.
     fits the `vix-modal` rules.
   - **Tests.** `sort`, `tr a-z A-Z`, a failing command, CRLF input.
     **S.**
+  - **Done 2026-10-26** on `feat/t659-pipe-selection`. New `tui/src/app/pipe.rs`
+    plus `run_shell_filter` beside `spawn_shell`. Deviation from the plan: the
+    editor waits for the command (10 s timeout, I/O on worker threads) rather
+    than applying the result asynchronously, so the output always applies to
+    the text it was computed from. A trailing newline the command adds to
+    input that had none is dropped. Spec:
+    `crates/vix-editor/spec/pipe-selection/index.md`.
 - [ ] **T660 — Editable side-by-side Compare Files.**
   - **Vix today.** `crates/vix-diff-view/spec/index.md` is a read-only
     unified overlay (despite its "side-by-side" heading), and `vix

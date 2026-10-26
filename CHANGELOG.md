@@ -8,12 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Pipe the selection through a shell command** (T659): **Edit → Lines → Pipe Through Command…** replaces the selection (or the whole buffer) with a command's output, as one undo step, and **Insert Command Output…** inserts the output at the cursor. Both are in the command palette, and the Emacs keymap binds `M-|`. A command that fails or runs past 10 seconds leaves the buffer unchanged and shows its stderr in the bottom dock. Builds without the `tasks` feature leave both out. See `crates/vix-editor/spec/pipe-selection/index.md`.
 - **Linux packages** (T668): every release now carries native `.deb`, `.rpm` and Arch `.pkg.tar.zst` packages of `vix-tui` and the four released desktop GUIs, for x86_64 and aarch64. Install with `sudo apt install ./vix-tui_*_amd64.deb`, `sudo dnf install ./vix-tui-*.x86_64.rpm` or `sudo pacman -U ./vix-tui-*.pkg.tar.zst`. They need glibc 2.35+ (Ubuntu 22.04+, Debian 12+, Fedora 36+). Each package is install-tested on Debian, Ubuntu, Fedora and Arch before upload. See `spec/linux-packages/index.md`.
 - **File → Save All** (T654): saves every modified file tab (also in the command palette), reports how many were saved, and stops at the first failure. The `save_all` action used to save only the active tab.
 - **`vix-lsp`: `Lsp::take_edit_replies()`** (T652) returns formatting and linked-editing replies as `EditReply`, tied to the document they were requested for and version-checked; `LspEvent::Edits` and `LspEvent::LinkedRanges` are no longer emitted. `vix-editor` gains `Editor::reload_clean_from_disk_checked`, which reports refused files.
 
 ### Fixed
 
+- **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.
 - **Git from a repository subdirectory** (T650): when Vix is started in a subdirectory of a repository, the diff gutter, hunk list, Stage/Unstage Hunk, the Git panel's Stage Selected, file history and Open File at Revision now use the right file. They could read a same-named file at the repository root, and Stage Hunk could overwrite that file's index entry. JJ actions are offered from a subdirectory of a jj repository too.
 - **Git paths are literal** (T651): staging a path such as `app/[id]/page.tsx` no longer also stages `app/i/page.tsx`.
 - **LSP formatting edits go to the right file** (T652): formatting and format-on-save edits apply to the file they were requested for, not whichever tab is active when the server replies. Edits computed against text that has since changed are dropped with a status message instead of corrupting the file. Linked-editing ranges get the same check.

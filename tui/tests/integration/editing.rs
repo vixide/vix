@@ -4328,3 +4328,79 @@ fn mirrored_calculator_buttons_follow_the_drawing() {
         "rect starts on the button"
     );
 }
+
+/// Open `action`'s command prompt, type `cmd`, and press Enter (T659).
+#[cfg(all(unix, feature = "tasks"))]
+fn pipe_through(app: &mut App, action: &str, cmd: &str) {
+    app.run_action(action);
+    assert!(app.prompt.is_some(), "{action} opens a command prompt");
+    for c in cmd.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.prompt.is_none(), "Enter runs and closes the prompt");
+}
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn pipe_selection_replaces_the_buffer_with_sort_output() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "pear\napple\nfig\n");
+    pipe_through(&mut app, "edit.pipe_selection", "sort");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "apple\nfig\npear\n"
+    );
+    // One undo step restores the original text.
+    app.run_action("edit.undo");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "pear\napple\nfig\n"
+    );
+}
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn pipe_selection_replaces_only_the_selection() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "hello");
+    app.on_key(ctrl('a'));
+    pipe_through(&mut app, "edit.pipe_selection", "tr a-z A-Z");
+    // `tr` keeps the input's lack of a trailing newline.
+    assert_eq!(app.editor.active_tab().unwrap().text(), "HELLO");
+}
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn pipe_selection_keeps_crlf() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "x\ny\n");
+    app.run_action("edit.eol_crlf");
+    pipe_through(&mut app, "edit.pipe_selection", "tr a-z A-Z");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "X\r\nY\r\n");
+}
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn pipe_selection_failure_leaves_buffer_and_shows_stderr() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "keep me\n");
+    pipe_through(
+        &mut app,
+        "edit.pipe_selection",
+        "echo pipe-oops >&2; exit 3",
+    );
+    assert_eq!(app.editor.active_tab().unwrap().text(), "keep me\n");
+    assert!(app.visible.contains(vix::app::Visible::BOTTOM_DOCK));
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("pipe-oops"), "stderr in the dock: {out:?}");
+}
+
+#[test]
+#[cfg(all(unix, feature = "tasks"))]
+fn insert_command_output_inserts_at_cursor() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "abc");
+    pipe_through(&mut app, "edit.insert_command_output", "tr a-z A-Z");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abcABC");
+}
