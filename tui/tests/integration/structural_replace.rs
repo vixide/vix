@@ -10,7 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 fn type_pattern_and_replacement(app: &mut App, pattern: &str, replacement: &str) {
     app.run_action("edit.structural_replace");

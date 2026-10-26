@@ -6,7 +6,7 @@
 //! `poll_ai_replace` have had at all (Annotate/Improve/Summarize/Explain/
 //! Define had none before this).
 
-use crate::common::*;
+use crate::integration::common::*;
 
 /// Build an app whose `ai_command` ignores its input and always prints
 /// `output` -- deterministic, no real assistant needed. Writes `output` to a

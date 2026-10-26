@@ -3,7 +3,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 // Each call needs its own `unique_dir` tag -- these tests run in parallel by
 // default, and `unique_dir("x")` is `vix-x-<pid>`, identical for every call

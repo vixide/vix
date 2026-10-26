@@ -14,7 +14,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 fn theme(json: &str) -> vix::theme_model::CustomTheme {
     vix::theme_model::parse_theme(json).expect("bundled theme JSON parses")

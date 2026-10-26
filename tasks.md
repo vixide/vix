@@ -7900,7 +7900,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     scrolling becomes a plain shared row offset.
   - **Tests.** Render snapshots of an aligned pair; a click on a filler row
     lands on the next real line; the cursor never enters a filler row. **L.**
-- [ ] **T672 — 2.0: version bump and API cleanups.** Workspace version
+- [x] **T672 — 2.0: version bump and API cleanups.** Workspace version
   1.8.0 → 2.0.0 (every internal pin). `#[non_exhaustive]` on the types that
   keep growing (`PromptKind` grew 59 → 74 variants and `App` 174 → 194
   fields between 1.5.0 and 1.7.1, each in a minor release). Real
@@ -7908,17 +7908,29 @@ widgets, and a markup-hiding Markdown "compose" mode.
   `editor_crossterm` module and `set_clipboard`, and the dead
   `LspEvent::Edits`/`LinkedRanges`. `read_text_guarded` returns a
   `TextFile` struct (T661 adds the encoding to it). **M.**
-- [ ] **T673 — Typed errors in vix-git, vix-http-client and vix-ai-core**
+  - **Done 2026-10-26** (`feat/2.0-api`). Not marked after all:
+    `Connection`, `LspServer`, `DebugAdapter` and `CaptureTemplate`. Other
+    crates build these small config records with struct literals (all of
+    vix-db's connection code), so `#[non_exhaustive]` would only force
+    clumsy construction everywhere. 25 types are marked.
+- [x] **T673 — Typed errors in vix-git, vix-http-client and vix-ai-core**
   (the first slice of T610). Replace `Result<_, String>` with an error enum
   that tells "not installed" (spawn failed) from "ran and failed", and show
   a translated install hint for the first. **M.**
-- [ ] **T674 — Shrink `App`'s public surface.** Of 114 public fields, the
+  - **Done 2026-10-26** (`feat/t673-typed-errors`): `GitError`, `HttpError`,
+    `AiError`, all `#[non_exhaustive]`, hand-written `Display` keeping the
+    old text (no `thiserror` dependency for three enums).
+- [x] **T674 — Shrink `App`'s public surface.** Of 114 public fields, the
   GUIs, examples and benches use about 12; 68 are public only for the
   integration tests and 35 for nothing outside the crate. Compile the
   integration tests inside the crate (`#[cfg(test)] #[path] mod
   integration;` with `extern crate self as vix;`), then make every field
   not used by a GUI, example or bench `pub(crate)`. Later refactors like
   T611 step 2 then need no major version. **M.**
+  - **Done 2026-10-26** (`refactor/t674-app-surface`): 95 fields are
+    `pub(crate)`, 19 stay public. All 682 library tests (unit plus the
+    whole integration suite) pass inside the crate unchanged apart from
+    `crate::common` → `crate::integration::common`.
 - [ ] **T670: the musl release build is dynamically linked and crashes.**
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)

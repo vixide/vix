@@ -3,7 +3,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
-use crate::common::*;
+use crate::integration::common::*;
 
 fn active_tab_filename(app: &App) -> String {
     app.editor

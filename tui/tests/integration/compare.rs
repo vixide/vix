@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::common::*;
+use crate::integration::common::*;
 
 /// A workspace with `old.txt` and `new.txt`, and an app comparing them.
 fn comparing(tag: &str, old: &str, new: &str) -> (App, PathBuf) {

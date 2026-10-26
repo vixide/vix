@@ -19,6 +19,9 @@ homepage.workspace = true
 readme = "../README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
+# The integration tests compile inside the library (`src/lib.rs`, T674) so they
+# can read `pub(crate)` state; the other test files are listed below.
+autotests = false
 # The library keeps the crate name `vix` (so `use vix::…` is unchanged for
 # tests, examples, benches and the GUIs), and the command is still `vix`.
 [lib]
@@ -433,3 +436,35 @@ mimalloc = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "action_catalog"
+path = "tests/action_catalog.rs"
+
+[[test]]
+name = "ai_provider_smoke"
+path = "tests/ai_provider_smoke.rs"
+
+[[test]]
+name = "db_smoke"
+path = "tests/db_smoke.rs"
+
+[[test]]
+name = "example_scripts"
+path = "tests/example_scripts.rs"
+
+[[test]]
+name = "i18n_keys"
+path = "tests/i18n_keys.rs"
+
+[[test]]
+name = "lsp_smoke"
+path = "tests/lsp_smoke.rs"
+
+[[test]]
+name = "snapshots"
+path = "tests/snapshots.rs"
+
+[[test]]
+name = "spawn_sites"
+path = "tests/spawn_sites.rs"

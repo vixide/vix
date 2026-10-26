@@ -223,3 +223,12 @@ pub use vix_zid_tool as zid_tool;
 /// The clock box's date/time strings; re-exported as `vix::clock` so the app and
 /// tests share one path.
 pub use crate::clock_panel as clock;
+
+// The integration tests (`tests/integration/`) compile inside the library so
+// they can read state that isn't public API (T674). `extern crate self` keeps
+// their `vix::…` paths working.
+#[cfg(test)]
+extern crate self as vix;
+#[cfg(test)]
+#[path = "../tests/integration/main.rs"]
+mod integration;
