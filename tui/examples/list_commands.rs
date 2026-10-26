@@ -332,10 +332,15 @@ fn render_settings(root: &Path) -> String {
 }
 
 /// One line for a single key binding: the key token, the action's resolved
-/// title, and its id.
+/// title, and its id. The token is escaped too: a `|` ends a table cell even
+/// inside a code span (Emacs `A-|`).
 fn binding_row(token: &str, action_id: &str) -> String {
     let (title, _) = resolve_title(action_id);
-    format!("| `{token}` | {} | `{action_id}` |\n", escape_cell(&title))
+    format!(
+        "| `{}` | {} | `{action_id}` |\n",
+        escape_cell(token),
+        escape_cell(&title)
+    )
 }
 
 fn render_shared_keybindings() -> String {

@@ -193,6 +193,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.sort_unique", "edit.sort_unique"),
     ("cmd.reverse_lines", "edit.reverse_lines"),
     ("cmd.remove_duplicate_lines", "edit.remove_duplicate_lines"),
+    ("cmd.pipe_selection", "edit.pipe_selection"),
+    ("cmd.insert_command_output", "edit.insert_command_output"),
     (
         "cmd.trim_trailing_whitespace",
         "edit.trim_trailing_whitespace",

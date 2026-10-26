@@ -115,6 +115,8 @@ impl Capability {
             ("tools.cancel_command", Capability::Tasks),
             ("tools.tasks", Capability::Tasks),
             ("tools.test", Capability::Tasks),
+            ("edit.pipe_selection", Capability::Tasks),
+            ("edit.insert_command_output", Capability::Tasks),
         ];
         PREFIXES
             .iter()
