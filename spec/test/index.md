@@ -25,7 +25,7 @@ documentation checks. Fuzzing and benchmarks are deliberately outside it — one
 needs nightly, the other needs a quiet machine.
 
 The integration layer lives in `tui/tests/integration/` (T143) but compiles
-inside the `vix` library's own test build (T674: `src/lib.rs` includes it as
+inside the `vix` library's own test build (T674: `tui/src/lib.rs` includes it as
 `#[cfg(test)] mod integration`, with `extern crate self as vix` so its
 `vix::…` paths still resolve). That lets the tests read `App` state that is
 `pub(crate)` rather than public API. `tui/Cargo.toml` sets `autotests = false`
