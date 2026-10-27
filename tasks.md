@@ -7774,7 +7774,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     read-only path, so it can't silently corrupt a file.
   - **Tests.** Byte-exact round trips for each encoding, with and without
     a BOM. **M.**
-- [ ] **T662 — Auto read-only for dependency and toolchain paths; no
+- [x] **T662 — Auto read-only for dependency and toolchain paths; no
   session state for "ephemeral" files.**
   - **Read-only paths.** Go to Definition into `~/.cargo/registry`,
     `~/.rustup`, `/nix/store`, Homebrew's Cellar, `node_modules` or
@@ -7789,6 +7789,10 @@ widgets, and a markup-hiding Markdown "compose" mode.
     Add an `ephemeral_paths` list that is never recorded.
   - From Fresh (editing.md "Read-Only Mode", session-persistence.md
     "Ephemeral files"). **S.**
+  - **Done 2026-10-27:** `read_only_paths`/`ephemeral_paths` in
+    `EditorBehaviorSettings`, matched by a new `vix_fileops::PathPatterns`
+    (`globset`, already in the lockfile through `ignore`). A matched tab
+    sets `Tab::path_access` to `PathAccess::Protected` and shows the lock until unlocked.
 - [ ] **T663 — Saving keeps hard links and ownership, and an interrupted
   save can be recovered.**
   - **Problem.** `write_atomic` (`crates/vix-fileops/src/lib.rs:187`)

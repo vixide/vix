@@ -9,7 +9,9 @@ the focused tab, and each tab's cursor position.
 
 - **Save** — on exit (`App::on_exit`), Vix captures the current session and
   writes it to the per-workspace store. Untitled buffers and image tabs are
-  skipped; only saved files are recorded.
+  skipped; only saved files are recorded. So are files matching an
+  `ephemeral_paths` glob (default `**/.git/**`, T662), so `COMMIT_EDITMSG` and
+  rebase todo lists never reopen at a stale cursor.
 - **Restore** — on startup, when no file argument is passed, `App::restore_session`
   loads the session for the current workspace root and reopens it. The fresh
   app's blank untitled buffer is dropped once at least one real file reopens. A

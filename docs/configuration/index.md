@@ -82,6 +82,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
 | `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |
+| `read_only_paths` | list of strings | Cargo registry/git, `~/.rustup`, `/nix/store`, Homebrew Cellar, `node_modules`, `site-packages` | Path globs that open read-only (`~/` is home, `**` spans directories). **View → Editor → Read-Only** unlocks a tab. |
+| `ephemeral_paths` | list of strings | `["**/.git/**"]` | Path globs the session never records, such as `COMMIT_EDITMSG`. |
 | `restore_session` | bool | `true`   | Reopen the previous session (files, focus, cursors) when launched in a workspace with no file argument. |
 | `recent_files_max` | int | `20`     | How many entries to keep in `recent_files`. |
 | `time_zone`     | string | `UTC`    | Active IANA time zone (e.g. `America/New_York`), chosen via **Tools → Time Zone…**. |

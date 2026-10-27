@@ -204,6 +204,16 @@ pub enum FsAccess {
     ReadOnly,
 }
 
+/// Whether a tab's path matched the `read_only_paths` setting on open (T662).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PathAccess {
+    /// An ordinary path.
+    #[default]
+    Normal,
+    /// A dependency or toolchain path: the tab opened read-only.
+    Protected,
+}
+
 /// One open buffer shown as one tab.
 #[non_exhaustive]
 pub struct Tab {
@@ -223,6 +233,10 @@ pub struct Tab {
     /// Separate from `read_only`: edits stay allowed (so Save As works) and
     /// toggling View-only never clears it.
     pub fs_access: FsAccess,
+    /// [`PathAccess::Protected`] when opened under a `read_only_paths` glob
+    /// (T662), so it started locked; the title shows the lock until View →
+    /// Read Only unlocks it.
+    pub path_access: PathAccess,
 }
 
 impl Tab {
@@ -256,7 +270,9 @@ impl Tab {
         } else {
             String::new()
         };
-        let lock = if self.fs_access == FsAccess::ReadOnly {
+        let lock = if self.fs_access == FsAccess::ReadOnly
+            || (self.path_access == PathAccess::Protected && self.read_only)
+        {
             " 🔒"
         } else {
             ""
@@ -337,6 +353,8 @@ pub struct Editor {
     /// bigger one is refused with a typed error the host can turn into a
     /// confirmation, then reopen with [`Editor::open_unbounded`].
     pub max_text_bytes: u64,
+    /// Paths that open read-only (the `read_only_paths` setting, T662).
+    pub read_only_paths: vix_fileops::PathPatterns,
 }
 
 impl Default for Editor {
@@ -358,6 +376,7 @@ impl Editor {
             split_root: None,
             focused_leaf: 0,
             max_text_bytes: vix_fileops::MAX_TEXT_BYTES,
+            read_only_paths: vix_fileops::PathPatterns::default(),
         };
         e.new_tab();
         e
@@ -526,6 +545,7 @@ impl Editor {
             image: None,
             read_only: false,
             fs_access: FsAccess::Writable,
+            path_access: PathAccess::Normal,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -542,6 +562,7 @@ impl Editor {
             image: None,
             read_only: false,
             fs_access: FsAccess::Writable,
+            path_access: PathAccess::Normal,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -568,6 +589,7 @@ impl Editor {
             image: Some(proto),
             read_only: false,
             fs_access: FsAccess::Writable,
+            path_access: PathAccess::Normal,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -642,6 +664,7 @@ impl Editor {
         // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
         // error; non-UTF-8 text opens lossily and read-only.
         let fs_read_only = vix_fileops::is_unwritable(&canon);
+        let protected = self.read_only_paths.matches(&canon);
         let vix_fileops::TextFile {
             text: content,
             lossy,
@@ -654,11 +677,16 @@ impl Editor {
             dirty: false,
             preview,
             image: None,
-            read_only: lossy,
+            read_only: lossy || protected,
             fs_access: if fs_read_only {
                 FsAccess::ReadOnly
             } else {
                 FsAccess::Writable
+            },
+            path_access: if protected {
+                PathAccess::Protected
+            } else {
+                PathAccess::Normal
             },
         };
 
@@ -1725,6 +1753,31 @@ mod tests {
             "lossy text must not be saved back over the file"
         );
         assert!(!tab.dirty);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T662: a file under a `read_only_paths` glob opens read-only with a lock
+    /// in its title; unlocking it (View → Read Only) drops the lock.
+    #[test]
+    fn read_only_paths_open_locked() {
+        let dir = scratch("read-only-paths");
+        let dep = dir.join("node_modules/pkg/index.js");
+        let own = dir.join("src/main.js");
+        for p in [&dep, &own] {
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, "x\n").unwrap();
+        }
+        let mut e = Editor::new(Flags::LINE_NUMBERS, "    ".into());
+        e.read_only_paths = vix_fileops::PathPatterns::new(&["**/node_modules/**"]);
+        e.open(&dep, false).unwrap();
+        let tab = e.active_tab_mut().unwrap();
+        assert!(
+            tab.read_only && tab.path_access == PathAccess::Protected && tab.title().contains('🔒')
+        );
+        tab.read_only = false;
+        assert!(!tab.title().contains('🔒'));
+        e.open(&own, false).unwrap();
+        assert!(!e.active_tab().unwrap().read_only);
         fs::remove_dir_all(&dir).ok();
     }
 }
