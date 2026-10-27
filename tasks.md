@@ -7665,8 +7665,8 @@ T650–T656 were done on 2026-10-25, on three branches merged through
     refuses untracked), `git.diff_head`/`git.diff_index`, and blame via
     `--contents -`. The staged-hunk gutter is left to T664, as planned.
 - [ ] **T658 — Small parity items from the same scan.**
-  - **(a)** Explicit `editor.fold`/`editor.unfold` actions beside
-    `fold_toggle`/`fold_all` (ttt #808).
+  - [x] **(a)** Explicit `editor.fold`/`editor.unfold` actions beside
+    `fold_toggle`/`fold_all` (ttt #808). Done 2026-10-26.
   - **(b)** Shebang-based language detection (`#!/usr/bin/env python3`)
     for files without an extension, in `vix-editor-core`'s language
     lookup (ttt #822).

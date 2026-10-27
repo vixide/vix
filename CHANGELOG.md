@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.
 - **Open and discard changes from the Git panel** (T657): in **Git → Changes…**, `Enter` opens the selected file's diff against HEAD and `d` discards its unstaged changes after a confirm (staged changes stay; untracked files are refused, never deleted). New **Git → Diff with HEAD** / **Diff with Staged** actions (`git.diff_head`, `git.diff_index`) diff the active file, unsaved edits included.
 - **Phosphor White Monochrome** theme: warm P4 white (`[230, 230, 215]`) on black, all one color like the other single-color themes.
 - **Editable side-by-side Compare Files** (T660): **Tools → Compare → Compare With File…** and `vix --diff OLD NEW` (so also `git difftool`) now open both files as real, editable tabs side by side. The panes scroll together, the gutter marks each side's changes, **Next/Previous Difference** step through them, and **Copy Change to Left/Right** copy the change at the cursor across as one undo step (like vimdiff `do`/`dp`). Saving a side saves that file. **Show as Unified Diff** keeps the read-only unified view, which an untitled buffer still gets. Rows are aligned at the top of the panes; filler rows are not drawn yet (T671). See `docs/diff-view/index.md`.
