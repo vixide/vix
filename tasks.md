@@ -7664,14 +7664,18 @@ T650–T656 were done on 2026-10-25, on three branches merged through
   - **Done 2026-10-26:** Open Changes (`Enter`), Discard (`d`, confirmed,
     refuses untracked), `git.diff_head`/`git.diff_index`, and blame via
     `--contents -`. The staged-hunk gutter is left to T664, as planned.
-- [ ] **T658 — Small parity items from the same scan.**
+- [x] **T658 — Small parity items from the same scan.**
   - [x] **(a)** Explicit `editor.fold`/`editor.unfold` actions beside
     `fold_toggle`/`fold_all` (ttt #808). Done 2026-10-26.
   - [x] **(b)** Shebang-based language detection (`#!/usr/bin/env python3`)
     for files without an extension, in `vix-editor-core`'s language
     lookup (ttt #822). Done 2026-10-27.
-  - **(c)** An `aarch64-pc-windows-msvc` release target in
-    `dist-workspace.toml`, if CI can build it (ttt #1106).
+  - [x] **(c)** An `aarch64-pc-windows-msvc` release target in
+    `dist-workspace.toml`, if CI can build it (ttt #1106). Done
+    2026-10-27 for `vix` only (the GUIs keep their own target lists),
+    pinned to the native `windows-11-arm` runner: dist would otherwise
+    cross-compile it on Ubuntu, where the MSI can't be built. The first
+    real build is the next tag's release run.
   - Each is its own branch. **S each.**
 
 ## Run O (comparator scan: Fresh, 2026-10-25)
