@@ -1,0 +1,15 @@
+[package]
+name = "vix-encoding"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Text-file encodings: detect a file's encoding and BOM, decode it to text, and encode it back byte for byte."
+
+[dependencies]
+chardetng = { workspace = true }
+encoding_rs = { workspace = true }
+
+[lints]
+workspace = true

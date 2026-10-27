@@ -4420,3 +4420,55 @@ fn run_command_after_a_cancelled_pipe_prompt_does_not_pipe() {
     pipe_through(&mut app, "tools.run_command", "echo not-piped");
     assert_eq!(app.editor.active_tab().unwrap().text(), "keep\n");
 }
+
+/// T661: a legacy-encoded file opens editable in its own encoding, shows it in
+/// the status bar's info, and File → Save / Reopen with Encoding convert it.
+#[test]
+fn encoding_choosers_convert_and_reopen() {
+    let dir = unique_dir("encodings");
+    let path = dir.join("latin.txt");
+    fs::write(&path, b"caf\xe9\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&path);
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.text(), "café\n");
+    assert!(!tab.read_only, "a lossless legacy decode stays editable");
+    assert_eq!(tab.encoding.to_string(), "windows-1252");
+
+    // Save with Encoding → UTF-8 (the chooser starts on windows-1252, row 4).
+    app.run_action("file.save_with_encoding");
+    assert_eq!(app.encoding_chooser.as_ref().unwrap().selected, 4);
+    for _ in 0..4 {
+        app.on_key(keycode(KeyCode::Up));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.encoding_chooser.is_none());
+    assert_eq!(fs::read(&path).unwrap(), "café\n".as_bytes());
+
+    // Reopen with Encoding → windows-1252 shows the UTF-8 bytes as mojibake.
+    app.run_action("file.reopen_with_encoding");
+    for _ in 0..4 {
+        app.on_key(keycode(KeyCode::Down));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "cafÃ©\n");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T661: a character the file's encoding can't hold fails the save with a
+/// message naming it, and the file on disk is untouched.
+#[test]
+fn saving_an_unmappable_character_is_refused() {
+    let dir = unique_dir("unmappable");
+    let path = dir.join("latin.txt");
+    fs::write(&path, b"caf\xe9\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&path);
+    type_str(&mut app, "\u{2603}");
+    app.run_action("file.save");
+    assert_eq!(fs::read(&path).unwrap(), b"caf\xe9\n");
+    let last = app.messages.items.last().expect("an error was reported");
+    assert!(last.text.contains("U+2603"), "{}", last.text);
+    assert!(app.editor.active_tab().unwrap().dirty);
+    fs::remove_dir_all(&dir).ok();
+}

@@ -38,9 +38,9 @@ use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choosers::draw_script_chooser;
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
-    draw_diff_view, draw_git_log, draw_git_panel, draw_location_chooser, draw_macro_chooser,
-    draw_recent_chooser, draw_refile_chooser, draw_spell_suggest, draw_task_chooser,
-    draw_workspace_chooser,
+    draw_diff_view, draw_encoding_chooser, draw_git_log, draw_git_panel, draw_location_chooser,
+    draw_macro_chooser, draw_recent_chooser, draw_refile_chooser, draw_spell_suggest,
+    draw_task_chooser, draw_workspace_chooser,
 };
 use dialogs::{
     draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
@@ -493,6 +493,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     draw_sql_overlays(app, frame, area);
     if app.media_type_panel.is_some() {
         draw_media_type_panel(app, frame, area);
+    }
+    if app.encoding_chooser.is_some() {
+        draw_encoding_chooser(app, frame, area);
     }
     if app.macro_chooser.is_some() {
         draw_macro_chooser(app, frame, area);

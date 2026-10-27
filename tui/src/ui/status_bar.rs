@@ -40,7 +40,12 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
                 let code = t.editor.code_ref();
                 (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
             });
-            crate::status_bar_panel::info_segment(Some(lang), t.editor.line_ending(), sel)
+            crate::status_bar_panel::info_segment(
+                Some(lang),
+                t.editor.line_ending(),
+                &t.encoding.to_string(),
+                sel,
+            )
         })
         .unwrap_or_default();
 

@@ -7755,7 +7755,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     are tracked by path, and the comparison ends when either one closes. To
     stay semver-compatible (T602), nothing public changed shape: the state is
     a private `App` field, and `open_diff_files` still opens the unified view.
-- [ ] **T661 — Legacy text encodings and BOM round-trip.**
+- [x] **T661 — Legacy text encodings and BOM round-trip.**
   - **Vix today.** Non-UTF-8 files decode lossily and open read-only
     (`crates/vix-fileops/spec/index.md:114`). Vix has no BOM handling and
     no `encoding_rs` anywhere.
@@ -7774,6 +7774,14 @@ widgets, and a markup-hiding Markdown "compose" mode.
     read-only path, so it can't silently corrupt a file.
   - **Tests.** Byte-exact round trips for each encoding, with and without
     a BOM. **M.**
+  - **Done 2026-10-27:** new `vix-encoding` crate. `chardetng` 1.0 has no
+    confidence score, so "confident" means the guess decodes cleanly *and*
+    re-encodes to the identical bytes. UTF-16 is detected by BOM only (the
+    binary check now runs after BOM sniffing) and encoded by hand, since
+    `encoding_rs` never emits UTF-16. Replace across files
+    (`apply_file_plan`) also writes in each file's own encoding, and refuses
+    a lossily-decoded file instead of corrupting it. The status bar's
+    encoding slot was a hardcoded "UTF-8"; it now shows the tab's.
 - [x] **T662 — Auto read-only for dependency and toolchain paths; no
   session state for "ephemeral" files.**
   - **Read-only paths.** Go to Definition into `~/.cargo/registry`,

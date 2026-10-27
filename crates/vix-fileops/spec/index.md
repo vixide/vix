@@ -112,7 +112,13 @@ would freeze or exhaust Vix with a typed `TextReadError` (inside an `InvalidData
 `io::Error`; recover it with `TextReadError::from_io`): `NotRegular` (a FIFO, socket,
 device or directory), `TooLarge` (over `max_bytes`, bounded even if the file grows after the
 stat) and `Binary` (a NUL in the first 8 KiB). It returns a `TextFile` (`text`, and
-`lossy`, set when non-UTF-8 text was decoded lossily, so the caller opens it read-only).
+`lossy`, set when no encoding decodes it losslessly and it was decoded as UTF-8 with
+replacements, so the caller opens it read-only), and `encoding`: the encoding and BOM
+`vix_encoding::detect` chose (a BOM, then UTF-8, then a legacy guess that round-trips byte
+for byte, T661). A BOM is sniffed before the NUL-byte check, so UTF-16 opens as text; a
+"UTF-16" file whose decoded text still has NULs is refused as `Binary`.
+`write_text_in_file_encoding(path, text)` writes text back in the encoding the file already
+has (replace across files uses it), refusing a file that only decodes lossily.
 `TextFile` is `#[non_exhaustive]`, so it can gain fields (such as an encoding) without a
 breaking change. `MAX_TEXT_BYTES` (50 MiB) is the default
 limit and `HARD_MAX_TEXT_BYTES` (1 GiB) the ceiling that applies even after the user

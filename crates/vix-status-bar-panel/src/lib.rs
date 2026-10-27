@@ -14,7 +14,8 @@ pub fn left_segment(mode: &str, path: &str, dirty: &str, status: &str) -> String
 }
 
 /// The editor-info prefix for the right segment:
-/// `"{language}  {line_ending}  UTF-8   {selection}"`.
+/// `"{language}  {line_ending}  {encoding}   {selection}"`, where `encoding`
+/// is the tab's file encoding, such as `UTF-8` or `Shift_JIS` (T661).
 ///
 /// `language` is `None` for a non-text tab (e.g. an image), giving an empty
 /// string. `selection` is `(chars, lines)` when text is selected, rendered as
@@ -23,6 +24,7 @@ pub fn left_segment(mode: &str, path: &str, dirty: &str, status: &str) -> String
 pub fn info_segment(
     language: Option<&str>,
     line_ending: &str,
+    encoding: &str,
     selection: Option<(usize, usize)>,
 ) -> String {
     let Some(language) = language else {
@@ -31,7 +33,7 @@ pub fn info_segment(
     let sel = selection.map_or(String::new(), |(chars, lines)| {
         format!("Sel {chars} ({lines}L)   ")
     });
-    format!("{language}  {line_ending}  UTF-8   {sel}")
+    format!("{language}  {line_ending}  {encoding}   {sel}")
 }
 
 /// The right segment: `"{info}Ln {line}:Col {col}   {calendar} "`, where `info`
@@ -83,18 +85,18 @@ mod tests {
 
     #[test]
     fn info_is_empty_for_a_non_text_tab() {
-        assert_eq!(info_segment(None, "LF", None), "");
+        assert_eq!(info_segment(None, "LF", "UTF-8", None), "");
     }
 
     #[test]
     fn info_includes_selection_when_present() {
         assert_eq!(
-            info_segment(Some("rust"), "LF", Some((12, 3))),
+            info_segment(Some("rust"), "LF", "UTF-8", Some((12, 3))),
             "rust  LF  UTF-8   Sel 12 (3L)   "
         );
         assert_eq!(
-            info_segment(Some("rust"), "CRLF", None),
-            "rust  CRLF  UTF-8   "
+            info_segment(Some("rust"), "CRLF", "Shift_JIS", None),
+            "rust  CRLF  Shift_JIS   "
         );
     }
 

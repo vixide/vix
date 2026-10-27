@@ -10,6 +10,7 @@ description = "Filesystem helpers for the explorer's copy / cut / paste / delete
 [dependencies]
 globset = { workspace = true }
 trash = { workspace = true }
+vix-encoding = { workspace = true }
 
 [lints]
 workspace = true

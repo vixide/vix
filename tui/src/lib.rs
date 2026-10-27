@@ -55,6 +55,7 @@ pub use vix_editor::editor;
 /// history, selection, soft-wrap renderer). Reached through
 /// [`editor::CodeEditor`] and `crate::editor_core` paths.
 pub use vix_editor_core as editor_core;
+pub use vix_encoding as encoding;
 pub use vix_fileops as fileops;
 pub use vix_find_panel as search;
 pub use vix_format_tool as format_tool;

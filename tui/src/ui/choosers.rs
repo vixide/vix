@@ -125,6 +125,23 @@ pub(super) fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_list_chooser(frame, area, &t!("ui.macros"), &hint, &labels, c.selected);
 }
 
+/// File → Reopen / Save with Encoding (T661): one row per encoding label.
+pub(super) fn draw_encoding_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.encoding_chooser.as_ref() else {
+        return;
+    };
+    let labels: Vec<String> = crate::encoding::CHOICES
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let title = match c.action {
+        crate::app::EncodingAction::Reopen => t!("ui.encoding_reopen"),
+        crate::app::EncodingAction::Save => t!("ui.encoding_save"),
+    };
+    let hint = t!("ui.encoding_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &title, &hint, &labels, c.selected);
+}
+
 pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.clipboard_chooser.as_ref() else {
         return;
