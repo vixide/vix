@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.
 - **Open and discard changes from the Git panel** (T657): in **Git → Changes…**, `Enter` opens the selected file's diff against HEAD and `d` discards its unstaged changes after a confirm (staged changes stay; untracked files are refused, never deleted). New **Git → Diff with HEAD** / **Diff with Staged** actions (`git.diff_head`, `git.diff_index`) diff the active file, unsaved edits included.
