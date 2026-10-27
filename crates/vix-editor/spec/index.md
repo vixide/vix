@@ -25,7 +25,10 @@ status bar and go-to-line.
 Capabilities:
 
 - **Syntax highlighting** — Tree-sitter grammars, selected from the file name's
-  extension. Unknown or extension-less files fall back to plain `text`. With a
+  extension. A file with no extension takes its language from a `#!` line
+  naming `sh`/`bash`/`zsh`/`dash`/`ksh`/`ash`, `python`/`pypy`, `node`, or
+  `ts-node`/`tsx`, directly or through `/usr/bin/env` (T658); version suffixes
+  like `python3.12` are ignored. Anything else falls back to plain `text`. With a
   custom JSON theme active, tokens are colored per the theme's syntax palette;
   the default monochrome themes show foreground only (no token colors). See
   [Themes](../../vix-theme/spec/index.md).

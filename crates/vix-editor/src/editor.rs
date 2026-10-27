@@ -21,7 +21,7 @@ use vix_editor_core::actions::{
 };
 use vix_editor_core::code::Code;
 pub use vix_editor_core::editor::Editor as CodeEditor;
-use vix_editor_core::utils::get_lang;
+use vix_editor_core::utils::get_lang_for;
 // Sentence boundaries are shared with the Edit → Transpose → Sentences command,
 // so navigation and transposition split text the same way.
 use vix_textops::sentence_starts;
@@ -158,7 +158,7 @@ fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> C
     let lang = if name.is_empty() {
         "text".to_string()
     } else {
-        get_lang(&name)
+        get_lang_for(&name, text)
     };
     // An empty syntax theme keeps the editor monochrome (no token colors), as the
     // theme spec requires. `CodeEditor::new` falls back to plain "text" on an
