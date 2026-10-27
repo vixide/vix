@@ -7042,7 +7042,7 @@ new action.
   coverage gutter reads that format, so the project can use the gutter on
   itself (document this in `docs/`). This also gives real numbers for
   T608 and T609. **Small.**
-- [ ] **T608 — DAP mock-adapter tests.** `crates/vix-dap/src/lib.rs` is
+- [~] **T608 — DAP mock-adapter tests.** (DAP half done: `crates/vix-dap/tests/mock_adapter.rs`; the vix-editor unit-test half remains.) `crates/vix-dap/src/lib.rs` is
   716 lines with 3 tests, and they cover pure helpers only.
   `handle_event` (`:324`), `handle_response` (`:370`), `configure`
   (`:444`), and request sequencing are untested. LSP has a Python mock

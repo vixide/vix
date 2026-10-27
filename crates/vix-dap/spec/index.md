@@ -62,3 +62,7 @@ actions, `poll_dap` (drains events each loop), gutter markers
 
 - `process` (default on): starting an adapter process. Off, `start` returns `false`. The
   root `dap` feature enables it (`spec/cargo-features`, T595).
+
+## Testing
+
+`crates/vix-dap/tests/mock_adapter.rs` drives the client against a scripted Python mock adapter (skipped without `python3`): the initialize → launch → stopped → stackTrace → scopes → variables handshake and its request order, evaluate success/failure, a rejected request surfacing as `RequestFailed`, and `terminated` ending the session.
