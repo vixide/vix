@@ -237,6 +237,9 @@ pub struct Tab {
     /// (T662), so it started locked; the title shows the lock until View →
     /// Read Only unlocks it.
     pub path_access: PathAccess,
+    /// The encoding and BOM the file was read in, and is saved back in
+    /// (T661). UTF-8 for a new buffer.
+    pub encoding: vix_encoding::TextEncoding,
 }
 
 impl Tab {
@@ -546,6 +549,7 @@ impl Editor {
             read_only: false,
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
+            encoding: vix_encoding::TextEncoding::UTF8,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -563,6 +567,7 @@ impl Editor {
             read_only: false,
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
+            encoding: vix_encoding::TextEncoding::UTF8,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -590,6 +595,7 @@ impl Editor {
             read_only: false,
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
+            encoding: vix_encoding::TextEncoding::UTF8,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -668,6 +674,7 @@ impl Editor {
         let vix_fileops::TextFile {
             text: content,
             lossy,
+            encoding,
             ..
         } = vix_fileops::read_text_guarded(&canon, max_bytes)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
@@ -688,6 +695,7 @@ impl Editor {
             } else {
                 PathAccess::Normal
             },
+            encoding,
         };
 
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
@@ -730,7 +738,10 @@ impl Editor {
                 self.max_text_bytes
             };
             let (content, lossy) = match vix_fileops::read_text_guarded(&path, limit) {
-                Ok(read) => (read.text, read.lossy),
+                Ok(read) => {
+                    tab.encoding = read.encoding;
+                    (read.text, read.lossy)
+                }
                 Err(e) => {
                     if let Some(why) = vix_fileops::TextReadError::from_io(&e) {
                         out.refused.push((path, why));
@@ -759,6 +770,56 @@ impl Editor {
     /// the user why a file was not reloaded call the checked variant.
     pub fn reload_clean_from_disk(&mut self) -> usize {
         self.reload_clean_from_disk_checked().reloaded
+    }
+
+    /// Re-read the active tab's file as `encoding` (File → Reopen with
+    /// Encoding, T661), replacing its text and adopting `encoding` for later
+    /// saves. Bytes `encoding` can't decode become U+FFFD and the tab turns
+    /// read-only; a clean decode clears a read-only that only came from a
+    /// lossy read. Returns whether the decode was lossy.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` for a tab without a file, `InvalidInput` for one with
+    /// unsaved edits (reopening would discard them), a [`TextReadError`] for
+    /// a FIFO or a file over the 1 GiB ceiling (T571), or the read error.
+    ///
+    /// [`TextReadError`]: vix_fileops::TextReadError
+    pub fn reopen_active_with_encoding(
+        &mut self,
+        encoding: vix_encoding::TextEncoding,
+    ) -> io::Result<bool> {
+        let limit = vix_fileops::HARD_MAX_TEXT_BYTES;
+        let protected_paths = &self.read_only_paths;
+        let Some(tab) = self.tabs.get_mut(self.active) else {
+            return Err(io::ErrorKind::NotFound.into());
+        };
+        let Some(path) = tab.path.clone().filter(|_| tab.image.is_none()) else {
+            return Err(io::ErrorKind::NotFound.into());
+        };
+        if tab.dirty {
+            return Err(io::ErrorKind::InvalidInput.into());
+        }
+        // The guards of `read_text_guarded` (T571) minus its binary check: the
+        // user picked this encoding on purpose, and UTF-16 without a BOM looks
+        // binary.
+        let meta = std::fs::metadata(&path)?;
+        let refuse = |why| Err(io::Error::new(io::ErrorKind::InvalidData, why));
+        if !meta.is_file() {
+            return refuse(vix_fileops::TextReadError::NotRegular);
+        }
+        if meta.len() > limit {
+            return refuse(vix_fileops::TextReadError::TooLarge);
+        }
+        let bytes = std::fs::read(&path)?;
+        let (text, lossy) = vix_encoding::decode_lossy(&bytes, encoding);
+        let cursor = tab.editor.get_cursor();
+        tab.editor.set_content(&text);
+        tab.editor.set_cursor(cursor.min(text.chars().count()));
+        tab.encoding = encoding;
+        tab.dirty = false;
+        tab.read_only = lossy || protected_paths.matches(&path);
+        Ok(lossy)
     }
 
     /// Promote the active preview tab to a permanent tab.
@@ -803,10 +864,15 @@ impl Editor {
         if opts.ensure_final_newline && !data.is_empty() && !data.ends_with('\n') {
             data.push('\n');
         }
+        // In the encoding the file was read in (T661). A character that
+        // encoding can't hold fails the save, with the `Unmappable` inside the
+        // `InvalidData` error, rather than writing a substitute.
+        let bytes = vix_encoding::encode(&data, self.tabs[idx].encoding)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         // Atomic, crash-safe save: a temp file is flushed and renamed over the
         // target, so a crash or full disk mid-write can't truncate the user's
         // file, and a concurrent reader never sees a half-written buffer.
-        vix_fileops::write_atomic(path, data.as_bytes())?;
+        vix_fileops::write_atomic(path, &bytes)?;
         self.tabs[idx].dirty = false;
         self.tabs[idx].preview = false;
         Ok(())
@@ -1737,14 +1803,15 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// T656: a non-UTF-8 file reloads lossily and read-only, as on open.
+    /// T656: an undecodable file reloads lossily and read-only, as on open.
     #[test]
     fn reload_of_non_utf8_text_marks_the_buffer_read_only() {
         let dir = scratch("reload-lossy");
         let path = dir.join("a.txt");
         fs::write(&path, "ok\n").unwrap();
         let mut e = editor_with(&path, 1024);
-        fs::write(&path, b"caf\xe9\n").unwrap();
+        // A UTF-8 BOM over invalid UTF-8: no encoding decodes it losslessly.
+        fs::write(&path, b"\xEF\xBB\xBFcaf\xe9\n").unwrap();
         let out = e.reload_clean_from_disk_checked();
         assert_eq!(out.reloaded, 1);
         let tab = e.active_tab().unwrap();
@@ -1778,6 +1845,89 @@ mod tests {
         assert!(!tab.title().contains('🔒'));
         e.open(&own, false).unwrap();
         assert!(!e.active_tab().unwrap().read_only);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T661: a file is saved back in the encoding and BOM it was read in,
+    /// byte for byte when untouched; a character that encoding can't hold
+    /// fails the save and leaves the file alone.
+    #[test]
+    fn save_keeps_the_file_encoding() {
+        let dir = scratch("encoding");
+        let opts = SaveOptions {
+            trim_trailing_whitespace: false,
+            ensure_final_newline: false,
+        };
+        for (name, label, text) in [
+            (
+                "sjis.txt",
+                "Shift_JIS",
+                "日本語のテキストファイルです。改行もあります。\n",
+            ),
+            ("utf16.txt", "UTF-16LE BOM", "héllo 𝄞\n"),
+            ("bom.txt", "UTF-8 BOM", "héllo\n"),
+        ] {
+            let enc = vix_encoding::TextEncoding::from_label(label).unwrap();
+            let bytes = vix_encoding::encode(text, enc).unwrap();
+            let path = dir.join(name);
+            fs::write(&path, &bytes).unwrap();
+            let mut e = editor_with(&path, 1024);
+            let tab = e.active_tab().unwrap();
+            assert_eq!(
+                (tab.text(), tab.encoding, tab.read_only),
+                (text.to_string(), enc, false)
+            );
+            e.save_active(opts).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), bytes, "{label}");
+        }
+        let path = dir.join("latin.txt");
+        fs::write(&path, b"caf\xe9\n").unwrap();
+        let mut e = editor_with(&path, 1024);
+        e.active_tab_mut()
+            .unwrap()
+            .editor
+            .set_content("snow \u{2603}\n");
+        let err = e.save_active(opts).unwrap_err();
+        let inner = err.into_inner().expect("the encode error is kept");
+        assert!(inner.is::<vix_encoding::Unmappable>());
+        assert_eq!(fs::read(&path).unwrap(), b"caf\xe9\n");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T661: Reopen with Encoding re-decodes the file, adopts the encoding
+    /// for saves, and refuses a tab with unsaved edits.
+    #[test]
+    fn reopen_with_encoding_redecodes_and_saves_back() {
+        let dir = scratch("reopen-encoding");
+        let path = dir.join("a.txt");
+        let koi8 = vix_encoding::TextEncoding::from_label("KOI8-R").unwrap();
+        let bytes = vix_encoding::encode("Привет\n", koi8).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        let mut e = editor_with(&path, 1024);
+        assert!(
+            !e.reopen_active_with_encoding(koi8).unwrap(),
+            "KOI8-R decodes cleanly"
+        );
+        let tab = e.active_tab().unwrap();
+        assert_eq!(
+            (tab.text(), tab.encoding, tab.read_only),
+            ("Привет\n".into(), koi8, false)
+        );
+        e.save_active(SaveOptions {
+            trim_trailing_whitespace: false,
+            ensure_final_newline: false,
+        })
+        .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        // Invalid as UTF-8: decoded with replacements and locked.
+        assert!(
+            e.reopen_active_with_encoding(vix_encoding::TextEncoding::UTF8)
+                .unwrap()
+        );
+        assert!(e.active_tab().unwrap().read_only);
+        e.active_tab_mut().unwrap().dirty = true;
+        let err = e.reopen_active_with_encoding(koi8).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
         fs::remove_dir_all(&dir).ok();
     }
 }

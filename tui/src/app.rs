@@ -970,6 +970,25 @@ pub struct MacroChooser {
     pub selected: usize,
 }
 
+/// File → Reopen / Save with Encoding (T661): which of the two the chooser
+/// does with the picked encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncodingAction {
+    /// Re-read the file as the picked encoding.
+    Reopen,
+    /// Save the buffer in the picked encoding, adopting it.
+    Save,
+}
+
+/// The encoding chooser: one row per [`crate::encoding::CHOICES`] label, the
+/// highlighted row starting on the tab's current encoding.
+pub struct EncodingChooser {
+    /// Reopen or Save.
+    pub action: EncodingAction,
+    /// Index of the highlighted label.
+    pub selected: usize,
+}
+
 /// Stand-in for the script chooser in a build without the `script` feature;
 /// never constructed (`App::script_chooser` stays `None`).
 #[cfg(not(feature = "script"))]
@@ -1794,6 +1813,8 @@ pub struct App {
     pub(crate) task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
     pub(crate) macro_chooser: Option<MacroChooser>,
+    /// The File → Reopen / Save with Encoding chooser (T661).
+    pub(crate) encoding_chooser: Option<EncodingChooser>,
     /// The Rhai scripting engine (`crates/vix-script`), built once at
     /// startup. Loading/reloading scripts rebuilds `scripts`, not this.
     #[cfg(feature = "script")]
@@ -2390,6 +2411,7 @@ impl App {
             git_log: None,
             task_chooser: None,
             macro_chooser: None,
+            encoding_chooser: None,
             #[cfg(feature = "script")]
             script_runtime: vix_script::Runtime::new(),
             #[cfg(feature = "script")]
@@ -2717,6 +2739,8 @@ impl App {
             }
             "file.rename" => self.open_rename_prompt(),
             "file.revert" => self.revert_active(),
+            "file.reopen_with_encoding" => self.open_encoding_chooser(EncodingAction::Reopen),
+            "file.save_with_encoding" => self.open_encoding_chooser(EncodingAction::Save),
             "file.close" => self.request_close_active(),
             "file.close_all" => {
                 for p in self.editor.close_all() {
@@ -3913,10 +3937,23 @@ impl App {
                 true
             }
             Err(e) => {
-                let msg = path_before.map_or_else(
-                    || t!("msg.save_failed", error = e).to_string(),
-                    |p| t!("msg.save_failed_path", path = p.display(), error = e).to_string(),
-                );
+                let unmappable = e
+                    .get_ref()
+                    .and_then(|inner| inner.downcast_ref::<crate::encoding::Unmappable>());
+                let msg = match (unmappable, &path_before) {
+                    (Some(u), Some(p)) => t!(
+                        "msg.save_unmappable",
+                        path = p.display(),
+                        encoding = u.encoding,
+                        ch = u.ch,
+                        code = format!("{:04X}", u32::from(u.ch))
+                    )
+                    .to_string(),
+                    _ => path_before.map_or_else(
+                        || t!("msg.save_failed", error = e).to_string(),
+                        |p| t!("msg.save_failed_path", path = p.display(), error = e).to_string(),
+                    ),
+                };
                 self.messages.error(msg);
                 false
             }
@@ -6675,6 +6712,107 @@ impl App {
         }
     }
 
+    // ----- Encodings (T661) -----------------------------------------------
+
+    fn open_encoding_chooser(&mut self, action: EncodingAction) {
+        let Some(tab) = self
+            .editor
+            .active_tab()
+            .filter(|t| t.path.is_some() && !t.is_image())
+        else {
+            self.status = t!("status.encoding_no_file").to_string();
+            return;
+        };
+        let current = tab.encoding.to_string();
+        let selected = crate::encoding::CHOICES
+            .iter()
+            .position(|c| *c == current)
+            .unwrap_or(0);
+        self.encoding_chooser = Some(EncodingChooser { action, selected });
+    }
+
+    fn encoding_key(&mut self, key: KeyEvent) {
+        let n = crate::encoding::CHOICES.len();
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.encoding_chooser.as_mut() {
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.encoding_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % n;
+                }
+            }
+            KeyCode::Enter => self.apply_selected_encoding(),
+            KeyCode::Esc => self.encoding_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn encoding_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.encoding_chooser.as_mut()
+            && idx < crate::encoding::CHOICES.len()
+        {
+            c.selected = idx;
+            self.apply_selected_encoding();
+        }
+    }
+
+    /// Reopen the file as, or save it in, the highlighted encoding.
+    fn apply_selected_encoding(&mut self) {
+        let Some(c) = self.encoding_chooser.take() else {
+            return;
+        };
+        let Some(encoding) = crate::encoding::CHOICES
+            .get(c.selected)
+            .and_then(|label| crate::encoding::TextEncoding::from_label(label))
+        else {
+            return;
+        };
+        match c.action {
+            EncodingAction::Reopen => self.reopen_with_encoding(encoding),
+            EncodingAction::Save => self.save_with_encoding(encoding),
+        }
+    }
+
+    fn reopen_with_encoding(&mut self, encoding: crate::encoding::TextEncoding) {
+        let name = encoding.to_string();
+        match self.editor.reopen_active_with_encoding(encoding) {
+            Ok(false) => self.status = t!("status.reopened_encoding", encoding = name).to_string(),
+            Ok(true) => {
+                self.status = t!("status.reopened_encoding_lossy", encoding = name).to_string();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
+                self.status = t!("status.reopen_encoding_unsaved").to_string();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.status = t!("status.encoding_no_file").to_string();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
+    /// Adopt `encoding` and save; on failure the tab keeps its old encoding.
+    fn save_with_encoding(&mut self, encoding: crate::encoding::TextEncoding) {
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").to_string();
+            return;
+        }
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let before = std::mem::replace(&mut tab.encoding, encoding);
+        if !self.write_active_to_disk()
+            && let Some(tab) = self.editor.active_tab_mut()
+        {
+            tab.encoding = before;
+        }
+    }
+
     // ----- Recent-projects switcher ---------------------------------------
 
     /// Switch to the highlighted recent project.
@@ -8318,6 +8456,7 @@ impl App {
         panel!(git_log, git_log_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
+        panel!(encoding_chooser, encoding_mouse);
         panel!(script_chooser, script_chooser_mouse);
         panel!(clipboard_chooser, clipboard_mouse);
         panel!(workspace_chooser, workspace_chooser_mouse);
@@ -12091,7 +12230,7 @@ impl App {
                     continue;
                 }
             }
-            if let Err(e) = crate::fileops::write_atomic(path, new.as_bytes()) {
+            if let Err(e) = crate::fileops::write_text_in_file_encoding(path, new) {
                 self.messages
                     .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;

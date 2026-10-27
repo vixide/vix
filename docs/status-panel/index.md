@@ -31,7 +31,9 @@ The right segment shows buffer and cursor details:
 
 - the buffer's **language** (omitted for a non-text tab);
 - the **line ending** (LF or CRLF);
-- the **encoding** (UTF-8);
+- the **encoding** the file was read in and will be saved in, such as
+  `UTF-8`, `UTF-8 BOM` or `Shift_JIS` (change it with **File → Reopen with
+  Encoding…** or **Save with Encoding…**);
 - the **selection size**, rendered as `Sel {chars} ({lines}L)` when text is
   selected;
 - the cursor position, as `Ln {line}:Col {col}`;

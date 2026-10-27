@@ -1,5 +1,5 @@
 ---
-source: tests/snapshots.rs
+source: tui/tests/snapshots.rs
 expression: screen
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
@@ -21,13 +21,13 @@ expression: screen
      │ Save All                       │                            ││
      │ Rename…                        │                            ││
      │ Revert                         │                            ││●──────────────────────────────
-  Ou│────────────────────────────────│─────────────────────────────────────────────────────────────
-(no o│ Close                   Ctrl W │
+  Ou│ Reopen with Encoding…          │─────────────────────────────────────────────────────────────
+(no o│ Save with Encoding…            │
+     │────────────────────────────────│
+     │ Close                   Ctrl W │
      │ Close All Tabs    Ctrl Shift W │
      │ Reopen Closed Tab Ctrl Shift T │
      ╰────────────────────────────────╯
-
-
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────

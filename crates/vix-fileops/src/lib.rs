@@ -478,13 +478,20 @@ impl TextReadError {
 pub struct TextFile {
     /// The decoded text.
     pub text: String,
-    /// The file wasn't valid UTF-8 and was decoded lossily, so the caller
-    /// should open it read-only rather than corrupt it on save.
+    /// The file couldn't be decoded losslessly in any encoding (T661) and was
+    /// decoded as UTF-8 with replacements, so the caller should open it
+    /// read-only rather than corrupt it on save.
     pub lossy: bool,
+    /// The encoding and BOM it was read in, to write it back the same way
+    /// (T661). UTF-8 when `lossy`.
+    pub encoding: vix_encoding::TextEncoding,
 }
 
 /// Read a text file, refusing anything that would hang, exhaust memory, or
-/// isn't text (T571). Non-UTF-8 text is decoded lossily, with
+/// isn't text (T571). The encoding comes from [`vix_encoding::detect`]: a BOM,
+/// then UTF-8, then a lossless legacy guess (T661). A UTF-16 BOM skips the
+/// NUL-byte binary check, since UTF-16 text is full of NULs. Text no encoding
+/// decodes losslessly is decoded as UTF-8 with replacements, with
 /// [`TextFile::lossy`] set.
 ///
 /// # Errors
@@ -510,21 +517,76 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     if bytes.len() as u64 > max_bytes {
         return Err(refuse(TextReadError::TooLarge));
     }
-    if bytes.iter().take(8192).any(|&b| b == 0) {
+    let bom = vix_encoding::sniff_bom(&bytes);
+    if bom.is_none() && bytes.iter().take(8192).any(|&b| b == 0) {
         return Err(refuse(TextReadError::Binary));
     }
-    Ok(match String::from_utf8(bytes) {
-        Ok(text) => TextFile { text, lossy: false },
-        Err(e) => TextFile {
-            text: String::from_utf8_lossy(e.as_bytes()).into_owned(),
-            lossy: true,
+    let utf8 = vix_encoding::TextEncoding::UTF8;
+    if bom.is_none() {
+        // The common case, without copying the text.
+        match String::from_utf8(bytes) {
+            Ok(text) => {
+                return Ok(TextFile {
+                    text,
+                    lossy: false,
+                    encoding: utf8,
+                });
+            }
+            Err(e) => bytes = e.into_bytes(),
+        }
+    }
+    let file = match vix_encoding::detect(&bytes) {
+        Some((text, encoding)) => TextFile {
+            text,
+            lossy: false,
+            encoding,
         },
-    })
+        None => TextFile {
+            text: match bom {
+                Some(enc) => vix_encoding::decode_lossy(&bytes, enc).0,
+                None => String::from_utf8_lossy(&bytes).into_owned(),
+            },
+            lossy: true,
+            encoding: utf8,
+        },
+    };
+    // A UTF-16 BOM skipped the NUL check on the raw bytes; a binary file that
+    // merely starts with FF FE still has NULs once decoded.
+    if file.text.chars().take(4096).any(|c| c == '\0') {
+        return Err(refuse(TextReadError::Binary));
+    }
+    Ok(file)
+}
+
+/// Atomically replace a text file's contents with `text`, in the encoding and
+/// BOM the file already has (T661), for writes that bypass an editor tab
+/// (replace across files). A file that doesn't exist yet is written as UTF-8.
+///
+/// # Errors
+///
+/// `InvalidData` when the existing file only decodes lossily (writing would
+/// corrupt it) or `text` has a character its encoding can't hold (with the
+/// [`vix_encoding::Unmappable`] inside); otherwise the read or write error.
+pub fn write_text_in_file_encoding(path: &Path, text: &str) -> io::Result<()> {
+    let encoding = match read_text_guarded(path, HARD_MAX_TEXT_BYTES) {
+        Ok(file) if file.lossy => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the file's encoding can't be decoded losslessly",
+            ));
+        }
+        Ok(file) => file.encoding,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => vix_encoding::TextEncoding::UTF8,
+        Err(e) => return Err(e),
+    };
+    let bytes = vix_encoding::encode(text, encoding)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    write_atomic(path, &bytes)
 }
 
 /// Read a user-chosen text file for a feature that only wants its contents
-/// (insert, revert, compare): [`read_text_guarded`] at the default limit, with
-/// non-UTF-8 text decoded lossily. The same refusals apply, so a FIFO or a
+/// (insert, revert, compare): [`read_text_guarded`] at the default limit, so
+/// legacy encodings decode too (T661) and undecodable text decodes lossily. The same refusals apply, so a FIFO or a
 /// multi-GB file cannot freeze or exhaust Vix from any of those paths (T571).
 ///
 /// # Errors
@@ -843,23 +905,34 @@ mod tests {
         let bin = dir.join("bin");
         fs::write(&bin, b"ab\0cd").unwrap();
         assert_eq!(why(&bin, 100), TextReadError::Binary);
-        let latin = dir.join("latin");
-        fs::write(&latin, b"caf\xe9").unwrap();
+        let read = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            fs::write(&p, bytes).unwrap();
+            let f = read_text_guarded(&p, 100).unwrap();
+            (f.text, f.lossy, f.encoding.to_string())
+        };
+        // T661: legacy text decodes losslessly in its own encoding now.
         assert_eq!(
-            read_text_guarded(&latin, 100).unwrap(),
-            TextFile {
-                text: "caf\u{fffd}".to_string(),
-                lossy: true
-            }
+            read("latin", b"caf\xe9"),
+            ("café".into(), false, "windows-1252".into())
         );
-        let ok = dir.join("ok");
-        fs::write(&ok, "héllo").unwrap();
         assert_eq!(
-            read_text_guarded(&ok, 100).unwrap(),
-            TextFile {
-                text: "héllo".to_string(),
-                lossy: false
-            }
+            read("ok", "héllo".as_bytes()),
+            ("héllo".into(), false, "UTF-8".into())
+        );
+        // UTF-16's NULs are text, not a sign of a binary file...
+        assert_eq!(
+            read("utf16", b"\xFF\xFEh\0i\0"),
+            ("hi".into(), false, "UTF-16LE BOM".into())
+        );
+        // ...unless they survive decoding.
+        let fake = dir.join("fake-utf16");
+        fs::write(&fake, b"\xFF\xFE\0\0\0\0").unwrap();
+        assert_eq!(why(&fake, 100), TextReadError::Binary);
+        // A BOM over bytes its encoding can't decode is the lossy, read-only case.
+        assert_eq!(
+            read("bad-bom", b"\xEF\xBB\xBFcaf\xe9"),
+            ("caf\u{fffd}".into(), true, "UTF-8".into())
         );
         let _ = fs::remove_dir_all(&dir);
     }
@@ -897,5 +970,25 @@ mod tests {
         assert!(!p.matches(Path::new("/w/app/src/main.rs")));
         assert!(!p.matches(Path::new("/w/node_modules_notes.md")));
         assert!(!PathPatterns::default().matches(Path::new("/nix/store/x")));
+    }
+
+    /// T661: a write that bypasses a tab keeps the file's encoding, and
+    /// refuses a file that only decodes lossily.
+    #[test]
+    fn write_text_in_file_encoding_keeps_the_encoding() {
+        let dir = std::env::temp_dir().join(format!("vix-wenc-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let utf16 = dir.join("utf16");
+        fs::write(&utf16, b"\xFF\xFEa\0").unwrap();
+        write_text_in_file_encoding(&utf16, "bc").unwrap();
+        assert_eq!(fs::read(&utf16).unwrap(), b"\xFF\xFEb\0c\0");
+        let broken = dir.join("broken");
+        fs::write(&broken, b"\xEF\xBB\xBF\xe9").unwrap();
+        assert!(write_text_in_file_encoding(&broken, "x").is_err());
+        assert_eq!(fs::read(&broken).unwrap(), b"\xEF\xBB\xBF\xe9");
+        let new = dir.join("new");
+        write_text_in_file_encoding(&new, "é").unwrap();
+        assert_eq!(fs::read(&new).unwrap(), "é".as_bytes());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

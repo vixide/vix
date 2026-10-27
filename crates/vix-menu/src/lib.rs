@@ -179,6 +179,16 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.save_all", "file.save_all", ""),
     Item::leaf("menu.item.file.rename", "file.rename", ""),
     Item::leaf("menu.item.file.revert", "file.revert", ""),
+    Item::leaf(
+        "menu.item.file.reopen_with_encoding",
+        "file.reopen_with_encoding",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.file.save_with_encoding",
+        "file.save_with_encoding",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
     Item::leaf("menu.item.file.close_all", "file.close_all", "Ctrl Shift W"),

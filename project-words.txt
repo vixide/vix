@@ -35,6 +35,7 @@ subcrates
 autotests
 pypy
 globset
+unmappable
 proc
 
 # TUI / editor domain

@@ -32,6 +32,8 @@ authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 bitflags = "2"
+chardetng = "1"
+encoding_rs = "0.8"
 globset = "0.4"
 ignore = "0.4"
 trash = "5"
@@ -175,6 +177,7 @@ vix-editor = { path = "crates/vix-editor", version = "2.0.0" }
 vix-editor-core = { path = "crates/vix-editor-core", version = "2.0.0" }
 vix-editorconfig = { path = "crates/vix-editorconfig", version = "2.0.0" }
 vix-emmet = { path = "crates/vix-emmet", version = "2.0.0" }
+vix-encoding = { path = "crates/vix-encoding", version = "2.0.0" }
 vix-file-browser-panel = { path = "crates/vix-file-browser-panel", version = "2.0.0" }
 vix-file-information-panel = { path = "crates/vix-file-information-panel", version = "2.0.0" }
 vix-fileops = { path = "crates/vix-fileops", version = "2.0.0" }

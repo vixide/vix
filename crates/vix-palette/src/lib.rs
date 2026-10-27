@@ -177,6 +177,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.save", "file.save"),
     ("cmd.save_as", "file.save_as"),
     ("cmd.save_all", "file.save_all"),
+    ("cmd.reopen_with_encoding", "file.reopen_with_encoding"),
+    ("cmd.save_with_encoding", "file.save_with_encoding"),
     ("cmd.close_tab", "file.close"),
     ("cmd.close_all", "file.close_all"),
     ("cmd.reopen_closed", "file.reopen_closed"),

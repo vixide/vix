@@ -144,10 +144,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `file.quit` | Quit | Menu |
 | `file.rename` | Rename… | Menu |
 | `file.reopen_closed` | Reopen Closed Tab | Menu |
+| `file.reopen_with_encoding` | Reopen with Encoding… | Menu |
 | `file.revert` | Revert | Menu |
 | `file.save` | Save | Menu |
 | `file.save_all` | Save All | Menu |
 | `file.save_as` | Save As… | Menu |
+| `file.save_with_encoding` | Save with Encoding… | Menu |
 | `file.scratch` | New Scratch Buffer | Menu |
 | `file.switch_project` | Switch Project… | Menu |
 | `find` | Find | Catalog |
@@ -679,4 +681,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**672 actions.**
+**674 actions.**
