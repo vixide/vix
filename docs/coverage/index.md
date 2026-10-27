@@ -15,6 +15,14 @@ pytest --cov --cov-report=xml           # coverage.xml, Cobertura format
 go test -coverprofile=coverage.out && gocov convert coverage.out | gocov-xml > coverage.xml
 ```
 
+## Vix on itself
+
+The GitHub CI `coverage` job (advisory — it never blocks a merge) runs
+`cargo llvm-cov --workspace --cobertura` and uploads `cobertura.xml` as the
+`cobertura` workflow artifact. Download it into the repo root and use
+**Tools → Load Coverage File…** to see Vix's own coverage in Vix's gutter.
+Locally: `cargo llvm-cov --workspace --cobertura --output-path cobertura.xml`.
+
 ## Using it
 
 **Tools → Load Coverage File…** prompts for the report's path (relative

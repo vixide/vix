@@ -267,6 +267,30 @@ jobs:
           cargo run --example textops_pipeline -- index.md >/dev/null
           cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
 
+  # Advisory coverage (T607): never gates a merge. Uploads a Cobertura
+  # report that Vix's own coverage gutter (Tools → Load Coverage File…) reads.
+  coverage:
+    name: coverage (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: measure coverage
+        run: cargo llvm-cov --workspace --cobertura --output-path cobertura.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: cobertura.xml
+
   # The toolchain floor promised by `rust-version` in Cargo.toml. A `check` is
   # enough: if the crate graph compiles on the floor, the claim holds.
   msrv:
