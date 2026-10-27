@@ -120,6 +120,11 @@ confirms. `read_to_string_guarded(path)` is the same guard for features that onl
 text (insert file, revert, compare, the TODO finder). `which_on_path` resolves a program
 against `PATH` only, never the working directory.
 
+`PathPatterns::new(&[..])` compiles a list of path globs (`~/` is the home directory, `**`
+spans directories, `*` doesn't cross `/`, invalid patterns are skipped) and
+`PathPatterns::matches(path)` tests one. It backs the `read_only_paths` and
+`ephemeral_paths` settings (T662).
+
 The host turns `TooLarge` and `Binary` into confirmations (`large_file_mb`; binary files
 open in the byte editor, which saves the bytes back exactly) rather than errors.
 

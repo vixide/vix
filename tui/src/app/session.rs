@@ -199,9 +199,12 @@ impl App {
 
     /// Capture the current open files, focused tab, and cursor positions as a
     /// [`WorkspaceSession`](crate::session::WorkspaceSession). Untitled and image
-    /// tabs are skipped. Pure (no config IO) so it can be tested directly.
+    /// tabs are skipped, and so are files under an `ephemeral_paths` glob
+    /// (T662). Pure (no config IO) so it can be tested directly.
     #[must_use]
     pub fn workspace_session(&self) -> crate::session::WorkspaceSession {
+        let ephemeral =
+            vix_fileops::PathPatterns::new(&self.settings.editor_behavior.ephemeral_paths);
         let mut files = Vec::new();
         let mut cursors = Vec::new();
         let mut scrolls = Vec::new();
@@ -210,7 +213,11 @@ impl App {
         // untitled/image tabs), so the split's pane index can be translated.
         let mut tab_to_file: Vec<Option<usize>> = Vec::with_capacity(self.editor.tabs.len());
         for (i, tab) in self.editor.tabs.iter().enumerate() {
-            let Some(path) = tab.path.as_ref().filter(|_| !tab.is_image()) else {
+            let Some(path) = tab
+                .path
+                .as_ref()
+                .filter(|p| !tab.is_image() && !ephemeral.matches(p))
+            else {
                 tab_to_file.push(None);
                 continue;
             };

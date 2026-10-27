@@ -779,6 +779,55 @@ fn session_snapshot_and_restore_round_trip() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T662: files under an `ephemeral_paths` glob (default `**/.git/**`) are
+/// never recorded in the session.
+#[test]
+fn session_skips_ephemeral_paths() {
+    let dir = unique_dir("session-ephemeral");
+    let msg = dir.join(".git/COMMIT_EDITMSG");
+    let a = dir.join("a.txt");
+    fs::create_dir_all(msg.parent().unwrap()).unwrap();
+    fs::write(&msg, "fix: x\n").unwrap();
+    fs::write(&a, "alpha\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&a);
+    app.open_initial(&msg);
+    let snap = app.workspace_session();
+    assert_eq!(
+        snap.files.len(),
+        1,
+        "only a.txt is recorded: {:?}",
+        snap.files
+    );
+    assert!(snap.files[0].ends_with("a.txt"));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T662: a file under a `read_only_paths` glob opens locked, and View →
+/// Read Only unlocks it.
+#[test]
+fn read_only_paths_open_locked_until_toggled() {
+    let dir = unique_dir("read-only-paths");
+    let dep = dir.join("node_modules/pkg/index.js");
+    fs::create_dir_all(dep.parent().unwrap()).unwrap();
+    fs::write(&dep, "module.exports = 1;\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&dep);
+    assert!(app.editor.active_tab().unwrap().read_only);
+    type_str(&mut app, "x");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "module.exports = 1;\n"
+    );
+    app.run_action("view.read_only");
+    assert!(!app.editor.active_tab().unwrap().read_only);
+
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn session_restores_scroll_offset() {
     let dir = unique_dir("session-scroll");

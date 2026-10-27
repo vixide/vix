@@ -447,6 +447,30 @@ pub struct EditorBehaviorSettings {
     /// Ask before opening a file larger than this many megabytes (T571); `0`
     /// never asks and refuses nothing on size (the 1 GiB ceiling still applies).
     pub large_file_mb: u64,
+    /// Path globs that open read-only (T662): dependency and toolchain sources
+    /// Go to Definition lands in. `~/` is the home directory and `**` spans
+    /// directories; View → Read Only still unlocks a tab.
+    pub read_only_paths: Vec<String>,
+    /// Path globs the session never records (T662), such as Git's
+    /// `COMMIT_EDITMSG`, so they never reopen at a stale cursor.
+    pub ephemeral_paths: Vec<String>,
+}
+
+/// Default `read_only_paths`: Rust, Nix, Homebrew, Node and Python dependency
+/// trees.
+fn default_read_only_paths() -> Vec<String> {
+    [
+        "~/.cargo/registry/**",
+        "~/.cargo/git/**",
+        "~/.rustup/**",
+        "/nix/store/**",
+        "/opt/homebrew/Cellar/**",
+        "/usr/local/Cellar/**",
+        "**/node_modules/**",
+        "**/site-packages/**",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 impl Default for EditorBehaviorSettings {
@@ -456,6 +480,8 @@ impl Default for EditorBehaviorSettings {
             sticky_scroll: true,
             persistent_undo: true,
             large_file_mb: 50,
+            read_only_paths: default_read_only_paths(),
+            ephemeral_paths: vec!["**/.git/**".to_string()],
         }
     }
 }

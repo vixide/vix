@@ -2354,6 +2354,8 @@ impl App {
         let command_recents = settings.command_recents.clone();
         let (mut editor, messages, lsp) = Self::build_core(&root, &settings);
         editor.max_text_bytes = Self::max_text_bytes(&settings);
+        editor.read_only_paths =
+            vix_fileops::PathPatterns::new(&settings.editor_behavior.read_only_paths);
 
         let mut app = App {
             explorer: Explorer::new(root.clone()),

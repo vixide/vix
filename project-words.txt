@@ -34,6 +34,7 @@ crates
 subcrates
 autotests
 pypy
+globset
 proc
 
 # TUI / editor domain

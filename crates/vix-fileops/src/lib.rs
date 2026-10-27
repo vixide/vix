@@ -394,6 +394,44 @@ pub fn is_unwritable(path: &Path) -> bool {
     }
 }
 
+/// A list of path globs, such as the `read_only_paths` and `ephemeral_paths`
+/// settings (T662). `~/` at the start of a pattern means the home directory
+/// (`HOME`, else `USERPROFILE`), `**` spans directories, and an invalid pattern
+/// is skipped rather than failing the whole list.
+#[derive(Debug, Clone, Default)]
+pub struct PathPatterns(globset::GlobSet);
+
+impl PathPatterns {
+    /// Compile `patterns`.
+    #[must_use]
+    pub fn new<S: AsRef<str>>(patterns: &[S]) -> Self {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from);
+        let mut set = globset::GlobSetBuilder::new();
+        for pattern in patterns {
+            let pattern = pattern.as_ref();
+            let expanded = match (pattern.strip_prefix("~/"), &home) {
+                (Some(rest), Some(home)) => format!("{}/{rest}", home.to_string_lossy()),
+                _ => pattern.to_string(),
+            };
+            if let Ok(glob) = globset::GlobBuilder::new(&expanded)
+                .literal_separator(true)
+                .build()
+            {
+                set.add(glob);
+            }
+        }
+        Self(set.build().unwrap_or_default())
+    }
+
+    /// Whether `path` matches any pattern.
+    #[must_use]
+    pub fn matches(&self, path: &Path) -> bool {
+        self.0.is_match(path)
+    }
+}
+
 /// Largest file [`read_text_guarded`] reads into a text buffer by default.
 pub const MAX_TEXT_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -837,5 +875,27 @@ mod tests {
         assert!(is_unwritable(&p));
         assert!(!is_unwritable(&p.with_extension("missing")));
         let _ = fs::remove_file(&p);
+    }
+
+    /// T662: `**` spans directories, `~/` is the home directory, and an
+    /// invalid pattern is skipped without losing the others.
+    #[test]
+    fn path_patterns_match_globs_and_home() {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .expect("tests run with a home directory");
+        let p = PathPatterns::new(&[
+            "**/node_modules/**",
+            "~/.cargo/registry/**",
+            "a[",
+            "/nix/store/**",
+        ]);
+        assert!(p.matches(Path::new("/w/app/node_modules/left-pad/index.js")));
+        assert!(p.matches(&home.join(".cargo/registry/src/x/lib.rs")));
+        assert!(p.matches(Path::new("/nix/store/abc-hello/bin/hello")));
+        assert!(!p.matches(Path::new("/w/app/src/main.rs")));
+        assert!(!p.matches(Path::new("/w/node_modules_notes.md")));
+        assert!(!PathPatterns::default().matches(Path::new("/nix/store/x")));
     }
 }
