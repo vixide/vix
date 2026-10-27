@@ -607,6 +607,8 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.ruler", "toggle_ruler", ""),
     SEP,
     Item::leaf("menu.item.view.fold_toggle", "editor.fold_toggle", ""),
+    Item::leaf("menu.item.view.fold", "editor.fold", ""),
+    Item::leaf("menu.item.view.unfold", "editor.unfold", ""),
     Item::leaf("menu.item.view.fold_all", "editor.fold_all", ""),
     Item::leaf("menu.item.view.unfold_all", "editor.unfold_all", ""),
     SEP,

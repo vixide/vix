@@ -174,6 +174,17 @@ Every action has a smoke test in `tui/tests/integration/catalog.rs`
 | `clear-info` | `clear_info` | `ClearInfo` |
 | `none` | `none` | `None` |
 
+## Fold and Unfold (T658)
+
+Besides `toggle_fold` (fold or unfold the range starting at a line) and
+`fold_all`/`unfold_all`, `Editor::fold(line)` folds the innermost open foldable
+range that contains `line`, and `Editor::unfold(line)` removes the innermost
+active fold that starts at or contains it. Neither ever toggles, so repeating
+**View → Fold** folds outward one level at a time and repeating **View →
+Unfold** opens inward. The cursor needn't be on a range's first line. The App
+exposes them as `editor.fold` / `editor.unfold`; with nothing to change the
+status bar says there is no fold.
+
 ## Collapsed folds and Move Line (T580)
 
 Move Line Up/Down treats a collapsed fold as one block: the moved block is the cursor line plus its hidden body, and it swaps with the adjacent visible line plus *its* hidden body. A fold is never split or moved into, and other collapsed folds inside the swapped region keep their shape.

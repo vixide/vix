@@ -768,6 +768,46 @@ impl Editor {
         false
     }
 
+    /// Fold the innermost open foldable range that contains `line` (T658).
+    /// Unlike [`Self::toggle_fold`], it never unfolds, and the cursor need not
+    /// be on the range's first line. Returns `true` if a fold was added.
+    pub fn fold(&mut self, line: usize) -> bool {
+        let Some(range) = self
+            .fold_ranges
+            .iter()
+            .copied()
+            .filter(|&(s, e)| s <= line && line <= e && e > s && !self.folds.contains(&(s, e)))
+            .min_by_key(|&(s, e)| e - s)
+        else {
+            return false;
+        };
+        self.folds.push(range);
+        let cursor_line = self.code_ref().char_to_line(self.cursor);
+        if self.is_line_hidden(cursor_line) {
+            let start = self.code_ref().line_to_char(range.0);
+            self.set_cursor(start);
+        }
+        true
+    }
+
+    /// Unfold the innermost active fold that starts at or contains `line`
+    /// (T658). Unlike [`Self::toggle_fold`], it never folds. Returns `true` if
+    /// a fold was removed.
+    pub fn unfold(&mut self, line: usize) -> bool {
+        let Some(i) = self
+            .folds
+            .iter()
+            .enumerate()
+            .filter(|&(_, &(s, e))| s <= line && line <= e)
+            .min_by_key(|&(_, &(s, e))| e - s)
+            .map(|(i, _)| i)
+        else {
+            return false;
+        };
+        self.folds.remove(i);
+        true
+    }
+
     /// Toggle a fold over the explicit inclusive `(start, end)` line range,
     /// without a language server having reported it — used for Org drawer
     /// folding, where the range is computed on the fly. Folds the range if it is
@@ -1241,5 +1281,28 @@ impl Editor {
     /// Set the left padding (in characters) between the gutter and the code.
     pub fn set_left_code_padding(&mut self, char_count: usize) {
         self.left_code_padding = char_count;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Editor;
+
+    /// T658: `fold` folds the innermost open range around a line and never
+    /// unfolds; `unfold` removes the innermost fold around it and never folds.
+    #[test]
+    fn fold_and_unfold_never_toggle() {
+        let mut e = Editor::new("text", "a\nb\nc\nd\ne\n", Vec::new()).unwrap();
+        e.set_fold_ranges(vec![(0, 4), (1, 3)]);
+        assert!(!e.unfold(2), "nothing folded yet");
+        assert!(e.fold(2), "inner range (1, 3) folds from inside it");
+        assert!(e.is_line_hidden(2) && !e.is_line_hidden(4));
+        assert!(e.fold(2), "the next fold is the outer range");
+        assert!(e.is_line_hidden(4));
+        assert!(!e.fold(2), "everything around line 2 is already folded");
+        assert!(e.unfold(1), "innermost fold around line 1 is (1, 3)");
+        assert!(e.is_line_hidden(4), "outer fold stays");
+        assert!(e.unfold(0) && !e.has_folds());
+        assert!(!e.fold(5), "no range covers line 5");
     }
 }

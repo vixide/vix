@@ -3352,6 +3352,8 @@ impl App {
             "lsp.code_lens" => self.request_code_lens(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
+            "editor.fold" => self.fold_at_cursor(true),
+            "editor.unfold" => self.fold_at_cursor(false),
             "editor.fold_all" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.fold_all();
@@ -4394,6 +4396,23 @@ impl App {
                 code.char_to_line(t.editor.get_cursor())
             };
             if t.editor.toggle_fold(line) {
+                return;
+            }
+        }
+        self.status = t!("status.no_fold").to_string();
+    }
+
+    /// `editor.fold` / `editor.unfold`: fold (or unfold) the innermost range
+    /// around the cursor line, never toggling (T658).
+    fn fold_at_cursor(&mut self, fold: bool) {
+        if let Some(t) = self.editor.active_tab_mut() {
+            let line = t.editor.code_ref().char_to_line(t.editor.get_cursor());
+            let changed = if fold {
+                t.editor.fold(line)
+            } else {
+                t.editor.unfold(line)
+            };
+            if changed {
                 return;
             }
         }
