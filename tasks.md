@@ -7036,7 +7036,7 @@ new action.
   capped-stack, greedy-wrap, hex-rgb): 519 mutants, 58 missed, 26 timeouts
   -- 52 in `vix-textops`, 6 in `vix-greedy-wrap` (chiefly `wrap_paragraph_at`, `smart_toggle_at`,
   `tag_column`). Triage those from the first scheduled report.
-- [ ] **T607 — Coverage measurement in CI.** Nothing runs llvm-cov or
+- [x] **T607 — Coverage measurement in CI.** Nothing runs llvm-cov or
   tarpaulin today. Add an advisory GitHub job that runs `cargo llvm-cov
   --workspace --cobertura` and uploads the artifact. Vix's own T210
   coverage gutter reads that format, so the project can use the gutter on
