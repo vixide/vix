@@ -73,6 +73,21 @@ pub(crate) fn isolated_session_path() -> PathBuf {
     std::env::temp_dir().join(format!("vix-test-session-{}-{n}.toml", std::process::id()))
 }
 
+/// Serializes the tests that switch the live theme or read it back.
+///
+/// The active theme is one process-wide `RwLock` (`vix_theme_model`), and the
+/// theme editor's live preview writes a draft into it. Without this, a test
+/// that leaves a preview or a non-default theme in place can land between
+/// another test's revert and its check of `vix::theme::region_fg` (seen on
+/// the macOS runner). Every `App::new` writes the default theme too, which is
+/// harmless: that is what the reverting tests expect. A poisoned lock just
+/// means another theme test failed, so it is taken anyway.
+pub(crate) fn live_theme_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub(crate) fn app_at(root: &Path) -> App {
     let mut app = App::new(root.to_path_buf(), Settings::default())
         .with_session_path(isolated_session_path());

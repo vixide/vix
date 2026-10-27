@@ -132,6 +132,7 @@ fn bundled_theme_names_are_unique() {
 
 #[test]
 fn open_theme_editor_starts_from_the_active_default_theme() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     assert_eq!(app.settings.theme, "dark", "the default");
     app.run_action("view.theme_edit");
@@ -145,6 +146,7 @@ fn open_theme_editor_starts_from_the_active_default_theme() {
 
 #[test]
 fn theme_editor_navigation_moves_the_highlight() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme_edit");
     app.on_key(keycode(KeyCode::Down));
@@ -155,6 +157,7 @@ fn theme_editor_navigation_moves_the_highlight() {
 
 #[test]
 fn enter_opens_the_x11_picker_over_the_theme_editor() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme_edit");
     app.on_key(keycode(KeyCode::Enter));
@@ -167,6 +170,7 @@ fn enter_opens_the_x11_picker_over_the_theme_editor() {
 
 #[test]
 fn picking_a_color_applies_it_to_the_selected_slot_and_returns_to_the_editor() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme_edit");
     app.on_key(keycode(KeyCode::Enter)); // open the picker
@@ -193,6 +197,7 @@ fn picking_a_color_applies_it_to_the_selected_slot_and_returns_to_the_editor() {
 
 #[test]
 fn esc_closes_the_theme_editor_and_reverts_the_live_preview() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme_edit");
     // Edit a slot (via the same real picker flow the UI uses) so the live
@@ -216,6 +221,7 @@ fn esc_closes_the_theme_editor_and_reverts_the_live_preview() {
 
 #[test]
 fn ctrl_s_opens_the_save_as_prompt() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme_edit");
     app.on_key(ctrl('s'));
@@ -225,6 +231,7 @@ fn ctrl_s_opens_the_save_as_prompt() {
 
 #[test]
 fn save_theme_as_with_an_empty_name_is_a_no_op() {
+    let _theme = live_theme_lock();
     // Submitting the prompt empty never reaches `Settings::themes_dir()`
     // (checked first, before any disk access), so this is safe to run for
     // real rather than needing a test-only override.
