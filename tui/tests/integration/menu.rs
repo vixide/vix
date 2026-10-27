@@ -237,6 +237,7 @@ fn vix_menu_quit_quits_program() {
 
 #[test]
 fn view_theme_submenu_actions_switch_theme() {
+    let _theme = live_theme_lock();
     let mut app = app_at(Path::new("."));
     // The View → Theme submenu dispatches `view.theme:<name>` per item.
     app.run_action("view.theme:Light");
