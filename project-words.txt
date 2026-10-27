@@ -33,6 +33,7 @@ crate
 crates
 subcrates
 autotests
+pypy
 proc
 
 # TUI / editor domain
