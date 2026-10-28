@@ -1451,6 +1451,8 @@ const GIT_LOG: &[Item] = &[
     // commit's diff in a tab), distinct from the plain streamed-to-the-dock
     // views above.
     Item::leaf("menu.item.git.browse_log", "git.browse_log", ""),
+    // T681: the interactive commit graph (lanes, decorations, filter, actions).
+    Item::leaf("menu.item.git.graph", "git.graph", ""),
     Item::leaf("menu.item.git.file_history", "git.file_history", ""),
     Item::leaf("menu.item.git.open_at_revision", "git.open_at_revision", ""),
 ];

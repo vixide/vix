@@ -5389,6 +5389,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-git-graph"
+version = "2.0.0"
+dependencies = [
+ "proptest",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-greedy-wrap"
 version = "2.0.0"
 
@@ -5879,6 +5887,7 @@ dependencies = [
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
+ "vix-git-graph",
  "vix-hl7",
  "vix-html-character-picker",
  "vix-http-client",

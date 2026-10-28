@@ -83,6 +83,16 @@ impl App {
         debug_assert!(self.git_log.is_none());
     }
 
+    /// The Git graph can't be open.
+    pub(super) fn git_graph_key(&mut self, _key: KeyEvent) {
+        debug_assert!(self.git_graph.is_none());
+    }
+
+    /// The Git graph can't be open.
+    pub(super) fn git_graph_mouse(&mut self, _mouse: MouseEvent) {
+        debug_assert!(self.git_graph.is_none());
+    }
+
     /// The conflict list can't be open.
     pub(super) fn conflict_list_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.conflict_list.is_none());

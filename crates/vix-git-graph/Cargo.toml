@@ -1,0 +1,24 @@
+[package]
+name = "vix-git-graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The interactive Git graph: commit lanes from parent links, ref decorations, paged log loading and per-commit actions."
+
+[features]
+default = ["process"]
+# The runners that spawn the `git` CLI. Off, the crate is only the parser, the
+# lane algorithm and the panel state (no process is ever started); the root
+# `git` feature turns it on.
+process = []
+
+[dependencies]
+vix-list-state = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

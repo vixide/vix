@@ -15,6 +15,7 @@ mod edit_surfaces;
 mod editor_region;
 mod explorer;
 mod file_browser;
+mod git_graph;
 mod help;
 mod hints;
 mod hl7;
@@ -477,6 +478,13 @@ fn draw_sql_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
 #[cfg(not(feature = "sql"))]
 fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
 
+/// The list-style overlays that each return early when closed.
+fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
+    git_graph::draw_git_graph(app, frame, area);
+    draw_todo_tree(app, frame, area);
+    hl7::draw_hl7_panel(app, frame, area);
+}
+
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
 /// per-function line limit). Behavior is identical to inlining this dispatch.
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -488,6 +496,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.git_log.is_some() {
         draw_git_log(app, frame, area);
     }
+    draw_listing_overlays(app, frame, area);
     if app.structural_replace.is_some() {
         draw_structural_replace(app, frame, area);
     }
@@ -495,11 +504,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.media_type_panel.is_some() {
         draw_media_type_panel(app, frame, area);
     }
-    draw_todo_tree(app, frame, area);
     if app.encoding_chooser.is_some() {
         draw_encoding_chooser(app, frame, area);
     }
-    hl7::draw_hl7_panel(app, frame, area);
     if app.macro_chooser.is_some() {
         draw_macro_chooser(app, frame, area);
     }

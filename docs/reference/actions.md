@@ -178,6 +178,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.edit_description` | Edit Description… | Menu |
 | `git.fetch` | Fetch | Menu |
 | `git.file_history` | File History | Menu |
+| `git.graph` | Graph… | Menu |
 | `git.grep` | Grep… | Menu |
 | `git.init` | Init | Menu |
 | `git.log` | All | Menu |
@@ -685,4 +686,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**678 actions.**
+**679 actions.**

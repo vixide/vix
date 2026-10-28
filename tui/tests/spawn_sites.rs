@@ -19,6 +19,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `git`",
     ),
     (
+        "crates/vix-git-graph/src/lib.rs",
+        "git log / switch / cherry-pick runners for the Git graph",
+        "`process` feature, enabled only by root `git`",
+    ),
+    (
         "crates/vix-lsp/src/lib.rs",
         "language-server process",
         "`process` feature, enabled only by root `lsp`",

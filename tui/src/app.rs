@@ -15,6 +15,8 @@ mod diff_tool;
 mod event_loop;
 #[cfg(feature = "git")]
 mod git;
+#[cfg(feature = "git")]
+mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
 mod hl7;
@@ -1484,6 +1486,9 @@ pub struct Layout {
     /// Row-list rectangle of the open T207 commit-list panel, so a click can
     /// hit-test a row.
     pub git_log: Rect,
+    /// Row-list rectangle of the open Git graph (T681), so a click can
+    /// hit-test a row.
+    pub git_graph: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
     /// Row-list rectangle of the open Conflict overlay (T556), so a click can
@@ -1818,6 +1823,8 @@ pub struct App {
     /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
     /// **File History**), when open.
     pub(crate) git_log: Option<crate::git::LogPanel>,
+    /// The interactive Git graph overlay (T681), when open.
+    pub(crate) git_graph: Option<crate::git_graph::Panel>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub(crate) task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
@@ -2436,6 +2443,7 @@ impl App {
             git_panel: None,
             branch_chooser: None,
             git_log: None,
+            git_graph: None,
             task_chooser: None,
             macro_chooser: None,
             encoding_chooser: None,
@@ -8498,6 +8506,7 @@ impl App {
         panel!(git_panel, git_panel_mouse);
         panel!(branch_chooser, branch_mouse);
         panel!(git_log, git_log_mouse);
+        panel!(git_graph, git_graph_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
         panel!(encoding_chooser, encoding_mouse);
