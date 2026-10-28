@@ -482,6 +482,33 @@ remote/SSH and remote-control-socket entries now carry Fresh's designs.
 independent fixes and should come before Run O's features. In Run O,
 T659 comes first. T663, T666 and T667 wait on T629, T631 and T627.
 
+### User-requested features and four researched plans (2026-10-28)
+
+**Features (T680–T685).** REST Client depth (`###` blocks, variables,
+response chaining), an interactive Git Graph, a Todo Tree, Prettier, and
+FHIR and HL7 v2 clients. Each extends something that exists: the HTTP
+client, `git.log_graph`, the TODO Finder, `vix-format-tool`.
+
+**Four plans, each with a spec.** Written from knowledge without live web
+research; every plan's first task re-checks the facts it rests on.
+1. **Cowork** ([`spec/cowork`](spec/cowork/index.md), T690–T697). Real-time
+   multi-user editing. CRDT, host-relayed, host-owned disk, per-user undo,
+   view-only by default, behind a `cowork` Cargo feature. T690 is a spike to
+   choose the CRDT.
+2. **OC** ([`spec/open-container`](spec/open-container/index.md),
+   T700–T708). An Open Container Initiative menu that drives Docker, Podman
+   or nerdctl through their CLIs with `--format json`, mirroring VS Code's
+   Container Tools. No socket client in v1.
+3. **Remote editing** ([`spec/remote-editing`](spec/remote-editing/index.md),
+   T710–T719). Emacs TRAMP and Zed-style: an `Authority` trait first (428
+   `std::fs` call sites in 38 files), then a shell-based SSH authority, then
+   a remote agent. The abstraction is the cost; T710 lands alone.
+4. **IDE parity** ([`spec/ide-parity`](spec/ide-parity/index.md),
+   T720–T727). A Visual Studio and JetBrains feature table rated by fit for a
+   terminal editor. Recommended first: Local History, Search Everywhere,
+   Run configurations, organize imports. GUI designers, decompilers and
+   profilers are a deliberate no.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on

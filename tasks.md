@@ -7987,6 +7987,160 @@ widgets, and a markup-hiding Markdown "compose" mode.
 
 ---
 
+## Run Q (user-requested features and research, 2026-10-28)
+
+Requested in one session. Features first (T680–T685), then four researched
+plans, each with its own spec: Cowork (T690–T697,
+[`spec/cowork`](spec/cowork/index.md)), OC (T700–T708,
+[`spec/open-container`](spec/open-container/index.md)), Remote editing
+(T710–T719, [`spec/remote-editing`](spec/remote-editing/index.md)) and IDE
+parity (T720–T727, [`spec/ide-parity`](spec/ide-parity/index.md)). The
+research was written from knowledge, without live web access; each spec says
+so, and the first task of each plan re-checks the facts it depends on.
+
+### Features
+
+- [ ] **T680 — REST Client depth.** `vix-http-client` parses exactly one
+  request per buffer. Bring it to VS Code REST Client parity: requests
+  separated by `###` with *send the request at the cursor*; `@name = value`
+  file variables and `{{name}}`; system variables (`{{$guid}}`,
+  `{{$timestamp}}`, `{{$datetime}}`, `{{$randomInt a b}}`,
+  `{{$processEnv NAME}}`, `{{$dotenv NAME}}`); `# @name login` plus
+  `{{login.response.body.$.token}}` / `.headers.X` chaining; an optional
+  `HTTP/1.1` suffix; multi-line query continuation; `< ./file` bodies; Basic
+  auth shorthand; and a *Copy as curl* action. Environments via a
+  `.vix/http-env.json` with a `$shared` block and a chooser. Keep the parser
+  pure in the crate. Update the spec, add i18n for new actions, and decide
+  that `tools.http_send` keeps its id and now sends the request at the cursor.
+  **Medium.**
+- [ ] **T681 — Git Graph.** Today `git.log_graph` only streams `git log
+  --graph` text into the dock. Add an interactive graph panel: commit list
+  with lanes drawn from parent links (a pure lane-assignment algorithm in a
+  new `vix-git-graph` crate, property-tested), ref decorations, branch/tag
+  filter, search, and per-commit actions (open diff, checkout, create branch,
+  cherry-pick, copy hash) reusing T207's browse-log and diff-tab machinery.
+  Load lazily in pages of ~200. **Medium.**
+- [ ] **T682 — Todo Tree.** The TODO Finder is a flat picker. Add a dockable
+  tree grouped by tag then file (TODO, FIXME, HACK, XXX, NOTE, plus
+  configurable tags and regex), counts per group, jump-to-line, refresh on
+  save, and a workspace/open-files scope toggle. Reuse `vix-textops`
+  `tag_column`, `vix-list-state` and the outline panel's tree shape. Respect
+  `.gitignore`. **Small–Medium.**
+- [ ] **T683 — Prettier.** Format with the user's own Prettier: run
+  `prettier --stdin-filepath <path>` (project-local `node_modules/.bin` first,
+  then `PATH`) for the languages Prettier supports, honoring `.prettierrc*`
+  and `.prettierignore`. Hook into Format Document and format-on-save through
+  the existing `vix-format-tool` dispatch, keyed per language in settings.
+  Missing binary gives a translated hint. Trust-gated like other project
+  tools (T627). Never bundle Node. **Small–Medium.**
+- [ ] **T684 — FHIR client.** A `.fhir`/`.http`-flavored request flow for
+  HL7 FHIR servers: a *server* profile (base URL, auth: none, bearer,
+  SMART-on-FHIR client-credentials token fetch), a `Read/Search/Create/
+  Update/Delete/History/Capabilities` request builder, `Accept:
+  application/fhir+json` defaults, a Bundle viewer (paging via `next` links,
+  one row per entry), pretty-printed resources in JSON tabs, and an
+  OperationOutcome renderer. Builds on T680's variable and request model; no
+  PHI is logged or cached to disk by default. **Medium.** After T680.
+- [ ] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send pipe-and-hat
+  messages: segment/field/component/repetition/subcomponent views with the
+  MSH-declared delimiters and escape sequences; a segment-per-line editor
+  mode with field numbering (`PID-5.1`); an ACK/NAK viewer; MLLP send/receive
+  over TCP (`0x0B` … `0x1C 0x0D`) in a background thread; a lenient parser
+  that never panics (proptest). Pure core in a `vix-hl7` crate. No PHI in logs.
+  **Medium.**
+
+### Cowork — real-time collaboration (spec: [`spec/cowork`](spec/cowork/index.md))
+
+- [ ] **T690 — Spike and decision record.** Score `loro`, `automerge`,
+  `diamond-types` and `yrs` on text performance, memory (1 MB file), license,
+  and bridge cost to the `ropey` buffer; prove cursor stability under remote
+  inserts with a throwaway test. Output: a decision in the spec. **Medium.**
+- [ ] **T691 — `vix-cowork` core.** Pure document, peer, presence and
+  permission model; N-replica convergence tests incl. proptest; no I/O.
+  **Large.** After T690.
+- [ ] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
+  without moving the local cursor; per-user undo. Cap shared size.
+  **Large.**
+- [ ] **T693 — Presence rendering.** Remote cursors and selections in
+  `ui.rs`, theme-derived peer colors (contrast-checked), status-line names.
+  **Medium.**
+- [ ] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
+  Encrypted, authenticated framing; invite token; host consent prompt;
+  reconnect and resync. **Large.**
+- [ ] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
+  Permissions, i18n in 15 locales, action catalog. **Medium.**
+- [ ] **T696 — Workspace sharing.** Shared file tree and search; host-only
+  disk writes; path confinement tests. **Medium.**
+- [ ] **T697 — Shared terminal (read-only default).** **Medium; optional.**
+
+### OC — Open Container Initiative menu (spec: [`spec/open-container`](spec/open-container/index.md))
+
+- [ ] **T700 — `vix-oci` core.** Engine enum and detection, argv builders,
+  parsers for `ps`/`images`/`volume ls`/`network ls`/`inspect` (Docker NDJSON
+  and Podman array forms), fixture-tested from captured real output.
+  **Medium.**
+- [ ] **T701 — Settings, menu and missing-engine hint.** `oc_engine`,
+  read-only mode, **OC** top-level menu, `oc.*` actions, i18n. **Small.**
+- [ ] **T702 — Containers panel.** List, start/stop/restart/pause/remove,
+  inspect (JSON tab), logs to the dock, **Shell** via `vix-terminal`.
+  **Medium.**
+- [ ] **T703 — Images panel.** List, run (shows the command first), tag,
+  pull, push, remove, inspect. **Medium.**
+- [ ] **T704 — Volumes and Networks panels.** **Small.**
+- [ ] **T705 — Build Image.** From a Dockerfile/Containerfile with streamed
+  output. **Small.**
+- [ ] **T706 — Compose.** Up/Down/Logs per service, auto-detect compose
+  files. **Medium.**
+- [ ] **T707 — Registries and Prune.** `login` via `--password-stdin`;
+  confirmed prune naming what goes. **Small–Medium.**
+- [ ] **T708 — Podman pods, and fake-engine tests.** A fake `docker` script
+  on `PATH` for integration tests; never a real engine in CI. **Small.**
+
+### Remote editing (spec: [`spec/remote-editing`](spec/remote-editing/index.md))
+
+- [ ] **T710 — `Authority` abstraction (no behavior change).** Route the 428
+  `std::fs` call sites in 38 files and process spawns through a trait, with
+  explicit local-only exceptions (config, themes, session, undo store).
+  **Large; land alone, behavior identical.**
+- [ ] **T711 — Fake authority and conformance tests.** Temp-dir backed.
+  **Small.**
+- [ ] **T712 — Shell-based SSH authority.** ControlMaster, `ssh_config`
+  honored, read/write/stat/list/rename/remove, atomic writes, mtime+size
+  conflict check; `ssh://user@host/path` and `/ssh:host:/path`. **Large.**
+- [ ] **T713 — Remote Open dialog, status, connection-lost state.**
+  **Medium.**
+- [ ] **T714 — Trust and safety.** Untrusted-until-trusted remote
+  workspace (T627), no secrets on argv, host-key policy documented. **Small.**
+- [ ] **T715 — Remote search and git.** `rg`/`git` run remotely. **Medium.**
+- [ ] **T716 — Remote LSP and tasks/terminal.** **Large.**
+- [ ] **T717 — Remote agent (`vix --remote-agent`).** Framed protocol over
+  stdio, batching, file watching, checksum-verified upload. **Large.**
+- [ ] **T718 — Other authorities.** Dev containers, `docker exec`/`podman`
+  (with OC), Kubernetes, WSL. **Large; later.**
+- [ ] **T719 — Optional opt-in CI job against a real local `sshd`.**
+  **Small.**
+
+### IDE parity (spec: [`spec/ide-parity`](spec/ide-parity/index.md))
+
+- [ ] **T720 — Local History.** Snapshots on save, label, diff view, revert a
+  range; on `vix-undo-store`. **Medium–Large.**
+- [ ] **T721 — Search Everywhere.** One fuzzy box, prefixes `>` `@` `:`.
+  **Medium.**
+- [ ] **T722 — Refactor menu.** Surface LSP `refactor.*` code actions with
+  preview. **Medium.**
+- [ ] **T723 — Organize imports and code cleanup.** `source.organizeImports`
+  plus a cleanup pipeline. **Small–Medium.**
+- [ ] **T724 — Named run configurations.** Saved, shareable, compound, with
+  before-launch steps, in `vix-tasks`. **Medium.**
+- [ ] **T725 — Peek definition.** **Small–Medium.**
+- [ ] **T726 — CodeLens.** **Medium.**
+- [ ] **T727 — Postfix completion.** **Small.**
+
+Order: T680 first (T684 builds on it), then T682, T683, T681, T685. Plans:
+spikes and the pure-core tasks (T690, T700, T710) before anything that
+touches the UI; T710 lands alone. The IDE items T721, T724 and T723 are
+the cheapest wins.
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -7996,7 +8150,7 @@ file) when someone actually wants to build it; don't start from this list
 directly. Recorded here so they aren't re-discovered and re-argued from
 scratch each time they come up.
 
-- **Remote/SSH editing.** Open a directory over SSH the way VS Code's
+- ~~**Remote/SSH editing.**~~ Promoted to **T710–T719** 2026-10-28 (Run Q; [`spec/remote-editing`](spec/remote-editing/index.md)). Original note: open a directory over SSH the way VS Code's
   Remote-SSH does — a remote filesystem + remote process (LSP servers,
   `Project → Compile`, terminal) with a thin local UI. Large: a real
   remote-fs/remote-process protocol, not a small feature. Vix's
@@ -8005,7 +8159,7 @@ scratch each time they come up.
   copy: a single "authority" slot that owns file access and process
   spawning, shared by SSH, devcontainers and Kubernetes, so
   devcontainer support falls out of the same abstraction.
-- **Collaborative editing.** Multiple people editing the same buffer
+- ~~**Collaborative editing.**~~ Promoted to **T690–T697** 2026-10-28 (Run Q, "Cowork"; [`spec/cowork`](spec/cowork/index.md)). Original note: multiple people editing the same buffer
   live (CRDT or OT-based). Large scope, a genuinely different product
   direction (network sync, presence, conflict resolution beyond git) —
   worth being explicit that this is *not* implied by anything already
@@ -8167,6 +8321,10 @@ CI-discovered rounds to get genuinely right on Windows).
     work around them). In order, one branch each: T672 (version bump and
     API cleanups), T673 (typed errors), T674 (`App`'s public surface),
     then T661 on top.
+
+17. **Run Q (user requests, 2026-10-28):** T680 first, then T682, T683,
+    T681, T684, T685. The four plans (Cowork, OC, Remote editing, IDE
+    parity) start with their spike or pure-core task; T710 lands alone.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
