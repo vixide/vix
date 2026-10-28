@@ -104,7 +104,7 @@ impl Capability {
             ("script.", Capability::Script),
             ("script:", Capability::Script),
             ("tools.terminal", Capability::Terminal),
-            ("tools.http_send", Capability::Http),
+            ("tools.http_", Capability::Http),
             ("ai.", Capability::Ai),
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),

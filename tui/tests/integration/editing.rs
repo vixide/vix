@@ -375,6 +375,36 @@ fn http_send_reports_when_buffer_has_no_request() {
 }
 
 #[test]
+#[cfg(feature = "http")]
+fn http_send_refuses_an_unresolved_variable_without_dispatching() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "GET https://example.invalid/{{nope}}\n");
+    app.run_action("tools.http_send");
+    assert!(!app.http_running(), "an unresolved variable must not send");
+    // A chained reference to a request that was never sent is refused too.
+    let mut app = app_at(Path::new("."));
+    type_str(
+        &mut app,
+        "GET https://example.invalid/{{login.response.body.$.token}}\n",
+    );
+    app.run_action("tools.http_send");
+    assert!(!app.http_running());
+}
+
+#[test]
+#[cfg(feature = "http")]
+fn http_copy_curl_works_on_the_block_at_the_cursor() {
+    let mut app = app_at(Path::new("."));
+    type_str(
+        &mut app,
+        "@h = https://example.invalid\n###\nGET {{h}}/a\n###\nGET {{h}}/b\n",
+    );
+    app.run_action("tools.http_copy_curl");
+    assert!(app.status.contains("curl"), "status: {}", app.status);
+    assert!(!app.http_running(), "copying never sends");
+}
+
+#[test]
 fn jump_to_line_labels_move_the_cursor() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "line0\nline1\nline2\nline3\n");

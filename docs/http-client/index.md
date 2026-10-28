@@ -33,6 +33,53 @@ shows the URL while it's in flight.
 Only `http://` and `https://` URLs are accepted; anything else is rejected
 before any network activity, both as defense-in-depth and as a clear error.
 
+## Several requests in one file
+
+Separate requests with a line starting with `###`. **Send HTTP Request**
+sends the request the cursor is in (a file with no `###` is one request).
+
+```http
+@host = https://api.example.com
+@token = {{login.response.body.$.token}}
+
+# @name login
+POST {{host}}/login
+Content-Type: application/json
+
+{"user": "joel", "id": "{{$guid}}"}
+
+###
+
+GET {{host}}/things
+  ?limit=10
+  &after={{$datetime iso8601 -1 d}}
+Authorization: Bearer {{token}}
+```
+
+- **File variables:** `@name = value` anywhere in the file; reference with
+  `{{name}}`. Values may use other variables.
+- **System variables:** `{{$guid}}`, `{{$timestamp}}`,
+  `{{$datetime iso8601}}` or `rfc1123`, `{{$randomInt 1 100}}`,
+  `{{$processEnv NAME}}` and `{{$dotenv NAME}}` (from `.env` beside the
+  file). `$timestamp` and `$datetime` take an offset such as `-1 d`
+  (units `ms s m h d w`).
+- **Chaining:** put `# @name login` above a request. Once it has been sent,
+  later requests can use `{{login.response.body.$.token}}` (a JSON path),
+  `{{login.response.body.*}}` or `{{login.response.headers.X-Id}}`.
+  Sending a request that refers to one you haven't sent says so.
+- **Query continuation:** following lines that start with `?` or `&` are
+  joined to the URL. A trailing `HTTP/1.1` on the request line is ignored.
+- **Body from a file:** a body that is the single line `< ./payload.json`
+  is read from that file, which must be inside the `.http` file's folder.
+- **Basic auth:** `Authorization: Basic user:password` is base64-encoded
+  for you.
+- **Copy as curl:** **Tools → Copy HTTP Request as curl** puts the request
+  under the cursor on the clipboard as a `curl` command, variables
+  expanded.
+
+Not yet supported: environments (`$shared` and per-environment variable
+sets), `{{$localDatetime}}`, `$aadToken`, and XML responses in chaining.
+
 ## The response
 
 When the response arrives, it opens in a new tab as plain text: an HTTP

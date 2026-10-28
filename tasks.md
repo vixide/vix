@@ -8013,6 +8013,12 @@ so, and the first task of each plan re-checks the facts it depends on.
   pure in the crate. Update the spec, add i18n for new actions, and decide
   that `tools.http_send` keeps its id and now sends the request at the cursor.
   **Medium.**
+  - **Done 2026-10-28** (`feat/t680-rest-client`): everything above except
+    environments (`.vix/http-env.json`, `$shared`, a chooser), which remain
+    open, as do `$localDatetime`, `$aadToken` and XML-body chaining. `< file`
+    bodies are confined to the `.http` file's folder on purpose: a crafted
+    file must not be able to send an arbitrary local file to its own URL.
+    The new action is `tools.http_copy_curl`.
 - [ ] **T681 — Git Graph.** Today `git.log_graph` only streams `git log
   --graph` text into the dock. Add an interactive graph panel: commit list
   with lanes drawn from parent links (a pure lane-assignment algorithm in a

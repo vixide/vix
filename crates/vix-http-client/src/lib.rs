@@ -17,6 +17,8 @@
 //! or `//` are comments. Parsing is pure and unit-tested; [`send`] performs the
 //! (blocking) request and is meant to be called from a background thread.
 
+pub mod rest;
+
 /// A parsed HTTP request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
@@ -40,18 +42,23 @@ pub fn parse_request(text: &str) -> Option<Request> {
     let mut request_line = None;
     for line in lines.by_ref() {
         let t = line.trim();
-        if t.is_empty() || t.starts_with('#') || t.starts_with("//") {
+        if t.is_empty() || t.starts_with('#') || t.starts_with("//") || t.starts_with('@') {
             continue;
         }
         request_line = Some(t);
         break;
     }
     let request_line = request_line?;
+    // An optional trailing `HTTP/1.1` is the protocol version, not part of the URL.
+    let request_line = match request_line.rsplit_once(char::is_whitespace) {
+        Some((head, tail)) if tail.to_ascii_uppercase().starts_with("HTTP/") => head.trim_end(),
+        _ => request_line,
+    };
     let mut parts = request_line.split_whitespace();
     let first = parts.next()?;
     // If the first token looks like a URL (has "://" or starts with "/"), the
     // method was omitted; otherwise it's the method and the next token is the URL.
-    let (method, url) = if first.contains("://") {
+    let (method, mut url) = if first.contains("://") {
         ("GET".to_string(), first.to_string())
     } else {
         (first.to_ascii_uppercase(), parts.next()?.to_string())
@@ -60,6 +67,16 @@ pub fn parse_request(text: &str) -> Option<Request> {
     // a request line.
     if !url.contains("://") {
         return None;
+    }
+
+    // A query may continue on following lines that start with `?` or `&`.
+    while let Some(next) = lines.peek().map(|l| l.trim()) {
+        if next.starts_with('?') || next.starts_with('&') {
+            url.push_str(next);
+            lines.next();
+        } else {
+            break;
+        }
     }
 
     // Headers until a blank line.
@@ -112,6 +129,37 @@ impl std::fmt::Display for HttpError {
 
 impl std::error::Error for HttpError {}
 
+/// A received HTTP response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Response {
+    /// Status code.
+    pub status: u16,
+    /// Reason phrase (may be empty).
+    pub reason: String,
+    /// Protocol version, e.g. `HTTP/1.1`.
+    pub version: String,
+    /// `(name, value)` header pairs, in order.
+    pub headers: Vec<(String, String)>,
+    /// Body as text.
+    pub body: String,
+}
+
+impl Response {
+    /// The response as readable text: a status line, headers, a blank line,
+    /// then the body.
+    #[must_use]
+    pub fn format(&self) -> String {
+        use std::fmt::Write as _;
+        let mut out = format!("{} {} {}\n", self.version, self.status, self.reason);
+        for (name, value) in &self.headers {
+            let _ = writeln!(out, "{name}: {value}");
+        }
+        out.push('\n');
+        out.push_str(&self.body);
+        out
+    }
+}
+
 /// Perform `req` (blocking) and format the response as text: a status line, the
 /// response headers, a blank line, then the body. On a transport error, returns
 /// `Err` with the message; on an HTTP error status (4xx/5xx), returns the
@@ -120,12 +168,20 @@ impl std::error::Error for HttpError {}
 /// Call from a background thread — this blocks on network I/O.
 ///
 /// # Errors
+/// See [`send_response`].
+pub fn send(req: &Request) -> Result<String, HttpError> {
+    send_response(req).map(|r| r.format())
+}
+
+/// Perform `req` (blocking) and return the structured [`Response`].
+///
+/// # Errors
 /// [`HttpError::UnsupportedScheme`] for a non-`http(s)` URL,
 /// [`HttpError::InvalidRequest`] when the request can't be built, and
 /// [`HttpError::Transport`] when it can't be completed (DNS, connection, TLS).
-/// An HTTP error *status* is not an error here: the formatted error response is
+/// An HTTP error *status* is not an error here: the error response is
 /// returned as `Ok`.
-pub fn send(req: &Request) -> Result<String, HttpError> {
+pub fn send_response(req: &Request) -> Result<Response, HttpError> {
     // Only http(s) may be requested. A `.http` buffer can be an opened file, so
     // restricting the scheme keeps a crafted request from reaching other URL
     // handlers (e.g. `file://`); ureq itself doesn't implement such schemes, but
@@ -149,7 +205,7 @@ pub fn send(req: &Request) -> Result<String, HttpError> {
         .body(req.body.clone())
         .map_err(|e| HttpError::InvalidRequest(e.to_string()))?;
     match agent.run(request) {
-        Ok(resp) => Ok(format_response(resp)),
+        Ok(resp) => Ok(read_response(resp)),
         Err(e) => Err(HttpError::Transport(e.to_string())),
     }
 }
@@ -160,30 +216,26 @@ fn scheme_is_http(url: &str) -> bool {
     lower.starts_with("http://") || lower.starts_with("https://")
 }
 
-/// Format a `ureq` response into a readable text block (status, headers, blank
-/// line, body). Consumes `resp` to read its body.
-fn format_response(resp: ureq::http::Response<ureq::Body>) -> String {
-    use std::fmt::Write as _;
+/// Read a `ureq` response into a [`Response`]. Consumes `resp` to read its body.
+fn read_response(resp: ureq::http::Response<ureq::Body>) -> Response {
     let status = resp.status();
-    let mut out = format!(
-        "{:?} {} {}\n",
-        resp.version(),
-        status.as_u16(),
-        status.canonical_reason().unwrap_or("")
-    );
-    for (name, value) in resp.headers() {
-        if let Ok(value) = value.to_str() {
-            let _ = writeln!(out, "{name}: {value}");
-        }
+    let version = format!("{:?}", resp.version());
+    let headers = resp
+        .headers()
+        .iter()
+        .filter_map(|(n, v)| Some((n.to_string(), v.to_str().ok()?.to_string())))
+        .collect();
+    let body = match resp.into_body().read_to_string() {
+        Ok(body) => body,
+        Err(e) => format!("<failed to read body: {e}>"),
+    };
+    Response {
+        status: status.as_u16(),
+        reason: status.canonical_reason().unwrap_or("").to_string(),
+        version,
+        headers,
+        body,
     }
-    out.push('\n');
-    match resp.into_body().read_to_string() {
-        Ok(body) => out.push_str(&body),
-        Err(e) => {
-            let _ = write!(out, "<failed to read body: {e}>");
-        }
-    }
-    out
 }
 
 #[cfg(test)]
@@ -220,6 +272,28 @@ mod tests {
         assert!(parse_request("").is_none());
         assert!(parse_request("# only a comment\n").is_none());
         assert!(parse_request("GET\n").is_none());
+    }
+
+    #[test]
+    fn strips_the_http_version_and_joins_query_continuations() {
+        let req =
+            parse_request("@x = 1\nGET https://e.com/s HTTP/1.1\n  ?a=1\n  &b=2\nAccept: */*\n")
+                .unwrap();
+        assert_eq!(req.method, "GET");
+        assert_eq!(req.url, "https://e.com/s?a=1&b=2");
+        assert_eq!(req.headers.len(), 1);
+    }
+
+    #[test]
+    fn formats_a_response_as_status_headers_body() {
+        let r = Response {
+            status: 404,
+            reason: "Not Found".into(),
+            version: "HTTP/1.1".into(),
+            headers: vec![("A".into(), "b".into())],
+            body: "nope".into(),
+        };
+        assert_eq!(r.format(), "HTTP/1.1 404 Not Found\nA: b\n\nnope");
     }
 
     #[test]
