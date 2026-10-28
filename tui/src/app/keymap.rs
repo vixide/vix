@@ -116,6 +116,7 @@ impl App {
             git_panel,
             branch_chooser,
             git_log,
+            git_graph,
             task_chooser,
             macro_chooser,
             script_chooser,
@@ -349,6 +350,7 @@ impl App {
         panel!(git_panel, git_panel_key);
         panel!(branch_chooser, branch_key);
         panel!(git_log, git_log_key);
+        panel!(git_graph, git_graph_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(script_chooser, script_chooser_key);

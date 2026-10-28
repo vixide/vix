@@ -180,6 +180,7 @@ pub use vix_file_browser_panel as file_browser_panel;
 pub use vix_file_information_panel as file_information_panel;
 pub use vix_find_panel as find_panel;
 pub use vix_git as git;
+pub use vix_git_graph as git_graph;
 pub use vix_html_character_picker as html_character_picker;
 #[cfg(feature = "http")]
 pub use vix_http_client as http_client;

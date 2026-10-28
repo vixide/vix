@@ -815,3 +815,128 @@ fn blame_follows_unsaved_edits() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T681: a throwaway repo with a merge, for the Git graph tests. `main` ends
+/// at the merge commit, `topic` at "side".
+fn graph_repo(tag: &str) -> PathBuf {
+    let dir = unique_dir(tag);
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
+    let run = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+    };
+    fs::write(dir.join("a.txt"), "a\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "base"]);
+    run(&["switch", "-q", "-c", "topic"]);
+    fs::write(dir.join("side.txt"), "side\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "side"]);
+    run(&["switch", "-q", "-"]);
+    fs::write(dir.join("a.txt"), "a\nmain\n").unwrap();
+    run(&["commit", "-qa", "-m", "mainline"]);
+    run(&["merge", "-q", "--no-ff", "-m", "merge topic", "topic"]);
+    dir
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_graph_lists_lanes_searches_filters_and_opens_the_diff_tab() {
+    let dir = graph_repo("gitgraph");
+    let mut app = app_at(&dir);
+    app.run_action("git.graph");
+    let g = app.git_graph.as_ref().expect("graph panel opens");
+    assert_eq!(g.commits.len(), 4);
+    assert_eq!(g.commits[0].subject, "merge topic");
+    assert_eq!(g.commits[0].parents.len(), 2, "the merge has two parents");
+    assert!(g.graph_width() >= 2, "the merge needs a second lane");
+
+    // Typing searches (hides rows; Backspace restores them).
+    type_str(&mut app, "side");
+    assert_eq!(app.git_graph.as_ref().unwrap().len(), 1);
+    for _ in 0..4 {
+        app.on_key(keycode(KeyCode::Backspace));
+    }
+    assert_eq!(app.git_graph.as_ref().unwrap().len(), 4);
+
+    // Tab limits the graph to one ref; cycling all the way round restores it.
+    app.on_key(keycode(KeyCode::Tab));
+    let g = app.git_graph.as_ref().unwrap();
+    assert!(g.reference.is_some(), "a ref filter is active");
+    let refs = g.refs.len();
+    for _ in 0..refs {
+        app.on_key(keycode(KeyCode::Tab));
+    }
+    let g = app.git_graph.as_ref().unwrap();
+    assert!(g.reference.is_none() && g.commits.len() == 4);
+
+    // Enter opens the highlighted commit as a read-only `git show` tab.
+    let tabs_before = app.editor.tabs.len();
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.git_graph.is_none(), "Enter closes the graph");
+    assert_eq!(app.editor.tabs.len(), tabs_before + 1);
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.read_only && tab.title().contains("graph"));
+    assert!(tab.text().contains("merge topic"));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_graph_checkout_branch_and_cherry_pick_confirm_before_acting() {
+    let dir = graph_repo("gitgraphact");
+    let head = |dir: &Path| {
+        let out = std::process::Command::new("git")
+            .current_dir(dir)
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    let mut app = app_at(&dir);
+    app.run_action("git.graph");
+
+    // Search for the topic tip, then Ctrl+O: nothing happens until `y`.
+    type_str(&mut app, "side");
+    app.on_key(ctrl('o'));
+    assert_eq!(head(&dir), "main", "checkout waits for confirmation");
+    app.on_key(key('n'));
+    assert_eq!(head(&dir), "main", "n cancels");
+    app.on_key(ctrl('o'));
+    app.on_key(key('y'));
+    assert_eq!(
+        head(&dir),
+        "topic",
+        "y checks out the commit's local branch"
+    );
+
+    // Ctrl+B asks for a name, then branches at the highlighted commit.
+    app.on_key(ctrl('b'));
+    type_str(&mut app, "from-side");
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(head(&dir), "from-side");
+
+    // Cherry-pick the mainline commit (confirmed), then Ctrl+Y copies a hash.
+    for _ in 0..4 {
+        app.on_key(keycode(KeyCode::Backspace));
+    }
+    type_str(&mut app, "mainline");
+    app.on_key(ctrl('p'));
+    app.on_key(key('y'));
+    let a = fs::read_to_string(dir.join("a.txt")).unwrap();
+    assert!(a.contains("main"), "the picked change landed: {a:?}");
+    app.on_key(ctrl('y'));
+    assert!(app.status.contains("Copied"), "{}", app.status);
+
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.git_graph.is_none());
+    fs::remove_dir_all(&dir).ok();
+}

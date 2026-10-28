@@ -7938,6 +7938,19 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `pub(crate)`, 19 stay public. All 682 library tests (unit plus the
     whole integration suite) pass inside the crate unchanged apart from
     `crate::common` → `crate::integration::common`.
+- [x] **T681 — Git graph.** `git.log_graph` only streams `git log --graph`
+  text into the dock. Add an interactive graph panel: lanes drawn from
+  parent links (a pure, property-tested lane-assignment algorithm in a new
+  `vix-git-graph` crate), ref decorations, a branch/tag filter, search, and
+  per-commit actions (open diff, checkout, create branch, cherry-pick, copy
+  hash) reusing T207's browse-log and diff-tab machinery. Loads lazily in
+  pages of 200. **M.**
+  - **Done 2026-10-28** (`feat/t681-git-graph`): **Git → Log → Graph…**
+    (`git.graph`); see `crates/vix-git-graph/spec/index.md` and
+    `docs/git-graph/index.md`. Checkout and cherry-pick ask `y/n`; a failed
+    cherry-pick is aborted so nothing is left half-applied. Not done: lane
+    colors (one dim color), horizontal scroll for very wide graphs, and
+    remote operations (push/fetch) from a commit.
 - [ ] **T670: the musl release build is dynamically linked and crashes.**
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)

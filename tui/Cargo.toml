@@ -73,7 +73,7 @@ script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
-git = ["tasks", "vix-git/process", "vix-doctor/probe-git"]
+git = ["tasks", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git"]
 jj = ["tasks"]
 lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
@@ -260,6 +260,8 @@ vix-find-panel = { workspace = true }
 vix-format-tool = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
 vix-git = { path = "../crates/vix-git", version = "2.0.0", default-features = false }
+# Interactive Git graph: lanes, decorations, paged log, per-commit actions.
+vix-git-graph = { path = "../crates/vix-git-graph", version = "2.0.0", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { workspace = true }
 # A minimal HTTP client driven by a `.http`-style buffer.

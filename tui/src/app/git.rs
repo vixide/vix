@@ -26,7 +26,7 @@ impl App {
     /// original behavior exactly (not the cached `AppFlags::GIT_REPO`,
     /// which a couple of *other* sites use instead for a different reason
     /// and are left alone here to avoid changing their check semantics).
-    fn require_git_repo(&mut self) -> bool {
+    pub(super) fn require_git_repo(&mut self) -> bool {
         if crate::git::is_repo(&self.root) {
             return true;
         }
@@ -71,6 +71,7 @@ impl App {
             "git.log_since_1_week_ago" => self.git_log_since(Some("1-week-ago")),
             "git.log_since_1_month_ago" => self.git_log_since(Some("1-month-ago")),
             "git.browse_log" => self.open_git_log(),
+            "git.graph" => self.open_git_graph(),
             "git.file_history" => self.open_git_file_history(),
             "git.open_at_revision" => self.open_git_at_revision_prompt(),
             "git.status" => self.git_status_to_dock(),

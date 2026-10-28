@@ -15,6 +15,7 @@ mod edit_surfaces;
 mod editor_region;
 mod explorer;
 mod file_browser;
+mod git_graph;
 mod help;
 mod hints;
 mod info_panels;
@@ -486,6 +487,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.git_log.is_some() {
         draw_git_log(app, frame, area);
+    }
+    if app.git_graph.is_some() {
+        git_graph::draw_git_graph(app, frame, area);
     }
     if app.structural_replace.is_some() {
         draw_structural_replace(app, frame, area);

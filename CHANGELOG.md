@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Git graph** (T681): **Git → Log → Graph…** (`git.graph`) opens an interactive commit graph with branch lanes drawn from the parent links, branch and tag decorations, a branch/tag filter (`Tab`), search (just type), and per-commit actions: `Enter` opens the commit as a read-only `git show` tab, `Ctrl+O` checks it out, `Ctrl+B` creates a branch at it, `Ctrl+P` cherry-picks it (checkout and cherry-pick ask first; a failed pick is undone) and `Ctrl+Y` copies its hash. History loads 200 commits at a time. The lane algorithm is the new pure `vix-git-graph` crate, property-tested over random commit DAGs. See `docs/git-graph/index.md`.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.
