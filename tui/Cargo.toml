@@ -79,7 +79,7 @@ lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
 # funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
-tasks = []
+tasks = ["vix-format-tool/process"]
 hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
@@ -259,7 +259,7 @@ vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
 vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
-vix-format-tool = { workspace = true }
+vix-format-tool = { path = "../crates/vix-format-tool", version = "2.0.0", default-features = false }
 # Git integration: status/diff/staging via the git CLI.
 vix-git = { path = "../crates/vix-git", version = "2.0.0", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.
@@ -463,6 +463,10 @@ path = "tests/i18n_keys.rs"
 [[test]]
 name = "lsp_smoke"
 path = "tests/lsp_smoke.rs"
+
+[[test]]
+name = "prettier"
+path = "tests/prettier.rs"
 
 [[test]]
 name = "snapshots"

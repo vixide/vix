@@ -7,6 +7,12 @@ license.workspace = true
 repository.workspace = true
 description = "Reformat the selection (or buffer) within one data format: pretty-print or minify."
 
+[features]
+default = ["process"]
+# Spawn the user's Prettier (`prettier::format`). Off, no process is ever
+# started; the root `tasks` feature turns it on.
+process = []
+
 [dependencies]
 serde_json = { workspace = true }
 serde_norway = { workspace = true }

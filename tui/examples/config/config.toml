@@ -66,6 +66,9 @@ trim_trailing_whitespace = true
 ensure_final_newline = true
 # On save, run the language server's formatter (when the file has one).
 format_on_save = false
+# Languages formatted with your own Prettier (Format Document and
+# format-on-save) instead of the language server, e.g. ["typescript", "css"].
+prettier_languages = []
 # Periodically save the active dirty file-backed buffer (every few
 # seconds).
 auto_save = false

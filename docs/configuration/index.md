@@ -79,6 +79,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `sticky_search_highlight` | bool | `true` | Keep search-match highlights after the Find box closes, until toggled off. |
 | `show_menu_tooltips` | bool | `true` | Show hover tooltips on menu names and items. |
 | `format_on_save` | bool  | `false`  | On save, run the language server's formatter when the file has one. |
+| `prettier_languages` | list of strings | `[]` | Languages formatted with your own Prettier by **Format Document** and format-on-save: any of `javascript`, `typescript`, `json`, `css`, `html`, `markdown`, `yaml`, `graphql`, `handlebars`. See [Format with Prettier](../prettier/index.md). |
 | `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
 | `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |
