@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **HL7 v2 view and MLLP send** (T685): new `vix-hl7` crate and **Tools → HL7 View** / **HL7 Send…**. The view lists the buffer's HL7 v2 (pipe-and-hat) message as numbered segments and fields (`PID-5.1`) using the delimiters `MSH` declares, decodes escape sequences, filters as you type and jumps to the field. Send asks for an explicit `host:port`, sends over plaintext MLLP on a background thread with timeouts, and opens the acknowledgement in a read-only tab. The parser is lenient and never panics; nothing is logged or saved, and sending needs the `http` capability. See `docs/hl7/index.md`.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.

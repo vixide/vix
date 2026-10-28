@@ -17,6 +17,7 @@ mod event_loop;
 mod git;
 #[cfg(not(feature = "git"))]
 mod git_off;
+mod hl7;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(not(feature = "http"))]
@@ -312,6 +313,9 @@ pub enum PromptKind {
     /// current selection (T205); the captured body lives in
     /// `App::pending_snippet_body`.
     SnippetPrefixFromSelection,
+    /// Enter the `host:port` to send the active HL7 message to over MLLP.
+    #[cfg(feature = "http")]
+    Hl7Send,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -1421,6 +1425,8 @@ pub struct Layout {
     pub theme_editor: Rect,
     /// Row-list rectangle of the media-type picker, for click-to-select.
     pub media_type_panel: Rect,
+    /// Row-list rectangle of the HL7 message view, for click-to-select.
+    pub hl7_panel: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -1871,6 +1877,16 @@ pub struct App {
     theme_editor_baseline: Option<String>,
     /// Media-type (MIME) picker overlay, when open.
     pub(crate) media_type_panel: Option<crate::media_type::Panel>,
+    /// HL7 message view overlay, when open.
+    pub(crate) hl7_panel: Option<crate::hl7::Panel>,
+    /// An in-flight HL7 send: the target shown to the user and the receiver
+    /// for the background thread's outcome. Never persisted.
+    #[cfg(feature = "http")]
+    hl7_rx: Option<hl7::Hl7Pending>,
+    /// The last `host:port` typed for an HL7 send, kept in memory only so the
+    /// prompt can be pre-filled; never written to disk.
+    #[cfg(feature = "http")]
+    hl7_endpoint: String,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
     #[cfg(feature = "http")]
     http_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
@@ -2422,6 +2438,11 @@ impl App {
             theme_editor: None,
             theme_editor_baseline: None,
             media_type_panel: None,
+            hl7_panel: None,
+            #[cfg(feature = "http")]
+            hl7_rx: None,
+            #[cfg(feature = "http")]
+            hl7_endpoint: String::new(),
             #[cfg(feature = "http")]
             http_rx: None,
             html_panel: None,
@@ -3343,6 +3364,7 @@ impl App {
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),
             a if self.run_http_action(a) => {}
+            a if self.run_hl7_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -8293,6 +8315,7 @@ impl App {
         panel!(x11_panel, x11_mouse);
         panel!(theme_editor, theme_editor_mouse);
         panel!(media_type_panel, media_type_mouse);
+        panel!(hl7_panel, hl7_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -12657,6 +12680,8 @@ impl App {
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
+            #[cfg(feature = "http")]
+            PromptKind::Hl7Send => self.accept_hl7_send(prompt.input.trim()),
             PromptKind::SnippetPrefixFromSelection => {
                 self.save_snippet_from_selection(prompt.input.trim());
             }

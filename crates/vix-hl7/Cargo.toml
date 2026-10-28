@@ -1,0 +1,22 @@
+[package]
+name = "vix-hl7"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HL7 v2 (ER7, pipe-and-hat) message parser, viewer model and MLLP framing, with an optional blocking TCP sender."
+
+[features]
+# The blocking TCP sender (`net`). Off by default so a build without the
+# `http` capability carries no socket code from this crate.
+net = []
+
+[dependencies]
+vix-list-state = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

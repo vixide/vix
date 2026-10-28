@@ -105,6 +105,8 @@ impl Capability {
             ("script:", Capability::Script),
             ("tools.terminal", Capability::Terminal),
             ("tools.http_send", Capability::Http),
+            // The HL7 MLLP sender is a network client: it rides `http`.
+            ("tools.hl7_send", Capability::Http),
             ("ai.", Capability::Ai),
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
