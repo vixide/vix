@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: "overlay_screen(\"ov-db\", \"\", \"db.connections\")"
+---
+╭  Database ──────────────────────────────────────────────────────────────────────────────────────╮
+│ Connections                                                                                      │
+│ No saved connections — press a to add one                                                        │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│Enter connect · a add · e edit · d delete · Esc close                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

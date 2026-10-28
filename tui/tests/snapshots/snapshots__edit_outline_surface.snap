@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: "overlay_screen(\"ov-outline\", \"# One\\nbody\\n## Two\\nmore\\n# Three\\n\",\n\"tools.edit_outline\",)"
+---
+╭  Edit Outline ──────────────────────────────────────────────────────────────────────────────────╮
+│· # One                                                                                           │
+│· body                                                                                            │
+│· ## Two                                                                                          │
+│· more                                                                                            │
+│· # Three                                                                                         │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│↑↓ move   ←→ fold   Tab/⇧Tab indent   Alt+↑↓ move item   Space fold   ^S save   q close           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

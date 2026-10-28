@@ -7051,7 +7051,7 @@ new action.
   failed request. vix-editor is also thin (2,022 lines, 98 pub fns, 8
   tests), so add unit tests for its non-trivial pub fns. Do this before
   T617. **Medium.**
-- [ ] **T609 — Snapshot tests per overlay family.** 13 snapshot tests
+- [x] **T609 — Snapshot tests per overlay family.** (Done: 10 new snapshots — calculator, color converter, edit-json/yaml/bytes/outline, text info, DB connections, theme editor, merge-conflict list. AI diff and choosers beyond the DB one are not covered.) 13 snapshot tests
   cover about 66 overlays (`tui/src/ui.rs:337-560`, 25 modules). Add one
   insta snapshot per family: DB workbench, AI diff, edit-value, edit-bytes,
   edit-outline, choosers, info panels, calculator/converters, and the
