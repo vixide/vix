@@ -27,7 +27,7 @@ right spec.
 | Keybindings | Reload Keybindings | `vix-keybindings` |
 | Generate | QR Code, Markdown Preview | `vix-qr-tool`, `vix-markdown-preview` |
 | Inspect | Calculator, Regex Tester, Color Converter, Unit Converter, Pomodoro | `vix-calculator-tool`, `vix-regex-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool` |
-| Find | TODO Finder | `vix-textops` (`tag_column`) + App shell |
+| Find | TODO Finder, Todo Tree | `vix-textops` (`tag_column`), `vix-todo-tree` + App shell |
 | Network | Send HTTP Request | `vix-http-client` |
 | Pickers | Characters (Nerd Font / ASCII / HTML entities), X11 Colors, Media Types, Snippets, Contacts | `vix-nerd-font-picker`, `vix-ascii-character-picker`, `vix-html-character-picker`, `vix-x11-color-picker`, `vix-media-type`, `vix-snippets`, `vix-contact-panel` |
 | Boxes | Calendar, Clock | `vix-calendar-panel`, `vix-clock-panel` |

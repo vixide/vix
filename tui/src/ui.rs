@@ -65,7 +65,7 @@ use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
 use minimap::draw_minimap;
 use picker_panels::{
     draw_ascii_panel, draw_media_type_panel, draw_nerd_palette, draw_qrcode, draw_theme_editor,
-    draw_x11_panel,
+    draw_todo_tree, draw_x11_panel,
 };
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
@@ -494,6 +494,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.media_type_panel.is_some() {
         draw_media_type_panel(app, frame, area);
     }
+    draw_todo_tree(app, frame, area);
     if app.encoding_chooser.is_some() {
         draw_encoding_chooser(app, frame, area);
     }

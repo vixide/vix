@@ -616,6 +616,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.test_panel` | Toggle Test Panel | Menu |
 | `tools.text_info` | Text… | Menu |
 | `tools.todo_finder` | Find TODOs… | Menu |
+| `tools.todo_tree` | Todo Tree | Menu |
 | `tools.toggle_coverage_gutter` | Toggle Coverage Gutter | Menu |
 | `tools.x11_colors` | X11 Colors… | Menu |
 | `trim_trailing_whitespace` | Trim Trailing Whitespace | Catalog |
@@ -682,4 +683,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**675 actions.**
+**676 actions.**

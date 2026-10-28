@@ -1,0 +1,15 @@
+[package]
+name = "vix-todo-tree"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The comment tags in a project (TODO, FIXME, HACK, XXX, BUG, NOTE) gathered into a tree you can fold and jump from."
+
+[dependencies]
+vix-list-state = { workspace = true }
+vix-textops = { workspace = true }
+
+[lints]
+workspace = true

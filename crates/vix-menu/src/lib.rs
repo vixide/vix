@@ -1337,6 +1337,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
     Item::leaf("menu.item.tools.regex_tester", "tools.regex_tester", ""),
     Item::leaf("menu.item.tools.todo_finder", "tools.todo_finder", ""),
+    Item::leaf("menu.item.tools.todo_tree", "tools.todo_tree", ""),
     Item::leaf("menu.item.tools.http_send", "tools.http_send", ""),
     Item::leaf("menu.item.tools.http_copy_curl", "tools.http_copy_curl", ""),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),

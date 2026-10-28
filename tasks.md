@@ -8026,12 +8026,18 @@ so, and the first task of each plan re-checks the facts it depends on.
   filter, search, and per-commit actions (open diff, checkout, create branch,
   cherry-pick, copy hash) reusing T207's browse-log and diff-tab machinery.
   Load lazily in pages of ~200. **Medium.**
-- [ ] **T682 — Todo Tree.** The TODO Finder is a flat picker. Add a dockable
+- [x] **T682 — Todo Tree.** The TODO Finder is a flat picker. Add a dockable
   tree grouped by tag then file (TODO, FIXME, HACK, XXX, NOTE, plus
   configurable tags and regex), counts per group, jump-to-line, refresh on
   save, and a workspace/open-files scope toggle. Reuse `vix-textops`
   `tag_column`, `vix-list-state` and the outline panel's tree shape. Respect
   `.gitignore`. **Small–Medium.**
+  - **Done 2026-10-28** (`feat/t682-todo-tree`): new `vix-todo-tree` crate and
+    a **Tools → Todo Tree** overlay (`tools.todo_tree`), grouped by tag or by
+    file (`g`), foldable, jump on Enter or click. The flat finder now shares
+    the same scan (`App::collect_todos`). Not done: custom tags/regex from
+    settings, a workspace-vs-open-files toggle, refresh on save, and a docked
+    placement; the tree is an overlay like the other pickers.
 - [ ] **T683 — Prettier.** Format with the user's own Prettier: run
   `prettier --stdin-filepath <path>` (project-local `node_modules/.bin` first,
   then `PATH`) for the languages Prettier supports, honoring `.prettierrc*`
