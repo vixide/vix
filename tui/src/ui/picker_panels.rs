@@ -515,3 +515,121 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
             .min(chunks[1].height),
     };
 }
+
+/// The text of one Todo Tree row: a fold marker and count for a header, the
+/// location (by tag) or line number (by file) and the comment for an item.
+fn todo_tree_row_text(p: &crate::todo_tree::Panel, row: &crate::todo_tree::Row) -> String {
+    use crate::todo_tree::{GroupBy, Row};
+    match row {
+        Row::Group {
+            label,
+            count,
+            collapsed,
+        } => format!("{} {label} ({count})", if *collapsed { '▸' } else { '▾' }),
+        Row::Item(i) => {
+            let it = &p.items[*i];
+            match p.group_by {
+                GroupBy::Tag => format!("    {}:{}  {}", it.file, it.line, it.text),
+                GroupBy::File => format!("    {:>5}  {}", it.line, it.text),
+            }
+        }
+    }
+}
+
+/// The Todo Tree overlay: group headers (folded or open, with a count) and,
+/// under each, its items.
+pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::todo_tree::{GroupBy, Row};
+    if app.todo_tree.is_none() {
+        return;
+    }
+    let width = 90u16.min(area.width);
+    let height = (area.height.saturating_sub(4)).max(6).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let Some(p) = app.todo_tree.as_ref() else {
+        return;
+    };
+    let grouping = match p.group_by {
+        GroupBy::Tag => t!("ui.todo_tree_by_tag"),
+        GroupBy::File => t!("ui.todo_tree_by_file"),
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(
+            " {} {} ({grouping}) ",
+            icon::LIST,
+            t!("ui.todo_tree")
+        ));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.todo_tree.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let Some(p) = app.todo_tree.as_ref() else {
+        return;
+    };
+    let rows = p.rows();
+    let total = rows.len();
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let row_area = if show_bar {
+        Rect {
+            width: chunks[0].width - 1,
+            ..chunks[0]
+        }
+    } else {
+        chunks[0]
+    };
+    let text_w = row_area.width as usize;
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (row, r) in rows.iter().enumerate().skip(p.scroll).take(view_h) {
+        let text = todo_tree_row_text(p, r);
+        let text = trunc(&text, text_w);
+        let line = if row == p.selected {
+            Line::from(Span::styled(text, theme::selected()))
+        } else if matches!(r, Row::Group { .. }) {
+            Line::from(Span::styled(text, theme::title(false)))
+        } else {
+            Line::from(Span::raw(text))
+        };
+        lines.push(line);
+    }
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect {
+            x: chunks[0].x + chunks[0].width - 1,
+            ..chunks[0]
+        };
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.todo_tree_hint").to_string(),
+            theme::dim(),
+        ))),
+        chunks[1],
+    );
+    app.layout.todo_tree = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: row_area.width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
+    };
+}

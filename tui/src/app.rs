@@ -1440,6 +1440,8 @@ pub struct Layout {
     pub theme_editor: Rect,
     /// Row-list rectangle of the media-type picker, for click-to-select.
     pub media_type_panel: Rect,
+    /// Row-list rectangle of the Todo Tree, for click-to-select.
+    pub todo_tree: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -1892,6 +1894,8 @@ pub struct App {
     theme_editor_baseline: Option<String>,
     /// Media-type (MIME) picker overlay, when open.
     pub(crate) media_type_panel: Option<crate::media_type::Panel>,
+    /// Todo Tree overlay (comment tags grouped by tag or file), when open.
+    pub(crate) todo_tree: Option<crate::todo_tree::Panel>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
     #[cfg(feature = "http")]
     http_rx: Option<std::sync::mpsc::Receiver<Result<crate::http_client::Response, String>>>,
@@ -2452,6 +2456,7 @@ impl App {
             theme_editor: None,
             theme_editor_baseline: None,
             media_type_panel: None,
+            todo_tree: None,
             #[cfg(feature = "http")]
             http_rx: None,
             #[cfg(feature = "http")]
@@ -3378,6 +3383,7 @@ impl App {
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),
+            "tools.todo_tree" => self.open_todo_tree(),
             a if self.run_http_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
@@ -8443,6 +8449,7 @@ impl App {
         panel!(x11_panel, x11_mouse);
         panel!(theme_editor, theme_editor_mouse);
         panel!(media_type_panel, media_type_mouse);
+        panel!(todo_tree, todo_tree_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -11896,13 +11903,12 @@ impl App {
         }
     }
 
-    /// Scan the project's files for comment tags (TODO / FIXME / HACK / XXX /
-    /// BUG / NOTE) and list them in the static-results search overlay; Enter jumps
-    /// to the match. Uses the file index (which honors `.gitignore`).
-    fn open_todo_finder(&mut self) {
-        static TAGS: &[&str] = &["TODO", "FIXME", "HACK", "XXX", "BUG", "NOTE"];
-        let mut hits: Vec<Hit> = Vec::new();
-        'files: for path in &self.file_index {
+    /// Every comment tag in the project's indexed files (which honor
+    /// `.gitignore`), capped at 2,000. Paths in the items are relative to the
+    /// project root.
+    pub(crate) fn collect_todos(&self) -> Vec<crate::todo_tree::Item> {
+        let mut items = Vec::new();
+        for path in &self.file_index {
             let Ok(content) = crate::fileops::read_to_string_guarded(path) else {
                 continue;
             };
@@ -11911,28 +11917,38 @@ impl App {
                 .unwrap_or(path)
                 .to_string_lossy()
                 .into_owned();
-            for (i, raw) in content.lines().enumerate() {
-                // Match a tag as a word (a following ':' or space/paren is typical).
-                if let Some(col) = TAGS
-                    .iter()
-                    .find_map(|tag| crate::textops::tag_column(raw, tag))
-                {
-                    let line = i + 1;
-                    let text: String = raw.trim().chars().take(120).collect();
-                    hits.push(Hit {
-                        path: path.clone(),
-                        rel: rel.clone(),
-                        line,
-                        col: col + 1,
-                        display: format!("{rel}:{line}: {text}"),
-                        text,
-                    });
-                    if hits.len() >= 2000 {
-                        break 'files;
-                    }
-                }
+            items.extend(crate::todo_tree::scan(
+                &rel,
+                &content,
+                crate::todo_tree::DEFAULT_TAGS,
+            ));
+            if items.len() >= 2000 {
+                items.truncate(2000);
+                break;
             }
         }
+        items
+    }
+
+    /// Scan the project's files for comment tags (TODO / FIXME / HACK / XXX /
+    /// BUG / NOTE) and list them in the static-results search overlay; Enter jumps
+    /// to the match. Uses the file index (which honors `.gitignore`).
+    fn open_todo_finder(&mut self) {
+        let mut hits: Vec<Hit> = self
+            .collect_todos()
+            .into_iter()
+            .map(|it| {
+                let rel = it.file;
+                Hit {
+                    path: self.root.join(&rel),
+                    display: format!("{rel}:{}: {}", it.line, it.text),
+                    rel,
+                    line: it.line,
+                    col: it.col,
+                    text: it.text,
+                }
+            })
+            .collect();
         if hits.is_empty() {
             self.status = t!("status.no_todos").to_string();
             return;
@@ -14728,6 +14744,51 @@ mod tests {
             "all three 'foo' occurrences marked: {marks:?}"
         );
         assert_eq!(marks[0], (0, 3));
+    }
+
+    #[test]
+    fn todo_tree_groups_tags_and_jumps_to_the_selected_item() {
+        let dir = std::env::temp_dir().join(format!("vix-todotree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("a.rs"),
+            "fn f() {}\n// TODO: first\n// TODO: second\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("b.rs"), "// FIXME broken\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.run_action("tools.todo_tree");
+        let tree = app.todo_tree.as_ref().expect("tree opens");
+        // TODO header + 2 items, FIXME header + 1 item.
+        assert_eq!(tree.rows().len(), 5);
+        assert_eq!(tree.items.len(), 3);
+
+        // Down to the first TODO item, then Enter jumps and closes the tree.
+        app.todo_tree_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.todo_tree_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.todo_tree.is_none(), "jumping closes the tree");
+        assert!(
+            app.editor
+                .active_tab()
+                .and_then(|t| t.path.clone())
+                .is_some_and(|p| p.ends_with("a.rs"))
+        );
+        assert_eq!(app.editor.cursor_line(), 1, "the first TODO is on line 2");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn todo_tree_reports_when_there_is_nothing() {
+        let dir = std::env::temp_dir().join(format!("vix-todotree-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.rs"), "fn f() {}\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.run_action("tools.todo_tree");
+        assert!(app.todo_tree.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

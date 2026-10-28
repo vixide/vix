@@ -5782,6 +5782,14 @@ name = "vix-time-zone-model"
 version = "2.0.0"
 
 [[package]]
+name = "vix-todo-tree"
+version = "2.0.0"
+dependencies = [
+ "vix-list-state",
+ "vix-textops",
+]
+
+[[package]]
 name = "vix-tui"
 version = "2.0.0"
 dependencies = [
@@ -5915,6 +5923,7 @@ dependencies = [
  "vix-theme-editor-panel",
  "vix-theme-model",
  "vix-time-zone-model",
+ "vix-todo-tree",
  "vix-tutor",
  "vix-undo-store",
  "vix-unit-converter-tool",

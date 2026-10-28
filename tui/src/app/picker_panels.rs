@@ -54,6 +54,7 @@ macro_rules! impl_list_panel {
 impl_list_panel!(AsciiPanel);
 impl_list_panel!(X11Panel);
 impl_list_panel!(crate::media_type::Panel);
+impl_list_panel!(crate::todo_tree::Panel);
 impl_list_panel!(vix_theme_editor_panel::Panel);
 
 /// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
@@ -491,5 +492,69 @@ impl App {
         if self.editor.insert_str(&media_type, area) {
             self.status = t!("status.media_type_inserted", media_type = media_type).to_string();
         }
+    }
+
+    /// Open the Todo Tree over the project's comment tags.
+    pub(super) fn open_todo_tree(&mut self) {
+        self.build_file_index();
+        let items = self.collect_todos();
+        if items.is_empty() {
+            self.status = t!("status.no_todos").to_string();
+            return;
+        }
+        self.status = t!("status.todos_n", n = items.len()).to_string();
+        self.todo_tree = Some(crate::todo_tree::Panel::new(items));
+    }
+
+    pub(super) fn todo_tree_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.todo_tree.height as usize).max(1);
+        if list_panel_nav_key(&mut self.todo_tree, key.code, page) {
+            return;
+        }
+        let Some(p) = self.todo_tree.as_mut() else {
+            return;
+        };
+        match key.code {
+            KeyCode::Char(' ') => p.toggle_fold(),
+            KeyCode::Char('g') => p.toggle_group_by(),
+            KeyCode::Char('[') => p.collapse_all(),
+            KeyCode::Char(']') => p.expand_all(),
+            KeyCode::Enter => {
+                if let Some(item) = p.activate() {
+                    self.jump_to_todo(&item);
+                }
+            }
+            KeyCode::Esc => self.todo_tree = None,
+            _ => {}
+        }
+    }
+
+    pub(super) fn todo_tree_mouse(&mut self, mouse: MouseEvent) {
+        let Some(idx) =
+            list_panel_click_index(self.todo_tree.as_ref(), self.layout.todo_tree, mouse)
+        else {
+            return;
+        };
+        let Some(p) = self.todo_tree.as_mut() else {
+            return;
+        };
+        if p.select_index(idx)
+            && let Some(item) = p.activate()
+        {
+            self.jump_to_todo(&item);
+        }
+    }
+
+    /// Close the tree and open the item's file at its line.
+    fn jump_to_todo(&mut self, item: &crate::todo_tree::Item) {
+        let path = self.root.join(&item.file);
+        let (line, col) = (item.line, item.col);
+        self.todo_tree = None;
+        self.with_jump(|s| {
+            s.open_path(&path, false);
+            let area = s.editor_view();
+            s.editor.goto(line, Some(col), area);
+            s.focus = super::Focus::Editor;
+        });
     }
 }
