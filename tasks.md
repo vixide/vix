@@ -7057,7 +7057,8 @@ new action.
   edit-outline, choosers, info panels, calculator/converters, and the
   merge-conflict overlay. **Medium.**
 - [ ] **T610 — Typed errors in the library crates.** (vix-git,
-  vix-http-client and vix-ai-core are done as T673; the rest remain.) 45 public fns in 31
+  vix-http-client and vix-ai-core are done as T673, and the vix-db SSH tunnel as
+  T610; the `*-tool` converters and `vix-db`'s `Session` remain.) 45 public fns in 31
   files return `Result<_, String>`. vix-git alone has 10 of them
   (`lib.rs:528-1024`), and the ai-core providers and every
   `convert-*-tool` crate do the same. Callers can't tell "git not

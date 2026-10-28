@@ -32,6 +32,54 @@ impl Drop for Tunnel {
     }
 }
 
+/// Why an SSH tunnel could not be set up.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum TunnelError {
+    /// A connection field could be misread by `ssh` as an option, or holds
+    /// whitespace/control characters (the argument-injection guard).
+    InvalidField(String),
+    /// No local port was free to forward.
+    NoPort,
+    /// `ssh` could not be found: it isn't installed, or isn't on `PATH`.
+    NotInstalled,
+    /// `ssh` could not be started for another reason.
+    Spawn(std::io::Error),
+    /// The forward did not come up within the ten-second ready timeout.
+    Timeout,
+}
+
+impl std::fmt::Display for TunnelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidField(why) => f.write_str(why),
+            Self::NoPort => f.write_str(&t!("msg.db_tunnel_no_port")),
+            Self::NotInstalled => f.write_str(&t!("msg.db_tunnel_ssh_missing")),
+            Self::Spawn(e) => f.write_str(&t!("msg.db_tunnel_spawn", error = e.to_string())),
+            Self::Timeout => f.write_str(&t!("msg.db_tunnel_timeout")),
+        }
+    }
+}
+
+impl std::error::Error for TunnelError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Spawn(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for TunnelError {
+    fn from(e: std::io::Error) -> Self {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Self::NotInstalled
+        } else {
+            Self::Spawn(e)
+        }
+    }
+}
+
 /// The `-L` forward spec `local:db_host:db_port`.
 #[must_use]
 pub fn forward_spec(local_port: u16, db_host: &str, db_port: &str) -> String {
@@ -44,15 +92,17 @@ pub fn forward_spec(local_port: u16, db_host: &str, db_port: &str) -> String {
 /// execution — and whitespace/control characters can split or corrupt the
 /// argument. Connections are `Serialize`/`Deserialize` and can arrive from a
 /// shared/imported config, so these fields are not fully trusted.
-fn reject_option_like(label: &str, value: &str) -> Result<(), String> {
+fn reject_option_like(label: &str, value: &str) -> Result<(), TunnelError> {
     let v = value.trim();
     if v.starts_with('-') {
-        return Err(format!("{label} must not start with '-': {value:?}"));
+        return Err(TunnelError::InvalidField(format!(
+            "{label} must not start with '-': {value:?}"
+        )));
     }
     if v.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err(format!(
+        return Err(TunnelError::InvalidField(format!(
             "{label} must not contain whitespace or control characters"
-        ));
+        )));
     }
     Ok(())
 }
@@ -63,10 +113,10 @@ fn reject_option_like(label: &str, value: &str) -> Result<(), String> {
 /// set; `-p` / `-i` are added when configured.
 ///
 /// # Errors
-/// Returns a message when any connection field could be misinterpreted by `ssh`
+/// Returns [`TunnelError::InvalidField`] when any connection field could be misinterpreted by `ssh`
 /// as an option (a leading `-`) or contains whitespace/control characters — the
 /// guard against SSH argument injection (`-oProxyCommand=…` → RCE).
-pub fn ssh_args(conn: &Connection, local_port: u16) -> Result<Vec<String>, String> {
+pub fn ssh_args(conn: &Connection, local_port: u16) -> Result<Vec<String>, TunnelError> {
     let db_port = if conn.port.is_empty() {
         conn.kind.default_port()
     } else {
@@ -124,13 +174,14 @@ pub fn wanted(conn: &Connection) -> bool {
 ///
 /// # Errors
 ///
-/// Returns a display-ready message if no local port is free, `ssh` cannot be
-/// spawned, or the forward does not come up within `READY_TIMEOUT` (10s).
-pub fn open(conn: &Connection) -> Result<Option<Tunnel>, String> {
+/// Returns a [`TunnelError`] if no local port is free, `ssh` is missing or
+/// cannot be spawned, or the forward does not come up within `READY_TIMEOUT`
+/// (10s).
+pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
     if !wanted(conn) {
         return Ok(None);
     }
-    let local_port = free_port().ok_or_else(|| t!("msg.db_tunnel_no_port").to_string())?;
+    let local_port = free_port().ok_or(TunnelError::NoPort)?;
     let args = ssh_args(conn, local_port)?;
     let child = std::process::Command::new("ssh")
         .args(args)
@@ -138,14 +189,14 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| t!("msg.db_tunnel_spawn", error = e.to_string()).to_string())?;
+        .map_err(TunnelError::from)?;
     let mut tunnel = Tunnel { child, local_port };
     if wait_ready(local_port, &mut tunnel.child) {
         Ok(Some(tunnel))
     } else {
         // Drop kills the child; surface the failure.
         let _ = tunnel.child.kill();
-        Err(t!("msg.db_tunnel_timeout").to_string())
+        Err(TunnelError::Timeout)
     }
 }
 
@@ -248,6 +299,27 @@ mod tests {
             "bastion.example.com",
             "no user@ prefix when unset"
         );
+    }
+
+    #[test]
+    fn missing_ssh_binary_is_a_distinct_error() {
+        let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+        assert!(matches!(
+            TunnelError::from(missing),
+            TunnelError::NotInstalled
+        ));
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert!(matches!(TunnelError::from(denied), TunnelError::Spawn(_)));
+    }
+
+    #[test]
+    fn option_injection_is_an_invalid_field() {
+        let mut c = pg("joel", "", "");
+        c.ssh_host = "-oProxyCommand=evil".into();
+        assert!(matches!(
+            ssh_args(&c, 5000),
+            Err(TunnelError::InvalidField(_))
+        ));
     }
 
     #[test]

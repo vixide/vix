@@ -407,7 +407,7 @@ fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> Connect
     // local end. The tunnel is held for the connection's lifetime.
     let tunnel = match tunnel::open(conn) {
         Ok(tunnel) => tunnel,
-        Err(e) => return ConnectOutcome::Failed(e),
+        Err(e) => return ConnectOutcome::Failed(e.to_string()),
     };
     let url = match &tunnel {
         Some(t) => connect::url_via_local(conn, &password, t.local_port),
