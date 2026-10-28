@@ -8,7 +8,11 @@ repository.workspace = true
 description = "A minimal HTTP client driven by a `.http`-style buffer."
 
 [dependencies]
+base64 = { workspace = true }
+getrandom = { workspace = true }
+serde_json = { workspace = true }
 ureq = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

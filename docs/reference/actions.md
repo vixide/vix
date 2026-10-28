@@ -584,6 +584,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.format.toml` | TOML | Menu |
 | `tools.format.yaml` | YAML | Menu |
 | `tools.html_chars` | HTML Characters… | Menu |
+| `tools.http_copy_curl` | Copy HTTP Request as curl | Menu |
 | `tools.http_send` | Send HTTP Request | Menu |
 | `tools.insert.uuid.v1` | 1 = Unsortable Time Count MAC | Menu |
 | `tools.insert.uuid.v2` | 2 = DCE Security | Menu |
@@ -681,4 +682,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**674 actions.**
+**675 actions.**

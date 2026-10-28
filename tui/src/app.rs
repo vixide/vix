@@ -1894,7 +1894,13 @@ pub struct App {
     pub(crate) media_type_panel: Option<crate::media_type::Panel>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
     #[cfg(feature = "http")]
-    http_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+    http_rx: Option<std::sync::mpsc::Receiver<Result<crate::http_client::Response, String>>>,
+    /// The `# @name` of the in-flight HTTP request, if it has one.
+    #[cfg(feature = "http")]
+    http_pending_name: Option<String>,
+    /// Responses of `# @name`d requests already sent, for `{{name.response…}}`.
+    #[cfg(feature = "http")]
+    http_named: std::collections::HashMap<String, crate::http_client::Response>,
     /// HTML character palette overlay, when open.
     pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -2448,6 +2454,10 @@ impl App {
             media_type_panel: None,
             #[cfg(feature = "http")]
             http_rx: None,
+            #[cfg(feature = "http")]
+            http_pending_name: None,
+            #[cfg(feature = "http")]
+            http_named: std::collections::HashMap::new(),
             html_panel: None,
             system_info: None,
             dashboard: None,

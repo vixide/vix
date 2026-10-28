@@ -5407,8 +5407,12 @@ dependencies = [
 name = "vix-http-client"
 version = "2.0.0"
 dependencies = [
+ "base64 0.23.1",
+ "getrandom 0.2.17",
  "proptest",
+ "serde_json",
  "ureq",
+ "uuid",
 ]
 
 [[package]]
