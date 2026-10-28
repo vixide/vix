@@ -11874,6 +11874,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-fhir"
+version = "2.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vix-http-client",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-file-browser-panel"
 version = "2.0.0"
 dependencies = [
@@ -11925,6 +11935,13 @@ version = "2.0.0"
 dependencies = [
  "similar",
  "vix-civil-date",
+ "vix-list-state",
+]
+
+[[package]]
+name = "vix-git-graph"
+version = "2.0.0"
+dependencies = [
  "vix-list-state",
 ]
 
@@ -11983,7 +12000,11 @@ dependencies = [
 name = "vix-http-client"
 version = "2.0.0"
 dependencies = [
+ "base64 0.23.1",
+ "getrandom 0.2.17",
+ "serde_json",
  "ureq",
+ "uuid",
 ]
 
 [[package]]
@@ -12369,6 +12390,14 @@ name = "vix-time-zone-model"
 version = "2.0.0"
 
 [[package]]
+name = "vix-todo-tree"
+version = "2.0.0"
+dependencies = [
+ "vix-list-state",
+ "vix-textops",
+]
+
+[[package]]
 name = "vix-tui"
 version = "2.0.0"
 dependencies = [
@@ -12441,12 +12470,14 @@ dependencies = [
  "vix-editorconfig",
  "vix-emmet",
  "vix-encoding",
+ "vix-fhir",
  "vix-file-browser-panel",
  "vix-file-information-panel",
  "vix-fileops",
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
+ "vix-git-graph",
  "vix-hl7",
  "vix-html-character-picker",
  "vix-http-client",
@@ -12500,6 +12531,7 @@ dependencies = [
  "vix-theme-editor-panel",
  "vix-theme-model",
  "vix-time-zone-model",
+ "vix-todo-tree",
  "vix-tutor",
  "vix-undo-store",
  "vix-unit-converter-tool",
