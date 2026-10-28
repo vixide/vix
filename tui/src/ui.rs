@@ -14,6 +14,7 @@ mod docks;
 mod edit_surfaces;
 mod editor_region;
 mod explorer;
+mod fhir;
 mod file_browser;
 mod help;
 mod hints;
@@ -53,6 +54,7 @@ use edit_surfaces::{
 };
 use editor_region::draw_editor_region;
 use explorer::draw_explorer;
+use fhir::draw_fhir_bundle;
 use file_browser::draw_file_browser;
 use help::{draw_help, draw_keybinding_editor};
 use hints::{draw_jump_labels, draw_which_key};
@@ -494,6 +496,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.media_type_panel.is_some() {
         draw_media_type_panel(app, frame, area);
     }
+    draw_fhir_bundle(app, frame, area);
     if app.encoding_chooser.is_some() {
         draw_encoding_chooser(app, frame, area);
     }

@@ -99,12 +99,13 @@ impl App {
     /// Whether an HTTP request is in flight (keeps the event loop polling fast).
     #[must_use]
     pub fn http_running(&self) -> bool {
-        self.http_rx.is_some()
+        self.http_rx.is_some() || self.fhir_rx.is_some()
     }
 
     /// Drain a finished HTTP response into a new tab. Called each event-loop
     /// iteration; cheap when none is running.
     pub fn poll_http(&mut self) {
+        self.poll_fhir();
         let result = {
             let Some(rx) = self.http_rx.as_ref() else {
                 return;

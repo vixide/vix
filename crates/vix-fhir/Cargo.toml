@@ -1,0 +1,30 @@
+[package]
+name = "vix-fhir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HL7 FHIR client logic: server profiles, request building, and Bundle and OperationOutcome parsing."
+
+[features]
+# The blocking network layer (token fetch + request execution), built on
+# `vix-http-client`. Off by default so the pure logic compiles without a
+# network stack; the `vix-tui` `http` feature turns it on.
+net = ["dep:vix-http-client"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+vix-http-client = { workspace = true, optional = true }
+vix-list-state = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[[test]]
+name = "loopback"
+required-features = ["net"]
+
+[lints]
+workspace = true

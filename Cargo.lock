@@ -5334,6 +5334,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-fhir"
+version = "2.0.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "vix-http-client",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-file-browser-panel"
 version = "2.0.0"
 dependencies = [
@@ -5857,6 +5868,7 @@ dependencies = [
  "vix-editorconfig",
  "vix-emmet",
  "vix-encoding",
+ "vix-fhir",
  "vix-file-browser-panel",
  "vix-file-information-panel",
  "vix-fileops",

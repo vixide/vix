@@ -181,6 +181,7 @@ vix-encoding = { path = "crates/vix-encoding", version = "2.0.0" }
 vix-file-browser-panel = { path = "crates/vix-file-browser-panel", version = "2.0.0" }
 vix-file-information-panel = { path = "crates/vix-file-information-panel", version = "2.0.0" }
 vix-fileops = { path = "crates/vix-fileops", version = "2.0.0" }
+vix-fhir = { path = "crates/vix-fhir", version = "2.0.0" }
 vix-find-panel = { path = "crates/vix-find-panel", version = "2.0.0" }
 vix-format-tool = { path = "crates/vix-format-tool", version = "2.0.0" }
 vix-git = { path = "crates/vix-git", version = "2.0.0" }

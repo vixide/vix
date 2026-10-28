@@ -71,7 +71,7 @@ sql = ["dep:vix-db", "dep:vix-edit-sql"]
 image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
-http = ["dep:vix-http-client"]
+http = ["dep:vix-http-client", "vix-fhir/net"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
 git = ["tasks", "vix-git/process", "vix-doctor/probe-git"]
 jj = ["tasks"]
@@ -260,6 +260,9 @@ vix-fileops = { workspace = true }
 vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
 vix-format-tool = { workspace = true }
+# HL7 FHIR client logic (profiles, request building, Bundle/OperationOutcome);
+# its blocking network layer is enabled by the `http` feature.
+vix-fhir = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
 vix-git = { path = "../crates/vix-git", version = "2.0.0", default-features = false }
 # HTML Characters panel (Tools menu): named-character table + picker state.

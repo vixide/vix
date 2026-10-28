@@ -75,6 +75,7 @@
 - [Edit Table](edit-table/index.md)
 - [Edit YAML](edit-yaml/index.md)
 - [Emmet](emmet/index.md)
+- [FHIR Client](fhir-client/index.md)
 - [File Explorer](file-explorer/index.md)
 - [Git Panel](git-panel/index.md)
 - [HTML Character Picker](html-character-picker/index.md)

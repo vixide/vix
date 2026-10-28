@@ -1339,6 +1339,16 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.todo_finder", "tools.todo_finder", ""),
     Item::leaf("menu.item.tools.http_send", "tools.http_send", ""),
     Item::leaf("menu.item.tools.http_copy_curl", "tools.http_copy_curl", ""),
+    Item::leaf(
+        "menu.item.tools.http_fhir_request",
+        "tools.http_fhir_request",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.http_fhir_bundle",
+        "tools.http_fhir_bundle",
+        "",
+    ),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
     Item::leaf("menu.item.tools.media_types", "tools.media_types", ""),

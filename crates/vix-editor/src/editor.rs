@@ -557,7 +557,14 @@ impl Editor {
     /// Open a new untitled tab pre-filled with `content` (e.g. AI output), marked
     /// dirty so the user is reminded to save it. Becomes the active tab.
     pub fn new_tab_with_content(&mut self, content: &str) {
-        let editor = make_editor(None, content, self.flags, &self.indent);
+        self.new_tab_with_content_as(content, None);
+    }
+
+    /// Like [`Editor::new_tab_with_content`], but highlighted as the language of
+    /// `name_hint` (a file name such as `response.json`) while the tab stays
+    /// untitled -- it has no path, so it is never written or restored.
+    pub fn new_tab_with_content_as(&mut self, content: &str, name_hint: Option<&str>) {
+        let editor = make_editor(name_hint.map(Path::new), content, self.flags, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: None,

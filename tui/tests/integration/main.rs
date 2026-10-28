@@ -19,6 +19,8 @@ mod coverage;
 #[cfg(feature = "sql")]
 mod db;
 mod editing;
+#[cfg(feature = "http")]
+mod fhir;
 mod find;
 #[cfg(feature = "git")]
 mod git;
