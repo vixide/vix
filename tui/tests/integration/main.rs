@@ -22,6 +22,7 @@ mod editing;
 mod find;
 #[cfg(feature = "git")]
 mod git;
+mod hl7;
 mod keybindings;
 mod keymaps;
 mod lsp;

@@ -619,3 +619,13 @@ nerdctl
 skopeo
 sshfs
 subcomponent
+
+# HL7 v2 / MLLP (crates/vix-hl7, docs/hl7)
+ER7
+MLLP
+PHI
+subcomponent
+subcomponents
+Deframer
+deframer
+unescape

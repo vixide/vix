@@ -7952,6 +7952,28 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Done 2026-10-26** (`feat/t673-typed-errors`): `GitError`, `HttpError`,
     `AiError`, all `#[non_exhaustive]`, hand-written `Display` keeping the
     old text (no `thiserror` dependency for three enums).
+- [x] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send
+  pipe-and-hat messages: a lenient never-panicking parser using the
+  delimiters `MSH` declares, a segment-per-line view with field numbering
+  (`PID-5.1`), an ACK/NAK reader, and MLLP send/receive over TCP on a
+  background thread. Pure core in `vix-hl7`; sending is an outward network
+  action, gated like the other network features and given an explicit
+  `host:port`; no PHI in logs or caches. **M.**
+  - **Done 2026-10-28** (`feat/t685-hl7`): new `vix-hl7` crate (parser,
+    escapes, `Path`, rows/`pretty`, `Ack`, `Panel`, pure `mllp`, and a
+    `net` feature with the timeout-bounded sender and typed `SendError`);
+    **Tools → HL7 View** (filterable overlay, Enter jumps to the field) and
+    **Tools → HL7 Send…** (prompt for `host:port`, background thread polled
+    like `poll_http`, ACK in a read-only tab). `tools.hl7_send` rides the
+    `http` capability (its `net` feature is only on with `http`); the view
+    and parser are in every build. Tests: unit, proptest, a loopback MLLP
+    server on 127.0.0.1, and `App`-level integration tests. Docs:
+    `docs/hl7/index.md`, `crates/vix-hl7/spec/index.md`.
+  - **Not done.** TLS-wrapped MLLP, a listener mode (receiving messages),
+    `FHS/BHS` batch files, per-version field-name dictionaries (the view
+    shows numbers, not names), and editing from the view. The overlay does
+    not reuse `impl_list_panel!` (private to `picker_panels.rs`); it calls
+    `vix-list-state` through `vix_hl7::Panel` directly.
 - [x] **T674 — Shrink `App`'s public surface.** Of 114 public fields, the
   GUIs, examples and benches use about 12; 68 are public only for the
   integration tests and 35 for nothing outside the crate. Compile the

@@ -89,6 +89,7 @@ impl App {
             theme_editor,
             media_type_panel,
             todo_tree,
+            hl7_panel,
             html_panel,
             system_info,
             file_info,
@@ -314,6 +315,7 @@ impl App {
         panel!(theme_editor, theme_editor_key);
         panel!(media_type_panel, media_type_key);
         panel!(todo_tree, todo_tree_key);
+        panel!(hl7_panel, hl7_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);
         panel!(file_info, file_info_key);

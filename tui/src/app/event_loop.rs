@@ -91,6 +91,8 @@ impl App {
         self.poll_auto_save();
         // Drain a finished HTTP response into a new tab.
         self.poll_http();
+        // Drain a finished HL7 send's reply into a read-only tab.
+        self.poll_hl7();
         // Drain a finished asynchronous DB query into the workbench.
         self.poll_db_query();
         // Drain a finished asynchronous DB connect/reconnect (Run H, T531).
@@ -112,6 +114,7 @@ impl App {
             || self.dap_busy()
             || self.parse_busy()
             || self.http_running()
+            || self.hl7_running()
             || self.db_query_running()
             || self.db_connect_running()
             || self.db_reconnect_running()

@@ -11966,6 +11966,13 @@ name = "vix-hex-rgb"
 version = "2.0.0"
 
 [[package]]
+name = "vix-hl7"
+version = "2.0.0"
+dependencies = [
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-html-character-picker"
 version = "2.0.0"
 dependencies = [
@@ -12440,6 +12447,7 @@ dependencies = [
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
+ "vix-hl7",
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",

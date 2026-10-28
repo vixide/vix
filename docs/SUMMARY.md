@@ -79,6 +79,7 @@
 - [File Explorer](file-explorer/index.md)
 - [Git Panel](git-panel/index.md)
 - [HTML Character Picker](html-character-picker/index.md)
+- [HL7 View & Send](hl7/index.md)
 - [HTTP Client](http-client/index.md)
 - [Hunspell](hunspell/index.md)
 - [Insert](insert/index.md)

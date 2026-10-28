@@ -17,6 +17,7 @@ mod explorer;
 mod file_browser;
 mod help;
 mod hints;
+mod hl7;
 mod info_panels;
 mod lsp_popups;
 mod menu_bar;
@@ -498,6 +499,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.encoding_chooser.is_some() {
         draw_encoding_chooser(app, frame, area);
     }
+    hl7::draw_hl7_panel(app, frame, area);
     if app.macro_chooser.is_some() {
         draw_macro_chooser(app, frame, area);
     }
