@@ -21,7 +21,7 @@ use crate::settings::Settings;
 /// taken on select. A local trait over each panel's own (foreign, per-crate)
 /// type; each impl below just forwards to the panel's identically-named
 /// inherent methods.
-trait ListPanel {
+pub(super) trait ListPanel {
     fn up(&mut self);
     fn down(&mut self);
     fn page_up(&mut self, page: usize);
@@ -56,11 +56,16 @@ impl_list_panel!(X11Panel);
 impl_list_panel!(crate::media_type::Panel);
 impl_list_panel!(crate::todo_tree::Panel);
 impl_list_panel!(vix_theme_editor_panel::Panel);
+impl_list_panel!(crate::fhir::BundlePanel);
 
 /// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
 /// returning whether one handled `code`. Each caller still handles its own
 /// remaining keys (Home/End, Enter, Esc, ...) since those differ per panel.
-fn list_panel_nav_key<P: ListPanel>(panel: &mut Option<P>, code: KeyCode, page: usize) -> bool {
+pub(super) fn list_panel_nav_key<P: ListPanel>(
+    panel: &mut Option<P>,
+    code: KeyCode,
+    page: usize,
+) -> bool {
     let Some(p) = panel.as_mut() else {
         return false;
     };
@@ -81,7 +86,7 @@ fn list_panel_nav_key<P: ListPanel>(panel: &mut Option<P>, code: KeyCode, page: 
 /// `select_index` reports the click landed on a real row -- that differs
 /// per panel (insert-and-keep-open vs. the theme editor's pick-and-open-
 /// x11-panel).
-fn list_panel_click_index<P: ListPanel>(
+pub(super) fn list_panel_click_index<P: ListPanel>(
     panel: Option<&P>,
     rect: Rect,
     mouse: MouseEvent,

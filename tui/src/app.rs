@@ -13,6 +13,11 @@ mod db;
 mod db_off;
 mod diff_tool;
 mod event_loop;
+mod fhir;
+#[cfg(feature = "http")]
+mod fhir_http;
+#[cfg(not(feature = "http"))]
+mod fhir_http_off;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(feature = "git")]
@@ -201,6 +206,9 @@ pub enum PromptKind {
     /// Enter the replacement template for a structural search pattern
     /// already compiled and waiting in `App::pending_structural` (T201).
     StructuralReplacement,
+    /// Enter a FHIR interaction line: `read Patient/1`, `search Patient
+    /// name=smith`, … (T684).
+    FhirRequest,
     /// Confirm/edit a resolved `project.*` lifecycle command before running
     /// it (`App::pending_project_command` carries which slot and, for the
     /// subproject family, which directory).
@@ -1451,6 +1459,8 @@ pub struct Layout {
     pub todo_tree: Rect,
     /// Row-list rectangle of the HL7 message view, for click-to-select.
     pub hl7_panel: Rect,
+    /// Row-list rectangle of the FHIR Bundle viewer, for click-to-select.
+    pub fhir_bundle: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -1920,6 +1930,14 @@ pub struct App {
     /// prompt can be pre-filled; never written to disk.
     #[cfg(feature = "http")]
     hl7_endpoint: String,
+    /// FHIR Bundle viewer overlay (T684), when open.
+    pub fhir_bundle: Option<crate::fhir::BundlePanel>,
+    /// The last FHIR response body, held in memory only (never written to
+    /// disk) so the Bundle viewer can open on it.
+    fhir_last: Option<String>,
+    /// Receiver of an in-flight FHIR exchange (background thread).
+    #[cfg(feature = "http")]
+    fhir_rx: Option<std::sync::mpsc::Receiver<Result<fhir_http::Reply, crate::fhir::FhirError>>>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
     #[cfg(feature = "http")]
     http_rx: Option<std::sync::mpsc::Receiver<Result<crate::http_client::Response, String>>>,
@@ -2487,6 +2505,10 @@ impl App {
             hl7_rx: None,
             #[cfg(feature = "http")]
             hl7_endpoint: String::new(),
+            fhir_bundle: None,
+            fhir_last: None,
+            #[cfg(feature = "http")]
+            fhir_rx: None,
             #[cfg(feature = "http")]
             http_rx: None,
             #[cfg(feature = "http")]
@@ -3416,6 +3438,7 @@ impl App {
             "tools.todo_tree" => self.open_todo_tree(),
             a if self.run_http_action(a) => {}
             a if self.run_hl7_action(a) => {}
+            a if self.run_fhir_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -8485,6 +8508,7 @@ impl App {
         panel!(media_type_panel, media_type_mouse);
         panel!(todo_tree, todo_tree_mouse);
         panel!(hl7_panel, hl7_mouse);
+        panel!(fhir_bundle, fhir_bundle_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -12946,6 +12970,7 @@ impl App {
             PromptKind::ImportSettings => self.import_settings(prompt.input.trim()),
             PromptKind::StructuralPattern => self.accept_structural_pattern(&prompt.input),
             PromptKind::StructuralReplacement => self.accept_structural_replacement(&prompt.input),
+            PromptKind::FhirRequest => self.fhir_send(&prompt.input),
             PromptKind::ProjectCommand => self.accept_project_command_prompt(&prompt.input),
             PromptKind::OrgSchedule
             | PromptKind::OrgDeadline

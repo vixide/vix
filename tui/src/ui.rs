@@ -14,6 +14,7 @@ mod docks;
 mod edit_surfaces;
 mod editor_region;
 mod explorer;
+mod fhir;
 mod file_browser;
 mod git_graph;
 mod help;
@@ -55,6 +56,7 @@ use edit_surfaces::{
 };
 use editor_region::draw_editor_region;
 use explorer::draw_explorer;
+use fhir::draw_fhir_bundle;
 use file_browser::draw_file_browser;
 use help::{draw_help, draw_keybinding_editor};
 use hints::{draw_jump_labels, draw_which_key};
@@ -482,6 +484,7 @@ fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
 fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     git_graph::draw_git_graph(app, frame, area);
     draw_todo_tree(app, frame, area);
+    draw_fhir_bundle(app, frame, area);
     hl7::draw_hl7_panel(app, frame, area);
 }
 

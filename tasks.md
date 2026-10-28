@@ -8092,7 +8092,7 @@ so, and the first task of each plan re-checks the facts it depends on.
   the existing `vix-format-tool` dispatch, keyed per language in settings.
   Missing binary gives a translated hint. Trust-gated like other project
   tools (T627). Never bundle Node. **Small–Medium.**
-- [ ] **T684 — FHIR client.** A `.fhir`/`.http`-flavored request flow for
+- [x] **T684 — FHIR client.** A `.fhir`/`.http`-flavored request flow for
   HL7 FHIR servers: a *server* profile (base URL, auth: none, bearer,
   SMART-on-FHIR client-credentials token fetch), a `Read/Search/Create/
   Update/Delete/History/Capabilities` request builder, `Accept:
@@ -8100,6 +8100,22 @@ so, and the first task of each plan re-checks the facts it depends on.
   one row per entry), pretty-printed resources in JSON tabs, and an
   OperationOutcome renderer. Builds on T680's variable and request model; no
   PHI is logged or cached to disk by default. **Medium.** After T680.
+  - **Done 2026-10-28** (`feat/t684-fhir`): new `vix-fhir` crate (pure
+    profile/request/Bundle/OperationOutcome logic + an optional `net` feature
+    over `vix-http-client`); **Tools -> FHIR Request** (one-line prompt:
+    `read|search|create|update|delete|history|capabilities Type[/id] [params]`;
+    Create/Update send the active buffer) and **Tools -> FHIR Bundle** (list
+    panel, Enter opens the entry in a JSON tab, `n` follows `next`); profile
+    at `.vix/fhir.json` (`none`, `bearer`, `smart_backend`), secrets only by
+    `FHIR_*` environment-variable name. Hardening beyond the task text: the
+    `FHIR_` prefix (a cloned repo cannot name `AWS_*`), https required for
+    authenticated profiles (loopback excepted), paging links confined to the
+    server's origin, redacted `Secret`, error text never carries a URL/body.
+    **Not done:** `private_key_jwt` client assertions for SMART backend
+    services (client-secret Basic auth only); token caching/refresh (a token
+    is fetched per request); `.fhir` file association and `{{variables}}`
+    from T680 inside the prompt line; multiple profiles/an environment
+    chooser; reading a specific resource version; FHIR XML.
 - [ ] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send pipe-and-hat
   messages: segment/field/component/repetition/subcomponent views with the
   MSH-declared delimiters and escape sequences; a segment-per-line editor
