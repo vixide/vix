@@ -345,3 +345,91 @@ fn every_bundled_theme_renders_without_panicking() {
         assert!(!screen.trim().is_empty(), "{name} rendered a blank screen");
     }
 }
+
+// T609: one snapshot per overlay family, driven by action id.
+
+/// Open `action` over `typed` buffer text in a fresh fixture app and snapshot it.
+fn overlay_screen(tag: &str, typed: &str, action: &str) -> String {
+    let mut app = app_at(tag);
+    if !typed.is_empty() {
+        type_str(&mut app, typed);
+    }
+    app.run_action(action);
+    render_screen(&mut app, 100, 30)
+}
+
+#[test]
+fn calculator_overlay() {
+    insta::assert_snapshot!(overlay_screen("ov-calc", "", "tools.calculator"));
+}
+
+#[test]
+fn color_converter_overlay() {
+    insta::assert_snapshot!(overlay_screen("ov-color", "", "tools.color_converter"));
+}
+
+#[test]
+fn edit_json_surface() {
+    insta::assert_snapshot!(overlay_screen(
+        "ov-json",
+        "{\"name\": \"vix\", \"tags\": [\"tui\", \"editor\"]}",
+        "tools.edit_json",
+    ));
+}
+
+#[test]
+fn edit_yaml_surface() {
+    insta::assert_snapshot!(overlay_screen(
+        "ov-yaml",
+        "name: vix\ntags:\n- tui\n- editor\n",
+        "tools.edit_yaml",
+    ));
+}
+
+#[test]
+fn edit_bytes_surface() {
+    insta::assert_snapshot!(overlay_screen(
+        "ov-bytes",
+        "Hello, Vix!\n",
+        "tools.edit_bytes"
+    ));
+}
+
+#[test]
+fn edit_outline_surface() {
+    insta::assert_snapshot!(overlay_screen(
+        "ov-outline",
+        "# One\nbody\n## Two\nmore\n# Three\n",
+        "tools.edit_outline",
+    ));
+}
+
+#[test]
+fn text_info_panel() {
+    insta::assert_snapshot!(overlay_screen(
+        "ov-text-info",
+        "one two three\nfour five\n",
+        "tools.text_info",
+    ));
+}
+
+#[test]
+fn db_connections_chooser() {
+    insta::assert_snapshot!(overlay_screen("ov-db", "", "db.connections"));
+}
+
+#[test]
+fn theme_editor_overlay() {
+    insta::assert_snapshot!(overlay_screen("ov-theme", "", "view.theme_edit"));
+}
+
+#[test]
+fn merge_conflict_list_overlay() {
+    let mut app = app_at("ov-conflict");
+    type_str(
+        &mut app,
+        "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\nz\n",
+    );
+    app.run_action("git.conflict_list");
+    insta::assert_snapshot!(render_screen(&mut app, 100, 30));
+}

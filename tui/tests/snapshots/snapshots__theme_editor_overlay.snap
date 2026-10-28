@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: "overlay_screen(\"ov-theme\", \"\", \"view.theme_edit\")"
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │╭  Edit Theme ────────────────────────╮ Ctrl B toggles the file explo
+ README.md                  ││ ██ #D7D7D7 Menu Bar Foreground       │
+                             ││ ██ #282828 Menu Bar Background       │
+                             ││ ██ #D7D7D7 Status Bar Foreground     │
+                             ││ ██ #282828 Status Bar Background     │
+                             ││ ██ #D7D7D7 Left Dock Foreground      │
+                             ││ ██ #282828 Left Dock Background      │
+                             ││ ██ #D7D7D7 Right Dock Foreground     │
+                             ││ ██ #282828 Right Dock Background     │
+                             ││ ██ #D7D7D7 Editor Foreground         │
+                             ││ ██ #282828 Editor Background         │
+                             ││ ██ #528BFF Editor Cursor             │
+                             ││ ██ #569CD6 Syntax: Keyword           │
+                             ││ ██ #CE9178 Syntax: String            │
+                             ││ ██ #6A9955 Syntax: Comment           │
+                             ││ ██ #B5CEA8 Syntax: Number            │──────────────────────────────
+  Output ────────────────────│                                      │──────────────────────────────
+(no output yet)               │Enter pick color · Ctrl+S save as · Es│
+                              ╰──────────────────────────────────────╯
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   
