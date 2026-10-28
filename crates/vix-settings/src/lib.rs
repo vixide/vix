@@ -418,6 +418,12 @@ pub struct SaveSettings {
     pub ensure_final_newline: bool,
     /// On save, run the language server's formatter (when the file has one).
     pub format_on_save: bool,
+    /// Languages formatted with the user's own Prettier (T683) by Format
+    /// Document and format-on-save, instead of the language server. Keys are
+    /// Prettier language ids (`javascript`, `typescript`, `json`, `css`,
+    /// `html`, `markdown`, `yaml`, `graphql`, `handlebars`). Empty (opt-in)
+    /// by default.
+    pub prettier_languages: Vec<String>,
 }
 
 impl Default for SaveSettings {
@@ -426,6 +432,7 @@ impl Default for SaveSettings {
             trim_trailing_whitespace: true,
             ensure_final_newline: true,
             format_on_save: false,
+            prettier_languages: Vec::new(),
         }
     }
 }

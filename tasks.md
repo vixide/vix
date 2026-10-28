@@ -7870,6 +7870,18 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `.venv` case reads files only and can always run.
   - **UI.** Add a status-bar indicator and a `project.reload_env`
     action. **M.**
+- [x] **T683 — Format with the user's own Prettier.** Format Document and
+  format-on-save run `prettier --stdin-filepath <path>` for languages listed
+  in `save.prettier_languages` (project-local `node_modules/.bin` first, then
+  `PATH`), trust-gated, never bundling Node. Code in
+  `crates/vix-format-tool/src/prettier.rs` + `run.rs` and
+  `tui/src/app/prettier.rs`; docs `docs/prettier/index.md`. **Done**, except:
+  the run is synchronous (10 s timeout) rather than async like LSP; trust
+  reuses the T132 scripts-trust decision (which is only asked when a
+  workspace has `.vix/scripts/`), so T627 should add a general trust prompt;
+  no new action id, menu entry or per-language setting table beyond the
+  `prettier_languages` list; the `src/capability.rs` runtime filter does not
+  know about it (the compile-time `tasks` feature gates it).
 
 ---
 

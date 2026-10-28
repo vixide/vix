@@ -68,6 +68,7 @@
 - [Debugger](debugger/index.md)
 - [Dictionaries & Spell Checking](dictionaries/index.md)
 - [Compare With File](diff-view/index.md)
+- [Format with Prettier](prettier/index.md)
 - [Edit Bytes](edit-bytes/index.md)
 - [Edit JSON](edit-json/index.md)
 - [Edit Outline](edit-outline/index.md)

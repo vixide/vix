@@ -6,6 +6,10 @@
 //! without changing its meaning. Used by the Tools → Format menu via
 //! `App::transform_selection_or_buffer_try`.
 
+pub mod prettier;
+#[cfg(feature = "process")]
+mod run;
+
 /// Pretty-print JSON with two-space indentation.
 ///
 /// # Errors

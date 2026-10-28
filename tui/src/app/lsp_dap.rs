@@ -709,6 +709,11 @@ impl App {
         let Some(path) = self.active_path() else {
             return;
         };
+        // T683: a language listed in `save.prettier_languages` formats with
+        // the user's Prettier instead of the language server.
+        if self.prettier_format_active() != super::prettier::PrettierOutcome::NotApplicable {
+            return;
+        }
         if !self.lsp.handles(&path) {
             self.status = t!("status.lsp_inactive").to_string();
             return;

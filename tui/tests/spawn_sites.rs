@@ -29,6 +29,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `dap`",
     ),
     (
+        "crates/vix-format-tool/src/run.rs",
+        "the user's own Prettier (format document / on save)",
+        "`process` feature, enabled only by root `tasks`",
+    ),
+    (
         "crates/vix-doctor/src/lib.rs",
         "git and language-server probes",
         "`probe-git` / `probe-lsp`, enabled by `git` / `lsp`",

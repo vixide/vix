@@ -32,6 +32,7 @@ mod org;
 mod org_table;
 mod picker_panels;
 mod pipe;
+mod prettier;
 mod roam;
 #[cfg(feature = "script")]
 mod scripts;
@@ -3824,6 +3825,9 @@ impl App {
         // Format on save: re-format via the language server, then re-save once the
         // edits land (see `apply_lsp_edits`). The plain save above already wrote
         // the file, so it is never lost if formatting is slow or unsupported.
+        if self.settings.save.format_on_save && self.prettier_format_on_save() {
+            return;
+        }
         if self.settings.save.format_on_save
             && let Some(p) = self.active_path()
             && self.lsp.handles(&p)
