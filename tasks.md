@@ -7883,18 +7883,6 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `.venv` case reads files only and can always run.
   - **UI.** Add a status-bar indicator and a `project.reload_env`
     action. **M.**
-- [x] **T683 — Format with the user's own Prettier.** Format Document and
-  format-on-save run `prettier --stdin-filepath <path>` for languages listed
-  in `save.prettier_languages` (project-local `node_modules/.bin` first, then
-  `PATH`), trust-gated, never bundling Node. Code in
-  `crates/vix-format-tool/src/prettier.rs` + `run.rs` and
-  `tui/src/app/prettier.rs`; docs `docs/prettier/index.md`. **Done**, except:
-  the run is synchronous (10 s timeout) rather than async like LSP; trust
-  reuses the T132 scripts-trust decision (which is only asked when a
-  workspace has `.vix/scripts/`), so T627 should add a general trust prompt;
-  no new action id, menu entry or per-language setting table beyond the
-  `prettier_languages` list; the `src/capability.rs` runtime filter does not
-  know about it (the compile-time `tasks` feature gates it).
 
 ---
 
@@ -7952,28 +7940,6 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Done 2026-10-26** (`feat/t673-typed-errors`): `GitError`, `HttpError`,
     `AiError`, all `#[non_exhaustive]`, hand-written `Display` keeping the
     old text (no `thiserror` dependency for three enums).
-- [x] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send
-  pipe-and-hat messages: a lenient never-panicking parser using the
-  delimiters `MSH` declares, a segment-per-line view with field numbering
-  (`PID-5.1`), an ACK/NAK reader, and MLLP send/receive over TCP on a
-  background thread. Pure core in `vix-hl7`; sending is an outward network
-  action, gated like the other network features and given an explicit
-  `host:port`; no PHI in logs or caches. **M.**
-  - **Done 2026-10-28** (`feat/t685-hl7`): new `vix-hl7` crate (parser,
-    escapes, `Path`, rows/`pretty`, `Ack`, `Panel`, pure `mllp`, and a
-    `net` feature with the timeout-bounded sender and typed `SendError`);
-    **Tools → HL7 View** (filterable overlay, Enter jumps to the field) and
-    **Tools → HL7 Send…** (prompt for `host:port`, background thread polled
-    like `poll_http`, ACK in a read-only tab). `tools.hl7_send` rides the
-    `http` capability (its `net` feature is only on with `http`); the view
-    and parser are in every build. Tests: unit, proptest, a loopback MLLP
-    server on 127.0.0.1, and `App`-level integration tests. Docs:
-    `docs/hl7/index.md`, `crates/vix-hl7/spec/index.md`.
-  - **Not done.** TLS-wrapped MLLP, a listener mode (receiving messages),
-    `FHS/BHS` batch files, per-version field-name dictionaries (the view
-    shows numbers, not names), and editing from the view. The overlay does
-    not reuse `impl_list_panel!` (private to `picker_panels.rs`); it calls
-    `vix-list-state` through `vix_hl7::Panel` directly.
 - [x] **T674 — Shrink `App`'s public surface.** Of 114 public fields, the
   GUIs, examples and benches use about 12; 68 are public only for the
   integration tests and 35 for nothing outside the crate. Compile the
@@ -7985,19 +7951,6 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `pub(crate)`, 19 stay public. All 682 library tests (unit plus the
     whole integration suite) pass inside the crate unchanged apart from
     `crate::common` → `crate::integration::common`.
-- [x] **T681 — Git graph.** `git.log_graph` only streams `git log --graph`
-  text into the dock. Add an interactive graph panel: lanes drawn from
-  parent links (a pure, property-tested lane-assignment algorithm in a new
-  `vix-git-graph` crate), ref decorations, a branch/tag filter, search, and
-  per-commit actions (open diff, checkout, create branch, cherry-pick, copy
-  hash) reusing T207's browse-log and diff-tab machinery. Loads lazily in
-  pages of 200. **M.**
-  - **Done 2026-10-28** (`feat/t681-git-graph`): **Git → Log → Graph…**
-    (`git.graph`); see `crates/vix-git-graph/spec/index.md` and
-    `docs/git-graph/index.md`. Checkout and cherry-pick ask `y/n`; a failed
-    cherry-pick is aborted so nothing is left half-applied. Not done: lane
-    colors (one dim color), horizontal scroll for very wide graphs, and
-    remote operations (push/fetch) from a commit.
 - [ ] **T670: the musl release build is dynamically linked and crashes.**
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)
@@ -8066,13 +8019,19 @@ so, and the first task of each plan re-checks the facts it depends on.
     bodies are confined to the `.http` file's folder on purpose: a crafted
     file must not be able to send an arbitrary local file to its own URL.
     The new action is `tools.http_copy_curl`.
-- [ ] **T681 — Git Graph.** Today `git.log_graph` only streams `git log
+- [x] **T681 — Git Graph.** Today `git.log_graph` only streams `git log
   --graph` text into the dock. Add an interactive graph panel: commit list
   with lanes drawn from parent links (a pure lane-assignment algorithm in a
   new `vix-git-graph` crate, property-tested), ref decorations, branch/tag
   filter, search, and per-commit actions (open diff, checkout, create branch,
   cherry-pick, copy hash) reusing T207's browse-log and diff-tab machinery.
   Load lazily in pages of ~200. **Medium.**
+  - **Done 2026-10-28** (`feat/t681-git-graph`): **Git → Log → Graph…**
+    (`git.graph`); see `crates/vix-git-graph/spec/index.md` and
+    `docs/git-graph/index.md`. Checkout and cherry-pick ask `y/n`; a failed
+    cherry-pick is aborted so nothing is left half-applied. Not done: lane
+    colors (one dim color), horizontal scroll for very wide graphs, and
+    remote operations (push/fetch) from a commit.
 - [x] **T682 — Todo Tree.** The TODO Finder is a flat picker. Add a dockable
   tree grouped by tag then file (TODO, FIXME, HACK, XXX, NOTE, plus
   configurable tags and regex), counts per group, jump-to-line, refresh on
@@ -8085,13 +8044,20 @@ so, and the first task of each plan re-checks the facts it depends on.
     the same scan (`App::collect_todos`). Not done: custom tags/regex from
     settings, a workspace-vs-open-files toggle, refresh on save, and a docked
     placement; the tree is an overlay like the other pickers.
-- [ ] **T683 — Prettier.** Format with the user's own Prettier: run
+- [x] **T683 — Prettier.** Format with the user's own Prettier: run
   `prettier --stdin-filepath <path>` (project-local `node_modules/.bin` first,
   then `PATH`) for the languages Prettier supports, honoring `.prettierrc*`
   and `.prettierignore`. Hook into Format Document and format-on-save through
   the existing `vix-format-tool` dispatch, keyed per language in settings.
   Missing binary gives a translated hint. Trust-gated like other project
   tools (T627). Never bundle Node. **Small–Medium.**
+  - **Done** (`feat/t683-prettier`): code in `tui/src/app/prettier.rs`, docs `docs/prettier/index.md`, except:
+    the run is synchronous (10 s timeout) rather than async like LSP; trust
+    reuses the T132 scripts-trust decision (which is only asked when a
+    workspace has `.vix/scripts/`), so T627 should add a general trust prompt;
+    no new action id, menu entry or per-language setting table beyond the
+    `prettier_languages` list; the `src/capability.rs` runtime filter does not
+    know about it (the compile-time `tasks` feature gates it).
 - [x] **T684 — FHIR client.** A `.fhir`/`.http`-flavored request flow for
   HL7 FHIR servers: a *server* profile (base URL, auth: none, bearer,
   SMART-on-FHIR client-credentials token fetch), a `Read/Search/Create/
@@ -8116,13 +8082,28 @@ so, and the first task of each plan re-checks the facts it depends on.
     is fetched per request); `.fhir` file association and `{{variables}}`
     from T680 inside the prompt line; multiple profiles/an environment
     chooser; reading a specific resource version; FHIR XML.
-- [ ] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send pipe-and-hat
+- [x] **T685 — HL7 v2 (ER7) client.** Parse, pretty-print and send pipe-and-hat
   messages: segment/field/component/repetition/subcomponent views with the
   MSH-declared delimiters and escape sequences; a segment-per-line editor
   mode with field numbering (`PID-5.1`); an ACK/NAK viewer; MLLP send/receive
   over TCP (`0x0B` … `0x1C 0x0D`) in a background thread; a lenient parser
   that never panics (proptest). Pure core in a `vix-hl7` crate. No PHI in logs.
   **Medium.**
+  - **Done 2026-10-28** (`feat/t685-hl7`): new `vix-hl7` crate (parser,
+    escapes, `Path`, rows/`pretty`, `Ack`, `Panel`, pure `mllp`, and a
+    `net` feature with the timeout-bounded sender and typed `SendError`);
+    **Tools → HL7 View** (filterable overlay, Enter jumps to the field) and
+    **Tools → HL7 Send…** (prompt for `host:port`, background thread polled
+    like `poll_http`, ACK in a read-only tab). `tools.hl7_send` rides the
+    `http` capability (its `net` feature is only on with `http`); the view
+    and parser are in every build. Tests: unit, proptest, a loopback MLLP
+    server on 127.0.0.1, and `App`-level integration tests. Docs:
+    `docs/hl7/index.md`, `crates/vix-hl7/spec/index.md`.
+  - **Not done.** TLS-wrapped MLLP, a listener mode (receiving messages),
+    `FHS/BHS` batch files, per-version field-name dictionaries (the view
+    shows numbers, not names), and editing from the view. The overlay does
+    not reuse `impl_list_panel!` (private to `picker_panels.rs`); it calls
+    `vix-list-state` through `vix_hl7::Panel` directly.
 
 ### Cowork — real-time collaboration (spec: [`spec/cowork`](spec/cowork/index.md))
 
