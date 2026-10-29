@@ -15,10 +15,13 @@
 //! `crates/vix-authority/spec/index.md` for the full list.
 //!
 
+pub mod conformance;
+mod fake;
 mod local;
 mod process;
 mod types;
 
+pub use fake::{Call, FakeAuthority};
 pub use local::LocalAuthority;
 pub use process::{Arg, ProcessSpec};
 pub use types::{DirEntry, FileKind, FileStat, WalkOptions};
