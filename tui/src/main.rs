@@ -104,6 +104,15 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // `--mcp` (T731) runs before anything that could write: no settings load
+    // (which would create `config.toml`), no clipboard or keyring opt-in.
+    if cli.mcp {
+        if !vix::mcp::run(&cli.files, cli.locale.as_deref()) {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     // Opt this process into the real system clipboard. Everything that does not
     // call this — the test suite above all — copies and pastes through an
     // in-memory clipboard instead, so running the tests cannot overwrite what

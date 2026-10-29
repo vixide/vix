@@ -661,9 +661,95 @@ fn mysql_detail_sql(detail: Detail, t: &str) -> String {
     }
 }
 
+/// The `SQLite` query listing every table and view column as
+/// `(object, kind, column, type)` rows, `kind` being `table` or `view`, in
+/// declaration order (T731, the MCP server's `db_schema` tool).
+pub const SQLITE_SCHEMA_SQL: &str = "SELECT m.name, m.type, p.name, p.type \
+     FROM sqlite_master m JOIN pragma_table_info(m.name) p \
+     WHERE m.type IN ('table','view') AND m.name NOT LIKE 'sqlite_%' \
+     ORDER BY m.type, m.name, p.cid;";
+
+/// The sqlx URL that opens the `SQLite` file at `path` **read-only**
+/// (`mode=ro`: the file is never created or written). `%`, `?` and `#` in
+/// the path are percent-encoded so they cannot end the path early.
+#[must_use]
+pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
+    let path = path
+        .to_string_lossy()
+        .replace('%', "%25")
+        .replace('?', "%3F")
+        .replace('#', "%23");
+    format!("sqlite://{path}?mode=ro")
+}
+
+/// Read the schema of the `SQLite` database at `path` without writing to it:
+/// opened through [`sqlite_read_only_url`] with `PRAGMA query_only = ON`,
+/// then [`SQLITE_SCHEMA_SQL`]. Returns `(object, kind, column, type)` rows.
+/// No credentials are involved: a `SQLite` file needs none.
+///
+/// # Errors
+///
+/// Returns the driver's error when the file cannot be opened or queried.
+pub fn read_sqlite_schema(
+    path: &std::path::Path,
+) -> Result<Vec<(String, String, String, String)>, String> {
+    let setup: Vec<String> = crate::connect::read_only_sql(Kind::Sqlite, true)
+        .into_iter()
+        .collect();
+    let mut session = crate::session::Session::connect(&sqlite_read_only_url(path), &setup)?;
+    let (_, rows) = session.run(SQLITE_SCHEMA_SQL)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let mut cells = row.into_iter();
+            Some((cells.next()?, cells.next()?, cells.next()?, cells.next()?))
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sqlite_read_only_url_escapes_query_characters() {
+        assert_eq!(
+            sqlite_read_only_url(std::path::Path::new("/w/a?b#c%d.db")),
+            "sqlite:///w/a%3Fb%23c%25d.db?mode=ro"
+        );
+    }
+
+    #[test]
+    fn read_sqlite_schema_lists_columns_and_leaves_the_file_alone() {
+        let dir = std::env::temp_dir().join(format!("vix-db-schema-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("app.db");
+        let url = format!("sqlite:{}?mode=rwc", file.display());
+        let mut seed = crate::session::Session::connect(&url, &[]).unwrap();
+        seed.run("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);")
+            .unwrap();
+        seed.run("CREATE VIEW names AS SELECT name FROM users;")
+            .unwrap();
+        drop(seed);
+        let before = std::fs::read(&file).unwrap();
+        let rows = read_sqlite_schema(&file).unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    "users".into(),
+                    "table".into(),
+                    "id".into(),
+                    "INTEGER".into()
+                ),
+                ("users".into(), "table".into(), "name".into(), "TEXT".into()),
+                ("names".into(), "view".into(), "name".into(), "TEXT".into()),
+            ]
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), before);
+        assert!(read_sqlite_schema(&dir.join("missing.db")).is_err());
+    }
 
     #[test]
     fn quote_literal_only_emits_plain_numbers_bare() {

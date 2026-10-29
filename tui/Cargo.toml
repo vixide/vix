@@ -314,6 +314,8 @@ vix-lsp-core = { workspace = true }
 vix-macros = { workspace = true }
 # Render Markdown to formatted plain-text lines for a read-only preview pane.
 vix-markdown-preview = { workspace = true }
+# `vix --mcp`: the read-only Model Context Protocol server core (T731).
+vix-mcp-server = { workspace = true }
 # The IANA-style media-type (MIME) table and the picker's filter + selection.
 vix-media-type = { workspace = true }
 # A real modal-editing engine for the Vi/Spacemacs keymaps (design-only for now).
@@ -495,6 +497,10 @@ path = "tests/i18n_keys.rs"
 [[test]]
 name = "lsp_smoke"
 path = "tests/lsp_smoke.rs"
+
+[[test]]
+name = "mcp_stdio"
+path = "tests/mcp_stdio.rs"
 
 [[test]]
 name = "prettier"

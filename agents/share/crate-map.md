@@ -96,6 +96,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Area        | Crates                                                                        |
 | ----------- | ----------------------------------------------------------------------------- |
 | Editor      | `vix-editor` (the `CodeEditor` host wrapper), `vix-editor-core` (the widget, above). |
+| MCP         | `vix-mcp-server` (T731: the read-only Model Context Protocol core behind `vix --mcp` — newline-delimited JSON-RPC 2.0 over stdio, `initialize`/`tools/*`/`resources/*`, six read-only tools over open buffers, offline symbols and outline, merge-conflict diagnostics and SQLite schemas; the workspace boundary and secret filter; a `Host` trait the App shell implements in `tui/src/mcp.rs`). |
 | LSP / DAP   | `vix-lsp` (process IO + host wiring), `vix-lsp-core` (JSON-RPC framing, builders, parsers, positions); `vix-dap` (Debug Adapter Protocol client, reuses `lsp_core::frame`). |
 | Git         | `vix-git` (status/diff/staging via the git CLI), `vix-git-graph` (T681: the interactive commit graph — pure lane assignment from parent links, `%D` ref decorations, paged `git log`, checkout/branch/cherry-pick), `vix-conflict-tool` (merge-marker parser). |
 | OC          | `vix-oci` (T700: drive an OCI engine — Docker/Podman/nerdctl — via its CLI: detection, argv builders, NDJSON/array parsers, the `process`-gated runner), `vix-oci-panel` (T702–T704: the containers/images/volumes/networks/pods list panel with confirm and input modes). |

@@ -59,6 +59,15 @@ indices still line up with the tab order.
 it disabled, Vix always starts with a single empty buffer unless files are given
 on the command line.
 
+## Read-only loading (T731)
+
+`Session::load` goes through `confy`, which creates a default `session.toml`
+when none exists. `Session::load_existing` (and `load_existing_from` for an
+explicit file) parses the file directly and never creates or writes one; a
+missing or unreadable file is an empty session. The read-only `vix --mcp`
+server ([`spec/mcp-server`](../../../spec/mcp-server/index.md)) uses it to
+list the files Vix last had open in a workspace.
+
 ## Project task-runner state
 
 `WorkspaceSession` also carries the private, per-user half of the `project.*`

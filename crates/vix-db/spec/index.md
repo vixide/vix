@@ -218,3 +218,14 @@ The same surus round added three companion features the AI surface builds on:
   live schema (typed entity blocks plus crow's-foot foreign-key edges) in a
   scrollable viewer; `y` yanks the Mermaid text to paste anywhere Mermaid
   renders (including Vix's own Org/Mermaid support).
+
+## Headless schema read (T731)
+
+`catalog::read_sqlite_schema(path)` reads one `SQLite` file's tables, views
+and columns without the workbench: it opens the file through
+`catalog::sqlite_read_only_url` (`mode=ro`, so the file is never created or
+written), applies `PRAGMA query_only = ON`, and runs
+`catalog::SQLITE_SCHEMA_SQL`, returning `(object, kind, column, type)` rows.
+No credentials are involved. The `vix --mcp` server's `db_schema` tool uses
+it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)); server engines
+are deliberately not offered there, since they need a password.
