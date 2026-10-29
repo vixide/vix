@@ -756,6 +756,7 @@ pub mod dispatch_scan {
         ("tui/src/app/ide_parity.rs", "run_ide_parity_action"),
         ("tui/src/app/hl7.rs", "run_hl7_action"),
         ("tui/src/app/fhir.rs", "run_fhir_action"),
+        ("tui/src/app/cowork.rs", "run_cowork_action"),
         ("tui/src/app/terminal.rs", "run_terminal_action"),
         ("tui/src/app/lsp_dap.rs", "run_dap_action"),
         ("tui/src/app/org.rs", "org_action"),

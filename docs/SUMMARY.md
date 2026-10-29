@@ -64,6 +64,7 @@
 - [Contacts](contacts/index.md)
 - [Convert](convert/index.md)
 - [Coverage Gutter](coverage/index.md)
+- [Cowork (edit together)](cowork/index.md)
 - [Database Workbench](db/index.md)
 - [Debugger](debugger/index.md)
 - [Dictionaries & Spell Checking](dictionaries/index.md)

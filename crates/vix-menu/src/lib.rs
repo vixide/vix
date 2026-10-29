@@ -1366,9 +1366,30 @@ const TOOLS: &[Item] = &[
         "tools.http_fhir_bundle",
         "",
     ),
+    Item::sub("menu.item.tools.cowork", TOOLS_COWORK),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
     Item::leaf("menu.item.tools.media_types", "tools.media_types", ""),
+];
+
+/// Real-time collaboration (T695), under Tools → Cowork. Compiled in only with
+/// the `cowork` feature; otherwise the runtime capability filter hides it.
+const TOOLS_COWORK: &[Item] = &[
+    Item::leaf("menu.item.cowork.host", "cowork.host", ""),
+    Item::leaf("menu.item.cowork.invite", "cowork.invite", ""),
+    Item::leaf("menu.item.cowork.share", "cowork.share", ""),
+    Item::leaf("menu.item.cowork.unshare", "cowork.unshare", ""),
+    Item::leaf(
+        "menu.item.cowork.share_workspace",
+        "cowork.share_workspace",
+        "",
+    ),
+    Item::leaf("menu.item.cowork.join", "cowork.join", ""),
+    Item::leaf("menu.item.cowork.files", "cowork.files", ""),
+    Item::leaf("menu.item.cowork.peers", "cowork.peers", ""),
+    Item::leaf("menu.item.cowork.follow", "cowork.follow", ""),
+    Item::leaf("menu.item.cowork.permissions", "cowork.permissions", ""),
+    Item::leaf("menu.item.cowork.leave", "cowork.leave", ""),
 ];
 
 /// Language-server (LSP) actions, grouped under Tools → Language Server.

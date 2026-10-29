@@ -192,3 +192,17 @@ Move Line Up/Down treats a collapsed fold as one block: the moved block is the c
 ## Drag past the edge (T581)
 
 A left-drag keeps extending the selection when the pointer leaves the text area: a pointer at or past the top or bottom edge scrolls one line and extends to the edge row; one left of the text clamps to the first column. The app keeps routing the drag to the editor wherever the pointer is, and calls `Editor::autoscroll_tick` from the main loop (polling every 50 ms while a drag is active), because terminals report drag only on motion.
+
+## Shared buffers (Cowork, T692/T693)
+
+`remote.rs` is the editor side of Cowork (`spec/cowork`), with no network
+code. `start_edit_log`/`take_edit_log` report every local content change as a
+`Splice` (`offset`, `delete`, `insert`, in characters); `apply_remote_edits`
+replays another participant's splices without an undo step or a log entry,
+keeping the cursor, selection and extra carets on their characters (an
+insertion exactly at the cursor leaves it before the new text);
+`set_remote_carets` hands the renderer other participants' carets and
+selections, drawn as a colored cell and a tinted range. While the log is on
+(`is_edit_logging`), the editor's own Undo and Redo do nothing, because remote
+edits leave its history's offsets stale; the App routes undo through the
+collaboration layer's per-participant stack instead.

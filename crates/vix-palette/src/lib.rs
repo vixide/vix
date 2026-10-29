@@ -365,6 +365,18 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.insert_zid", "tools.insert.zid.256"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
+    // Cowork (T695): hidden by the capability filter unless built with `cowork`.
+    ("cmd.cowork_host", "cowork.host"),
+    ("cmd.cowork_invite", "cowork.invite"),
+    ("cmd.cowork_share", "cowork.share"),
+    ("cmd.cowork_unshare", "cowork.unshare"),
+    ("cmd.cowork_share_workspace", "cowork.share_workspace"),
+    ("cmd.cowork_join", "cowork.join"),
+    ("cmd.cowork_files", "cowork.files"),
+    ("cmd.cowork_peers", "cowork.peers"),
+    ("cmd.cowork_follow", "cowork.follow"),
+    ("cmd.cowork_permissions", "cowork.permissions"),
+    ("cmd.cowork_leave", "cowork.leave"),
     ("cmd.run_config", "project.run_config"),
     ("cmd.run_config_edit", "project.run_config_edit"),
 ];

@@ -257,6 +257,25 @@ pub struct Code {
     edit_gen: u64,
     /// Background reparse worker for large buffers (lazily created on first use).
     parse_worker: Option<ParseWorker>,
+    /// Every local content change since the last [`Code::take_edit_log`], when
+    /// logging is on (Cowork's editor bridge, T692). `None` = off.
+    edit_log: Option<Vec<Splice>>,
+    /// True while [`Code::apply_remote`] runs, so remote edits are neither
+    /// logged (they would echo back) nor recorded in the undo history.
+    applying_remote: bool,
+}
+
+/// One content change as a splice: delete `delete` characters at `offset`,
+/// then insert `insert`. Offsets are character indices in the buffer as it
+/// stood when the change was made, so a log replays in order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Splice {
+    /// Start, in characters.
+    pub offset: usize,
+    /// Characters removed first.
+    pub delete: usize,
+    /// Text inserted after the removal.
+    pub insert: String,
 }
 
 impl Drop for Code {
@@ -308,6 +327,8 @@ impl Code {
             revision: 0,
             edit_gen: 0,
             parse_worker: None,
+            edit_log: None,
+            applying_remote: false,
         };
 
         if let Some(language) = Self::get_language(lang) {
@@ -629,6 +650,15 @@ impl Code {
 
         self.revision = self.revision.wrapping_add(1);
         self.content.insert(from, text);
+        if !self.applying_remote
+            && let Some(log) = self.edit_log.as_mut()
+        {
+            log.push(Splice {
+                offset: from,
+                delete: 0,
+                insert: text.to_string(),
+            });
+        }
 
         if self.applying_history {
             self.current_batch.edits.push(Edit {
@@ -665,6 +695,15 @@ impl Code {
 
         self.revision = self.revision.wrapping_add(1);
         self.content.remove(from..to);
+        if !self.applying_remote
+            && let Some(log) = self.edit_log.as_mut()
+        {
+            log.push(Splice {
+                offset: from,
+                delete: to - from,
+                insert: String::new(),
+            });
+        }
 
         if self.applying_history {
             self.current_batch.edits.push(Edit {
@@ -987,8 +1026,62 @@ impl Code {
         results
     }
 
+    /// Start recording every local content change (idempotent). The log holds
+    /// the changes of typing, undo, redo and whole-buffer replacement alike,
+    /// but never edits applied with [`Code::apply_remote`].
+    pub fn start_edit_log(&mut self) {
+        self.edit_log.get_or_insert_with(Vec::new);
+    }
+
+    /// Whether the edit log is on (the buffer is shared).
+    #[must_use]
+    pub const fn is_edit_logging(&self) -> bool {
+        self.edit_log.is_some()
+    }
+
+    /// Stop recording and discard anything pending.
+    pub fn stop_edit_log(&mut self) {
+        self.edit_log = None;
+    }
+
+    /// Take the changes recorded since the last call (empty when logging is
+    /// off).
+    pub fn take_edit_log(&mut self) -> Vec<Splice> {
+        self.edit_log
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    /// Apply edits that came from another participant: in order, clamped to
+    /// the buffer, with no undo-history entry and no log entry.
+    pub fn apply_remote(&mut self, edits: &[Splice]) {
+        let was_history = std::mem::replace(&mut self.applying_history, false);
+        self.applying_remote = true;
+        for e in edits {
+            let len = self.len();
+            let start = e.offset.min(len);
+            let end = start.saturating_add(e.delete).min(len);
+            if end > start {
+                self.remove(start, end);
+            }
+            if !e.insert.is_empty() {
+                self.insert(start, &e.insert);
+            }
+        }
+        self.applying_remote = false;
+        self.applying_history = was_history;
+    }
+
     /// Undo the last committed batch, reverting its edits; return the batch if any.
+    ///
+    /// Does nothing while the edit log is on (the buffer is shared, T692):
+    /// remote edits leave this history's offsets stale, so a shared buffer's
+    /// undo goes through the collaboration layer's per-participant stack.
     pub fn undo(&mut self) -> Option<EditBatch> {
+        if self.edit_log.is_some() {
+            return None;
+        }
         let batch = self.history.undo()?;
         self.applying_history = false;
 
@@ -1027,7 +1120,11 @@ impl Code {
     }
 
     /// Redo the next undone batch, reapplying its edits; return the batch if any.
+    /// Does nothing while the edit log is on (see [`Code::undo`]).
     pub fn redo(&mut self) -> Option<EditBatch> {
+        if self.edit_log.is_some() {
+            return None;
+        }
         let batch = self.history.redo()?;
         self.applying_history = false;
 

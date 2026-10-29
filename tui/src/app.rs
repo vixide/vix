@@ -7,6 +7,10 @@ mod ai_off;
 mod command_palette;
 mod compare;
 mod coverage;
+#[cfg(feature = "cowork")]
+mod cowork;
+#[cfg(not(feature = "cowork"))]
+mod cowork_off;
 #[cfg(feature = "sql")]
 mod db;
 #[cfg(not(feature = "sql"))]
@@ -18,6 +22,10 @@ mod fhir;
 mod fhir_http;
 #[cfg(not(feature = "http"))]
 mod fhir_http_off;
+#[cfg(feature = "cowork")]
+use cowork as cowork_state;
+#[cfg(not(feature = "cowork"))]
+use cowork_off as cowork_state;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(feature = "git")]
@@ -158,6 +166,16 @@ pub enum PromptKind {
     Rename,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Cowork (T695): the address to host a session on.
+    CoworkHost,
+    /// Cowork (T695): the invite string to join with.
+    CoworkJoin,
+    /// Cowork (T695): a guest number and permission level.
+    CoworkPermission,
+    /// Cowork (T695): the host's answer to a guest that wants to join.
+    CoworkConsent,
+    /// Cowork (T693): which participant to follow (empty stops).
+    CoworkFollow,
     /// Pipe the selection (or buffer) through a shell command, replacing it
     /// with the output (T659).
     PipeSelection,
@@ -1989,6 +2007,9 @@ pub struct App {
     /// Responses of `# @name`d requests already sent, for `{{name.response…}}`.
     #[cfg(feature = "http")]
     http_named: std::collections::HashMap<String, crate::http_client::Response>,
+    /// Real-time collaboration state (T695); a zero-size stand-in unless the
+    /// `cowork` feature is on.
+    pub(crate) cowork: cowork_state::State,
     /// HTML character palette overlay, when open.
     pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -2260,6 +2281,10 @@ pub struct App {
     /// Files mode to entries under this project-relative directory instead
     /// of the whole workspace. Cleared whenever the palette closes.
     palette_file_scope: Option<String>,
+    /// When set, the palette's Files mode lists these paths instead of the
+    /// project index (a Cowork guest browsing the host's shared files,
+    /// T696). Cleared whenever the palette closes.
+    palette_files_override: Option<Vec<PathBuf>>,
     /// In-memory cache of resolved/edited lifecycle commands for the current
     /// workspace root (`project.*`/`project.subproject.*` actions) — the
     /// highest-precedence layer in `crate::tasks::lifecycle::
@@ -2564,6 +2589,7 @@ impl App {
             http_pending_name: None,
             #[cfg(feature = "http")]
             http_named: std::collections::HashMap::new(),
+            cowork: cowork_state::State::default(),
             html_panel: None,
             system_info: None,
             dashboard: None,
@@ -2671,6 +2697,7 @@ impl App {
             file_index: Vec::new(),
             palette_origin: None,
             palette_file_scope: None,
+            palette_files_override: None,
             project_command_cache: crate::tasks::lifecycle::LifecycleCommands::default(),
             project_history: ProjectHistory::default(),
             project_last_command: None,
@@ -3188,6 +3215,7 @@ impl App {
             return true;
         }
         match action {
+            "edit.undo" | "edit.redo" if self.cowork_undo(action == "edit.undo") => {}
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(UndoAction {});
@@ -3490,6 +3518,7 @@ impl App {
             a if self.run_ide_parity_action(a) => {}
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
+            a if self.run_cowork_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -3929,6 +3958,10 @@ impl App {
     }
 
     fn save(&mut self) {
+        // A buffer shared in from a Cowork host is saved by the host.
+        if self.cowork_intercept_save() {
+            return;
+        }
         if self.active_tab_is_wgrep_results() {
             self.prepare_wgrep_confirm();
             return;
@@ -4002,8 +4035,10 @@ impl App {
         let mut targets = Vec::new();
         let mut skipped = 0usize;
         for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
+            // A Cowork guest's shared-in tab is saved by its host (Save asks).
             let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
                 && !t.is_image()
+                && !t.is_remote()
                 && !t.read_only
                 && t.fs_access != crate::editor::FsAccess::ReadOnly;
             if savable {
@@ -5300,7 +5335,7 @@ impl App {
         let savable = self
             .editor
             .active_tab()
-            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none());
+            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none() && !t.is_remote());
         if savable && self.write_active_to_disk() {
             self.status = t!("status.auto_saved").to_string();
         }
@@ -8811,6 +8846,18 @@ impl App {
 
     /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        // A local scroll or click ends Cowork follow mode (T693).
+        if matches!(
+            mouse.kind,
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown | MouseEventKind::Down(_)
+        ) {
+            self.cowork_local_input();
+        }
+        self.dispatch_mouse(mouse);
+    }
+
+    /// The real mouse dispatch, wrapped by [`Self::on_mouse`] above.
+    fn dispatch_mouse(&mut self, mouse: MouseEvent) {
         if self.try_overlay_mouse(mouse) {
             return;
         }
@@ -12936,6 +12983,11 @@ impl App {
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::CoworkHost
+            | PromptKind::CoworkJoin
+            | PromptKind::CoworkPermission
+            | PromptKind::CoworkConsent
+            | PromptKind::CoworkFollow => self.accept_cowork_prompt(prompt.kind, &prompt.input),
             PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
             PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),

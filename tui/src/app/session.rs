@@ -216,7 +216,7 @@ impl App {
             let Some(path) = tab
                 .path
                 .as_ref()
-                .filter(|p| !tab.is_image() && !ephemeral.matches(p))
+                .filter(|p| !tab.is_image() && !tab.is_remote() && !ephemeral.matches(p))
             else {
                 tab_to_file.push(None);
                 continue;

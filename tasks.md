@@ -8119,27 +8119,102 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### Cowork — real-time collaboration (spec: [`spec/cowork`](spec/cowork/index.md))
 
-- [ ] **T690 — Spike and decision record.** Score `loro`, `automerge`,
+- [x] **T690 — Spike and decision record.** Score `loro`, `automerge`,
   `diamond-types` and `yrs` on text performance, memory (1 MB file), license,
   and bridge cost to the `ropey` buffer; prove cursor stability under remote
   inserts with a throwaway test. Output: a decision in the spec. **Medium.**
-- [ ] **T691 — `vix-cowork` core.** Pure document, peer, presence and
+  - **Done 2026-10-29** (`feat/t690-cowork`): chose **Loro** (MIT). Measured in a
+    scratch crate outside the workspace (1 MB file, 20k edits): Loro 29 ms /
+    26 MB, diamond-types 6 ms / 25 MB, Yrs 3.2 s / 32 MB, Automerge 243 ms /
+    364 MB; all converged. Loro wins on the bridge (stable cursors, text-delta
+    events, per-peer undo), proven by throwaway tests (a cursor at 6 moved to
+    10 after remote inserts; A's undo left B's text). `cargo deny` passes with
+    four dated "unmaintained" advisory ignores for Loro's transitive crates
+    (`im`, `bitmaps`, `sized-chunks`, `atomic-polyfill`; no vulnerabilities).
+    Decision record in `spec/cowork`. **Not done:** the numbers are one machine,
+    one run; no live web research on release cadence.
+- [x] **T691 — `vix-cowork` core.** Pure document, peer, presence and
   permission model; N-replica convergence tests incl. proptest; no I/O.
   **Large.** After T690.
-- [ ] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
+  - **Done 2026-10-29**: `vix-cowork` crate: `SharedDoc` (Loro), `Peer`/`Permission`,
+    `SharedPath` confinement, panic-free wire codec, presence, and the
+    `HostSession`/`GuestSession` state machines. 57 unit tests plus a proptest
+    host-and-three-guest convergence run with delayed delivery and undo.
+    **Not done:** only text buffers (no cursor-position undo grouping policy
+    beyond Loro's 1 s merge window); Loro's behavior on hostile update bytes is
+    covered by "never panics on garbage" tests, not a fuzz target.
+- [x] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
   without moving the local cursor; per-user undo. Cap shared size.
   **Large.**
-- [ ] **T693 — Presence rendering.** Remote cursors and selections in
+  - **Done 2026-10-29** (`feat/t695-cowork-app`): `vix_editor_core::remote`
+    (edit log of `Splice`s, `apply_remote_edits` keeping cursor, selection and
+    carets on their characters, no undo step or log entry) and the per-tick
+    pump in `tui/src/app/cowork.rs` (local edits into the CRDT first, then
+    remote edits onto the buffer). Per-user undo: while a buffer is shared the
+    editor's own Undo/Redo do nothing (`is_edit_logging`), and `edit.undo`/
+    `edit.redo` go to `HostSession::undo`/`redo` or `GuestSession::undo`/
+    `redo`; tested in `vix-cowork` and by a two-App loopback test. 5 MB cap and
+    binary refusal at share time. **Not done:** undo groups follow Loro's 1 s
+    merge window, not the editor's own word/line grouping; an encoding (T661)
+    or CRLF difference between host and guest is not reconciled (the guest
+    sees the host's decoded text).
+- [x] **T693 — Presence rendering.** Remote cursors and selections in
   `ui.rs`, theme-derived peer colors (contrast-checked), status-line names.
   **Medium.**
-- [ ] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
+  - **Done 2026-10-29**: carets and selections are drawn by
+    `vix-editor-core`'s renderer (`set_remote_carets`), not `ui.rs`; colors
+    from `vix_cowork::presence::peer_color` against the editor background
+    (WCAG 3:1); the status bar lists the other participants in the active
+    shared buffer; **Follow…** pins the view to a participant until any
+    local key, click or scroll. **Not done:** a peer's name is not drawn next
+    to its caret (status bar and Peers only).
+- [x] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
   Encrypted, authenticated framing; invite token; host consent prompt;
   reconnect and resync. **Large.**
-- [ ] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
+  - **Done 2026-10-29**: `vix-cowork-net` (Noise `NKpsk0` over X25519/ChaCha20-Poly1305/
+    BLAKE2s via `snow`): single-use short-lived invite carrying the host key
+    (pinned) and a PSK; encrypted chunked frames; silent failure; handshake and
+    pending-guest caps; host consent via `Knock`. 11 loopback-socket tests incl.
+    a recording proxy proving nothing readable crosses the wire. **Not done:**
+    reconnect/resync (a dropped guest rejoins with a new invite), NAT traversal,
+    per-source-address rate limits.
+- [x] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
   Permissions, i18n in 15 locales, action catalog. **Medium.**
-- [ ] **T696 — Workspace sharing.** Shared file tree and search; host-only
+  - **Done 2026-10-29** (`feat/t695-cowork-app`, salvaged from a stalled
+    agent's draft and finished): **Tools → Cowork** (Host Session…, New
+    Invite, Share This Buffer, Stop Sharing This Buffer, Share File Tree, Join
+    Session…, Shared Files…, Peers, Follow…, Permissions…, Leave Session),
+    `cowork.*` actions dispatched by `run_cowork_action`, `Cowork: …` palette
+    commands, every string in 15 locales, `cowork` capability (menu hidden
+    without the feature, `cowork_off.rs` stand-ins). Host consent prompt
+    (Enter = view-only, Esc = decline); guest buffers are `cowork:` tabs that
+    can't be saved locally (Save asks the host). User guide
+    `docs/cowork/index.md`. CI and `scripts/check` now clippy and test
+    `--features cowork`. **Not done:** Peers and the invite are plain text
+    dialogs and Permissions/Follow are typed prompts (`2 edit`), not
+    interactive panels; the permission keywords (`view`, `edit`, `terminal`,
+    `no`) are typed in English in every locale (the prompt says so); a host
+    cannot remove a guest except by lowering it to view or ending the session.
+- [x] **T696 — Workspace sharing.** Shared file tree and search; host-only
   disk writes; path confinement tests. **Medium.**
+  - **Done 2026-10-29** (file tree; search by file name only): **Share File
+    Tree** (host toggle, off by default) answers a guest's `ListFiles` from
+    the file-finder index (`.gitignore` honored, hidden files skipped) and
+    its `OpenRequest`s; **Shared Files…** shows the list in the palette's
+    fuzzy file finder. Requests are refused unless the tree is shared, the
+    path passes `SharedPath`, its canonical path stays inside the root
+    (symlinks followed) and it is not private (`SharedPath::is_private`:
+    `.env*`, `.git`, `.vix`, keys, credentials, …, also applied to the host's
+    own shares). Accepted files open in a background host tab. Disk writes
+    stay host-only. Tests: session unit tests, `confine` (symlink escapes),
+    and a two-App loopback test. **Not done:** searching file *contents*
+    across the shared tree (Find in Files over the host's workspace); new or
+    deleted host files reach a guest only when it asks for the list again.
 - [ ] **T697 — Shared terminal (read-only default).** **Medium; optional.**
+  - **Not started** (2026-10-29): skipped as optional. `Permission::
+    EditTerminal` and `Action::Terminal` exist in `vix-cowork`, and a
+    `Channel` for terminal output would slot into the wire tag table the same
+    way chat does; nothing streams a terminal yet.
 
 ### OC — Open Container Initiative menu (spec: [`spec/open-container`](spec/open-container/index.md))
 

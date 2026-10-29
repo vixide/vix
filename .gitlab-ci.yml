@@ -151,6 +151,9 @@ feature-combos:
     - cargo install cargo-hack --locked
     - cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
     - cargo test -p vix-tui --no-default-features
+    # The opt-in `cowork` feature is in no default build: lint and test it here.
+    - cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+    - cargo test -p vix-tui --features cowork --lib cowork
     - cargo hack check -p vix-tui --each-feature --no-dev-deps
 
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's

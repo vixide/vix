@@ -16,6 +16,8 @@ mod catalog;
 mod common;
 mod compare;
 mod coverage;
+#[cfg(feature = "cowork")]
+mod cowork;
 #[cfg(feature = "sql")]
 mod db;
 mod editing;

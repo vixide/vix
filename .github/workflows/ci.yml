@@ -129,6 +129,11 @@ jobs:
         run: cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
       - name: test with no default features
         run: cargo test -p vix-tui --no-default-features
+      # The opt-in `cowork` feature is in no default build: lint and test it here.
+      - name: clippy with the cowork feature
+        run: cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+      - name: test the cowork feature
+        run: cargo test -p vix-tui --features cowork --lib cowork
       - name: check each feature
         run: cargo hack check -p vix-tui --each-feature --no-dev-deps
 
@@ -153,7 +158,7 @@ jobs:
       - name: cargo semver-checks
         # A crate with no crates.io release yet has no baseline to compare
         # against: add `--exclude <crate>` until its first publish.
-        run: cargo semver-checks --workspace --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list
+        run: cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list
 
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
