@@ -4007,8 +4007,10 @@ impl App {
         let mut targets = Vec::new();
         let mut skipped = 0usize;
         for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
+            // A Cowork guest's shared-in tab is saved by its host (Save asks).
             let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
                 && !t.is_image()
+                && !t.is_remote()
                 && !t.read_only
                 && t.fs_access != crate::editor::FsAccess::ReadOnly;
             if savable {
@@ -5294,7 +5296,7 @@ impl App {
         let savable = self
             .editor
             .active_tab()
-            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none());
+            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none() && !t.is_remote());
         if savable && self.write_active_to_disk() {
             self.status = t!("status.auto_saved").to_string();
         }
