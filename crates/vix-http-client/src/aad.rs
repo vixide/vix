@@ -1,6 +1,6 @@
 //! `{{$aadToken}}`: an Azure AD access token from the Azure CLI.
 //!
-//! The token is fetched by running `az account get-access-token` with an argv
+//! The token is fetched by running `az account get-access-token` with an command_line
 //! array (never a shell, so a crafted `.http` file cannot inject a command).
 //! It is held in memory only: never cached, logged or written to disk, and
 //! errors deliberately carry nothing the CLI printed.
@@ -52,9 +52,9 @@ pub fn token(args: &[&str]) -> Result<String, AadError> {
 /// # Errors
 /// An [`AadError`].
 pub fn token_with(program: &str, args: &[&str]) -> Result<String, AadError> {
-    let argv = build_args(args)?;
+    let command_line = build_args(args)?;
     let out = Command::new(program)
-        .args(&argv)
+        .args(&command_line)
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -90,16 +90,16 @@ fn build_args(args: &[&str]) -> Result<Vec<String>, AadError> {
             resource = checked(a)?;
         }
     }
-    let mut argv: Vec<String> = ["account", "get-access-token", "--resource"]
+    let mut command_line: Vec<String> = ["account", "get-access-token", "--resource"]
         .map(String::from)
         .into();
-    argv.push(resource);
+    command_line.push(resource);
     if let Some(t) = tenant {
-        argv.push("--tenant".into());
-        argv.push(t);
+        command_line.push("--tenant".into());
+        command_line.push(t);
     }
-    argv.extend(["--query", "accessToken", "--output", "tsv"].map(String::from));
-    Ok(argv)
+    command_line.extend(["--query", "accessToken", "--output", "tsv"].map(String::from));
+    Ok(command_line)
 }
 
 /// `s` if it is a plain id/URL: no leading `-` (an option), no whitespace.
@@ -121,9 +121,10 @@ mod tests {
 
     #[test]
     fn builds_an_argv_not_a_shell_line() {
-        let argv = build_args(&["new", "https://vault.azure.net", "tenantid:abc-123"]).unwrap();
+        let command_line =
+            build_args(&["new", "https://vault.azure.net", "tenantid:abc-123"]).unwrap();
         assert_eq!(
-            argv,
+            command_line,
             [
                 "account",
                 "get-access-token",
