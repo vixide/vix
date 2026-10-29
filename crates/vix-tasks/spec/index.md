@@ -178,6 +178,12 @@ understand real block nesting. Supported: Rust, Python, Go,
 JavaScript/TypeScript, Ruby (RSpec and Minitest), and Elixir. Not
 implemented: Java, Erlang, F#.
 
+`vix_tasks::test_at_point::tests_in_file` (T726) applies the same rules to a
+whole file and lists every test in file order as `(line, TestMatch)`, the line
+being the one that names the test (Rust: the `fn` line after `#[test]`). The
+host draws a local **Run test** code lens on each of those lines where the
+language server put no lens of its own (see `spec/ide-parity`).
+
 ## As implemented in Vix
 
 `vix-tasks` is pure logic — detection, resolution, discovery, merging, and

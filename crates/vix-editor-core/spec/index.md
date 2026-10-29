@@ -30,6 +30,24 @@ The host routes a snake_case id through `App::run_named_action(id)`:
 Every action has a smoke test in `tui/tests/integration/catalog.rs`
 (`catalog_<snake>()`), and its own page under `spec/<kebab>/index.md`.
 
+## Code lens rows (T726)
+
+`Editor::set_code_lenses(Vec<(line, label)>)` gives a line a **virtual row
+above it** holding its lens titles (same-line labels joined with ` | `),
+drawn dimmed in the inlay-hint style, indented to the line's own
+indentation, with a blank gutter. A lens row is not buffer text: the cursor,
+selections, line numbers, edits and every char offset are unchanged. Only
+the line-to-screen-row mapping grows by one row per visible lensed line,
+and it lives in one place (`lens.rs`'s `view_rows`/`rows_to_text` for the
+no-wrap view, `wrap.rs`'s `visual_rows` for soft wrap), shared by every
+render layer, `focus` (scrolls until the cursor's text row is inside the
+view), `get_visible_cursor` and `cursor_from_mouse` (a click on a lens row
+lands at the start of the line it annotates). A folded-away line shows no
+lens; a lens past the buffer's end (stale after an edit) is skipped.
+`Editor::text_screen_row(line, area)` gives hosts the same mapping to
+anchor overlays. `clear_code_lenses`, `has_code_lenses` and `code_lens_at`
+complete the API.
+
 ## Sub-specs
 
 - [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,

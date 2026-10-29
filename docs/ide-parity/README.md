@@ -82,9 +82,29 @@ search as Go to Definition and peeks the first match.
 
 ## CodeLens
 
-**Tools → LSP → Code Lens** now lists the lenses in file order with their
-line numbers and starts on the one at or after the cursor, so "Run test" for
-the function you are in is one Enter away.
+Code lenses appear as dimmed rows **above** the lines they belong to, for
+example `Run | Debug` over a Rust test or `3 references` over a function.
+They are not part of the file: the cursor, selections, line numbers and
+saving all ignore them. They work with soft wrap and with folds (a folded-away
+line shows no lens).
+
+- **Where they come from.** The language server's lenses (requested when a
+  file opens, again half a second after you stop typing, on save, and
+  whenever the server asks for a refresh; lenses the server sends without a
+  title are filled in only once they scroll into view). Without a server, or
+  where the server put no lens on a test, Vix adds its own **Run test** lens
+  above each test it recognizes (Rust, Python, Go, JavaScript/TypeScript,
+  Ruby, Elixir, the same rules as **Project → Test at Point**).
+- **Running one.** **Tools → LSP → Run Code Lens on Line**
+  (`lsp.code_lens_run`) runs the lens above the cursor's line; when the line
+  has several it opens a list to pick from. **Tools → LSP → Code Lens…**
+  (`lsp.code_lens`) lists every lens in the file, starting at the cursor.
+  A command the server advertises is sent back to it; rust-analyzer's
+  **Run** runs its `cargo` command in the bottom dock, and **N references**
+  opens the references list. Any other client-side command (for example
+  rust-analyzer's **Debug**) reports "Unsupported code lens command".
+- **Turning them off.** **View → Editor → Code Lens** (`view.code_lens`), or
+  `code_lens = false` in the config file.
 
 ## Postfix completion
 

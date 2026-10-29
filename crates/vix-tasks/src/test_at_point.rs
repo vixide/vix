@@ -274,9 +274,72 @@ pub fn test_at_point(
     }
 }
 
+/// Every test defined in `lines`, in file order, for local "Run test" code
+/// lenses (T726): `(line, match)` where `line` (0-based) is the line naming
+/// the test (Rust: the `fn` line after `#[test]`; elsewhere the definition
+/// line itself) and `match` is what [`test_at_point`] resolves there. Same
+/// line-based heuristics and languages as [`test_at_point`]; any other
+/// extension yields nothing.
+#[must_use]
+pub fn tests_in_file(
+    file_extension: &str,
+    project_relative_path: &str,
+    lines: &[&str],
+    hint: TestFrameworkHint,
+) -> Vec<(usize, TestMatch)> {
+    let def: &Regex = match file_extension {
+        "rs" => &RUST_TEST_ATTR,
+        "py" => &PYTHON_TEST_DEF,
+        "go" => &GO_TEST_FUNC,
+        "js" | "jsx" | "ts" | "tsx" => &JS_TEST_CALL,
+        "rb" if hint == TestFrameworkHint::RubyMinitest => &RUBY_MINITEST_DEF,
+        "rb" => &RUBY_RSPEC_CALL,
+        "ex" | "exs" => &ELIXIR_TEST_CALL,
+        _ => return Vec::new(),
+    };
+    let mut found = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if !def.is_match(line) {
+            continue;
+        }
+        let name_line = if file_extension == "rs" {
+            let Some(off) = lines[i..].iter().position(|l| RUST_FN_NAME.is_match(l)) else {
+                continue;
+            };
+            i + off
+        } else {
+            i
+        };
+        if let Some(m) = test_at_point(file_extension, project_relative_path, lines, i, hint) {
+            found.push((name_line, m));
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tests_in_file_lists_every_test_at_its_name_line() {
+        let text = "fn helper() {}\n\n#[test]\nfn one() {}\n\n#[test]\n#[ignore]\nfn two() {}\n";
+        let lines = split(text);
+        let found = tests_in_file("rs", "src/lib.rs", &lines, TestFrameworkHint::Unknown);
+        let names: Vec<(usize, &str)> = found.iter().map(|(l, m)| (*l, m.name.as_str())).collect();
+        assert_eq!(names, vec![(3, "one"), (7, "two")]);
+        assert_eq!(found[1].1.command, "cargo test -- --exact two");
+
+        let py =
+            split("def test_a():\n    pass\ndef helper():\n    pass\ndef test_b():\n    pass\n");
+        let found = tests_in_file("py", "t.py", &py, TestFrameworkHint::Unknown);
+        assert_eq!(found.iter().map(|f| f.0).collect::<Vec<_>>(), vec![0, 4]);
+
+        assert_eq!(
+            tests_in_file("txt", "a.txt", &py, TestFrameworkHint::Unknown),
+            vec![]
+        );
+    }
 
     fn split(text: &str) -> Vec<&str> {
         text.lines().collect()

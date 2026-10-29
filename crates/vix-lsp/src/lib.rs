@@ -52,6 +52,10 @@ enum Pending {
     InlayHint,
     LinkedEditing,
     CodeLens,
+    /// A background lens refresh (T726): silent on error, routed by path.
+    CodeLensAuto,
+    /// `codeLens/resolve` for one lens (T726): silent on error, routed by path.
+    CodeLensResolve,
     PrepareCallHierarchy,
     IncomingCalls,
     PrepareRename,
@@ -134,6 +138,33 @@ pub enum LspEvent {
     InlayHints(Vec<(u32, u32, String)>),
     /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
     CodeLenses(Vec<vix_lsp_core::message::CodeLens>),
+    /// A background code-lens refresh for `path` (T726, from
+    /// [`Lsp::refresh_code_lens`]): every lens the server reported, split into
+    /// those that already carry a command and those still to be resolved
+    /// ([`Lsp::resolve_code_lens`]). Empty lists mean "no lenses now". A reply
+    /// computed against an older version of the document is dropped.
+    CodeLensUpdate {
+        /// The file the lenses belong to, as the host passed it in.
+        path: PathBuf,
+        /// Lenses with a command: `(line, title, command, arguments)`.
+        lenses: Vec<vix_lsp_core::message::CodeLens>,
+        /// Lenses without one yet: `(line, raw lens)`.
+        unresolved: Vec<vix_lsp_core::message::UnresolvedLens>,
+    },
+    /// A `codeLens/resolve` reply for `path` (T726): the lens now carrying
+    /// its command, and the raw `range` it was sent with, so the host can
+    /// match it to the unresolved lens it asked about.
+    CodeLensResolved {
+        /// The file the lens belongs to.
+        path: PathBuf,
+        /// The resolved lens: `(line, title, command, arguments)`.
+        lens: vix_lsp_core::message::CodeLens,
+        /// The lens's `range` exactly as the server sent it.
+        range: Value,
+    },
+    /// The server asked the client to re-request every code lens
+    /// (`workspace/codeLens/refresh`, T726).
+    CodeLensRefresh,
     /// The server replied to a request with a JSON-RPC `error` object instead
     /// of a `result` (T123 audit: previously silently dropped, so a failed
     /// rename/code-action/format/… just appeared to do nothing) — the
@@ -230,6 +261,17 @@ fn log_push(log: &LogBuf, line: String) {
     q.push_back(line);
 }
 
+/// How far a server supports code lenses (T726).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LensSupport {
+    /// No `codeLensProvider`.
+    None,
+    /// Lenses, each sent complete.
+    Lenses,
+    /// Lenses, some sent without a command for `codeLens/resolve`.
+    Resolve,
+}
+
 /// One running language server.
 struct Server {
     child: Child,
@@ -257,6 +299,13 @@ struct Server {
     /// workspace-folder changes (T123f) — see
     /// `message::parse_workspace_folders_change_support`.
     workspace_folders_change_support: bool,
+    /// Whether this server provides code lenses (`codeLensProvider`, T726)
+    /// and resolves them lazily; background lens refreshes are only sent to
+    /// servers that provide them.
+    code_lens: LensSupport,
+    /// The commands it runs via `workspace/executeCommand`
+    /// (`executeCommandProvider.commands`).
+    execute_commands: Vec<String>,
     /// Whether `initialize` has completed and `initialized` been sent.
     ready: bool,
     /// Messages deferred until the server is `ready`.
@@ -840,6 +889,103 @@ impl Lsp {
         });
     }
 
+    /// Ask every server handling `path` that provides code lenses for them
+    /// again, in the background (T726): each reply arrives as
+    /// [`LspEvent::CodeLensUpdate`] naming `path`; an error reply is silent
+    /// (lenses are ambient, like semantic tokens). Returns whether any request
+    /// was sent (no server, not open yet or no lens support: `false`).
+    pub fn refresh_code_lens(&mut self, path: &Path) -> bool {
+        let uri = path_to_uri(path);
+        let mut sent = false;
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            // Before `initialize` finishes the capability is unknown; ask
+            // anyway (queued) -- an unsupported request fails silently.
+            if server.ready && server.code_lens == LensSupport::None {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::CodeLensAuto);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            server.send(message::request(
+                id,
+                "textDocument/codeLens",
+                &message::text_document_params(&uri),
+            ));
+            sent = true;
+        }
+        sent
+    }
+
+    /// Whether a server handling `path` resolves code lenses lazily
+    /// (`codeLens/resolve`, T726).
+    #[must_use]
+    pub fn resolves_code_lens(&self, path: &Path) -> bool {
+        self.configs_for(path).iter().any(|c| {
+            self.servers
+                .get(&c.language_id)
+                .is_some_and(|s| s.code_lens == LensSupport::Resolve)
+        })
+    }
+
+    /// Resolve one unresolved code lens of `path` (`codeLens/resolve`, T726),
+    /// sent to the first server handling `path` that resolves lenses; the
+    /// reply arrives as [`LspEvent::CodeLensResolved`]. Like
+    /// [`Lsp::execute_command`] this targets one server: nothing records which
+    /// server sent the lens. Returns whether a request was sent.
+    pub fn resolve_code_lens(&mut self, path: &Path, lens: &Value) -> bool {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            if server.code_lens != LensSupport::Resolve {
+                continue;
+            }
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::CodeLensResolve);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri,
+                    version,
+                },
+            );
+            server.send(message::request(id, "codeLens/resolve", lens));
+            return true;
+        }
+        false
+    }
+
+    /// Whether a server handling `path` advertised `command` in its
+    /// `executeCommandProvider.commands` (T726), i.e. runs it via
+    /// [`Lsp::execute_command`]. A lens whose command no server advertises is
+    /// a client-side command the host must map or refuse.
+    #[must_use]
+    pub fn executes_command(&self, path: &Path, command: &str) -> bool {
+        self.configs_for(path).iter().any(|c| {
+            self.servers
+                .get(&c.language_id)
+                .is_some_and(|s| s.execute_commands.iter().any(|x| x == command))
+        })
+    }
+
     /// Execute a server command (`workspace/executeCommand`); the response is
     /// ignored (edits arrive via a server `workspace/applyEdit` request).
     ///
@@ -1225,6 +1371,15 @@ impl Lsp {
 
         // Server → client request (has both id and method).
         if let (Some(method), true) = (has_method, has_id) {
+            if method == "workspace/codeLens/refresh" {
+                // T726: acknowledge, and let the host re-request its lenses.
+                events.push(LspEvent::CodeLensRefresh);
+                if let Some(server) = self.servers.get_mut(lang) {
+                    let id = msg.get("id").cloned().unwrap_or(Value::Null);
+                    server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": null }));
+                }
+                return;
+            }
             if method == "workspace/applyEdit" {
                 // Apply the edit on the host and acknowledge optimistically.
                 if let Some(params) = msg.get("params") {
@@ -1317,9 +1472,13 @@ impl Lsp {
             // capability -- Tree-sitter's own highlighting already covers
             // the baseline, so a server without support (or a transient
             // failure) shouldn't interrupt the user with an error.
+            // T726: background lens refreshes and resolves are ambient too.
             if matches!(
                 kind,
-                Pending::WorkspaceDiagnostics | Pending::SemanticTokens
+                Pending::WorkspaceDiagnostics
+                    | Pending::SemanticTokens
+                    | Pending::CodeLensAuto
+                    | Pending::CodeLensResolve
             ) {
                 return;
             }
@@ -1366,6 +1525,14 @@ impl Lsp {
             }
             return;
         }
+        // T726: lens replies are routed to their document (a `null` refresh
+        // means "no lenses") and dropped once that document has moved on.
+        if matches!(kind, Pending::CodeLensAuto | Pending::CodeLensResolve) {
+            if let Some((target, true)) = target {
+                Self::lens_reply(kind, target.path, result, events);
+            }
+            return;
+        }
         if result.is_null() {
             return;
         }
@@ -1382,6 +1549,21 @@ impl Lsp {
             return;
         }
         Self::response_to_events(kind, result, events);
+    }
+
+    /// Turn a current background-lens or lens-resolve reply into its event.
+    fn lens_reply(kind: Pending, path: PathBuf, result: &Value, events: &mut Vec<LspEvent>) {
+        if matches!(kind, Pending::CodeLensAuto) {
+            let (lenses, unresolved) = message::parse_code_lens_list(result);
+            events.push(LspEvent::CodeLensUpdate {
+                path,
+                lenses,
+                unresolved,
+            });
+        } else if let Some(lens) = message::parse_code_lens(result) {
+            let range = result.get("range").cloned().unwrap_or(Value::Null);
+            events.push(LspEvent::CodeLensResolved { path, lens, range });
+        }
     }
 
     /// Parse an edit-returning reply already checked against its document's
@@ -1582,6 +1764,12 @@ impl Lsp {
             server.semantic_tokens_legend = message::parse_semantic_tokens_legend(result);
             server.workspace_folders_change_support =
                 message::parse_workspace_folders_change_support(result);
+            server.code_lens = match message::parse_code_lens_provider(result) {
+                (false, _) => LensSupport::None,
+                (true, false) => LensSupport::Lenses,
+                (true, true) => LensSupport::Resolve,
+            };
+            server.execute_commands = message::parse_execute_commands(result);
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -1665,6 +1853,8 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),
         workspace_folders_change_support: false,
+        code_lens: LensSupport::None,
+        execute_commands: Vec::new(),
         ready: false,
         queue: Vec::new(),
         ready_since: None,

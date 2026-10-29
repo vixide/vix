@@ -251,6 +251,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.call_hierarchy` | Call Hierarchy (Callers) | Menu |
 | `lsp.code_action` | Code Action… | Menu |
 | `lsp.code_lens` | Code Lens… | Menu |
+| `lsp.code_lens_run` | Run Code Lens on Line | Menu |
 | `lsp.complete` | Completion | Menu |
 | `lsp.diagnostics` | Diagnostics… | Menu |
 | `lsp.document_symbols` | Document Symbols… | Menu |
@@ -659,6 +660,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `view.auto_save` | Auto Save | Menu |
 | `view.bottom_dock` | Show/Hide Bottom Dock | Menu |
 | `view.breadcrumbs` | Breadcrumbs | Menu |
+| `view.code_lens` | Code Lens | Menu |
 | `view.explorer` | Toggle Explorer | Catalog |
 | `view.final_newline_on_save` | Final Newline on Save | Menu |
 | `view.focus_other_pane` | Other Pane | Menu |
@@ -712,4 +714,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**705 actions.**
+**707 actions.**

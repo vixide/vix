@@ -82,6 +82,8 @@ impl App {
         // Drain language-server messages (diagnostics, hover/definition/completion
         // responses) and sync the active document.
         self.poll_lsp();
+        // Code lenses (T726): notice edits, refresh when due, resolve visible.
+        self.poll_code_lens();
         self.poll_dap();
         // Install any completed background reparse (large-file async highlighting).
         self.poll_parse();
