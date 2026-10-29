@@ -3487,7 +3487,12 @@ fn click_dropdown_item_runs_its_action() {
     app.on_mouse(click(2, 0)); // open the Vix menu (index 0)
     assert_eq!(app.menu.open, Some(0));
     // The dropdown rect is normally set during render; compute and set it.
-    let dd = vix::ui::menu_dropdown_rect(Rect::new(0, 0, 100, 40), app.layout.menu, 0);
+    let dd = vix::ui::menu_dropdown_rect(
+        app.menu.defs(),
+        Rect::new(0, 0, 100, 40),
+        app.layout.menu,
+        0,
+    );
     app.layout.menu_dropdown = dd;
     // The first Vix item is "About Vix" → opens its dialog.
     app.on_mouse(click(dd.x + 2, dd.y + 1));
@@ -4217,10 +4222,13 @@ fn mirrored_menu_bar_hit_tests_follow_the_drawing() {
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let bar = app.layout.menu;
 
-    let first = vix::ui::menu_title_x(bar, 0, true);
-    let second = vix::ui::menu_title_x(bar, 1, true);
+    let first = vix::ui::menu_title_x(app.menu.defs(), bar, 0, true);
+    let second = vix::ui::menu_title_x(app.menu.defs(), bar, 1, true);
     assert!(first > second, "first menu is rightmost");
-    assert_eq!(first + vix::ui::menu_title_width(0), bar.x + bar.width);
+    assert_eq!(
+        first + vix::ui::menu_title_width(app.menu.defs(), 0),
+        bar.x + bar.width
+    );
 
     // The first title's text is really drawn there (leading pad, then a letter).
     let cell = term.backend().buffer()[(first + 1, bar.y)]
@@ -4238,7 +4246,10 @@ fn mirrored_menu_bar_hit_tests_follow_the_drawing() {
     assert_eq!(app.menu.open, Some(0));
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let dd = app.layout.menu_dropdown;
-    assert_eq!(dd.x + dd.width, first + vix::ui::menu_title_width(0));
+    assert_eq!(
+        dd.x + dd.width,
+        first + vix::ui::menu_title_width(app.menu.defs(), 0)
+    );
     app.on_mouse(click(second + 1, bar.y));
     assert_eq!(app.menu.open, Some(1), "the second title is hit-tested too");
 

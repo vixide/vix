@@ -175,6 +175,9 @@ Panel**.
 
 ## AI menu
 
+AI is optional: with `ai = "off"` in `config.toml` this menu is hidden and
+every AI request is refused (see [configuration](../configuration/index.md)).
+
 Each item runs a configurable assistant on the selection, or the whole file
 when nothing is selected: a CLI by default (`ai_command`, default `claude -p
 "{prompt}"` — point it at Claude, Codex, Mistral, a local `ollama` model, or

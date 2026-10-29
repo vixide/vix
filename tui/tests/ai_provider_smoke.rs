@@ -117,3 +117,66 @@ fn ai_summarize_via_a_configured_http_provider_lands_in_a_new_tab() {
         Some("mock summary".to_string())
     );
 }
+
+/// T730: with `ai = "off"` the same configured provider is never contacted.
+/// The in-process fake listens, and after every AI action has been tried it
+/// has still accepted no connection.
+#[test]
+fn ai_off_never_contacts_the_configured_http_provider() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let endpoint = format!("http://{}/api/generate", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).expect("nonblocking");
+
+    let root = std::env::temp_dir().join(format!("vix-ai-off-smoke-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let file = root.join("notes.txt");
+    std::fs::write(&file, "Some text to summarize.\n").unwrap();
+
+    let settings = {
+        let mut s = Settings::default();
+        s.ai = "off".to_string();
+        s.ai_provider = "ollama".to_string();
+        s.ai_endpoint = endpoint;
+        s
+    };
+    let session_path = std::env::temp_dir().join(format!(
+        "vix-ai-off-smoke-session-{}.toml",
+        std::process::id()
+    ));
+    let mut app = App::new(root.clone(), settings).with_session_path(session_path);
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+    let tabs_before = app.editor.tabs.len();
+
+    for action in [
+        "ai.summarize",
+        "ai.explain",
+        "ai.define",
+        "ai.annotate",
+        "ai.improve",
+        "ai.generate_doc_comment",
+        "ai.edit_with_instruction",
+        "ai.chat",
+    ] {
+        app.run_action(action);
+        assert!(!app.ai_replace_running(), "{action} started a request");
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(500);
+    let mut contacted = false;
+    while Instant::now() < deadline {
+        app.poll_ai_replace();
+        if listener.accept().is_ok() {
+            contacted = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(
+        !contacted,
+        "the provider must never be contacted with AI off"
+    );
+    assert_eq!(app.editor.tabs.len(), tabs_before, "no reply tab opened");
+}

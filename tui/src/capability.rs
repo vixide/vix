@@ -161,6 +161,13 @@ pub fn is_available(action: &str) -> bool {
     Capability::for_action(action).is_none_or(Capability::enabled)
 }
 
+/// Whether `action` is an AI action: one the `ai` capability owns, which the
+/// runtime `ai = "off"` setting (T730) also hides and refuses.
+#[must_use]
+pub fn is_ai_action(action: &str) -> bool {
+    Capability::for_action(action) == Some(Capability::Ai)
+}
+
 /// The names of the capabilities compiled into this build, in [`Capability::ALL`]
 /// order (for `--version --json` and `--doctor`).
 #[must_use]

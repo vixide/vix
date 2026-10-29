@@ -197,7 +197,7 @@
   </header>
   <div class="prose centered">
     <ul>
-      <li><strong>AI menu</strong> — runs the assistant command-line tool you configure (Claude, Codex, a local model, …) on the selection or file: summarize, explain or define in a new tab, or annotate and improve it in place (undo reverts it).</li>
+      <li><strong>AI menu</strong> — runs the assistant command-line tool you configure (Claude, Codex, a local model, …) on the selection or file: summarize, explain or define in a new tab, or annotate and improve it in place (undo reverts it). AI is optional: <code>ai = "off"</code> in the settings hides the AI menu and refuses every AI request, with no rebuild.</li>
       <li><strong>Insert</strong> — UUIDs, Markdown/HTML/SQL/LaTeX/Org snippets, Lorem ipsum, date and time presets, and QR codes.</li>
       <li><strong>Pickers</strong> — Nerd Font glyphs, media types, and more from the Tools menu.</li>
       <li><strong>Calendar</strong> — local time, UTC instant, ISO week date, and a month grid.</li>

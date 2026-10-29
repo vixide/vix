@@ -195,6 +195,14 @@ pub struct Settings {
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
     pub time_zone: String,
+    /// The AI optional switch (T730): `"on"` (default) or `"off"`. Off hides
+    /// the AI menu and every AI palette entry and refuses every AI request at
+    /// run time — the AI menu's actions, the chat panel, the generated commit
+    /// message and the DB workbench assistant — so no prompt ever leaves Vix.
+    /// It needs no rebuild (the `ai` Cargo feature is the build-time switch).
+    /// Any value other than `"on"` counts as `"off"`, failing closed. See
+    /// [`Settings::ai_enabled`].
+    pub ai: String,
     /// Command template the **AI** menu runs over editor text. The placeholder
     /// `{prompt}` is replaced with the action's instruction; if the template also
     /// contains `{file}` it is replaced with the path of a temp file holding the
@@ -754,6 +762,7 @@ impl Default for Settings {
             // Unix, double-quoted on Windows — T547), so the template must
             // NOT add quotes of its own (doing so would let chat text break
             // out and inject shell commands).
+            ai: "on".to_string(),
             ai_command: "claude -p {prompt}".to_string(),
             ai_provider: "cli".to_string(),
             ai_endpoint: String::new(),
@@ -826,6 +835,14 @@ impl Settings {
         } else {
             " ".repeat(self.tab_width.max(1))
         }
+    }
+
+    /// Whether AI features may run (T730): [`ai`](Self::ai) is `"on"`, ignoring
+    /// case and surrounding whitespace. Anything else — `"off"`, a typo —
+    /// turns AI off, so a mistyped value never sends a prompt anywhere.
+    #[must_use]
+    pub fn ai_enabled(&self) -> bool {
+        self.ai.trim().eq_ignore_ascii_case("on")
     }
 
     /// Build the shell command the AI menu runs for `prompt` over the input text
@@ -1105,6 +1122,21 @@ clock_in = true
             second.debug_adapters[0].command,
             first.debug_adapters[0].command
         );
+    }
+
+    #[test]
+    fn ai_switch_defaults_on_and_fails_closed() {
+        let mut s = Settings::default();
+        assert_eq!(s.ai, "on");
+        assert!(s.ai_enabled());
+        s.ai = " ON ".to_string();
+        assert!(s.ai_enabled());
+        for off in ["off", "OFF", "", "no", "of"] {
+            s.ai = off.to_string();
+            assert!(!s.ai_enabled(), "{off:?} should turn AI off");
+        }
+        let parsed: Settings = toml::from_str("ai = \"off\"\n").expect("parse");
+        assert!(!parsed.ai_enabled());
     }
 
     #[test]

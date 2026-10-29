@@ -91,7 +91,7 @@ use tool_panels::{
 };
 
 use crate::app::{App, AppFlags, Focus};
-use crate::menu::menus;
+use crate::menu::MenuDef;
 use crate::theme;
 
 /// The body's column rectangles: file explorer, center editor, message drawer,
@@ -392,7 +392,7 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.menu.is_open() {
         if let Some(i) = app.menu.open {
             app.layout.menu_dropdown =
-                menu_dropdown_rect_for(area, menu_bar, i, layout_mirrored(app));
+                menu_dropdown_rect_for(app.menu.defs(), area, menu_bar, i, layout_mirrored(app));
         }
         draw_menu_dropdown(app, frame);
     }
@@ -670,30 +670,31 @@ fn unix_secs_label(secs: Option<i64>) -> String {
         .unwrap_or_default()
 }
 
-fn menu_offsets() -> Vec<u16> {
+fn menu_offsets(defs: &[MenuDef]) -> Vec<u16> {
     let mut offsets = Vec::new();
     let mut pos: u16 = 0;
-    for m in menus() {
+    for m in defs {
         offsets.push(pos);
         pos += u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
     }
     offsets
 }
 
-/// Width in columns of the top-level menu title at `index` (padding included).
+/// Width in columns of the top-level menu title at `index` of `defs` (the
+/// menu bar as shown, [`crate::menu::Menu::defs`]), padding included.
 #[must_use]
-pub fn menu_title_width(index: usize) -> u16 {
-    u16::try_from(menus()[index].title().chars().count()).unwrap_or(u16::MAX) + 2
+pub fn menu_title_width(defs: &[MenuDef], index: usize) -> u16 {
+    u16::try_from(defs[index].title().chars().count()).unwrap_or(u16::MAX) + 2
 }
 
 /// Screen column where the top-level menu title at `index` starts. Left to right
 /// from the bar's left edge, or, mirrored, right to left from its right edge so
 /// the first menu is rightmost (T564).
 #[must_use]
-pub fn menu_title_x(bar: Rect, index: usize, mirrored: bool) -> u16 {
-    let offset = menu_offsets()[index];
+pub fn menu_title_x(defs: &[MenuDef], bar: Rect, index: usize, mirrored: bool) -> u16 {
+    let offset = menu_offsets(defs)[index];
     if mirrored {
-        (bar.x + bar.width).saturating_sub(offset + menu_title_width(index))
+        (bar.x + bar.width).saturating_sub(offset + menu_title_width(defs, index))
     } else {
         bar.x + offset
     }
@@ -722,20 +723,26 @@ pub fn dock_toggle_cols_for(menu: Rect, mirrored: bool) -> (u16, u16) {
 /// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
 /// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
 #[must_use]
-pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
-    menu_dropdown_rect_for(frame_area, bar, index, false)
+pub fn menu_dropdown_rect(defs: &[MenuDef], frame_area: Rect, bar: Rect, index: usize) -> Rect {
+    menu_dropdown_rect_for(defs, frame_area, bar, index, false)
 }
 
 /// [`menu_dropdown_rect`] for an explicit layout direction. Mirrored, the
 /// dropdown's right edge lines up with its title's right edge.
 #[must_use]
-pub fn menu_dropdown_rect_for(frame_area: Rect, bar: Rect, index: usize, mirrored: bool) -> Rect {
-    let def = &menus()[index];
+pub fn menu_dropdown_rect_for(
+    defs: &[MenuDef],
+    frame_area: Rect,
+    bar: Rect,
+    index: usize,
+    mirrored: bool,
+) -> Rect {
+    let def = &defs[index];
     let width = dropdown_width(def.items);
     let x = if mirrored {
-        (menu_title_x(bar, index, true) + menu_title_width(index)).saturating_sub(width)
+        (menu_title_x(defs, bar, index, true) + menu_title_width(defs, index)).saturating_sub(width)
     } else {
-        menu_title_x(bar, index, false)
+        menu_title_x(defs, bar, index, false)
     };
     let height = u16::try_from(def.items.len()).unwrap_or(u16::MAX) + 2;
     let y = bar.y + 1;

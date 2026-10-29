@@ -27,6 +27,26 @@ Examples:
 | Mistral   | `mistral chat -m "{prompt}"`    |
 | Ollama    | `ollama run llama3 "{prompt}"`  |
 
+## Turning AI off
+
+AI is optional. The `ai` setting is `"on"` by default; `ai = "off"` in
+`config.toml` turns every AI feature off at run time, with no rebuild (T730):
+
+- The **AI** menu disappears from the menu bar (its `Alt+A` mnemonic opens
+  nothing), and no `ai.*` command is listed in the command palette.
+- Every AI request is refused before it is built: an `ai.*` action reached any
+  other way (a keymap binding, a script's `bind_key`), the Git panel's
+  generated commit message (`g`), and the DB workbench assistant (`Ctrl+A`).
+  Each shows the translated *"AI is off"* warning (`msg.ai_off`) and sends
+  nothing. As defense in depth the shared spawn core every request ends in
+  (`App::spawn_ai_cmd`) refuses too, so neither the `ai_command` CLI nor an
+  HTTP provider is ever started.
+- Any value other than `"on"` (case and surrounding spaces ignored) counts as
+  `"off"`, so a typo fails closed.
+
+The setting is read when Vix starts. It is separate from the `ai` Cargo feature
+(`spec/cargo-features`), which removes the AI code from a build entirely.
+
 ## Commands
 
 | Item      | Prompt                | Input                                  | Output                  |

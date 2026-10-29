@@ -297,6 +297,11 @@ impl App {
         prompt: &str,
         text: &str,
     ) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+        // T730: every AI request ends here, so `ai = "off"` is enforced here
+        // too, whatever route led in (defense in depth).
+        if self.ai_refused() {
+            return None;
+        }
         match vix_ai_core::Provider::parse(&self.settings.ai_provider) {
             Some(provider) => self.spawn_ai_http(provider, prompt, text),
             None => self.spawn_ai_cli(prompt, text),

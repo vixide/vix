@@ -101,7 +101,7 @@ use regex::Regex;
 
 use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
 use crate::explorer::Explorer;
-use crate::menu::{Menu, menus};
+use crate::menu::Menu;
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
 use crate::search::{Field, Flags as SearchFlags, Scope, SearchBar};
@@ -2521,7 +2521,10 @@ impl App {
             root,
             editor,
             messages,
-            menu: Menu::default(),
+            menu: Menu {
+                ai_hidden: !settings.ai_enabled(),
+                ..Menu::default()
+            },
             palette: None,
             search: None,
             query_replace: None,
@@ -2920,6 +2923,28 @@ impl App {
         true
     }
 
+    /// Whether `action` may be listed in the menus and the command palette: its
+    /// capability is compiled in (T586) and, for an AI action, `ai = "off"`
+    /// has not turned AI off at run time (T730).
+    #[must_use]
+    pub fn action_listed(&self, action: &str) -> bool {
+        crate::capability::is_available(action)
+            && (self.settings.ai_enabled() || !crate::capability::is_ai_action(action))
+    }
+
+    /// With `ai = "off"` (T730), warn that AI is off and return `true` so the
+    /// caller stops before any AI request is built or sent. Every AI entry
+    /// point checks this: `run_action` for the `ai.*` actions, the generated
+    /// commit message, the DB assistant, and the shared spawn core that every
+    /// request ends in (defense in depth).
+    pub(crate) fn ai_refused(&mut self) -> bool {
+        if self.settings.ai_enabled() {
+            return false;
+        }
+        self.messages.warn(t!("msg.ai_off").to_string());
+        true
+    }
+
     /// Dispatch a named action (shared by the menu bar, command palette, and
     /// keyboard shortcuts).
     pub fn run_action(&mut self, action: &str) {
@@ -2931,6 +2956,10 @@ impl App {
         {
             self.messages
                 .warn(t!("msg.capability_missing", name = cap.name()).to_string());
+            return;
+        }
+        // The runtime AI switch (T730): the same routes in, refused the same way.
+        if crate::capability::is_ai_action(action) && self.ai_refused() {
             return;
         }
         // Go-menu navigation and Org → Contacts live in their own dispatchers
@@ -9438,7 +9467,7 @@ impl App {
             // Items start one row below the dropdown's top border.
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
-                let items = menus()[mi].items;
+                let items = self.menu.defs()[mi].items;
                 let offset = crate::ui::dropdown_scroll(
                     self.menu.item,
                     dd.height.saturating_sub(2) as usize,
@@ -9493,9 +9522,10 @@ impl App {
     /// Index of the top-level menu whose title spans column `col`, if any.
     fn top_menu_index_at(&self, col: u16) -> Option<usize> {
         let mirrored = crate::ui::layout_mirrored(self);
-        (0..menus().len()).find(|&i| {
-            let x = crate::ui::menu_title_x(self.layout.menu, i, mirrored);
-            col >= x && col < x + crate::ui::menu_title_width(i)
+        let defs = self.menu.defs();
+        (0..defs.len()).find(|&i| {
+            let x = crate::ui::menu_title_x(defs, self.layout.menu, i, mirrored);
+            col >= x && col < x + crate::ui::menu_title_width(defs, i)
         })
     }
 
@@ -9566,7 +9596,7 @@ impl App {
             // Items start one row below the dropdown's top border.
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
-                let items = menus()[mi].items;
+                let items = self.menu.defs()[mi].items;
                 let offset = crate::ui::dropdown_scroll(
                     self.menu.item,
                     dd.height.saturating_sub(2) as usize,
@@ -9654,7 +9684,7 @@ impl App {
             // Menu-bar mnemonics keep working while a dropdown is open: the open
             // menu's own letter closes it, another menu's letter switches to it.
             KeyCode::Char(c) if Self::alt(&key) => {
-                if let Some(i) = menu_index_for_alt(c) {
+                if let Some(i) = menu_index_for_alt(self.menu.defs(), c) {
                     self.toggle_menu(i);
                 }
             }
@@ -13972,8 +14002,9 @@ fn jump_label(i: usize) -> String {
 /// jump), Run=R, AI=A, DB=D, Git=G, Org=O, Tools=T, Help=H. JJ and Project have
 /// no mnemonic (Alt+J is the recent-locations jump; Alt+P already means
 /// `search.prev_selection` in the editor; see `global_shared_key`). `None` for
-/// any other letter, or when the menu isn't in the current build.
-fn menu_index_for_alt(c: char) -> Option<usize> {
+/// any other letter, or when the menu isn't in `defs` (the menu bar as shown:
+/// not in this build, or AI hidden by `ai = "off"`).
+fn menu_index_for_alt(defs: &[crate::menu::MenuDef], c: char) -> Option<usize> {
     let name = match c.to_ascii_lowercase() {
         'v' => "menu.vix",
         'f' => "menu.file",
@@ -13989,7 +14020,7 @@ fn menu_index_for_alt(c: char) -> Option<usize> {
         'h' => "menu.help",
         _ => return None,
     };
-    crate::menu::menus().iter().position(|m| m.name == name)
+    defs.iter().position(|m| m.name == name)
 }
 
 /// The char offset within `code` of LSP position `(line, character)`, where
@@ -14310,13 +14341,18 @@ mod tests {
             ('t', "menu.tools"),
             ('h', "menu.help"),
         ] {
-            let i = menu_index_for_alt(c).unwrap_or_else(|| panic!("no menu for Alt+{c}"));
+            let i = menu_index_for_alt(menus, c).unwrap_or_else(|| panic!("no menu for Alt+{c}"));
             assert_eq!(menus[i].name, name, "Alt+{c}");
         }
         // JJ and Project deliberately have no mnemonic; unknown letters are None.
-        assert_eq!(menu_index_for_alt('j'), None);
-        assert_eq!(menu_index_for_alt('p'), None);
-        assert_eq!(menu_index_for_alt('z'), None);
+        assert_eq!(menu_index_for_alt(menus, 'j'), None);
+        assert_eq!(menu_index_for_alt(menus, 'p'), None);
+        assert_eq!(menu_index_for_alt(menus, 'z'), None);
+        // With AI off (T730) Alt+A finds nothing.
+        assert_eq!(
+            menu_index_for_alt(crate::menu::menus_without_ai(), 'a'),
+            None
+        );
     }
 
     use super::*;

@@ -225,6 +225,36 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T730: with `ai = "off"` the Git panel's `g` key generates nothing -- the AI
+/// command never runs and no commit prompt opens.
+#[cfg(feature = "ai")]
+#[test]
+#[ignore = "needs git; creates a throwaway repo"]
+fn git_panel_generates_no_commit_message_with_ai_off() {
+    let dir = unique_dir("gitpanel-ai-off");
+    fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+    let marker = dir.join("ai-ran");
+    let settings = {
+        let mut s = Settings::default();
+        s.ai = "off".to_string();
+        s.ai_command = format!("touch {}", marker.display());
+        s
+    };
+    let mut app = app_at_with(&dir, settings);
+
+    app.run_action("git.changes");
+    app.on_key(keycode(KeyCode::Char(' '))); // stage the file
+    app.on_key(keycode(KeyCode::Char('g'))); // would generate a message
+    assert!(!app.ai_replace_running(), "no AI request started");
+    std::thread::sleep(Duration::from_millis(200));
+    app.poll_ai_replace();
+    assert!(app.prompt.is_none(), "no commit prompt opened");
+    assert!(!marker.exists(), "the AI command never ran");
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 #[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_stash_and_pop_round_trip() {

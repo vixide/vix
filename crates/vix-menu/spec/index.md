@@ -307,6 +307,10 @@ and **Define** open the result in a new editor tab; **Annotate** and **Improve**
 **replace** the text with the result (an undoable edit). Only one AI task runs at
 a time.
 
+With `ai = "off"` (T730) the whole AI menu is hidden: `Menu::ai_hidden` makes
+`Menu::defs` return `menus_without_ai()`, the menu bar minus every `ai.*` leaf
+and any menu left empty. Indices in `Menu` always refer to `Menu::defs`.
+
 Summarize / Explain / Annotate / Improve act on the selection, or the whole file
 when nothing is selected. **Define** instead acts on the selection, or the word
 at the cursor (or the next word when the cursor is between words) — never the

@@ -955,7 +955,7 @@ impl App {
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key)
             && let KeyCode::Char(c) = key.code
-            && let Some(i) = menu_index_for_alt(c)
+            && let Some(i) = menu_index_for_alt(self.menu.defs(), c)
         {
             self.toggle_menu(i);
             return true;

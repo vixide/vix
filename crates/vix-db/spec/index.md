@@ -173,6 +173,9 @@ Keys, in the Workbench:
 - **`Ctrl+K` — Explain.** Explains the statement at the cursor in plain English
   in the text viewer (no SQL run).
 
+With `ai = "off"` (T730) every one of these requests fails in the workbench
+unsent, and Vix warns that AI is off (`crates/vix-ai-panel/spec/ai/index.md`).
+
 SQL replies (Ask / Optimize / Fix) route to the editor and are validated with
 `EXPLAIN`; prose replies (schema question / Explain) open in the scrollable text
 viewer. The reply destination is tracked as an `AiReply` on the request so one
