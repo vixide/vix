@@ -91,6 +91,7 @@ impl App {
             choice_list,
             html_panel,
             system_info,
+            lsp_status,
             file_info,
             text_info,
             markdown_preview,
@@ -323,6 +324,7 @@ impl App {
         panel!(choice_list, choice_list_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);
+        panel!(lsp_status, lsp_status_key);
         panel!(file_info, file_info_key);
         panel!(text_info, text_info_key);
         panel!(markdown_toc, markdown_toc_key);

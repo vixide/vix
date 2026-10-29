@@ -24,6 +24,7 @@ mod hl7;
 mod im;
 mod info_panels;
 mod lsp_popups;
+mod lsp_status;
 mod menu_bar;
 mod minimap;
 mod oc;
@@ -69,6 +70,7 @@ use info_panels::{
     draw_system_info, draw_text_info, draw_vcard,
 };
 use lsp_popups::{draw_code_actions, draw_completion, draw_hover};
+use lsp_status::draw_lsp_status;
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
 use minimap::draw_minimap;
 use picker_panels::{
@@ -552,6 +554,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.system_info.is_some() {
         draw_system_info(app, frame, area);
+    }
+    if app.lsp_status.is_some() {
+        draw_lsp_status(app, frame, area);
     }
     if app.file_info.is_some() {
         draw_file_info(app, frame, area);

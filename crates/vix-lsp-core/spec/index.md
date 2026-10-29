@@ -20,3 +20,15 @@ synchronous and unit-testable with no IO.
 `CodeActionKind`s) to a `textDocument/codeAction` request; the host uses
 `["refactor"]` for the Refactor menu and `["source.organizeImports"]` for
 Organize Imports. `code_action_params` is the unfiltered form.
+
+## Progress and capabilities (T732)
+
+`message::parse_progress_update` decodes a `$/progress` notification into a
+`ProgressUpdate` — its token (a string, or an integer normalized to a
+string), its `ProgressKind` (`Begin`/`Report`/`End`), and the optional
+title, message and percentage — so the client can track several concurrent
+tasks per server. `message::parse_progress` (T123d) still formats a single
+report as one line. `message::parse_capability_names` lists the
+capabilities in an `initialize` result: every key of `capabilities` whose
+value is present and not `false`, with a trailing `Provider` dropped
+(`hoverProvider` → `hover`), sorted.

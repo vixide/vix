@@ -8402,10 +8402,22 @@ editor by completion, diagnostics and never losing work first.
   open buffers, diagnostics, document symbols, the outline and the DB
   schema. Read-only in v1; writes would go through the same preview and
   accept flow as T635. Spec first (`spec/mcp-server`). **Medium–Large.**
-- [ ] **T732 — LSP status and progress.** Show `$/progress` (indexing,
+- [x] **T732 — LSP status and progress.** Show `$/progress` (indexing,
   building) in the status bar and add **View → LSP Status…**: each
   server's name, root, state, capabilities and last error, with restart.
   Neovim 0.12's `:lsp` does this. **Small–Medium.**
+  Done 2026-10-29: `$/progress` is now tracked per server and token
+  (`begin`/`report`/`end`, `vix_lsp_core::message::parse_progress_update`)
+  and the newest task shows as a persistent status-bar segment until it
+  ends (it used to overwrite the transient status message once and never
+  clear). `lsp.status` (View → LSP Status…) is a live overlay over the new
+  `Lsp::statuses()`: name, state (not started/starting/running/failed),
+  command, root, extensions, open files, progress, capabilities (from the
+  `initialize` result) and last error (spawn failed / crashed / a request's
+  error message); ↑/↓ or click selects, `r`/Enter restarts that server
+  (`Lsp::restart_language`), Esc closes. Not done: per-server log from the
+  panel (Show Server Log stays per active file), stop-without-restart, and
+  showing every workspace folder as the root (only the first).
 - [ ] **T733 — Very large files.** Promote the Ideas-backlog item: a
   read-only chunked viewer for multi-gigabyte files with an on-demand
   line index, then publish a measured number (open time, memory) in

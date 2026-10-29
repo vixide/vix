@@ -561,6 +561,87 @@ pub fn parse_progress(params: &Value) -> Option<String> {
     Some(out)
 }
 
+/// The phase of one `$/progress` work-done report (T732). Exhaustive: the
+/// protocol defines exactly these three kinds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgressKind {
+    /// `"begin"`: a new task starts (carries its `title`).
+    Begin,
+    /// `"report"`: an update to a running task.
+    Report,
+    /// `"end"`: the task finished.
+    End,
+}
+
+/// One decoded `$/progress` notification (T732), keyed by its `token` so the
+/// client can track several concurrent tasks per server.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ProgressUpdate {
+    /// The task's token (a string or an integer in the protocol, normalized
+    /// to a string).
+    pub token: String,
+    /// Which phase this report is.
+    pub kind: ProgressKind,
+    /// The task's title (normally sent only with `"begin"`).
+    pub title: Option<String>,
+    /// The optional detail message.
+    pub message: Option<String>,
+    /// The optional completion percentage, 0–100.
+    pub percentage: Option<u64>,
+}
+
+/// Parse a `$/progress` notification's `params` into a [`ProgressUpdate`]
+/// (T732), or `None` when it is not a work-done report (no token, or a
+/// `value` without a recognized `kind`).
+#[must_use]
+pub fn parse_progress_update(params: &Value) -> Option<ProgressUpdate> {
+    let token = match params.get("token")? {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        _ => return None,
+    };
+    let value = params.get("value")?;
+    let kind = match value.get("kind").and_then(Value::as_str)? {
+        "begin" => ProgressKind::Begin,
+        "report" => ProgressKind::Report,
+        "end" => ProgressKind::End,
+        _ => return None,
+    };
+    let text = |key: &str| {
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    Some(ProgressUpdate {
+        token,
+        kind,
+        title: text("title"),
+        message: text("message"),
+        percentage: value.get("percentage").and_then(Value::as_u64),
+    })
+}
+
+/// The capabilities a server advertised in its `initialize` result (T732):
+/// every key of `capabilities` whose value is present and not `false`, with a
+/// trailing `Provider` dropped for brevity (`hoverProvider` → `hover`),
+/// sorted. Empty when the result carries no `capabilities` object.
+#[must_use]
+pub fn parse_capability_names(result: &Value) -> Vec<String> {
+    let Some(caps) = result.get("capabilities").and_then(Value::as_object) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = caps
+        .iter()
+        .filter(|(_, v)| !matches!(v, Value::Null | Value::Bool(false)))
+        .map(|(k, _)| k.strip_suffix("Provider").unwrap_or(k).to_string())
+        .collect();
+    names.sort();
+    names
+}
+
 /// Parse a `textDocument/prepareRename` result into a placeholder decision.
 ///
 /// - `None` — the server says this position cannot be renamed (a bare
@@ -1333,6 +1414,47 @@ mod tests {
         assert_eq!(pairs[0].1[0].message, "boom");
         assert_eq!(pairs[1].0, "file:///c.rs");
         assert!(pairs[1].1.is_empty());
+    }
+
+    #[test]
+    fn progress_update_reads_token_kind_and_fields() {
+        let begin = parse_progress_update(&json!({
+            "token": "ra/index",
+            "value": {"kind": "begin", "title": "Indexing", "percentage": 0}
+        }))
+        .unwrap();
+        assert_eq!(begin.token, "ra/index");
+        assert_eq!(begin.kind, ProgressKind::Begin);
+        assert_eq!(begin.title.as_deref(), Some("Indexing"));
+        assert_eq!(begin.percentage, Some(0));
+        let report = parse_progress_update(&json!({
+            "token": 7,
+            "value": {"kind": "report", "message": "3/9 crates"}
+        }))
+        .unwrap();
+        assert_eq!(report.token, "7");
+        assert_eq!(report.kind, ProgressKind::Report);
+        assert_eq!(report.message.as_deref(), Some("3/9 crates"));
+        let end = parse_progress_update(&json!({"token": 7, "value": {"kind": "end"}})).unwrap();
+        assert_eq!(end.kind, ProgressKind::End);
+        assert!(parse_progress_update(&json!({"value": {"kind": "end"}})).is_none());
+        assert!(parse_progress_update(&json!({"token": 1, "value": {"kind": "x"}})).is_none());
+    }
+
+    #[test]
+    fn capability_names_skip_false_and_drop_provider_suffix() {
+        let result = json!({"capabilities": {
+            "hoverProvider": true,
+            "renameProvider": {"prepareProvider": true},
+            "codeLensProvider": false,
+            "textDocumentSync": 2,
+            "foldingRangeProvider": null
+        }});
+        assert_eq!(
+            parse_capability_names(&result),
+            ["hover", "rename", "textDocumentSync"]
+        );
+        assert_eq!(parse_capability_names(&json!({})), Vec::<String>::new());
     }
 
     #[test]
