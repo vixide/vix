@@ -3,7 +3,7 @@
 Vix makes some capabilities optional at build time: the **DB** workbench, inline
 **image** preview, **script**ing, the integrated **terminal**, the **HTTP**
 client, the **AI** assistant, **Git** and **Jujutsu** integration, **LSP** and
-**DAP** servers, the **tasks** shell runner, and the **hunspell** probe. Every
+**DAP** servers, the **tasks** shell runner, the **hunspell** probe, and **IM**'s IRC connections. Every
 capability is **default-on**, so a released binary is unchanged; the features
 exist for source builds that want a smaller or locked-down Vix.
 
@@ -32,13 +32,13 @@ unflagged: it has no payoff and the heaviest coupling.
 | `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `tui/src/app/git.rs`, with `git_off.rs` stand-ins |
 | `jj` | `jj.*` | (surface only: no crates; `tui/src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
 | `oc` | `oc.*` | `vix-oci/process` (the runner that starts `docker`/`podman`/`nerdctl`; the crate keeps detection, argv builders and parsers, and `vix-oci-panel` stays compiled); implies `tasks`, since logs, builds and Compose stream through the no-shell runner; `tui/src/app/oc.rs`, with `oc_off.rs` stand-ins |
-| `im` (planned, T752) | `im.*` | `vix-im-irc/net` (the IRC connection thread: TCP plus TLS via `rustls`/`webpki-roots`; the codec and client state machine stay in every build), with an `im.rs` App module and `im_off.rs` stand-ins; will join the `net` and `full` umbrellas. T751 ships the crate with `net` off by default and nothing enables it yet |
+| `im` | `im.connect`, `im.disconnect`, `im.join`, `im.leave`, `im.direct` (only the network actions; the IM panel, Notes, sharing, status, notifications and history are in every build) | `vix-im-irc/net` (the IRC connection thread: TCP plus TLS via `rustls`/`webpki-roots`; the codec and client state machine stay compiled), with `tui/src/app/im_net.rs` and `im_off.rs` stand-ins beside the always-compiled `tui/src/app/im.rs`; part of the `net` and `full` umbrellas (T752) |
 | `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
 | `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*`, `edit.pipe_selection`, `edit.insert_command_output` | the runners `spawn_shell`, `run_shell_filter` (Pipe Through Command, T659) and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
 | `full` | umbrella for every capability (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
-| `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
+| `net` | umbrella for `http`, `ai`, `sql`, `im` | everything that can reach the network |
 
 `syntax-*` / `lang-*` (Tree-sitter grammars) are a separate, older axis and are
 unchanged.
@@ -110,7 +110,7 @@ spawning. A new spawn site must be gated behind a capability feature first.
 
 ## Measured
 
-`cargo tree --no-default-features -e normal` has **zero** `sqlx`, `ureq`, `rustls`, `ring`, `keyring`, `rhai`, `portable-pty`, `vt100`, `image` or `ratatui-image` crates: with `net` (`http`, `ai`, `sql`) off, the build contains no TLS stack and makes no outbound network connections.
+`cargo tree --no-default-features -e normal` has **zero** `sqlx`, `ureq`, `rustls`, `ring`, `keyring`, `rhai`, `portable-pty`, `vt100`, `image` or `ratatui-image` crates: with `net` (`http`, `ai`, `sql`, `im`) off, the build contains no TLS stack and makes no outbound network connections.
 
 ## Distribution (T594)
 

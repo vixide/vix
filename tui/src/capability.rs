@@ -29,6 +29,9 @@ pub enum Capability {
     Jj,
     /// The OC container menu (`oc`): Vix starts the Docker/Podman/nerdctl CLI.
     Oc,
+    /// IM's IRC connections (`im`): Vix opens a socket to a chat server.
+    /// The panel and Notes stay in every build.
+    Im,
     /// Language servers (`lsp`): Vix starts the configured server programs.
     Lsp,
     /// Debug adapters (`dap`): Vix starts the configured adapter programs.
@@ -43,7 +46,7 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 13] = [
+    pub const ALL: [Capability; 14] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -53,6 +56,7 @@ impl Capability {
         Capability::Git,
         Capability::Jj,
         Capability::Oc,
+        Capability::Im,
         Capability::Lsp,
         Capability::Dap,
         Capability::Tasks,
@@ -72,6 +76,7 @@ impl Capability {
             Capability::Git => "git",
             Capability::Jj => "jj",
             Capability::Oc => "oc",
+            Capability::Im => "im",
             Capability::Lsp => "lsp",
             Capability::Dap => "dap",
             Capability::Tasks => "tasks",
@@ -92,6 +97,7 @@ impl Capability {
             Capability::Git => cfg!(feature = "git"),
             Capability::Jj => cfg!(feature = "jj"),
             Capability::Oc => cfg!(feature = "oc"),
+            Capability::Im => cfg!(feature = "im"),
             Capability::Lsp => cfg!(feature = "lsp"),
             Capability::Dap => cfg!(feature = "dap"),
             Capability::Tasks => cfg!(feature = "tasks"),
@@ -116,6 +122,13 @@ impl Capability {
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
             ("oc.", Capability::Oc),
+            // Only IM's network actions; the panel, Notes, sharing, status
+            // and history work in every build.
+            ("im.connect", Capability::Im),
+            ("im.disconnect", Capability::Im),
+            ("im.join", Capability::Im),
+            ("im.leave", Capability::Im),
+            ("im.direct", Capability::Im),
             ("lsp.", Capability::Lsp),
             // Every `run.*` action is a debugger (DAP) action.
             ("run.", Capability::Dap),
@@ -198,6 +211,8 @@ mod tests {
             Capability::for_action("oc.containers"),
             Some(Capability::Oc)
         );
+        assert_eq!(Capability::for_action("im.connect"), Some(Capability::Im));
+        assert_eq!(Capability::for_action("im.panel"), None);
         assert_eq!(Capability::for_action("lsp.hover"), Some(Capability::Lsp));
         assert_eq!(Capability::for_action("run.start"), Some(Capability::Dap));
         assert_eq!(

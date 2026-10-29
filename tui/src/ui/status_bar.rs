@@ -55,8 +55,9 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.git_dirty(),
     );
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let right =
-        crate::status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
+    // IM's unread count and mention marker, as text (T754).
+    let segments = format!("{git}{}{info}", app.im_status_segment());
+    let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.

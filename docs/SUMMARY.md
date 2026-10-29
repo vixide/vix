@@ -83,6 +83,7 @@
 - [HTML Character Picker](html-character-picker/index.md)
 - [HL7 View & Send](hl7/index.md)
 - [HTTP Client](http-client/index.md)
+- [IM (instant messaging)](im/index.md)
 - [Hunspell](hunspell/index.md)
 - [Insert](insert/index.md)
 - [Language Server Protocol](language-server-protocol/index.md)

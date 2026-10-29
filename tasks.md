@@ -8358,22 +8358,74 @@ free-floating chat does not; never pop up on your own.
   cleaned; long messages leave room for the relay prefix; the SASL
   password is redacted in `Debug` and wiped after use; CTCP other than
   `ACTION` is never answered. Proptest plus a 127.0.0.1 fake-server test.
-- [ ] **T752 — The IM menu, panel and App wiring.** Every item in the
+- [x] **T752 — The IM menu, panel and App wiring.** Every item in the
   spec's menu table, `tui/src/app/im.rs` with `im_off.rs` stand-ins
   behind a new `im` Cargo feature (in `net` and `full`), the dock panel
   drawn in `tui/src/ui/im.rs`, `[im]` settings, `t!` labels in all 15
   locales, palette entries, docs page `docs/im/index.md`. Without a
   connection the panel offers Notes. **Medium–Large.**
+  *Done 2026-10-29 (`feat/run-s-im`):* the IM menu sits between Git and
+  Org with every id from the spec's table, a palette entry each, and
+  labels, help text, status, prompt and system-message keys in all 15
+  locales. `tui/src/app/im.rs` is in every build (inbox with Notes,
+  actions, panel keys, slash commands, Enter-to-open references through
+  `resolve_in_root` plus a canonical-path check, Share Selection with a
+  confirm that shows the exact snippet and target, Share Location,
+  status, notify policy, history); `im_net.rs` (feature `im` =
+  `vix-im-irc/net`, in `net` and `full`) owns connections and the event
+  pump called from `App::tick`; `im_off.rs` holds the stand-ins and an
+  uninhabited `Link`. Only `im.connect/disconnect/join/leave/direct` are
+  owned by the `im` capability, so a build without it still has the
+  panel and Notes. The dock is drawn by `tui/src/ui/im.rs` beside the
+  editor (`Focus::Im`; plain keys go to the panel, Ctrl/Alt/F-keys fall
+  through to the keymap; a paste becomes one input line). Connect picks
+  from `[[im.accounts]]` (a small picker when there are several); the
+  password comes only from `VIX_IM_PASSWORD_<NAME>`. New `[im]` settings
+  (`ImSettings`, `ImAccount`) and `Settings::data_dir`; the settings
+  reference generator now lists a non-flattened table's fields as dotted
+  keys. Tests: `tui/tests/integration/im.rs` (menu and palette ids,
+  never-opens rule, Notes, slash-command errors, share location and
+  selection, references stay in the root, status segment and Busy, disk
+  history, and an IRC round trip against a 127.0.0.1 fake server with
+  CAP/account-tag, sanitizing and send), plus an `im_dock` snapshot.
+  Decisions: **Comment on Line…** and **Threads…** answer "not available
+  yet" until T753; presence is local only (never sent, per the spec's
+  "no presence outside a Cowork session"); `/join #room key` ignores the
+  key (the client's `Join` has no key); a shared snippet is capped at 50
+  lines; ISUPPORT `CASEMAPPING` is not surfaced by `vix-im-irc`, so the
+  inbox keeps RFC 1459.
 - [ ] **T753 — Anchored threads in the editor.** Gutter marker on lines
   with a thread, **IM → Comment on Line…**, **IM → Threads…**,
   next/previous thread, resolve/reopen, stored in `.vix/im/threads/`;
   share the format with T665. **Medium.**
-- [ ] **T754 — Unread and mention indicators.** Status-bar count and
+  *Not started (2026-10-29).* T752 put **Comment on Line…**
+  (`im.comment_line`) and **Threads…** (`im.threads`) in the menu and
+  palette; both answer `status.im_not_yet` today, from the arm in
+  `tui/src/app/im.rs`'s `run_im_action`. The model (`vix_im::Thread`,
+  `reanchor`, `to_json`/`from_json`) is ready; still to build: the
+  gutter mark (sharing the gutter-sign column with git/coverage), the
+  comment prompt, a threads list overlay (Enter jumps, `r` resolves),
+  next/previous, and storage under `.vix/im/threads/`.
+- [x] **T754 — Unread and mention indicators.** Status-bar count and
   mention marker; `notify` setting; Busy silences. Never opens or
   focuses the panel on its own. **Small.**
-- [ ] **T755 — Disk history.** `history = "disk"`: JSONL per conversation
+  *Done 2026-10-29 with T752:* the status bar's right segment gains
+  `IM n unread @` (text, not color); a notification is a status-line
+  note, raised per `vix_im::Delivery::notifies` (policy from `im.notify`,
+  Busy silences); a message in the conversation on screen is read at
+  once; **Next Unread** goes mentions first. No bell or desktop
+  notification.
+- [x] **T755 — Disk history.** `history = "disk"`: JSONL per conversation
   in the platform data directory, pruned to `history_days`; **Clear
   History**. **Small.**
+  *Done 2026-10-29 with T752:* `Settings::data_dir()` (etcetera, the
+  version confy already uses) + `im/`; one `<id>.jsonl` per conversation
+  (the id percent-escaped, so it can't leave the directory), appended per
+  message, owner-only permissions, pruned (and rewritten) when a
+  conversation loads, loaded as read. **Clear History** confirms, then
+  clears the conversation and deletes its file. History is not written
+  for a conversation's earlier session-only messages when the setting
+  changes mid-run (it is read at startup).
 - [ ] **T756 — Session chat over Cowork (after T694 lands on `main`).** A
   chat message type inside `vix-cowork-net`'s encrypted frames; a
   `Session` conversation appears when a session starts and is dropped

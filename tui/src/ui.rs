@@ -20,6 +20,7 @@ mod git_graph;
 mod help;
 mod hints;
 mod hl7;
+mod im;
 mod info_panels;
 mod lsp_popups;
 mod menu_bar;
@@ -95,6 +96,7 @@ struct BodyColumns {
     explorer: Option<Rect>,
     center: Rect,
     messages: Option<Rect>,
+    im: Option<Rect>,
     outline: Option<Rect>,
     debug: Option<Rect>,
     test: Option<Rect>,
@@ -121,6 +123,9 @@ pub fn layout_mirrored(app: &App) -> bool {
     bidi::mirrored(&app.settings.mirror_layout, &rust_i18n::locale())
 }
 
+/// Width (columns) of the IM dock panel (T752), clamped like the other docks.
+const IM_DOCK_WIDTH: u16 = 40;
+
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
     use crate::app::Visible;
     let dock_max = body.width.saturating_sub(20).max(12);
@@ -139,6 +144,9 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
             'm',
             Constraint::Length(st.messages_width.clamp(12, dock_max)),
         ));
+    }
+    if app.im.open {
+        order.push(('i', Constraint::Length(IM_DOCK_WIDTH.clamp(12, dock_max))));
     }
     if st.secondary_panels.show_outline_dock {
         order.push((
@@ -164,6 +172,7 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
         explorer: at('e'),
         center: at('c').unwrap_or(body),
         messages: at('m'),
+        im: at('i'),
         outline: at('o'),
         debug: at('d'),
         test: at('t'),
@@ -226,6 +235,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         explorer: explorer_rect,
         center: center_rect,
         messages: messages_rect,
+        im: im_rect,
         outline: outline_rect,
         debug: debug_rect,
         test: test_rect,
@@ -273,18 +283,11 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     frame.render_widget(editor_block, editor_cell);
     draw_editor_region(app, frame, editor_inner);
-    if let Some(r) = messages_rect {
-        draw_messages(app, frame, r);
-    }
-    if let Some(r) = outline_rect {
-        draw_outline_dock(app, frame, r);
-    }
-    if let Some(r) = debug_rect {
-        draw_debug_panel(app, frame, r);
-    }
-    if let Some(r) = test_rect {
-        draw_test_panel(app, frame, r);
-    }
+    draw_side_docks(
+        app,
+        frame,
+        [messages_rect, im_rect, outline_rect, debug_rect, test_rect],
+    );
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
         draw_bottom_dock(app, frame, r);
@@ -296,6 +299,27 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     draw_overlays(app, frame, area, rows[0]);
     right_to_left_passes(app, frame);
     single_color_pass(frame);
+}
+
+/// The docks beside the editor, each only when shown: messages, IM, outline,
+/// debugger, tests.
+fn draw_side_docks(app: &mut App, frame: &mut Frame, rects: [Option<Rect>; 5]) {
+    let [messages, im, outline, debug, test] = rects;
+    if let Some(r) = messages {
+        draw_messages(app, frame, r);
+    }
+    if let Some(r) = im {
+        im::draw_im_dock(app, frame, r);
+    }
+    if let Some(r) = outline {
+        draw_outline_dock(app, frame, r);
+    }
+    if let Some(r) = debug {
+        draw_debug_panel(app, frame, r);
+    }
+    if let Some(r) = test {
+        draw_test_panel(app, frame, r);
+    }
 }
 
 /// A single-color theme repaints the whole finished frame in its one color,
@@ -485,6 +509,7 @@ fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
 fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     git_graph::draw_git_graph(app, frame, area);
     oc::draw_oc(app, frame, area);
+    im::draw_im_dialog(app, frame, area);
     draw_todo_tree(app, frame, area);
     draw_fhir_bundle(app, frame, area);
     hl7::draw_hl7_panel(app, frame, area);

@@ -1,0 +1,34 @@
+---
+source: tui/tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help              
+  Explorer ───────╮  untitled         ╭  Messages ─────────────────╭ IM ─────────────────────────
+ src              │────────────────────│ Welcome to Vix. Press Ctrl │> Notes
+ Cargo.toml       │    1              ●│ Ctrl B toggles the file exp│No messages yet
+ README.md        │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │
+                   │                   ││                             │› see src/main.rs:1▏
+                   │                   ││●────────────────────────────│Enter send · Tab next · Up me
+  Output ──────────────────────────────────────────────────────────────────────────────────────────
+(no output yet)
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

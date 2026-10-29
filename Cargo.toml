@@ -54,6 +54,9 @@ ratatui-image = { version = "11.1.0", default-features = false, features = ["cro
 # also compile an AV1 encoder (rav1e/ravif), exr, dds and rayon (T583).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico", "tiff"] }
 confy = "2.0.0"
+# The platform data directory (IM disk history, T755); the version confy
+# already pulls in, so no new crate.
+etcetera = "0.10"
 clap = { version = "4.6.7", features = ["derive"] }
 rust-i18n = "4.2.4"
 base64 = "0.23"

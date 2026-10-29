@@ -78,6 +78,9 @@ jj = ["tasks"]
 # The OC menu (T700-T708): runs the Docker/Podman/nerdctl CLI. Streamed output
 # (logs, builds, Compose) reuses the tasks runner, so it implies `tasks`.
 oc = ["tasks", "vix-oci/process"]
+# The IM menu's IRC connection (T752): the TCP/TLS thread in `vix-im-irc`.
+# Notes, the panel and the codec are in every build; only sockets need this.
+im = ["vix-im-irc/net"]
 lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
@@ -87,9 +90,9 @@ hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
 # capability off legitimately has a different menu bar.
-full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "oc", "lsp", "dap", "tasks", "hunspell"]
+full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "oc", "im", "lsp", "dap", "tasks", "hunspell"]
 # The network-facing capabilities together.
-net = ["http", "ai", "sql"]
+net = ["http", "ai", "sql", "im"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -332,6 +335,12 @@ vix-qr-tool = { workspace = true }
 vix-regex-tool = { workspace = true }
 # Right dock: a message drawer of advice and notifications + selection.
 vix-right-dock = { workspace = true }
+# IM menu (T752): conversations, messages, the sanitizer and code references.
+vix-im = { workspace = true }
+# IM dock panel state (conversation, message list, input line).
+vix-im-panel = { workspace = true }
+# IRCv3 client for IM; its connection thread is behind the `im` feature.
+vix-im-irc = { workspace = true }
 # Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
 vix-roam = { workspace = true }
 # Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the
@@ -414,6 +423,8 @@ nix = { workspace = true }
 # `vt100` parses the integrated terminal's escape sequences into a screen grid.
 vt100 = { workspace = true, optional = true }
 ropey = { workspace = true }
+# Display width of characters, for wrapping IM messages in the dock (T752).
+unicode-width = { workspace = true }
 
 [dev-dependencies]
 clap_mangen = { workspace = true }

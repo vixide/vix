@@ -121,6 +121,7 @@ impl App {
             git_log,
             git_graph,
             oc,
+            im_dialog,
             task_chooser,
             macro_chooser,
             encoding_chooser,
@@ -361,6 +362,7 @@ impl App {
         panel!(git_log, git_log_key);
         panel!(git_graph, git_graph_key);
         panel!(oc, oc_key);
+        panel!(im_dialog, im_dialog_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(encoding_chooser, encoding_key);
@@ -446,6 +448,11 @@ impl App {
         if self.try_overlay_key(key) {
             return;
         }
+        // The IM panel takes plain keys while it has focus; chords fall
+        // through to the keymap so menus and shortcuts still work (T752).
+        if self.focus == Focus::Im && self.im_key(key) {
+            return;
+        }
         // Org table context-sensitive keys (Tab/S-Tab/RET field & row nav,
         // Meta-/Shift-arrow structural edits) take priority over every
         // keymap's own bindings for the same keys — including `Alt`+arrow and
@@ -522,6 +529,8 @@ impl App {
             Focus::Explorer => self.explorer_key(key),
             Focus::Messages => self.messages_key(key),
             Focus::BottomDock => self.bottomdock_key(key),
+            // Chords the keymap did not take; the panel ignores them.
+            Focus::Im => {}
         }
     }
 
@@ -549,6 +558,11 @@ impl App {
             }
             let area = self.editor_view();
             self.editor.paste_str(text, area);
+            return;
+        }
+        // The IM panel's input takes a paste as one line, never as Enter.
+        if self.focus == Focus::Im && !self.overlay_capturing_keys() {
+            self.im_paste(text);
             return;
         }
         // Replay for every other target. `\r\n` is one line break, not two.

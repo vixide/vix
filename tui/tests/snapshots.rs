@@ -295,6 +295,19 @@ fn zen_mode_hides_the_docks() {
 }
 
 #[test]
+fn im_dock_with_notes_and_a_draft() {
+    // T752: the IM dock beside the editor -- the conversation list (Notes),
+    // the empty-conversation hint, the input line with a draft and the key
+    // hint. No message is sent, so no clock time (which depends on the
+    // machine's time zone) reaches the golden file.
+    let mut app = app_at("im-dock");
+    app.run_action("im.panel");
+    type_str(&mut app, "see src/main.rs:1");
+    let screen = render_screen(&mut app, 100, 30);
+    insta::assert_snapshot!(screen);
+}
+
+#[test]
 fn theme_other_than_default() {
     // A bundled theme name (from `themes/nord.json`), not one loaded from a
     // user's on-disk custom-themes directory — that keeps this deterministic

@@ -5735,6 +5735,7 @@ name = "vix-settings"
 version = "2.0.0"
 dependencies = [
  "confy",
+ "etcetera 0.10.0",
  "serde",
  "toml 1.1.8+spec-1.1.0",
  "vix-fileops",
@@ -5898,6 +5899,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "unicode-width 0.2.2",
  "vix-action-catalog",
  "vix-affix",
  "vix-ai-core",
@@ -5960,6 +5962,9 @@ dependencies = [
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",
+ "vix-im",
+ "vix-im-irc",
+ "vix-im-panel",
  "vix-input",
  "vix-jwt-tool",
  "vix-keybinding-editor-panel",
