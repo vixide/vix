@@ -1,0 +1,2 @@
+{"CreatedAt":"2026-10-01 00:00:00 +0000 UTC","Driver":"bridge","ID":"deadbeefcafe","IPv6":"false","Internal":"false","Labels":"","Name":"bridge","Scope":"local"}
+{"CreatedAt":"2026-10-02 00:00:00 +0000 UTC","Driver":"bridge","ID":"feedfacebeef","IPv6":"false","Internal":"false","Labels":"","Name":"appnet","Scope":"local"}

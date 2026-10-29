@@ -630,3 +630,15 @@ Deframer
 deframer
 unescape
 topo
+
+# OC menu (crates/vix-oci, crates/vix-oci-panel)
+podman
+Podman
+unpause
+Unpause
+unpaused
+rmi
+nginx
+pgdata
+dockerfile
+Dockerfile

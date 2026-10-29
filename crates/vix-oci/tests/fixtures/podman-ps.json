@@ -1,0 +1,25 @@
+[
+  {
+    "AutoRemove": false,
+    "Command": ["nginx", "-g", "daemon off;"],
+    "Created": 1760951642,
+    "CreatedAt": "",
+    "Exited": false,
+    "Id": "9d8c7b6a5f4e3d2c1b0a99887766554433221100ffeeddccbbaa998877665544",
+    "Image": "docker.io/library/nginx:1.27",
+    "Names": ["web"],
+    "Pod": "",
+    "Ports": [
+      {"host_ip": "", "container_port": 80, "host_port": 8080, "range": 1, "protocol": "tcp"}
+    ],
+    "State": "running"
+  },
+  {
+    "Created": 1760900000,
+    "Id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "Image": "docker.io/library/alpine:3.19",
+    "Names": ["batch"],
+    "Ports": null,
+    "State": "exited"
+  }
+]
