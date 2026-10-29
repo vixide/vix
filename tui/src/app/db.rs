@@ -123,7 +123,8 @@ impl App {
             .as_mut()
             .and_then(crate::db::Browser::take_ai_request)
         {
-            if self.ai_replace.is_some() {
+            // T730: with AI off the request fails in the workbench, unsent.
+            if self.ai_replace.is_some() || self.ai_refused() {
                 if let Some(b) = self.db.as_mut() {
                     b.ai_failed();
                 }

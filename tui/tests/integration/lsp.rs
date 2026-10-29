@@ -139,7 +139,12 @@ fn hover_moves_menu_dropdown_selection() {
     app.layout.menu = Rect::new(0, 0, 100, 1);
     app.on_mouse(click(2, 0)); // open the Vix menu (index 0)
     assert_eq!(app.menu.open, Some(0));
-    let dd = vix::ui::menu_dropdown_rect(Rect::new(0, 0, 100, 40), app.layout.menu, 0);
+    let dd = vix::ui::menu_dropdown_rect(
+        app.menu.defs(),
+        Rect::new(0, 0, 100, 40),
+        app.layout.menu,
+        0,
+    );
     app.layout.menu_dropdown = dd;
 
     // Hover (no button) over the third item; the highlight follows the pointer

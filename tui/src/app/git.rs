@@ -803,6 +803,10 @@ impl App {
     /// user still reviews the text and presses Enter (or Esc to discard).
     #[cfg(feature = "ai")]
     fn git_generate_commit_message(&mut self) {
+        // T730: refuse before running `git diff` for a request never sent.
+        if self.ai_refused() {
+            return;
+        }
         if self.ai_replace.is_some() {
             self.status = t!("status.ai_busy").to_string();
             return;

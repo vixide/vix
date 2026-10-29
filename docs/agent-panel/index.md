@@ -12,6 +12,14 @@ Unlike the one-shot AI menu commands (Summarize, Explain, …), the chat panel
 keeps a running conversation: each reply is remembered and fed back as context on
 the next turn, so you can ask follow-up questions.
 
+## AI optional
+
+AI in Vix is optional. Set `ai = "off"` in `config.toml` and the AI menu and
+every AI command palette entry disappear, and every AI request is refused: the
+chat panel, the AI menu's commands, the Git panel's generated commit message
+and the DB workbench assistant all show *"AI is off"* and send nothing. No
+rebuild is needed; restart Vix after changing the setting.
+
 ## Using it
 
 - **Type** a message on the input line at the bottom and press **Enter** to send.

@@ -2339,6 +2339,35 @@ pub fn menus() -> &'static [MenuDef] {
         .as_slice()
 }
 
+/// The menu bar with AI hidden, cached on first use (see [`menus_without_ai`]).
+static MENUS_NO_AI_CELL: std::sync::OnceLock<Vec<MenuDef>> = std::sync::OnceLock::new();
+
+/// Whether `action` belongs to the AI menu's namespace (`ai.*`).
+#[must_use]
+pub fn is_ai_action(action: &str) -> bool {
+    action.starts_with("ai.")
+}
+
+/// [`menus`] with every `ai.*` leaf removed, and with it the AI menu itself
+/// (T730: the runtime `ai = "off"` switch, as opposed to a build without the
+/// `ai` capability). Built once, from [`menus`], so the build's own action
+/// filter still applies.
+#[must_use]
+pub fn menus_without_ai() -> &'static [MenuDef] {
+    MENUS_NO_AI_CELL
+        .get_or_init(|| {
+            let all = menus()
+                .iter()
+                .map(|m| MenuDef {
+                    name: m.name,
+                    items: m.items,
+                })
+                .collect();
+            filter_menus(all, |a| !is_ai_action(a))
+        })
+        .as_slice()
+}
+
 /// Decides whether an action id belongs in this build's menus.
 type ActionFilter = fn(&str) -> bool;
 
@@ -2627,9 +2656,24 @@ pub struct Menu {
     pub subsub: Option<usize>,
     /// Whether the highlighted submenu item's own submenu (third level) is open.
     pub subsub_open: bool,
+    /// Hide the AI menu and every other `ai.*` item (T730, the `ai = "off"`
+    /// setting). Set by the host from its settings; see [`menus_without_ai`].
+    pub ai_hidden: bool,
 }
 
 impl Menu {
+    /// The menu bar this state navigates: [`menus`], or [`menus_without_ai`]
+    /// when [`Self::ai_hidden`] is set. Indices in [`Self::open`] and the rest
+    /// always refer to this list.
+    #[must_use]
+    pub fn defs(&self) -> &'static [MenuDef] {
+        if self.ai_hidden {
+            menus_without_ai()
+        } else {
+            menus()
+        }
+    }
+
     /// Whether a dropdown is currently open.
     #[must_use]
     pub fn is_open(&self) -> bool {
@@ -2658,7 +2702,7 @@ impl Menu {
     /// Open the menu at index `i` (no-op if out of range). No item is highlighted
     /// yet — the user picks one by arrowing, hovering, or typing.
     pub fn open_index(&mut self, i: usize) {
-        if i < menus().len() {
+        if i < self.defs().len() {
             self.open = Some(i);
             self.item = None;
             self.sub = None;
@@ -2698,7 +2742,7 @@ impl Menu {
     pub fn submenu_items(&self) -> Option<&'static [Item]> {
         let i = self.open?;
         let it = self.item?;
-        menus()[i].items[it].submenu
+        self.defs()[i].items[it].submenu
     }
 
     /// Whether the highlighted submenu item's own (third-level) submenu is open.
@@ -2730,7 +2774,7 @@ impl Menu {
             self.sub = None;
             return;
         }
-        let n = menus().len();
+        let n = self.defs().len();
         self.open_index((i + n - 1) % n);
     }
 
@@ -2751,13 +2795,13 @@ impl Menu {
             return;
         }
         if let Some(it) = self.item
-            && let Some(sub) = menus()[i].items[it].submenu
+            && let Some(sub) = self.defs()[i].items[it].submenu
         {
             self.sub_open = true;
             self.sub = Some(first_selectable(sub));
             return;
         }
-        let n = menus().len();
+        let n = self.defs().len();
         self.open_index((i + 1) % n);
     }
 
@@ -2765,7 +2809,7 @@ impl Menu {
     /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
-        let items = menus()[i].items;
+        let items = self.defs()[i].items;
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
                 self.subsub = Some(prev_selectable(ss, self.subsub.unwrap_or(0)));
@@ -2791,7 +2835,7 @@ impl Menu {
     /// highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
-        let items = menus()[i].items;
+        let items = self.defs()[i].items;
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
                 self.subsub = Some(match self.subsub {
@@ -2820,7 +2864,7 @@ impl Menu {
     /// return the leaf action to run. Does nothing when nothing is highlighted.
     pub fn enter(&mut self) -> Option<&'static str> {
         let i = self.open?;
-        let items = menus()[i].items;
+        let items = self.defs()[i].items;
         let it_idx = self.item?;
         if self.subsub_open {
             let ss = self.subsubmenu_items()?;
@@ -2854,7 +2898,7 @@ impl Menu {
     /// to step Save → Save As.
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
-        let items = menus()[i].items;
+        let items = self.defs()[i].items;
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
                 let from = self.subsub.unwrap_or_else(|| ss.len().saturating_sub(1));
@@ -2889,7 +2933,7 @@ impl Menu {
     #[must_use]
     pub fn selected_action(&self) -> Option<&'static str> {
         let i = self.open?;
-        let items = menus()[i].items;
+        let items = self.defs()[i].items;
         let it_idx = self.item?;
         if self.subsub_open {
             let ss = self.subsubmenu_items()?;

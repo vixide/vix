@@ -8392,11 +8392,23 @@ editor by completion, diagnostics and never losing work first.
 
 ### Features
 
-- [ ] **T730 — "AI optional" switch.** One setting, `ai = "off"`, hides
+- [x] **T730 — "AI optional" switch.** One setting, `ai = "off"`, hides
   the AI menu and AI palette entries and refuses every AI call at run time
   (the generated commit message and DB assist included), without a
   rebuild. The docs and site then say "AI optional" plainly; Zed 1.0
   markets the same switch. **Small.**
+  *Done 2026-10-29:* `Settings::ai` (`"on"` default; anything else fails
+  closed to off) and `Settings::ai_enabled`. `Menu::ai_hidden` swaps the
+  menu bar for `vix_menu::menus_without_ai()`; the palette lists through
+  `App::action_listed`. `App::ai_refused` (translated `msg.ai_off`) guards
+  `run_action` for every `ai.*` id, the Git panel's `g`, the DB assistant,
+  and the shared spawn core `spawn_ai_cmd`. Spec in
+  `crates/vix-ai-panel/spec/ai/index.md`; docs in configuration, menus,
+  agent-panel and the docs index; the site's Features page says "AI is
+  optional". Tests: menu/palette/run-action in `tui/tests/integration/ai.rs`,
+  the Git `g` key in `git.rs`, and no connection to the in-process fake
+  provider in `tui/tests/ai_provider_smoke.rs`. Read at startup; the GUIs'
+  native menus still build from `vix_menu::menus()`.
 - [x] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
   Protocol over stdio so an agent can read Vix's view of a workspace:
   open buffers, diagnostics, document symbols, the outline and the DB

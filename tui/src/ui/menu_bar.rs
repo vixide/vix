@@ -13,7 +13,6 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
 use super::{draw_scrollbar, dropdown_scroll};
 use crate::app::App;
-use crate::menu::menus;
 use crate::theme::{self, icon};
 
 pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
@@ -22,7 +21,8 @@ pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
         Block::default().style(theme::region_base(theme::Region::MenuBar)),
         area,
     );
-    for (i, m) in menus().iter().enumerate() {
+    let defs = app.menu.defs();
+    for (i, m) in defs.iter().enumerate() {
         let open = app.menu.open == Some(i);
         let style = if open {
             theme::selected()
@@ -30,8 +30,8 @@ pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
             Style::default().fg(theme::region_fg(theme::Region::MenuBar))
         };
         let rect = Rect {
-            x: super::menu_title_x(area, i, mirrored),
-            width: super::menu_title_width(i),
+            x: super::menu_title_x(defs, area, i, mirrored),
+            width: super::menu_title_width(defs, i),
             ..area
         }
         .intersection(area);
@@ -178,7 +178,7 @@ fn render_dropdown(
 pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let Some(i) = app.menu.open else { return };
     let area = app.layout.menu_dropdown;
-    render_dropdown(frame, area, menus()[i].items, app.menu.item);
+    render_dropdown(frame, area, app.menu.defs()[i].items, app.menu.item);
 
     // An open submenu is drawn to the right of its parent item. It may be open
     // with nothing highlighted yet (`app.menu.sub == None`).
@@ -266,7 +266,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.sub, items.len())));
     }
     if let Some(idx) = app.menu.item {
-        let items = menus()[mi].items;
+        let items = app.menu.defs()[mi].items;
         let rect = app.layout.menu_dropdown;
         return items
             .get(idx)
@@ -274,7 +274,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.item, items.len())));
     }
     let rect = app.layout.menu_dropdown;
-    menus()[mi].help().map(|h| (h, rect, rect.y))
+    app.menu.defs()[mi].help().map(|h| (h, rect, rect.y))
 }
 
 /// Draw a help tooltip for the deepest currently-highlighted menu entry, placed

@@ -39,7 +39,7 @@ Highlights:
   selection) · [Macros](macros/index.md) (record, save, replay).
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
-  `ai_command` assistant).
+  `ai_command` assistant). AI is optional: `ai = "off"` turns it all off.
 - [Scripting](scripting/index.md) (Rhai `.rhai` scripts — new palette
   commands, key bindings, buffer transforms, no rebuild).
 - DB: [Database Workbench](db/index.md) (SQLite/Postgres/MySQL — connections,

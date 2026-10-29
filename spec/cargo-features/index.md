@@ -62,6 +62,10 @@ unchanged.
   `Capability::for_action`; an id owned by a compiled-out capability — reached by
   keymap, a script's `bind_key`, or typed input — shows the translated
   *"X is not included in this build"* (`msg.capability_missing`, all locales).
+- **AI also has a runtime switch.** Separately from the `ai` feature, the
+  `ai = "off"` setting (T730) hides the AI menu and palette entries and refuses
+  every AI request in a build that has the capability. See
+  `crates/vix-ai-panel/spec/ai/index.md`.
 - **Builds say what they are.** `vix --version --json` carries a `capabilities`
   array and `vix --doctor` / Help → Run Diagnostics a "build capabilities" row.
 - **Prefixes are the contract.** `Capability::for_action` maps an action-id

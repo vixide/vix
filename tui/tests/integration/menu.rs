@@ -462,7 +462,7 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
     let bar = Rect::new(0, 0, 200, 1);
     let frame = Rect::new(0, 0, 200, 40);
     for (i, m) in vix::menu::menus().iter().enumerate() {
-        let rect = vix::ui::menu_dropdown_rect(frame, bar, i);
+        let rect = vix::ui::menu_dropdown_rect(vix::menu::menus(), frame, bar, i);
         for it in m.items {
             if it.shortcut.is_empty() {
                 continue;
