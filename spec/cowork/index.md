@@ -1,6 +1,6 @@
 # Cowork — real-time collaborative editing
 
-**Status:** proposed (2026-10-28). Planning only; no code. Tasks T690–T697 in
+**Status:** in progress (2026-10-29). T690 decided (below); T691 onward are implemented as the tasks list records. Tasks T690–T697 in
 [`tasks.md`](../../tasks.md). Supersedes the "Collaborative editing" entry in
 the Ideas backlog.
 
@@ -92,3 +92,67 @@ is not a hosted service and it does not replace git.
 
 Hosted relay service, voice/video, audio, cloud accounts, collaborative
 debugging, guest-side LSP.
+
+## Decision record (T690, 2026-10-29)
+
+**Decision: `loro` (1.17.x, MIT).** Spike: a scratch crate outside the
+workspace, release build, Apple-silicon macOS, rustc 1.99. A 1 MB source file
+(about 16,000 lines) is loaded as one insert, then 20,000 random single-char
+inserts and deletes are applied (one transaction each), the document is
+snapshotted, and a second replica imports the snapshot. The `ropey` row is the
+buffer-only baseline.
+
+| Candidate | License | Load | 20k edits | Snapshot | Peak RSS | Verdict |
+| --------- | ------- | ---- | --------- | -------- | -------- | ------- |
+| `ropey` (baseline) | MIT | n/a | 3 ms | n/a | 6 MB | the buffer; stays the source of truth |
+| `loro` 1.17 | MIT | 3 ms | 29 ms | 353 KB | 26 MB | **chosen** |
+| `diamond-types` 1.0 | ISC | 0.5 ms | 6 ms | 79 KB | 25 MB | fastest, but see below |
+| `yrs` 0.28 | MIT | 0.4 ms | 3,156 ms | 1.7 MB | 32 MB | the 1 MB block splits are slow |
+| `automerge` 0.12 | MIT | 290 ms | 243 ms | 184 KB | 364 MB | memory far above the 5 MB cap's budget |
+
+All four converged (the importing replica matched byte for byte) and all four
+are permissively licensed, so none is excluded by `deny.toml`.
+
+Why Loro over the faster `diamond-types`: the bridge, not raw speed, is the
+cost that matters. Loro ships exactly the three things Cowork needs and
+`diamond-types` ships none of them:
+
+1. **Stable cursors** (`LoroText::get_cursor` / `LoroDoc::get_cursor_pos`).
+   The throwaway test put a cursor before "world" in `hello world`, had a
+   second replica insert `>>> ` at the start and ` <<<` at the end, imported
+   that, and the cursor moved from 6 to 10 (it followed its character). This
+   is both the local-cursor-stability and the remote-presence primitive.
+2. **Change events as text deltas** (`LoroDoc::subscribe`, `Diff::Text` with
+   retain, insert and delete runs, tagged `Import` or `Local`). A remote
+   import therefore turns into ordinary `(offset, delete, insert)` buffer
+   edits with no diffing of whole strings.
+3. **Per-peer undo** (`UndoManager`). With peer A's `A:` and peer B's `B:`
+   both inserted, A's undo removed only `A:`.
+
+Loro also offers `LoroText::update`, which diffs a whole new string into the
+document, the right tool for an external disk reload on the host.
+
+Rejected: `automerge` (an order of magnitude more memory and a slow load), `yrs` (3 s for 20k edits in a
+large block; relative positions exist but the slow path is the common one),
+`diamond-types` (best numbers, but a text-only library with no public stable-cursor,
+per-peer undo or change-event API that the spike found: we would write all
+three).
+
+Build impact: `loro` adds about 90 transitive crates, all MIT or Apache-2.0
+(checked with `cargo deny`), and compiles in about 30 seconds in release.
+It is a dependency of `vix-cowork` only, which is not in the default build
+(see "Build gating").
+
+### Settled design points
+
+- **Position unit.** Loro text positions are Unicode scalar values, the same
+  unit as `ropey` char indices and `vix-editor-core` offsets. No conversion.
+- **Source of truth.** The `ropey` buffer renders; the CRDT mirrors it. Local
+  edits are pushed into the CRDT as they happen; remote edits arrive as
+  deltas and are applied to the buffer.
+- **Peer ids.** Each session peer gets a random 64-bit CRDT peer id assigned
+  by the host at join (never reused), so two guests cannot collide.
+- **Size cap.** 5 MB per shared buffer by default, refused at share time.
+- **Wire format.** Loro's binary updates, carried inside the encrypted frames
+  of `vix-cowork-net`; the application protocol adds a version byte and a
+  message tag.

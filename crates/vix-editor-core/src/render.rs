@@ -95,6 +95,9 @@ impl Editor {
             );
         }
 
+        // Cowork: other participants' carets, beneath the local cursor
+        self.draw_remote_carets(area, buf, line_number_width, total_chars);
+
         // draw marks
         if let Some(ref marks) = self.marks {
             for &(start, end, _color) in marks {
@@ -879,7 +882,7 @@ impl Editor {
     /// Overlay `style` on the cells covering the character range `[start, end)`
     /// across the visible lines, accounting for grapheme widths and horizontal
     /// scroll. Used by selection, mark, spell-check, and diagnostic layers.
-    fn highlight_char_range(
+    pub(crate) fn highlight_char_range(
         &self,
         area: Rect,
         buf: &mut Buffer,
@@ -943,7 +946,7 @@ impl Editor {
     /// Draw a one-cell block at the character offset `pos` with `style`. When
     /// `exclusive_end` is set the caret must lie strictly before the last visible
     /// column (used for bracket matching); otherwise the end column is allowed.
-    fn draw_caret_block(
+    pub(crate) fn draw_caret_block(
         &self,
         area: Rect,
         buf: &mut Buffer,

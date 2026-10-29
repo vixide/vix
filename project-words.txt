@@ -645,3 +645,21 @@ pgdata
 dockerfile
 Dockerfile
 IBANs
+# Cowork (T690-T697): CRDT candidates and crypto vocabulary
+Loro
+automerge
+yrs
+CRDTs
+Teletype
+ChaCha
+BLAKE
+AEAD
+PSK
+Poly
+heapless
+bitmaps
+polyfill
+unmaintained
+cowork
+VXCW
+collab
