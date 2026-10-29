@@ -399,6 +399,42 @@ kbd {
 /* Small layout helpers */
 
 .centered { margin-left: auto; margin-right: auto; }
+
+/* At-a-glance numbers under the hero. */
+.stat-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  text-align: center;
+}
+.stat-strip li {
+  padding: 1rem 0.5rem;
+  border: 1px solid var(--vix-border);
+  border-radius: 8px;
+}
+.stat-value { display: block; font-size: 2rem; font-weight: 700; color: var(--vix-primary); }
+.stat-label { color: var(--vix-text-muted); }
+
+/* Home-page comparison slice. */
+.table-scroll { overflow-x: auto; }
+.compare-table { width: 100%; border-collapse: collapse; }
+.compare-table th, .compare-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--vix-border);
+}
+.compare-table td, .compare-table thead th { text-align: center; }
+.compare-table tbody th { text-align: left; font-weight: normal; }
+
+/* FAQ disclosure list. */
+.faq details { border-bottom: 1px solid var(--vix-border); padding: 0.75rem 0; }
+.faq summary { cursor: pointer; font-weight: 600; }
+.faq details p { margin: 0.5rem 0 0; }
+
+/* Closing call to action. */
+.cta { text-align: center; }
 .section-more { text-align: center; margin-top: 1.5rem; }
 .small-print { font-size: 0.95rem; color: var(--vix-text-muted); }
 

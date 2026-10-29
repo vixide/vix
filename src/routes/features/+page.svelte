@@ -168,7 +168,7 @@
     <ul>
       <li><strong>Ten keymaps</strong> — Apple (the default), VS Code for macOS and Windows, Emacs, Vi, Spacemacs, IntelliJ for macOS and Windows, Eclipse, and Sublime Text, switchable live from <strong>View → Keymap</strong>. On macOS, <kbd>Command</kbd> works wherever <kbd>Control</kbd> does.</li>
       <li><strong>Discoverable</strong> — a menu bar for every action, a searchable overlay of every shortcut (<kbd>F1</kbd>), and full mouse support.</li>
-      <li><strong>Themes</strong> — 20 bundled, including high-contrast and Catppuccin; <code>theme = "auto"</code> follows your terminal's light or dark background; a theme editor; and your own JSON themes.</li>
+      <li><strong>Themes</strong> — 21 bundled, including high-contrast and Catppuccin; <code>theme = "auto"</code> follows your terminal's light or dark background; a theme editor; and your own JSON themes.</li>
       <li><strong>Languages</strong> — the interface is translated into 15 languages, including Arabic, Bengali, Chinese, Hindi, Japanese, Russian, Welsh, Irish and Scottish Gaelic.</li>
       <li><strong>Focus</strong> — Zen mode hides the docks and status bar; a breadcrumb bar shows <code>file ▸ symbol</code>; the status bar shows language, line ending, encoding, selection size and position.</li>
     </ul>
