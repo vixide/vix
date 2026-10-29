@@ -509,6 +509,65 @@ research; every plan's first task re-checks the facts it rests on.
    Run configurations, organize imports. GUI designers, decompilers and
    profilers are a deliberate no.
 
+### Improvements and promotion, researched (2026-10-29)
+
+A web survey of Zed 1.0 (Apr 2026), Neovim 0.12, Helix 25.07, Fresh and
+Emacs 30/31, and of the landing pages of Zed, Helix, Micro, Fresh, Starship
+and Ratatui.
+
+**Assessment.** Vix's breadth is already ahead of every terminal
+comparator: LSP, DAP, Tree-sitter, Git and Jujutsu, Org, a DB workbench, a
+REST client and containers in one binary. Its risk is depth on the
+daily-driver loop. Completion as you type (T612), inline diagnostics
+(T614), incremental sync (T615), OSC 52 over SSH (T625), live and
+per-project settings (T626, T627) and hot exit (T629) are still open, and
+the musl build crashes (T670). These matter more to a first-week user than
+any new tool, so they come before new vertical features and before the
+2.0 launch.
+
+**What the field moved to.** The clear trend of 2025–26 is agents: Zed's
+Agent Client Protocol (Vix's T635), parallel agents per worktree, open
+edit-prediction and LSP inline completion (T618), and an explicit "AI
+optional" switch. Smaller trends: plugin managers with lockfiles (T637),
+trust prompts for project config (Vix already has workspace trust), and
+huge-file handling as a headline claim.
+
+**Promotion.** The best pages lead with a short category claim, one
+install line, one real demo, then one GIF per headline feature, a
+comparison, an honest FAQ and hard numbers. The README and site were
+reworked on these lines on 2026-10-29. What is left needs assets,
+measurements or the user's decisions: social cards, a theme gallery,
+more install channels, a "try without installing" route, measured
+performance numbers, a 2.0 launch kit, listings, a community home and a
+translated landing page.
+
+Tasks: **Run R, T730–T748.**
+
+### IM — instant messaging for people editing together (2026-10-29)
+
+Spec: [`spec/instant-message`](spec/instant-message/index.md). The
+research is blunt: free-floating chat inside editors gets removed (Zed
+dropped channel chat in 2025) or dies with its product (Code With Me,
+Atom Teletype), while threads anchored to code (Replit's Inline Threads)
+and chat scoped to a live session survive. So Vix's **IM** menu builds:
+
+1. **Code-aware messages**: `path:line` references that open on Enter,
+   shared selections and locations, sent only after the user sees them.
+2. **Anchored threads**: comments on a line that follow the code,
+   resolvable, stored in the workspace, so they work with no network.
+3. **Session chat over Cowork's encrypted link**, with verified
+   identities and nothing to set up, plus shared session notes.
+4. **A bridge to an open protocol** for team channels: IRCv3 over TLS
+   first (small, no SDK), Matrix later behind its own feature, since
+   real end-to-end encryption needs the large pre-1.0 `matrix-sdk`.
+
+It never pops up on its own, sanitizes every received character before
+drawing it (no escape sequences, no bidi overrides), and keeps history in
+memory unless the user opts in. Voice, video and proprietary chat
+services are out of scope.
+
+Tasks: **Run S, T750–T759.**
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on
