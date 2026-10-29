@@ -53,11 +53,14 @@ pub(super) fn draw_which_key(app: &App, frame: &mut Frame, area: Rect) {
 pub(super) fn draw_jump_labels(app: &App, frame: &mut Frame) {
     let Some(jm) = app.jump.as_ref() else { return };
     let ed = app.layout.editor;
-    let top = app.editor.top_visible_line();
+    let Some(tab) = app.editor.active_tab() else {
+        return;
+    };
     let style = theme::selected();
     for (label, line) in &jm.labels {
-        // The label's row within the editor viewport (non-wrapped mapping).
-        let Some(row_off) = line.checked_sub(top) else {
+        // The label's row within the editor viewport (folds and code-lens
+        // rows, T726, counted).
+        let Some(row_off) = tab.editor.text_screen_row(*line, ed) else {
             continue;
         };
         let y = ed.y + u16::try_from(row_off).unwrap_or(u16::MAX);

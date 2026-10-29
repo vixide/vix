@@ -101,6 +101,7 @@ field is absent.
 | `org_agenda_files` | array of strings | `[]` | The Org agenda's explicit file list (workspace-relative paths), managed by **Org → Agenda → File List**. Empty means every `.org` file in the project. |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
 | `restore_session` | bool | `true` | Reopen the previous [session](../../vix-session/spec/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
+| `code_lens` | bool | `true` | Draw code lenses (T726) -- a language server's "Run \| Debug \| 3 references" and local "Run test" lenses -- as dimmed rows above their lines. Toggled by **View → Editor → Code Lens** (`view.code_lens`). Held in `LanguageFeatureSettings` (`Settings::language_features`), flattened like every group. |
 | `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../../vix-find-panel/spec/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |
 
 ### Indentation

@@ -13,12 +13,15 @@ use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_an
 use crate::editor::{Editor, Flags};
 
 /// One on-screen row in soft-wrap mode: a `[start, end)` character-offset slice
-/// of a logical line (`line`).
+/// of a logical line (`line`), or (`lens`) the virtual code-lens row drawn
+/// above that line (T726), which holds no text (`start == end ==` the line's
+/// first char).
 #[derive(Clone, Copy)]
 pub(crate) struct VRow {
     pub(crate) line: usize,
     pub(crate) start: usize,
     pub(crate) end: usize,
+    pub(crate) lens: bool,
 }
 
 /// Shared per-render context for drawing one visual row. Bundles the values that
@@ -101,6 +104,10 @@ impl Editor {
             ..
         } = *ctx;
 
+        if vr.lens {
+            self.draw_lens_row(buf, vr.line, text_x0, right, draw_y);
+            return;
+        }
         let line_start = code.line_to_char(vr.line);
         let line_len = code.line_len(vr.line);
         let is_first = vr.start == line_start;
@@ -280,7 +287,7 @@ impl Editor {
 
     /// Visible visual rows (soft-wrap segments) starting at `offset_y`, up to
     /// `max_rows`. Each row holds at most `text_width` display columns of one
-    /// logical line.
+    /// logical line; a line with a code lens (T726) is preceded by its lens row.
     pub(crate) fn visual_rows(&self, text_width: usize, max_rows: usize) -> Vec<VRow> {
         let code = self.code_ref();
         let total_lines = code.len_lines();
@@ -290,11 +297,23 @@ impl Editor {
         while line < total_lines && rows.len() < max_rows {
             let line_start = code.line_to_char(line);
             let line_len = code.line_len(line);
+            if self.lens_row_above(line) {
+                rows.push(VRow {
+                    line,
+                    start: line_start,
+                    end: line_start,
+                    lens: true,
+                });
+                if rows.len() >= max_rows {
+                    break;
+                }
+            }
             if line_len == 0 {
                 rows.push(VRow {
                     line,
                     start: line_start,
                     end: line_start,
+                    lens: false,
                 });
                 line += 1;
                 continue;
@@ -324,6 +343,7 @@ impl Editor {
                     line,
                     start: line_start + col,
                     end: line_start + seg_end,
+                    lens: false,
                 });
                 col = seg_end;
             }

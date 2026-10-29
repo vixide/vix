@@ -204,48 +204,16 @@ impl Editor {
         hints
     }
 
-    /// Screen row (absolute `y`) for logical `line`, accounting for folds, or
-    /// `None` if the line is hidden, above the viewport, or below it. With no
-    /// active folds this is exactly `area.top() + (line - offset_y)`.
+    /// Screen row (absolute `y`) for logical `line`, accounting for folds and
+    /// code-lens rows (T726), or `None` if the line is hidden, above the
+    /// viewport, or below it. With no folds or lenses this is exactly
+    /// `area.top() + (line - offset_y)`.
     fn screen_row(&self, line: usize, area: Rect) -> Option<u16> {
-        if line < self.offset_y {
-            return None;
-        }
-        let row = if self.has_folds() {
-            if self.is_line_hidden(line) {
-                return None;
-            }
-            (self.offset_y..line)
-                .filter(|&l| !self.is_line_hidden(l))
-                .count()
-        } else {
-            line - self.offset_y
-        };
+        let row = self.rows_to_text(line)?;
         let draw_y = area
             .top()
             .checked_add(u16::try_from(row).unwrap_or(u16::MAX))?;
         (draw_y < area.bottom()).then_some(draw_y)
-    }
-
-    /// The logical line drawn at screen row `screen_y` (0-based within the view),
-    /// accounting for folds. With no active folds this is `offset_y + screen_y`.
-    fn line_at_row(&self, screen_y: usize) -> Option<usize> {
-        let total = self.code_ref().len_lines();
-        if !self.has_folds() {
-            let line = self.offset_y + screen_y;
-            return (line < total).then_some(line);
-        }
-        let mut count = 0;
-        for line in self.offset_y..total {
-            if self.is_line_hidden(line) {
-                continue;
-            }
-            if count == screen_y {
-                return Some(line);
-            }
-            count += 1;
-        }
-        None
     }
 
     /// Draw line numbers, the git-diff gutter, and the (optionally
@@ -260,46 +228,25 @@ impl Editor {
         total_lines: usize,
     ) {
         let code = self.code_ref();
-        let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
-        // For relative numbering, the cursor's line is the reference point.
-        let cursor_line = if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS) {
-            code.char_to_line(self.cursor)
-        } else {
-            0
-        };
 
-        let mut row: u16 = 0;
-        for line_idx in self.offset_y..total_lines {
-            if self.is_line_hidden(line_idx) {
-                continue;
-            }
-            let draw_y = area.top() + row;
+        let text_x0 = area.left() + line_number_width_u16;
+        for (row, view_row) in self.view_rows(area.height as usize).into_iter().enumerate() {
+            let draw_y = area.top() + u16::try_from(row).unwrap_or(u16::MAX);
             if draw_y >= area.bottom() {
                 break;
             }
-            row = row.saturating_add(1);
-            if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
-                // Hybrid relative: the cursor line shows its absolute number;
-                // others show their distance from it.
-                let value = if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS)
-                    && line_idx != cursor_line
-                {
-                    line_idx.abs_diff(cursor_line)
-                } else {
-                    line_idx + 1
-                };
-                let line_number = format!("{value:>line_number_digits$}");
-                buf.set_string(area.left(), draw_y, &line_number, line_number_style);
-            }
-            // Gutter sign column (just before the text, or column 0 when line
-            // numbers are hidden).
-            let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
-                area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
-            } else {
-                area.left()
+            let line_idx = match view_row {
+                crate::lens::ViewRow::Lens(line) => {
+                    self.draw_lens_row(buf, line, text_x0, area.right(), draw_y);
+                    continue;
+                }
+                crate::lens::ViewRow::Text(line) => line,
             };
-            self.draw_gutter_sign(buf, sign_x, draw_y, line_idx, area.right());
+            if line_idx >= total_lines {
+                break;
+            }
+            self.draw_line_gutter(buf, area, draw_y, line_idx, line_number_digits);
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
 
@@ -371,6 +318,39 @@ impl Editor {
                 default_text_style,
             );
         }
+    }
+
+    /// Draw `line_idx`'s line number (absolute, or hybrid-relative to the
+    /// cursor's line) and its gutter sign at screen row `draw_y`.
+    fn draw_line_gutter(
+        &self,
+        buf: &mut Buffer,
+        area: Rect,
+        draw_y: u16,
+        line_idx: usize,
+        line_number_digits: usize,
+    ) {
+        if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
+            // Hybrid relative: the cursor line shows its absolute number;
+            // others show their distance from it.
+            let cursor_line = self.code_ref().char_to_line(self.cursor);
+            let value =
+                if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS) && line_idx != cursor_line {
+                    line_idx.abs_diff(cursor_line)
+                } else {
+                    line_idx + 1
+                };
+            let line_number = format!("{value:>line_number_digits$}");
+            buf.set_string(area.left(), draw_y, &line_number, self.line_number_style);
+        }
+        // Gutter sign column (just before the text, or column 0 when line
+        // numbers are hidden).
+        let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
+            area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+        } else {
+            area.left()
+        };
+        self.draw_gutter_sign(buf, sign_x, draw_y, line_idx, area.right());
     }
 
     /// Draw the fold marker (▸ folded, ▾ open) in the gutter padding column just
@@ -634,10 +614,7 @@ impl Editor {
         }
         let step = unit.chars().count();
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
-        for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else {
-                break;
-            };
+        for (screen_y, line_idx) in self.text_rows(area.height as usize) {
             if line_idx >= total_lines {
                 break;
             }
@@ -689,7 +666,8 @@ impl Editor {
             Color::Rgb(0x4d, 0xd0, 0xe1), // cyan
         ];
         let code = self.code_ref();
-        let Some(first) = self.line_at_row(0) else {
+        let rows = self.text_rows(area.height as usize);
+        let Some(&(_, first)) = rows.first() else {
             return;
         };
         let base = code.line_to_char(first);
@@ -706,10 +684,7 @@ impl Editor {
                 _ => d,
             });
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
-        for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else {
-                break;
-            };
+        for (screen_y, line_idx) in rows {
             if line_idx >= total_lines {
                 break;
             }
@@ -767,10 +742,8 @@ impl Editor {
         // than one query per line: cheaper while typing, and the (start, end) cache
         // now memoizes one entry instead of one per visible line.
         let mut region: Option<(usize, usize)> = None;
-        for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else {
-                break;
-            };
+        let rows = self.text_rows(area.height as usize);
+        for &(_, line_idx) in &rows {
             if line_idx >= total_lines {
                 break;
             }
@@ -816,10 +789,7 @@ impl Editor {
             }
         }
         highlights.extend(treesitter_highlights);
-        for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else {
-                break;
-            };
+        for (screen_y, line_idx) in rows {
             if line_idx >= total_lines {
                 break;
             }

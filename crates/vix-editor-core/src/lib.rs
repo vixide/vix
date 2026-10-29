@@ -36,5 +36,6 @@ pub mod utils;
 // Vix-owned modules, held to crate-wide `clippy::pedantic`: the soft-wrap layout
 // + renderer, bracket matching, and line ops.
 mod brackets;
+mod lens;
 mod lines;
 mod wrap;

@@ -298,3 +298,111 @@ fn refactor_and_organize_need_a_language_server() {
     assert!(app.code_actions.is_none());
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// The whole screen, as text.
+#[cfg(feature = "tasks")]
+fn screen(app: &mut App) -> String {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(160, 50)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    let buf = term.backend().buffer().clone();
+    (0..buf.area.height)
+        .map(|y| {
+            (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// T726: a file's tests get a local "Run test" lens drawn on its own row
+/// above the test's `fn` line (no language server needed), the buffer text is
+/// untouched, `lsp.code_lens_run` on that line runs the test, and View → Code
+/// Lens turns the rows off.
+#[test]
+#[cfg(feature = "tasks")]
+fn local_test_lenses_are_drawn_above_their_line_and_run_from_it() {
+    let (mut app, dir) = app_with_store("lens-local");
+    app.layout.editor = Rect::new(0, 0, 80, 12);
+    let src = "fn helper() {}\n\n#[test]\nfn it_works() {\n    assert!(true);\n}\n";
+    app.editor.new_tab_with_content(src);
+    app.editor.active_tab_mut().unwrap().path = Some(dir.join("src/lib.rs"));
+    app.poll_code_lens();
+
+    let ed = &app.editor.active_tab().unwrap().editor;
+    assert_eq!(ed.code_lens_at(3), Some("Run test"), "above `fn it_works`");
+    assert_eq!(active_text(&app), src, "a lens is not buffer text");
+    let shown = screen(&mut app);
+    let lens_row = shown.lines().position(|l| l.contains("Run test"));
+    let fn_row = shown.lines().position(|l| l.contains("fn it_works"));
+    assert!(
+        matches!((lens_row, fn_row), (Some(l), Some(f)) if l + 1 == f),
+        "lens row directly above its line:\n{shown}"
+    );
+
+    // Not on a lensed line: nothing to run.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(0);
+    app.run_action("lsp.code_lens_run");
+    assert!(!app.command_running());
+    // On the test's line: the lens runs the test.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(3);
+    app.run_action("lsp.code_lens_run");
+    assert!(
+        app.bottom_dock
+            .lines
+            .iter()
+            .any(|l| l == "$ cargo test -- --exact it_works"),
+        "{:?}",
+        app.bottom_dock.lines
+    );
+    app.run_action("tools.cancel_command");
+
+    // `lsp.code_lens` lists every lens in the file in the pick-one overlay.
+    app.run_action("lsp.code_lens");
+    assert_eq!(app.choice_list.as_ref().map(|c| c.panel.len()), Some(1));
+    app.on_key(keycode(KeyCode::Esc));
+
+    app.run_action("view.code_lens");
+    assert!(!app.editor.active_tab().unwrap().editor.has_code_lenses());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// T726: edits re-request lenses only once typing pauses (the debounce), so
+/// a lens added by an edit shows up after the wait, not on every keystroke.
+#[test]
+fn lens_refresh_after_an_edit_waits_for_the_debounce() {
+    let (mut app, dir) = app_with_store("lens-debounce");
+    let f = dir.join("t.py");
+    fs::write(&f, "x = 1\n").unwrap();
+    app.editor.open(&f, false).unwrap();
+    app.poll_code_lens();
+    assert!(!app.editor.active_tab().unwrap().editor.has_code_lenses());
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor.set_content("def test_a():\n    pass\n");
+    app.poll_code_lens();
+    assert!(
+        !app.editor.active_tab().unwrap().editor.has_code_lenses(),
+        "not yet: the debounce is still running"
+    );
+    std::thread::sleep(Duration::from_millis(600));
+    app.poll_code_lens();
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .code_lens_at(0)
+            .is_some(),
+        "refreshed once the edit settled"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

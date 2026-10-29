@@ -4,6 +4,7 @@
 mod ai;
 #[cfg(not(feature = "ai"))]
 mod ai_off;
+mod code_lens;
 mod command_palette;
 mod compare;
 mod coverage;
@@ -1307,15 +1308,6 @@ pub struct CodeActionMenu {
     pub refactor: bool,
 }
 
-/// The LSP code-lens chooser: invokable lenses and the highlighted row. Each
-/// lens carries its `(line, title, command, arguments)`.
-pub struct CodeLensMenu {
-    /// Offered lenses.
-    pub lenses: Vec<crate::lsp_core::message::CodeLens>,
-    /// Index of the highlighted lens.
-    pub selected: usize,
-}
-
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
@@ -2108,8 +2100,9 @@ pub struct App {
     pub(crate) regex_tester: Option<crate::regex_tool::Tester>,
     /// Code-action chooser (LSP quick fixes / refactors), when open.
     pub(crate) code_actions: Option<CodeActionMenu>,
-    /// Code-lens chooser (LSP), when open.
-    pub(crate) code_lens: Option<CodeLensMenu>,
+    /// Code lenses per file (T726): server and local lenses, refresh
+    /// debounce and pending resolves. See `app/code_lens.rs`.
+    pub(crate) code_lenses: code_lens::LensMap,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Visible::POMODORO`].
     pub(crate) pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -2637,7 +2630,7 @@ impl App {
             calculator: None,
             regex_tester: None,
             code_actions: None,
-            code_lens: None,
+            code_lenses: code_lens::LensMap::new(),
             pomodoro: None,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
@@ -3516,6 +3509,7 @@ impl App {
             "tools.todo_tree" => self.open_todo_tree(),
             a if self.run_http_action(a) => {}
             a if self.run_ide_parity_action(a) => {}
+            a if self.run_code_lens_action(a) => {}
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
             a if self.run_cowork_action(a) => {}
@@ -3525,7 +3519,6 @@ impl App {
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
-            "lsp.code_lens" => self.request_code_lens(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
             "editor.fold" => self.fold_at_cursor(true),
@@ -4086,6 +4079,7 @@ impl App {
                     let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
                     self.lsp.did_save(&p, &text);
                 }
+                self.code_lens_saved(&p);
                 // Persist the undo tree alongside the saved content.
                 if self.settings.editor_behavior.persistent_undo
                     && let Some(tab) = self.editor.active_tab()
@@ -4634,53 +4628,6 @@ impl App {
             self.lsp.request_document_highlight(&path, line, character);
         } else {
             self.status = t!("status.lsp_inactive").to_string();
-        }
-    }
-
-    // ----- Code lens ------------------------------------------------------
-
-    /// Request the code lenses for the active file (LSP).
-    fn request_code_lens(&mut self) {
-        if let Some(path) = self.active_path()
-            && self.lsp.handles(&path)
-        {
-            self.lsp.request_code_lens(&path);
-        } else {
-            self.status = t!("status.lsp_inactive").to_string();
-        }
-    }
-
-    /// Handle a key for the code-lens chooser: Up/Down move, Enter runs, Esc
-    /// closes.
-    fn code_lens_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.code_lens = None,
-            KeyCode::Up => {
-                if let Some(m) = self.code_lens.as_mut() {
-                    m.selected = m.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(m) = self.code_lens.as_mut() {
-                    m.selected = (m.selected + 1).min(m.lenses.len().saturating_sub(1));
-                }
-            }
-            KeyCode::Enter => self.run_selected_lens(),
-            _ => {}
-        }
-    }
-
-    /// Execute the highlighted code lens's command (`workspace/executeCommand`).
-    fn run_selected_lens(&mut self) {
-        let Some(menu) = self.code_lens.take() else {
-            return;
-        };
-        let Some((_, title, command, args)) = menu.lenses.into_iter().nth(menu.selected) else {
-            return;
-        };
-        if let Some(path) = self.active_path() {
-            self.lsp.execute_command(&path, &command, &args);
-            self.status = t!("status.lens_run", title = title).to_string();
         }
     }
 
@@ -7326,6 +7273,9 @@ impl App {
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
+                ev @ (crate::lsp::LspEvent::CodeLensUpdate { .. }
+                | crate::lsp::LspEvent::CodeLensResolved { .. }
+                | crate::lsp::LspEvent::CodeLensRefresh) => self.on_code_lens_event(ev),
                 crate::lsp::LspEvent::SelectionRanges(ranges) => {
                     self.apply_selection_range(&ranges);
                 }

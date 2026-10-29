@@ -35,8 +35,6 @@ impl App {
             self.regex_tester_key(key);
         } else if self.code_actions.is_some() {
             self.code_action_key(key);
-        } else if self.code_lens.is_some() {
-            self.code_lens_key(key);
         } else {
             return false;
         }
@@ -68,7 +66,6 @@ impl App {
             calculator,
             regex_tester,
             code_actions,
-            code_lens,
             // `try_panel_key`.
             terminal,
             db,

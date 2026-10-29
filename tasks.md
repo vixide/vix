@@ -8340,13 +8340,33 @@ so, and the first task of each plan re-checks the facts it depends on.
     the definition in the choice-list overlay (LSP, else the text-search
     fallback). **Not done:** read-only popup only (no in-popup editing or
     nested peek), the first of several definitions is shown, no syntax colors.
-- [ ] **T726 — CodeLens.** **Medium.**
-  - **Partial 2026-10-29 (left open):** the existing `lsp.code_lens` chooser
-    already ran lenses; it now sorts by line, shows line numbers and starts on
-    the lens at or after the cursor, and reports when there are none. **Still
-    to do (the core of the task):** draw lenses inline above their lines (a
-    virtual-line row in the editor view), refresh them on edit/save, and add
-    local (non-LSP) "Run test" lenses from `vix-tasks` test-at-point.
+- [x] **T726 — CodeLens.** **Medium.**
+  - **Partial 2026-10-29:** the `lsp.code_lens` chooser sorts by line, shows
+    line numbers and starts on the lens at or after the cursor.
+  - **Done 2026-10-29:** lenses are drawn as dimmed virtual rows above their
+    lines (`vix-editor-core` `lens.rs`: one layout shared by every render
+    layer, cursor scroll, cursor position and mouse hit-testing; soft wrap and
+    folds handled; `Editor::text_screen_row` for host overlays). Refreshed
+    when a buffer is first seen, 500 ms after the last edit, on save and on
+    the server's `workspace/codeLens/refresh` (`Lsp::refresh_code_lens`,
+    background and silent on error, only to servers with `codeLensProvider`,
+    stale replies dropped); unresolved lenses resolved (`codeLens/resolve`)
+    once on screen. `lsp.code_lens_run` runs the cursor line's lens (a
+    `vix-choice-list` pick when several): advertised commands go back as
+    `workspace/executeCommand`, rust-analyzer's `runSingle` runs its cargo
+    command through the command pipeline, `showReferences` opens the
+    references list, anything else gets a translated "unsupported" message.
+    Local "Run test" lenses come from the new
+    `vix_tasks::test_at_point::tests_in_file` where the server put none.
+    `code_lens` setting (new `language_features` group) and View → Editor →
+    Code Lens. Tests: lens layout/render/mouse/focus unit tests, debounce and
+    command-mapping unit tests, two integration tests and a mock-server
+    end-to-end test (`lsp_smoke`). **Not done:** no click-to-run on a lens
+    row (a click places the cursor on its line); rust-analyzer's
+    `debugSingle` and other client-side commands are refused rather than
+    mapped to the debugger; a lens's line is not shifted by edits made
+    before the debounced refresh lands; with several servers on one file the
+    last lens reply wins and resolves go to the first resolving server.
 - [x] **T727 — Postfix completion.** **Small.**
   - **Done 2026-10-29:** `vix-snippets::postfix` templates for Rust, JS/TS,
     Python, Go and C-like languages, expanded on Tab ahead of prefix snippets.

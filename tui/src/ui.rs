@@ -67,7 +67,7 @@ use info_panels::{
     draw_contacts, draw_file_info, draw_markdown_preview, draw_markdown_toc, draw_snippets,
     draw_system_info, draw_text_info, draw_vcard,
 };
-use lsp_popups::{draw_code_actions, draw_code_lens, draw_completion, draw_hover};
+use lsp_popups::{draw_code_actions, draw_completion, draw_hover};
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
 use minimap::draw_minimap;
 use picker_panels::{
@@ -587,9 +587,6 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.code_actions.is_some() {
         draw_code_actions(app, frame, area);
-    }
-    if app.code_lens.is_some() {
-        draw_code_lens(app, frame, area);
     }
     if app.visible.contains(crate::app::Visible::POMODORO) {
         draw_pomodoro(app, frame, area);

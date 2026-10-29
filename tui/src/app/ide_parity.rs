@@ -1,6 +1,7 @@
 //! IDE-parity features (T720-T727, `spec/ide-parity`): Local History, Search
 //! Everywhere, the Refactor menu, Organize Imports and Code Cleanup, named run
-//! configurations, Peek Definition, `CodeLens` polish and postfix completion.
+//! configurations, Peek Definition and postfix completion (`CodeLens`, T726,
+//! lives in `code_lens.rs` and uses the overlay here).
 //!
 //! Most of these are thin wiring over pure crates (`vix-undo-store`'s
 //! `local_history`, `vix-tasks`' `run_config`, `vix-snippets`' `postfix`,
@@ -41,6 +42,11 @@ pub(crate) enum ChoicePurpose {
         path: PathBuf,
         /// 1-based line of the definition.
         line: usize,
+    },
+    /// Code lenses (T726), one per row: Enter runs it.
+    CodeLens {
+        /// The lens per row.
+        lenses: Vec<super::code_lens::Lens>,
     },
 }
 
@@ -167,6 +173,13 @@ impl App {
                     && let Some(name) = names.get(row)
                 {
                     self.run_config_named(name);
+                }
+            }
+            ChoicePurpose::CodeLens { lenses } => {
+                if matches!(action, ChoiceAction::Primary)
+                    && let Some(lens) = lenses.get(row)
+                {
+                    self.run_lens(lens);
                 }
             }
             ChoicePurpose::Peek { path, line } => {
@@ -704,25 +717,6 @@ impl App {
                 line,
             },
         });
-    }
-
-    // ----- T726 CodeLens ------------------------------------------------------
-
-    /// Show the file's lenses in document order with the one at or after the
-    /// cursor's line highlighted, so "run this test" is one Enter away from
-    /// where you are.
-    pub(super) fn on_code_lenses(&mut self, mut lenses: Vec<vix_lsp_core::message::CodeLens>) {
-        if lenses.is_empty() {
-            self.status = t!("status.code_lens_none").to_string();
-            return;
-        }
-        lenses.sort_by_key(|l| l.0);
-        let line = u32::try_from(self.editor.cursor_line()).unwrap_or(u32::MAX);
-        let selected = lenses
-            .iter()
-            .position(|l| l.0 >= line)
-            .unwrap_or(lenses.len() - 1);
-        self.code_lens = Some(super::CodeLensMenu { lenses, selected });
     }
 
     // ----- T727 Postfix completion ------------------------------------------

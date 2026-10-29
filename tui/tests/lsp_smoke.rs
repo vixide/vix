@@ -1199,3 +1199,160 @@ fn mock_server_formatting_replies_name_their_document_and_go_stale() {
         "edits for an old version are dropped"
     );
 }
+
+/// T726: provides code lenses (one complete, one to resolve), runs the
+/// advertised `mock.run` command, and after the first lens request asks the
+/// client to refresh. Every request's method (and an executed command's
+/// name) is appended to the log file `argv[1]`.
+const MOCK_SERVER_CODE_LENS: &str = r"
+import sys, json
+
+LOG = sys.argv[1]
+
+def log(text):
+    with open(LOG, 'a') as f:
+        f.write(text + '\n')
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def rng(line):
+    return {'start':{'line':line,'character':0},'end':{'line':line,'character':2}}
+
+lens_requests = 0
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method:
+        log(method)
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
+            'positionEncoding':'utf-16',
+            'codeLensProvider':{'resolveProvider':True},
+            'executeCommandProvider':{'commands':['mock.run']}}}})
+    elif method == 'textDocument/codeLens':
+        lens_requests += 1
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'range':rng(0),'command':{'title':'$(play) Run mock','command':'mock.run','arguments':[1]}},
+            {'range':rng(1),'data':{'n':1}}]})
+        if lens_requests == 1:
+            send({'jsonrpc':'2.0','id':9001,'method':'workspace/codeLens/refresh'})
+    elif method == 'codeLens/resolve':
+        lens = msg['params']
+        lens['command'] = {'title':'2 references','command':'mock.refs'}
+        send({'jsonrpc':'2.0','id':mid,'result':lens})
+    elif method == 'workspace/executeCommand':
+        log('exec ' + msg['params']['command'])
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+";
+
+/// T726 end to end through a real `App`: lenses are requested on open, drawn
+/// above their lines once the unresolved one is resolved, re-requested on the
+/// server's `workspace/codeLens/refresh`, and `lsp.code_lens_run` sends an
+/// advertised command back as `workspace/executeCommand` while refusing an
+/// unadvertised one.
+#[test]
+fn code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-lens-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_CODE_LENS).unwrap();
+    let log = root.join("requests.log");
+    let file = root.join("a.rs");
+    std::fs::write(&file, "fn a() {}\nfn b() {}\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            log.to_string_lossy().into_owned(),
+        ],
+    });
+    let mut app = App::new(root.clone(), settings);
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+
+    let logged = |n: &str| {
+        std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| *l == n)
+            .count()
+    };
+    let lens = |app: &App, line: usize| {
+        app.editor
+            .active_tab()
+            .and_then(|t| t.editor.code_lens_at(line).map(str::to_string))
+    };
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline
+        && !(lens(&app, 1).is_some() && logged("textDocument/codeLens") >= 2)
+    {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        lens(&app, 0).as_deref(),
+        Some("Run mock"),
+        "icon markup gone"
+    );
+    assert_eq!(lens(&app, 1).as_deref(), Some("2 references"), "resolved");
+    assert!(logged("codeLens/resolve") >= 1);
+    assert!(
+        logged("textDocument/codeLens") >= 2,
+        "re-requested on workspace/codeLens/refresh"
+    );
+
+    // Line 0's lens: an advertised server command.
+    app.run_action("lsp.code_lens_run");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline && logged("exec mock.run") == 0 {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        logged("exec mock.run"),
+        1,
+        "sent as workspace/executeCommand"
+    );
+
+    // Line 1's lens: a command the server never advertised.
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.run_action("lsp.code_lens_run");
+    assert!(app.status.contains("mock.refs"), "refused: {}", app.status);
+
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}
