@@ -30,6 +30,7 @@ vix-convert-from-yaml-into-json-tool = { path = "../crates/vix-convert-from-yaml
 vix-convert-tabular = { path = "../crates/vix-convert-tabular" }
 vix-find-panel = { path = "../crates/vix-find-panel" }
 vix-http-client = { path = "../crates/vix-http-client" }
+vix-im = { path = "../crates/vix-im" }
 vix-lsp-core = { path = "../crates/vix-lsp-core" }
 vix-macros = { path = "../crates/vix-macros" }
 vix-org-table = { path = "../crates/vix-org-table" }
@@ -102,6 +103,13 @@ bench = false
 [[bin]]
 name = "macro_tokens"
 path = "fuzz_targets/macro_tokens.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "im_message"
+path = "fuzz_targets/im_message.rs"
 test = false
 doc = false
 bench = false

@@ -8335,12 +8335,15 @@ IRCv3 bridge for team channels. Research (Zed removed channel chat in
 down) says: anchored threads and session-scoped chat earn their place;
 free-floating chat does not; never pop up on your own.
 
-- [ ] **T750 — `vix-im` core.** The pure crate: conversations, messages
+- [x] **T750 — `vix-im` core.** The pure crate: conversations, messages
   and their kinds, presence, mentions, unread tracking, slash-command
   parsing, the code-reference parser, the sanitizer (property-tested),
   the anchored-thread model with re-anchoring, and history JSONL
   encode/decode. Plus `vix-im-panel` (panel state, no drawing). Re-check
   the spec's unverified facts. **Medium.**
+  Done 2026-10-29 (`feat/t750-vix-im-core`): vix-im + vix-im-panel, 65
+  tests incl. proptest, fuzz target `im_message`. The unverified-facts
+  re-check was not done; carried to T757.
 - [x] **T751 — `vix-im-irc`.** IRCv3 line codec (tags, `server-time`,
   `CAP LS 302`, SASL PLAIN, `PING`, CTCP `ACTION`, `CASEMAPPING`),
   UTF-8-safe splitting under 512 bytes, and a TLS connection

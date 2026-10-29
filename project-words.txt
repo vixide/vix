@@ -645,6 +645,7 @@ pgdata
 dockerfile
 Dockerfile
 IBANs
+<<<<<<< HEAD
 # IM (spec/instant-message, vix-im-irc)
 binstall
 casemapping
@@ -665,3 +666,20 @@ sasl
 sunsetting
 winget
 zeroize
+||||||| 655d205c
+=======
+CASEMAPPING
+isupport
+reanchor
+Replit
+sunsetting
+rcirc
+ement
+Pantalaimon
+Floobits
+Libera
+libera
+sasl
+SASL
+CTCP
+>>>>>>> feat/t750-vix-im-core

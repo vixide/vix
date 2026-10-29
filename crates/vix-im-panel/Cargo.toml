@@ -1,0 +1,16 @@
+[package]
+name = "vix-im-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The IM dock panel's state: selected conversation, message list, input line and Enter-to-open code references, over vix-im; drawing-free."
+
+[dependencies]
+vix-im = { workspace = true }
+vix-input = { workspace = true }
+vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

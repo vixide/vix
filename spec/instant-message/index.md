@@ -156,8 +156,9 @@ Vix owns.
 - **Session transport** — once Cowork's link (`vix-cowork-net`) is on
   `main`, session chat is a separate message type inside the same
   encrypted frames, so a Cowork session has chat with nothing to set up.
-- **App shell** — `tui/src/app/im.rs` owns the actions and the event pump,
-  with `im_off.rs` stand-ins; `tui/src/ui/im.rs` draws the panel.
+- **App shell** — an `im.rs` module under `tui/src/app/` owns the actions
+  and the event pump, with `im_off.rs` stand-ins; an `im.rs` module under
+  `tui/src/ui/` draws the panel.
 - **Cargo feature** `im`, part of `net` and `full` (see
   [cargo-features](../cargo-features/index.md)): it gates `vix-im-irc` and
   every socket. Without it, the IM menu still offers Notes and anchored

@@ -153,7 +153,7 @@ jobs:
       - name: cargo semver-checks
         # A crate with no crates.io release yet has no baseline to compare
         # against: add `--exclude <crate>` until its first publish.
-        run: cargo semver-checks --workspace --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im-irc --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree
+        run: cargo semver-checks --workspace --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree
 
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
