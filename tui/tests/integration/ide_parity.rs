@@ -175,6 +175,7 @@ fn code_cleanup_trims_whitespace_and_fixes_the_final_newline() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn run_configuration_runs_its_before_step_first() {
     let (mut app, dir) = app_with_store("runconfig");
@@ -205,6 +206,7 @@ fn run_configuration_runs_its_before_step_first() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn a_broken_run_file_is_reported_not_run() {
     let (mut app, dir) = app_with_store("runconfig-bad");
@@ -215,6 +217,7 @@ fn a_broken_run_file_is_reported_not_run() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn edit_run_configurations_creates_a_starter_file() {
     let (mut app, dir) = app_with_store("runconfig-edit");

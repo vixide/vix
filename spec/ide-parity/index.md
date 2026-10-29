@@ -1,6 +1,6 @@
 # IDE parity assessment: Visual Studio and JetBrains
 
-**Status:** assessment and advice (2026-10-28); T720–T727 implemented (see [docs](../../docs/ide-parity/index.md)). Tasks T720–T729 in
+**Status:** assessment and advice (2026-10-28); T720–T725 and T727 implemented, T726 (CodeLens) partial (see [docs](../../docs/ide-parity/index.md)). Tasks T720–T729 in
 [`tasks.md`](../../tasks.md).
 
 *Sources: the author's knowledge of Visual Studio, IntelliJ-platform IDEs
@@ -31,7 +31,7 @@ specification-driven and terminal-native, not a clone of a 2 GB IDE.
 | **Bookmarks with mnemonics, numbered** | present | covered | none |
 | **Call/type hierarchy** | call hierarchy only | **Medium** | Add type hierarchy: tracked as T620. |
 | **Peek definition** (VS), **Quick Definition** (JetBrains) | none | covered | An inline read-only popup of the target; cheap with LSP. (T725) Done. |
-| **Inlay hints, Code Vision / CodeLens** | inlay hints present | covered | CodeLens (references, run test) is a thin layer over LSP. (T726) Done. |
+| **Inlay hints, Code Vision / CodeLens** | inlay hints present; lenses in a line-numbered chooser | **Medium** | CodeLens (references, run test) is a thin layer over LSP. (T726) Partial: lenses are listed, not yet drawn inline above their lines. |
 | **Postfix completion and live templates** | snippets | covered | Add postfix (`.if`, `.for`) on top of the snippet engine. (T727) Done. |
 | **Changelists and Shelve** (JetBrains) | git stash | **Medium** | Map to named stashes plus a changelist view; lower than Local History. |
 | **Interactive rebase UI, annotate/blame, 3-way merge** | blame, rebase, merge tool present | covered | Polish only. |

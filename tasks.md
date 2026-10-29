@@ -8265,12 +8265,13 @@ so, and the first task of each plan re-checks the facts it depends on.
     the definition in the choice-list overlay (LSP, else the text-search
     fallback). **Not done:** read-only popup only (no in-popup editing or
     nested peek), the first of several definitions is shown, no syntax colors.
-- [x] **T726 — CodeLens.** **Medium.**
-  - **Done 2026-10-29 (partial):** the existing `lsp.code_lens` chooser already
-    ran lenses; it now sorts by line, shows line numbers and starts on the lens
-    at or after the cursor, and reports when there are none. **Not done:** lenses
-    are not drawn inline above their lines, are not auto-refreshed, and there
-    are no local (non-LSP) "Run test" lenses.
+- [ ] **T726 — CodeLens.** **Medium.**
+  - **Partial 2026-10-29 (left open):** the existing `lsp.code_lens` chooser
+    already ran lenses; it now sorts by line, shows line numbers and starts on
+    the lens at or after the cursor, and reports when there are none. **Still
+    to do (the core of the task):** draw lenses inline above their lines (a
+    virtual-line row in the editor view), refresh them on edit/save, and add
+    local (non-LSP) "Run test" lenses from `vix-tasks` test-at-point.
 - [x] **T727 — Postfix completion.** **Small.**
   - **Done 2026-10-29:** `vix-snippets::postfix` templates for Rust, JS/TS,
     Python, Go and C-like languages, expanded on Tab ahead of prefix snippets.
