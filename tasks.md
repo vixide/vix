@@ -8238,6 +8238,150 @@ spikes and the pure-core tasks (T690, T700, T710) before anything that
 touches the UI; T710 lands alone. The IDE items T721, T724 and T723 are
 the cheapest wins.
 
+## Run R (research: improvements and promotion, 2026-10-29)
+
+From a web survey of Zed 1.0, Neovim 0.12, Helix 25.07, Fresh and Emacs
+30/31, and of the landing pages of Zed, Helix, Micro, Fresh, Starship and
+Ratatui. Many findings were already tasks (ACP is T635, ghost text T618,
+inline diagnostics T614, document colors T621, OSC 52 T625, the Rhai
+plugin installer T637, apt/dnf repositories T669); those are not repeated
+here. **Advice on order:** before 2.0, fix T670 (the musl build crashes)
+and finish the daily-driver items still open from Run M — T612, T614,
+T615, T625, T626, T627, T629 — ahead of new vertical tools. Users judge an
+editor by completion, diagnostics and never losing work first.
+
+### Features
+
+- [ ] **T730 — "AI optional" switch.** One setting, `ai = "off"`, hides
+  the AI menu and AI palette entries and refuses every AI call at run time
+  (the generated commit message and DB assist included), without a
+  rebuild. The docs and site then say "AI optional" plainly; Zed 1.0
+  markets the same switch. **Small.**
+- [ ] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
+  Protocol over stdio so an agent can read Vix's view of a workspace:
+  open buffers, diagnostics, document symbols, the outline and the DB
+  schema. Read-only in v1; writes would go through the same preview and
+  accept flow as T635. Spec first (`spec/mcp-server`). **Medium–Large.**
+- [ ] **T732 — LSP status and progress.** Show `$/progress` (indexing,
+  building) in the status bar and add **View → LSP Status…**: each
+  server's name, root, state, capabilities and last error, with restart.
+  Neovim 0.12's `:lsp` does this. **Small–Medium.**
+- [ ] **T733 — Very large files.** Promote the Ideas-backlog item: a
+  read-only chunked viewer for multi-gigabyte files with an on-demand
+  line index, then publish a measured number (open time, memory) in
+  `docs/performance` that the README and site can quote. Fresh markets
+  exactly this. **Large.**
+- [ ] **T734 — Jupyter kernel REPL (spike first).** Send a selection or
+  an Org `src` block to a Jupyter kernel and show the result inline or in
+  the dock (Zed has a kernel REPL). The spike decides whether the
+  ZeroMQ dependency is acceptable or a `jupyter console` subprocess is
+  enough. **Medium–Large.**
+- [ ] **T735 — Translations in Rhai scripts.** Let a script ship its own
+  strings per locale through the same catalog `t!` reads, so script
+  commands appear in the user's language (Fresh plugins can). After
+  T637. **Small–Medium.**
+
+### Distribution and promotion
+
+- [ ] **T740 — Social cards.** Open Graph and Twitter meta tags on every
+  site page, a 1200×630 PNG card rendered from a real screenshot, and the
+  same image as the GitHub repository's social preview. **Small.**
+- [ ] **T741 — Theme gallery.** One real screenshot per bundled theme
+  (rendered by a VHS tape over the demo workspace), shown as a gallery
+  on the site's features page. Micro's colorscheme carousel is the
+  model. **Small–Medium.**
+- [ ] **T742 — More install channels.** winget, Scoop, a Nix flake
+  (`nix run github:vixide/vix`), AUR, `cargo binstall` metadata and mise,
+  each verified on a real machine or CI runner before it is listed.
+  Fresh lists about fourteen channels. Goes with T669. **Medium.**
+- [ ] **T743 — Try without installing.** `nix run` (from T742) and a
+  container image (`ghcr.io/vixide/vix`) so `docker run -it` opens Vix on
+  a demo workspace; list both on the README and site. **Small–Medium.**
+- [ ] **T744 — Measured claims.** Startup time and memory for Vix, Vim,
+  Helix, Micro and Neovim on the same files with `hyperfine`, in a
+  reproducible script with the machine stated, published in
+  `docs/performance`. Only then may the site quote a number. **Medium.**
+- [ ] **T745 — 2.0 launch kit.** A "What's new in 2.0" page on the site,
+  release notes written for users rather than library authors, and
+  announcement drafts for the user to post. Nothing is posted without the
+  user's say-so. **Small–Medium.**
+- [ ] **T746 — Listings (needs the user's approval for each).** Ratatui's
+  showcase and awesome-ratatui, awesome-rust, Terminal Trove and
+  AlternativeTo. Each listing is outward-facing, so the user approves
+  each submission. **Small.**
+- [ ] **T747 — Community home.** GitHub Discussions (or a Matrix room,
+  which T751 could then join), issue templates for bugs and feature
+  requests, and a `good first issue` label with a handful of real
+  starter tasks; linked from the README and site. The choice of channel
+  is the user's. **Small.**
+- [ ] **T748 — Localized landing page.** The site's language picker sets
+  only `lang`/`dir`; translate the home page's text into the editor's 15
+  languages, per the [Worldwide](spec/worldwide/index.md) spec, starting
+  with the hero, the install block and the FAQ. **Medium.**
+
+Order: T670 and the Run M daily-driver items first; then T730, T740,
+T732 (small, visible); T742 → T743 → T744 before the 2.0 launch kit
+(T745); T746 and T747 need the user's decisions; T731, T733 and T734 are
+spec- or spike-first.
+
+## Run S (IM — instant messaging, 2026-10-29)
+
+Spec: [`spec/instant-message`](spec/instant-message/index.md). A new
+**IM** menu for people editing together: code-aware messages
+(`path:line` references that open on Enter, shared selections), threads
+anchored to lines, session chat over Cowork's encrypted link, and an
+IRCv3 bridge for team channels. Research (Zed removed channel chat in
+2025, Replit replaced chat with inline threads, Code With Me is shutting
+down) says: anchored threads and session-scoped chat earn their place;
+free-floating chat does not; never pop up on your own.
+
+- [ ] **T750 — `vix-im` core.** The pure crate: conversations, messages
+  and their kinds, presence, mentions, unread tracking, slash-command
+  parsing, the code-reference parser, the sanitizer (property-tested),
+  the anchored-thread model with re-anchoring, and history JSONL
+  encode/decode. Plus `vix-im-panel` (panel state, no drawing). Re-check
+  the spec's unverified facts. **Medium.**
+- [ ] **T751 — `vix-im-irc`.** IRCv3 line codec (tags, `server-time`,
+  `CAP LS 302`, SASL PLAIN, `PING`, CTCP `ACTION`, `CASEMAPPING`),
+  UTF-8-safe splitting under 512 bytes, and a TLS connection
+  (`rustls` + `webpki-roots`) on a background thread speaking to the App
+  over channels. Tested against an in-process fake server; no real
+  network in tests. **Medium.**
+- [ ] **T752 — The IM menu, panel and App wiring.** Every item in the
+  spec's menu table, `tui/src/app/im.rs` with `im_off.rs` stand-ins
+  behind a new `im` Cargo feature (in `net` and `full`), the dock panel
+  drawn in `tui/src/ui/im.rs`, `[im]` settings, `t!` labels in all 15
+  locales, palette entries, docs page `docs/im/index.md`. Without a
+  connection the panel offers Notes. **Medium–Large.**
+- [ ] **T753 — Anchored threads in the editor.** Gutter marker on lines
+  with a thread, **IM → Comment on Line…**, **IM → Threads…**,
+  next/previous thread, resolve/reopen, stored in `.vix/im/threads/`;
+  share the format with T665. **Medium.**
+- [ ] **T754 — Unread and mention indicators.** Status-bar count and
+  mention marker; `notify` setting; Busy silences. Never opens or
+  focuses the panel on its own. **Small.**
+- [ ] **T755 — Disk history.** `history = "disk"`: JSONL per conversation
+  in the platform data directory, pruned to `history_days`; **Clear
+  History**. **Small.**
+- [ ] **T756 — Session chat over Cowork (after T694 lands on `main`).** A
+  chat message type inside `vix-cowork-net`'s encrypted frames; a
+  `Session` conversation appears when a session starts and is dropped
+  when it ends; peers shown by verified identity; host mute/remove.
+  **Medium.**
+- [ ] **T757 — Docs, site and demo.** A user guide, a VHS demo of
+  sharing a selection and opening its reference, and a features-page
+  entry. **Small.**
+- [ ] **T758 — Matrix bridge (spike first).** Decide between
+  `matrix-sdk` in-process (pre-1.0, heavy, but real Olm/Megolm E2EE)
+  and talking to a local Pantalaimon or iamb out of process; behind its
+  own Cargo feature either way. **Large.**
+- [ ] **T759 — Follow, presence and session notes (after T693/T695).**
+  Show who is in which file in the panel, follow a peer, and one shared
+  Markdown notes buffer per session. **Medium.**
+
+Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
+T759 wait for Cowork on `main`; T758 last.
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -8318,7 +8462,7 @@ scratch each time they come up.
   folders (#729), dragging a path into the terminal (#662).
 - **Editable live diff** (ttt #795): edit in the diff view itself. Wait
   for T660, which makes both sides real buffers. **L.**
-- **Very large files without loading them** (Fresh's lazy loading): a
+- ~~**Very large files without loading them**~~ Promoted to **T733** 2026-10-29 (Run R). Original note: (Fresh's lazy loading): a
   read-only, chunked viewer with a byte-offset gutter and an on-demand
   line index for multi-gigabyte logs. Today Vix loads the whole file, up
   to its 1 GiB ceiling (T571). **L.**
@@ -8422,6 +8566,15 @@ CI-discovered rounds to get genuinely right on Windows).
 17. **Run Q (user requests, 2026-10-28):** T680 first, then T682, T683,
     T681, T684, T685. The four plans (Cowork, OC, Remote editing, IDE
     parity) start with their spike or pure-core task; T710 lands alone.
+
+18. **Run R (improvements and promotion, 2026-10-29):** T670 and the
+    Run M daily-driver items (T612, T614, T615, T625–T627, T629) first;
+    then T730, T740, T732; T742 → T743 → T744 → T745. T746 and T747 wait
+    for the user's decisions.
+
+19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
+    then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
+    last.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

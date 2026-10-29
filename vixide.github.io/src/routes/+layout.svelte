@@ -85,8 +85,20 @@
   ];
 </script>
 
+<!--
+  Open Graph / Twitter card tags, so a shared link shows a title and a real
+  screenshot. The image is the overview demo until T740 adds a 1200x630 PNG
+  card.
+-->
 <svelte:head>
   <title>{pageTitle}</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Vix" />
+  <meta property="og:title" content={pageTitle} />
+  <meta property="og:url" content={`https://vixide.github.io${page.url.pathname}`} />
+  <meta property="og:image" content="https://vixide.github.io/assets/demos/overview.gif" />
+  <meta property="og:image:alt" content="Vix in a terminal: a menu bar, a file explorer, an editor tab and a status bar." />
+  <meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
 <a class="skip-link" href="#main">Skip to main content</a>
