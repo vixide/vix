@@ -12162,6 +12162,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-mcp-server"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+ "vix-conflict-tool",
+ "vix-markdown-preview",
+ "vix-org",
+ "vix-palette",
+]
+
+[[package]]
 name = "vix-media-type"
 version = "2.0.0"
 dependencies = [
@@ -12293,6 +12304,7 @@ version = "2.0.0"
 dependencies = [
  "confy",
  "serde",
+ "toml 1.1.8+spec-1.1.0",
  "vix-fileops",
 ]
 
@@ -12554,6 +12566,7 @@ dependencies = [
  "vix-lsp-core",
  "vix-macros",
  "vix-markdown-preview",
+ "vix-mcp-server",
  "vix-media-type",
  "vix-menu",
  "vix-modal",

@@ -32,6 +32,7 @@ mod im;
 mod keybindings;
 mod keymaps;
 mod lsp;
+mod mcp;
 mod menu;
 mod modal;
 mod org;

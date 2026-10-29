@@ -8397,11 +8397,27 @@ editor by completion, diagnostics and never losing work first.
   (the generated commit message and DB assist included), without a
   rebuild. The docs and site then say "AI optional" plainly; Zed 1.0
   markets the same switch. **Small.**
-- [ ] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
+- [x] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
   Protocol over stdio so an agent can read Vix's view of a workspace:
   open buffers, diagnostics, document symbols, the outline and the DB
   schema. Read-only in v1; writes would go through the same preview and
   accept flow as T635. Spec first (`spec/mcp-server`). **Medium–Large.**
+  *Done 2026-10-29:* [`spec/mcp-server`](spec/mcp-server/index.md) and the
+  new `vix-mcp-server` crate (MCP 2025-06-18, newline-delimited JSON-RPC
+  over stdio; `initialize`, `ping`, `tools/list`, `tools/call`,
+  `resources/list`, `resources/read`). Six read-only tools:
+  `list_open_buffers` (the saved session for the canonical root, read
+  without creating `session.toml`), `read_buffer`, `document_symbols`
+  (`vix_palette::symbols`), `outline` (Markdown/Org headings, else
+  symbols), `diagnostics` (merge-conflict blocks) and `db_schema` (SQLite
+  files in the workspace, `mode=ro` + `query_only`). Paths are confined to
+  the root after canonicalization, secret files are refused, nothing is
+  written. Unit tests plus `tui/tests/mcp_stdio.rs`, which spawns the binary
+  for an initialize → tools/list → tools/call round trip. **Not done:**
+  live language-server diagnostics and symbols (no server is spawned in
+  this mode), unsaved buffers of a running Vix (no attach channel),
+  `PostgreSQL`/`MySQL` schemas (need secrets), any write tool (T635's
+  preview-and-accept flow), prompts, subscriptions, and the HTTP transport.
 - [ ] **T732 — LSP status and progress.** Show `$/progress` (indexing,
   building) in the status bar and add **View → LSP Status…**: each
   server's name, root, state, capabilities and last error, with restart.

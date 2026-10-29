@@ -10,10 +10,9 @@ description = "Per-workspace editor session, persisted with `confy`."
 [dependencies]
 confy = { workspace = true }
 serde = { workspace = true }
-vix-fileops = { workspace = true }
-
-[dev-dependencies]
+# Parse `session.toml` directly for the never-writing `load_existing` (T731).
 toml = { workspace = true }
+vix-fileops = { workspace = true }
 
 [lints]
 workspace = true
