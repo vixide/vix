@@ -3,7 +3,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use crate::prettier::PrettierError;
@@ -22,15 +22,19 @@ pub fn format(
     input: &str,
     timeout: Duration,
 ) -> Result<String, PrettierError> {
-    let mut cmd = Command::new(binary);
-    cmd.arg("--stdin-filepath")
-        .arg(file)
-        .stdin(Stdio::piped())
+    // Built by the workspace authority (T710): Prettier runs where the
+    // file is.
+    let auth = vix_authority::current();
+    let mut spec = vix_authority::ProcessSpec::new(binary)
+        .arg("--stdin-filepath")
+        .arg(file);
+    if let Some(dir) = file.parent().filter(|d| auth.is_dir(d)) {
+        spec = spec.current_dir(dir);
+    }
+    let mut cmd = auth.command(&spec).map_err(PrettierError::Io)?;
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if let Some(dir) = file.parent().filter(|d| d.is_dir()) {
-        cmd.current_dir(dir);
-    }
     let mut child = cmd.spawn().map_err(PrettierError::Io)?;
     let mut stdin = child.stdin.take();
     let text = input.to_owned();

@@ -17,9 +17,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin};
 #[cfg(feature = "process")]
-use std::process::{Command, Stdio};
+use std::process::Stdio;
+use std::process::{Child, ChildStdin};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -2082,8 +2082,11 @@ impl Lsp {
 /// Start the server process with all three stdio streams piped.
 #[cfg(feature = "process")]
 fn start_process(program: &str, args: &[String]) -> Option<Child> {
-    Command::new(program)
-        .args(args)
+    // Built by the workspace authority (T710): a remote workspace runs its
+    // language server where its files are.
+    vix_authority::current()
+        .command(&vix_authority::ProcessSpec::new(program).args(args))
+        .ok()?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -2202,7 +2205,9 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
 
 /// Canonicalize a path for diagnostic keying, falling back to the path as-is.
 fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    vix_authority::current()
+        .canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Build a `file://` URI from a filesystem path, percent-encoding each segment.
@@ -2402,7 +2407,7 @@ mod tests {
     fn writer_thread_decouples_the_caller_from_a_stalled_stdin() {
         use std::time::{Duration, Instant};
         // A child that never reads its stdin, so the OS pipe fills after ~64 KiB.
-        let mut child = Command::new("sh")
+        let mut child = std::process::Command::new("sh")
             .arg("-c")
             .arg("sleep 5")
             .stdin(Stdio::piped())

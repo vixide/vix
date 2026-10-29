@@ -145,7 +145,7 @@ pub fn load(root: &Path) -> Vec<Task> {
         root.join(".vix").join("tasks.toml"),
     ];
     for path in candidates {
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = vix_authority::current().read_to_string(&path) else {
             continue;
         };
         let Ok(parsed) = toml::from_str::<TaskFile>(&text) else {

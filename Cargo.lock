@@ -6058,6 +6058,7 @@ name = "vix-coverage"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
 ]
 
 [[package]]
@@ -6083,6 +6084,7 @@ name = "vix-dap"
 version = "2.0.0"
 dependencies = [
  "serde_json",
+ "vix-authority",
  "vix-lsp-core",
  "vix-settings",
 ]
@@ -6306,6 +6308,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "vix-authority",
 ]
 
 [[package]]
@@ -6313,6 +6316,7 @@ name = "vix-git"
 version = "2.0.0"
 dependencies = [
  "similar 3.2.0",
+ "vix-authority",
  "vix-civil-date",
  "vix-list-state",
 ]
@@ -6322,6 +6326,7 @@ name = "vix-git-graph"
 version = "2.0.0"
 dependencies = [
  "proptest",
+ "vix-authority",
  "vix-list-state",
 ]
 
@@ -6359,6 +6364,7 @@ dependencies = [
  "serde_json",
  "ureq",
  "uuid",
+ "vix-authority",
 ]
 
 [[package]]
@@ -6466,6 +6472,7 @@ name = "vix-lsp"
 version = "2.0.0"
 dependencies = [
  "serde_json",
+ "vix-authority",
  "vix-lsp-core",
  "vix-settings",
 ]
@@ -6727,6 +6734,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "vix-authority",
 ]
 
 [[package]]
@@ -7022,7 +7030,7 @@ version = "2.0.0"
 dependencies = [
  "serde",
  "toml 1.1.8+spec-1.1.0",
- "vix-fileops",
+ "vix-authority",
 ]
 
 [[package]]

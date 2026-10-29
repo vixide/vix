@@ -545,14 +545,22 @@ impl GitError {
 }
 
 #[cfg(feature = "process")]
+/// The `git` command for `args` in `dir`, built by the workspace authority
+/// (T710) so a remote workspace runs git where its files are.
+fn git_command(dir: &Path, args: &[&str]) -> std::io::Result<Command> {
+    vix_authority::current().command(
+        &vix_authority::ProcessSpec::new(git_program())
+            .current_dir(dir)
+            // T651: every path Vix hands git is a literal file name, never a
+            // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.
+            .env("GIT_LITERAL_PATHSPECS", "1")
+            .args(args),
+    )
+}
+
+#[cfg(feature = "process")]
 fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
-    Command::new(git_program())
-        .current_dir(dir)
-        // T651: every path Vix hands git is a literal file name, never a
-        // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.
-        .env("GIT_LITERAL_PATHSPECS", "1")
-        .args(args)
-        .output()
+    git_command(dir, args)?.output()
 }
 
 #[cfg(feature = "process")]
@@ -793,10 +801,7 @@ pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), Gi
 fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, GitError> {
     use std::io::Write;
     use std::process::Stdio;
-    let mut child = Command::new(git_program())
-        .current_dir(dir)
-        .env("GIT_LITERAL_PATHSPECS", "1") // T651, as in `git`
-        .args(args)
+    let mut child = git_command(dir, args)?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

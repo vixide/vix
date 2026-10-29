@@ -121,7 +121,7 @@ impl Environments {
 /// An [`EnvError`] when it exists but is unreadable or malformed.
 pub fn load(root: &Path) -> Result<Option<Environments>, EnvError> {
     let path: PathBuf = root.join(ENV_FILE);
-    match std::fs::read_to_string(&path) {
+    match vix_authority::current().read_to_string(&path) {
         Ok(text) => parse(&text).map(Some),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(EnvError::Read(e.to_string())),
@@ -131,7 +131,9 @@ pub fn load(root: &Path) -> Result<Option<Environments>, EnvError> {
 /// The workspace's remembered active environment, if any.
 #[must_use]
 pub fn read_active(root: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(root.join(ACTIVE_FILE)).ok()?;
+    let text = vix_authority::current()
+        .read_to_string(&root.join(ACTIVE_FILE))
+        .ok()?;
     let name = text.trim();
     (!name.is_empty()).then(|| name.to_string())
 }
@@ -141,15 +143,16 @@ pub fn read_active(root: &Path) -> Option<String> {
 /// # Errors
 /// The I/O error from writing the file.
 pub fn write_active(root: &Path, name: Option<&str>) -> std::io::Result<()> {
+    let auth = vix_authority::current();
     let path = root.join(ACTIVE_FILE);
     match name {
         Some(n) => {
             if let Some(dir) = path.parent() {
-                std::fs::create_dir_all(dir)?;
+                auth.create_dir_all(dir)?;
             }
-            std::fs::write(path, n)
+            auth.write(&path, n.as_bytes())
         }
-        None => match std::fs::remove_file(path) {
+        None => match auth.remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
             _ => Ok(()),
         },

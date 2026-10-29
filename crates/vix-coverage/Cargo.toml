@@ -9,6 +9,7 @@ description = "Parse LCOV and Cobertura XML coverage reports into per-file, per-
 
 [dependencies]
 regex.workspace = true
+vix-authority.workspace = true
 
 [lints]
 workspace = true

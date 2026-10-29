@@ -478,6 +478,10 @@ name = "action_catalog"
 path = "tests/action_catalog.rs"
 
 [[test]]
+name = "authority_fake"
+path = "tests/authority_fake.rs"
+
+[[test]]
 name = "ai_provider_smoke"
 path = "tests/ai_provider_smoke.rs"
 

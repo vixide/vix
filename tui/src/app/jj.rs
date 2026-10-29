@@ -48,7 +48,8 @@ impl App {
     /// way, so Vix started in a subdirectory of a jj repo still offers the jj
     /// commands (T650).
     pub(super) fn jj_is_repo(&self) -> bool {
-        self.root.ancestors().any(|d| d.join(".jj").exists())
+        let auth = crate::authority::current();
+        self.root.ancestors().any(|d| auth.exists(&d.join(".jj")))
     }
 
     /// Run a `jj` command in the workspace, streaming its output into the bottom
@@ -80,9 +81,10 @@ impl App {
             return;
         }
         #[cfg(feature = "git")]
-        let colocate = self.root.join(".git").exists() || crate::git::is_repo(&self.root);
+        let colocate = crate::authority::current().exists(&self.root.join(".git"))
+            || crate::git::is_repo(&self.root);
         #[cfg(not(feature = "git"))]
-        let colocate = self.root.join(".git").exists();
+        let colocate = crate::authority::current().exists(&self.root.join(".git"));
         self.run_command(if colocate {
             "jj git init --colocate"
         } else {

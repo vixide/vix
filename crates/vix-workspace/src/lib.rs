@@ -43,7 +43,9 @@ fn normalize_lexical(path: &Path) -> PathBuf {
 /// normalization so non-existent paths are still handled deterministically.
 fn resolve(path: &str) -> PathBuf {
     let p = Path::new(path);
-    std::fs::canonicalize(p).unwrap_or_else(|_| normalize_lexical(p))
+    vix_authority::current()
+        .canonicalize(p)
+        .unwrap_or_else(|_| normalize_lexical(p))
 }
 
 /// The conventional extension for a Vix workspace file.
@@ -131,7 +133,7 @@ impl Workspace {
     /// # Errors
     /// Returns an error if the file cannot be read or parsed.
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        let text = std::fs::read_to_string(path)?;
+        let text = vix_authority::current().read_to_string(path)?;
         Self::from_toml(&text).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
@@ -143,7 +145,7 @@ impl Workspace {
         let text = self
             .to_toml()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        vix_fileops::write_atomic(path, text.as_bytes())
+        vix_authority::current().write_atomic(path, text.as_bytes())
     }
 }
 

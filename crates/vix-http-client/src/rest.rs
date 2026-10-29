@@ -312,7 +312,8 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
         "dotenv" => {
             let name = parts.next().ok_or_else(bad)?;
             let dir = ctx.base_dir.ok_or_else(bad)?;
-            let text = std::fs::read_to_string(dir.join(".env"))
+            let text = vix_authority::current()
+                .read_to_string(&dir.join(".env"))
                 .map_err(|_| VarError::BadReference(full.to_string()))?;
             dotenv_get(&text, name).ok_or_else(|| VarError::BadReference(full.to_string()))
         }
@@ -438,7 +439,9 @@ pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), String> {
         ));
     }
     let full: PathBuf = base.join(path);
-    req.body = std::fs::read_to_string(&full).map_err(|e| format!("{}: {e}", full.display()))?;
+    req.body = vix_authority::current()
+        .read_to_string(&full)
+        .map_err(|e| format!("{}: {e}", full.display()))?;
     Ok(())
 }
 

@@ -1115,7 +1115,9 @@ impl App {
     /// Initialize a git repository in the workspace, refusing (for safety) if one
     /// already exists (a `.git` directory or a detected repo).
     fn git_init(&mut self) {
-        if self.root.join(".git").exists() || crate::git::is_repo(&self.root) {
+        if crate::authority::current().exists(&self.root.join(".git"))
+            || crate::git::is_repo(&self.root)
+        {
             self.status = t!("status.git_already_init").to_string();
             return;
         }
@@ -1496,7 +1498,9 @@ impl App {
     /// file on disk. A file that isn't in `base` diffs against nothing.
     fn git_show_diff(&mut self, rel: &str, base: DiffBase) {
         let abs = self.root.join(rel);
-        let canon = abs.canonicalize().unwrap_or_else(|_| abs.clone());
+        let canon = crate::authority::current()
+            .canonicalize(&abs)
+            .unwrap_or_else(|_| abs.clone());
         let current = self
             .editor
             .tabs

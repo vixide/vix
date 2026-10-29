@@ -339,7 +339,7 @@ impl App {
     /// Open `path` and move the cursor to `line` (1-based) for a debug stop.
     pub(super) fn jump_to_debug_location(&mut self, path: &str, line: usize) {
         let p = PathBuf::from(path);
-        if p.is_file() {
+        if crate::authority::current().is_file(&p) {
             self.with_jump(|s| {
                 s.open_path(&p, false);
                 let area = s.editor_view();

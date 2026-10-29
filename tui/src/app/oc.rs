@@ -46,7 +46,7 @@ impl App {
             "oc.build" => {
                 let seed = BUILD_FILES
                     .iter()
-                    .find(|f| self.root.join(f).is_file())
+                    .find(|f| crate::authority::current().is_file(&self.root.join(f)))
                     .unwrap_or(&BUILD_FILES[1]);
                 self.open_oc(Kind::Image, Some((Purpose::Build, (*seed).to_string())));
             }
@@ -177,7 +177,7 @@ impl App {
         };
         let file = COMPOSE_FILES
             .iter()
-            .find(|f| self.root.join(f).is_file())
+            .find(|f| crate::authority::current().is_file(&self.root.join(f)))
             .copied();
         if file.is_none() {
             self.status = t!("status.oc_no_compose").to_string();

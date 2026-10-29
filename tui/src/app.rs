@@ -6976,7 +6976,7 @@ impl App {
             return;
         };
         let path = PathBuf::from(&root);
-        if !path.is_dir() {
+        if !crate::authority::current().is_dir(&path) {
             self.status = t!("status.project_missing", path = root).to_string();
             return;
         }
@@ -7071,7 +7071,7 @@ impl App {
                 continue;
             }
             let p = PathBuf::from(f);
-            if p.exists() {
+            if crate::authority::current().exists(&p) {
                 self.open_path(&p, false);
             }
         }
@@ -7094,7 +7094,7 @@ impl App {
     /// so it needs no separate notification.
     fn workspace_add_folder(&mut self, path: &str) {
         let folder = self.resolve(path.trim());
-        if !folder.is_dir() {
+        if !crate::authority::current().is_dir(&folder) {
             self.status = t!("status.workspace_not_a_folder").to_string();
             return;
         }
@@ -8245,7 +8245,7 @@ impl App {
     /// Reopen the most recently closed tab whose file still exists.
     fn reopen_closed_tab(&mut self) {
         while let Some(path) = self.closed_tabs.pop() {
-            if path.is_file() {
+            if crate::authority::current().is_file(&path) {
                 self.with_jump(|s| {
                     s.open_path(&path, false);
                     s.focus = Focus::Editor;
@@ -8259,7 +8259,9 @@ impl App {
     /// Record a real (non-preview) file open at the front of the recent list,
     /// de-duplicated and capped. Stored canonicalized so reopening is reliable.
     fn record_recent(&mut self, path: &Path) {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canon = crate::authority::current()
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         let entry = canon.to_string_lossy().into_owned();
         let max = self.settings.recent_files_max;
         let recent = &mut self.settings.recent_files;
@@ -9025,7 +9027,7 @@ impl App {
             return;
         };
         let path = self.resolve(&path);
-        if path.is_file() {
+        if crate::authority::current().is_file(&path) {
             self.with_jump(|s| {
                 s.open_path(&path, false);
                 let area = s.editor_view();
@@ -12398,7 +12400,9 @@ impl App {
         let mut changed = Vec::new();
         let mut buffer_only = 0usize;
         for (path, new) in plan {
-            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+            let canon = crate::authority::current()
+                .canonicalize(path)
+                .unwrap_or_else(|_| path.clone());
             let open = self
                 .editor
                 .tabs
@@ -13165,20 +13169,19 @@ impl App {
     /// and an existing file other than the buffer's own asks for a y/n
     /// overwrite confirmation instead of being replaced silently.
     fn request_save_as(&mut self, path: PathBuf) {
-        let is_link = path
-            .symlink_metadata()
-            .is_ok_and(|m| m.file_type().is_symlink());
-        if is_link && !path.exists() {
+        let auth = crate::authority::current();
+        let is_link = auth.symlink_metadata(&path).is_ok_and(|m| m.is_symlink());
+        if is_link && !auth.exists(&path) {
             self.messages
                 .error(t!("msg.save_as_dangling_symlink", path = path.display()).to_string());
             return;
         }
         let own = self.editor.active_tab().and_then(|t| t.path.clone());
         let same = own.is_some_and(|o| {
-            path.canonicalize()
-                .is_ok_and(|c| c == o.canonicalize().unwrap_or(o))
+            auth.canonicalize(&path)
+                .is_ok_and(|c| c == auth.canonicalize(&o).unwrap_or(o))
         });
-        if (is_link || path.exists()) && !same {
+        if (is_link || auth.exists(&path)) && !same {
             self.save_as_overwrite = Some(path.clone());
             self.confirm = Some(Confirm {
                 message: t!("confirm.save_as_overwrite", path = path.display()).to_string(),
@@ -13571,7 +13574,7 @@ impl App {
             return;
         };
         let path = self.resolve(&file);
-        if path.is_file() {
+        if crate::authority::current().is_file(&path) {
             self.with_jump(|s| {
                 s.open_path(&path, false);
                 let area = s.editor_view();
@@ -13772,12 +13775,10 @@ fn display_key(k: &str) -> String {
 /// already exactly the text `cmd.exe` itself should parse, not user input
 /// reaching this function unquoted.
 #[cfg(all(windows, feature = "tasks"))]
-fn shell_command(script: &str) -> std::process::Command {
-    use std::os::windows::process::CommandExt;
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.arg("/C");
-    cmd.raw_arg(script);
-    cmd
+fn shell_command(script: &str) -> crate::authority::ProcessSpec {
+    crate::authority::ProcessSpec::new("cmd")
+        .arg("/C")
+        .raw_arg(script)
 }
 
 /// Start `script` in the platform shell in `dir` with stdin closed, stdout
@@ -13786,12 +13787,12 @@ fn shell_command(script: &str) -> std::process::Command {
 /// without `tasks` has none.
 #[cfg(feature = "tasks")]
 fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::process::Child> {
-    let mut command = shell_command(script);
+    let mut command =
+        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
     if no_tty {
         no_tty_prompts(&mut command);
     }
     command
-        .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -13828,10 +13829,10 @@ fn run_shell_filter(
             buf
         })
     }
-    let mut command = shell_command(script);
+    let mut command =
+        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
     no_tty_prompts(&mut command);
     let mut child = command
-        .current_dir(dir)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -13895,15 +13896,17 @@ fn spawn_argv(
     dir: &Path,
 ) -> std::io::Result<(std::process::Child, std::io::PipeReader)> {
     let (reader, writer) = std::io::pipe()?;
-    let resolved = crate::fileops::which_on_path(program).map_or_else(
+    let auth = crate::authority::current();
+    let resolved = auth.which(program).map_or_else(
         || std::ffi::OsString::from(program),
         std::path::PathBuf::into_os_string,
     );
-    let mut command = std::process::Command::new(resolved);
-    command.args(args);
+    let spec = crate::authority::ProcessSpec::new(resolved)
+        .args(args)
+        .current_dir(dir);
+    let mut command = auth.command(&spec)?;
     no_tty_prompts(&mut command);
     command
-        .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(writer.try_clone()?)
         .stderr(writer);
@@ -13962,10 +13965,10 @@ fn is_auth_failure_line(line: &str) -> bool {
 }
 
 #[cfg(all(not(windows), feature = "tasks"))]
-fn shell_command(script: &str) -> std::process::Command {
-    let mut cmd = std::process::Command::new("sh");
-    cmd.arg("-c").arg(script);
-    cmd
+fn shell_command(script: &str) -> crate::authority::ProcessSpec {
+    crate::authority::ProcessSpec::new("sh")
+        .arg("-c")
+        .arg(script)
 }
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over

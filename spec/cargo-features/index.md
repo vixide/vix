@@ -96,6 +96,12 @@ gated `terminal`, `sql` (SSH tunnels, keychain helpers) and `ai` (keychain helpe
 default `osascript` child. `format` is not a capability: `vix-format-tool` pretty-prints
 JSON/YAML/TOML in-process and starts nothing.
 
+Since T710 the workspace spawns (the shell and argv runners, `vix-git`,
+`vix-git-graph`, `vix-lsp`, `vix-dap`, Prettier) build their `Command` through
+`vix_authority::current().command(…)`. `vix-authority`'s own `process` feature is
+what lets any authority build one; each spawning crate's `process` feature (and root
+`tasks`) turns it on, so a minimal build still has no way to start a process.
+
 With `ai` but not `tasks`, only the HTTP providers work; the `cli` provider hands its
 command to a shell and reports *"tasks is not included in this build"*.
 
