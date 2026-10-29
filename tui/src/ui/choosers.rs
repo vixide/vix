@@ -142,6 +142,18 @@ pub(super) fn draw_encoding_chooser(app: &mut App, frame: &mut Frame, area: Rect
     app.layout.chooser = draw_list_chooser(frame, area, &title, &hint, &labels, c.selected);
 }
 
+/// Tools → HTTP Environment…: "none" plus one row per environment name.
+pub(super) fn draw_http_env_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.http_env_chooser.as_ref() else {
+        return;
+    };
+    let mut labels = vec![t!("ui.http_env_none").to_string()];
+    labels.extend(c.names.iter().cloned());
+    let hint = t!("ui.encoding_hint");
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.http_env"), &hint, &labels, c.selected);
+}
+
 pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.clipboard_chooser.as_ref() else {
         return;

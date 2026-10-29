@@ -588,6 +588,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.hl7_view` | HL7 View | Menu |
 | `tools.html_chars` | HTML Characters… | Menu |
 | `tools.http_copy_curl` | Copy HTTP Request as curl | Menu |
+| `tools.http_environment` | HTTP Environment… | Menu |
 | `tools.http_fhir_bundle` | FHIR Bundle… | Menu |
 | `tools.http_fhir_request` | FHIR Request… | Menu |
 | `tools.http_send` | Send HTTP Request | Menu |
@@ -688,4 +689,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**681 actions.**
+**682 actions.**

@@ -8000,7 +8000,7 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### Features
 
-- [ ] **T680 — REST Client depth.** `vix-http-client` parses exactly one
+- [x] **T680 — REST Client depth.** `vix-http-client` parses exactly one
   request per buffer. Bring it to VS Code REST Client parity: requests
   separated by `###` with *send the request at the cursor*; `@name = value`
   file variables and `{{name}}`; system variables (`{{$guid}}`,
@@ -8019,6 +8019,18 @@ so, and the first task of each plan re-checks the facts it depends on.
     bodies are confined to the `.http` file's folder on purpose: a crafted
     file must not be able to send an arbitrary local file to its own URL.
     The new action is `tools.http_copy_curl`.
+  - **Done (rest)** (`feat/t680-rest-environments`): environments
+    (`.vix/http-env.json` with `$shared` + named sections, resolved
+    environment > file > `$shared`; **Tools -> HTTP Environment...** chooser,
+    choice persisted per workspace in `.vix/http-env.active`),
+    `{{$localDatetime}}`, `{{$aadToken}}` (via `az`, argv only, in-memory
+    token), and XML chaining (`{{name.response.body.//xpath}}`, an XPath
+    subset on the new `roxmltree` dependency). **Not done:** `$aadToken`
+    runs `az` synchronously on the UI thread and is never cached, so it
+    pauses about a second per send; no `$aadV2Token`; the XPath subset has no
+    functions, axes or unions; `$processEnv` is the only secret mechanism
+    (no OS keychain); `.vix/http-env.json` is documented as gitignore-worthy
+    but Vix does not edit `.gitignore`.
 - [x] **T681 — Git Graph.** Today `git.log_graph` only streams `git log
   --graph` text into the dock. Add an interactive graph panel: commit list
   with lanes drawn from parent links (a pure lane-assignment algorithm in a

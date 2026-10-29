@@ -123,6 +123,7 @@ impl App {
             task_chooser,
             macro_chooser,
             encoding_chooser,
+            http_env_chooser,
             script_chooser,
             clipboard_chooser,
             workspace_chooser,
@@ -361,6 +362,7 @@ impl App {
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(encoding_chooser, encoding_key);
+        panel!(http_env_chooser, http_env_key);
         panel!(script_chooser, script_chooser_key);
         panel!(clipboard_chooser, clipboard_key);
         panel!(workspace_chooser, workspace_chooser_key);

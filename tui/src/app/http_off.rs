@@ -11,6 +11,16 @@ impl App {
         false
     }
 
+    /// No environment chooser in this build (never constructed).
+    pub(super) fn http_env_key(&mut self, _key: vix_input::KeyEvent) {
+        debug_assert!(self.layout.edit_sql.width < u16::MAX);
+    }
+
+    /// No environment chooser in this build (never constructed).
+    pub(super) fn http_env_mouse(&mut self, _mouse: vix_input::MouseEvent) {
+        debug_assert!(self.layout.edit_sql.width < u16::MAX);
+    }
+
     /// No response to drain.
     pub fn poll_http(&mut self) {
         debug_assert!(self.layout.edit_sql.width < u16::MAX);

@@ -77,8 +77,49 @@ Authorization: Bearer {{token}}
   under the cursor on the clipboard as a `curl` command, variables
   expanded.
 
-Not yet supported: environments (`$shared` and per-environment variable
-sets), `{{$localDatetime}}`, `$aadToken`, and XML responses in chaining.
+- **Local time:** `{{$localDatetime iso8601}}` (or `rfc1123`, with the same
+  optional offset) is `$datetime` in your computer's time zone.
+- **XML responses:** for an XML body use an XPath instead of a JSON path:
+  `{{soap.response.body.//Token}}`, `{{r.response.body.//item[2]/@id}}`.
+  Supported: `/` and `//` steps, names (namespace prefixes ignored), `*`,
+  `text()`, `@attr`, and the predicates `[2]`, `[@a]` and `[@a='v']`. The
+  first match's text is used.
+- **Azure AD token:** `{{$aadToken}}` (optionally `{{$aadToken
+  https://vault.azure.net tenantid:ID}}`) asks the Azure CLI for a token by
+  running `az account get-access-token`. Install the CLI and run `az login`
+  first; without it Vix shows an install hint. The token is kept in memory
+  only, never logged or written to disk. The call takes about a second, during
+  which the editor waits.
+
+## Environments
+
+Put named sets of variables in `.vix/http-env.json` in your workspace:
+
+```json
+{
+  "$shared": { "version": "v2" },
+  "dev":  { "host": "https://dev.example.com",  "token": "{{$processEnv DEV_TOKEN}}" },
+  "prod": { "host": "https://example.com",      "token": "{{$processEnv PROD_TOKEN}}" }
+}
+```
+
+Choose the active one with **Tools → HTTP Environment…** (the first row means
+"no environment"). Vix remembers the choice for the workspace in
+`.vix/http-env.active`. Each section maps names to strings, numbers or
+booleans, referenced as `{{host}}`.
+
+When the same name is defined in more than one place, the **active
+environment wins over the `.http` file's `@name = value`, which wins over
+`$shared`**.
+
+**Secrets.** Do not write a token or password into `http-env.json`. Give the
+value as `{{$processEnv NAME}}` so it is read from your shell environment when
+the request is sent, and add both files to `.gitignore`:
+
+```text
+.vix/http-env.json
+.vix/http-env.active
+```
 
 ## The response
 
