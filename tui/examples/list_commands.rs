@@ -178,6 +178,8 @@ struct SettingsField {
     name: String,
     ty: String,
     doc: String,
+    /// Marked `#[serde(flatten)]`: its own fields are top-level keys.
+    flatten: bool,
 }
 
 /// Parse one `pub struct <Name> { .. }` body starting at `lines` (already
@@ -189,8 +191,13 @@ fn parse_struct_body(lines: &mut std::iter::Peekable<std::str::Lines<'_>>) -> Ve
     let mut fields = Vec::new();
     let mut depth = 1i32;
     let mut doc_buf: Vec<String> = Vec::new();
+    let mut flatten = false;
     for line in lines.by_ref() {
         let trimmed = line.trim();
+        if trimmed == "#[serde(flatten)]" {
+            flatten = true;
+            continue;
+        }
         if let Some(text) = trimmed.strip_prefix("///") {
             doc_buf.push(text.trim().to_string());
             continue;
@@ -205,8 +212,14 @@ fn parse_struct_body(lines: &mut std::iter::Peekable<std::str::Lines<'_>>) -> Ve
                 .trim()
                 .to_string();
             let doc = strip_intradoc_links(&doc_buf.join(" "));
-            fields.push(SettingsField { name, ty, doc });
+            fields.push(SettingsField {
+                name,
+                ty,
+                doc,
+                flatten,
+            });
             doc_buf.clear();
+            flatten = false;
             continue;
         }
         // Any other line (an attribute like `#[serde(flatten)]`, a blank
@@ -254,7 +267,9 @@ fn parse_all_structs(src: &str) -> std::collections::HashMap<String, Vec<Setting
 /// body: every field's doc comment and `name: Type` declaration, in source
 /// order — with each `#[serde(flatten)]` sub-struct field (T149) expanded
 /// in place into *its* fields, since those (not the wrapper field itself)
-/// are the real flat TOML keys `config.toml` round-trips.
+/// are the real flat TOML keys `config.toml` round-trips. A sub-struct that
+/// is *not* flattened is its own TOML table (`[im]`, T752): its fields are
+/// listed as dotted keys (`im.nick`).
 ///
 /// # Panics
 ///
@@ -268,7 +283,11 @@ fn parse_settings_fields(src: &str) -> Vec<SettingsField> {
     let mut fields = Vec::new();
     for f in settings_fields {
         match structs.get(f.ty.as_str()) {
-            Some(inner) => fields.extend(inner.iter().cloned()),
+            Some(inner) if f.flatten => fields.extend(inner.iter().cloned()),
+            Some(inner) => fields.extend(inner.iter().map(|g| SettingsField {
+                name: format!("{}.{}", f.name, g.name),
+                ..g.clone()
+            })),
             None => fields.push(f.clone()),
         }
     }
@@ -316,8 +335,12 @@ fn render_settings(root: &Path) -> String {
     out.push_str("| Key | Type | Default | Description |\n");
     out.push_str("| --- | --- | --- | --- |\n");
     for f in &fields {
-        let default = defaults
-            .get(&f.name)
+        // A dotted key (`im.nick`) looks its default up inside its table.
+        let mut path = f.name.split('.');
+        let first = path.next().and_then(|k| defaults.get(k));
+        let default = path
+            .try_fold(first, |v, k| Some(v?.get(k)))
+            .flatten()
             .map_or_else(|| "—".to_string(), format_default);
         let _ = writeln!(
             out,

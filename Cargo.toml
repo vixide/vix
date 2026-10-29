@@ -54,9 +54,19 @@ ratatui-image = { version = "11.1.0", default-features = false, features = ["cro
 # also compile an AV1 encoder (rav1e/ravif), exr, dds and rayon (T583).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico", "tiff"] }
 confy = "2.0.0"
+# The platform data directory (IM disk history, T755); the version confy
+# already pulls in, so no new crate.
+etcetera = "0.10"
 clap = { version = "4.6.7", features = ["derive"] }
 rust-i18n = "4.2.4"
 base64 = "0.23"
+# TLS for the IRC connection (`vix-im-irc/net`): the same rustls 0.23 and
+# webpki-roots 1.x that ureq already pulls in, with `ring` as the provider
+# (as ureq uses) -- no aws-lc, no rustls logging.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+# Wipes the IRC SASL password from memory once the handshake is done.
+zeroize = "1"
 # Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
 # AGPL-3.0-only, which is incompatible with the license Vix offers. Do not
 # bump without replacing the calculator's evaluator — `cargo deny` fails on it.
@@ -203,9 +213,12 @@ vix-oci-panel = { path = "crates/vix-oci-panel", version = "2.0.0" }
 vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "2.0.0" }
 vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "2.0.0" }
 vix-hl7 = { path = "crates/vix-hl7", version = "2.0.0" }
+vix-im-irc = { path = "crates/vix-im-irc", version = "2.0.0" }
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "2.0.0" }
 vix-http-client = { path = "crates/vix-http-client", version = "2.0.0" }
 vix-i18n = { path = "crates/vix-i18n", version = "2.0.0" }
+vix-im = { path = "crates/vix-im", version = "2.0.0" }
+vix-im-panel = { path = "crates/vix-im-panel", version = "2.0.0" }
 vix-input = { path = "crates/vix-input", version = "2.0.0" }
 vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "2.0.0" }
 vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "2.0.0" }

@@ -1645,6 +1645,45 @@ const OC: &[Item] = &[
     Item::leaf("menu.item.oc.prune", "oc.prune", ""),
 ];
 
+/// Presence, grouped under IM → Status.
+const IM_STATUS: &[Item] = &[
+    Item::leaf("menu.item.im.status_available", "im.status_available", ""),
+    Item::leaf("menu.item.im.status_away", "im.status_away", ""),
+    Item::leaf("menu.item.im.status_busy", "im.status_busy", ""),
+];
+
+/// Notification policy, grouped under IM → Notifications.
+const IM_NOTIFY: &[Item] = &[
+    Item::leaf("menu.item.im.notify_all", "im.notify_all", ""),
+    Item::leaf("menu.item.im.notify_mentions", "im.notify_mentions", ""),
+    Item::leaf("menu.item.im.notify_off", "im.notify_off", ""),
+];
+
+/// IM (T752, `spec/instant-message`): code-aware chat -- local Notes, IRC
+/// rooms and direct messages, shared selections and locations.
+const IM: &[Item] = &[
+    Item::leaf("menu.item.im.panel", "im.panel", ""),
+    SEP,
+    Item::leaf("menu.item.im.connect", "im.connect", ""),
+    Item::leaf("menu.item.im.disconnect", "im.disconnect", ""),
+    Item::leaf("menu.item.im.join", "im.join", ""),
+    Item::leaf("menu.item.im.leave", "im.leave", ""),
+    Item::leaf("menu.item.im.direct", "im.direct", ""),
+    SEP,
+    Item::leaf("menu.item.im.next_unread", "im.next_unread", ""),
+    SEP,
+    Item::leaf("menu.item.im.share_selection", "im.share_selection", ""),
+    Item::leaf("menu.item.im.share_location", "im.share_location", ""),
+    SEP,
+    Item::leaf("menu.item.im.comment_line", "im.comment_line", ""),
+    Item::leaf("menu.item.im.threads", "im.threads", ""),
+    SEP,
+    Item::sub("menu.item.im.status", IM_STATUS),
+    Item::sub("menu.item.im.notify", IM_NOTIFY),
+    SEP,
+    Item::leaf("menu.item.im.clear_history", "im.clear_history", ""),
+];
+
 /// Headline structure commands, grouped under Org → Headline.
 const ORG_HEADLINE: &[Item] = &[
     Item::leaf("menu.item.org.promote", "org.promote", ""),
@@ -2492,6 +2531,10 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef {
             name: "menu.git",
             items: GIT,
+        },
+        MenuDef {
+            name: "menu.im",
+            items: IM,
         },
         MenuDef {
             name: "menu.org",

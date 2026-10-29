@@ -225,6 +225,24 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `help.tutorial` | Tutorial… | Menu |
 | `help.welcome` | Welcome… | Menu |
 | `hsplit` | Split Horizontally | Catalog |
+| `im.clear_history` | Clear History | Menu |
+| `im.comment_line` | Comment on Line… | Menu |
+| `im.connect` | Connect… | Menu |
+| `im.direct` | Direct Message… | Menu |
+| `im.disconnect` | Disconnect | Menu |
+| `im.join` | Join Room… | Menu |
+| `im.leave` | Leave Room | Menu |
+| `im.next_unread` | Next Unread | Menu |
+| `im.notify_all` | All Messages | Menu |
+| `im.notify_mentions` | Mentions Only | Menu |
+| `im.notify_off` | Off | Menu |
+| `im.panel` | Chat Panel | Menu |
+| `im.share_location` | Share Location | Menu |
+| `im.share_selection` | Share Selection | Menu |
+| `im.status_available` | Available | Menu |
+| `im.status_away` | Away | Menu |
+| `im.status_busy` | Busy | Menu |
+| `im.threads` | Threads… | Menu |
 | `indent_line` | Indent Line | Catalog |
 | `indent_selection` | Indent Selection | Catalog |
 | `insert_newline` | Insert Newline | Catalog |
@@ -725,4 +743,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**718 actions.**
+**736 actions.**

@@ -244,6 +244,79 @@ pub struct Settings {
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
     pub db_connections: Vec<Connection>,
+    /// The **IM** menu (T752, `spec/instant-message`): your nick, when to
+    /// notify, where history lives, blocked nicks and IRC accounts. Written as
+    /// an `[im]` table. Passwords are never stored here: an account's SASL
+    /// password comes from the `VIX_IM_PASSWORD_<NAME>` environment variable.
+    pub im: ImSettings,
+}
+
+/// The `[im]` table: IM preferences and IRC accounts (T752).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct ImSettings {
+    /// Your nick. Empty (the default) uses the operating system's user name.
+    pub nick: String,
+    /// When a new message raises a notification: `"all"`, `"mentions"`
+    /// (default) or `"off"`. Any other value behaves as `"mentions"`.
+    pub notify: String,
+    /// Where messages are kept: `"session"` (default; memory only) or
+    /// `"disk"` (JSONL per conversation under the platform data directory).
+    pub history: String,
+    /// With `history = "disk"`, how many days of messages to keep.
+    pub history_days: u32,
+    /// Nicks whose messages and mentions are hidden.
+    pub blocked: Vec<String>,
+    /// IRC accounts for **IM → Connect…**, as `[[im.accounts]]` tables.
+    pub accounts: Vec<ImAccount>,
+}
+
+impl Default for ImSettings {
+    fn default() -> Self {
+        ImSettings {
+            nick: String::new(),
+            notify: "mentions".to_string(),
+            history: "session".to_string(),
+            history_days: 30,
+            blocked: Vec::new(),
+            accounts: Vec::new(),
+        }
+    }
+}
+
+/// One IRC account (an `[[im.accounts]]` table).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct ImAccount {
+    /// The name shown in the account picker; also names the password variable
+    /// `VIX_IM_PASSWORD_<NAME>` (upper-cased, other characters as `_`).
+    pub name: String,
+    /// The server's host name.
+    pub server: String,
+    /// The server's port (default 6697, IRC over TLS).
+    pub port: u16,
+    /// Whether to use TLS (default `true`). Plaintext needs `tls = false`
+    /// and is flagged in the conversation.
+    pub tls: bool,
+    /// Channels to join once connected.
+    pub channels: Vec<String>,
+    /// The SASL account name; empty (the default) skips SASL.
+    pub sasl_user: String,
+}
+
+impl Default for ImAccount {
+    fn default() -> Self {
+        ImAccount {
+            name: String::new(),
+            server: String::new(),
+            port: 6697,
+            tls: true,
+            channels: Vec::new(),
+            sasl_user: String::new(),
+        }
+    }
 }
 
 /// Line-number gutter and inline whitespace-glyph display toggles (T149 —
@@ -692,6 +765,7 @@ impl Default for Settings {
             project_snippets: "config/snippets/snippets.json".to_string(),
             coverage_path: String::new(),
             db_connections: Vec::new(),
+            im: ImSettings::default(),
         }
     }
 }
@@ -829,6 +903,17 @@ impl Settings {
     #[must_use]
     pub fn config_path() -> Option<std::path::PathBuf> {
         confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME)).ok()
+    }
+
+    /// Vix's directory under the platform data directory (for example
+    /// `~/.local/share/vix`), or `None` if the home directory cannot be found.
+    /// Used for data that is not configuration, such as IM history (T755).
+    #[must_use]
+    pub fn data_dir() -> Option<std::path::PathBuf> {
+        use etcetera::BaseStrategy as _;
+        etcetera::choose_base_strategy()
+            .ok()
+            .map(|s| s.data_dir().join(APP_NAME))
     }
 
     /// Directory holding custom JSON themes (`<config dir>/themes/`), or `None`

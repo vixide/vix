@@ -35,8 +35,8 @@ Top menu bar with keyboard-navigable dropdowns (one level of submenus).
   Save As. Works inside an open submenu too.
 
 The menus, left to right, are
-**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Project · Tools ·
-Help**.
+**Vix · File · Edit · View · Go · Run · AI · DB · JJ · Git · IM · Org · Project ·
+OC · Tools · Help**. IM and OC have no Alt mnemonic.
 
 ## Vix menu
 
@@ -364,6 +364,18 @@ The **Branch** submenu:
 | Merge…            | Choose a branch to merge into the current one                |
 | Delete…           | Prompt for a branch name and `git branch --delete` it        |
 | Edit Description… | Prompt for text, set via `git branch --edit-description` (a throwaway `GIT_EDITOR` writes it) |
+
+## IM menu
+
+Code-aware chat (T752; design in `spec/instant-message/index.md`, user guide
+`docs/im/index.md`): Chat Panel (`im.panel`); Connect… (`im.connect`),
+Disconnect (`im.disconnect`), Join Room… (`im.join`), Leave Room
+(`im.leave`), Direct Message… (`im.direct`); Next Unread (`im.next_unread`);
+Share Selection (`im.share_selection`), Share Location (`im.share_location`);
+Comment on Line… (`im.comment_line`), Threads… (`im.threads`); Status ▸
+Available / Away / Busy (`im.status_*`); Notifications ▸ All Messages /
+Mentions Only / Off (`im.notify_*`); Clear History (`im.clear_history`).
+Without the `im` capability the five network items are filtered out.
 
 ## Org menu
 

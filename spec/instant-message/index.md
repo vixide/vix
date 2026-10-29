@@ -1,7 +1,12 @@
 # IM — instant messaging for people editing together
 
 **Status:** specified 2026-10-29; implementation tracked as T750–T759 in
-[`tasks.md`](../../tasks.md). Related: [Cowork](../cowork/index.md)
+[`tasks.md`](../../tasks.md). T750–T752, T754 and T755 are implemented: the
+core crates, the IRC client, the IM menu, panel and App wiring (`im` Cargo
+feature), status-bar unread and mention indicators with the notify policy,
+and disk history. Not yet: anchored threads (T753; **Comment on Line…** and
+**Threads…** say so), session chat over Cowork (T756), Matrix (T758), and
+presence and session notes (T759). User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
 (real-time co-editing, whose v1 explicitly leaves chat out) and
 [Worldwide](../worldwide/index.md).
 
@@ -156,8 +161,12 @@ Vix owns.
 - **Session transport** — once Cowork's link (`vix-cowork-net`) is on
   `main`, session chat is a separate message type inside the same
   encrypted frames, so a Cowork session has chat with nothing to set up.
-- **App shell** — `tui/src/app/im.rs` owns the actions and the event pump,
-  with `im_off.rs` stand-ins; `tui/src/ui/im.rs` draws the panel.
+- **App shell** — `tui/src/app/im.rs` (every build) owns the inbox, the
+  actions, the panel's keys, sharing, notifications and history;
+  `tui/src/app/im_net.rs` (feature `im`) owns the IRC connections and the
+  event pump that converts `vix-im-irc` events into `vix-im` messages, with
+  `im_off.rs` stand-ins; `tui/src/ui/im.rs` draws the dock panel and the IM
+  dialogs (account picker, share and clear confirmations).
 - **Cargo feature** `im`, part of `net` and `full` (see
   [cargo-features](../cargo-features/index.md)): it gates `vix-im-irc` and
   every socket. Without it, the IM menu still offers Notes and anchored

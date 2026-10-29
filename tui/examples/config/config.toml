@@ -294,3 +294,25 @@ prepend = false
 empty_lines = 0
 immediate_finish = true
 clock_in = false
+
+# The IM menu (docs/im/index.md). nick = "" uses the OS user name; notify is
+# "all" | "mentions" | "off"; history is "session" (memory only) or "disk"
+# (JSONL under the platform data directory, kept history_days days).
+[im]
+nick = ""
+notify = "mentions"
+history = "session"
+history_days = 30
+blocked = []
+accounts = []
+# An IRC account, commented out. The SASL password comes only from the
+# environment variable VIX_IM_PASSWORD_<NAME> (here VIX_IM_PASSWORD_LIBERA),
+# never from this file.
+#
+# [[im.accounts]]
+# name = "Libera"
+# server = "irc.libera.chat"
+# port = 6697
+# tls = true
+# channels = ["#vix"]
+# sasl_user = "ana"

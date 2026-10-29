@@ -34,13 +34,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.git_dirty(),
     );
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let collab = app.cowork_segment();
-    let right = crate::status_bar_panel::right_segment(
-        &format!("{collab}{git}{info}"),
-        line,
-        col,
-        icon::CALENDAR,
+    // Cowork participants, then IM's unread count and mention marker (T754).
+    let segments = format!(
+        "{}{git}{}{info}",
+        app.cowork_segment(),
+        app.im_status_segment()
     );
+    let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.

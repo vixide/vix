@@ -102,6 +102,8 @@ impl App {
         // Drain a finished asynchronous DB connect/reconnect (Run H, T531).
         self.poll_db_connect();
         self.poll_db_reconnect();
+        // Drain IM connection events into the inbox (T752).
+        self.poll_im();
     }
 
     /// How long the loop may wait for input before ticking again: short
@@ -124,6 +126,7 @@ impl App {
             || self.db_connect_running()
             || self.db_reconnect_running()
             || self.editor_drag_active()
+            || self.im_connected()
         {
             Duration::from_millis(50)
         } else {

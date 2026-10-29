@@ -377,7 +377,6 @@ bisectable
 boundable
 BRDA
 Catppuccin
-catppuccin
 checksummed
 chrono
 CLDR
@@ -531,7 +530,6 @@ supertypes
 syspolicyd
 Taskfile
 Taskfiles
-tblfm
 TBLFM
 tcell
 termcode
@@ -622,9 +620,7 @@ subcomponent
 
 # HL7 v2 / MLLP (crates/vix-hl7, docs/hl7)
 ER7
-MLLP
 PHI
-subcomponent
 subcomponents
 Deframer
 deframer
@@ -645,6 +641,31 @@ pgdata
 dockerfile
 Dockerfile
 IBANs
+# IM (spec/instant-message, vix-im-irc)
+binstall
+casemapping
+chantypes
+ctcp
+ement
+Floobits
+isupport
+Libera
+Megolm
+nicklen
+Pantalaimon
+privmsg
+rcirc
+realname
+Replit
+sasl
+sunsetting
+winget
+zeroize
+CASEMAPPING
+reanchor
+libera
+SASL
+CTCP
 # Cowork (T690-T697): CRDT candidates and crypto vocabulary
 Loro
 automerge
@@ -660,12 +681,9 @@ heapless
 bitmaps
 polyfill
 unmaintained
-cowork
 VXCW
-collab
 
 # Cowork private-path list (crates/vix-cowork/src/path.rs, spec/cowork)
 netrc
 pypirc
-pgpass
 kdbx

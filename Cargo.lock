@@ -6361,6 +6361,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-im"
+version = "2.0.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "vix-im-irc"
+version = "2.0.0"
+dependencies = [
+ "base64 0.23.1",
+ "proptest",
+ "rustls",
+ "vix-civil-date",
+ "webpki-roots",
+ "zeroize",
+]
+
+[[package]]
+name = "vix-im-panel"
+version = "2.0.0"
+dependencies = [
+ "vix-im",
+ "vix-input",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-input"
 version = "2.0.0"
 dependencies = [
@@ -6604,6 +6634,7 @@ name = "vix-settings"
 version = "2.0.0"
 dependencies = [
  "confy",
+ "etcetera 0.10.0",
  "serde",
  "toml 1.1.8+spec-1.1.0",
  "vix-fileops",
@@ -6767,6 +6798,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "unicode-width 0.2.2",
  "vix-action-catalog",
  "vix-affix",
  "vix-ai-core",
@@ -6832,6 +6864,9 @@ dependencies = [
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",
+ "vix-im",
+ "vix-im-irc",
+ "vix-im-panel",
  "vix-input",
  "vix-jwt-tool",
  "vix-keybinding-editor-panel",

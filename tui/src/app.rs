@@ -39,6 +39,11 @@ mod http;
 #[cfg(not(feature = "http"))]
 mod http_off;
 mod ide_parity;
+pub(crate) mod im;
+#[cfg(feature = "im")]
+mod im_net;
+#[cfg(not(feature = "im"))]
+mod im_off;
 mod info_panels;
 mod insert_tools;
 #[cfg(feature = "jj")]
@@ -153,6 +158,8 @@ pub enum Focus {
     Messages,
     /// The bottom dock (log/output/data panel).
     BottomDock,
+    /// The IM dock panel (T752).
+    Im,
 }
 
 /// Which kind of single-line prompt is open.
@@ -218,6 +225,10 @@ pub enum PromptKind {
     ExplorerExclude,
     /// Enter a file path to compare the active buffer against (diff overlay).
     CompareFile,
+    /// Enter a room to join (**IM → Join Room…**, T752).
+    ImJoin,
+    /// Enter a nick to message (**IM → Direct Message…**, T752).
+    ImDirect,
     /// Enter a file path whose contents to insert at the cursor.
     InsertFile,
     /// Enter a coverage report (LCOV or Cobertura XML) path to load for the
@@ -1534,6 +1545,10 @@ pub struct Layout {
     /// Row-list rectangle of the open OC panel (T702), so a click can hit-test
     /// a row.
     pub oc: Rect,
+    /// The IM dock panel (T752), so a click can focus it.
+    pub im: Rect,
+    /// The IM panel's conversation list, so a click can select a row.
+    pub im_list: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
     /// Row-list rectangle of the open Conflict overlay (T556), so a click can
@@ -1872,6 +1887,10 @@ pub struct App {
     pub(crate) git_graph: Option<crate::git_graph::Panel>,
     /// The OC container panel (T702-T704), when open.
     pub(crate) oc: Option<crate::oci_panel::Panel>,
+    /// The IM menu's state: inbox, dock panel, connections (T752).
+    pub(crate) im: im::ImState,
+    /// An IM dialog (account picker, share or clear confirm), when open.
+    pub(crate) im_dialog: Option<im::ImDialog>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub(crate) task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
@@ -2523,6 +2542,8 @@ impl App {
             git_log: None,
             git_graph: None,
             oc: None,
+            im: im::ImState::new(&settings),
+            im_dialog: None,
             task_chooser: None,
             macro_chooser: None,
             encoding_chooser: None,
@@ -2968,6 +2989,7 @@ impl App {
             #[cfg(feature = "jj")]
             other if self.run_jj_action(other) => {}
             other if self.run_oc_action(other) => {}
+            other if self.run_im_action(other) => {}
             other if self.run_dap_action(other) => {}
             other if self.run_project_action(other) => {}
             other if self.run_named_action(other) => {}
@@ -8896,6 +8918,10 @@ impl App {
             self.messages_mouse(mouse);
             return;
         }
+        if self.im.open && rect_contains(self.layout.im, col, row) {
+            self.im_mouse(mouse);
+            return;
+        }
         if self.settings.secondary_panels.show_outline_dock
             && rect_contains(self.layout.outline_dock, col, row)
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
@@ -13023,6 +13049,10 @@ impl App {
                 self.explorer.set_filter(&include, prompt.input.trim());
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
+            PromptKind::ImJoin => self.im_join(&prompt.input),
+            PromptKind::ImDirect => {
+                self.im_direct(&prompt.input);
+            }
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
             PromptKind::LoadCoverageFile => self.load_coverage_file(prompt.input.trim()),
             PromptKind::ExportSettings => self.export_settings(prompt.input.trim()),

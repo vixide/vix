@@ -2,7 +2,7 @@
 source: tui/tests/snapshots.rs
 expression: screen
 ---
- Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  OC  Tools  Help                  
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help              
   Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
  src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
  Cargo.toml  ╭  Welcome to Vix ────────────────────────────────────────────────────╮the file explo

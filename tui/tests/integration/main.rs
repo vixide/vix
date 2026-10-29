@@ -28,6 +28,7 @@ mod find;
 mod git;
 mod hl7;
 mod ide_parity;
+mod im;
 mod keybindings;
 mod keymaps;
 mod lsp;

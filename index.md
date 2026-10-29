@@ -48,7 +48,7 @@ quit. Other ways to install, including Windows, Linux packages and
 ## Why Vix
 
 - **Familiar keys, no modes by default.** Ctrl/Cmd shortcuts, a real menu bar
-  (Vix File Edit View Go Run AI DB JJ Git Org Project Tools Help), mouse
+  (Vix File Edit View Go Run AI DB JJ Git IM Org Project OC Tools Help), mouse
   support, and `F1` for every shortcut. Ten keymaps — Apple (the default),
   VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows),
   Eclipse and Sublime Text — switchable live from **View → Keymap**.

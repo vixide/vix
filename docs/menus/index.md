@@ -2,8 +2,8 @@
 
 The top menu bar groups every command into dropdown menus. From left to right
 the menus are
-**Vix™ · File · Edit · View · Go · Run · AI · DB · JJ · Git · Org · Project ·
-Tools · Help**.
+**Vix™ · File · Edit · View · Go · Run · AI · DB · JJ · Git · IM · Org ·
+Project · OC · Tools · Help**.
 
 ## Navigating the menus
 
@@ -13,7 +13,8 @@ Tools · Help**.
   Help **Alt+H**. **JJ** and **Project** have no Alt mnemonic of their own —
   `Alt+J` is already the recent-locations jump and `Alt+P` is already
   find-selection-backward, so reach these two via **F10** plus the arrow keys,
-  or a mouse click.
+  or a mouse click. **IM** and **OC** have none either (`Alt+I` is View,
+  `Alt+O` is Org).
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -258,6 +259,29 @@ The **Branch** submenu:
 | Merge…           | Choose a branch to merge into the current one         |
 | Delete…          | Prompt for a branch name and `git branch --delete` it |
 | Edit Description… | Prompt for text and set it via `git branch --edit-description` |
+
+## IM menu
+
+Code-aware chat: local Notes, IRC rooms and direct messages, shared
+selections and locations. IM never opens or focuses anything on its own. See
+[IM](../im/index.md).
+
+| Item              | Action                                                        |
+| ----------------- | ------------------------------------------------------------- |
+| Chat Panel        | Show or hide the IM panel beside the editor                   |
+| Connect…          | Connect a configured IRC account (`[[im.accounts]]`)          |
+| Disconnect        | Close the selected conversation's account                     |
+| Join Room…        | Prompt for a room (`#channel`) and join it                    |
+| Leave Room        | Leave the selected room                                       |
+| Direct Message…   | Prompt for a nick and open a direct conversation              |
+| Next Unread       | Go to the next conversation with unread messages              |
+| Share Selection   | Send the selection as a snippet, after showing what and to whom |
+| Share Location    | Send the cursor's `path:line:col`                             |
+| Comment on Line…  | Line threads (not available yet)                              |
+| Threads…          | Line threads (not available yet)                              |
+| Status ▸          | Available / Away / Busy (Busy silences notifications)         |
+| Notifications ▸   | All Messages / Mentions Only / Off                            |
+| Clear History     | Delete the selected conversation's messages, after a confirm  |
 
 ## Org menu
 
