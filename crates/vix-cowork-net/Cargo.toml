@@ -1,0 +1,17 @@
+[package]
+name = "vix-cowork-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Encrypted, authenticated TCP transport for Vix Cowork: Noise handshake, invite tokens, framed messages."
+
+[dependencies]
+vix-cowork = { workspace = true }
+snow = { workspace = true }
+getrandom = { workspace = true }
+base64 = { workspace = true }
+
+[lints]
+workspace = true

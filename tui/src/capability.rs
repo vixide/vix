@@ -42,11 +42,14 @@ pub enum Capability {
     /// Asking the installed `hunspell` where its dictionaries live (`hunspell`).
     /// Owns no actions; it only decides whether that program is ever started.
     Hunspell,
+    /// Real-time collaboration (`cowork`): hosting or joining a shared
+    /// session over an encrypted socket. Off by default.
+    Cowork,
 }
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 14] = [
+    pub const ALL: [Capability; 15] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -61,6 +64,7 @@ impl Capability {
         Capability::Dap,
         Capability::Tasks,
         Capability::Hunspell,
+        Capability::Cowork,
     ];
 
     /// The Cargo feature (and user-visible) name.
@@ -81,6 +85,7 @@ impl Capability {
             Capability::Dap => "dap",
             Capability::Tasks => "tasks",
             Capability::Hunspell => "hunspell",
+            Capability::Cowork => "cowork",
         }
     }
 
@@ -102,6 +107,7 @@ impl Capability {
             Capability::Dap => cfg!(feature = "dap"),
             Capability::Tasks => cfg!(feature = "tasks"),
             Capability::Hunspell => cfg!(feature = "hunspell"),
+            Capability::Cowork => cfg!(feature = "cowork"),
         }
     }
 
@@ -122,6 +128,7 @@ impl Capability {
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
             ("oc.", Capability::Oc),
+            ("cowork.", Capability::Cowork),
             // Only IM's network actions; the panel, Notes, sharing, status
             // and history work in every build.
             ("im.connect", Capability::Im),
@@ -223,9 +230,19 @@ mod tests {
             Capability::for_action("tools.run_command"),
             Some(Capability::Tasks)
         );
+        assert_eq!(
+            Capability::for_action("cowork.host"),
+            Some(Capability::Cowork)
+        );
         assert_eq!(Capability::for_action("file.save"), None);
         // Prefix match is on the dot: `github.*`-style ids are not Git's.
         assert_eq!(Capability::for_action("gitx.thing"), None);
+    }
+
+    #[test]
+    fn cowork_is_off_unless_asked_for() {
+        assert_eq!(Capability::Cowork.enabled(), cfg!(feature = "cowork"));
+        assert_eq!(is_available("cowork.host"), cfg!(feature = "cowork"));
     }
 
     #[test]

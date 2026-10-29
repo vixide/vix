@@ -23,6 +23,9 @@ pub mod history;
 /// Multiple cursors ("carets") and the operations applied across them.
 pub mod multicursor;
 pub mod named;
+/// Collaboration support: the local edit log, applying remote edits, and
+/// drawing other participants' carets.
+pub mod remote;
 /// Rendering of the editor, including soft-wrap layout.
 pub mod render;
 /// Text selection ranges and selection-snapping modes.
@@ -33,5 +36,6 @@ pub mod utils;
 // Vix-owned modules, held to crate-wide `clippy::pedantic`: the soft-wrap layout
 // + renderer, bracket matching, and line ops.
 mod brackets;
+mod lens;
 mod lines;
 mod wrap;

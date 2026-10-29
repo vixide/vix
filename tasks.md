@@ -8119,27 +8119,102 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### Cowork — real-time collaboration (spec: [`spec/cowork`](spec/cowork/index.md))
 
-- [ ] **T690 — Spike and decision record.** Score `loro`, `automerge`,
+- [x] **T690 — Spike and decision record.** Score `loro`, `automerge`,
   `diamond-types` and `yrs` on text performance, memory (1 MB file), license,
   and bridge cost to the `ropey` buffer; prove cursor stability under remote
   inserts with a throwaway test. Output: a decision in the spec. **Medium.**
-- [ ] **T691 — `vix-cowork` core.** Pure document, peer, presence and
+  - **Done 2026-10-29** (`feat/t690-cowork`): chose **Loro** (MIT). Measured in a
+    scratch crate outside the workspace (1 MB file, 20k edits): Loro 29 ms /
+    26 MB, diamond-types 6 ms / 25 MB, Yrs 3.2 s / 32 MB, Automerge 243 ms /
+    364 MB; all converged. Loro wins on the bridge (stable cursors, text-delta
+    events, per-peer undo), proven by throwaway tests (a cursor at 6 moved to
+    10 after remote inserts; A's undo left B's text). `cargo deny` passes with
+    four dated "unmaintained" advisory ignores for Loro's transitive crates
+    (`im`, `bitmaps`, `sized-chunks`, `atomic-polyfill`; no vulnerabilities).
+    Decision record in `spec/cowork`. **Not done:** the numbers are one machine,
+    one run; no live web research on release cadence.
+- [x] **T691 — `vix-cowork` core.** Pure document, peer, presence and
   permission model; N-replica convergence tests incl. proptest; no I/O.
   **Large.** After T690.
-- [ ] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
+  - **Done 2026-10-29**: `vix-cowork` crate: `SharedDoc` (Loro), `Peer`/`Permission`,
+    `SharedPath` confinement, panic-free wire codec, presence, and the
+    `HostSession`/`GuestSession` state machines. 57 unit tests plus a proptest
+    host-and-three-guest convergence run with delayed delivery and undo.
+    **Not done:** only text buffers (no cursor-position undo grouping policy
+    beyond Loro's 1 s merge window); Loro's behavior on hostile update bytes is
+    covered by "never panics on garbage" tests, not a fuzz target.
+- [x] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
   without moving the local cursor; per-user undo. Cap shared size.
   **Large.**
-- [ ] **T693 — Presence rendering.** Remote cursors and selections in
+  - **Done 2026-10-29** (`feat/t695-cowork-app`): `vix_editor_core::remote`
+    (edit log of `Splice`s, `apply_remote_edits` keeping cursor, selection and
+    carets on their characters, no undo step or log entry) and the per-tick
+    pump in `tui/src/app/cowork.rs` (local edits into the CRDT first, then
+    remote edits onto the buffer). Per-user undo: while a buffer is shared the
+    editor's own Undo/Redo do nothing (`is_edit_logging`), and `edit.undo`/
+    `edit.redo` go to `HostSession::undo`/`redo` or `GuestSession::undo`/
+    `redo`; tested in `vix-cowork` and by a two-App loopback test. 5 MB cap and
+    binary refusal at share time. **Not done:** undo groups follow Loro's 1 s
+    merge window, not the editor's own word/line grouping; an encoding (T661)
+    or CRLF difference between host and guest is not reconciled (the guest
+    sees the host's decoded text).
+- [x] **T693 — Presence rendering.** Remote cursors and selections in
   `ui.rs`, theme-derived peer colors (contrast-checked), status-line names.
   **Medium.**
-- [ ] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
+  - **Done 2026-10-29**: carets and selections are drawn by
+    `vix-editor-core`'s renderer (`set_remote_carets`), not `ui.rs`; colors
+    from `vix_cowork::presence::peer_color` against the editor background
+    (WCAG 3:1); the status bar lists the other participants in the active
+    shared buffer; **Follow…** pins the view to a participant until any
+    local key, click or scroll. **Not done:** a peer's name is not drawn next
+    to its caret (status bar and Peers only).
+- [x] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
   Encrypted, authenticated framing; invite token; host consent prompt;
   reconnect and resync. **Large.**
-- [ ] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
+  - **Done 2026-10-29**: `vix-cowork-net` (Noise `NKpsk0` over X25519/ChaCha20-Poly1305/
+    BLAKE2s via `snow`): single-use short-lived invite carrying the host key
+    (pinned) and a PSK; encrypted chunked frames; silent failure; handshake and
+    pending-guest caps; host consent via `Knock`. 11 loopback-socket tests incl.
+    a recording proxy proving nothing readable crosses the wire. **Not done:**
+    reconnect/resync (a dropped guest rejoins with a new invite), NAT traversal,
+    per-source-address rate limits.
+- [x] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
   Permissions, i18n in 15 locales, action catalog. **Medium.**
-- [ ] **T696 — Workspace sharing.** Shared file tree and search; host-only
+  - **Done 2026-10-29** (`feat/t695-cowork-app`, salvaged from a stalled
+    agent's draft and finished): **Tools → Cowork** (Host Session…, New
+    Invite, Share This Buffer, Stop Sharing This Buffer, Share File Tree, Join
+    Session…, Shared Files…, Peers, Follow…, Permissions…, Leave Session),
+    `cowork.*` actions dispatched by `run_cowork_action`, `Cowork: …` palette
+    commands, every string in 15 locales, `cowork` capability (menu hidden
+    without the feature, `cowork_off.rs` stand-ins). Host consent prompt
+    (Enter = view-only, Esc = decline); guest buffers are `cowork:` tabs that
+    can't be saved locally (Save asks the host). User guide
+    `docs/cowork/index.md`. CI and `scripts/check` now clippy and test
+    `--features cowork`. **Not done:** Peers and the invite are plain text
+    dialogs and Permissions/Follow are typed prompts (`2 edit`), not
+    interactive panels; the permission keywords (`view`, `edit`, `terminal`,
+    `no`) are typed in English in every locale (the prompt says so); a host
+    cannot remove a guest except by lowering it to view or ending the session.
+- [x] **T696 — Workspace sharing.** Shared file tree and search; host-only
   disk writes; path confinement tests. **Medium.**
+  - **Done 2026-10-29** (file tree; search by file name only): **Share File
+    Tree** (host toggle, off by default) answers a guest's `ListFiles` from
+    the file-finder index (`.gitignore` honored, hidden files skipped) and
+    its `OpenRequest`s; **Shared Files…** shows the list in the palette's
+    fuzzy file finder. Requests are refused unless the tree is shared, the
+    path passes `SharedPath`, its canonical path stays inside the root
+    (symlinks followed) and it is not private (`SharedPath::is_private`:
+    `.env*`, `.git`, `.vix`, keys, credentials, …, also applied to the host's
+    own shares). Accepted files open in a background host tab. Disk writes
+    stay host-only. Tests: session unit tests, `confine` (symlink escapes),
+    and a two-App loopback test. **Not done:** searching file *contents*
+    across the shared tree (Find in Files over the host's workspace); new or
+    deleted host files reach a guest only when it asks for the list again.
 - [ ] **T697 — Shared terminal (read-only default).** **Medium; optional.**
+  - **Not started** (2026-10-29): skipped as optional. `Permission::
+    EditTerminal` and `Action::Terminal` exist in `vix-cowork`, and a
+    `Channel` for terminal output would slot into the wire tag table the same
+    way chat does; nothing streams a terminal yet.
 
 ### OC — Open Container Initiative menu (spec: [`spec/open-container`](spec/open-container/index.md))
 
@@ -8219,19 +8294,84 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### IDE parity (spec: [`spec/ide-parity`](spec/ide-parity/index.md))
 
-- [ ] **T720 — Local History.** Snapshots on save, label, diff view, revert a
+- [x] **T720 — Local History.** Snapshots on save, label, diff view, revert a
   range; on `vix-undo-store`. **Medium–Large.**
-- [ ] **T721 — Search Everywhere.** One fuzzy box, prefixes `>` `@` `:`.
+  - **Done 2026-10-29** (`feat/t720-ide-parity`): `vix-undo-store::local_history`
+    (`LocalHistory`, `unified_diff`, `revert_range`, typed `HistoryError`),
+    `local_history_keep` setting (0 = off), File → Local History… / Label…,
+    the new shared `vix-choice-list` overlay. **Not done:** snapshots are taken
+    only on save (not on idle or before risky operations), no deletion or
+    pruning UI, no side-by-side diff (read-only unified diff tab), no history
+    for unsaved or renamed files (keyed by canonical path), the store is not
+    shared across a rename.
+- [x] **T721 — Search Everywhere.** One fuzzy box, prefixes `>` `@` `:`.
   **Medium.**
-- [ ] **T722 — Refactor menu.** Surface LSP `refactor.*` code actions with
+  - **Done 2026-10-29:** Go → Search Everywhere opens the palette with an
+    `everywhere` flag; an unprefixed query mixes files, commands, current-file
+    symbols and workspace symbols (capped per kind), prefixes still narrow.
+    `recompute_palette` was split so `palette_entries(mode, query)` is reusable.
+    **Not done:** no settings or recent-files sections, no double-Shift
+    binding or default chord, results are not merged into one global score
+    ranking (kinds stay in fixed order), the title still reads "Files".
+- [x] **T722 — Refactor menu.** Surface LSP `refactor.*` code actions with
   preview. **Medium.**
-- [ ] **T723 — Organize imports and code cleanup.** `source.organizeImports`
+  - **Done 2026-10-29:** Tools → LSP → Refactor… sends `context.only =
+    ["refactor"]` (`code_action_params_only`, `request_code_action_only`) and
+    shows the existing chooser; `p` previews the selected action as a unified
+    diff tab. **Not tested** against a real `rust-analyzer` or second server
+    (no real servers in tests); command-only actions (no inline edit) cannot be
+    applied and say so.
+- [x] **T723 — Organize imports and code cleanup.** `source.organizeImports`
   plus a cleanup pipeline. **Small–Medium.**
-- [ ] **T724 — Named run configurations.** Saved, shareable, compound, with
+  - **Done 2026-10-29:** Tools → LSP → Organize Imports, and Edit → Code
+    Cleanup (`vix-textops::cleanup`: trailing whitespace, trailing blank lines,
+    final newline, then organize imports when a server handles the file).
+    **Not done:** the pipeline does not chain the formatter (async edits
+    would race the organize edit) and is not configurable or run on commit.
+- [x] **T724 — Named run configurations.** Saved, shareable, compound, with
   before-launch steps, in `vix-tasks`. **Medium.**
-- [ ] **T725 — Peek definition.** **Small–Medium.**
-- [ ] **T726 — CodeLens.** **Medium.**
-- [ ] **T727 — Postfix completion.** **Small.**
+  - **Done 2026-10-29:** `vix-tasks::run_config` (`.vix/run.toml`, `plan`,
+    `Plan::shell_command`), Project → Run Configuration… / Edit Run
+    Configurations. **Not done:** a compound's members share one output stream
+    and one running-command slot (no per-member tabs or stop), `cmd.exe` runs a
+    compound sequentially, no GUI editor, no debug-launch kind of configuration.
+- [x] **T725 — Peek definition.** **Small–Medium.**
+  - **Done 2026-10-29:** Tools → LSP → Peek Definition shows the lines around
+    the definition in the choice-list overlay (LSP, else the text-search
+    fallback). **Not done:** read-only popup only (no in-popup editing or
+    nested peek), the first of several definitions is shown, no syntax colors.
+- [x] **T726 — CodeLens.** **Medium.**
+  - **Partial 2026-10-29:** the `lsp.code_lens` chooser sorts by line, shows
+    line numbers and starts on the lens at or after the cursor.
+  - **Done 2026-10-29:** lenses are drawn as dimmed virtual rows above their
+    lines (`vix-editor-core` `lens.rs`: one layout shared by every render
+    layer, cursor scroll, cursor position and mouse hit-testing; soft wrap and
+    folds handled; `Editor::text_screen_row` for host overlays). Refreshed
+    when a buffer is first seen, 500 ms after the last edit, on save and on
+    the server's `workspace/codeLens/refresh` (`Lsp::refresh_code_lens`,
+    background and silent on error, only to servers with `codeLensProvider`,
+    stale replies dropped); unresolved lenses resolved (`codeLens/resolve`)
+    once on screen. `lsp.code_lens_run` runs the cursor line's lens (a
+    `vix-choice-list` pick when several): advertised commands go back as
+    `workspace/executeCommand`, rust-analyzer's `runSingle` runs its cargo
+    command through the command pipeline, `showReferences` opens the
+    references list, anything else gets a translated "unsupported" message.
+    Local "Run test" lenses come from the new
+    `vix_tasks::test_at_point::tests_in_file` where the server put none.
+    `code_lens` setting (new `language_features` group) and View → Editor →
+    Code Lens. Tests: lens layout/render/mouse/focus unit tests, debounce and
+    command-mapping unit tests, two integration tests and a mock-server
+    end-to-end test (`lsp_smoke`). **Not done:** no click-to-run on a lens
+    row (a click places the cursor on its line); rust-analyzer's
+    `debugSingle` and other client-side commands are refused rather than
+    mapped to the debugger; a lens's line is not shifted by edits made
+    before the debounced refresh lands; with several servers on one file the
+    last lens reply wins and resolves go to the first resolving server.
+- [x] **T727 — Postfix completion.** **Small.**
+  - **Done 2026-10-29:** `vix-snippets::postfix` templates for Rust, JS/TS,
+    Python, Go and C-like languages, expanded on Tab ahead of prefix snippets.
+    **Not done:** not offered in the completion popup, no user-defined postfix
+    templates, no type-aware filtering (`.some` expands on any expression).
 
 Order: T680 first (T684 builds on it), then T682, T683, T681, T685. Plans:
 spikes and the pure-core tasks (T690, T700, T710) before anything that

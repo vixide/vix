@@ -124,6 +124,13 @@ pub struct Editor {
     /// already carry.
     pub(crate) semantic_tokens: Vec<(usize, usize, String)>,
 
+    /// Code lenses (T726): `(line, label)`, sorted by line, one entry per
+    /// line (same-line labels already joined). Each is drawn as a virtual,
+    /// dimmed row above its line -- never buffer text. Like `inlay_hints`, a
+    /// lens can go stale after an edit until the host refreshes it; one past
+    /// the buffer's end is skipped. See `lens.rs`.
+    pub(crate) code_lenses: Vec<(usize, String)>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -178,6 +185,9 @@ pub struct Editor {
     /// non-vertical motion routes through [`Editor::set_cursor`]). This stops the
     /// classic drift where moving through a short line snaps the column inward.
     pub(crate) goal_col: Option<usize>,
+    /// Other participants' carets and selections (Cowork, T693), drawn under
+    /// the local cursor.
+    pub(crate) remote_carets: Vec<crate::remote::RemoteCaret>,
 }
 
 impl Editor {
@@ -227,6 +237,7 @@ impl Editor {
             folds: Vec::new(),
             inlay_hints: Vec::new(),
             semantic_tokens: Vec::new(),
+            code_lenses: Vec::new(),
             highlights_cache,
             flags: Flags::SHOW_LINE_NUMBERS | Flags::AUTO_PAIR,
             eol_note: None,
@@ -241,6 +252,7 @@ impl Editor {
             cursor_style: None,
             carets: Vec::new(),
             goal_col: None,
+            remote_carets: Vec::new(),
         })
     }
 
@@ -318,7 +330,7 @@ impl Editor {
                 let rows = self.visual_rows(text_width, height.max(1));
                 let visible = rows
                     .iter()
-                    .any(|r| self.cursor >= r.start && self.cursor <= r.end);
+                    .any(|r| !r.lens && self.cursor >= r.start && self.cursor <= r.end);
                 if visible {
                     break;
                 }
@@ -341,6 +353,16 @@ impl Editor {
             self.offset_y = line;
         } else if line >= self.offset_y + visible_height {
             self.offset_y = line.saturating_sub(visible_height.saturating_sub(1));
+        }
+        // Lens rows (T726) and folds change how many screen rows sit above
+        // the cursor's line: scroll on until its text row is inside the view.
+        if self.has_code_lenses() || self.has_folds() {
+            while self.offset_y < line {
+                match self.rows_to_text(line) {
+                    Some(r) if r >= visible_height => self.offset_y += 1,
+                    _ => break,
+                }
+            }
         }
     }
 
@@ -417,6 +439,10 @@ impl Editor {
             let text_width = (area.width as usize).saturating_sub(line_number_width as usize);
             let rows = self.visual_rows(text_width, screen_row + 1);
             let vr = rows.get(screen_row)?;
+            if vr.lens {
+                // A lens row (T726) maps to the start of the line it annotates.
+                return Some(vr.start);
+            }
             let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
             let slice = self.code.char_slice(vr.start, vr.end);
             let mut cur_col = 0usize;
@@ -437,7 +463,13 @@ impl Editor {
             return Some(ch);
         }
 
-        let clicked_row = (mouse_y - area.top()) as usize + self.offset_y;
+        // Map the screen row through the layout (folds and lens rows, T726);
+        // a lens row maps to the line it annotates.
+        let screen_row = (mouse_y - area.top()) as usize;
+        let clicked_row = match self.view_rows(screen_row + 1).get(screen_row) {
+            Some(crate::lens::ViewRow::Text(line) | crate::lens::ViewRow::Lens(line)) => *line,
+            None => return None,
+        };
         if clicked_row >= self.code.len_lines() {
             return None;
         }
@@ -598,10 +630,18 @@ impl Editor {
         }
     }
 
-    /// Scroll the viewport down one line, bounded by the last line.
+    /// Scroll the viewport down one line, bounded by the last line. With code
+    /// lens rows (T726) the bound is the last line's text row reaching the
+    /// view, since lens rows make the document taller than its line count.
     pub fn scroll_down(&mut self, area_height: usize) {
         let len_lines = self.code.len_lines();
-        if self.offset_y < len_lines.saturating_sub(area_height) {
+        let more_below = if self.has_code_lenses() {
+            self.rows_to_text(len_lines.saturating_sub(1))
+                .is_some_and(|r| r >= area_height)
+        } else {
+            self.offset_y < len_lines.saturating_sub(area_height)
+        };
+        if more_below {
             self.offset_y += 1;
         }
     }
@@ -1162,7 +1202,11 @@ impl Editor {
 
         let (cursor_line, cursor_char_col) = self.code.point(self.cursor);
 
-        if cursor_line >= self.offset_y && cursor_line < self.offset_y + area.height as usize {
+        // Rows above the cursor's text, folds and lens rows (T726) counted.
+        let text_row = self
+            .rows_to_text(cursor_line)
+            .filter(|&r| r < area.height as usize);
+        if let Some(text_row) = text_row {
             let line_start_char = self.code.line_to_char(cursor_line);
             let line_len = self.code.line_len(cursor_line);
 
@@ -1189,8 +1233,7 @@ impl Editor {
 
             let cursor_x =
                 area.left() + u16::try_from(line_number_width + visible_x).unwrap_or(u16::MAX);
-            let cursor_y =
-                area.top() + u16::try_from(cursor_line - self.offset_y).unwrap_or(u16::MAX);
+            let cursor_y = area.top() + u16::try_from(text_row).unwrap_or(u16::MAX);
 
             if cursor_x < area.right() && cursor_y < area.bottom() {
                 return Some((cursor_x, cursor_y));

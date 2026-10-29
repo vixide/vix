@@ -114,6 +114,18 @@ pub fn is_image_path(path: &Path) -> bool {
 /// renders marks as underlines, so the specific value is not shown as a color.
 pub const SEARCH_MARK: &str = "search";
 
+/// The path prefix of a buffer that belongs to someone else's Cowork session
+/// (`cowork:src/main.rs`). Such a path is synthetic: [`Editor::save_active`]
+/// and [`Editor::save_active_as`] refuse it.
+pub const REMOTE_PATH_PREFIX: &str = "cowork:";
+
+/// Whether `path` is a synthetic Cowork path (see [`REMOTE_PATH_PREFIX`]).
+#[must_use]
+pub fn is_remote_path(path: &Path) -> bool {
+    path.to_str()
+        .is_some_and(|p| p.starts_with(REMOTE_PATH_PREFIX))
+}
+
 /// Apply the current theme's styles to a code editor.
 ///
 /// With a custom JSON theme active, the editor uses its per-region foreground,
@@ -246,6 +258,13 @@ impl Tab {
     /// Whether this tab displays an image rather than editable text.
     pub fn is_image(&self) -> bool {
         self.image.is_some()
+    }
+
+    /// Whether this buffer belongs to someone else's Cowork session (its path
+    /// is the synthetic [`REMOTE_PATH_PREFIX`] form and it never reaches disk
+    /// from here).
+    pub fn is_remote(&self) -> bool {
+        self.path.as_deref().is_some_and(is_remote_path)
     }
 
     /// Whole buffer text.
@@ -864,6 +883,14 @@ impl Editor {
     }
 
     fn write_to(&mut self, idx: usize, path: &Path, opts: SaveOptions) -> io::Result<()> {
+        // A buffer shared by someone else's Cowork session is saved by that
+        // host, never by us: its synthetic path must not become a local file.
+        if is_remote_path(path) || self.tabs[idx].path.as_deref().is_some_and(is_remote_path) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "shared buffer: the host saves it",
+            ));
+        }
         let mut data = self.tabs[idx].text();
         if opts.trim_trailing_whitespace {
             data = trim_trailing_whitespace(&data);
@@ -1935,6 +1962,28 @@ mod tests {
         e.active_tab_mut().unwrap().dirty = true;
         let err = e.reopen_active_with_encoding(koi8).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A buffer shared in from someone else's Cowork session has a synthetic
+    /// path and must never be written to disk from here.
+    #[test]
+    fn remote_buffers_refuse_to_save() {
+        const NO_TRIM: SaveOptions = SaveOptions {
+            trim_trailing_whitespace: false,
+            ensure_final_newline: false,
+        };
+        let dir = scratch("remote-save");
+        let mut e = Editor::new(Flags::LINE_NUMBERS, "    ".into());
+        let tab = e.active_tab_mut().unwrap();
+        tab.path = Some(PathBuf::from(format!("{REMOTE_PATH_PREFIX}src/a.rs")));
+        assert!(tab.is_remote());
+        let err = e.save_active(NO_TRIM).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        let err = e.save_active_as(dir.join("real.txt"), NO_TRIM).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        assert!(!dir.join("real.txt").exists());
+        assert!(!Path::new("cowork:src/a.rs").exists());
         fs::remove_dir_all(&dir).ok();
     }
 }

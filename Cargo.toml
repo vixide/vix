@@ -137,6 +137,13 @@ insta = "1"
 # Generates the man page from the real `Cli` clap definition (T307,
 # tasks.md), via examples/generate_man.rs (dev-only).
 clap_mangen = "0.3.3"
+# CRDT for Cowork (T690, spec/cowork): chosen over automerge, yrs and
+# diamond-types for its stable text cursors, text-delta change events and
+# per-peer undo. MIT. `counter` (default) is not needed.
+loro = { version = "1.17", default-features = false }
+# Noise protocol (Cowork transport, T694): NK + psk0 over X25519, ChaCha20-Poly1305,
+# BLAKE2s. MIT OR Apache-2.0.
+snow = "0.10"
 
 # Internal crates, declared once (T601): members say `vix-x.workspace = true`.
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "2.0.0" }
@@ -177,6 +184,8 @@ vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into
 vix-convert-from-yaml-into-json-tool = { path = "crates/vix-convert-from-yaml-into-json-tool", version = "2.0.0" }
 vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "2.0.0" }
 vix-coverage = { path = "crates/vix-coverage", version = "2.0.0" }
+vix-cowork = { path = "crates/vix-cowork", version = "2.0.0" }
+vix-cowork-net = { path = "crates/vix-cowork-net", version = "2.0.0" }
 vix-dap = { path = "crates/vix-dap", version = "2.0.0" }
 vix-db = { path = "crates/vix-db", version = "2.0.0" }
 vix-diff-view = { path = "crates/vix-diff-view", version = "2.0.0" }
@@ -234,6 +243,7 @@ vix-org-contacts = { path = "crates/vix-org-contacts", version = "2.0.0" }
 vix-org-table = { path = "crates/vix-org-table", version = "2.0.0" }
 vix-outline-panel = { path = "crates/vix-outline-panel", version = "2.0.0" }
 vix-todo-tree = { path = "crates/vix-todo-tree", version = "2.0.0" }
+vix-choice-list = { path = "crates/vix-choice-list", version = "2.0.0" }
 vix-palette = { path = "crates/vix-palette", version = "2.0.0" }
 vix-pomodoro-tool = { path = "crates/vix-pomodoro-tool", version = "2.0.0" }
 vix-qr-tool = { path = "crates/vix-qr-tool", version = "2.0.0" }

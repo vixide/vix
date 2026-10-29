@@ -37,8 +37,9 @@ unflagged: it has no payoff and the heaviest coupling.
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
 | `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*`, `edit.pipe_selection`, `edit.insert_command_output` | the runners `spawn_shell`, `run_shell_filter` (Pipe Through Command, T659) and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
-| `full` | umbrella for every capability (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
-| `net` | umbrella for `http`, `ai`, `sql`, `im` | everything that can reach the network |
+| `cowork` | `cowork.*` | `vix-cowork`, `vix-cowork-net` (real-time collaboration, T690-T697; `cowork_off.rs` stand-ins). **Not** in `full` or `default`: the default build has no collaboration or listening code. See `spec/cowork` |
+| `full` | umbrella for every capability except `cowork` (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
+| `net` | umbrella for `http`, `ai`, `sql`, `im` | everything that can reach the network (`cowork` is separate: it is opt-in) |
 
 `syntax-*` / `lang-*` (Tree-sitter grammars) are a separate, older axis and are
 unchanged.

@@ -18,8 +18,14 @@ fn cursor_screen_yx(app: &App) -> Option<(u16, u16)> {
     let area = app.layout.editor;
     let t = app.editor.active_tab()?;
     let (line, col) = app.editor.cursor_1based();
-    let off_y = t.editor.get_offset_y();
-    let y = area.y + u16::try_from(line.saturating_sub(1).saturating_sub(off_y)).unwrap_or(0);
+    // The row the cursor's line is drawn on (folds and code-lens rows, T726,
+    // counted); a line off screen falls back to plain scroll arithmetic.
+    let line0 = line.saturating_sub(1);
+    let row = t
+        .editor
+        .text_screen_row(line0, area)
+        .unwrap_or_else(|| line0.saturating_sub(t.editor.get_offset_y()));
+    let y = area.y + u16::try_from(row).unwrap_or(0);
     let x = area.x
         + u16::try_from(col.saturating_sub(1))
             .unwrap_or(0)
@@ -156,31 +162,17 @@ pub(super) fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let titles: Vec<&str> = menu.actions.iter().map(|(t, _)| t.as_str()).collect();
-    draw_chooser(
-        frame,
-        area,
-        &t!("menu.item.lsp.code_action"),
-        &titles,
-        menu.selected,
-    );
-}
-
-pub(super) fn draw_code_lens(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(menu) = app.code_lens.as_ref() else {
-        return;
+    let name = if menu.refactor {
+        t!("menu.item.lsp.refactor")
+    } else {
+        t!("menu.item.lsp.code_action")
     };
-    let titles: Vec<&str> = menu.lenses.iter().map(|(_, t, _, _)| t.as_str()).collect();
-    draw_chooser(
-        frame,
-        area,
-        &t!("menu.item.lsp.code_lens"),
-        &titles,
-        menu.selected,
-    );
+    let title = format!("{name}  ({})", t!("ui.code_action_hint"));
+    draw_chooser(frame, area, &title, &titles, menu.selected);
 }
 
 /// A centered single-column chooser: a bordered list of `titles` with `selected`
-/// highlighted. Shared by the code-action and code-lens menus.
+/// highlighted. Used by the code-action menu.
 fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], selected: usize) {
     let longest = titles.iter().map(|t| t.chars().count()).max().unwrap_or(20);
     let width = u16::try_from(longest)

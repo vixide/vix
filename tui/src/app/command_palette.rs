@@ -23,11 +23,22 @@ impl App {
     /// Open the palette with `seed` already typed (e.g. `"@"` to land in
     /// go-to-symbol mode).
     pub(super) fn open_palette_seeded(&mut self, seed: &str) {
+        self.palette_everywhere = false;
         self.build_file_index();
         self.palette_origin = self.editor.active_tab().map(|t| t.editor.get_cursor());
         let mut p = Palette::new();
         p.input = seed.to_string();
         self.palette = Some(p);
+        self.palette_files_override = None;
+        self.recompute_palette();
+    }
+
+    /// Open the palette's Files mode over `files` instead of the project
+    /// index (a Cowork guest browsing the host's shared files, T696).
+    #[cfg(feature = "cowork")]
+    pub(super) fn open_palette_over(&mut self, files: Vec<std::path::PathBuf>) {
+        self.open_palette_seeded("");
+        self.palette_files_override = Some(files);
         self.recompute_palette();
     }
 
@@ -122,12 +133,21 @@ impl App {
     fn palette_file_entries(&self, query: &str) -> Vec<Entry> {
         let (qpath, target) = palette::parse_path_target(query);
         let mut scored: Vec<(i32, String, Entry)> = Vec::new();
-        for path in &self.file_index {
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
+        let source = self
+            .palette_files_override
+            .as_ref()
+            .unwrap_or(&self.file_index);
+        for path in source {
+            let shown = path.to_string_lossy();
+            // A Cowork guest's list holds `cowork:`-prefixed host paths (T696).
+            let rel = match shown.strip_prefix(crate::editor::REMOTE_PATH_PREFIX) {
+                Some(remote) => remote.to_string(),
+                None => path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned(),
+            };
             // `project.subproject.find_file` scopes this list to one
             // subproject's files (see `App::palette_file_scope`).
             if let Some(scope) = self.palette_file_scope.as_deref()
@@ -191,15 +211,30 @@ impl App {
         scored
     }
 
-    fn recompute_palette(&mut self) {
+    pub(super) fn recompute_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;
         };
         let mode = p.mode();
         let query = p.query().to_string();
+        let entries = if self.palette_everywhere && mode == PMode::Files {
+            self.everywhere_entries(&query)
+        } else {
+            self.palette_entries(mode, &query)
+        };
+        if let Some(p) = self.palette.as_mut() {
+            if p.selected >= entries.len() {
+                p.selected = entries.len().saturating_sub(1);
+            }
+            p.entries = entries;
+        }
+    }
+
+    /// The entries of palette `mode` for `query` (the prefix already removed).
+    pub(super) fn palette_entries(&self, mode: PMode, query: &str) -> Vec<Entry> {
         let mut entries: Vec<Entry> = Vec::new();
         match mode {
-            PMode::Files => entries = self.palette_file_entries(&query),
+            PMode::Files => entries = self.palette_file_entries(query),
             PMode::Commands => {
                 // Score every command: when the query is empty, order by recency
                 // (recently-run first) then catalog order; otherwise rank by fuzzy
@@ -224,22 +259,22 @@ impl App {
                                 i32::try_from(r).unwrap_or(0)
                             });
                         scored.push((-key, cat_idx, entry));
-                    } else if let Some(score) = palette::fuzzy_score(&label, &query) {
+                    } else if let Some(score) = palette::fuzzy_score(&label, query) {
                         let boost = recent_rank(action)
                             .map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
                         scored.push((score + boost, cat_idx, entry));
                     }
                 }
-                scored.extend(self.script_palette_entries(&query));
+                scored.extend(self.script_palette_entries(query));
                 let catalog_start = palette::COMMANDS.len() + self.script_command_count();
-                scored.extend(self.catalog_palette_entries(&query, catalog_start));
+                scored.extend(self.catalog_palette_entries(query, catalog_start));
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
                 entries = scored.into_iter().map(|(_, _, e)| e).collect();
             }
             PMode::Buffers => {
                 for (i, tab) in self.editor.tabs.iter().enumerate() {
                     let label = tab.display_path();
-                    if query.is_empty() || palette::fuzzy_match(&label, &query) {
+                    if query.is_empty() || palette::fuzzy_match(&label, query) {
                         entries.push(Entry {
                             label: format!("# {label}"),
                             action: PAction::SwitchBuffer(i),
@@ -261,7 +296,7 @@ impl App {
                 {
                     let text = tab.text();
                     for sym in palette::symbols(&text) {
-                        if query.is_empty() || palette::fuzzy_match(&sym.name, &query) {
+                        if query.is_empty() || palette::fuzzy_match(&sym.name, query) {
                             entries.push(Entry {
                                 label: format!("@ {}", sym.text),
                                 action: PAction::GotoLine(sym.line),
@@ -271,15 +306,10 @@ impl App {
                 }
             }
             PMode::WorkspaceSymbols => {
-                entries = self.workspace_symbol_entries(&query);
+                entries = self.workspace_symbol_entries(query);
             }
         }
-        if let Some(p) = self.palette.as_mut() {
-            if p.selected >= entries.len() {
-                p.selected = entries.len().saturating_sub(1);
-            }
-            p.entries = entries;
-        }
+        entries
     }
 
     /// Scan the workspace's indexed files for declaration symbols matching
@@ -336,6 +366,7 @@ impl App {
                 self.palette = None;
                 self.palette_origin = None;
                 self.palette_file_scope = None;
+                self.palette_files_override = None;
             }
             KeyCode::Up => {
                 if let Some(p) = self.palette.as_mut() {
@@ -395,11 +426,15 @@ impl App {
         };
         self.palette = None;
         self.palette_file_scope = None;
+        self.palette_files_override = None;
         // Undo any live go-to-line preview so the action below jumps from (and
         // records in the history) the cursor's real pre-palette position.
         self.restore_palette_origin();
         self.palette_origin = None;
         match entry.action {
+            PAction::OpenFile(path, _) if crate::editor::is_remote_path(&path) => {
+                self.cowork_request_open(&path);
+            }
             PAction::OpenFile(path, target) => {
                 self.with_jump(|s| {
                     s.open_path(&path, false);

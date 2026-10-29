@@ -114,3 +114,14 @@ relative to the project root).
 - The host (`App`) builds the in-scope library for the active buffer's media
   type, renders the searchable picker, expands a typed prefix on Tab, and drives
   the tabstop session (`insert_snippet_body`, `snippet_tab`).
+
+## Postfix completion (T727)
+
+`postfix::expand(before, family)` takes the text before the cursor and, when it
+ends in `expr.key` for a template key of the file's `Family` (Rust, script,
+Python, Go, C-like; chosen by `Family::from_extension`), returns the number of
+characters to replace and a snippet body (`$EXPR` and the singularized loop
+variable `$ITEM` substituted, `$` in the expression escaped). The expression
+is an identifier/path with balanced `()`/`[]` groups. The host
+(`expand_postfix` in `tui/src/app/ide_parity.rs`) tries it before prefix
+snippets on Tab and inserts the body through the tabstop engine.

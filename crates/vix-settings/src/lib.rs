@@ -79,6 +79,9 @@ pub struct Settings {
     /// Whole-subsystem on/off switches: LSP, modal engine, inline blame (T149).
     #[serde(flatten)]
     pub subsystems: SubsystemSettings,
+    /// Language-feature display: code lenses (T726).
+    #[serde(flatten)]
+    pub language_features: LanguageFeatureSettings,
     /// Channels for surfacing state changes outside the visible screen —
     /// e.g. a terminal bell, for someone not looking at the screen when a
     /// background command finishes (T557).
@@ -402,6 +405,24 @@ impl Default for SecondaryPanelSettings {
     }
 }
 
+/// Language-feature display (T726). Its own group because
+/// [`EditorBehaviorSettings`] is already at `clippy::struct_excessive_bools`'s
+/// limit of three.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct LanguageFeatureSettings {
+    /// Draw code lenses -- a language server's "Run | Debug | 3 references"
+    /// and local "Run test" -- as dimmed rows above their lines.
+    pub code_lens: bool,
+}
+
+impl Default for LanguageFeatureSettings {
+    fn default() -> Self {
+        LanguageFeatureSettings { code_lens: true }
+    }
+}
+
 /// What the editor's scroll bar shows beyond the thumb (T578). Kept apart from
 /// [`ViewportSettings`], which is already at `clippy::struct_excessive_bools`'s
 /// limit of three.
@@ -534,6 +555,10 @@ pub struct EditorBehaviorSettings {
     /// Persist each file's undo tree across sessions (restored on reopen when the
     /// file content still matches).
     pub persistent_undo: bool,
+    /// How many timestamped snapshots Local History (T720) keeps per file; one
+    /// is taken on each save that changed the text, and File -> Local History
+    /// browses them. `0` turns Local History off.
+    pub local_history_keep: usize,
     /// Ask before opening a file larger than this many megabytes (T571); `0`
     /// never asks and refuses nothing on size (the 1 GiB ceiling still applies).
     pub large_file_mb: u64,
@@ -569,6 +594,7 @@ impl Default for EditorBehaviorSettings {
             auto_save: false,
             sticky_scroll: true,
             persistent_undo: true,
+            local_history_keep: 50,
             large_file_mb: 50,
             read_only_paths: default_read_only_paths(),
             ephemeral_paths: vec!["**/.git/**".to_string()],
@@ -690,6 +716,7 @@ impl Default for Settings {
             typing: TypingSettings::default(),
             startup: StartupSettings::default(),
             subsystems: SubsystemSettings::default(),
+            language_features: LanguageFeatureSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
             smart_commit: "ask".to_string(),

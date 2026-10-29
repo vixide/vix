@@ -178,6 +178,12 @@ understand real block nesting. Supported: Rust, Python, Go,
 JavaScript/TypeScript, Ruby (RSpec and Minitest), and Elixir. Not
 implemented: Java, Erlang, F#.
 
+`vix_tasks::test_at_point::tests_in_file` (T726) applies the same rules to a
+whole file and lists every test in file order as `(line, TestMatch)`, the line
+being the one that names the test (Rust: the `fn` line after `#[test]`). The
+host draws a local **Run test** code lens on each of those lines where the
+language server put no lens of its own (see `spec/ide-parity`).
+
 ## As implemented in Vix
 
 `vix-tasks` is pure logic — detection, resolution, discovery, merging, and
@@ -192,3 +198,17 @@ menu structure and its `C-c p c …` chords.
 
 This crate absorbed the earlier standalone `vix-projectile` crate; there is
 no separate crate by that name.
+
+## Run configurations (T724)
+
+`run_config` reads `.vix/run.toml` (`[[config]]` tables: `name`, exactly one of
+`command` or `compound`, optional `cwd`, `env`, `before`). `parse` validates
+(`RunConfigError::{Parse, Duplicate, Invalid}`); `plan(configs, tasks, name)`
+flattens a configuration into ordered stages — `before` entries first (a name
+that is not a configuration may be a `tasks.toml` task, and a shared
+dependency runs once), a compound's members together in one stage — and
+reports `Unknown`, `Cycle` or `NotFound`. `Plan::shell_command(Shell)` renders
+one line for the host's single command pipeline: stages joined by `&&`, a
+stage's members run as background jobs and `wait` on POSIX, in order on
+`cmd.exe`; `cwd` and `env` are applied with quoting. Pure: no I/O besides
+`load`. Documented in `docs/ide-parity/index.md`.

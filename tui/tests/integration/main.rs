@@ -16,6 +16,8 @@ mod catalog;
 mod common;
 mod compare;
 mod coverage;
+#[cfg(feature = "cowork")]
+mod cowork;
 #[cfg(feature = "sql")]
 mod db;
 mod editing;
@@ -25,6 +27,7 @@ mod find;
 #[cfg(feature = "git")]
 mod git;
 mod hl7;
+mod ide_parity;
 mod im;
 mod keybindings;
 mod keymaps;

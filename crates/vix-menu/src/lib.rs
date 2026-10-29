@@ -179,6 +179,12 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.save_all", "file.save_all", ""),
     Item::leaf("menu.item.file.rename", "file.rename", ""),
     Item::leaf("menu.item.file.revert", "file.revert", ""),
+    Item::leaf("menu.item.file.local_history", "file.local_history", ""),
+    Item::leaf(
+        "menu.item.file.local_history_label",
+        "file.local_history_label",
+        "",
+    ),
     Item::leaf(
         "menu.item.file.reopen_with_encoding",
         "file.reopen_with_encoding",
@@ -423,6 +429,8 @@ const GO_FILE: &[Item] = &[
 
 /// The top-level Go menu (promoted from Edit → Go), placed after View.
 const GO: &[Item] = &[
+    Item::leaf("menu.go.search_everywhere", "nav.search_everywhere", ""),
+    SEP,
     Item::leaf("menu.go.symbol", "nav.goto_symbol", ""),
     Item::leaf("menu.go.declaration", "nav.goto_declaration", ""),
     Item::leaf("menu.go.implementations", "nav.goto_implementation", ""),
@@ -474,6 +482,7 @@ const EDIT_MOVE: &[Item] = &[
         "",
     ),
     Item::leaf("menu.item.edit.trim", "edit.trim_trailing_whitespace", ""),
+    Item::leaf("menu.item.edit.cleanup_code", "edit.cleanup_code", ""),
     SEP,
     Item::leaf("menu.item.edit.pipe_selection", "edit.pipe_selection", ""),
     Item::leaf(
@@ -623,6 +632,7 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.unfold_all", "editor.unfold_all", ""),
     SEP,
     Item::leaf("menu.item.view.inlay_hints", "view.inlay_hints", ""),
+    Item::leaf("menu.item.view.code_lens", "view.code_lens", ""),
     Item::leaf("menu.item.view.sticky_scroll", "view.sticky_scroll", ""),
     Item::leaf("menu.item.view.minimap", "view.minimap", ""),
     Item::leaf("menu.item.view.highlight_word", "view.highlight_word", ""),
@@ -1357,14 +1367,36 @@ const TOOLS: &[Item] = &[
         "tools.http_fhir_bundle",
         "",
     ),
+    Item::sub("menu.item.tools.cowork", TOOLS_COWORK),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
     Item::leaf("menu.item.tools.media_types", "tools.media_types", ""),
 ];
 
+/// Real-time collaboration (T695), under Tools → Cowork. Compiled in only with
+/// the `cowork` feature; otherwise the runtime capability filter hides it.
+const TOOLS_COWORK: &[Item] = &[
+    Item::leaf("menu.item.cowork.host", "cowork.host", ""),
+    Item::leaf("menu.item.cowork.invite", "cowork.invite", ""),
+    Item::leaf("menu.item.cowork.share", "cowork.share", ""),
+    Item::leaf("menu.item.cowork.unshare", "cowork.unshare", ""),
+    Item::leaf(
+        "menu.item.cowork.share_workspace",
+        "cowork.share_workspace",
+        "",
+    ),
+    Item::leaf("menu.item.cowork.join", "cowork.join", ""),
+    Item::leaf("menu.item.cowork.files", "cowork.files", ""),
+    Item::leaf("menu.item.cowork.peers", "cowork.peers", ""),
+    Item::leaf("menu.item.cowork.follow", "cowork.follow", ""),
+    Item::leaf("menu.item.cowork.permissions", "cowork.permissions", ""),
+    Item::leaf("menu.item.cowork.leave", "cowork.leave", ""),
+];
+
 /// Language-server (LSP) actions, grouped under Tools → Language Server.
 const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.definition", "nav.goto_definition", "F12"),
+    Item::leaf("menu.item.lsp.peek_definition", "nav.peek_definition", ""),
     Item::leaf(
         "menu.item.lsp.implementation",
         "nav.goto_implementation",
@@ -1382,7 +1414,10 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.linked_edit", "lsp.linked_edit", ""),
     SEP,
     Item::leaf("menu.item.lsp.code_action", "lsp.code_action", ""),
+    Item::leaf("menu.item.lsp.refactor", "lsp.refactor", ""),
+    Item::leaf("menu.item.lsp.organize_imports", "lsp.organize_imports", ""),
     Item::leaf("menu.item.lsp.code_lens", "lsp.code_lens", ""),
+    Item::leaf("menu.item.lsp.code_lens_run", "lsp.code_lens_run", ""),
     SEP,
     Item::leaf("menu.item.lsp.highlight", "lsp.highlight", ""),
     SEP,
@@ -2246,6 +2281,12 @@ const PROJECT: &[Item] = &[
         "menu.item.project.repeat_last_task",
         "project.repeat_last_task",
         "C-c p c X",
+    ),
+    Item::leaf("menu.item.project.run_config", "project.run_config", ""),
+    Item::leaf(
+        "menu.item.project.run_config_edit",
+        "project.run_config_edit",
+        "",
     ),
     SEP,
     Item::sub("menu.item.project.subproject", PROJECT_SUBPROJECT),

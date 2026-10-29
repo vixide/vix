@@ -87,7 +87,7 @@ fn lsp_navigation_actions_report_inactive_without_server() {
             app.code_actions.is_none(),
             "{action} opened no code-action menu"
         );
-        assert!(app.code_lens.is_none(), "{action} opened no code-lens menu");
+        assert!(app.choice_list.is_none(), "{action} opened no choice list");
         assert!(
             app.prompt.is_none(),
             "{action} opened no prompt without a server"

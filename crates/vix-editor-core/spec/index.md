@@ -30,6 +30,24 @@ The host routes a snake_case id through `App::run_named_action(id)`:
 Every action has a smoke test in `tui/tests/integration/catalog.rs`
 (`catalog_<snake>()`), and its own page under `spec/<kebab>/index.md`.
 
+## Code lens rows (T726)
+
+`Editor::set_code_lenses(Vec<(line, label)>)` gives a line a **virtual row
+above it** holding its lens titles (same-line labels joined with ` | `),
+drawn dimmed in the inlay-hint style, indented to the line's own
+indentation, with a blank gutter. A lens row is not buffer text: the cursor,
+selections, line numbers, edits and every char offset are unchanged. Only
+the line-to-screen-row mapping grows by one row per visible lensed line,
+and it lives in one place (`lens.rs`'s `view_rows`/`rows_to_text` for the
+no-wrap view, `wrap.rs`'s `visual_rows` for soft wrap), shared by every
+render layer, `focus` (scrolls until the cursor's text row is inside the
+view), `get_visible_cursor` and `cursor_from_mouse` (a click on a lens row
+lands at the start of the line it annotates). A folded-away line shows no
+lens; a lens past the buffer's end (stale after an edit) is skipped.
+`Editor::text_screen_row(line, area)` gives hosts the same mapping to
+anchor overlays. `clear_code_lenses`, `has_code_lenses` and `code_lens_at`
+complete the API.
+
 ## Sub-specs
 
 - [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,
@@ -192,3 +210,17 @@ Move Line Up/Down treats a collapsed fold as one block: the moved block is the c
 ## Drag past the edge (T581)
 
 A left-drag keeps extending the selection when the pointer leaves the text area: a pointer at or past the top or bottom edge scrolls one line and extends to the edge row; one left of the text clamps to the first column. The app keeps routing the drag to the editor wherever the pointer is, and calls `Editor::autoscroll_tick` from the main loop (polling every 50 ms while a drag is active), because terminals report drag only on motion.
+
+## Shared buffers (Cowork, T692/T693)
+
+`remote.rs` is the editor side of Cowork (`spec/cowork`), with no network
+code. `start_edit_log`/`take_edit_log` report every local content change as a
+`Splice` (`offset`, `delete`, `insert`, in characters); `apply_remote_edits`
+replays another participant's splices without an undo step or a log entry,
+keeping the cursor, selection and extra carets on their characters (an
+insertion exactly at the cursor leaves it before the new text);
+`set_remote_carets` hands the renderer other participants' carets and
+selections, drawn as a colored cell and a tinted range. While the log is on
+(`is_edit_logging`), the editor's own Undo and Redo do nothing, because remote
+edits leave its history's offsets stale; the App routes undo through the
+collaboration layer's per-participant stack instead.

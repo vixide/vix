@@ -604,6 +604,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.scrollbar",
             "view.soft_wrap",
             "view.inlay_hints",
+            "view.code_lens",
             "view.sticky_scroll",
             "view.minimap",
             "view.highlight_word",

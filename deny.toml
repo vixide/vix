@@ -26,6 +26,20 @@ ignore = [
     # The only ways out are upstream (rhai dropping/replacing smartstring)
     # or dropping user scripting. Revisit when rhai moves off it.
     "RUSTSEC-2026-0249",
+    # 2026-10-29: four "unmaintained" notices (no vulnerability), all reached
+    # only through the Cowork CRDT, `loro` (T690, spec/cowork; chosen over
+    # automerge/yrs/diamond-types for stable cursors, text-delta events and
+    # per-peer undo). `loro` is a dependency of `vix-cowork` alone, which is
+    # compiled only with the `cowork` feature:
+    #   loro -> loro-internal -> im -> bitmaps, sized-chunks   (0247, 0248, 0251)
+    #   loro -> loro-internal -> postcard -> heapless -> atomic-polyfill (0089;
+    #     used only on targets without native atomics)
+    # The ways out are upstream (loro replacing `im`/updating `postcard`) or
+    # dropping Cowork. Revisit when loro moves.
+    "RUSTSEC-2023-0089",
+    "RUSTSEC-2026-0247",
+    "RUSTSEC-2026-0248",
+    "RUSTSEC-2026-0251",
 ]
 
 [licenses]

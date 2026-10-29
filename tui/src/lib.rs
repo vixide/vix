@@ -172,6 +172,7 @@ pub mod edit_sql {
     /// The (absent) SQL editor; uninhabited.
     pub enum Editor {}
 }
+pub use vix_choice_list as choice_list;
 pub use vix_edit_table as edit_table;
 pub use vix_edit_value as edit_value;
 pub use vix_editor::pane_tree;

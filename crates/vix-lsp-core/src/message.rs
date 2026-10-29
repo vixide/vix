@@ -127,6 +127,8 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // server never needs to ask the client to discard cached
                 // reports.
                 "diagnostics": { "refreshSupport": false },
+                // T726: lenses are re-requested on `workspace/codeLens/refresh`.
+                "codeLens": { "refreshSupport": true },
                 // T123f: Vix understands `workspaceFolders` and will send
                 // `workspace/didChangeWorkspaceFolders` when the server's own
                 // response asks for it (`changeNotifications`).
@@ -375,6 +377,40 @@ pub fn parse_workspace_folders_change_support(result: &Value) -> bool {
     notifications.as_bool() == Some(true) || notifications.is_string()
 }
 
+/// What a server's `initialize` result says about code lenses (T726):
+/// `(provides lenses, resolves them lazily)` from
+/// `capabilities.codeLensProvider` and its `resolveProvider`.
+#[must_use]
+pub fn parse_code_lens_provider(result: &Value) -> (bool, bool) {
+    let Some(provider) = result
+        .get("capabilities")
+        .and_then(|c| c.get("codeLensProvider"))
+        .filter(|p| !p.is_null() && p.as_bool() != Some(false))
+    else {
+        return (false, false);
+    };
+    let resolve = provider.get("resolveProvider").and_then(Value::as_bool) == Some(true);
+    (true, resolve)
+}
+
+/// The commands a server's `initialize` result says it runs through
+/// `workspace/executeCommand` (`capabilities.executeCommandProvider.commands`).
+#[must_use]
+pub fn parse_execute_commands(result: &Value) -> Vec<String> {
+    result
+        .get("capabilities")
+        .and_then(|c| c.get("executeCommandProvider"))
+        .and_then(|p| p.get("commands"))
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Parse a `textDocument/publishDiagnostics` notification into `(uri, diagnostics)`.
 #[must_use]
 pub fn parse_diagnostics(params: &Value) -> Option<(String, Vec<Diagnostic>)> {
@@ -621,27 +657,59 @@ pub fn parse_resolved_detail(result: &Value) -> Option<String> {
 /// One resolved code lens: `(line, title, command, arguments)`.
 pub type CodeLens = (u32, String, String, Value);
 
+/// A code lens the server sent without its command (T726), to be filled in
+/// by `codeLens/resolve`: `(line, the lens object exactly as sent)`.
+pub type UnresolvedLens = (u32, Value);
+
 /// Parse a `textDocument/codeLens` result (`CodeLens[]`) into the lenses that
 /// carry an invokable command: `(line, title, command, arguments)`.
 #[must_use]
 pub fn parse_code_lenses(result: &Value) -> Vec<CodeLens> {
+    parse_code_lens_list(result).0
+}
+
+/// Parse a `textDocument/codeLens` result into its resolved lenses (those
+/// that carry a command) and its unresolved ones (a range but no command
+/// yet, kept verbatim for `codeLens/resolve`), T726.
+#[must_use]
+pub fn parse_code_lens_list(result: &Value) -> (Vec<CodeLens>, Vec<UnresolvedLens>) {
+    let mut resolved = Vec::new();
+    let mut unresolved = Vec::new();
     let Value::Array(arr) = result else {
-        return Vec::new();
+        return (resolved, unresolved);
     };
-    arr.iter()
-        .filter_map(|lens| {
-            let line =
-                u32::try_from(lens.get("range")?.get("start")?.get("line")?.as_u64()?).ok()?;
-            let cmd = lens.get("command")?;
-            let title = cmd.get("title")?.as_str()?.to_string();
-            let command = cmd.get("command")?.as_str()?.to_string();
-            let arguments = cmd
-                .get("arguments")
-                .cloned()
-                .unwrap_or(Value::Array(Vec::new()));
-            Some((line, title, command, arguments))
-        })
-        .collect()
+    for lens in arr {
+        if let Some(r) = parse_code_lens(lens) {
+            resolved.push(r);
+        } else if lens.get("command").is_none_or(Value::is_null)
+            && let Some(line) = code_lens_line(lens)
+        {
+            unresolved.push((line, lens.clone()));
+        }
+    }
+    (resolved, unresolved)
+}
+
+/// The 0-based line a code lens annotates (its range's start line).
+#[must_use]
+pub fn code_lens_line(lens: &Value) -> Option<u32> {
+    u32::try_from(lens.get("range")?.get("start")?.get("line")?.as_u64()?).ok()
+}
+
+/// Parse one `CodeLens` object (a `textDocument/codeLens` element or a
+/// `codeLens/resolve` result) into `(line, title, command, arguments)`, or
+/// `None` when it has no command.
+#[must_use]
+pub fn parse_code_lens(lens: &Value) -> Option<CodeLens> {
+    let line = code_lens_line(lens)?;
+    let cmd = lens.get("command")?;
+    let title = cmd.get("title")?.as_str()?.to_string();
+    let command = cmd.get("command")?.as_str()?.to_string();
+    let arguments = cmd
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Array(Vec::new()));
+    Some((line, title, command, arguments))
 }
 
 /// Parse the `WorkspaceEdit` from a server-initiated `workspace/applyEdit`
@@ -725,13 +793,31 @@ pub fn code_action_params(
     end: (u32, u32),
     diagnostics: &Value,
 ) -> Value {
+    code_action_params_only(uri, start, end, diagnostics, &[])
+}
+
+/// Like [`code_action_params`], but asking the server for only the listed
+/// `CodeActionKind`s (`context.only`), e.g. `["refactor"]` or
+/// `["source.organizeImports"]`. An empty `only` asks for every kind.
+#[must_use]
+pub fn code_action_params_only(
+    uri: &str,
+    start: (u32, u32),
+    end: (u32, u32),
+    diagnostics: &Value,
+    only: &[&str],
+) -> Value {
+    let mut context = json!({ "diagnostics": diagnostics });
+    if !only.is_empty() {
+        context["only"] = json!(only);
+    }
     json!({
         "textDocument": { "uri": uri },
         "range": {
             "start": { "line": start.0, "character": start.1 },
             "end": { "line": end.0, "character": end.1 }
         },
-        "context": { "diagnostics": diagnostics }
+        "context": context
     })
 }
 
@@ -1006,6 +1092,24 @@ fn parse_range(v: &Value) -> Option<Range> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_action_params_carry_the_only_filter_when_given() {
+        let none = code_action_params("file:///a.rs", (0, 0), (1, 0), &json!([]));
+        assert!(none["context"].get("only").is_none());
+        let p = code_action_params_only(
+            "file:///a.rs",
+            (0, 0),
+            (1, 0),
+            &json!([]),
+            &["refactor", "source.organizeImports"],
+        );
+        assert_eq!(
+            p["context"]["only"],
+            json!(["refactor", "source.organizeImports"])
+        );
+        assert_eq!(p["range"]["end"]["line"], 1);
+    }
 
     #[test]
     fn incoming_calls_parse_to_call_sites() {
@@ -1539,6 +1643,42 @@ mod tests {
             ]}}
         }));
         assert_eq!(edits.len(), 1);
+    }
+
+    #[test]
+    fn code_lens_list_splits_resolved_and_unresolved() {
+        let (resolved, unresolved) = parse_code_lens_list(&json!([
+            {"range": {"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 1}},
+             "command": {"title": "Run", "command": "x.run"}},
+            {"range": {"start": {"line": 9, "character": 0}, "end": {"line": 9, "character": 1}},
+             "data": {"id": 7}}
+        ]));
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].3, json!([]), "missing arguments become []");
+        assert_eq!(unresolved.len(), 1);
+        assert_eq!(unresolved[0].0, 9);
+        assert_eq!(
+            unresolved[0].1["data"]["id"], 7,
+            "kept verbatim for resolve"
+        );
+        assert_eq!(parse_code_lens_list(&Value::Null), (vec![], vec![]));
+    }
+
+    #[test]
+    fn code_lens_provider_and_execute_commands_parse() {
+        let caps = json!({"capabilities": {
+            "codeLensProvider": {"resolveProvider": true},
+            "executeCommandProvider": {"commands": ["a.run", "a.debug"]}
+        }});
+        assert_eq!(parse_code_lens_provider(&caps), (true, true));
+        assert_eq!(parse_execute_commands(&caps), vec!["a.run", "a.debug"]);
+        let plain = json!({"capabilities": {"codeLensProvider": {}}});
+        assert_eq!(parse_code_lens_provider(&plain), (true, false));
+        assert_eq!(
+            parse_code_lens_provider(&json!({"capabilities": {}})),
+            (false, false)
+        );
+        assert_eq!(parse_execute_commands(&plain), Vec::<String>::new());
     }
 
     #[test]

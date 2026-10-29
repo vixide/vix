@@ -4,9 +4,14 @@
 mod ai;
 #[cfg(not(feature = "ai"))]
 mod ai_off;
+mod code_lens;
 mod command_palette;
 mod compare;
 mod coverage;
+#[cfg(feature = "cowork")]
+mod cowork;
+#[cfg(not(feature = "cowork"))]
+mod cowork_off;
 #[cfg(feature = "sql")]
 mod db;
 #[cfg(not(feature = "sql"))]
@@ -18,6 +23,10 @@ mod fhir;
 mod fhir_http;
 #[cfg(not(feature = "http"))]
 mod fhir_http_off;
+#[cfg(feature = "cowork")]
+use cowork as cowork_state;
+#[cfg(not(feature = "cowork"))]
+use cowork_off as cowork_state;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(feature = "git")]
@@ -29,6 +38,7 @@ mod hl7;
 mod http;
 #[cfg(not(feature = "http"))]
 mod http_off;
+mod ide_parity;
 pub(crate) mod im;
 #[cfg(feature = "im")]
 mod im_net;
@@ -164,6 +174,16 @@ pub enum PromptKind {
     Rename,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Cowork (T695): the address to host a session on.
+    CoworkHost,
+    /// Cowork (T695): the invite string to join with.
+    CoworkJoin,
+    /// Cowork (T695): a guest number and permission level.
+    CoworkPermission,
+    /// Cowork (T695): the host's answer to a guest that wants to join.
+    CoworkConsent,
+    /// Cowork (T693): which participant to follow (empty stops).
+    CoworkFollow,
     /// Pipe the selection (or buffer) through a shell command, replacing it
     /// with the output (T659).
     PipeSelection,
@@ -184,6 +204,8 @@ pub enum PromptKind {
     GitDeleteBranch,
     /// Enter a regex to search the repository with `git grep`.
     GitGrep,
+    /// Enter a label for a Local History snapshot of the active buffer (T720).
+    LocalHistoryLabel,
     /// Enter a revision (branch, tag, or commit-ish) to open the active
     /// file's content at, in a read-only tab (T207).
     GitOpenAtRevision,
@@ -1292,15 +1314,9 @@ pub struct CodeActionMenu {
     pub actions: Vec<crate::lsp::CodeAction>,
     /// Index of the highlighted action.
     pub selected: usize,
-}
-
-/// The LSP code-lens chooser: invokable lenses and the highlighted row. Each
-/// lens carries its `(line, title, command, arguments)`.
-pub struct CodeLensMenu {
-    /// Offered lenses.
-    pub lenses: Vec<crate::lsp_core::message::CodeLens>,
-    /// Index of the highlighted lens.
-    pub selected: usize,
+    /// Whether this is the Refactor menu (only `refactor.*` kinds) rather than
+    /// the all-kinds lightbulb menu; changes the title.
+    pub refactor: bool,
 }
 
 /// A point in the position-history jump list: a file and a 1-based line/column.
@@ -1485,6 +1501,9 @@ pub struct Layout {
     pub hl7_panel: Rect,
     /// Row-list rectangle of the FHIR Bundle viewer, for click-to-select.
     pub fhir_bundle: Rect,
+    /// Row-list rectangle of the pick-one list overlay (Local History, run
+    /// configurations, definition peek), for click-to-select.
+    pub choice_list: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -1971,6 +1990,19 @@ pub struct App {
     hl7_endpoint: String,
     /// FHIR Bundle viewer overlay (T684), when open.
     pub fhir_bundle: Option<crate::fhir::BundlePanel>,
+    /// The pick-one list overlay (Local History, run configurations, definition
+    /// peek), when open.
+    pub(crate) choice_list: Option<ide_parity::ChoiceList>,
+    /// Why the last code-action request was made (routes the reply).
+    pub(crate) code_action_intent: ide_parity::CodeActionIntent,
+    /// A Peek Definition request is in flight: show the reply as a peek.
+    pub(crate) peek_pending: bool,
+    /// The open palette is Search Everywhere (an unprefixed query searches
+    /// files, commands and symbols together).
+    pub(crate) palette_everywhere: bool,
+    /// Where Local History keeps snapshots; `None` uses the user's config
+    /// directory (tests point it at a temporary directory).
+    pub local_history_root: Option<PathBuf>,
     /// The last FHIR response body, held in memory only (never written to
     /// disk) so the Bundle viewer can open on it.
     fhir_last: Option<String>,
@@ -1986,6 +2018,9 @@ pub struct App {
     /// Responses of `# @name`d requests already sent, for `{{name.response…}}`.
     #[cfg(feature = "http")]
     http_named: std::collections::HashMap<String, crate::http_client::Response>,
+    /// Real-time collaboration state (T695); a zero-size stand-in unless the
+    /// `cowork` feature is on.
+    pub(crate) cowork: cowork_state::State,
     /// HTML character palette overlay, when open.
     pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -2084,8 +2119,9 @@ pub struct App {
     pub(crate) regex_tester: Option<crate::regex_tool::Tester>,
     /// Code-action chooser (LSP quick fixes / refactors), when open.
     pub(crate) code_actions: Option<CodeActionMenu>,
-    /// Code-lens chooser (LSP), when open.
-    pub(crate) code_lens: Option<CodeLensMenu>,
+    /// Code lenses per file (T726): server and local lenses, refresh
+    /// debounce and pending resolves. See `app/code_lens.rs`.
+    pub(crate) code_lenses: code_lens::LensMap,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Visible::POMODORO`].
     pub(crate) pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -2257,6 +2293,10 @@ pub struct App {
     /// Files mode to entries under this project-relative directory instead
     /// of the whole workspace. Cleared whenever the palette closes.
     palette_file_scope: Option<String>,
+    /// When set, the palette's Files mode lists these paths instead of the
+    /// project index (a Cowork guest browsing the host's shared files,
+    /// T696). Cleared whenever the palette closes.
+    palette_files_override: Option<Vec<PathBuf>>,
     /// In-memory cache of resolved/edited lifecycle commands for the current
     /// workspace root (`project.*`/`project.subproject.*` actions) — the
     /// highest-precedence layer in `crate::tasks::lifecycle::
@@ -2549,6 +2589,11 @@ impl App {
             #[cfg(feature = "http")]
             hl7_endpoint: String::new(),
             fhir_bundle: None,
+            choice_list: None,
+            code_action_intent: ide_parity::CodeActionIntent::default(),
+            peek_pending: false,
+            palette_everywhere: false,
+            local_history_root: None,
             fhir_last: None,
             #[cfg(feature = "http")]
             fhir_rx: None,
@@ -2558,6 +2603,7 @@ impl App {
             http_pending_name: None,
             #[cfg(feature = "http")]
             http_named: std::collections::HashMap::new(),
+            cowork: cowork_state::State::default(),
             html_panel: None,
             system_info: None,
             dashboard: None,
@@ -2605,7 +2651,7 @@ impl App {
             calculator: None,
             regex_tester: None,
             code_actions: None,
-            code_lens: None,
+            code_lenses: code_lens::LensMap::new(),
             pomodoro: None,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
@@ -2665,6 +2711,7 @@ impl App {
             file_index: Vec::new(),
             palette_origin: None,
             palette_file_scope: None,
+            palette_files_override: None,
             project_command_cache: crate::tasks::lifecycle::LifecycleCommands::default(),
             project_history: ProjectHistory::default(),
             project_last_command: None,
@@ -3183,6 +3230,7 @@ impl App {
             return true;
         }
         match action {
+            "edit.undo" | "edit.redo" if self.cowork_undo(action == "edit.undo") => {}
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(UndoAction {});
@@ -3482,15 +3530,17 @@ impl App {
             "tools.todo_finder" => self.open_todo_finder(),
             "tools.todo_tree" => self.open_todo_tree(),
             a if self.run_http_action(a) => {}
+            a if self.run_ide_parity_action(a) => {}
+            a if self.run_code_lens_action(a) => {}
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
+            a if self.run_cowork_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
-            "lsp.code_lens" => self.request_code_lens(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
             "editor.fold" => self.fold_at_cursor(true),
@@ -3923,6 +3973,10 @@ impl App {
     }
 
     fn save(&mut self) {
+        // A buffer shared in from a Cowork host is saved by the host.
+        if self.cowork_intercept_save() {
+            return;
+        }
         if self.active_tab_is_wgrep_results() {
             self.prepare_wgrep_confirm();
             return;
@@ -3996,8 +4050,10 @@ impl App {
         let mut targets = Vec::new();
         let mut skipped = 0usize;
         for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
+            // A Cowork guest's shared-in tab is saved by its host (Save asks).
             let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
                 && !t.is_image()
+                && !t.is_remote()
                 && !t.read_only
                 && t.fs_access != crate::editor::FsAccess::ReadOnly;
             if savable {
@@ -4045,11 +4101,16 @@ impl App {
                     let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
                     self.lsp.did_save(&p, &text);
                 }
+                self.code_lens_saved(&p);
                 // Persist the undo tree alongside the saved content.
                 if self.settings.editor_behavior.persistent_undo
                     && let Some(tab) = self.editor.active_tab()
                 {
                     crate::undo_store::save(&p, &tab.text(), tab.editor.code_ref().history());
+                }
+                // And a Local History snapshot (T720).
+                if let Some(tab) = self.editor.active_tab() {
+                    self.take_local_history_snapshot(&p, &tab.text());
                 }
                 self.refresh_git();
                 true
@@ -4592,53 +4653,6 @@ impl App {
         }
     }
 
-    // ----- Code lens ------------------------------------------------------
-
-    /// Request the code lenses for the active file (LSP).
-    fn request_code_lens(&mut self) {
-        if let Some(path) = self.active_path()
-            && self.lsp.handles(&path)
-        {
-            self.lsp.request_code_lens(&path);
-        } else {
-            self.status = t!("status.lsp_inactive").to_string();
-        }
-    }
-
-    /// Handle a key for the code-lens chooser: Up/Down move, Enter runs, Esc
-    /// closes.
-    fn code_lens_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.code_lens = None,
-            KeyCode::Up => {
-                if let Some(m) = self.code_lens.as_mut() {
-                    m.selected = m.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(m) = self.code_lens.as_mut() {
-                    m.selected = (m.selected + 1).min(m.lenses.len().saturating_sub(1));
-                }
-            }
-            KeyCode::Enter => self.run_selected_lens(),
-            _ => {}
-        }
-    }
-
-    /// Execute the highlighted code lens's command (`workspace/executeCommand`).
-    fn run_selected_lens(&mut self) {
-        let Some(menu) = self.code_lens.take() else {
-            return;
-        };
-        let Some((_, title, command, args)) = menu.lenses.into_iter().nth(menu.selected) else {
-            return;
-        };
-        if let Some(path) = self.active_path() {
-            self.lsp.execute_command(&path, &command, &args);
-            self.status = t!("status.lens_run", title = title).to_string();
-        }
-    }
-
     // ----- Selection range (expand / shrink) ------------------------------
 
     /// Request selection ranges at the cursor; `expand` chooses the direction the
@@ -4750,8 +4764,14 @@ impl App {
                 })
             })
             .collect();
-        self.lsp
-            .request_code_action(&path, start, end, &serde_json::Value::Array(diags));
+        let only = self.code_action_intent.only();
+        self.lsp.request_code_action_only(
+            &path,
+            start,
+            end,
+            &serde_json::Value::Array(diags),
+            only,
+        );
     }
 
     /// Handle a key for the code-action chooser: Up/Down move, Enter applies,
@@ -4770,6 +4790,7 @@ impl App {
                 }
             }
             KeyCode::Enter => self.apply_selected_code_action(),
+            KeyCode::Char('p') => self.preview_selected_code_action(),
             _ => {}
         }
     }
@@ -5283,7 +5304,7 @@ impl App {
         let savable = self
             .editor
             .active_tab()
-            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none());
+            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none() && !t.is_remote());
         if savable && self.write_active_to_disk() {
             self.status = t!("status.auto_saved").to_string();
         }
@@ -7244,7 +7265,9 @@ impl App {
                     line,
                     character,
                 } => {
-                    self.lsp_jump(&path, line, character);
+                    if !self.finish_peek(&path, line) {
+                        self.lsp_jump(&path, line, character);
+                    }
                 }
                 crate::lsp::LspEvent::Completion(items) => {
                     if !items.is_empty() {
@@ -7270,18 +7293,11 @@ impl App {
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
-                crate::lsp::LspEvent::CodeActions(actions) => {
-                    self.code_actions = Some(CodeActionMenu {
-                        actions,
-                        selected: 0,
-                    });
-                }
-                crate::lsp::LspEvent::CodeLenses(lenses) => {
-                    self.code_lens = Some(CodeLensMenu {
-                        lenses,
-                        selected: 0,
-                    });
-                }
+                crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
+                crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
+                ev @ (crate::lsp::LspEvent::CodeLensUpdate { .. }
+                | crate::lsp::LspEvent::CodeLensResolved { .. }
+                | crate::lsp::LspEvent::CodeLensRefresh) => self.on_code_lens_event(ev),
                 crate::lsp::LspEvent::SelectionRanges(ranges) => {
                     self.apply_selection_range(&ranges);
                 }
@@ -8554,6 +8570,7 @@ impl App {
         panel!(todo_tree, todo_tree_mouse);
         panel!(hl7_panel, hl7_mouse);
         panel!(fhir_bundle, fhir_bundle_mouse);
+        panel!(choice_list, choice_list_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -8801,6 +8818,18 @@ impl App {
 
     /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        // A local scroll or click ends Cowork follow mode (T693).
+        if matches!(
+            mouse.kind,
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown | MouseEventKind::Down(_)
+        ) {
+            self.cowork_local_input();
+        }
+        self.dispatch_mouse(mouse);
+    }
+
+    /// The real mouse dispatch, wrapped by [`Self::on_mouse`] above.
+    fn dispatch_mouse(&mut self, mouse: MouseEvent) {
         if self.try_overlay_mouse(mouse) {
             return;
         }
@@ -12930,6 +12959,11 @@ impl App {
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::CoworkHost
+            | PromptKind::CoworkJoin
+            | PromptKind::CoworkPermission
+            | PromptKind::CoworkConsent
+            | PromptKind::CoworkFollow => self.accept_cowork_prompt(prompt.kind, &prompt.input),
             PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
             PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
@@ -13040,6 +13074,7 @@ impl App {
                 self.accept_org_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
+            PromptKind::LocalHistoryLabel => self.local_history_label(prompt.input.trim()),
             // A closing note may be empty (DONE + CLOSED, no LOGBOOK entry).
             PromptKind::OrgCloseNote => self.org_close_note(prompt.input.trim()),
             PromptKind::OrgAgendaMatch | PromptKind::OrgAgendaSearch => {

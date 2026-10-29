@@ -21,14 +21,14 @@ expression: screen
      │ Save All                       │                            ││
      │ Rename…                        │                            ││
      │ Revert                         │                            ││●──────────────────────────────
-  Ou│ Reopen with Encoding…          │─────────────────────────────────────────────────────────────
-(no o│ Save with Encoding…            │
+  Ou│ Local History…                 │─────────────────────────────────────────────────────────────
+(no o│ Label Local History Snapshot…  │
+     │ Reopen with Encoding…          │
+     │ Save with Encoding…            │
      │────────────────────────────────│
      │ Close                   Ctrl W │
      │ Close All Tabs    Ctrl Shift W │
      │ Reopen Closed Tab Ctrl Shift T │
      ╰────────────────────────────────╯
-
-
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

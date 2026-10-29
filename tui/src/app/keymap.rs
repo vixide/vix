@@ -35,8 +35,6 @@ impl App {
             self.regex_tester_key(key);
         } else if self.code_actions.is_some() {
             self.code_action_key(key);
-        } else if self.code_lens.is_some() {
-            self.code_lens_key(key);
         } else {
             return false;
         }
@@ -68,7 +66,6 @@ impl App {
             calculator,
             regex_tester,
             code_actions,
-            code_lens,
             // `try_panel_key`.
             terminal,
             db,
@@ -91,6 +88,7 @@ impl App {
             todo_tree,
             hl7_panel,
             fhir_bundle,
+            choice_list,
             html_panel,
             system_info,
             file_info,
@@ -322,6 +320,7 @@ impl App {
         panel!(todo_tree, todo_tree_key);
         panel!(hl7_panel, hl7_key);
         panel!(fhir_bundle, fhir_bundle_key);
+        panel!(choice_list, choice_list_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);
         panel!(file_info, file_info_key);
@@ -413,6 +412,10 @@ impl App {
 
     /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
+        // Any local key ends Cowork follow mode (T693).
+        if key.kind != KeyEventKind::Release {
+            self.cowork_local_input();
+        }
         self.dispatch_key(key);
         // Keeps the tutorial's status-bar progress indicator live as the
         // learner types (`crates/vix-tutor/spec/index.md`, § Progress

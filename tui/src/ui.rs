@@ -6,6 +6,7 @@ mod ai;
 mod bidi;
 mod bottom_dock;
 mod boxes;
+mod choice_list;
 mod choosers;
 #[cfg(feature = "sql")]
 mod db;
@@ -39,6 +40,7 @@ mod tool_panels;
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
+use choice_list::draw_choice_list;
 #[cfg(feature = "script")]
 use choosers::draw_script_chooser;
 use choosers::{
@@ -66,7 +68,7 @@ use info_panels::{
     draw_contacts, draw_file_info, draw_markdown_preview, draw_markdown_toc, draw_snippets,
     draw_system_info, draw_text_info, draw_vcard,
 };
-use lsp_popups::{draw_code_actions, draw_code_lens, draw_completion, draw_hover};
+use lsp_popups::{draw_code_actions, draw_completion, draw_hover};
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
 use minimap::draw_minimap;
 use picker_panels::{
@@ -514,6 +516,7 @@ fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     draw_fhir_bundle(app, frame, area);
     hl7::draw_hl7_panel(app, frame, area);
     draw_http_env_chooser(app, frame, area);
+    draw_choice_list(app, frame, area);
 }
 
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
@@ -609,9 +612,6 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.code_actions.is_some() {
         draw_code_actions(app, frame, area);
-    }
-    if app.code_lens.is_some() {
-        draw_code_lens(app, frame, area);
     }
     if app.visible.contains(crate::app::Visible::POMODORO) {
         draw_pomodoro(app, frame, area);

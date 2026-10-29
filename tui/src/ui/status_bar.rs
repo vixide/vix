@@ -26,28 +26,7 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         .mode_indicator()
         .map(|m| format!("{m}   "))
         .unwrap_or_default();
-    // Editor info (language · line ending · encoding · selection) for text tabs.
-    let info = app
-        .editor
-        .active_tab()
-        .filter(|t| !t.is_image())
-        .map(|t| {
-            let lang = match t.editor.language() {
-                "unknown" | "" => "text",
-                other => other,
-            };
-            let sel = t.editor.selection_span().map(|(s, e)| {
-                let code = t.editor.code_ref();
-                (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
-            });
-            crate::status_bar_panel::info_segment(
-                Some(lang),
-                t.editor.line_ending(),
-                &t.encoding.to_string(),
-                sel,
-            )
-        })
-        .unwrap_or_default();
+    let info = editor_info(app);
 
     let git = crate::status_bar_panel::git_segment(
         app.git_branch.as_deref(),
@@ -55,8 +34,12 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.git_dirty(),
     );
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    // IM's unread count and mention marker, as text (T754).
-    let segments = format!("{git}{}{info}", app.im_status_segment());
+    // Cowork participants, then IM's unread count and mention marker (T754).
+    let segments = format!(
+        "{}{git}{}{info}",
+        app.cowork_segment(),
+        app.im_status_segment()
+    );
     let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
@@ -120,4 +103,28 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         Rect::default()
     };
+}
+
+/// Editor info (language, line ending, encoding, selection) for a text tab.
+fn editor_info(app: &App) -> String {
+    app.editor
+        .active_tab()
+        .filter(|t| !t.is_image())
+        .map(|t| {
+            let lang = match t.editor.language() {
+                "unknown" | "" => "text",
+                other => other,
+            };
+            let sel = t.editor.selection_span().map(|(s, e)| {
+                let code = t.editor.code_ref();
+                (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
+            });
+            crate::status_bar_panel::info_segment(
+                Some(lang),
+                t.editor.line_ending(),
+                &t.encoding.to_string(),
+                sel,
+            )
+        })
+        .unwrap_or_default()
 }
