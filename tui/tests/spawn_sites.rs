@@ -14,6 +14,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
     (
+        "crates/vix-http-client/src/aad.rs",
+        "`az account get-access-token` for {{$aadToken}} (argv array, no shell)",
+        "`http` feature (vix-http-client is an optional dependency of the root)",
+    ),
+    (
         "crates/vix-git/src/lib.rs",
         "git process runners",
         "`process` feature, enabled only by root `git`",

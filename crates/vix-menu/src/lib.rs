@@ -1340,6 +1340,11 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.todo_tree", "tools.todo_tree", ""),
     Item::leaf("menu.item.tools.http_send", "tools.http_send", ""),
     Item::leaf("menu.item.tools.http_copy_curl", "tools.http_copy_curl", ""),
+    Item::leaf(
+        "menu.item.tools.http_environment",
+        "tools.http_environment",
+        "",
+    ),
     Item::leaf("menu.item.tools.hl7_view", "tools.hl7_view", ""),
     Item::leaf("menu.item.tools.hl7_send", "tools.hl7_send", ""),
     Item::leaf(

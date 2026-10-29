@@ -405,6 +405,40 @@ fn http_copy_curl_works_on_the_block_at_the_cursor() {
 }
 
 #[test]
+#[cfg(feature = "http")]
+fn http_environment_chooser_picks_and_remembers_the_active_environment() {
+    let dir = std::env::temp_dir().join(format!("vix-http-env-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join(".vix")).unwrap();
+    std::fs::write(
+        dir.join(".vix/http-env.json"),
+        r#"{"$shared": {"v": "1"}, "dev": {"h": "https://example.invalid"}}"#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    type_str(&mut app, "GET {{h}}/a\n");
+    // No environment active: `{{h}}` is unknown, so nothing is copied.
+    app.run_action("tools.http_copy_curl");
+    assert!(!app.status.contains("curl"), "status: {}", app.status);
+    // Choose `dev` (row 0 is "no environment").
+    app.run_action("tools.http_environment");
+    assert!(app.http_env_chooser.is_some());
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.http_env_chooser.is_none());
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".vix/http-env.active")).unwrap(),
+        "dev"
+    );
+    app.run_action("tools.http_copy_curl");
+    assert!(app.status.contains("curl"), "status: {}", app.status);
+    // Without an environments file the chooser says so instead of opening.
+    std::fs::remove_file(dir.join(".vix/http-env.json")).unwrap();
+    app.run_action("tools.http_environment");
+    assert!(app.http_env_chooser.is_none());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn jump_to_line_labels_move_the_cursor() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "line0\nline1\nline2\nline3\n");

@@ -985,6 +985,15 @@ pub struct MacroChooser {
     pub selected: usize,
 }
 
+/// The HTTP environment chooser (Tools → HTTP Environment…): row 0 is "no
+/// environment", then one row per name in `.vix/http-env.json`.
+pub struct HttpEnvChooser {
+    /// Environment names (without the leading "none" row).
+    pub names: Vec<String>,
+    /// Highlighted row (0 is "none").
+    pub selected: usize,
+}
+
 /// File → Reopen / Save with Encoding (T661): which of the two the chooser
 /// does with the picked encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1841,6 +1850,8 @@ pub struct App {
     pub(crate) macro_chooser: Option<MacroChooser>,
     /// The File → Reopen / Save with Encoding chooser (T661).
     pub(crate) encoding_chooser: Option<EncodingChooser>,
+    /// The HTTP environment chooser, when open.
+    pub(crate) http_env_chooser: Option<HttpEnvChooser>,
     /// The Rhai scripting engine (`crates/vix-script`), built once at
     /// startup. Loading/reloading scripts rebuilds `scripts`, not this.
     #[cfg(feature = "script")]
@@ -2465,6 +2476,7 @@ impl App {
             task_chooser: None,
             macro_chooser: None,
             encoding_chooser: None,
+            http_env_chooser: None,
             #[cfg(feature = "script")]
             script_runtime: vix_script::Runtime::new(),
             #[cfg(feature = "script")]
@@ -8534,6 +8546,7 @@ impl App {
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
         panel!(encoding_chooser, encoding_mouse);
+        panel!(http_env_chooser, http_env_mouse);
         panel!(script_chooser, script_chooser_mouse);
         panel!(clipboard_chooser, clipboard_mouse);
         panel!(workspace_chooser, workspace_chooser_mouse);
