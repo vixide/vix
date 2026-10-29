@@ -197,6 +197,8 @@ vix-hl7 = { path = "crates/vix-hl7", version = "2.0.0" }
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "2.0.0" }
 vix-http-client = { path = "crates/vix-http-client", version = "2.0.0" }
 vix-i18n = { path = "crates/vix-i18n", version = "2.0.0" }
+vix-im = { path = "crates/vix-im", version = "2.0.0" }
+vix-im-panel = { path = "crates/vix-im-panel", version = "2.0.0" }
 vix-input = { path = "crates/vix-input", version = "2.0.0" }
 vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "2.0.0" }
 vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "2.0.0" }

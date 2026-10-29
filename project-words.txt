@@ -645,3 +645,17 @@ pgdata
 dockerfile
 Dockerfile
 IBANs
+CASEMAPPING
+isupport
+reanchor
+Replit
+sunsetting
+rcirc
+ement
+Pantalaimon
+Floobits
+Libera
+libera
+sasl
+SASL
+CTCP

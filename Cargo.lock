@@ -5462,6 +5462,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-im"
+version = "2.0.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "vix-im-panel"
+version = "2.0.0"
+dependencies = [
+ "vix-im",
+ "vix-input",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-input"
 version = "2.0.0"
 dependencies = [

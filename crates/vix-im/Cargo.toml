@@ -1,0 +1,18 @@
+[package]
+name = "vix-im"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The pure core of Vix's IM menu: conversations, messages, presence, mentions, unread tracking, slash commands, code references, the received-text sanitizer, anchored threads and JSONL history."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

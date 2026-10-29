@@ -152,7 +152,7 @@ signal, not a formality — read *why* the screen changed before accepting it.
 root `cargo build` never touches it. Targets cover the code that parses input
 Vix did not write: `textops`, `org_table`, `lsp_frame`, `vcard`, `conflict`,
 `http_request`, `query_replace`, `tabular_convert`, `structured_convert`,
-`macro_tokens`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
+`macro_tokens`, `im_message`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
 minimizing a crash, and adding a target.
 
 A fuzz target asserts **invariants**, not merely the absence of a panic — "a
