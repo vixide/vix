@@ -8,6 +8,9 @@ languages on the fly. The translations live in `locales/`, one file per key
 namespace; the active language is a single setting; and any text that has not
 yet been translated falls back to English automatically.
 
+Localization serves the repo-wide [Worldwide](../../../spec/worldwide/index.md)
+rule: every locale gets equitable capabilities, not just English-speaking ones.
+
 ## How it works: rust-i18n and `locales/`
 
 Localization is built on the [`rust-i18n`](https://crates.io/crates/rust-i18n)

@@ -195,6 +195,9 @@ guideline's sense.
    update it if intent is changing.
 2. Implement in the owning crate; keep editing logic out of `tui/src/ui.rs`.
 3. Internationalize any new text (YAML key + `t!`).
+   Worldwide target: no feature may favor the US/UK; standards, locales and
+   conventions must serve every country, region and federation equitably
+   ([`spec/worldwide/index.md`](spec/worldwide/index.md)).
 4. Document every new public item (`deny(missing_docs)`).
 5. Add/extend tests (`tui/tests/integration/main.rs` or a module's unit tests).
 6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean
