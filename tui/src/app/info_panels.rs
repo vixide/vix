@@ -625,6 +625,10 @@ impl App {
     /// If the word just before the cursor is a snippet prefix, replace it with the
     /// snippet body and arm a tabstop session. Returns `true` if it expanded.
     pub(super) fn expand_snippet_prefix(&mut self) -> bool {
+        // `expr.if` / `items.for`: postfix templates win over a prefix snippet.
+        if self.expand_postfix() {
+            return true;
+        }
         self.refresh_snippet_library(false);
         let Some(tab) = self.editor.active_tab() else {
             return false;
@@ -660,7 +664,7 @@ impl App {
     /// Insert a snippet `body` (with `$1`/`${1:…}`/`$0` tabstops) at the cursor.
     /// Places the cursor at the first tabstop and arms a [`SnippetSession`] so Tab
     /// walks the rest; with no tabstops it is a plain insert.
-    fn insert_snippet_body(&mut self, body: &str) {
+    pub(super) fn insert_snippet_body(&mut self, body: &str) {
         let parsed = crate::snippet_tool::parse(body);
         let area = self.layout.editor;
         // Insertion replaces any active selection, so the body begins at the

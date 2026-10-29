@@ -72,6 +72,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.align.comma` | On , (comma) | Menu |
 | `edit.align.equals` | On = (equals) | Menu |
 | `edit.align.pipe` | On \| (pipe) | Menu |
+| `edit.cleanup_code` | Code Cleanup | Menu |
 | `edit.column_select_down` | Column Select Down | Menu |
 | `edit.column_select_up` | Column Select Up | Menu |
 | `edit.comment_banner` | Comment Banner | Menu |
@@ -137,6 +138,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `file.close` | Close | Menu |
 | `file.close_all` | Close All Tabs | Menu |
 | `file.insert_file` | Insert File… | Menu |
+| `file.local_history` | Local History… | Menu |
+| `file.local_history_label` | Label Local History Snapshot… | Menu |
 | `file.new` | New | Menu |
 | `file.open` | Open… | Menu |
 | `file.open_path` | Open Path… | Catalog |
@@ -256,6 +259,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.highlight` | Highlight Occurrences | Menu |
 | `lsp.hover` | Hover | Menu |
 | `lsp.linked_edit` | Edit Linked Ranges… | Menu |
+| `lsp.organize_imports` | Organize Imports | Menu |
+| `lsp.refactor` | Refactor… | Menu |
 | `lsp.references` | Go to References | Menu |
 | `lsp.rename` | Rename Symbol | Menu |
 | `lsp.restart` | Restart Server | Menu |
@@ -301,8 +306,10 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `nav.outline` | Outline | Palette |
 | `nav.para_next` | Next | Menu |
 | `nav.para_prev` | Previous | Menu |
+| `nav.peek_definition` | Peek Definition | Menu |
 | `nav.prev_issue` | Previous Issue | Menu |
 | `nav.recent_locations` | Recent Locations… | Menu |
+| `nav.search_everywhere` | Search Everywhere | Menu |
 | `nav.section_next` | Next | Menu |
 | `nav.section_prev` | Previous | Menu |
 | `nav.sentence_end` | End | Menu |
@@ -438,6 +445,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `project.package` | Package | Menu |
 | `project.repeat_last_task` | Repeat Last Task | Menu |
 | `project.run` | Run | Menu |
+| `project.run_config` | Run Configuration… | Menu |
+| `project.run_config_edit` | Edit Run Configurations | Menu |
 | `project.run_task` | Run Task… | Menu |
 | `project.subproject.compile` | Compile | Menu |
 | `project.subproject.configure` | Configure | Menu |
@@ -688,4 +697,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**681 actions.**
+**690 actions.**

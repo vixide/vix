@@ -6,6 +6,7 @@ mod ai;
 mod bidi;
 mod bottom_dock;
 mod boxes;
+mod choice_list;
 mod choosers;
 #[cfg(feature = "sql")]
 mod db;
@@ -37,6 +38,7 @@ mod tool_panels;
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
+use choice_list::draw_choice_list;
 #[cfg(feature = "script")]
 use choosers::draw_script_chooser;
 use choosers::{
@@ -486,6 +488,7 @@ fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     draw_todo_tree(app, frame, area);
     draw_fhir_bundle(app, frame, area);
     hl7::draw_hl7_panel(app, frame, area);
+    draw_choice_list(app, frame, area);
 }
 
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the

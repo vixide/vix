@@ -752,6 +752,7 @@ pub mod dispatch_scan {
         ("tui/src/app/jj.rs", "run_jj_action"),
         ("tui/src/app/ai.rs", "run_ai_action"),
         ("tui/src/app/http.rs", "run_http_action"),
+        ("tui/src/app/ide_parity.rs", "run_ide_parity_action"),
         ("tui/src/app/hl7.rs", "run_hl7_action"),
         ("tui/src/app/fhir.rs", "run_fhir_action"),
         ("tui/src/app/terminal.rs", "run_terminal_action"),

@@ -70,3 +70,10 @@ this builds on.
 ---
 
 Vix™ and Vix IDE™ are trademarks.
+
+## Local History
+
+A second store, [Local History](../ide-parity/index.md), keeps timestamped
+snapshots on every save, with labels, diff and restore. It is controlled by the
+`local_history_keep` setting (default 50, `0` = off) and is separate from
+`persistent_undo`.

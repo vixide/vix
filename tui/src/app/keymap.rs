@@ -91,6 +91,7 @@ impl App {
             todo_tree,
             hl7_panel,
             fhir_bundle,
+            choice_list,
             html_panel,
             system_info,
             file_info,
@@ -319,6 +320,7 @@ impl App {
         panel!(todo_tree, todo_tree_key);
         panel!(hl7_panel, hl7_key);
         panel!(fhir_bundle, fhir_bundle_key);
+        panel!(choice_list, choice_list_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);
         panel!(file_info, file_info_key);
