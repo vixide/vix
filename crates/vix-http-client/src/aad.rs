@@ -1,6 +1,6 @@
 //! `{{$aadToken}}`: an Azure AD access token from the Azure CLI.
 //!
-//! The token is fetched by running `az account get-access-token` with an command_line
+//! The token is fetched by running `az account get-access-token` with an `argv`
 //! array (never a shell, so a crafted `.http` file cannot inject a command).
 //! It is held in memory only: never cached, logged or written to disk, and
 //! errors deliberately carry nothing the CLI printed.
