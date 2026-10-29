@@ -34,12 +34,10 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.git_dirty(),
     );
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    // Cowork participants, then IM's unread count and mention marker (T754).
-    let segments = format!(
-        "{}{git}{}{info}",
-        app.cowork_segment(),
-        app.im_status_segment()
-    );
+    // Language-server progress (T732) and Cowork participants, then git,
+    // then IM's unread count and mention marker (T754).
+    let before_git = format!("{}{}", app.lsp_progress_segment(), app.cowork_segment());
+    let segments = format!("{before_git}{git}{}{info}", app.im_status_segment());
     let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
@@ -88,13 +86,15 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     // Record the git/branch segment's rectangle (the leftmost part of the
     // right-aligned right segment, after its 1-cell padding) so a click on the
     // branch indicator opens the Git panel.
+    // The progress/Cowork text before it shifts it right (T732).
     let git_w = u16::try_from(git.chars().count()).unwrap_or(u16::MAX);
+    let lead = u16::try_from(before_git.chars().count()).unwrap_or(u16::MAX);
     app.layout.git_status_bar = if git_w > 0 {
         Rect {
             x: if mirrored {
-                right_col.x
+                right_col.x.saturating_add(lead)
             } else {
-                right_col.x + 1
+                right_col.x.saturating_add(1).saturating_add(lead)
             },
             y: right_col.y,
             width: git_w.min(right_col.width),

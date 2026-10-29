@@ -185,3 +185,57 @@ fn hover_over_pane_does_not_steal_focus() {
         "plain hover must not change focus"
     );
 }
+
+/// T732: View → LSP Status opens a live panel over every configured server
+/// (here one whose command cannot start, so it reads Failed with a spawn
+/// error); Up/Down stay in bounds, `r` retries the spawn, Esc closes.
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_status_panel_lists_servers_and_closes() {
+    use ratatui::{Terminal, backend::TestBackend};
+    use vix::lsp::{Lsp, ServerError, ServerState};
+    use vix::settings::LspServer;
+    let mut app = app_at(Path::new("."));
+    let ghost = LspServer {
+        language_id: "ghost".into(),
+        extensions: vec!["gh".into()],
+        command: vec!["vix-no-such-language-server-t732".into()],
+    };
+    let mut other = ghost.clone();
+    other.language_id = "other".into();
+    other.extensions = vec!["ot".into()];
+    app.lsp = Lsp::new(true, vec![ghost, other], &[PathBuf::from("/proj")]);
+    app.lsp.did_open(Path::new("/proj/a.gh"), "x");
+
+    app.run_action("lsp.status");
+    assert!(app.lsp_status.is_some(), "the panel opens");
+    let statuses = app.lsp.statuses();
+    assert_eq!(statuses.len(), 2);
+    assert_eq!(statuses[0].state, ServerState::Failed);
+    assert_eq!(statuses[0].last_error, Some(ServerError::SpawnFailed));
+    assert_eq!(statuses[1].state, ServerState::NotStarted);
+
+    let mut term = Terminal::new(TestBackend::new(100, 40)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(screen.contains("ghost") && screen.contains("other"));
+    assert!(screen.contains("vix-no-such-language-server-t732"));
+
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(app.lsp_status.as_ref().unwrap().selected, 1, "clamped");
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(app.lsp_status.as_ref().unwrap().selected, 0, "clamped");
+    app.on_key(key('r'));
+    assert!(app.lsp_status.is_some(), "restart keeps the panel open");
+    assert_eq!(app.lsp.statuses()[0].state, ServerState::Failed);
+    app.on_key(esc());
+    assert!(app.lsp_status.is_none(), "Esc closes");
+}
