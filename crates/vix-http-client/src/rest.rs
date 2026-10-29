@@ -117,6 +117,11 @@ pub enum VarError {
     BadArguments(String),
     /// Variables refer to each other too deeply (probably a cycle).
     TooDeep(String),
+    /// `{{$aadToken}}` needs the Azure CLI (`az`), which is not installed.
+    AzureCliMissing,
+    /// The Azure CLI ran but gave no token (not signed in, bad resource).
+    /// Deliberately carries no detail: nothing from the CLI is echoed.
+    AzureTokenFailed,
     /// A `{{` with no closing `}}`.
     Unterminated,
 }
@@ -129,6 +134,8 @@ impl std::fmt::Display for VarError {
             Self::BadReference(n) => write!(f, "cannot resolve {{{{{n}}}}}"),
             Self::BadArguments(n) => write!(f, "bad arguments for {{{{{n}}}}}"),
             Self::TooDeep(n) => write!(f, "variable {{{{{n}}}}} nests too deeply"),
+            Self::AzureCliMissing => f.write_str("the Azure CLI (az) is not installed"),
+            Self::AzureTokenFailed => f.write_str("the Azure CLI could not get a token"),
             Self::Unterminated => f.write_str("unterminated {{ in request"),
         }
     }
@@ -147,6 +154,9 @@ pub struct Context<'a> {
     pub base_dir: Option<&'a Path>,
     /// Current time, milliseconds since the Unix epoch.
     pub now_ms: i64,
+    /// The local zone's offset from UTC in minutes (east positive), for
+    /// `{{$localDatetime}}`.
+    pub local_offset_min: i32,
 }
 
 /// Deepest chain of variables referring to variables.
@@ -212,7 +222,14 @@ fn response_part(resp: &Response, tail: &str) -> Option<String> {
     let body = tail.strip_prefix("body")?;
     match body {
         "" | ".*" => Some(resp.body.clone()),
-        _ => json_path(&resp.body, body.strip_prefix('.')?),
+        _ => {
+            let path = body.strip_prefix('.')?;
+            if path.starts_with('/') {
+                crate::xpath::query(&resp.body, path)
+            } else {
+                json_path(&resp.body, path)
+            }
+        }
     }
 }
 
@@ -269,6 +286,24 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
                 "rfc1123" => Ok(rfc1123(ms)),
                 _ => Err(bad()),
             }
+        }
+        "localDatetime" => {
+            let format = parts.next().ok_or_else(bad)?;
+            let ms = ctx.now_ms + offset_ms(parts.next(), parts.next()).ok_or_else(bad)?;
+            let off = ctx.local_offset_min;
+            match format {
+                "iso8601" => Ok(local_iso8601(ms, off)),
+                "rfc1123" => Ok(local_rfc1123(ms, off)),
+                _ => Err(bad()),
+            }
+        }
+        "aadToken" => {
+            let args: Vec<&str> = parts.collect();
+            crate::aad::token(&args).map_err(|e| match e {
+                crate::aad::AadError::CliMissing => VarError::AzureCliMissing,
+                crate::aad::AadError::BadArgument => bad(),
+                crate::aad::AadError::Failed => VarError::AzureTokenFailed,
+            })
         }
         "processEnv" => {
             let name = parts.next().ok_or_else(bad)?;
@@ -330,6 +365,24 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
+
+/// `+hh:mm` (or `-hh:mm`) for an offset in minutes.
+fn offset_colon(off: i32) -> String {
+    let (sign, a) = (if off < 0 { '-' } else { '+' }, off.abs());
+    format!("{sign}{:02}:{:02}", a / 60, a % 60)
+}
+
+fn local_iso8601(ms: i64, off: i32) -> String {
+    let shifted = iso8601(ms + i64::from(off) * 60_000);
+    // Swap the trailing `Z` for the real offset.
+    format!("{}{}", shifted.trim_end_matches('Z'), offset_colon(off))
+}
+
+fn local_rfc1123(ms: i64, off: i32) -> String {
+    let shifted = rfc1123(ms + i64::from(off) * 60_000);
+    let zone = offset_colon(off).replace(':', "");
+    format!("{}{zone}", shifted.trim_end_matches("GMT"))
 }
 
 fn iso8601(ms: i64) -> String {
@@ -440,6 +493,7 @@ mod tests {
             named,
             base_dir: None,
             now_ms: 1_700_000_000_000,
+            local_offset_min: 60,
         }
     }
 
@@ -577,6 +631,54 @@ mod tests {
             Err(VarError::Unknown(_))
         ));
         assert_ne!(expand("{{$processEnv PATH}}", &c).unwrap(), "");
+    }
+
+    #[test]
+    fn local_datetime_applies_the_zone_offset() {
+        let vars = vec![];
+        let named = HashMap::new();
+        let c = ctx(&vars, &named);
+        assert_eq!(
+            expand("{{$localDatetime iso8601}}", &c).unwrap(),
+            "2023-11-14T23:13:20.000+01:00"
+        );
+        assert_eq!(
+            expand("{{$localDatetime rfc1123}}", &c).unwrap(),
+            "Tue, 14 Nov 2023 23:13:20 +0100"
+        );
+        assert!(matches!(
+            expand("{{$localDatetime bogus}}", &c),
+            Err(VarError::BadArguments(_))
+        ));
+        assert_eq!(offset_colon(-330), "-05:30");
+    }
+
+    #[test]
+    fn aad_token_errors_map_without_leaking_detail() {
+        let vars = vec![];
+        let named = HashMap::new();
+        let c = ctx(&vars, &named);
+        assert!(matches!(
+            expand("{{$aadToken --evil}}", &c),
+            Err(VarError::BadArguments(_))
+        ));
+    }
+
+    #[test]
+    fn chains_xml_responses_with_xpath() {
+        let vars = vec![];
+        let mut named = HashMap::new();
+        named.insert(
+            "soap".to_string(),
+            resp("<env><body><id n=\"9\">42</id></body></env>"),
+        );
+        let c = ctx(&vars, &named);
+        assert_eq!(expand("{{soap.response.body.//id}}", &c).unwrap(), "42");
+        assert_eq!(expand("{{soap.response.body.//id/@n}}", &c).unwrap(), "9");
+        assert!(matches!(
+            expand("{{soap.response.body.//nope}}", &c),
+            Err(VarError::BadReference(_))
+        ));
     }
 
     #[test]

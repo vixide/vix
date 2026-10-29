@@ -64,6 +64,9 @@ evalexpr = "11"
 getrandom = "0.2"
 htmd = "0.5"
 jiff = "0.2"
+# XML for the REST Client's `{{name.response.body.//xpath}}` (MIT OR Apache-2.0,
+# no unsafe, no DTD/entity expansion by default).
+roxmltree = "0.21"
 percent-encoding = "2"
 pulldown-cmark = "0.13"
 sha2 = "0.11"

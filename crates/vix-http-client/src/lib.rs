@@ -17,7 +17,10 @@
 //! or `//` are comments. Parsing is pure and unit-tested; [`send`] performs the
 //! (blocking) request and is meant to be called from a background thread.
 
+pub mod aad;
+pub mod env;
 pub mod rest;
+mod xpath;
 
 /// A parsed HTTP request.
 #[derive(Debug, Clone, PartialEq, Eq)]
