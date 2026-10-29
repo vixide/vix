@@ -70,6 +70,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Changed
 
+- **Workspace file access and process spawning go through one authority** (T710, T711; [`crates/vix-authority`](crates/vix-authority/spec/index.md)), the groundwork for remote editing. New crate `vix-authority`: the `Authority` trait, `LocalAuthority` (installed by default, doing exactly what Vix did before), a temp-dir-backed `FakeAuthority` and a shared `conformance` suite. Opening, saving, the explorer, File → Open, the file finder, tasks, Org and Org-roam, workspace files, `.http` environment and body files, and every git, jj, shell, language-server, debug-adapter and Prettier process now use it; configuration, themes, session, undo history, IM, credentials and temp files deliberately stay on the local machine (the spec lists each one and why). No behavior change.
 - **Single-color themes renamed**: `Phosphor Green` → `Phosphor Green Monochrome`, `Phosphor Amber` → `Phosphor Amber Monochrome`, `Safelight Red` → `Safelight Red Monochrome`. A saved setting that names an old theme still finds it.
 - **Docs are spell-checked** in `scripts/check-docs` (CSpell; required in GitHub and Codeberg CI), and the existing spelling findings are fixed.
 - **README and website rewritten for new visitors**, and the website now uses the current Lily design system (PickerBar 0.5 with docs search, theme, language, text size and share pickers; 57 themes from `@lilydesignsystem/themes`).

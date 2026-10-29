@@ -58,6 +58,11 @@ explicitly marked local-only (settings, themes, session, undo store, which
 always live on the machine running the UI). This is the bulk of the work and
 should land first, on its own, with no behavior change (T710).
 
+Done 2026-10-29 (T710, T711): the `vix-authority` crate owns the slot, and its
+spec lists every routed area and every local-only exception with its reason.
+(The 428/38 count above included test code; outside tests it was 146 call
+sites in 37 files.)
+
 ## Safety
 
 - Host keys are verified by `ssh` (never `StrictHostKeyChecking=no`).

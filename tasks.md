@@ -8270,12 +8270,30 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### Remote editing (spec: [`spec/remote-editing`](spec/remote-editing/index.md))
 
-- [ ] **T710 — `Authority` abstraction (no behavior change).** Route the 428
+- [x] **T710 — `Authority` abstraction (no behavior change).** Route the 428
   `std::fs` call sites in 38 files and process spawns through a trait, with
   explicit local-only exceptions (config, themes, session, undo store).
   **Large; land alone, behavior identical.**
-- [ ] **T711 — Fake authority and conformance tests.** Temp-dir backed.
+  - Done 2026-10-29. New crate `vix-authority` (`Authority`, `LocalAuthority`,
+    `current()`/`install()`, `ProcessSpec`). Routed: editor open/reload/save,
+    explorer and File → Open listings and file ops, the finder walk, tasks
+    and run configs, `.vix-workspace`, Org/Org-roam, `.http` env and body
+    files, Save As guards, session tab restore, Cowork confinement, coverage
+    and LSP path keying, and every workspace process (shell/argv runners,
+    `vix-git`, `vix-git-graph`, LSP, DAP, Prettier). The real count outside
+    tests was 146 sites in 37 files; 60 in 21 files remain, each listed as
+    local-only with its reason in `crates/vix-authority/spec/index.md`.
+    NOT done: IM's code-reference resolver (left for T753), the AI `cli`
+    provider's local prompt temp file under a remote shell, and `vix-git`'s
+    cached local `git` path / `no_tty_prompts` env reaching a remote side —
+    all recorded for T712.
+- [x] **T711 — Fake authority and conformance tests.** Temp-dir backed.
   **Small.**
+  - Done 2026-10-29. `FakeAuthority` (virtual `/` over a backing dir, escape
+    refusal, sibling trash, call recording) and `conformance::run`, run
+    against both authorities in `crates/vix-authority/tests/conformance.rs`;
+    `tui/tests/authority_fake.rs` drives the App's explorer, open and save
+    with the fake installed. NOT done: an SSH run of the suite (T712).
 - [ ] **T712 — Shell-based SSH authority.** ControlMaster, `ssh_config`
   honored, read/write/stat/list/rename/remove, atomic writes, mtime+size
   conflict check; `ssh://user@host/path` and `/ssh:host:/path`. **Large.**
