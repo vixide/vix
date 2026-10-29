@@ -13833,7 +13833,7 @@ fn run_shell_filter(
 /// Start `program` with `args` directly (no shell) in `dir`, its stdout and
 /// stderr both feeding the returned pipe. The program is resolved against
 /// `PATH` only. Used by [`App::run_argv_in`].
-#[cfg(any(feature = "git", feature = "jj"))]
+#[cfg(any(feature = "git", feature = "jj", feature = "oc"))]
 fn spawn_argv(
     program: &str,
     args: &[&str],
