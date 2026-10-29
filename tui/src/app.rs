@@ -29,6 +29,7 @@ mod hl7;
 mod http;
 #[cfg(not(feature = "http"))]
 mod http_off;
+mod ide_parity;
 mod info_panels;
 mod insert_tools;
 #[cfg(feature = "jj")]
@@ -177,6 +178,8 @@ pub enum PromptKind {
     GitDeleteBranch,
     /// Enter a regex to search the repository with `git grep`.
     GitGrep,
+    /// Enter a label for a Local History snapshot of the active buffer (T720).
+    LocalHistoryLabel,
     /// Enter a revision (branch, tag, or commit-ish) to open the active
     /// file's content at, in a read-only tab (T207).
     GitOpenAtRevision,
@@ -1281,6 +1284,9 @@ pub struct CodeActionMenu {
     pub actions: Vec<crate::lsp::CodeAction>,
     /// Index of the highlighted action.
     pub selected: usize,
+    /// Whether this is the Refactor menu (only `refactor.*` kinds) rather than
+    /// the all-kinds lightbulb menu; changes the title.
+    pub refactor: bool,
 }
 
 /// The LSP code-lens chooser: invokable lenses and the highlighted row. Each
@@ -1474,6 +1480,9 @@ pub struct Layout {
     pub hl7_panel: Rect,
     /// Row-list rectangle of the FHIR Bundle viewer, for click-to-select.
     pub fhir_bundle: Rect,
+    /// Row-list rectangle of the pick-one list overlay (Local History, run
+    /// configurations, definition peek), for click-to-select.
+    pub choice_list: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -1952,6 +1961,19 @@ pub struct App {
     hl7_endpoint: String,
     /// FHIR Bundle viewer overlay (T684), when open.
     pub fhir_bundle: Option<crate::fhir::BundlePanel>,
+    /// The pick-one list overlay (Local History, run configurations, definition
+    /// peek), when open.
+    pub(crate) choice_list: Option<ide_parity::ChoiceList>,
+    /// Why the last code-action request was made (routes the reply).
+    pub(crate) code_action_intent: ide_parity::CodeActionIntent,
+    /// A Peek Definition request is in flight: show the reply as a peek.
+    pub(crate) peek_pending: bool,
+    /// The open palette is Search Everywhere (an unprefixed query searches
+    /// files, commands and symbols together).
+    pub(crate) palette_everywhere: bool,
+    /// Where Local History keeps snapshots; `None` uses the user's config
+    /// directory (tests point it at a temporary directory).
+    pub local_history_root: Option<PathBuf>,
     /// The last FHIR response body, held in memory only (never written to
     /// disk) so the Bundle viewer can open on it.
     fhir_last: Option<String>,
@@ -2528,6 +2550,11 @@ impl App {
             #[cfg(feature = "http")]
             hl7_endpoint: String::new(),
             fhir_bundle: None,
+            choice_list: None,
+            code_action_intent: ide_parity::CodeActionIntent::default(),
+            peek_pending: false,
+            palette_everywhere: false,
+            local_history_root: None,
             fhir_last: None,
             #[cfg(feature = "http")]
             fhir_rx: None,
@@ -3460,6 +3487,7 @@ impl App {
             "tools.todo_finder" => self.open_todo_finder(),
             "tools.todo_tree" => self.open_todo_tree(),
             a if self.run_http_action(a) => {}
+            a if self.run_ide_parity_action(a) => {}
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
@@ -4028,6 +4056,10 @@ impl App {
                     && let Some(tab) = self.editor.active_tab()
                 {
                     crate::undo_store::save(&p, &tab.text(), tab.editor.code_ref().history());
+                }
+                // And a Local History snapshot (T720).
+                if let Some(tab) = self.editor.active_tab() {
+                    self.take_local_history_snapshot(&p, &tab.text());
                 }
                 self.refresh_git();
                 true
@@ -4728,8 +4760,14 @@ impl App {
                 })
             })
             .collect();
-        self.lsp
-            .request_code_action(&path, start, end, &serde_json::Value::Array(diags));
+        let only = self.code_action_intent.only();
+        self.lsp.request_code_action_only(
+            &path,
+            start,
+            end,
+            &serde_json::Value::Array(diags),
+            only,
+        );
     }
 
     /// Handle a key for the code-action chooser: Up/Down move, Enter applies,
@@ -4748,6 +4786,7 @@ impl App {
                 }
             }
             KeyCode::Enter => self.apply_selected_code_action(),
+            KeyCode::Char('p') => self.preview_selected_code_action(),
             _ => {}
         }
     }
@@ -7222,7 +7261,9 @@ impl App {
                     line,
                     character,
                 } => {
-                    self.lsp_jump(&path, line, character);
+                    if !self.finish_peek(&path, line) {
+                        self.lsp_jump(&path, line, character);
+                    }
                 }
                 crate::lsp::LspEvent::Completion(items) => {
                     if !items.is_empty() {
@@ -7248,18 +7289,8 @@ impl App {
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
-                crate::lsp::LspEvent::CodeActions(actions) => {
-                    self.code_actions = Some(CodeActionMenu {
-                        actions,
-                        selected: 0,
-                    });
-                }
-                crate::lsp::LspEvent::CodeLenses(lenses) => {
-                    self.code_lens = Some(CodeLensMenu {
-                        lenses,
-                        selected: 0,
-                    });
-                }
+                crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
+                crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
                 crate::lsp::LspEvent::SelectionRanges(ranges) => {
                     self.apply_selection_range(&ranges);
                 }
@@ -8532,6 +8563,7 @@ impl App {
         panel!(todo_tree, todo_tree_mouse);
         panel!(hl7_panel, hl7_mouse);
         panel!(fhir_bundle, fhir_bundle_mouse);
+        panel!(choice_list, choice_list_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -13010,6 +13042,7 @@ impl App {
                 self.accept_org_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
+            PromptKind::LocalHistoryLabel => self.local_history_label(prompt.input.trim()),
             // A closing note may be empty (DONE + CLOSED, no LOGBOOK entry).
             PromptKind::OrgCloseNote => self.org_close_note(prompt.input.trim()),
             PromptKind::OrgAgendaMatch | PromptKind::OrgAgendaSearch => {

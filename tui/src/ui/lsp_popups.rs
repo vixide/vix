@@ -156,20 +156,27 @@ pub(super) fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let titles: Vec<&str> = menu.actions.iter().map(|(t, _)| t.as_str()).collect();
-    draw_chooser(
-        frame,
-        area,
-        &t!("menu.item.lsp.code_action"),
-        &titles,
-        menu.selected,
-    );
+    let name = if menu.refactor {
+        t!("menu.item.lsp.refactor")
+    } else {
+        t!("menu.item.lsp.code_action")
+    };
+    let title = format!("{name}  ({})", t!("ui.code_action_hint"));
+    draw_chooser(frame, area, &title, &titles, menu.selected);
 }
 
 pub(super) fn draw_code_lens(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(menu) = app.code_lens.as_ref() else {
         return;
     };
-    let titles: Vec<&str> = menu.lenses.iter().map(|(_, t, _, _)| t.as_str()).collect();
+    // Each lens is prefixed with its 1-based line so a lens can be matched
+    // to the code it annotates.
+    let owned: Vec<String> = menu
+        .lenses
+        .iter()
+        .map(|(line, title, _, _)| format!("{:>5}  {title}", line + 1))
+        .collect();
+    let titles: Vec<&str> = owned.iter().map(String::as_str).collect();
     draw_chooser(
         frame,
         area,

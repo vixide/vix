@@ -106,6 +106,7 @@
 - [Test Runner](test-runner/index.md)
 - [Themes](themes/index.md)
 - [Todo Tree](todo-tree/index.md)
+- [IDE Parity Features](ide-parity/index.md)
 - [Tools](tools/index.md)
 - [Welcome Panel](welcome-panel/index.md)
 - [Workspace Information](workspace-information-panel/index.md)

@@ -108,6 +108,10 @@ pub mod discover_make;
 /// file for any given path.
 pub mod subproject;
 
+/// Named run configurations from `.vix/run.toml`: before-launch steps,
+/// compounds, and rendering to one shell line.
+pub mod run_config;
+
 /// Command run history: push-with-dedup policies.
 pub mod history;
 
