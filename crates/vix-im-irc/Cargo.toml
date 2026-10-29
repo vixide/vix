@@ -1,0 +1,27 @@
+[package]
+name = "vix-im-irc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IRCv3 client for Vix IM: line codec, registration/SASL state machine, UTF-8-safe splitting, and an optional TLS connection thread."
+
+[features]
+# The background connection thread with TCP and TLS (`net`). Off by default
+# so a build without the App's `im` capability carries no socket or TLS code
+# from this crate; the codec and state machine are always compiled.
+net = ["dep:rustls", "dep:webpki-roots"]
+
+[dependencies]
+base64 = { workspace = true }
+rustls = { workspace = true, optional = true }
+vix-civil-date = { workspace = true }
+webpki-roots = { workspace = true, optional = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
