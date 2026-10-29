@@ -31,4 +31,4 @@ pub use error::{CoworkError, PathProblem, WireProblem};
 pub use path::SharedPath;
 pub use peer::{Action, Peer, PeerId, Permission};
 pub use session::{GuestEvent, GuestSession, Handled, HostSession, Outbound};
-pub use wire::{ErrorCode, Message, Presence};
+pub use wire::{Channel, ErrorCode, Message, Presence};

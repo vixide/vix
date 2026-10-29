@@ -1,6 +1,9 @@
 # Cowork — real-time collaborative editing
 
-**Status:** in progress (2026-10-29). T690 decided (below); T691 onward are implemented as the tasks list records. Tasks T690–T697 in
+**Status:** implemented behind the opt-in `cowork` Cargo feature (2026-10-29):
+T690–T696 are done, T697 (shared terminal) is not started. The task list
+records what each task left out. User guide: `docs/cowork/index.md`. Tasks
+T690–T697 in
 [`tasks.md`](../../tasks.md). Supersedes the "Collaborative editing" entry in
 the Ideas backlog.
 
@@ -74,9 +77,106 @@ is not a hosted service and it does not replace git.
   remote selections as a tinted range; the name appears in the status line and
   a peers panel.
 - **Follow mode:** pin the viewport to a peer; any local scroll unpins.
-- Chat is out of scope for v1 (use the call you are already on).
-- Menu: **Cowork → Host Session…, Join Session…, Leave, Peers, Follow,
-  Permissions**. All text goes through `t!`.
+- Chat is out of scope for v1 (use the call you are already on); the wire
+  format keeps room for it (see "Chat seam").
+- Menu: **Tools → Cowork** holds Host Session…, New Invite, Share This Buffer,
+  Stop Sharing This Buffer, Share File Tree, Join Session…, Shared Files…,
+  Peers, Follow…, Permissions… and Leave Session (a submenu rather than a new
+  top-level menu, so the menu bar's Alt mnemonics stay put). Each is also a
+  `Cowork: …` palette command. All text goes through `t!` in every locale.
+  The actions are `cowork.*` and are hidden, like the menu, in a build without
+  the `cowork` feature.
+
+## App behavior (T692, T693, T695, T696)
+
+The App shell (`tui/src/app/cowork.rs`, with `cowork_off.rs` stand-ins) is
+glue over `vix-cowork`, `vix-cowork-net` and `vix_editor_core::remote`:
+
+- **Hosting.** Host Session asks for a bind address (default `127.0.0.1:0`,
+  this machine only; `bind=advertise` when guests reach the host through
+  another address) and shows a single-use invite valid for 10 minutes. Each
+  authenticated guest raises a consent prompt naming it and its address;
+  Enter admits it **view-only**, `edit` or `terminal` raise the level, and
+  anything else or Esc declines. Nothing is sent to a guest before consent.
+- **Sharing is opt-in per file.** Share This Buffer shares the active saved
+  project file; a private path (below) is refused with a status message.
+- **Guest buffers** open as tabs whose path is the synthetic
+  `cowork:<path>` (`vix_editor::REMOTE_PATH_PREFIX`). `vix-editor` refuses to
+  save such a tab, and Save asks the host instead (`SaveRequest`), which
+  writes with its normal save path and answers `Saved`. A view-only guest's
+  tabs are read-only and become editable when the host grants edit. Leaving
+  turns them into untitled, unsaved local copies.
+- **The pump.** Once per event-loop tick: finish a join, offer a waiting
+  guest for consent, feed local edits (the editor's edit log) to the CRDT,
+  then apply remote edits, then publish and draw presence, then follow.
+  Local edits go first because the log's offsets refer to the buffer as it
+  was before any remote edit.
+- **Undo (T692).** While a buffer is shared (its edit log is on) the editor's
+  own Undo and Redo do nothing, because remote edits make that history's
+  offsets stale. `edit.undo`/`edit.redo` on a shared buffer go to the
+  session's per-participant stack (`HostSession::undo`/`redo`,
+  `GuestSession::undo`/`redo`) and the result is replayed on the buffer, so
+  Ctrl+Z never reverts a collaborator's text.
+- **Presence (T693).** Remote carets and selections are drawn by
+  `vix-editor-core` in contrast-checked peer colors; the status bar lists the
+  other participants in the active shared buffer. **Follow…** pins the view to
+  a participant (their buffer and caret); any local key, click or scroll
+  unpins it, and so does that participant leaving.
+- **Failure is closed.** If a shared buffer and its document disagree, the
+  host stops sharing that buffer; a guest that cannot apply the host's update
+  leaves the session.
+
+## Workspace sharing (T696)
+
+Off by default. **Share File Tree** (host, a toggle) lets guests list the
+project and ask for files; until then a guest sees only what the host shares
+one by one.
+
+- **List.** `ListFiles` is answered with the host's file-finder index (it
+  honors `.gitignore`, skips hidden files and `target`/`node_modules`),
+  limited to files under the root and to `MAX_LISTED_FILES`, with every
+  private path removed. A guest picks from it in the palette's file finder
+  (**Shared Files…**).
+- **Open.** `OpenRequest` names a `SharedPath`. The session refuses it when
+  the tree is not shared or the path is private; the App then resolves it on
+  disk and refuses it unless its canonical path (symlinks followed) is a
+  regular file inside the canonical root and is still not private, is not an
+  image, and opens as an unlocked text buffer. An accepted file opens in a
+  background tab on the host (the host always sees what is shared) and is
+  shared with everyone. At most 32 buffers are shared at once (further open
+  requests are refused), and the host reuses its file list for 5 seconds, so
+  a guest cannot make the host open every file or walk the project in a
+  loop.
+- **Disk writes stay with the host.** Guests still only ask to save.
+- **Not done:** searching file *contents* across the shared tree.
+
+## Never shared (private paths)
+
+`SharedPath::is_private` is the single list, applied to the host's own
+shares, to file lists and to open requests: the directories `.git`, `.ssh`,
+`.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.vix`; any name starting
+`.env`; `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `credentials`,
+`credentials.json`; SSH keys (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`,
+and their `.pub`); and the extensions `.pem`, `.key`, `.p12`, `.pfx`, `.jks`,
+`.keystore`, `.kdbx`, `.gpg`. Matching ignores ASCII case.
+
+## Chat seam
+
+Session chat (IM, task T756 in the instant-messaging plan) will be a separate
+message family inside the same encrypted, authenticated frames, so a Cowork
+session gets chat with nothing more to set up or trust. The wire format
+already leaves room for it:
+
+- Every `wire::Message` has a `Channel` (`Control`, `Document`, `Presence`,
+  `Workspace`); T756 adds `Channel::Chat` and its messages.
+- Tags 48–63 are reserved for chat (`wire::RESERVED_CHAT_TAGS`). Today such a
+  message decodes to `WireProblem::Reserved`, and the transport's reader
+  skips it instead of closing the link (`CoworkError::is_reserved_message`),
+  so a peer that speaks chat can share a session with one that does not.
+  `Link::send_encoded` carries an already encoded payload, which is how the
+  test proves the skip.
+- Chat routing belongs in the session layer: the host will relay chat by
+  channel, stamping the sender's verified peer id as it does for presence.
 
 ## Risks
 

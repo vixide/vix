@@ -6796,6 +6796,8 @@ dependencies = [
  "vix-convert-from-yaml-into-json-tool",
  "vix-convert-tabular",
  "vix-coverage",
+ "vix-cowork",
+ "vix-cowork-net",
  "vix-dap",
  "vix-db",
  "vix-diff-view",

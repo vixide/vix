@@ -59,6 +59,58 @@ impl SharedPath {
         &self.0
     }
 
+    /// Whether this path is never shared, whatever the host or a guest asks:
+    /// secrets, keys, credentials, version-control internals and Vix's own
+    /// project settings (`spec/cowork`, "Never share"). Matched on each
+    /// component, ignoring ASCII case:
+    ///
+    /// - directories `.git`, `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`,
+    ///   `.docker`, `.vix` (trusted environment, HTTP environments, FHIR
+    ///   profiles);
+    /// - any name starting `.env` (`.env`, `.env.local`, `.envrc`);
+    /// - `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `credentials`,
+    ///   `credentials.json`, and SSH keys (`id_rsa`, `id_dsa`, `id_ecdsa`,
+    ///   `id_ed25519`, with or without `.pub`);
+    /// - key and keystore extensions `.pem`, `.key`, `.p12`, `.pfx`, `.jks`,
+    ///   `.keystore`, `.kdbx`, `.gpg`.
+    #[must_use]
+    pub fn is_private(&self) -> bool {
+        const DIRS: &[&str] = &[
+            ".git", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".vix",
+        ];
+        const NAMES: &[&str] = &[
+            ".netrc",
+            ".npmrc",
+            ".pypirc",
+            ".pgpass",
+            "credentials",
+            "credentials.json",
+        ];
+        const KEYS: &[&str] = &["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"];
+        const EXTS: &[&str] = &[
+            ".pem",
+            ".key",
+            ".p12",
+            ".pfx",
+            ".jks",
+            ".keystore",
+            ".kdbx",
+            ".gpg",
+        ];
+        let parts: Vec<String> = self.0.split('/').map(str::to_ascii_lowercase).collect();
+        let Some((name, dirs)) = parts.split_last() else {
+            return false;
+        };
+        dirs.iter().any(|d| DIRS.contains(&d.as_str()))
+            || DIRS.contains(&name.as_str())
+            || name.starts_with(".env")
+            || NAMES.contains(&name.as_str())
+            || KEYS
+                .iter()
+                .any(|k| name == k || name.strip_prefix(k) == Some(".pub"))
+            || EXTS.iter().any(|e| name.ends_with(e))
+    }
+
     /// This path joined under `root`, using the platform separator.
     #[must_use]
     pub fn under(&self, root: &std::path::Path) -> PathBuf {
@@ -147,6 +199,37 @@ mod tests {
             if let Ok(p) = SharedPath::parse(&raw) {
                 prop_assert_eq!(SharedPath::parse(p.as_str()).unwrap(), p);
             }
+        }
+    }
+
+    #[test]
+    fn secrets_and_settings_are_private() {
+        for p in [
+            ".env",
+            ".ENV.production",
+            "web/.envrc",
+            ".git/config",
+            "sub/.git/HEAD",
+            ".vix/http-env.json",
+            ".ssh/id_ed25519",
+            "id_rsa.pub",
+            "deploy/server.PEM",
+            "tls/site.key",
+            "home/.netrc",
+            ".aws/credentials",
+            "vault.kdbx",
+        ] {
+            assert!(SharedPath::parse(p).unwrap().is_private(), "{p}");
+        }
+        for p in [
+            "src/main.rs",
+            "environment.md",
+            "docs/keys.md",
+            "id_rsa_notes.txt",
+            "gitignore.txt",
+            "monkey.rs",
+        ] {
+            assert!(!SharedPath::parse(p).unwrap().is_private(), "{p}");
         }
     }
 }

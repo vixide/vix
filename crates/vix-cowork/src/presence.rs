@@ -150,6 +150,12 @@ impl PresenceBoard {
         self.names.iter().map(|(p, n)| (*p, n.as_str()))
     }
 
+    /// Where `peer`'s cursor last was (for follow mode).
+    #[must_use]
+    pub fn location(&self, peer: PeerId) -> Option<&Presence> {
+        self.latest.get(&peer)
+    }
+
     /// The display name of `peer`.
     #[must_use]
     pub fn name(&self, peer: PeerId) -> Option<&str> {

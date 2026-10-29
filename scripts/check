@@ -33,6 +33,9 @@ fi
 echo "==> feature combinations (T587)"
 cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
 cargo test -p vix-tui --no-default-features
+# The opt-in `cowork` feature is in no default build: lint and test it here.
+cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+cargo test -p vix-tui --features cowork --lib cowork
 if command -v cargo-hack >/dev/null 2>&1; then
 	cargo hack check -p vix-tui --each-feature --no-dev-deps
 else

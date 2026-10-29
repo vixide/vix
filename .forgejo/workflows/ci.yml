@@ -95,6 +95,8 @@ jobs:
           cargo install cargo-hack --locked
           cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
           cargo test -p vix-tui --no-default-features
+          cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+          cargo test -p vix-tui --features cowork --lib cowork
           cargo hack check -p vix-tui --each-feature --no-dev-deps
 
       # T505 (tasks.md): every example must keep running, not just compiling

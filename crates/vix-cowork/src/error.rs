@@ -74,6 +74,10 @@ pub enum WireProblem {
     TrailingBytes,
     /// The protocol version is not one this build speaks.
     Version(u8),
+    /// The tag is in a range reserved for a later message family (chat,
+    /// T756; see `wire::RESERVED_CHAT_TAGS`). The message is skipped, not
+    /// fatal.
+    Reserved(u8),
 }
 
 impl fmt::Display for PathProblem {
@@ -98,6 +102,7 @@ impl fmt::Display for WireProblem {
             Self::FieldTooLong => f.write_str("field too long"),
             Self::TrailingBytes => f.write_str("trailing bytes"),
             Self::Version(v) => write!(f, "unsupported protocol version {v}"),
+            Self::Reserved(t) => write!(f, "reserved message tag {t}"),
         }
     }
 }
@@ -124,6 +129,16 @@ impl fmt::Display for CoworkError {
 }
 
 impl std::error::Error for CoworkError {}
+
+impl CoworkError {
+    /// Whether this is a message from a reserved, not yet understood family
+    /// (see `wire::RESERVED_CHAT_TAGS`): the receiver skips it and keeps the
+    /// connection.
+    #[must_use]
+    pub const fn is_reserved_message(&self) -> bool {
+        matches!(self, Self::Wire(WireProblem::Reserved(_)))
+    }
+}
 
 impl From<WireProblem> for CoworkError {
     fn from(w: WireProblem) -> Self {

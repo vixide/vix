@@ -3,7 +3,7 @@
 //! knowing about the network.
 //!
 //! - [`Editor::start_edit_log`] / [`Editor::take_edit_log`] report every local
-//!   content change as a [`Splice`], including undo, redo and whole-buffer
+//!   content change as a [`Splice`], including whole-buffer
 //!   replacement. The collaboration layer feeds them to its CRDT.
 //! - [`Editor::apply_remote_edits`] replays another participant's splices,
 //!   keeps the local cursor, selection and extra carets on their characters,
@@ -14,7 +14,9 @@
 //! While a buffer is shared its undo must not use this editor's history,
 //! whose stored offsets go stale when a remote edit lands; the collaboration
 //! layer routes undo through its own per-participant stack and replays the
-//! result here with [`Editor::apply_remote_edits`].
+//! result here with [`Editor::apply_remote_edits`]. To make that safe, this
+//! editor's own Undo and Redo do nothing while the edit log is on
+//! ([`Editor::is_edit_logging`]).
 
 pub use crate::code::Splice;
 use crate::editor::Editor;
@@ -80,6 +82,14 @@ impl Editor {
     /// Stop recording local content changes and drop anything pending.
     pub fn stop_edit_log(&mut self) {
         self.code.stop_edit_log();
+    }
+
+    /// Whether local changes are being recorded (the buffer is shared). While
+    /// they are, this editor's own undo and redo do nothing; see the module
+    /// docs.
+    #[must_use]
+    pub const fn is_edit_logging(&self) -> bool {
+        self.code.is_edit_logging()
     }
 
     /// The local changes since the last call, oldest first. Empty when
@@ -210,15 +220,23 @@ mod tests {
         assert_eq!(mirror.into_iter().collect::<String>(), e.get_content());
     }
 
+    /// T692: while shared, this editor's own history is stale (remote edits
+    /// skip it), so its undo and redo do nothing; the collaboration layer
+    /// owns undo. Once sharing stops, local undo works again.
     #[test]
-    fn undo_and_redo_are_logged_too() {
+    fn local_undo_is_off_while_shared() {
         let mut e = editor("abc");
         e.start_edit_log();
+        assert!(e.is_edit_logging());
         e.set_content("abcd");
         e.take_edit_log();
         e.apply(crate::actions::Undo);
-        let log = e.take_edit_log();
-        assert_ne!(log, Vec::new());
+        e.apply(crate::actions::Redo);
+        assert_eq!(e.get_content(), "abcd");
+        assert_eq!(e.take_edit_log(), Vec::new());
+        e.stop_edit_log();
+        assert!(!e.is_edit_logging());
+        e.apply(crate::actions::Undo);
         assert_eq!(e.get_content(), "abc");
     }
 

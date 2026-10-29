@@ -1033,6 +1033,12 @@ impl Code {
         self.edit_log.get_or_insert_with(Vec::new);
     }
 
+    /// Whether the edit log is on (the buffer is shared).
+    #[must_use]
+    pub const fn is_edit_logging(&self) -> bool {
+        self.edit_log.is_some()
+    }
+
     /// Stop recording and discard anything pending.
     pub fn stop_edit_log(&mut self) {
         self.edit_log = None;
@@ -1068,7 +1074,14 @@ impl Code {
     }
 
     /// Undo the last committed batch, reverting its edits; return the batch if any.
+    ///
+    /// Does nothing while the edit log is on (the buffer is shared, T692):
+    /// remote edits leave this history's offsets stale, so a shared buffer's
+    /// undo goes through the collaboration layer's per-participant stack.
     pub fn undo(&mut self) -> Option<EditBatch> {
+        if self.edit_log.is_some() {
+            return None;
+        }
         let batch = self.history.undo()?;
         self.applying_history = false;
 
@@ -1107,7 +1120,11 @@ impl Code {
     }
 
     /// Redo the next undone batch, reapplying its edits; return the batch if any.
+    /// Does nothing while the edit log is on (see [`Code::undo`]).
     pub fn redo(&mut self) -> Option<EditBatch> {
+        if self.edit_log.is_some() {
+            return None;
+        }
         let batch = self.history.redo()?;
         self.applying_history = false;
 

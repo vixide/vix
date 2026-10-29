@@ -383,3 +383,35 @@ fn peer_ids_come_from_the_host_not_the_guest() -> Res {
     );
     Ok(())
 }
+
+/// The chat seam (T756): a message in the reserved chat tag range is skipped
+/// by a receiver that does not understand it, and the session carries on.
+#[test]
+fn a_reserved_chat_message_is_skipped_not_fatal() -> Res {
+    let listener = Listener::bind(loopback())?;
+    let invite = invite_for(&listener)?;
+    let guest_thread = std::thread::spawn(move || join(&invite, "Ada", T, T));
+    let knock = wait_knock(&listener)?;
+    let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+    let (_peer, out) = host.admit(&knock.name, Permission::View)?;
+    let (link, _reader) = knock.approve();
+    for o in out {
+        link.send(&o.msg)?;
+    }
+    let joined = guest_thread.join().map_err(|_| "guest thread panicked")??;
+    let first = *vix_cowork::wire::RESERVED_CHAT_TAGS.start();
+    link.send_encoded(&[first, 0, 1, 2, 3])?;
+    link.send(&Message::Leave)?;
+    let (gtx, grx) = channel();
+    let _g = joined.reader.spawn((), gtx);
+    loop {
+        let ((), ev) = grx.recv_timeout(T)?;
+        match ev {
+            LinkEvent::Message(Message::Leave) => return Ok(()),
+            LinkEvent::Message(_) => {}
+            LinkEvent::Closed(e) => {
+                return Err(format!("closed by the reserved message: {e}").into());
+            }
+        }
+    }
+}

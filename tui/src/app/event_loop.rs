@@ -93,6 +93,8 @@ impl App {
         self.poll_http();
         // Drain a finished HL7 send's reply into a read-only tab.
         self.poll_hl7();
+        // Drive a Cowork session: edits out, edits in, guests, presence.
+        self.poll_cowork();
         // Drain a finished asynchronous DB query into the workbench.
         self.poll_db_query();
         // Drain a finished asynchronous DB connect/reconnect (Run H, T531).
@@ -115,6 +117,7 @@ impl App {
             || self.parse_busy()
             || self.http_running()
             || self.hl7_running()
+            || self.cowork_active()
             || self.db_query_running()
             || self.db_connect_running()
             || self.db_reconnect_running()

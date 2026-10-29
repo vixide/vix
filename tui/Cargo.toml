@@ -90,6 +90,9 @@ hunspell = ["vix-spellcheck/hunspell"]
 full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "oc", "lsp", "dap", "tasks", "hunspell"]
 # The network-facing capabilities together.
 net = ["http", "ai", "sql"]
+# Real-time collaboration (T690-T697, spec/cowork). Opt-in and NOT part of
+# `full`: the default build carries no collaboration or listening code.
+cowork = ["dep:vix-cowork", "dep:vix-cowork-net"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -280,6 +283,9 @@ vix-html-character-picker = { workspace = true }
 vix-hl7 = { workspace = true }
 # A minimal HTTP client driven by a `.http`-style buffer.
 vix-http-client = { workspace = true, optional = true }
+# Real-time collaboration: the pure core and the encrypted transport (the `cowork` feature).
+vix-cowork = { workspace = true, optional = true }
+vix-cowork-net = { workspace = true, optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { workspace = true }
 # Data and table state for the keybinding editor overlay (rebind/reset).

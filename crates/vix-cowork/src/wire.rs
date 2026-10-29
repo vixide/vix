@@ -5,6 +5,29 @@
 //! one authenticated, encrypted frame. The codec is hand-written, length
 //! checked on every field, and total: [`decode`] returns an error for any
 //! input and never panics, which a property test pins.
+//!
+//! ## Message tags and channels
+//!
+//! The first byte of a message is its tag. Tags are grouped by [`Channel`] so
+//! a later message family slots in without renumbering anything:
+//!
+//! | Tags | Channel | Messages |
+//! | ---- | ------- | -------- |
+//! | 1, 2, 9–13 | [`Channel::Control`] | `Hello`, `Welcome`, `PermissionChanged`, `PeerJoined`, `PeerLeft`, `Leave`, `Error` |
+//! | 3–5, 7, 8 | [`Channel::Document`] | `Open`, `Close`, `Update`, `SaveRequest`, `Saved` |
+//! | 6 | [`Channel::Presence`] | `Presence` |
+//! | 14–16 | [`Channel::Workspace`] | `ListFiles`, `FileList`, `OpenRequest` (T696) |
+//! | 48–63 | reserved: chat (T756) | none yet; see [`RESERVED_CHAT_TAGS`] |
+//!
+//! **The chat seam (T756).** Session chat will be its own message family
+//! inside the same encrypted frames, in the reserved tag range, with a new
+//! `Channel::Chat`. Until then [`decode`] reports a tag in that range as
+//! [`WireProblem::Reserved`], which [`CoworkError::is_reserved_message`]
+//! recognizes, so a receiver skips the message and keeps the connection
+//! instead of treating it as a protocol violation. A peer that speaks chat
+//! can therefore talk to one that does not.
+
+use std::ops::RangeInclusive;
 
 use crate::doc::Anchor;
 use crate::error::{CoworkError, WireProblem};
@@ -20,6 +43,29 @@ pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 /// Longest string field (names), in bytes.
 const MAX_STR: usize = 256;
+
+/// Most paths one [`Message::FileList`] carries; the host truncates beyond it.
+pub const MAX_LISTED_FILES: usize = 20_000;
+
+/// Tags kept free for session chat (T756, `spec/instant-message`). A message
+/// in this range decodes to [`WireProblem::Reserved`], which a receiver skips.
+pub const RESERVED_CHAT_TAGS: RangeInclusive<u8> = 48..=63;
+
+/// Which family a [`Message`] belongs to. Lets the session layer route a
+/// message family as a whole (for example, chat later) without matching on
+/// every variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Channel {
+    /// Joining, leaving, permissions, errors.
+    Control,
+    /// Shared buffer contents and saves.
+    Document,
+    /// Cursors and selections.
+    Presence,
+    /// The shared file tree (T696).
+    Workspace,
+}
 
 /// Why the other side refused or ended something.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,6 +201,43 @@ pub enum Message {
         /// Why.
         code: ErrorCode,
     },
+    /// Guest to host: list the files I may open (needs workspace sharing).
+    ListFiles,
+    /// Host to guest: the files the guest may open, relative to the root.
+    FileList {
+        /// The paths, at most [`MAX_LISTED_FILES`].
+        paths: Vec<SharedPath>,
+    },
+    /// Guest to host: please share this file with the session.
+    OpenRequest {
+        /// The file, relative to the host's root.
+        path: SharedPath,
+    },
+}
+
+impl Message {
+    /// The family this message belongs to.
+    #[must_use]
+    pub const fn channel(&self) -> Channel {
+        match self {
+            Self::Open { .. }
+            | Self::Close { .. }
+            | Self::Update { .. }
+            | Self::SaveRequest { .. }
+            | Self::Saved { .. } => Channel::Document,
+            Self::Presence(_) => Channel::Presence,
+            Self::ListFiles | Self::FileList { .. } | Self::OpenRequest { .. } => {
+                Channel::Workspace
+            }
+            Self::Hello { .. }
+            | Self::Welcome { .. }
+            | Self::PermissionChanged { .. }
+            | Self::PeerJoined { .. }
+            | Self::PeerLeft { .. }
+            | Self::Leave
+            | Self::Error { .. } => Channel::Control,
+        }
+    }
 }
 
 struct Writer(Vec<u8>);
@@ -174,6 +257,9 @@ impl Writer {
     }
     fn str(&mut self, s: &str) {
         self.bytes(s.as_bytes());
+    }
+    fn u32(&mut self, v: u32) {
+        self.0.extend_from_slice(&v.to_le_bytes());
     }
 }
 
@@ -215,6 +301,11 @@ impl<'a> Reader<'a> {
         let raw = self.bytes(crate::path::MAX_PATH_BYTES)?;
         let s = std::str::from_utf8(raw).map_err(|_| WireProblem::BadUtf8)?;
         SharedPath::parse(s)
+    }
+    fn u32(&mut self) -> Result<u32, WireProblem> {
+        let mut a = [0u8; 4];
+        a.copy_from_slice(self.take(4)?);
+        Ok(u32::from_le_bytes(a))
     }
     fn blob(&mut self) -> Result<Vec<u8>, WireProblem> {
         Ok(self.bytes(MAX_MESSAGE_BYTES)?.to_vec())
@@ -295,6 +386,20 @@ impl Message {
                 w.u8(13);
                 w.u8(code.to_byte());
             }
+            Self::ListFiles => w.u8(14),
+            Self::FileList { paths } => {
+                w.u8(15);
+                let shown = &paths[..paths.len().min(MAX_LISTED_FILES)];
+                // Bounded by MAX_LISTED_FILES, far below u32::MAX.
+                w.u32(u32::try_from(shown.len()).unwrap_or(u32::MAX));
+                for p in shown {
+                    w.str(p.as_str());
+                }
+            }
+            Self::OpenRequest { path } => {
+                w.u8(16);
+                w.str(path.as_str());
+            }
         }
         w.0
     }
@@ -367,6 +472,21 @@ pub fn decode(buf: &[u8]) -> Result<Message, CoworkError> {
                 code: ErrorCode::from_byte(b).ok_or(WireProblem::UnknownTag(b))?,
             }
         }
+        14 => Message::ListFiles,
+        15 => {
+            let n = usize::try_from(r.u32()?).map_err(|_| WireProblem::FieldTooLong)?;
+            if n > MAX_LISTED_FILES {
+                return Err(WireProblem::FieldTooLong.into());
+            }
+            // Grown as paths decode, so a lying count allocates nothing.
+            let mut paths = Vec::new();
+            for _ in 0..n {
+                paths.push(r.path()?);
+            }
+            Message::FileList { paths }
+        }
+        16 => Message::OpenRequest { path: r.path()? },
+        t if RESERVED_CHAT_TAGS.contains(&t) => return Err(WireProblem::Reserved(t).into()),
         other => return Err(WireProblem::UnknownTag(other).into()),
     };
     if r.pos != buf.len() {
@@ -427,7 +547,53 @@ mod tests {
             Message::Error {
                 code: ErrorCode::Removed,
             },
+            Message::ListFiles,
+            Message::FileList {
+                paths: vec![p("a"), p("src/b.rs")],
+            },
+            Message::OpenRequest {
+                path: p("src/b.rs"),
+            },
         ]
+    }
+
+    #[test]
+    fn every_message_has_a_channel() {
+        assert_eq!(Message::Leave.channel(), Channel::Control);
+        assert_eq!(Message::ListFiles.channel(), Channel::Workspace);
+        assert_eq!(
+            Message::SaveRequest { path: p("a") }.channel(),
+            Channel::Document
+        );
+    }
+
+    #[test]
+    fn a_reserved_chat_tag_is_skippable_not_fatal() {
+        for tag in RESERVED_CHAT_TAGS {
+            let err = decode(&[tag, 1, 2, 3]).unwrap_err();
+            assert_eq!(err, WireProblem::Reserved(tag).into());
+            assert!(err.is_reserved_message());
+        }
+        assert!(!decode(&[200]).unwrap_err().is_reserved_message());
+        assert!(!decode(&[]).unwrap_err().is_reserved_message());
+    }
+
+    #[test]
+    fn a_file_list_with_a_lying_count_or_a_hostile_path_is_refused() {
+        let mut w = Writer(Vec::new());
+        w.u8(15);
+        w.u32(u32::MAX);
+        assert_eq!(decode(&w.0), Err(WireProblem::FieldTooLong.into()));
+        let mut w = Writer(Vec::new());
+        w.u8(15);
+        w.u32(3);
+        w.str("a");
+        assert_eq!(decode(&w.0), Err(WireProblem::Truncated.into()));
+        let mut w = Writer(Vec::new());
+        w.u8(15);
+        w.u32(1);
+        w.str("/etc/passwd");
+        assert!(matches!(decode(&w.0), Err(CoworkError::BadPath(_))));
     }
 
     #[test]
@@ -480,7 +646,7 @@ mod tests {
         }
 
         #[test]
-        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..13, pos in 0usize..64, val in any::<u8>()) {
+        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..16, pos in 0usize..64, val in any::<u8>()) {
             let mut bytes = samples()[idx].encode();
             let at = pos % bytes.len();
             bytes[at] = val;

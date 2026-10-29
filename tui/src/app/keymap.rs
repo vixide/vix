@@ -411,6 +411,10 @@ impl App {
 
     /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
+        // Any local key ends Cowork follow mode (T693).
+        if key.kind != KeyEventKind::Release {
+            self.cowork_local_input();
+        }
         self.dispatch_key(key);
         // Keeps the tutorial's status-bar progress indicator live as the
         // learner types (`crates/vix-tutor/spec/index.md`, § Progress

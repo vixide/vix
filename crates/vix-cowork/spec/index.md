@@ -56,18 +56,46 @@ up, never reused). `Permission` is `View` (default) < `Edit` < `EditTerminal`;
 empty, absolute (`/`, `\`, `C:`), `..`, control-character and over-long paths
 are refused; `.`, repeated and trailing separators are normalized away. A
 property test pins that an accepted path joined under a root never leaves it.
-Symlink checks need I/O and belong to workspace sharing (T696).
+Symlink checks need I/O and live in the App's workspace sharing (T696).
+
+`SharedPath::is_private` is the one "never shared" list (secrets, keys,
+credentials, `.git`, `.vix` settings; the full list is in `spec/cowork`). It
+is checked on the host's own `share`, on file lists and on open requests.
 
 ## Wire messages
 
 `wire::Message` is the application payload inside one authenticated, encrypted
 frame: `Hello`, `Welcome`, `Open`, `Close`, `Update`, `Presence`,
 `SaveRequest`, `Saved`, `PermissionChanged`, `PeerJoined`, `PeerLeft`, `Leave`,
-`Error`. `Message::encode` and `wire::decode` are hand-written, length-checked
+`Error`, and for workspace sharing (T696) `ListFiles`, `FileList` (at most
+`MAX_LISTED_FILES` paths; a lying count allocates nothing) and `OpenRequest`.
+`Message::channel` names each message's family (`Channel::Control`,
+`Document`, `Presence`, `Workspace`); the module docs carry the tag table.
+Tags 48–63 (`RESERVED_CHAT_TAGS`) are kept for session chat (T756): they
+decode to `WireProblem::Reserved`, which `CoworkError::is_reserved_message`
+recognizes so a receiver skips the message instead of dropping the peer. `Message::encode` and `wire::decode` are hand-written, length-checked
 on every field, capped at `MAX_MESSAGE_BYTES`, and total: a property test
 feeds arbitrary and mutated bytes and requires an error, not a panic. Paths in
 messages go through `SharedPath::parse` on decode. The host stamps the real
 peer id on every relayed `Presence`; the sender's value is ignored.
+
+## Sessions
+
+`HostSession` is the authority and `GuestSession` the mirror; both return the
+messages to send as values. Beyond sharing, admitting, permissions, edits,
+presence and saves:
+
+- **Undo (T692).** `HostSession::undo`/`redo` (host's own edits; the update
+  goes to every guest) and `GuestSession::undo`/`redo` (needs edit) revert
+  only the caller's edit groups.
+- **Workspace sharing (T696).** Off until `set_workspace_shared(true)`.
+  While on, a guest with read access may send `ListFiles` (reported in
+  `Handled::list_files`; answer with `file_list`, which drops private paths)
+  and `OpenRequest` (reported in `Handled::open` unless private; the host
+  confines it on disk, then `share`s it or `reopen_for`s an already shared
+  one). While off, both are refused with `ErrorCode::PermissionDenied` and the
+  guest stays connected. `refuse_to` builds a refusal for a request the host
+  could not carry out. Guests see `GuestEvent::Files`.
 
 ## Presence
 
@@ -78,7 +106,8 @@ selection, color). Reports from peers that never joined are dropped.
 it lighter or darker until it keeps a WCAG contrast ratio of at least 3.0
 against the theme background (tested on dark, light, black, white and mid-gray
 backgrounds). `Follow` pins the viewport to a peer and unpins on any local
-scroll or when that peer leaves.
+scroll or when that peer leaves; `PresenceBoard::location` gives the followed
+peer's latest buffer and caret.
 
 ## Tests
 

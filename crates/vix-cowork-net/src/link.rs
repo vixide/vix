@@ -123,7 +123,18 @@ impl Link {
     /// [`NetError::TooLarge`] for a message over [`MAX_MESSAGE_BYTES`], or an
     /// I/O error.
     pub fn send(&self, msg: &Message) -> Result<(), NetError> {
-        let data = msg.encode();
+        self.send_encoded(&msg.encode())
+    }
+
+    /// Encrypt and send a payload that is already encoded. [`send`](Self::send)
+    /// is the normal door; this one exists so a message family this build
+    /// does not model yet (the reserved chat tags, T756) can be carried and
+    /// tested. The receiver decodes and validates it like any other message.
+    ///
+    /// # Errors
+    ///
+    /// As [`send`](Self::send).
+    pub fn send_encoded(&self, data: &[u8]) -> Result<(), NetError> {
         if data.len() > MAX_MESSAGE_BYTES {
             return Err(NetError::TooLarge);
         }
@@ -176,6 +187,9 @@ impl LinkReader {
     /// [`NetError::Crypto`] for a frame that fails authentication,
     /// [`NetError::TooLarge`] for an oversized message, or
     /// [`NetError::Cowork`] for a decrypted payload that is not a message.
+    /// A message in a reserved family (see
+    /// `vix_cowork::wire::RESERVED_CHAT_TAGS`) is skipped, not an error, so a
+    /// newer peer's chat does not end an older peer's session.
     pub fn recv(&mut self) -> Result<Message, NetError> {
         let mut assembled: Vec<u8> = Vec::new();
         loop {
@@ -195,7 +209,10 @@ impl LinkReader {
             }
             assembled.extend_from_slice(body);
             match flag {
-                1 => return Ok(wire::decode(&assembled)?),
+                1 => match wire::decode(&assembled) {
+                    Err(e) if e.is_reserved_message() => assembled.clear(),
+                    decoded => return Ok(decoded?),
+                },
                 0 => {}
                 _ => return Err(NetError::Protocol),
             }

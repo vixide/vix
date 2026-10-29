@@ -50,9 +50,18 @@ sharing live in `vix-cowork`. The design is in
   sanitized (control characters, escape sequences dropped).
 - `join(invite, name, connect_timeout, consent_timeout)` — the guest side;
   returns the link halves and the host's `Welcome`, or `NetError::Refused`.
-- `Link::send(&Message)` (cloneable, serialized), `Link::close()`,
+- `Link::send(&Message)` (cloneable, serialized), `Link::send_encoded(&[u8])`
+  (an already encoded payload, for a message family this build does not
+  model yet), `Link::close()`,
   `LinkReader::recv()` (blocking), `LinkReader::spawn(tag, tx)` (a forwarding
   thread ending in `LinkEvent::Closed`).
+
+## Reserved messages
+
+A decoded payload in a reserved tag range (`vix_cowork::wire::
+RESERVED_CHAT_TAGS`, kept for session chat, T756) is skipped by
+`LinkReader::recv` and the link stays open, so a newer peer's chat cannot end
+an older peer's session. Any other undecodable payload still ends the link.
 
 ## Framing
 
@@ -72,5 +81,6 @@ Unit tests for invites. `crates/vix-cowork-net/tests/loopback.rs` runs over real
 a complete host and guest session including a multi-frame snapshot; decline;
 an unapproved guest receiving nothing; wrong secret, revoked, spent and
 expired invites; a pinned-key mismatch; garbage and fake-preamble
-connections; and a recording proxy proving neither names, file names nor
-document text appear on the wire.
+connections; a recording proxy proving neither names, file names nor
+document text appear on the wire; and a reserved (chat) message being skipped
+while the session carries on.

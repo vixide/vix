@@ -663,3 +663,9 @@ unmaintained
 cowork
 VXCW
 collab
+
+# Cowork private-path list (crates/vix-cowork/src/path.rs, spec/cowork)
+netrc
+pypirc
+pgpass
+kdbx

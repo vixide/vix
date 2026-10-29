@@ -28,6 +28,16 @@ impl App {
         let mut p = Palette::new();
         p.input = seed.to_string();
         self.palette = Some(p);
+        self.palette_files_override = None;
+        self.recompute_palette();
+    }
+
+    /// Open the palette's Files mode over `files` instead of the project
+    /// index (a Cowork guest browsing the host's shared files, T696).
+    #[cfg(feature = "cowork")]
+    pub(super) fn open_palette_over(&mut self, files: Vec<std::path::PathBuf>) {
+        self.open_palette_seeded("");
+        self.palette_files_override = Some(files);
         self.recompute_palette();
     }
 
@@ -122,12 +132,21 @@ impl App {
     fn palette_file_entries(&self, query: &str) -> Vec<Entry> {
         let (qpath, target) = palette::parse_path_target(query);
         let mut scored: Vec<(i32, String, Entry)> = Vec::new();
-        for path in &self.file_index {
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
+        let source = self
+            .palette_files_override
+            .as_ref()
+            .unwrap_or(&self.file_index);
+        for path in source {
+            let shown = path.to_string_lossy();
+            // A Cowork guest's list holds `cowork:`-prefixed host paths (T696).
+            let rel = match shown.strip_prefix(crate::editor::REMOTE_PATH_PREFIX) {
+                Some(remote) => remote.to_string(),
+                None => path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned(),
+            };
             // `project.subproject.find_file` scopes this list to one
             // subproject's files (see `App::palette_file_scope`).
             if let Some(scope) = self.palette_file_scope.as_deref()
@@ -336,6 +355,7 @@ impl App {
                 self.palette = None;
                 self.palette_origin = None;
                 self.palette_file_scope = None;
+                self.palette_files_override = None;
             }
             KeyCode::Up => {
                 if let Some(p) = self.palette.as_mut() {
@@ -395,11 +415,15 @@ impl App {
         };
         self.palette = None;
         self.palette_file_scope = None;
+        self.palette_files_override = None;
         // Undo any live go-to-line preview so the action below jumps from (and
         // records in the history) the cursor's real pre-palette position.
         self.restore_palette_origin();
         self.palette_origin = None;
         match entry.action {
+            PAction::OpenFile(path, _) if crate::editor::is_remote_path(&path) => {
+                self.cowork_request_open(&path);
+            }
             PAction::OpenFile(path, target) => {
                 self.with_jump(|s| {
                     s.open_path(&path, false);

@@ -24,6 +24,10 @@ pub struct Outbound {
     pub msg: Message,
 }
 
+/// What a host undo or redo produced: the update for every guest, and the
+/// edits to replay on the host's own buffer.
+pub type HostRevert = (Vec<Outbound>, Vec<BufferEdit>);
+
 /// What the host should do after handling one inbound message.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Handled {
@@ -31,10 +35,20 @@ pub struct Handled {
     pub out: Vec<Outbound>,
     /// Edits to replay onto the host's own buffers, per path.
     pub edits: Vec<(SharedPath, Vec<BufferEdit>)>,
-    /// Buffers a permitted guest asked the host to write to disk.
-    pub save: Vec<SharedPath>,
+    /// Buffers a permitted guest asked the host to write to disk, with who
+    /// asked (answer with [`HostSession::saved`]).
+    pub save: Vec<(PeerId, SharedPath)>,
     /// Connections the host must drop (misbehaving or leaving).
     pub disconnect: Vec<PeerId>,
+    /// Guests that asked for the file list (T696); answer each with
+    /// [`HostSession::file_list`]. Only produced while the workspace is shared.
+    pub list_files: Vec<PeerId>,
+    /// Files a guest asked to have shared (T696), already checked for
+    /// workspace sharing, permission and [`SharedPath::is_private`]. The host
+    /// still resolves each against its root on disk, refusing a symlink that
+    /// leaves it, then calls [`HostSession::share`] (or
+    /// [`HostSession::reopen_for`] when it is already shared).
+    pub open: Vec<(PeerId, SharedPath)>,
 }
 
 /// The host's side of one session.
@@ -46,6 +60,9 @@ pub struct HostSession {
     docs: BTreeMap<SharedPath, SharedDoc>,
     board: PresenceBoard,
     next_guest: u64,
+    /// Whether guests may list the host's files and ask to open them (T696).
+    /// Off until the host turns it on.
+    workspace: bool,
 }
 
 impl HostSession {
@@ -62,7 +79,113 @@ impl HostSession {
             docs: BTreeMap::new(),
             board,
             next_guest: 0,
+            workspace: false,
         }
+    }
+
+    /// Let guests browse the file tree and ask for files (T696), or stop.
+    /// Off by default: until then a guest sees only what the host shares.
+    pub fn set_workspace_shared(&mut self, on: bool) {
+        self.workspace = on;
+    }
+
+    /// Whether the file tree is shared.
+    #[must_use]
+    pub const fn workspace_shared(&self) -> bool {
+        self.workspace
+    }
+
+    /// Answer a guest's [`Message::ListFiles`] with `paths`, dropping every
+    /// [`SharedPath::is_private`] one and capping the list at
+    /// [`MAX_LISTED_FILES`](crate::wire::MAX_LISTED_FILES). Sends nothing
+    /// while the workspace is not shared.
+    #[must_use]
+    pub fn file_list(
+        &self,
+        to: PeerId,
+        paths: impl IntoIterator<Item = SharedPath>,
+    ) -> Vec<Outbound> {
+        if !self.workspace || !self.peers.contains_key(&to) {
+            return Vec::new();
+        }
+        let paths: Vec<SharedPath> = paths
+            .into_iter()
+            .filter(|p| !p.is_private())
+            .take(crate::wire::MAX_LISTED_FILES)
+            .collect();
+        vec![Outbound {
+            to,
+            msg: Message::FileList { paths },
+        }]
+    }
+
+    /// Send an already shared buffer's current state to one guest (it asked
+    /// to open a file that is shared already).
+    ///
+    /// # Errors
+    ///
+    /// When the document cannot be snapshotted (not expected).
+    pub fn reopen_for(&self, to: PeerId, path: &SharedPath) -> Result<Vec<Outbound>, CoworkError> {
+        let Some(doc) = self.docs.get(path) else {
+            return Ok(Vec::new());
+        };
+        Ok(vec![Outbound {
+            to,
+            msg: Message::Open {
+                path: path.clone(),
+                snapshot: doc.snapshot()?,
+            },
+        }])
+    }
+
+    /// Refuse a guest's request (for example a file the host could not
+    /// open).
+    #[must_use]
+    pub fn refuse_to(to: PeerId, code: ErrorCode) -> Vec<Outbound> {
+        vec![Self::refuse(to, code)]
+    }
+
+    /// Per-peer undo of the host's own last edit group on `path`. Returns the
+    /// update for every guest and the edits to replay on the host's buffer;
+    /// `None` when there is nothing to undo.
+    ///
+    /// # Errors
+    ///
+    /// When `path` is not shared or the CRDT fails.
+    pub fn undo(&mut self, path: &SharedPath) -> Result<Option<HostRevert>, CoworkError> {
+        self.revert(path, true)
+    }
+
+    /// Redo what [`undo`](Self::undo) reverted.
+    ///
+    /// # Errors
+    ///
+    /// When `path` is not shared or the CRDT fails.
+    pub fn redo(&mut self, path: &SharedPath) -> Result<Option<HostRevert>, CoworkError> {
+        self.revert(path, false)
+    }
+
+    fn revert(&mut self, path: &SharedPath, undo: bool) -> Result<Option<HostRevert>, CoworkError> {
+        let doc = self
+            .docs
+            .get_mut(path)
+            .ok_or(CoworkError::BadPath(crate::error::PathProblem::Empty))?;
+        let reverted = if undo { doc.undo()? } else { doc.redo()? };
+        let Some(r) = reverted else {
+            return Ok(None);
+        };
+        let out = if r.update.is_empty() {
+            Vec::new()
+        } else {
+            self.to_all(
+                None,
+                &Message::Update {
+                    path: path.clone(),
+                    bytes: r.update,
+                },
+            )
+        };
+        Ok(Some((out, r.edits)))
     }
 
     /// Connected guests.
@@ -108,8 +231,13 @@ impl HostSession {
     ///
     /// # Errors
     ///
-    /// When the text is over the cap or binary.
+    /// When the text is over the cap or binary, or [`CoworkError::PermissionDenied`]
+    /// for a [`SharedPath::is_private`] path (secrets and settings are never
+    /// shared).
     pub fn share(&mut self, path: &SharedPath, text: &str) -> Result<Vec<Outbound>, CoworkError> {
+        if path.is_private() {
+            return Err(CoworkError::PermissionDenied);
+        }
         let doc = SharedDoc::host(PeerId::HOST, text, self.cap)?;
         let open = Message::Open {
             path: path.clone(),
@@ -296,13 +424,29 @@ impl HostSession {
             }
             Message::SaveRequest { path } => {
                 if peer.permission.allows(Action::Save) && self.docs.contains_key(&path) {
-                    h.save.push(path);
+                    h.save.push((from, path));
                 } else {
                     h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
                 }
             }
+            Message::ListFiles => {
+                if self.workspace && peer.permission.allows(Action::Read) {
+                    h.list_files.push(from);
+                } else {
+                    h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
+                }
+            }
+            Message::OpenRequest { path } => {
+                if !self.workspace || !peer.permission.allows(Action::Read) {
+                    h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
+                } else if path.is_private() {
+                    h.out.push(Self::refuse(from, ErrorCode::BadPath));
+                } else {
+                    h.open.push((from, path));
+                }
+            }
             // `Leave`, or anything else: a guest sends nothing but updates,
-            // presence and save requests after the handshake.
+            // presence, save, list and open requests after the handshake.
             _ => {
                 h.out.extend(self.remove(from));
                 h.disconnect.push(from);
@@ -359,6 +503,8 @@ pub enum GuestEvent {
     Permission(Permission),
     /// The host refused something, or removed us.
     Refused(ErrorCode),
+    /// The host's file list arrived (T696): files this guest may open.
+    Files(Vec<SharedPath>),
     /// A participant joined or left, or a cursor moved: redraw presence.
     Presence,
     /// The session is over.
@@ -473,6 +619,7 @@ impl GuestSession {
                 vec![GuestEvent::Permission(permission)]
             }
             Message::Error { code } => vec![GuestEvent::Refused(code)],
+            Message::FileList { paths } => vec![GuestEvent::Files(paths)],
             Message::Leave => vec![GuestEvent::Ended],
             _ => Vec::new(),
         })
@@ -526,6 +673,18 @@ impl GuestSession {
         Ok(Message::SaveRequest { path: path.clone() })
     }
 
+    /// Ask the host for the files this guest may open (T696).
+    #[must_use]
+    pub const fn request_files(&self) -> Message {
+        Message::ListFiles
+    }
+
+    /// Ask the host to share `path` (T696). The host decides.
+    #[must_use]
+    pub fn request_open(&self, path: &SharedPath) -> Message {
+        Message::OpenRequest { path: path.clone() }
+    }
+
     /// Per-peer undo of this guest's last edit group.
     ///
     /// # Errors
@@ -535,12 +694,33 @@ impl GuestSession {
         &mut self,
         path: &SharedPath,
     ) -> Result<Option<(Message, Vec<BufferEdit>)>, CoworkError> {
+        self.revert(path, true)
+    }
+
+    /// Redo what [`undo`](Self::undo) reverted.
+    ///
+    /// # Errors
+    ///
+    /// When the buffer is not shared or the CRDT fails.
+    pub fn redo(
+        &mut self,
+        path: &SharedPath,
+    ) -> Result<Option<(Message, Vec<BufferEdit>)>, CoworkError> {
+        self.revert(path, false)
+    }
+
+    fn revert(
+        &mut self,
+        path: &SharedPath,
+        undo: bool,
+    ) -> Result<Option<(Message, Vec<BufferEdit>)>, CoworkError> {
         self.permission.require(Action::Edit)?;
         let doc = self
             .docs
             .get_mut(path)
             .ok_or(CoworkError::BadPath(crate::error::PathProblem::Empty))?;
-        Ok(doc.undo()?.map(|r| {
+        let reverted = if undo { doc.undo()? } else { doc.redo()? };
+        Ok(reverted.map(|r| {
             (
                 Message::Update {
                     path: path.clone(),
@@ -726,7 +906,7 @@ mod tests {
         let h = host
             .handle(ed.me(), ed.request_save(&path("a")).unwrap())
             .unwrap();
-        assert_eq!(h.save, vec![path("a")]);
+        assert_eq!(h.save, vec![(ed.me(), path("a"))]);
         let h = host
             .handle(
                 ed.me(),
@@ -822,5 +1002,131 @@ mod tests {
             host.share(&path("a"), "too long"),
             Err(CoworkError::TooLarge { .. })
         ));
+    }
+
+    #[test]
+    fn private_files_are_never_shared() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        for p in [
+            ".env",
+            "config/.env.local",
+            ".vix/fhir.json",
+            "keys/server.pem",
+        ] {
+            assert_eq!(
+                host.share(&path(p), "SECRET=1"),
+                Err(CoworkError::PermissionDenied),
+                "{p}"
+            );
+        }
+        assert_eq!(host.shared().count(), 0);
+    }
+
+    /// T696: the file tree is closed until the host opens it; then a guest
+    /// may list and ask, private paths are filtered and refused, and only the
+    /// host decides what is shared.
+    #[test]
+    fn workspace_sharing_is_opt_in_and_filters_private_paths() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut guest, joined) = join(&mut host, "One", Permission::View);
+        deliver(joined, &mut [&mut guest]);
+
+        // Closed: both requests are refused, and the guest stays connected.
+        let handled = host.handle(guest.me(), guest.request_files()).unwrap();
+        assert_eq!(handled.list_files, Vec::<PeerId>::new());
+        assert_eq!(handled.disconnect, Vec::<PeerId>::new());
+        assert_eq!(
+            handled.out,
+            vec![Outbound {
+                to: guest.me(),
+                msg: Message::Error {
+                    code: ErrorCode::PermissionDenied
+                }
+            }]
+        );
+        let handled = host
+            .handle(guest.me(), guest.request_open(&path("src/a.rs")))
+            .unwrap();
+        assert_eq!(handled.open, Vec::new());
+        assert_eq!(host.file_list(guest.me(), [path("a")]), Vec::new());
+
+        // Open: a view-only guest may browse and ask (reading is all it does).
+        host.set_workspace_shared(true);
+        let handled = host.handle(guest.me(), guest.request_files()).unwrap();
+        assert_eq!(handled.list_files, vec![guest.me()]);
+        let out = host.file_list(
+            guest.me(),
+            [
+                path("src/a.rs"),
+                path(".env"),
+                path(".git/config"),
+                path("README.md"),
+            ],
+        );
+        let events = deliver(out, &mut [&mut guest]);
+        assert_eq!(
+            events,
+            vec![(
+                guest.me(),
+                GuestEvent::Files(vec![path("src/a.rs"), path("README.md")])
+            )]
+        );
+        let handled = host
+            .handle(guest.me(), guest.request_open(&path("src/a.rs")))
+            .unwrap();
+        assert_eq!(handled.open, vec![(guest.me(), path("src/a.rs"))]);
+        let handled = host
+            .handle(guest.me(), guest.request_open(&path(".env")))
+            .unwrap();
+        assert_eq!(handled.open, Vec::new());
+        assert_eq!(
+            handled.out,
+            HostSession::refuse_to(guest.me(), ErrorCode::BadPath)
+        );
+
+        // An already shared file is resent to the asker alone.
+        host.share(&path("src/a.rs"), "fn main() {}").unwrap();
+        let out = host.reopen_for(guest.me(), &path("src/a.rs")).unwrap();
+        assert_eq!(out.len(), 1);
+        let events = deliver(out, &mut [&mut guest]);
+        assert_eq!(
+            events[0].1,
+            GuestEvent::Opened(path("src/a.rs"), "fn main() {}".to_string())
+        );
+    }
+
+    /// T692: Undo on either side reverses only that side's own text, and the
+    /// result reaches the other side.
+    #[test]
+    fn host_and_guest_undo_only_their_own_edits() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        host.share(&path("a"), "").unwrap();
+        let (mut g, o) = join(&mut host, "One", Permission::Edit);
+        deliver(o, &mut [&mut g]);
+        let p = path("a");
+
+        let out = host.local_edit(&p, 0, 0, "H").unwrap();
+        deliver(out, &mut [&mut g]);
+        let msg = g.edit(&p, 1, 0, "G").unwrap().unwrap();
+        host.handle(g.me(), msg).unwrap();
+        assert_eq!(host.doc(&p).unwrap().text(), "HG");
+
+        let (out, edits) = host.undo(&p).unwrap().unwrap();
+        assert_eq!(edits.len(), 1);
+        assert_eq!(host.doc(&p).unwrap().text(), "G");
+        deliver(out, &mut [&mut g]);
+        assert_eq!(g.doc(&p).unwrap().text(), "G");
+
+        let (msg, _) = g.undo(&p).unwrap().unwrap();
+        host.handle(g.me(), msg).unwrap();
+        assert_eq!(host.doc(&p).unwrap().text(), "");
+
+        let (out, _) = host.redo(&p).unwrap().unwrap();
+        deliver(out, &mut [&mut g]);
+        let (msg, _) = g.redo(&p).unwrap().unwrap();
+        host.handle(g.me(), msg).unwrap();
+        assert_eq!(host.doc(&p).unwrap().text(), g.doc(&p).unwrap().text());
+        assert_eq!(host.doc(&p).unwrap().text().len(), 2);
+        assert!(host.undo(&path("nope")).is_err());
     }
 }
