@@ -2,21 +2,21 @@
 //! participant's edits and cursor live in this buffer without the editor
 //! knowing about the network.
 //!
-//! - [`Editor::start_edit_log`] / [`Editor::take_edit_log`] report every local
-//!   content change as a [`Splice`], including whole-buffer
+//! - [`Editor::start_edit_log`](crate::editor::Editor::start_edit_log) / [`Editor::take_edit_log`](crate::editor::Editor::take_edit_log) report every local
+//!   content change as a [`Splice`](crate::code::Splice), including whole-buffer
 //!   replacement. The collaboration layer feeds them to its CRDT.
-//! - [`Editor::apply_remote_edits`] replays another participant's splices,
+//! - [`Editor::apply_remote_edits`](crate::editor::Editor::apply_remote_edits) replays another participant's splices,
 //!   keeps the local cursor, selection and extra carets on their characters,
 //!   and records nothing (no log entry, no undo step).
-//! - [`Editor::set_remote_carets`] gives the renderer other participants'
+//! - [`Editor::set_remote_carets`](crate::editor::Editor::set_remote_carets) gives the renderer other participants'
 //!   carets and selections to draw beneath the local cursor.
 //!
 //! While a buffer is shared its undo must not use this editor's history,
 //! whose stored offsets go stale when a remote edit lands; the collaboration
 //! layer routes undo through its own per-participant stack and replays the
-//! result here with [`Editor::apply_remote_edits`]. To make that safe, this
+//! result here with [`Editor::apply_remote_edits`](crate::editor::Editor::apply_remote_edits). To make that safe, this
 //! editor's own Undo and Redo do nothing while the edit log is on
-//! ([`Editor::is_edit_logging`]).
+//! ([`Editor::is_edit_logging`](crate::editor::Editor::is_edit_logging)).
 
 pub use crate::code::Splice;
 use crate::editor::Editor;
