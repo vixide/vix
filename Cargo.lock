@@ -5829,6 +5829,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-authority"
+version = "2.0.0"
+dependencies = [
+ "ignore",
+ "vix-fileops",
+]
+
+[[package]]
 name = "vix-base-tool"
 version = "2.0.0"
 
