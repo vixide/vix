@@ -8341,12 +8341,20 @@ free-floating chat does not; never pop up on your own.
   the anchored-thread model with re-anchoring, and history JSONL
   encode/decode. Plus `vix-im-panel` (panel state, no drawing). Re-check
   the spec's unverified facts. **Medium.**
-- [ ] **T751 — `vix-im-irc`.** IRCv3 line codec (tags, `server-time`,
+- [x] **T751 — `vix-im-irc`.** IRCv3 line codec (tags, `server-time`,
   `CAP LS 302`, SASL PLAIN, `PING`, CTCP `ACTION`, `CASEMAPPING`),
   UTF-8-safe splitting under 512 bytes, and a TLS connection
   (`rustls` + `webpki-roots`) on a background thread speaking to the App
   over channels. Tested against an in-process fake server; no real
-  network in tests. **Medium.**
+  network in tests. **Medium.** *Done 2026-10-29:* new crate
+  `crates/vix-im-irc` (spec `crates/vix-im-irc/spec/index.md`): pure
+  `codec`/`ctcp`/`isupport`/`split` and a `Client` state machine with its
+  own `Event`/`Command` types; the connection thread is behind the crate's
+  `net` feature (off by default; T752's `im` enables it), `rustls` with
+  `ring` + `webpki-roots`. Names with control characters are refused, not
+  cleaned; long messages leave room for the relay prefix; the SASL
+  password is redacted in `Debug` and wiped after use; CTCP other than
+  `ACTION` is never answered. Proptest plus a 127.0.0.1 fake-server test.
 - [ ] **T752 — The IM menu, panel and App wiring.** Every item in the
   spec's menu table, `tui/src/app/im.rs` with `im_off.rs` stand-ins
   behind a new `im` Cargo feature (in `net` and `full`), the dock panel

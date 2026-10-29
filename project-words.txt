@@ -645,3 +645,23 @@ pgdata
 dockerfile
 Dockerfile
 IBANs
+# IM (spec/instant-message, vix-im-irc)
+binstall
+casemapping
+chantypes
+ctcp
+ement
+Floobits
+isupport
+Libera
+Megolm
+nicklen
+Pantalaimon
+privmsg
+rcirc
+realname
+Replit
+sasl
+sunsetting
+winget
+zeroize
