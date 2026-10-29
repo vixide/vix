@@ -48,6 +48,30 @@ lens; a lens past the buffer's end (stale after an edit) is skipped.
 anchor overlays. `clear_code_lenses`, `has_code_lenses` and `code_lens_at`
 complete the API.
 
+## Gutter signs (T753)
+
+One cell per line, just right of the line numbers (column 0 when they are
+hidden), holds one sign. Several features feed it; the editor draws the
+highest-priority one, in both the no-wrap view and soft wrap (on a line's
+first visual row only):
+
+1. `▶` — the debugger's stopped line (`set_debug_line`);
+2. `●` — a breakpoint (`set_breakpoints`);
+3. `◆` / `◇` — an open / resolved comment thread
+   (`set_comment_marks(Vec<(line, CommentMark)>)`, drawn without color: an
+   open thread at full intensity, a resolved one in the line-number style,
+   so it reads in a monochrome theme). One mark per line, an open thread
+   winning; `comment_marks`, `comment_mark(line)` and `clear_comment_marks`
+   complete the API;
+4. `▎` — the diff or coverage bar (`set_gutter_marks`; the host shows git
+   diff, coverage or a comparison there, one at a time).
+
+A thread outranks the bar because someone put it on that line on purpose,
+while the bar is ambient; every other changed line still shows its bar.
+Until T753 the soft-wrap renderer drew only the bar, so a breakpoint or the
+stopped line was missing there; both renderers now share
+`draw_gutter_sign`.
+
 ## Sub-specs
 
 - [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,

@@ -1,12 +1,12 @@
 # IM — instant messaging for people editing together
 
 **Status:** specified 2026-10-29; implementation tracked as T750–T759 in
-[`tasks.md`](../../tasks.md). T750–T752, T754 and T755 are implemented: the
-core crates, the IRC client, the IM menu, panel and App wiring (`im` Cargo
-feature), status-bar unread and mention indicators with the notify policy,
-and disk history. Not yet: anchored threads (T753; **Comment on Line…** and
-**Threads…** say so), session chat over Cowork (T756), Matrix (T758), and
-presence and session notes (T759). User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
+[`tasks.md`](../../tasks.md). T750–T755 are implemented: the core crates,
+the IRC client, the IM menu, panel and App wiring (`im` Cargo feature),
+anchored threads in the editor, status-bar unread and mention indicators
+with the notify policy, and disk history. Not yet: session chat over Cowork
+(T756), Matrix (T758), and presence and session notes (T759); threads are
+shared through Git only until Cowork carries them. User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
 (real-time co-editing, whose v1 explicitly leaves chat out) and
 [Worldwide](../worldwide/index.md).
 
@@ -80,7 +80,41 @@ Floobits. T750 re-checks anything the code leans on.*
   few lines of context so it can re-find its line after edits (exact
   match, then nearest fuzzy match of the context, then "outdated").
   Threads can be resolved and reopened. The format is shared with T665's
-  saved line comments; whichever lands first defines it.
+  saved line comments; whichever lands first defines it (T753 landed
+  first: `vix_im::Thread`, pretty JSON, optional fields defaulted and
+  unknown fields ignored, so T665 can add its own).
+
+## Anchored threads in the editor (T753)
+
+- **Storage.** One `<id>.json` per thread under the workspace root's
+  `.vix/im/threads/`, written as soon as a thread is started, replied to,
+  resolved or reopened; commit the directory to share threads through Git.
+  A file is loaded only when it parses, its id is safe and matches the file
+  name, and its path is relative without `..`; message text is sanitized
+  on load. Files are read on first use and again by **Threads…**.
+- **Gutter.** A line with a thread shows `◆` (open) or `◇` (resolved) in the
+  editor's sign column. That column holds one sign per line: the debugger's
+  stopped line, then a breakpoint, then a thread, then the git diff or
+  coverage bar (see `crates/vix-editor-core/spec/index.md`). The marks are
+  drawn without color.
+- **Re-anchoring.** When the active buffer changes, each of its threads is
+  looked for at its current line, then by `vix_im::reanchor`; its range
+  follows the text in memory. A thread found nowhere is outdated: no mark,
+  and the list says `(outdated)`. Moved lines reach the thread files when
+  the file is saved, so a thread file never points into an unsaved buffer.
+- **Comment on Line…** prompts for the comment. On a line covered by a
+  thread (an open one first) it replies; otherwise it starts a thread on
+  the selected lines, or the cursor's line. A file must be saved inside the
+  workspace; an empty answer does nothing.
+- **Threads…** lists every thread (`◆`/`◇` and the words `resolved` /
+  `outdated`, `path:line`, message count, first message), the one at the
+  cursor highlighted, with the highlighted thread's messages below. Up/Down
+  move, Enter opens the file at the thread (only inside the root), `r`
+  resolves or reopens, Esc closes.
+- **Next / Previous Thread** move through the active file's threads,
+  wrapping, and say the thread's first message in the status line.
+- Like the rest of IM nothing opens on its own: a thread that arrives
+  through Git shows only as a gutter mark.
 - **Presence.** `Available`, `Away`, `Busy` (do not disturb), and, in a
   Cowork session, the file each peer is in (from Cowork presence).
 - **Mention.** `@nick` in a message. Mentions of you raise a notification
@@ -106,6 +140,8 @@ Top level, between **Git** and **Org**. Every item has an action id, a
 | Share Location | `im.share_location` | Send `path:line:col` of the cursor. |
 | Comment on Line… | `im.comment_line` | Start or reply to the anchored thread at the cursor. |
 | Threads… | `im.threads` | List anchored threads in the workspace; Enter jumps, `r` resolves. |
+| Next Thread / Previous Thread | `im.next_thread`, `im.prev_thread` | Move to the next / previous thread in this file, wrapping. |
+| Resolve or Reopen Thread | `im.resolve_thread` | Toggle the thread on the cursor's line. |
 | Status ▸ Available / Away / Busy | `im.status_available`, `im.status_away`, `im.status_busy` | Busy silences notifications. |
 | Notifications ▸ All / Mentions / Off | `im.notify_all`, `im.notify_mentions`, `im.notify_off` | Default: Mentions. |
 | Clear History | `im.clear_history` | Delete stored history of the selected conversation after a confirm. |
@@ -163,10 +199,14 @@ Vix owns.
   encrypted frames, so a Cowork session has chat with nothing to set up.
 - **App shell** — `tui/src/app/im.rs` (every build) owns the inbox, the
   actions, the panel's keys, sharing, notifications and history;
+  `tui/src/app/im_threads.rs` (every build) owns anchored threads: loading
+  and writing `.vix/im/threads/`, re-anchoring, the gutter marks, the
+  comment prompt, the list and next/previous/resolve;
   `tui/src/app/im_net.rs` (feature `im`) owns the IRC connections and the
   event pump that converts `vix-im-irc` events into `vix-im` messages, with
   `im_off.rs` stand-ins; `tui/src/ui/im.rs` draws the dock panel and the IM
-  dialogs (account picker, share and clear confirmations).
+  dialogs (account picker, share and clear confirmations, the thread
+  list).
 - **Cargo feature** `im`, part of `net` and `full` (see
   [cargo-features](../cargo-features/index.md)): it gates `vix-im-irc` and
   every socket. Without it, the IM menu still offers Notes and anchored

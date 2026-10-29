@@ -201,6 +201,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     } else if app.flags.contains(AppFlags::GIT_REPO) {
         app.refresh_git_gutter();
     }
+    // Anchored IM threads (T753) have their own marks in the same sign
+    // column; the editor draws a thread's ◆ over the diff/coverage bar on
+    // that one line (see `Editor::set_comment_marks`).
+    app.refresh_thread_marks_if_stale();
     let area = frame.area();
     // Paint the whole frame in the theme's background so every pane (and the gaps
     // between them) shares one background — important for the light theme.

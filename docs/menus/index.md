@@ -277,8 +277,11 @@ selections and locations. IM never opens or focuses anything on its own. See
 | Next Unread       | Go to the next conversation with unread messages              |
 | Share Selection   | Send the selection as a snippet, after showing what and to whom |
 | Share Location    | Send the cursor's `path:line:col`                             |
-| Comment on Line…  | Line threads (not available yet)                              |
-| Threads…          | Line threads (not available yet)                              |
+| Comment on Line…  | Start or reply to the thread anchored to the cursor's line    |
+| Threads…          | List the workspace's threads; Enter goes there, `r` resolves  |
+| Next Thread       | Go to the next thread in this file                            |
+| Previous Thread   | Go to the previous thread in this file                        |
+| Resolve or Reopen Thread | Resolve the thread on the cursor's line, or reopen it  |
 | Status ▸          | Available / Away / Busy (Busy silences notifications)         |
 | Notifications ▸   | All Messages / Mentions Only / Off                            |
 | Clear History     | Delete the selected conversation's messages, after a confirm  |

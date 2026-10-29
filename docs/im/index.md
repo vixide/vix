@@ -15,8 +15,9 @@ There are two kinds of conversation today:
 - **IRC** rooms and direct messages, through an account you configure. IRC is
   an open, vendor-neutral protocol; Vix speaks IRCv3 over TLS.
 
-Session chat with the people in a Cowork session, threads anchored to lines,
-and Matrix are planned (see `spec/instant-message/index.md`).
+Beside conversations there are **threads anchored to lines** of your files
+(see below), which need no network either. Session chat with the people in a
+Cowork session and Matrix are planned (see `spec/instant-message/index.md`).
 
 ## The panel
 
@@ -74,6 +75,42 @@ path outside it — and never runs anything. URLs are shown, not fetched.
 
 Paths are relative to the workspace root, so the people you share with can
 open them in their own checkout.
+
+## Threads on lines
+
+A thread is a short conversation attached to a line, or a range of lines, of
+a file: a review note, a question for whoever picks the code up next.
+
+- **IM → Comment on Line…** asks for a comment. On a line that already has a
+  thread it adds a reply; otherwise it starts a thread on the selected lines,
+  or on the cursor's line. The file must be saved inside the workspace.
+- A line with a thread shows `◆` in the gutter beside its line number, or
+  `◇` once the thread is resolved.
+- **IM → Threads…** lists every thread in the workspace — `path:line`, the
+  number of messages and the first one — with the thread under the cursor
+  highlighted and its messages shown below. **Enter** opens the file at the
+  thread, **r** resolves or reopens it, **Esc** closes the list.
+- **IM → Next Thread** and **Previous Thread** move through the threads in
+  the current file, wrapping around, and show the thread's first message in
+  the status line.
+- **IM → Resolve or Reopen Thread** toggles the thread on the cursor's line.
+
+A thread follows its text as you edit: add lines above it and its mark moves
+down with it; change the line itself and the surrounding lines still place
+it. If both the text and its surroundings are gone, the thread is
+*outdated*: it has no mark, and the list says so.
+
+Threads are stored one JSON file each in `.vix/im/threads/` at the
+workspace root, written as soon as you comment, reply, resolve or reopen. The
+line a thread sits on is updated when you save the file. Commit the directory
+to share threads with your team through Git; threads that arrive that way
+show up as gutter marks, and nothing pops up. Message text in a thread file is
+cleaned like any received message, and a thread whose path leads outside the
+workspace is ignored.
+
+The gutter has one sign per line. When several apply, the debugger's
+stopped line (`▶`) comes first, then a breakpoint (`●`), then a thread, then
+the git change or coverage bar (`▎`).
 
 ## Connecting to IRC
 
@@ -157,8 +194,8 @@ selected conversation's messages and its file, after asking.
 `im` is a Cargo capability feature, on by default and part of the `net` and
 `full` umbrellas. Without it Vix opens no chat socket: Connect, Disconnect,
 Join Room, Leave Room and Direct Message are hidden, and everything else —
-the panel, Notes, sharing into Notes, status, notifications and history —
-still works. See [Cargo features](../../spec/cargo-features/index.md).
+the panel, Notes, sharing into Notes, threads on lines, status,
+notifications and history — still works. See [Cargo features](../../spec/cargo-features/index.md).
 
 ## See also
 

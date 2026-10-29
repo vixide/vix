@@ -308,6 +308,33 @@ fn im_dock_with_notes_and_a_draft() {
 }
 
 #[test]
+fn im_thread_marks_in_the_gutter() {
+    // T753: an open thread (◆) on line 2 and a resolved one (◇) on line 4,
+    // in the gutter-sign column next to the line numbers. Comments are
+    // made through the menu actions and the prompt, as a user would; the
+    // thread files land in the fixture's own `.vix/im/threads/`.
+    let root = fixture_root("im-threads");
+    fs::write(
+        root.join("src/main.rs"),
+        "fn main() {\n    let a = 1;\n    let b = 2;\n    println!(\"{a}{b}\");\n}\n",
+    )
+    .unwrap();
+    let mut app = app_at_root(root.clone());
+    app.open_initial(&root.join("src/main.rs"));
+    let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+    app.on_key(down);
+    app.run_action("im.comment_line");
+    type_str(&mut app, "why 1?\n");
+    app.on_key(down);
+    app.on_key(down);
+    app.run_action("im.comment_line");
+    type_str(&mut app, "fine\n");
+    app.run_action("im.resolve_thread");
+    let screen = render_screen(&mut app, 220, 30);
+    insta::assert_snapshot!(screen);
+}
+
+#[test]
 fn theme_other_than_default() {
     // A bundled theme name (from `themes/nord.json`), not one loaded from a
     // user's on-disk custom-themes directory — that keeps this deterministic

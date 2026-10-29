@@ -8562,18 +8562,43 @@ free-floating chat does not; never pop up on your own.
   key (the client's `Join` has no key); a shared snippet is capped at 50
   lines; ISUPPORT `CASEMAPPING` is not surfaced by `vix-im-irc`, so the
   inbox keeps RFC 1459.
-- [ ] **T753 — Anchored threads in the editor.** Gutter marker on lines
+- [x] **T753 — Anchored threads in the editor.** Gutter marker on lines
   with a thread, **IM → Comment on Line…**, **IM → Threads…**,
   next/previous thread, resolve/reopen, stored in `.vix/im/threads/`;
   share the format with T665. **Medium.**
-  *Not started (2026-10-29).* T752 put **Comment on Line…**
-  (`im.comment_line`) and **Threads…** (`im.threads`) in the menu and
-  palette; both answer `status.im_not_yet` today, from the arm in
-  `tui/src/app/im.rs`'s `run_im_action`. The model (`vix_im::Thread`,
-  `reanchor`, `to_json`/`from_json`) is ready; still to build: the
-  gutter mark (sharing the gutter-sign column with git/coverage), the
-  comment prompt, a threads list overlay (Enter jumps, `r` resolves),
-  next/previous, and storage under `.vix/im/threads/`.
+  *Done 2026-10-29 (`feat/t753-anchored-threads`):* new
+  `tui/src/app/im_threads.rs` (every build, no network): threads load on
+  first use from `<root>/.vix/im/threads/<id>.json` (skipping bad JSON, an
+  id that is unsafe or differs from the file name, and a path that is
+  absolute or has `..`), re-anchor when the active buffer's revision
+  changes (current line first, then `vix_im::reanchor`; ranges move in
+  memory, outdated threads lose their mark), and are written on
+  start/reply/resolve/reopen and, for moved ranges, when their file is
+  saved. **Comment on Line…** prompts (`PromptKind::ImComment`) and replies
+  to the thread covering the cursor line (open first) or starts one on the
+  selection's lines or the cursor line. **Threads…** (`ImDialog::Threads`,
+  drawn in `tui/src/ui/im.rs`) re-reads the files and lists every thread
+  with the highlighted one's messages; Enter jumps (inside the root only),
+  `r` toggles resolved, Esc closes. New actions `im.next_thread`,
+  `im.prev_thread`, `im.resolve_thread` (menu, palette, 15 locales); the
+  `status.im_not_yet` key is gone. Gutter: new
+  `vix_editor_core::editor::CommentMark` + `Editor::set_comment_marks`;
+  the sign column draws one glyph per line, in the order debugger line ▶,
+  breakpoint ●, thread ◆/◇, diff/coverage bar ▎ (a deliberate mark beats
+  an ambient one), colorless for monochrome themes, and the soft-wrap renderer now
+  shares `draw_gutter_sign` (so it shows breakpoints and the stopped line,
+  which it did not before). Pure helpers `vix_im::thread::{new_id, step}`
+  and `Thread::covers`. Tests: unit tests in `vix-im`, `vix-editor-core`
+  and `im_threads.rs`; 8 integration tests in
+  `tui/tests/integration/im.rs`; snapshot `im_thread_marks_in_the_gutter`.
+  **Not done:** sharing threads over Cowork (with T756; Git only for now);
+  threads in files not open in the active tab are not re-anchored until
+  shown (the list shows their stored line); no inbox-style unread state
+  for threads, and replies from others arrive only by re-reading the files
+  (Threads… does that); no editing or deleting a message or a whole thread
+  from Vix (delete the JSON file); the Threads list has no filter
+  (open/resolved, this file) and no mouse support; no Markdown export
+  (T665's); the thread author is the IM nick, unverified.
 - [x] **T754 — Unread and mention indicators.** Status-bar count and
   mention marker; `notify` setting; Busy silences. Never opens or
   focuses the panel on its own. **Small.**

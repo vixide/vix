@@ -44,6 +44,7 @@ pub(crate) mod im;
 mod im_net;
 #[cfg(not(feature = "im"))]
 mod im_off;
+pub(crate) mod im_threads;
 mod info_panels;
 mod insert_tools;
 #[cfg(feature = "jj")]
@@ -230,6 +231,9 @@ pub enum PromptKind {
     ImJoin,
     /// Enter a nick to message (**IM → Direct Message…**, T752).
     ImDirect,
+    /// Enter a comment for the anchored thread at the cursor
+    /// (**IM → Comment on Line…**, T753).
+    ImComment,
     /// Enter a file path whose contents to insert at the cursor.
     InsertFile,
     /// Enter a coverage report (LCOV or Cobertura XML) path to load for the
@@ -4120,6 +4124,8 @@ impl App {
                 if let Some(tab) = self.editor.active_tab() {
                     self.take_local_history_snapshot(&p, &tab.text());
                 }
+                // Anchored IM threads that moved with the text (T753).
+                self.im_threads_saved(&p);
                 self.refresh_git();
                 true
             }
@@ -13061,6 +13067,7 @@ impl App {
             PromptKind::ImDirect => {
                 self.im_direct(&prompt.input);
             }
+            PromptKind::ImComment => self.im_comment(&prompt.input),
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
             PromptKind::LoadCoverageFile => self.load_coverage_file(prompt.input.trim()),
             PromptKind::ExportSettings => self.export_settings(prompt.input.trim()),

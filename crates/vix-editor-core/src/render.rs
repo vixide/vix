@@ -1,5 +1,5 @@
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
-use crate::editor::{Editor, Flags};
+use crate::editor::{CommentMark, Editor, Flags};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -469,11 +469,14 @@ impl Editor {
         }
     }
 
-    /// Draw the gutter sign for `line_idx` at `sign_x`. Debugger markers take
-    /// precedence over the git diff bar: ▶ for the stopped line, ● for a
-    /// breakpoint, else ▎ diff. No-op when `sign_x` is past `area_right`. Split
-    /// out of [`Editor::draw_text_lines`] to keep it within the line limit.
-    fn draw_gutter_sign(
+    /// Draw the gutter sign for `line_idx` at `sign_x`, one glyph per line in
+    /// priority order: ▶ the debugger's stopped line, ● a breakpoint, ◆/◇ an
+    /// open/resolved comment thread, else ▎ the diff or coverage bar (see
+    /// [`Editor::set_comment_marks`]). No-op when `sign_x` is past
+    /// `area_right`. Split out of [`Editor::draw_text_lines`] to keep it
+    /// within the line limit; the soft-wrap renderer calls it too, for a
+    /// logical line's first row.
+    pub(crate) fn draw_gutter_sign(
         &self,
         buf: &mut Buffer,
         sign_x: u16,
@@ -492,6 +495,12 @@ impl Editor {
             buf[(sign_x, draw_y)]
                 .set_symbol("\u{25cf}")
                 .set_style(Style::default().fg(Color::Red));
+        } else if let Some(mark) = self.comment_mark(line_idx) {
+            let (symbol, style) = match mark {
+                CommentMark::Resolved => ("\u{25c7}", self.line_number_style),
+                _ => ("\u{25c6}", Style::default()),
+            };
+            buf[(sign_x, draw_y)].set_symbol(symbol).set_style(style);
         } else if let Some(ref gmarks) = self.gutter_marks
             && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx)
         {
@@ -1191,5 +1200,69 @@ mod overhang_tests {
             (&ed).render(Rect::new(0, 0, 40, 9), &mut buf);
             (&ed).render(Rect::new(30, 5, 10, 3), &mut buf);
         }
+    }
+}
+
+#[cfg(test)]
+mod gutter_sign_tests {
+    use crate::editor::{CommentMark, Editor};
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::widgets::Widget;
+
+    /// The glyphs of row `y`, so a test can look for a gutter sign in it.
+    fn row(buf: &Buffer, y: u16) -> String {
+        (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    /// T753: one glyph per line in the sign column -- debugger, then a
+    /// comment thread, then the diff bar -- in both renderers.
+    #[test]
+    fn comment_marks_sit_between_debugger_and_diff_bar() {
+        for wrap in [false, true] {
+            let mut ed = Editor::new("text", "a\nb\nc\nd\n", Vec::new()).unwrap();
+            ed.set_soft_wrap(wrap);
+            ed.set_gutter_marks(vec![(0, "#3fb950"), (1, "#3fb950"), (3, "#3fb950")]);
+            ed.set_comment_marks(vec![
+                (0, CommentMark::Open),
+                (2, CommentMark::Resolved),
+                (3, CommentMark::Open),
+            ]);
+            ed.set_breakpoints(vec![3]);
+            let area = Rect::new(0, 0, 20, 4);
+            let mut buf = Buffer::empty(area);
+            (&ed).render(area, &mut buf);
+            let rows: Vec<String> = (0..4).map(|y| row(&buf, y)).collect();
+            assert!(
+                rows[0].contains('◆') && !rows[0].contains('▎'),
+                "{wrap}: {rows:?}"
+            );
+            assert!(rows[1].contains('▎'), "a plain changed line keeps its bar");
+            assert!(rows[2].contains('◇'), "a resolved thread");
+            assert!(
+                rows[3].contains('●') && !rows[3].contains('◆'),
+                "{wrap}: {rows:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn one_mark_per_line_and_open_wins() {
+        let mut ed = Editor::new("text", "a\nb\n", Vec::new()).unwrap();
+        ed.set_comment_marks(vec![
+            (1, CommentMark::Resolved),
+            (0, CommentMark::Resolved),
+            (1, CommentMark::Open),
+        ]);
+        assert_eq!(
+            ed.comment_marks(),
+            &[(0, CommentMark::Resolved), (1, CommentMark::Open)]
+        );
+        assert_eq!(ed.comment_mark(1), Some(CommentMark::Open));
+        assert_eq!(ed.comment_mark(5), None);
+        ed.clear_comment_marks();
+        assert_eq!(ed.comment_marks(), []);
     }
 }

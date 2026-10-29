@@ -126,6 +126,14 @@ share the format. `from_json` and `reply` sanitize message text.
 3. `Anchor::Outdated`.
 
 `Thread::apply(anchor)` moves the stored range, keeping its length.
+`Thread::covers(line)` says whether the stored range holds a line.
+
+Two helpers for the App (T753): `thread::new_id(time_utc_ms, taken)` makes
+an id from the time in base 36 (`t` + digits), adding `-2`, `-3`, … while
+`taken` says the id is in use, so it always passes `is_valid_id`; and
+`thread::step(lines, from, forward)` gives the next (or previous) line in a
+set after `from`, wrapping around, for **Next Thread** / **Previous
+Thread**.
 
 ## History
 

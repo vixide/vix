@@ -225,8 +225,66 @@ fn draw_input(app: &App, frame: &mut Frame, area: Rect, focused: bool) {
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// An IM dialog over the editor: the account picker, or a share or clear
-/// confirmation that shows exactly what will happen.
+/// The **Threads…** list (T753): one row per thread -- `◆` open or `◇`
+/// resolved, written out as text too, `path:line`, the message count and the
+/// first message -- with the highlighted thread's messages below it, then
+/// the key hint.
+fn thread_lines(app: &App, ids: &[String], selected: usize, area: Rect) -> Vec<Line<'static>> {
+    let rows = app.im_thread_rows(ids);
+    let width = usize::from(area.width.saturating_sub(4)).clamp(20, 100);
+    let list_height = (usize::from(area.height) / 3).max(3);
+    let top = selected.saturating_sub(list_height.saturating_sub(1));
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    for (i, (thread, outdated)) in rows.iter().enumerate().skip(top).take(list_height) {
+        let glyph = if thread.resolved {
+            "\u{25c7}"
+        } else {
+            "\u{25c6}"
+        };
+        let mut parts = vec![format!("{glyph} {}:{}", thread.path, thread.start_line)];
+        if thread.resolved {
+            parts.push(format!("({})", t!("ui.im_thread_resolved")));
+        }
+        if *outdated {
+            parts.push(format!("({})", t!("ui.im_thread_outdated")));
+        }
+        parts.push(format!(
+            " {}",
+            t!("ui.im_thread_messages", count = thread.messages.len())
+        ));
+        if let Some(first) = thread.messages.first() {
+            parts.push(format!(" {}: {}", first.author, first.body));
+        }
+        let row = parts.join(" ");
+        let row: String = wrap(&row, width).into_iter().next().unwrap_or_default();
+        let line = Line::from(row);
+        lines.push(if i == selected {
+            line.style(theme::selected())
+        } else {
+            line
+        });
+    }
+    if let Some((thread, _)) = rows.get(selected) {
+        lines.push(Line::from(""));
+        let budget = usize::from(area.height).saturating_sub(lines.len() + 4);
+        let mut detail: Vec<Line<'static>> = Vec::new();
+        for m in &thread.messages {
+            let text = format!("{} {}: {}", clock(m.time_utc), m.author, m.body);
+            detail.extend(wrap(&text, width).into_iter().map(Line::from));
+        }
+        // Keep the newest messages when they do not all fit.
+        let skip = detail.len().saturating_sub(budget);
+        lines.extend(detail.into_iter().skip(skip));
+    }
+    lines.push(Line::from(Span::styled(
+        t!("ui.im_threads_hint").to_string(),
+        theme::dim(),
+    )));
+    lines
+}
+
+/// An IM dialog over the editor: the account picker, a share or clear
+/// confirmation that shows exactly what will happen, or the thread list.
 pub(super) fn draw_im_dialog(app: &App, frame: &mut Frame, area: Rect) {
     let Some(dialog) = app.im_dialog.as_ref() else {
         return;
@@ -264,6 +322,10 @@ pub(super) fn draw_im_dialog(app: &App, frame: &mut Frame, area: Rect) {
             )));
             (t!("menu.item.im.share_selection").to_string(), lines)
         }
+        ImDialog::Threads { ids, selected } => (
+            t!("menu.item.im.threads").to_string(),
+            thread_lines(app, ids, *selected, area),
+        ),
         ImDialog::Clear { title, .. } => (
             t!("menu.item.im.clear_history").to_string(),
             vec![

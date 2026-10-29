@@ -170,8 +170,60 @@ impl Thread {
         }
     }
 
+    /// Whether the thread's stored range covers `line` (1-based).
+    #[must_use]
+    pub fn covers(&self, line: u32) -> bool {
+        (self.start_line..=self.end_line.max(self.start_line)).contains(&line)
+    }
+
     fn anchor_lines(&self) -> Vec<&str> {
         self.anchor_text.split('\n').collect()
+    }
+}
+
+/// A fresh thread id from a UTC millisecond time: `t` and the time in
+/// base 36, with `-2`, `-3`, ... added until `taken` says the id is free.
+/// Always passes [`is_valid_id`].
+#[must_use]
+pub fn new_id(time_utc_ms: i64, taken: impl Fn(&str) -> bool) -> String {
+    const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let mut n = time_utc_ms.unsigned_abs();
+    let mut digits = Vec::new();
+    loop {
+        digits.push(char::from(DIGITS[usize::try_from(n % 36).unwrap_or(0)]));
+        n /= 36;
+        if n == 0 {
+            break;
+        }
+    }
+    let base: String = std::iter::once('t')
+        .chain(digits.into_iter().rev())
+        .collect();
+    if !taken(&base) {
+        return base;
+    }
+    (2..=u32::MAX)
+        .map(|k| format!("{base}-{k}"))
+        .find(|id| !taken(id))
+        .unwrap_or(base)
+}
+
+/// The next line after `from` (or, with `forward` false, before it) among
+/// `lines` (1-based, any order), wrapping around the end. `None` when
+/// `lines` is empty. A single line is its own next.
+#[must_use]
+pub fn step(lines: &[u32], from: u32, forward: bool) -> Option<u32> {
+    let all = lines.iter().copied();
+    if forward {
+        all.clone()
+            .filter(|&l| l > from)
+            .min()
+            .or_else(|| all.min())
+    } else {
+        all.clone()
+            .filter(|&l| l < from)
+            .max()
+            .or_else(|| all.max())
     }
 }
 
@@ -371,6 +423,39 @@ mod tests {
         let t = Thread::from_json(minimal).unwrap();
         assert!(!t.resolved && t.messages.is_empty());
         assert!(Thread::from_json("{").is_err());
+    }
+
+    #[test]
+    fn covers_its_range() {
+        let t = Thread::new("t", "a", FILE, 2, 4);
+        assert!(!t.covers(1));
+        assert!(t.covers(2) && t.covers(3) && t.covers(4));
+        assert!(!t.covers(5));
+    }
+
+    #[test]
+    fn new_ids_are_valid_and_unique() {
+        let id = new_id(1_700_000_000_000, |_| false);
+        assert!(id.starts_with('t') && is_valid_id(&id), "{id}");
+        assert_eq!(new_id(0, |_| false), "t0");
+        assert_eq!(new_id(35, |_| false), "tz");
+        assert_eq!(new_id(36, |_| false), "t10");
+        let taken = ["t0".to_string(), "t0-2".to_string()];
+        let id = new_id(0, |s| taken.iter().any(|t| t == s));
+        assert_eq!(id, "t0-3");
+        assert!(is_valid_id(&new_id(i64::MIN, |_| false)));
+    }
+
+    #[test]
+    fn step_wraps_both_ways() {
+        let lines = [10, 3, 7];
+        assert_eq!(step(&lines, 3, true), Some(7));
+        assert_eq!(step(&lines, 7, true), Some(10));
+        assert_eq!(step(&lines, 10, true), Some(3), "wraps to the first");
+        assert_eq!(step(&lines, 5, false), Some(3));
+        assert_eq!(step(&lines, 3, false), Some(10), "wraps to the last");
+        assert_eq!(step(&[4], 4, true), Some(4));
+        assert_eq!(step(&[], 1, true), None);
     }
 
     #[test]
