@@ -1,8 +1,8 @@
 ---
-source: tests/snapshots.rs
+source: tui/tests/snapshots.rs
 expression: "render_screen(&mut app, 100, 30)"
 ---
- Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  OC  Tools  Help                  
   Explorer ─────────────────╮  untitled                          ╭  Messages ───────────────────
  src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
  Cargo.toml                 │    1  a                             ││ Ctrl B toggles the file explo

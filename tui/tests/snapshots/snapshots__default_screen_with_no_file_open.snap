@@ -1,8 +1,8 @@
 ---
-source: tests/snapshots.rs
+source: tui/tests/snapshots.rs
 expression: screen
 ---
- Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  OC  Tools  Help                  
   Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
  src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
  Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo

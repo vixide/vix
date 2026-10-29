@@ -49,14 +49,14 @@ returns stdout or a typed `OciError` (`NotInstalled`, `Io`, `Failed {code,
 stderr}`, `InvalidArgument`, `Parse`). `DOCKER_HOST` and context variables are
 inherited, never overridden. The root `oc` Cargo feature turns `process` on;
 without it the crate is detection, builders and parsers only, and
-`tui/tests/spawn_sites.rs` lists `src/lib.rs` as the single spawn site.
+`tui/tests/spawn_sites.rs` lists `crates/vix-oci/src/lib.rs` as the single spawn site.
 
 ## Testing
 
 Unit tests cover detection order, hostile arguments, and every builder.
-`tests/parse.rs` parses fixtures for both output shapes of every listing.
+`crates/vix-oci/tests/parse.rs` parses fixtures for both output shapes of every listing.
 **The fixtures were written by hand from the documented shapes, not captured
 from a live engine**; re-check them against real output when an engine is
-available. `tests/fake_engine.rs` runs `run` against a shell script standing in
+available. `crates/vix-oci/tests/fake_engine.rs` runs `run` against a shell script standing in
 for `docker` (argument passing, stdin-only passwords, failure codes, missing
 binary), so no real engine is ever started.

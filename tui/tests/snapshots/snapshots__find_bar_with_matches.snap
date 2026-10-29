@@ -1,8 +1,8 @@
 ---
-source: tests/snapshots.rs
+source: tui/tests/snapshots.rs
 expression: screen
 ---
- Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                                                                                                                                              
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  OC  Tools  Help                                                                                                                                          
   Explorer ─────────────────╮  ╭  Find ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ ╭  Messages ───────────────────
  src                        │───│❯ Find main                                                                                                                                             │─│ Welcome to Vix. Press Ctrl P
  Cargo.toml                 │   │Match 4 of 4)   Smart (Alt S)   Word (Alt W)   Regex (Alt R)   Replace   In: Buffer                                                                     │┃│ Ctrl B toggles the file explo

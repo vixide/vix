@@ -87,6 +87,7 @@
 - [Insert](insert/index.md)
 - [Language Server Protocol](language-server-protocol/index.md)
 - [Markdown Preview](markdown-preview/index.md)
+- [OC (containers)](oc/index.md)
 - [Matching Tag](tags/index.md)
 - [Media Types](media-types/index.md)
 - [Nerd Font Picker](nerd-font-picker/index.md)

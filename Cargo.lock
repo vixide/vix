@@ -5938,6 +5938,8 @@ dependencies = [
  "vix-menu",
  "vix-modal",
  "vix-nerd-font-picker",
+ "vix-oci",
+ "vix-oci-panel",
  "vix-org",
  "vix-org-capture",
  "vix-org-contacts",

@@ -50,6 +50,8 @@ pub enum Purpose {
     Pull,
     /// `DOCKERFILE [tag=REF] [context=DIR]` for `build`.
     Build,
+    /// Which kind to prune: `containers`, `images`, `volumes` or `networks`.
+    Prune,
 }
 
 /// What the panel is doing with keys.
@@ -87,8 +89,8 @@ pub enum Request {
     Logs(String),
     /// Open an interactive shell in the running container.
     Shell(String),
-    /// Open the container's first published port in a browser.
-    OpenPort(u16),
+    /// Copy `http://localhost:PORT` for the container's first published port.
+    PortUrl(u16),
     /// Run this command (already confirmed where it needed to be).
     Exec(Pending),
     /// The key would change something but read-only mode is on.
@@ -421,6 +423,12 @@ impl Panel {
             'q' => return Request::Close,
             'i' => return self.inspect(),
             'd' => return self.remove(),
+            'D' => {
+                if let Some(r) = self.guard() {
+                    return r;
+                }
+                return self.confirm(argv::prune(self.kind), false);
+            }
             _ => {}
         }
         match self.kind {
@@ -440,11 +448,11 @@ impl Panel {
                 return Request::Reload;
             }
             'l' => return Request::Logs(ctr.id),
-            'o' => {
+            'o' | 'c' => {
                 return ctr
                     .host_ports
                     .first()
-                    .map_or(Request::None, |p| Request::OpenPort(*p));
+                    .map_or(Request::None, |p| Request::PortUrl(*p));
             }
             'e' => {
                 return if ctr.is_running() {
@@ -556,6 +564,7 @@ impl Panel {
             Purpose::Pull => self.confirm(argv::pull(text), true),
             Purpose::Run => self.confirm(parse_run(text).and_then(|o| argv::run(&o)), true),
             Purpose::Build => self.confirm(parse_build(text), true),
+            Purpose::Prune => self.confirm(parse_prune_kind(text).and_then(argv::prune), false),
         }
     }
 }
@@ -595,6 +604,17 @@ fn parse_run(text: &str) -> Result<RunOptions, OciError> {
         }
     }
     Ok(opts)
+}
+
+/// Parse the Prune prompt's one word into the kind to prune.
+fn parse_prune_kind(text: &str) -> Result<Kind, OciError> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "containers" | "container" => Ok(Kind::Container),
+        "images" | "image" => Ok(Kind::Image),
+        "volumes" | "volume" => Ok(Kind::Volume),
+        "networks" | "network" => Ok(Kind::Network),
+        other => Err(OciError::InvalidArgument(other.to_string())),
+    }
 }
 
 /// Parse the Build prompt: `DOCKERFILE [tag=REF] [context=DIR]`.
@@ -755,7 +775,7 @@ mod tests {
         let mut p = panel(false);
         p.down();
         assert_eq!(p.key(press(KeyCode::Char('e')), 5), Request::None);
-        assert_eq!(p.key(press(KeyCode::Char('o')), 5), Request::OpenPort(8080));
+        assert_eq!(p.key(press(KeyCode::Char('o')), 5), Request::PortUrl(8080));
     }
 
     #[test]
@@ -851,6 +871,30 @@ mod tests {
         let r = prune_pending(Engine::Docker, Kind::Image).unwrap_or_else(|_| panic!());
         assert_eq!(r.rendered, "docker image prune -f");
         assert!(!r.stream);
+    }
+
+    #[test]
+    fn prune_names_the_kind_and_confirms() {
+        let mut p = Panel::new(Engine::Docker, Kind::Container, false);
+        p.start_input(Purpose::Prune, "volumes", "");
+        assert_eq!(p.key(press(KeyCode::Enter), 5), Request::None);
+        assert!(matches!(&p.mode, Mode::Confirm(c) if c.rendered == "docker volume prune -f"));
+        p.mode = Mode::Browse;
+        p.key(press(KeyCode::Char('D')), 5);
+        assert!(matches!(&p.mode, Mode::Confirm(c) if c.rendered == "docker container prune -f"));
+        p.mode = Mode::Browse;
+        p.start_input(Purpose::Prune, "everything", "");
+        assert!(matches!(
+            p.key(press(KeyCode::Enter), 5),
+            Request::Invalid(_)
+        ));
+        let mut ro = Panel::new(Engine::Docker, Kind::Image, true);
+        assert_eq!(ro.key(press(KeyCode::Char('D')), 5), Request::ReadOnly);
+        let mut pods = Panel::new(Engine::Podman, Kind::Pod, false);
+        assert!(matches!(
+            pods.key(press(KeyCode::Char('D')), 5),
+            Request::Invalid(_)
+        ));
     }
 
     #[test]

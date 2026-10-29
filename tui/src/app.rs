@@ -36,6 +36,10 @@ mod jj;
 mod keymap;
 mod lsp_dap;
 mod modal;
+#[cfg(feature = "oc")]
+mod oc;
+#[cfg(not(feature = "oc"))]
+mod oc_off;
 mod org;
 mod org_table;
 mod picker_panels;
@@ -1499,6 +1503,9 @@ pub struct Layout {
     /// Row-list rectangle of the open Git graph (T681), so a click can
     /// hit-test a row.
     pub git_graph: Rect,
+    /// Row-list rectangle of the open OC panel (T702), so a click can hit-test
+    /// a row.
+    pub oc: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
     /// Row-list rectangle of the open Conflict overlay (T556), so a click can
@@ -1835,6 +1842,8 @@ pub struct App {
     pub(crate) git_log: Option<crate::git::LogPanel>,
     /// The interactive Git graph overlay (T681), when open.
     pub(crate) git_graph: Option<crate::git_graph::Panel>,
+    /// The OC container panel (T702-T704), when open.
+    pub(crate) oc: Option<crate::oci_panel::Panel>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub(crate) task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
@@ -2462,6 +2471,7 @@ impl App {
             branch_chooser: None,
             git_log: None,
             git_graph: None,
+            oc: None,
             task_chooser: None,
             macro_chooser: None,
             encoding_chooser: None,
@@ -2898,6 +2908,7 @@ impl App {
             other if self.run_git_action(other) => {}
             #[cfg(feature = "jj")]
             other if self.run_jj_action(other) => {}
+            other if self.run_oc_action(other) => {}
             other if self.run_dap_action(other) => {}
             other if self.run_project_action(other) => {}
             other if self.run_named_action(other) => {}
@@ -8531,6 +8542,7 @@ impl App {
         panel!(branch_chooser, branch_mouse);
         panel!(git_log, git_log_mouse);
         panel!(git_graph, git_graph_mouse);
+        panel!(oc, oc_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
         panel!(encoding_chooser, encoding_mouse);
@@ -13278,14 +13290,14 @@ impl App {
     /// no quoting is needed and no metacharacter in a user-typed URL, revision
     /// or message is interpreted. Output streams to the bottom dock the same way
     /// as [`App::run_command_in`], with stderr merged into the same pipe.
-    #[cfg(any(feature = "git", feature = "jj"))]
+    #[cfg(any(feature = "git", feature = "jj", feature = "oc"))]
     fn run_argv(&mut self, program: &str, args: &[&str]) {
         let root = self.root.clone();
         self.run_argv_in(&root, program, args);
     }
 
     /// [`App::run_argv`] in `dir`.
-    #[cfg(any(feature = "git", feature = "jj"))]
+    #[cfg(any(feature = "git", feature = "jj", feature = "oc"))]
     fn run_argv_in(&mut self, dir: &Path, program: &str, args: &[&str]) {
         if self.running_command.is_some() {
             self.status = t!("status.command_busy").to_string();

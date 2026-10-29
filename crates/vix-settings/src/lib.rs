@@ -95,6 +95,16 @@ pub struct Settings {
     /// `"always"` (stage everything without asking) or `"never"` (refuse).
     /// Any other value behaves as `"ask"`.
     pub smart_commit: String,
+    /// Which container engine the **OC** menu drives (T701): `"auto"`
+    /// (default -- the first of `docker`, `podman`, `nerdctl` on `PATH`) or one
+    /// of those names. A named engine that is not installed falls back to the
+    /// auto order; any other value behaves as `"auto"`.
+    pub oc_engine: String,
+    /// What the **OC** menu may do (T701): `"full"` (default) or
+    /// `"read-only"`, which allows only listing, inspecting and viewing logs
+    /// and refuses start/stop/remove/run/build/push/prune and every other
+    /// change. Any other value behaves as `"read-only"`, the safer reading.
+    pub oc_mode: String,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
@@ -610,6 +620,8 @@ impl Default for Settings {
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
             smart_commit: "ask".to_string(),
+            oc_engine: "auto".to_string(),
+            oc_mode: "full".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
             indent_style: "spaces".to_string(),

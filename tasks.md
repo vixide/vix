@@ -8131,26 +8131,55 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### OC — Open Container Initiative menu (spec: [`spec/open-container`](spec/open-container/index.md))
 
-- [ ] **T700 — `vix-oci` core.** Engine enum and detection, argv builders,
+- [x] **T700 — `vix-oci` core.** Engine enum and detection, argv builders,
   parsers for `ps`/`images`/`volume ls`/`network ls`/`inspect` (Docker NDJSON
   and Podman array forms), fixture-tested from captured real output.
   **Medium.**
-- [ ] **T701 — Settings, menu and missing-engine hint.** `oc_engine`,
+  - Done (feat/t700-oc): `crates/vix-oci` -- `Engine`, `detect` (injected
+    lookup), `argv` builders with option-injection refusal and `render`,
+    `parse` for both shapes (plus pods), `process`-gated `run`, fake-engine
+    script tests. NOT done: the fixtures are hand-written from the documented
+    output shapes, not captured from a live engine -- re-check against real
+    Docker/Podman output.
+- [x] **T701 — Settings, menu and missing-engine hint.** `oc_engine`,
   read-only mode, **OC** top-level menu, `oc.*` actions, i18n. **Small.**
-- [ ] **T702 — Containers panel.** List, start/stop/restart/pause/remove,
+  - Done: `oc_engine` and `oc_mode` settings, OC menu (15 locales, with
+    `.help`), `oc` capability feature, translated install hint. NOT done:
+    the menu has no Registries or Dev Container entries (push/pull live in
+    the Images panel and Pull Image...).
+- [x] **T702 — Containers panel.** List, start/stop/restart/pause/remove,
   inspect (JSON tab), logs to the dock, **Shell** via `vix-terminal`.
   **Medium.**
-- [ ] **T703 — Images panel.** List, run (shows the command first), tag,
+  - Done: `vix-oci-panel` + `tui/src/app/oc.rs`. NOT done: "open in browser"
+    copies `http://localhost:PORT` instead (no opener spawn site); no
+    separate detail pane or column headers.
+- [x] **T703 — Images panel.** List, run (shows the command first), tag,
   pull, push, remove, inspect. **Medium.**
-- [ ] **T704 — Volumes and Networks panels.** **Small.**
-- [ ] **T705 — Build Image.** From a Dockerfile/Containerfile with streamed
+  - Done. Run is always detached; `-it` runs go through the container Shell.
+- [x] **T704 — Volumes and Networks panels.** **Small.**
+  - Done (list, inspect, remove, prune).
+- [x] **T705 — Build Image.** From a Dockerfile/Containerfile with streamed
   output. **Small.**
-- [ ] **T706 — Compose.** Up/Down/Logs per service, auto-detect compose
+  - Done: output streams to the bottom dock; file paths with spaces are not
+    accepted by the one-line prompt.
+- [x] **T706 — Compose.** Up/Down/Logs per service, auto-detect compose
   files. **Medium.**
-- [ ] **T707 — Registries and Prune.** `login` via `--password-stdin`;
+  - Done for the whole project: Up/Down confirm first, Logs streams to the
+    dock, compose file auto-detected. NOT done: per-service logs (the builder
+    supports a service name, the menu does not ask for one).
+- [x] **T707 — Registries and Prune.** `login` via `--password-stdin`;
   confirmed prune naming what goes. **Small–Medium.**
-- [ ] **T708 — Podman pods, and fake-engine tests.** A fake `docker` script
+  - Prune done (menu + `D`, names the kind, shows the command). NOT done:
+    there is no login prompt or Registries submenu; only the
+    `--password-stdin` argv builder and its stdin-only test exist (needs a
+    masked input widget).
+- [x] **T708 — Podman pods, and fake-engine tests.** A fake `docker` script
   on `PATH` for integration tests; never a real engine in CI. **Small.**
+  - Pods list/inspect/remove done (Podman only). Fake-engine tests run
+    `vix_oci::run` against a script by explicit path (`crates/vix-oci/tests/
+    fake_engine.rs`). NOT done: an App-level test with the fake `docker` on
+    `PATH` (editing `PATH` in-process is `unsafe` under edition 2024, which
+    this workspace forbids).
 
 ### Remote editing (spec: [`spec/remote-editing`](spec/remote-editing/index.md))
 

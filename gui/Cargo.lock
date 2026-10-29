@@ -12155,6 +12155,22 @@ name = "vix-nerd-font-picker"
 version = "2.0.0"
 
 [[package]]
+name = "vix-oci"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "vix-oci-panel"
+version = "2.0.0"
+dependencies = [
+ "vix-input",
+ "vix-list-state",
+ "vix-oci",
+]
+
+[[package]]
 name = "vix-org"
 version = "2.0.0"
 dependencies = [
@@ -12500,6 +12516,8 @@ dependencies = [
  "vix-menu",
  "vix-modal",
  "vix-nerd-font-picker",
+ "vix-oci",
+ "vix-oci-panel",
  "vix-org",
  "vix-org-capture",
  "vix-org-contacts",
