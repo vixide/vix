@@ -29,6 +29,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `git`",
     ),
     (
+        "crates/vix-oci/src/lib.rs",
+        "container-engine CLI runner for the OC menu (argv only, no shell)",
+        "`process` feature, enabled only by root `oc`",
+    ),
+    (
         "crates/vix-lsp/src/lib.rs",
         "language-server process",
         "`process` feature, enabled only by root `lsp`",

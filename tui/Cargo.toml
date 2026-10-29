@@ -75,6 +75,9 @@ http = ["dep:vix-http-client", "vix-hl7/net", "vix-fhir/net"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
 git = ["tasks", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git"]
 jj = ["tasks"]
+# The OC menu (T700-T708): runs the Docker/Podman/nerdctl CLI. Streamed output
+# (logs, builds, Compose) reuses the tasks runner, so it implies `tasks`.
+oc = ["tasks", "vix-oci/process"]
 lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
@@ -84,7 +87,7 @@ hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
 # capability off legitimately has a different menu bar.
-full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "lsp", "dap", "tasks", "hunspell"]
+full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "oc", "lsp", "dap", "tasks", "hunspell"]
 # The network-facing capabilities together.
 net = ["http", "ai", "sql"]
 
@@ -267,6 +270,10 @@ vix-fhir = { workspace = true }
 vix-git = { path = "../crates/vix-git", version = "2.0.0", default-features = false }
 # Interactive Git graph: lanes, decorations, paged log, per-commit actions.
 vix-git-graph = { path = "../crates/vix-git-graph", version = "2.0.0", default-features = false }
+# OC menu: drive a container engine through its CLI (runner behind `oc`).
+vix-oci = { workspace = true }
+# OC menu list panel: containers, images, volumes, networks, pods.
+vix-oci-panel = { workspace = true }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { workspace = true }
 # HL7 v2 parser, viewer model and MLLP framing (the sender needs `http`).

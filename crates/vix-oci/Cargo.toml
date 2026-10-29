@@ -1,0 +1,21 @@
+[package]
+name = "vix-oci"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Drive an OCI container engine (Docker, Podman, nerdctl) through its CLI: engine detection, argv builders and parsers for containers, images, volumes and networks."
+
+[features]
+default = ["process"]
+# The runner that spawns the engine CLI. Off, the crate is only detection,
+# argv builders and parsers (no process is ever started); the root `oc`
+# feature turns it on.
+process = []
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

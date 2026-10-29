@@ -49,6 +49,21 @@ impl Terminal {
         rows: u16,
         cols: u16,
     ) -> std::io::Result<Terminal> {
+        Terminal::open_command(shell, &[], cwd, rows, cols)
+    }
+
+    /// Spawn `program` with `args` on a new PTY of `rows`×`cols`, rooted at
+    /// `cwd` (the OC menu's `exec -it <container> sh` tab).
+    ///
+    /// # Errors
+    /// Returns an error if the PTY cannot be created or the program cannot spawn.
+    pub fn open_command(
+        program: &str,
+        args: &[String],
+        cwd: &std::path::Path,
+        rows: u16,
+        cols: u16,
+    ) -> std::io::Result<Terminal> {
         let rows = rows.max(1);
         let cols = cols.max(1);
         let pty = portable_pty::native_pty_system();
@@ -59,7 +74,8 @@ impl Terminal {
             pixel_height: 0,
         };
         let pair = pty.openpty(size).map_err(|e| to_io(&e))?;
-        let mut cmd = portable_pty::CommandBuilder::new(shell);
+        let mut cmd = portable_pty::CommandBuilder::new(program);
+        cmd.args(args);
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         let child = pair.slave.spawn_command(cmd).map_err(|e| to_io(&e))?;

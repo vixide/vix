@@ -1,7 +1,10 @@
 # OC — Open Container Initiative menu
 
-**Status:** proposed (2026-10-28). Planning only. Tasks T700–T708 in
-[`tasks.md`](../../tasks.md).
+**Status:** implemented (T700–T708) apart from registry login, Dev
+Containers and per-service Compose logs; see the Done notes under each task in
+[`tasks.md`](../../tasks.md). User guide: [`docs/oc`](../../docs/oc/index.md).
+Crates: [`vix-oci`](../../crates/vix-oci/spec/index.md) and
+[`vix-oci-panel`](../../crates/vix-oci-panel/spec/index.md).
 
 *Sources: the author's knowledge of VS Code's Container Tools extension (the
 successor to the Docker extension), the OCI specs and the engines' CLIs; no

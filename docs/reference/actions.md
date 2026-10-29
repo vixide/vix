@@ -323,6 +323,20 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `node.rename_by_title` | Rename File by Title | Menu |
 | `node.reset` | Rebuild Cache | Menu |
 | `none` | None | Catalog |
+| `oc.build` | Build Image… | Menu |
+| `oc.compose_down` | Down | Menu |
+| `oc.compose_logs` | Logs | Menu |
+| `oc.compose_up` | Up | Menu |
+| `oc.containers` | Containers… | Menu |
+| `oc.engine_choose` | Choose | Menu |
+| `oc.engine_detect` | Detect | Menu |
+| `oc.images` | Images… | Menu |
+| `oc.networks` | Networks… | Menu |
+| `oc.pods` | Pods… | Menu |
+| `oc.prune` | Prune… | Menu |
+| `oc.pull` | Pull Image… | Menu |
+| `oc.run` | Run Image… | Menu |
+| `oc.volumes` | Volumes… | Menu |
 | `open_file` | Open File | Catalog |
 | `org.agenda` | Weekly/Daily Agenda | Menu |
 | `org.agenda.file_add` | Add Current File | Menu |
@@ -689,4 +703,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**682 actions.**
+**696 actions.**

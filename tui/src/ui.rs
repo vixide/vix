@@ -24,6 +24,7 @@ mod info_panels;
 mod lsp_popups;
 mod menu_bar;
 mod minimap;
+mod oc;
 mod picker_panels;
 mod scroll_markers;
 mod search;
@@ -483,6 +484,7 @@ fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
 /// The list-style overlays that each return early when closed.
 fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     git_graph::draw_git_graph(app, frame, area);
+    oc::draw_oc(app, frame, area);
     draw_todo_tree(app, frame, area);
     draw_fhir_bundle(app, frame, area);
     hl7::draw_hl7_panel(app, frame, area);

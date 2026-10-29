@@ -23,6 +23,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
 | `smart_commit` | string | `"ask"` | What Git → Commit does when nothing is staged but files changed: `"ask"` (confirm, then stage everything with `git add -A`), `"always"` (stage everything without asking) or `"never"` (refuse). Any other value behaves as `"ask"`. |
+| `oc_engine` | string | `"auto"` | Which container engine the OC menu drives: `"auto"` (the first of `docker`, `podman`, `nerdctl` found on `PATH`) or one of those names. A named engine that is not installed falls back to the auto order. |
+| `oc_mode` | string | `"full"` | `"full"`, or `"read-only"` to let the OC menu list, inspect and show logs only. Any other value behaves as `"read-only"`. |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
@@ -104,6 +106,8 @@ show_whitespace = false
 show_explorer = true
 explorer_delete = "trash"
 smart_commit = "ask"
+oc_engine = "auto"
+oc_mode = "full"
 show_messages = true
 show_status_bar = true
 show_scrollbar = true

@@ -31,6 +31,7 @@ unflagged: it has no payoff and the heaviest coupling.
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
 | `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `tui/src/app/git.rs`, with `git_off.rs` stand-ins |
 | `jj` | `jj.*` | (surface only: no crates; `tui/src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
+| `oc` | `oc.*` | `vix-oci/process` (the runner that starts `docker`/`podman`/`nerdctl`; the crate keeps detection, argv builders and parsers, and `vix-oci-panel` stays compiled); implies `tasks`, since logs, builds and Compose stream through the no-shell runner; `tui/src/app/oc.rs`, with `oc_off.rs` stand-ins |
 | `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
 | `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*`, `edit.pipe_selection`, `edit.insert_command_output` | the runners `spawn_shell`, `run_shell_filter` (Pipe Through Command, T659) and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |

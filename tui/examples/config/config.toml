@@ -41,6 +41,11 @@ explorer_delete = "trash"
 # What Git -> Commit does when nothing is staged but files changed: "ask"
 # (default -- confirm, then `git add -A`), "always", or "never".
 smart_commit = "ask"
+# Which container engine the OC menu drives: "auto" (default -- first of
+# docker, podman, nerdctl on PATH) or one of those names.
+oc_engine = "auto"
+# "full" (default) or "read-only" (OC lists, inspects and shows logs only).
+oc_mode = "full"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.

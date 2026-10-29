@@ -189,6 +189,8 @@ vix-find-panel = { path = "crates/vix-find-panel", version = "2.0.0" }
 vix-format-tool = { path = "crates/vix-format-tool", version = "2.0.0" }
 vix-git = { path = "crates/vix-git", version = "2.0.0" }
 vix-git-graph = { path = "crates/vix-git-graph", version = "2.0.0" }
+vix-oci = { path = "crates/vix-oci", version = "2.0.0", default-features = false }
+vix-oci-panel = { path = "crates/vix-oci-panel", version = "2.0.0" }
 vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "2.0.0" }
 vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "2.0.0" }
 vix-hl7 = { path = "crates/vix-hl7", version = "2.0.0" }

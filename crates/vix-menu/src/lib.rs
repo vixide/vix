@@ -1577,6 +1577,39 @@ const JJ: &[Item] = &[
     Item::sub("menu.item.jj.git", JJ_REMOTE),
 ];
 
+/// Engine commands, grouped under OC → Engine.
+const OC_ENGINE: &[Item] = &[
+    Item::leaf("menu.item.oc.engine_detect", "oc.engine_detect", ""),
+    Item::leaf("menu.item.oc.engine_choose", "oc.engine_choose", ""),
+];
+
+/// Compose commands, grouped under OC → Compose.
+const OC_COMPOSE: &[Item] = &[
+    Item::leaf("menu.item.oc.compose_up", "oc.compose_up", ""),
+    Item::leaf("menu.item.oc.compose_down", "oc.compose_down", ""),
+    Item::leaf("menu.item.oc.compose_logs", "oc.compose_logs", ""),
+];
+
+/// OC (Open Container Initiative, T700-T708): containers, images, volumes,
+/// networks and pods of Docker, Podman or nerdctl, driven through the CLI.
+const OC: &[Item] = &[
+    Item::sub("menu.item.oc.engine", OC_ENGINE),
+    SEP,
+    Item::leaf("menu.item.oc.containers", "oc.containers", ""),
+    Item::leaf("menu.item.oc.images", "oc.images", ""),
+    Item::leaf("menu.item.oc.volumes", "oc.volumes", ""),
+    Item::leaf("menu.item.oc.networks", "oc.networks", ""),
+    Item::leaf("menu.item.oc.pods", "oc.pods", ""),
+    SEP,
+    Item::sub("menu.item.oc.compose", OC_COMPOSE),
+    SEP,
+    Item::leaf("menu.item.oc.build", "oc.build", ""),
+    Item::leaf("menu.item.oc.run", "oc.run", ""),
+    Item::leaf("menu.item.oc.pull", "oc.pull", ""),
+    SEP,
+    Item::leaf("menu.item.oc.prune", "oc.prune", ""),
+];
+
 /// Headline structure commands, grouped under Org → Headline.
 const ORG_HEADLINE: &[Item] = &[
     Item::leaf("menu.item.org.promote", "org.promote", ""),
@@ -2426,6 +2459,10 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef {
             name: "menu.project",
             items: PROJECT,
+        },
+        MenuDef {
+            name: "menu.oc",
+            items: OC,
         },
         MenuDef {
             name: "menu.tools",

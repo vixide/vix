@@ -120,6 +120,7 @@ impl App {
             branch_chooser,
             git_log,
             git_graph,
+            oc,
             task_chooser,
             macro_chooser,
             encoding_chooser,
@@ -359,6 +360,7 @@ impl App {
         panel!(branch_chooser, branch_key);
         panel!(git_log, git_log_key);
         panel!(git_graph, git_graph_key);
+        panel!(oc, oc_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(encoding_chooser, encoding_key);

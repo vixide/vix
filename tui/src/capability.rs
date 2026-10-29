@@ -27,6 +27,8 @@ pub enum Capability {
     Git,
     /// Jujutsu integration (`jj`).
     Jj,
+    /// The OC container menu (`oc`): Vix starts the Docker/Podman/nerdctl CLI.
+    Oc,
     /// Language servers (`lsp`): Vix starts the configured server programs.
     Lsp,
     /// Debug adapters (`dap`): Vix starts the configured adapter programs.
@@ -41,7 +43,7 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 13] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -50,6 +52,7 @@ impl Capability {
         Capability::Ai,
         Capability::Git,
         Capability::Jj,
+        Capability::Oc,
         Capability::Lsp,
         Capability::Dap,
         Capability::Tasks,
@@ -68,6 +71,7 @@ impl Capability {
             Capability::Ai => "ai",
             Capability::Git => "git",
             Capability::Jj => "jj",
+            Capability::Oc => "oc",
             Capability::Lsp => "lsp",
             Capability::Dap => "dap",
             Capability::Tasks => "tasks",
@@ -87,6 +91,7 @@ impl Capability {
             Capability::Ai => cfg!(feature = "ai"),
             Capability::Git => cfg!(feature = "git"),
             Capability::Jj => cfg!(feature = "jj"),
+            Capability::Oc => cfg!(feature = "oc"),
             Capability::Lsp => cfg!(feature = "lsp"),
             Capability::Dap => cfg!(feature = "dap"),
             Capability::Tasks => cfg!(feature = "tasks"),
@@ -110,6 +115,7 @@ impl Capability {
             ("ai.", Capability::Ai),
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
+            ("oc.", Capability::Oc),
             ("lsp.", Capability::Lsp),
             // Every `run.*` action is a debugger (DAP) action.
             ("run.", Capability::Dap),
@@ -188,6 +194,10 @@ mod tests {
         );
         assert_eq!(Capability::for_action("git.push"), Some(Capability::Git));
         assert_eq!(Capability::for_action("jj.log"), Some(Capability::Jj));
+        assert_eq!(
+            Capability::for_action("oc.containers"),
+            Some(Capability::Oc)
+        );
         assert_eq!(Capability::for_action("lsp.hover"), Some(Capability::Lsp));
         assert_eq!(Capability::for_action("run.start"), Some(Capability::Dap));
         assert_eq!(

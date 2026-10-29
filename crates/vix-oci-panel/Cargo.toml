@@ -1,0 +1,16 @@
+[package]
+name = "vix-oci-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The OC menu's list panel: containers, images, volumes, networks and pods with per-row actions, confirm and input modes, built on vix-oci."
+
+[dependencies]
+vix-input = { workspace = true }
+vix-list-state = { workspace = true }
+vix-oci = { workspace = true }
+
+[lints]
+workspace = true

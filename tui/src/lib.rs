@@ -198,6 +198,8 @@ pub use vix_lsp_core as lsp_core;
 pub use vix_macros as macros;
 pub use vix_media_type as media_type;
 pub use vix_nerd_font_picker as nerd_font_picker;
+pub use vix_oci as oci;
+pub use vix_oci_panel as oci_panel;
 pub use vix_org as org;
 pub use vix_org_contacts as org_contacts;
 pub use vix_org_table as org_table;
