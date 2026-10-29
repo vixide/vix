@@ -1,22 +1,49 @@
+<div align="center">
+
 # Vix IDE™
+
+**The terminal IDE that already knows your keys.**
+
+Save is `Ctrl+S`. Find is `Ctrl+F`. Everything else is in a menu bar or the
+`Ctrl+P` command palette. Language servers, a debugger, Git, Org mode and a
+database workbench come built in, so Vix is useful the moment it opens.
 
 [![CI](https://github.com/vixide/vix/actions/workflows/ci.yml/badge.svg)](https://github.com/vixide/vix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vix-tui.svg)](https://crates.io/crates/vix-tui)
 [![License: Apache-2.0 / BSD-3-Clause / MIT / GPL](https://img.shields.io/badge/license-Apache--2.0%20%7C%20BSD--3--Clause%20%7C%20MIT%20%7C%20GPL-blue.svg)](LICENSE)
 
-**Vix is a terminal text editor and IDE, written in Rust, that you can use
-with the keys you already know.** Save is `Ctrl+S`, find is `Ctrl+F`, and
-everything else is in a menu bar or the `Ctrl+P` command palette — no modes
-to learn first (a Vi keymap is there if you want one). A language-server
-client, a debugger, Git and Jujutsu, an Org-mode suite, a database workbench
-and an integrated terminal are built in, so there is no plugin setup before
-it is useful.
+[Website](https://vixide.github.io/) ·
+[Install](#install) ·
+[Documentation](https://vixide.github.io/vix/) ·
+[Getting Started](docs/getting-started/index.md) ·
+[Compare](docs/comparison/index.md) ·
+[Changelog](CHANGELOG.md)
 
 ![Vix overview: open a file, edit, save, find, and browse keyboard shortcuts](docs/demos/overview.gif)
 
-Website: <https://vixide.github.io/> · Documentation:
-<https://vixide.github.io/vix/> · New here? Read
-[Getting Started](docs/getting-started/index.md).
+</div>
+
+## Try it in 30 seconds
+
+```sh
+brew install vixide/homebrew-tap/vix-tui   # or: npm install -g @vixide/vix
+vix                                        # open the current directory
+```
+
+Press `Ctrl+P` to find a file, `F1` to see every shortcut, and `Ctrl+Q` to
+quit. Other ways to install, including Windows, Linux packages and
+`cargo install`, are [below](#install).
+
+## Vix at a glance
+
+|                     |                                                                 |
+| ------------------- | --------------------------------------------------------------- |
+| **One binary**      | No plugin manager, no runtime, nothing to assemble first        |
+| **10 keymaps**      | Apple, VS Code, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime |
+| **21 themes**       | Plus a theme editor and your own JSON themes                     |
+| **15 languages**    | The whole interface, from Arabic to Welsh                        |
+| **0 `unsafe`**      | `unsafe` Rust is forbidden in every crate                        |
+| **Your choice of 5 licenses** | Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0      |
 
 ## Why Vix
 
@@ -26,24 +53,61 @@ Website: <https://vixide.github.io/> · Documentation:
   VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows),
   Eclipse and Sublime Text — switchable live from **View → Keymap**.
 - **An IDE, not just an editor.** Language Server Protocol, a DAP debugger,
-  Tree-sitter highlighting, Git (hunk staging, blame, conflict resolver) and
-  Jujutsu, a test runner, project tasks and an integrated terminal ship in
-  one binary.
+  Tree-sitter highlighting, Git (hunk staging, blame, an interactive commit
+  graph, conflict resolver) and Jujutsu, a test runner, project tasks and an
+  integrated terminal ship in one binary.
 - **Things other editors leave to plugins.** An Org-mode suite with Org-roam,
-  a SQLite/PostgreSQL/MySQL workbench, an HTTP client, table/JSON/YAML/hex
-  edit surfaces, and a persistent, branching undo tree.
+  a SQLite/PostgreSQL/MySQL workbench, a REST client for `.http` files, a
+  container menu for Docker and Podman, table/JSON/YAML/hex edit surfaces,
+  and a persistent, branching undo tree.
 - **Careful by default.** `unsafe` code is forbidden in every crate. Rhai
   scripts get no file, network or process access, and a project's own scripts
   run only after you trust that workspace. The DB workbench opens connections
   read-only. A [minimal build](#install) leaves out every network, shell and
   external-program feature for locked-down machines.
-- **Yours to adjust.** 20 bundled themes plus your own, a UI fully translated
+- **Yours to adjust.** 21 bundled themes plus your own, a UI fully translated
   into 15 languages, snippets, macros, and Rhai scripts that add commands and
   key bindings without a rebuild.
 - **Terminal or desktop.** The same editor also runs in a native window via
   experimental [desktop GUIs](#desktop-guis).
 
-Coming from another editor? See the pages for
+## Who it's for
+
+- **You live in the terminal but miss your IDE.** Go to definition, rename,
+  a debugger and a Git panel, over SSH or in tmux, without a config project.
+- **You tried Vim or Helix and bounced off modes.** Vix starts with the
+  shortcuts every other app uses; switch on the Vi keymap when you want it.
+- **You came from Emacs for Org mode.** Agenda, tables with formulas, Column
+  View, Org-roam and dailies are built in, with menus to find them.
+- **You work with data and APIs.** Query a database, send an HTTP request,
+  inspect a container and edit the CSV it produced, all in one window.
+
+## See it work
+
+| | |
+| --- | --- |
+| ![Command palette: fuzzy-find files, then switch to command mode](docs/demos/palette.gif) | ![Multiple cursors: select every occurrence of a word and edit them at once](docs/demos/multi-cursor.gif) |
+| **Command palette.** Fuzzy-find files, then type `>` for commands. | **Multiple cursors.** Edit every occurrence of a word at once. |
+| ![Git hunk staging: stage two changes in one file, one hunk at a time](docs/demos/git-hunks.gif) | ![Database workbench: connect to SQLite, run a join, read the result grid](docs/demos/db-workbench.gif) |
+| **Git hunk staging.** Stage one change at a time. | **Database workbench.** Run a query, read the grid. |
+
+More recordings — Org-roam, edit surfaces and themes — are in
+[`docs/demos/`](docs/demos/).
+
+## How Vix compares
+
+| | Vix | Vim | Helix | Micro | Zed |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Runs in a terminal | ✓ | ✓ | ✓ | ✓ | ✗ |
+| Familiar keys by default (no modes) | ✓ | ✗ | ✗ | ✓ | ✓ |
+| LSP, debugger and Tree-sitter built in | ✓ | ✗ | ✓ | ✗ | ✓ |
+| Git client built in | ✓ | ✗ | ~ | ✗ | ✓ |
+| Integrated terminal | ✓ | ✓ | ✗ | ✗ | ✓ |
+| Org mode | ✓ | ✗ | ✗ | ✗ | ✗ |
+
+The full matrix, with footnotes and the places where Vix is behind, is in
+[the feature comparison](docs/comparison/index.md). Coming from another
+editor? See the pages for
 [Vim](docs/for-vim-users/index.md),
 [Emacs](docs/for-emacs-users/index.md),
 [Spacemacs](docs/for-spacemacs-users/index.md),
@@ -51,8 +115,7 @@ Coming from another editor? See the pages for
 [VS Code](docs/for-visual-studio-code-users/index.md),
 [IntelliJ](docs/for-intellij-users/index.md),
 [Eclipse](docs/for-eclipse-users/index.md) and
-[Sublime Text](docs/for-sublime-users/index.md) users, and the
-[feature comparison](docs/comparison/index.md) with Vim, Helix, Micro and Zed.
+[Sublime Text](docs/for-sublime-users/index.md) users.
 
 ## Install
 
@@ -113,6 +176,8 @@ vix src/main.rs:42:7    # open a file at line 42, column 7
 
 These are the default Apple keymap's bindings; on macOS `Command` works
 wherever `Control` does. Every action is also in a menu, whatever the keymap.
+For a guided start, run the built-in tutor or read the
+[tutorials](docs/tutorials/).
 
 ## Features
 
@@ -121,29 +186,35 @@ bracket matching, relative line numbers, indent guides, rainbow brackets,
 sticky scroll and a minimap; surround, align, increment/toggle, transpose,
 fill paragraph, comment toggle (`Ctrl+/`) and comment banners; Emmet;
 snippets; clipboard history; sort/dedupe/case/line-ending transforms;
-format-on-save, auto-save and auto-reload; an undo tree that is saved and
-restored when you reopen a file.
+format-on-save (including your project's own Prettier), auto-save and
+auto-reload; legacy encodings such as UTF-16, Shift_JIS and windows-1252,
+saved back as they came; an undo tree that is saved and restored when you
+reopen a file.
 
 **Finding your way.** Command palette with file, command, buffer, line and
 symbol modes; incremental find and replace with smart-case, whole-word, regex
 and capture groups; workspace search and replace; go to definition (`F12`);
 leap-style jump labels; structural selection; position history
 (`Alt+Left`/`Alt+Right`); a file explorer with preview tabs and file
-operations; Zen mode and a breadcrumb bar.
+operations; a Todo Tree; Zen mode and a breadcrumb bar.
 
 **Code intelligence.** LSP diagnostics, hover, completion, references, call
 hierarchy, rename, code actions, code lens and inlay hints; a DAP debugger
 with breakpoints, stepping, call stack, variables, watches and a REPL; a test
-runner with jump-to-failure; a TODO finder.
+runner with jump-to-failure; dependency sources open read-only so Go to
+Definition can't lead to an accidental edit.
 
 **Version control.** Git status, diff, blame, stage/unstage/revert per hunk,
-branches, stash, amend and a merge-conflict resolver; a Jujutsu menu for
-log, bookmarks, new/describe/commit, squash, rebase, undo, and push/fetch.
+branches, stash, amend, an interactive commit graph and a merge-conflict
+resolver; a Jujutsu menu for log, bookmarks, new/describe/commit, squash,
+rebase, undo, and push/fetch.
 
 **Projects and tools.** Per-project-type build/test/run commands; tasks
 discovered from npm/yarn/pnpm/bun, Deno, Composer, just, go-task, Rake and
-Make; test-at-point; an integrated terminal; an HTTP client for `.http`
-files; an AI menu that runs the assistant CLI of your choice on a selection.
+Make; test-at-point; an integrated terminal; a REST client for `.http` files
+with environments, variables and request chaining; a container menu for
+Docker, Podman and nerdctl; FHIR and HL7 v2 tools; an AI menu that runs the
+assistant CLI of your choice on a selection.
 
 **Data and documents.** A database workbench for SQLite, PostgreSQL and MySQL
 with embedded drivers, a schema browser, autocomplete, a filterable result
@@ -155,7 +226,7 @@ image viewing on graphics-capable terminals.
 editor with `TBLFM` formulas, Column View, export to Markdown/HTML, contacts,
 and Org-roam with link completion, dailies and a live backlinks panel.
 
-**Look and language.** 20 bundled themes (including high-contrast and
+**Look and language.** 21 bundled themes (including high-contrast and
 Catppuccin) and a theme editor; `theme = "auto"` follows your terminal's
 light or dark background; the UI is translated into 15 languages.
 
@@ -185,6 +256,29 @@ Settings are TOML in the platform configuration directory (for example
 Command-line flags — `--locale`, `--diff OLD NEW`, `vix -` to read stdin,
 `--version --json` — are in [`docs/cli/index.md`](docs/cli/index.md).
 
+## FAQ
+
+**Do I have to learn modal editing?** No. The default keymap uses the same
+shortcuts as your other apps. Vi and Spacemacs keymaps are one menu choice
+away if you want them.
+
+**Do I need plugins to get started?** No. Everything listed on this page
+ships in the one `vix` binary. Rhai scripts are there for adding your own
+commands, not for filling gaps.
+
+**Does it work over SSH and in tmux?** Yes — Vix is a terminal program, so
+run it on the remote machine as you would any other. Opening a remote
+project from a local Vix is [planned](tasks.md).
+
+**Can my company use it?** Pick whichever of the five licenses suits you.
+For locked-down machines, the minimal build makes no network connections
+and starts no other program.
+
+**Is it stable?** Vix is young and moving fast; read the
+[changelog](CHANGELOG.md) before upgrading across a major version. The
+editor itself is well tested — every crate has a spec, and CI runs the
+test suite, clippy pedantic and a docs check on every change.
+
 ## Build from source
 
 Needs a Rust toolchain, 1.96 or newer.
@@ -206,12 +300,13 @@ feature.
 ## Contributing
 
 Vix is a Cargo workspace: a thin app shell (the `vix-tui` package in `tui/`)
-over about 120 focused `vix-*` crates in `crates/`, with the desktop GUIs in
+over about 130 focused `vix-*` crates in `crates/`, with the desktop GUIs in
 `gui/`. Development is specification-driven — each crate's spec at
 `crates/<crate>/spec/index.md` is the source of truth. Start with
 [`AGENTS.md`](AGENTS.md) (conventions, workflow and crate map, for humans and
 AI agents alike) and
-[`docs/contributing-workflow.md`](docs/contributing-workflow.md).
+[`docs/contributing-workflow.md`](docs/contributing-workflow.md). The roadmap
+lives in [`plan.md`](plan.md) and [`tasks.md`](tasks.md).
 
 ```sh
 cargo test
@@ -224,6 +319,9 @@ Runnable examples live in [`tui/examples/`](tui/examples/) — for instance
 and `cargo run --example list_commands` (print every command). The demo GIFs
 are [VHS](https://github.com/charmbracelet/vhs) scripts in
 [`docs/demos/`](docs/demos/), rendered by `scripts/render-demos.sh`.
+
+If Vix is useful to you, a ⭐ on [GitHub](https://github.com/vixide/vix)
+helps other people find it.
 
 ## License
 

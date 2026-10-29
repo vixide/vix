@@ -1010,6 +1010,24 @@ impl Lsp {
         );
     }
 
+    /// Request only the code actions of the listed kinds (`context.only`,
+    /// e.g. `["refactor"]`) for the range `[start, end)`.
+    pub fn request_code_action_only(
+        &mut self,
+        path: &Path,
+        start: (u32, u32),
+        end: (u32, u32),
+        diagnostics: &Value,
+        only: &[&str],
+    ) {
+        self.send_request(
+            path,
+            "textDocument/codeAction",
+            Pending::CodeAction,
+            |uri| message::code_action_params_only(uri, start, end, diagnostics, only),
+        );
+    }
+
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
         self.send_targeted(

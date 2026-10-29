@@ -328,6 +328,7 @@ vix-org-table = { workspace = true }
 # The code-outline list (symbol kind + name + line) and the panel's selection.
 vix-outline-panel = { workspace = true }
 vix-todo-tree = { workspace = true }
+vix-choice-list = { workspace = true }
 # Command palette (Ctrl+P) with prefix-driven modes.
 vix-palette = { workspace = true }
 # A Pomodoro work/break countdown as a small state machine.

@@ -5,6 +5,11 @@
 //! file content it corresponds to. On open, the history is restored **only** when
 //! the stored content hash matches the file's current content, so undo is never
 //! replayed onto text it doesn't match.
+//!
+//! The [`local_history`] module adds timestamped whole-file snapshots on save
+//! (Local History), with labels, diffs and range revert.
+
+pub mod local_history;
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +27,7 @@ fn undo_dir() -> Option<PathBuf> {
 }
 
 /// Hex SHA-256 of `s`.
-fn sha(s: &str) -> String {
+pub(crate) fn sha(s: &str) -> String {
     use std::fmt::Write as _;
     let mut h = Sha256::new();
     h.update(s.as_bytes());

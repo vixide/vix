@@ -25,3 +25,11 @@ deletion agree on where a sentence begins.
 `wrap` refills text at a given width, treating blank lines and list bullets as
 chunk boundaries and keeping each chunk's indentation, shared comment/quote
 marker, and hanging bullet indent (see `crates/vix-editor/spec/wrap/index.md`).
+
+## Cleanup (T723)
+
+`cleanup::cleanup(text)` is the whitespace half of Code Cleanup: trims
+trailing spaces and tabs, drops blank lines at the end of the file and ends a
+non-empty file in exactly one newline, keeping CRLF if the file uses it. It
+returns the new text and a `Report` of what changed. The language-server half
+(organize imports) is the host's.

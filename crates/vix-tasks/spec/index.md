@@ -192,3 +192,17 @@ menu structure and its `C-c p c …` chords.
 
 This crate absorbed the earlier standalone `vix-projectile` crate; there is
 no separate crate by that name.
+
+## Run configurations (T724)
+
+`run_config` reads `.vix/run.toml` (`[[config]]` tables: `name`, exactly one of
+`command` or `compound`, optional `cwd`, `env`, `before`). `parse` validates
+(`RunConfigError::{Parse, Duplicate, Invalid}`); `plan(configs, tasks, name)`
+flattens a configuration into ordered stages — `before` entries first (a name
+that is not a configuration may be a `tasks.toml` task, and a shared
+dependency runs once), a compound's members together in one stage — and
+reports `Unknown`, `Cycle` or `NotFound`. `Plan::shell_command(Shell)` renders
+one line for the host's single command pipeline: stages joined by `&&`, a
+stage's members run as background jobs and `wait` on POSIX, in order on
+`cmd.exe`; `cwd` and `env` are applied with quoting. Pure: no I/O besides
+`load`. Documented in `docs/ide-parity/index.md`.
