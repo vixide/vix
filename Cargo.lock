@@ -5008,6 +5008,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-choice-list"
+version = "2.0.0"
+dependencies = [
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-civil-date"
 version = "2.0.0"
 
@@ -5858,6 +5865,7 @@ dependencies = [
  "vix-calendar-panel",
  "vix-case",
  "vix-checksum-tool",
+ "vix-choice-list",
  "vix-clipboard",
  "vix-clock-panel",
  "vix-color-converter-tool",
@@ -5981,6 +5989,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "similar 3.2.0",
  "vix-editor-core",
  "vix-fileops",
  "vix-settings",
