@@ -7972,6 +7972,40 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `signed-by=`), and a decision on the host.
   - **Size: M.**
 
+### Cowork — real-time collaboration (spec: [`spec/cowork`](spec/cowork/index.md))
+
+- [x] **T690 — Spike and decision record.** Score `loro`, `automerge`,
+  `diamond-types` and `yrs` on text performance, memory (1 MB file), license,
+  and bridge cost to the `ropey` buffer; prove cursor stability under remote
+  inserts with a throwaway test. Output: a decision in the spec. **Medium.**
+  - **Done 2026-10-29** (`feat/t690-cowork`): chose **Loro** (MIT). Measured in a
+    scratch crate outside the workspace (1 MB file, 20k edits): Loro 29 ms /
+    26 MB, diamond-types 6 ms / 25 MB, Yrs 3.2 s / 32 MB, Automerge 243 ms /
+    364 MB; all converged. Loro wins on the bridge (stable cursors, text-delta
+    events, per-peer undo), proven by throwaway tests (a cursor at 6 moved to
+    10 after remote inserts; A's undo left B's text). `cargo deny` passes with
+    four dated "unmaintained" advisory ignores for Loro's transitive crates
+    (`im`, `bitmaps`, `sized-chunks`, `atomic-polyfill`; no vulnerabilities).
+    Decision record in `spec/cowork`. **Not done:** the numbers are one machine,
+    one run; no live web research on release cadence.
+- [ ] **T691 — `vix-cowork` core.** Pure document, peer, presence and
+  permission model; N-replica convergence tests incl. proptest; no I/O.
+  **Large.** After T690.
+- [ ] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
+  without moving the local cursor; per-user undo. Cap shared size.
+  **Large.**
+- [ ] **T693 — Presence rendering.** Remote cursors and selections in
+  `ui.rs`, theme-derived peer colors (contrast-checked), status-line names.
+  **Medium.**
+- [ ] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
+  Encrypted, authenticated framing; invite token; host consent prompt;
+  reconnect and resync. **Large.**
+- [ ] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
+  Permissions, i18n in 15 locales, action catalog. **Medium.**
+- [ ] **T696 — Workspace sharing.** Shared file tree and search; host-only
+  disk writes; path confinement tests. **Medium.**
+- [ ] **T697 — Shared terminal (read-only default).** **Medium; optional.**
+
 ---
 
 ## Ideas backlog (unscoped)

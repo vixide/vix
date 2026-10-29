@@ -121,6 +121,10 @@ insta = "1"
 # Generates the man page from the real `Cli` clap definition (T307,
 # tasks.md), via examples/generate_man.rs (dev-only).
 clap_mangen = "0.3.3"
+# CRDT for Cowork (T690, spec/cowork): chosen over automerge, yrs and
+# diamond-types for its stable text cursors, text-delta change events and
+# per-peer undo. MIT. `counter` (default) is not needed.
+loro = { version = "1.17", default-features = false }
 
 # Internal crates, declared once (T601): members say `vix-x.workspace = true`.
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "2.0.0" }
@@ -161,6 +165,7 @@ vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into
 vix-convert-from-yaml-into-json-tool = { path = "crates/vix-convert-from-yaml-into-json-tool", version = "2.0.0" }
 vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "2.0.0" }
 vix-coverage = { path = "crates/vix-coverage", version = "2.0.0" }
+vix-cowork = { path = "crates/vix-cowork", version = "2.0.0" }
 vix-dap = { path = "crates/vix-dap", version = "2.0.0" }
 vix-db = { path = "crates/vix-db", version = "2.0.0" }
 vix-diff-view = { path = "crates/vix-diff-view", version = "2.0.0" }

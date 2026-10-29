@@ -79,7 +79,7 @@ fi
 if [ "$semver_ok" = yes ]; then
 	# A crate with no crates.io release yet has no baseline to compare against:
 	# add `--exclude <crate>` until its first publish.
-	cargo semver-checks --workspace
+	cargo semver-checks --workspace --exclude vix-cowork
 else
 	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 fi

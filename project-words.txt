@@ -599,3 +599,18 @@ XVCJ
 abcéxxxxxx
 efgh
 ello
+# Cowork (T690-T697): CRDT candidates and crypto vocabulary
+Loro
+automerge
+yrs
+CRDTs
+Teletype
+ChaCha
+BLAKE
+AEAD
+PSK
+Poly
+heapless
+bitmaps
+polyfill
+unmaintained

@@ -1,0 +1,17 @@
+[package]
+name = "vix-cowork"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure real-time collaboration core: a CRDT text document, peers, presence, permissions and the wire messages."
+
+[dependencies]
+loro = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

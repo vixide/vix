@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Cowork core** (T690-T693, `spec/cowork`): the new `vix-cowork` crate is the pure, I/O-free half of real-time collaboration. The CRDT is Loro, chosen over Automerge, Yrs and diamond-types in a measured spike (decision record in `spec/cowork`). It provides `SharedDoc` (a replica with local-edit capture, remote updates as ordered buffer edits, cursor-stable anchors, per-peer undo, a 5 MB cap and no binary files), peers with `View`/`Edit`/`EditTerminal` permissions (default View), `SharedPath` (guest paths confined to the shared root), a panic-free wire codec, remote-cursor presence with theme-contrast-checked peer colors and follow mode, and `HostSession`/`GuestSession` state machines. The host refuses forged, snapshot or over-permission updates. Nothing is networked yet in the default build.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.
