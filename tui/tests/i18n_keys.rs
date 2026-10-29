@@ -40,7 +40,14 @@ fn rust_sources(root: &Path) -> Vec<PathBuf> {
                 // `$CI_PROJECT_DIR/.cargo` (for caching — see .gitlab-ci.yml),
                 // landing the registry source cache, vendored dependency
                 // source included, inside the workspace this walks.
-                if name == "target" || name == ".git" || name == "fuzz" || name == ".cargo" {
+                // `.claude` is skipped because agent worktrees live under
+                // `.claude/worktrees/`: other branches' checkouts, not this tree.
+                if name == "target"
+                    || name == ".git"
+                    || name == "fuzz"
+                    || name == ".cargo"
+                    || name == ".claude"
+                {
                     continue;
                 }
                 walk(&path, out);
