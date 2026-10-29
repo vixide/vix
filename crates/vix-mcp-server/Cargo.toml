@@ -1,0 +1,18 @@
+[package]
+name = "vix-mcp-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Read-only Model Context Protocol server core: JSON-RPC over stdio exposing a workspace's open buffers, symbols, outline, offline diagnostics and SQLite schema"
+
+[dependencies]
+serde_json = { workspace = true }
+vix-conflict-tool = { workspace = true }
+vix-markdown-preview = { workspace = true }
+vix-org = { workspace = true }
+vix-palette = { workspace = true }
+
+[lints]
+workspace = true

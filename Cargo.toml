@@ -234,6 +234,7 @@ vix-lsp = { path = "crates/vix-lsp", version = "2.0.0" }
 vix-lsp-core = { path = "crates/vix-lsp-core", version = "2.0.0" }
 vix-macros = { path = "crates/vix-macros", version = "2.0.0" }
 vix-markdown-preview = { path = "crates/vix-markdown-preview", version = "2.0.0" }
+vix-mcp-server = { path = "crates/vix-mcp-server", version = "2.0.0" }
 vix-media-type = { path = "crates/vix-media-type", version = "2.0.0" }
 vix-menu = { path = "crates/vix-menu", version = "2.0.0" }
 vix-modal = { path = "crates/vix-modal", version = "2.0.0" }

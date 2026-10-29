@@ -470,8 +470,17 @@ impl App {
             self.status = t!("status.lsp_inactive").to_string();
             return;
         }
-        for reopened in self.lsp.restart(&path) {
-            self.lsp_synced.remove(&reopened);
+        let reopened = self.lsp.restart(&path);
+        self.after_lsp_restart(reopened);
+    }
+
+    /// After a restart (T576, or the LSP Status panel's per-server restart,
+    /// T732): forget that the `reopened` files were synced so the next sync
+    /// tick replays `didOpen` with their real content, and drop the old
+    /// server's diagnostic marks.
+    pub(super) fn after_lsp_restart(&mut self, reopened: Vec<std::path::PathBuf>) {
+        for path in reopened {
+            self.lsp_synced.remove(&path);
         }
         self.refresh_diagnostic_marks();
         self.status = t!("status.lsp_restarted").to_string();

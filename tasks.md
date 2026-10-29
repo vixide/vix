@@ -8397,15 +8397,43 @@ editor by completion, diagnostics and never losing work first.
   (the generated commit message and DB assist included), without a
   rebuild. The docs and site then say "AI optional" plainly; Zed 1.0
   markets the same switch. **Small.**
-- [ ] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
+- [x] **T731 — MCP server mode.** `vix --mcp` serves the Model Context
   Protocol over stdio so an agent can read Vix's view of a workspace:
   open buffers, diagnostics, document symbols, the outline and the DB
   schema. Read-only in v1; writes would go through the same preview and
   accept flow as T635. Spec first (`spec/mcp-server`). **Medium–Large.**
-- [ ] **T732 — LSP status and progress.** Show `$/progress` (indexing,
+  *Done 2026-10-29:* [`spec/mcp-server`](spec/mcp-server/index.md) and the
+  new `vix-mcp-server` crate (MCP 2025-06-18, newline-delimited JSON-RPC
+  over stdio; `initialize`, `ping`, `tools/list`, `tools/call`,
+  `resources/list`, `resources/read`). Six read-only tools:
+  `list_open_buffers` (the saved session for the canonical root, read
+  without creating `session.toml`), `read_buffer`, `document_symbols`
+  (`vix_palette::symbols`), `outline` (Markdown/Org headings, else
+  symbols), `diagnostics` (merge-conflict blocks) and `db_schema` (SQLite
+  files in the workspace, `mode=ro` + `query_only`). Paths are confined to
+  the root after canonicalization, secret files are refused, nothing is
+  written. Unit tests plus `tui/tests/mcp_stdio.rs`, which spawns the binary
+  for an initialize → tools/list → tools/call round trip. **Not done:**
+  live language-server diagnostics and symbols (no server is spawned in
+  this mode), unsaved buffers of a running Vix (no attach channel),
+  `PostgreSQL`/`MySQL` schemas (need secrets), any write tool (T635's
+  preview-and-accept flow), prompts, subscriptions, and the HTTP transport.
+- [x] **T732 — LSP status and progress.** Show `$/progress` (indexing,
   building) in the status bar and add **View → LSP Status…**: each
   server's name, root, state, capabilities and last error, with restart.
   Neovim 0.12's `:lsp` does this. **Small–Medium.**
+  Done 2026-10-29: `$/progress` is now tracked per server and token
+  (`begin`/`report`/`end`, `vix_lsp_core::message::parse_progress_update`)
+  and the newest task shows as a persistent status-bar segment until it
+  ends (it used to overwrite the transient status message once and never
+  clear). `lsp.status` (View → LSP Status…) is a live overlay over the new
+  `Lsp::statuses()`: name, state (not started/starting/running/failed),
+  command, root, extensions, open files, progress, capabilities (from the
+  `initialize` result) and last error (spawn failed / crashed / a request's
+  error message); ↑/↓ or click selects, `r`/Enter restarts that server
+  (`Lsp::restart_language`), Esc closes. Not done: per-server log from the
+  panel (Show Server Log stays per active file), stop-without-restart, and
+  showing every workspace folder as the root (only the first).
 - [ ] **T733 — Very large files.** Promote the Ideas-backlog item: a
   read-only chunked viewer for multi-gigabyte files with an on-demand
   line index, then publish a measured number (open time, memory) in

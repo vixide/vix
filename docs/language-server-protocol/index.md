@@ -52,6 +52,29 @@ Most actions live under **Tools → Language Server** and the command palette
 Lifecycle (`initialize`/`initialized`/`shutdown`/`exit`) and full-document sync
 (`didOpen`/`didChange`/`didClose`/`didSave`) are handled automatically.
 
+## Server status and progress
+
+While a server reports work through `$/progress` — indexing a project,
+building, loading crates — the status bar shows the newest task beside the
+git branch, as `language: title: message (n%)`, with `+N` when more tasks are
+in flight. It clears when the server reports the task ended.
+
+**View → LSP Status…** lists every configured server, live:
+
+- its name (language id) and state: *not started* (no matching file opened
+  yet), *starting*, *running*, or *failed* (the command would not start, or it
+  crashed more often than the automatic respawn allows);
+- its command, workspace root, file extensions and number of open files;
+- its in-flight progress tasks;
+- the capabilities it advertised at `initialize` (`hover`, `definition`,
+  `rename`, …);
+- its last error since it was last restarted: the command would not start,
+  it exited unexpectedly, or the message of a failed request.
+
+Use ↑/↓ to pick a server and `r` (or Enter) to restart it; Esc closes the
+panel. **Tools → Language Server → Restart Server** and **Show Server Log**
+act on the active file's servers instead.
+
 ## When no server is configured
 
 Every LSP action degrades gracefully: with no server attached it reports

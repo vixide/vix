@@ -22,6 +22,7 @@ list; this page adds usage detail and the `git` integration snippets.
 | `--doctor` | Check the environment for common setup friction (`git` on `PATH`, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support) and print a plain pass/fail report, then exit without starting the editor. Also reachable via **Help → Run Diagnostics** — see `crates/vix-doctor/spec/index.md`. |
 | `--export-settings <PATH>` | Bundle `config.toml`, macros, keybindings, the user dictionary, and the active custom theme into one file at `PATH`, then exit. Also reachable via **Vix → Export Settings…** — see `crates/vix-settings-bundle/spec/index.md`. |
 | `--import-settings <PATH>` | Restore a bundle written by `--export-settings` from `PATH` (backing up any file it replaces first), then exit. Also reachable via **Vix → Import Settings…**. |
+| `--mcp [DIR]` | Serve the Model Context Protocol over stdin/stdout instead of starting the editor, so an AI agent can read the workspace (`DIR`, or the current directory) as Vix sees it: open buffers, symbols, outline, offline diagnostics and SQLite schemas. Read-only — see [MCP server](../mcp-server/index.md). |
 | `--version` | Print the version and exit. |
 | `--version --json` | Print `{"name":"vix","version":"…","capabilities":[…]}` instead of plain text, for scripts/tooling. `capabilities` lists the optional areas compiled into this build. |
 | `--help` | Full flag reference (clap-generated, always in sync with the binary). |

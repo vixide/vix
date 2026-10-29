@@ -1356,3 +1356,77 @@ fn code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app() {
     app.lsp.shutdown();
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// T732: a live app shows the mock server's `$/progress` task in the status
+/// bar, and View → LSP Status lists the server as running with the
+/// capabilities it advertised; `r` in the panel restarts it.
+#[test]
+fn lsp_status_panel_and_status_bar_progress_in_a_live_app() {
+    use ratatui::{Terminal, backend::TestBackend};
+    use vix::lsp::ServerState;
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-status-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    });
+    let mut app = App::new(root.clone(), settings);
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && app.lsp.progress_line().is_none() {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        app.lsp.progress_line().as_deref(),
+        Some("rust: Indexing (0%)")
+    );
+    let status = &app.lsp.statuses()[0];
+    assert_eq!(status.state, ServerState::Running);
+    assert!(
+        status.capabilities.iter().any(|c| c == "semanticTokens"),
+        "{:?}",
+        status.capabilities
+    );
+    assert_eq!(status.open_documents, 1);
+
+    let screen = |app: &mut App| {
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| vix::ui::draw(app, f)).unwrap();
+        term.backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect::<String>()
+    };
+    assert!(
+        screen(&mut app).contains("rust: Indexing (0%)"),
+        "progress shows in the status bar"
+    );
+    app.run_action("lsp.status");
+    let shown = screen(&mut app);
+    assert!(shown.contains("semanticTokens"), "capabilities listed");
+    assert!(shown.contains(&mock.to_string_lossy().into_owned()) || shown.contains("python3"));
+
+    // `r` restarts the highlighted server: its progress goes with it.
+    app.on_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    assert_eq!(app.lsp.progress_line(), None);
+    assert_ne!(app.lsp.statuses()[0].state, ServerState::Failed);
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}

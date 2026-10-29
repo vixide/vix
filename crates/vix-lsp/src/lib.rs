@@ -13,7 +13,7 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -243,6 +243,91 @@ pub enum RenamePrepared {
     NotRenameable,
 }
 
+/// Where a configured language server is in its lifecycle (T732), for the
+/// View → LSP Status panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ServerState {
+    /// Configured, but no matching file has been opened yet.
+    NotStarted,
+    /// Spawned; `initialize` has not completed.
+    Starting,
+    /// Initialized and serving requests.
+    Running,
+    /// It could not be spawned, or it crashed more often than the
+    /// auto-respawn budget allows; it stays down until restarted.
+    Failed,
+}
+
+/// The most recent problem a language server had (T732). The host
+/// translates the fixed kinds; [`ServerError::Request`] carries the server's
+/// own message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ServerError {
+    /// Its command could not be started (not installed, not executable).
+    SpawnFailed,
+    /// The process exited unexpectedly.
+    Crashed,
+    /// A request returned a JSON-RPC error with this message.
+    Request(String),
+}
+
+/// A snapshot of one configured language server (T732), from
+/// [`Lsp::statuses`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ServerStatus {
+    /// The configured language id (the server's name in Vix).
+    pub language_id: String,
+    /// The configured command line, joined with spaces.
+    pub command: String,
+    /// The file extensions it is configured for.
+    pub extensions: Vec<String>,
+    /// The workspace root it is given (the first workspace folder).
+    pub root: Option<PathBuf>,
+    /// Its lifecycle state.
+    pub state: ServerState,
+    /// The capabilities it advertised at `initialize` (see
+    /// [`message::parse_capability_names`]); empty until it is running.
+    pub capabilities: Vec<String>,
+    /// How many documents are open on it.
+    pub open_documents: usize,
+    /// Its in-flight `$/progress` tasks, one formatted line each.
+    pub progress: Vec<String>,
+    /// Its most recent error, if any since it was last restarted.
+    pub last_error: Option<ServerError>,
+}
+
+/// One in-flight `$/progress` task (T732): its title from `"begin"`, and the
+/// latest message and percentage from `"report"`.
+#[derive(Clone, Debug, Default)]
+struct ProgressTask {
+    title: Option<String>,
+    message: Option<String>,
+    percentage: Option<u64>,
+}
+
+impl ProgressTask {
+    /// `title: message (n%)`, leaving out whichever parts are missing.
+    fn line(&self) -> String {
+        let mut out = match (&self.title, &self.message) {
+            (Some(t), Some(m)) => format!("{t}: {m}"),
+            (Some(t), None) => t.clone(),
+            (None, Some(m)) => m.clone(),
+            (None, None) => String::new(),
+        };
+        if let Some(p) = self.percentage {
+            if out.is_empty() {
+                out = format!("{p}%");
+            } else {
+                let _ = write!(out, " ({p}%)");
+            }
+        }
+        out
+    }
+}
+
 /// Most stderr lines kept per language (T576).
 const LOG_LINES: usize = 2_000;
 
@@ -314,6 +399,10 @@ struct Server {
     /// (many crashes in quick succession) from an isolated crash after a
     /// long healthy run — see [`MAX_RESTART_ATTEMPTS`].
     ready_since: Option<Instant>,
+    /// The capabilities advertised at `initialize` (T732).
+    capabilities: Vec<String>,
+    /// In-flight `$/progress` tasks by token, oldest first (T732).
+    progress: Vec<(String, ProgressTask)>,
 }
 
 impl Server {
@@ -376,6 +465,11 @@ pub struct Lsp {
     /// Edit-returning replies received by [`Lsp::poll`] and not yet taken by
     /// [`Lsp::take_edit_replies`] (T652).
     edit_replies: Vec<EditReply>,
+    /// Each language's most recent error since it was last restarted (T732).
+    last_errors: HashMap<String, ServerError>,
+    /// Languages that failed to spawn or used up their respawn budget, and
+    /// stay down until an explicit restart or a successful spawn (T732).
+    failed: HashSet<String>,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -403,6 +497,8 @@ impl Lsp {
             restart_attempts: HashMap::new(),
             logs: HashMap::new(),
             edit_replies: Vec::new(),
+            last_errors: HashMap::new(),
+            failed: HashSet::new(),
         }
     }
 
@@ -446,6 +542,38 @@ impl Lsp {
     pub fn restart(&mut self, path: &Path) -> Vec<PathBuf> {
         let mut reopen = Vec::new();
         for config in self.configs_for(path) {
+            reopen.extend(self.restart_config(&config));
+        }
+        reopen.sort();
+        reopen.dedup();
+        reopen
+    }
+
+    /// Restart the server configured as `language_id` (T732, the LSP Status
+    /// panel's restart), exactly as [`Lsp::restart`] does for one file's
+    /// servers. Returns the files that were open on the old server; empty
+    /// (and nothing happens) when no server is configured under that id.
+    pub fn restart_language(&mut self, language_id: &str) -> Vec<PathBuf> {
+        let Some(config) = self
+            .configs
+            .iter()
+            .find(|c| c.language_id == language_id)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let mut reopen = self.restart_config(&config);
+        reopen.sort();
+        reopen.dedup();
+        reopen
+    }
+
+    /// Shut down `config`'s server (if running), forget its diagnostics,
+    /// error and crash budget, and spawn a fresh one. Returns the files that
+    /// were open on the old server.
+    fn restart_config(&mut self, config: &ServerConfig) -> Vec<PathBuf> {
+        let mut reopen = Vec::new();
+        {
             let lang = config.language_id.clone();
             if let Some(mut server) = self.servers.remove(&lang) {
                 reopen.extend(server.docs.keys().map(|uri| uri_to_path(uri)));
@@ -461,10 +589,10 @@ impl Lsp {
             }
             self.diagnostics.retain(|_, m| !m.is_empty());
             self.restart_attempts.remove(&lang);
-            let _ = self.ensure_server(&config);
+            self.last_errors.remove(&lang);
+            self.failed.remove(&lang);
+            let _ = self.ensure_server(config);
         }
-        reopen.sort();
-        reopen.dedup();
         reopen
     }
 
@@ -610,7 +738,11 @@ impl Lsp {
     fn ensure_server(&mut self, config: &ServerConfig) -> Option<&mut Server> {
         if !self.servers.contains_key(&config.language_id) {
             let log = self.log_for(&config.language_id);
-            let server = spawn(config, &self.folder_pairs(), &log)?;
+            let Some(server) = spawn(config, &self.folder_pairs(), &log) else {
+                self.mark_failed(&config.language_id, ServerError::SpawnFailed);
+                return None;
+            };
+            self.failed.remove(&config.language_id);
             self.servers.insert(config.language_id.clone(), server);
         }
         self.servers.get_mut(&config.language_id)
@@ -1343,9 +1475,12 @@ impl Lsp {
         if survived_a_while {
             self.restart_attempts.remove(lang);
         }
+        self.last_errors
+            .insert(lang.to_string(), ServerError::Crashed);
         let attempts = self.restart_attempts.entry(lang.to_string()).or_insert(0);
         *attempts += 1;
         if *attempts > MAX_RESTART_ATTEMPTS {
+            self.failed.insert(lang.to_string());
             events.push(LspEvent::ServerCrashed(lang.to_string()));
             return;
         }
@@ -1354,6 +1489,7 @@ impl Lsp {
         };
         let log = self.log_for(lang);
         let Some(new_server) = spawn(&config, &self.folder_pairs(), &log) else {
+            self.mark_failed(lang, ServerError::SpawnFailed);
             events.push(LspEvent::ServerCrashed(lang.to_string()));
             return;
         };
@@ -1414,9 +1550,13 @@ impl Lsp {
             }
             if method == "$/progress"
                 && let Some(params) = msg.get("params")
-                && let Some(text) = message::parse_progress(params)
             {
-                events.push(LspEvent::Progress(text));
+                if let Some(update) = message::parse_progress_update(params) {
+                    self.track_progress(lang, update);
+                }
+                if let Some(text) = message::parse_progress(params) {
+                    events.push(LspEvent::Progress(text));
+                }
             }
             return;
         }
@@ -1488,6 +1628,8 @@ impl Lsp {
                     .and_then(Value::as_str)
                     .unwrap_or("the server returned an error")
                     .to_string();
+                self.last_errors
+                    .insert(lang.to_string(), ServerError::Request(text.clone()));
                 events.push(LspEvent::RequestFailed(text));
             }
             return;
@@ -1770,6 +1912,7 @@ impl Lsp {
                 (true, true) => LensSupport::Resolve,
             };
             server.execute_commands = message::parse_execute_commands(result);
+            server.capabilities = message::parse_capability_names(result);
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -1798,6 +1941,131 @@ impl Lsp {
             Value::Null
         };
         server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+    }
+
+    /// Record `error` for `lang` and mark it failed (it stays down until a
+    /// restart or a later successful spawn).
+    fn mark_failed(&mut self, lang: &str, error: ServerError) {
+        self.last_errors.insert(lang.to_string(), error);
+        self.failed.insert(lang.to_string());
+    }
+
+    /// Apply one `$/progress` report to `lang`'s in-flight tasks (T732):
+    /// `begin` adds (or replaces) the task, `report` updates its message and
+    /// percentage, `end` drops it.
+    fn track_progress(&mut self, lang: &str, update: message::ProgressUpdate) {
+        let Some(server) = self.servers.get_mut(lang) else {
+            return;
+        };
+        let pos = server.progress.iter().position(|(t, _)| *t == update.token);
+        match update.kind {
+            message::ProgressKind::End => {
+                if let Some(i) = pos {
+                    server.progress.remove(i);
+                }
+            }
+            message::ProgressKind::Begin => {
+                let task = ProgressTask {
+                    title: update.title,
+                    message: update.message,
+                    percentage: update.percentage,
+                };
+                match pos {
+                    Some(i) => server.progress[i].1 = task,
+                    None => server.progress.push((update.token, task)),
+                }
+            }
+            message::ProgressKind::Report => {
+                let i = pos.unwrap_or_else(|| {
+                    server
+                        .progress
+                        .push((update.token.clone(), ProgressTask::default()));
+                    server.progress.len() - 1
+                });
+                let task = &mut server.progress[i].1;
+                if update.title.is_some() {
+                    task.title = update.title;
+                }
+                if update.message.is_some() {
+                    task.message = update.message;
+                }
+                if update.percentage.is_some() {
+                    task.percentage = update.percentage;
+                }
+            }
+        }
+    }
+
+    /// The status-bar progress line (T732): the newest in-flight
+    /// `$/progress` task of the first configured server that has one, as
+    /// `language: title: message (n%)`, with ` +N` when more tasks are in
+    /// flight across all servers. `None` when nothing is in progress.
+    #[must_use]
+    pub fn progress_line(&self) -> Option<String> {
+        let mut total = 0;
+        let mut first: Option<(&str, String)> = None;
+        for config in &self.configs {
+            let Some(server) = self.servers.get(&config.language_id) else {
+                continue;
+            };
+            total += server.progress.len();
+            if first.is_none()
+                && let Some((_, task)) = server.progress.last()
+            {
+                first = Some((&config.language_id, task.line()));
+            }
+        }
+        let (lang, line) = first?;
+        let mut out = if line.is_empty() {
+            lang.to_string()
+        } else {
+            format!("{lang}: {line}")
+        };
+        if total > 1 {
+            let _ = write!(out, " +{}", total - 1);
+        }
+        Some(out)
+    }
+
+    /// Whether LSP is switched on in settings (T732).
+    #[must_use]
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// A snapshot of every configured server, in configuration order, one
+    /// entry per language id (T732) — for View → LSP Status.
+    #[must_use]
+    pub fn statuses(&self) -> Vec<ServerStatus> {
+        let mut seen = HashSet::new();
+        let root = self.folders.first().cloned();
+        self.configs
+            .iter()
+            .filter(|c| seen.insert(c.language_id.clone()))
+            .map(|config| {
+                let lang = &config.language_id;
+                let server = self.servers.get(lang);
+                let state = match server {
+                    Some(s) if s.ready => ServerState::Running,
+                    Some(_) => ServerState::Starting,
+                    None if self.failed.contains(lang) => ServerState::Failed,
+                    None => ServerState::NotStarted,
+                };
+                ServerStatus {
+                    language_id: lang.clone(),
+                    command: config.command.join(" "),
+                    extensions: config.extensions.clone(),
+                    root: root.clone(),
+                    state,
+                    capabilities: server.map(|s| s.capabilities.clone()).unwrap_or_default(),
+                    open_documents: server.map_or(0, |s| s.docs.len()),
+                    progress: server
+                        .map(|s| s.progress.iter().map(|(_, t)| t.line()).collect())
+                        .unwrap_or_default(),
+                    last_error: self.last_errors.get(lang).cloned(),
+                }
+            })
+            .collect()
     }
 
     /// Politely shut down every server (best-effort; called on exit).
@@ -1858,6 +2126,8 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         ready: false,
         queue: Vec::new(),
         ready_since: None,
+        capabilities: Vec::new(),
+        progress: Vec::new(),
     };
     let init = message::request(
         INITIALIZE_ID,
@@ -2208,6 +2478,107 @@ mod tests {
         }
         assert!(text.contains("--- restarted ---"), "{text}");
         assert!(text.matches("booted").count() >= 2, "{text}");
+        lsp.shutdown();
+    }
+
+    #[test]
+    fn statuses_list_every_configured_server_not_started() {
+        let cfg = ServerConfig {
+            language_id: "rust".into(),
+            command: vec!["ra".into(), "--x".into()],
+            extensions: vec!["rs".into()],
+        };
+        let lsp = Lsp::new(true, vec![cfg.clone(), cfg], &[PathBuf::from("/proj")]);
+        let statuses = lsp.statuses();
+        assert_eq!(statuses.len(), 1, "one entry per language id");
+        let s = &statuses[0];
+        assert_eq!(s.language_id, "rust");
+        assert_eq!(s.command, "ra --x");
+        assert_eq!(s.root.as_deref(), Some(Path::new("/proj")));
+        assert_eq!(s.state, ServerState::NotStarted);
+        assert_eq!(s.last_error, None);
+        assert_eq!(lsp.progress_line(), None);
+    }
+
+    #[test]
+    #[cfg(feature = "process")]
+    fn a_server_that_cannot_spawn_is_failed_until_restarted() {
+        let cfg = ServerConfig {
+            language_id: "ghost".into(),
+            command: vec!["vix-no-such-language-server-t732".into()],
+            extensions: vec!["gh".into()],
+        };
+        let mut lsp = Lsp::new(true, vec![cfg], &[PathBuf::from("/")]);
+        lsp.did_open(Path::new("/tmp/a.gh"), "x");
+        let s = &lsp.statuses()[0];
+        assert_eq!(s.state, ServerState::Failed);
+        assert_eq!(s.last_error, Some(ServerError::SpawnFailed));
+        // Restarting retries the spawn (which fails again here).
+        assert_eq!(lsp.restart_language("ghost"), Vec::<PathBuf>::new());
+        assert_eq!(lsp.statuses()[0].state, ServerState::Failed);
+        assert_eq!(lsp.restart_language("nope"), Vec::<PathBuf>::new());
+    }
+
+    #[test]
+    #[cfg(feature = "process")]
+    #[cfg(unix)]
+    fn progress_is_tracked_per_token_until_it_ends() {
+        let cfg = ServerConfig {
+            language_id: "fake".into(),
+            command: vec!["sh".into(), "-c".into(), "sleep 5".into()],
+            extensions: vec!["fk".into()],
+        };
+        let mut lsp = Lsp::new(true, vec![cfg], &[PathBuf::from("/")]);
+        lsp.did_open(Path::new("/tmp/a.fk"), "x");
+        assert_eq!(lsp.statuses()[0].state, ServerState::Starting);
+        let mut events = Vec::new();
+        let progress = |token: &str, value: Value| {
+            json!({"jsonrpc": "2.0", "method": "$/progress",
+                   "params": {"token": token, "value": value}})
+        };
+        lsp.handle(
+            "fake",
+            &progress("idx", json!({"kind": "begin", "title": "Indexing"})),
+            &mut events,
+        );
+        assert_eq!(lsp.progress_line().as_deref(), Some("fake: Indexing"));
+        lsp.handle(
+            "fake",
+            &progress(
+                "idx",
+                json!({"kind": "report", "message": "3/9", "percentage": 33}),
+            ),
+            &mut events,
+        );
+        assert_eq!(
+            lsp.progress_line().as_deref(),
+            Some("fake: Indexing: 3/9 (33%)")
+        );
+        lsp.handle(
+            "fake",
+            &progress("build", json!({"kind": "begin", "title": "Building"})),
+            &mut events,
+        );
+        assert_eq!(lsp.progress_line().as_deref(), Some("fake: Building +1"));
+        assert_eq!(lsp.statuses()[0].progress.len(), 2);
+        assert!(lsp.busy(), "still starting");
+        for token in ["idx", "build"] {
+            lsp.handle(
+                "fake",
+                &progress(token, json!({"kind": "end"})),
+                &mut events,
+            );
+        }
+        assert_eq!(lsp.progress_line(), None);
+        // A restart drops the old server's tasks with it.
+        lsp.handle(
+            "fake",
+            &progress("idx", json!({"kind": "begin", "title": "Indexing"})),
+            &mut events,
+        );
+        let reopened = lsp.restart_language("fake");
+        assert_eq!(reopened, vec![PathBuf::from("/tmp/a.fk")]);
+        assert_eq!(lsp.progress_line(), None);
         lsp.shutdown();
     }
 }

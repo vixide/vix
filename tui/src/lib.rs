@@ -48,6 +48,7 @@ vix_i18n::surface!();
 pub mod app;
 pub mod capability;
 pub mod cli;
+pub mod mcp;
 pub use vix_authority as authority;
 pub use vix_case as case;
 pub use vix_clipboard as clipboard;

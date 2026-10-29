@@ -81,4 +81,12 @@ pub struct Cli {
     /// Settings…**.
     #[arg(long, value_name = "PATH")]
     pub import_settings: Option<std::path::PathBuf>,
+
+    /// Serve the Model Context Protocol over stdin/stdout instead of
+    /// starting the editor, so an AI agent can read this workspace as Vix
+    /// sees it: open buffers, symbols, outline, offline diagnostics and
+    /// SQLite schemas. Read-only. The workspace is the one directory given
+    /// as an argument, or the current directory. See `spec/mcp-server`.
+    #[arg(long)]
+    pub mcp: bool,
 }

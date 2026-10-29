@@ -188,6 +188,29 @@ impl Session {
         confy::load_path(path).unwrap_or_default()
     }
 
+    /// Load the saved sessions **without ever writing**: unlike
+    /// [`Session::load`] (whose `confy` call creates a default file when none
+    /// exists), a missing or unreadable file just yields an empty set. Used by
+    /// the read-only `vix --mcp` server (T731).
+    #[must_use]
+    pub fn load_existing() -> Session {
+        confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME))
+            .ok()
+            .filter(|path| path.is_file())
+            .map(|path| Self::load_existing_from(&path))
+            .unwrap_or_default()
+    }
+
+    /// [`Session::load_existing`] for an explicit file: parsed directly, never
+    /// created, empty on any error.
+    #[must_use]
+    pub fn load_existing_from(path: &std::path::Path) -> Session {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| toml::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
     /// Persist the sessions to the config directory. `session.toml` can
     /// carry mildly sensitive content (open-file paths reveal project
     /// structure; a cached `project_cmd_*` could embed a secret in a custom
@@ -300,6 +323,30 @@ mod tests {
             root: root.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn load_existing_from_never_creates_a_file() {
+        let dir = std::env::temp_dir().join(format!("vix-session-ro-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let missing = dir.join("session.toml");
+        assert!(Session::load_existing_from(&missing).workspaces.is_empty());
+        assert!(!missing.exists());
+        let mut s = Session::default();
+        s.set_workspace(WorkspaceSession {
+            root: "/w".into(),
+            files: vec!["/w/a.rs".into()],
+            ..Default::default()
+        });
+        std::fs::write(&missing, toml::to_string(&s).unwrap()).unwrap();
+        assert_eq!(
+            Session::load_existing_from(&missing)
+                .workspace("/w")
+                .unwrap()
+                .files,
+            vec!["/w/a.rs".to_string()]
+        );
     }
 
     #[test]

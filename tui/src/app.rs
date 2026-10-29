@@ -50,6 +50,7 @@ mod insert_tools;
 mod jj;
 mod keymap;
 mod lsp_dap;
+mod lsp_status;
 mod modal;
 #[cfg(feature = "oc")]
 mod oc;
@@ -1510,6 +1511,9 @@ pub struct Layout {
     /// Row-list rectangle of the open System Information panel, so a click can
     /// hit-test which row was picked.
     pub system_info: Rect,
+    /// List rectangle of the open LSP Status panel (T732), for click
+    /// hit-testing.
+    pub lsp_status: Rect,
     /// Text rectangle of the open welcome panel, for mouse-wheel scrolling.
     pub welcome: Rect,
     /// Row-list rectangle of the open File Information panel, for click hit-testing.
@@ -2025,6 +2029,8 @@ pub struct App {
     pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
     pub(crate) system_info: Option<SystemInfoPanel>,
+    /// View → LSP Status… overlay (T732), when open.
+    pub(crate) lsp_status: Option<lsp_status::LspStatusPanel>,
     /// Workspace Dashboard overlay, when open.
     pub(crate) dashboard: Option<Dashboard>,
     /// QR code overlay (rendered Unicode art), when open.
@@ -2606,6 +2612,7 @@ impl App {
             cowork: cowork_state::State::default(),
             html_panel: None,
             system_info: None,
+            lsp_status: None,
             dashboard: None,
             dashboard_rx: None,
             outline: None,
@@ -3526,6 +3533,7 @@ impl App {
             "lsp.hover" => self.lsp_hover(),
             "lsp.restart" => self.lsp_restart(),
             "lsp.show_log" => self.lsp_show_log(),
+            "lsp.status" => self.open_lsp_status(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),
@@ -7336,7 +7344,6 @@ impl App {
                     self.messages
                         .error(t!("msg.lsp_server_crashed", language = language_id).to_string());
                 }
-                crate::lsp::LspEvent::Progress(text) => self.status = text,
                 crate::lsp::LspEvent::SemanticTokens(tokens) => {
                     self.apply_semantic_tokens(&tokens);
                 }
@@ -8582,6 +8589,7 @@ impl App {
         panel!(choice_list, choice_list_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
+        panel!(lsp_status, lsp_status_mouse);
         panel!(file_info, file_info_mouse);
         panel!(text_info, text_info_mouse);
         if self.markdown_preview.is_some() {
