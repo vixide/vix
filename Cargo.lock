@@ -6266,9 +6266,9 @@ dependencies = [
 name = "vix-file-browser-panel"
 version = "2.0.0"
 dependencies = [
+ "vix-authority",
  "vix-list-state",
  "vix-palette",
- "walkdir",
 ]
 
 [[package]]
@@ -6442,6 +6442,7 @@ name = "vix-left-dock"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
  "vix-list-state",
 ]
 
@@ -6792,7 +6793,6 @@ dependencies = [
  "confy",
  "criterion",
  "crossterm",
- "ignore",
  "image",
  "include_dir",
  "insta",

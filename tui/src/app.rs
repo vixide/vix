@@ -5979,7 +5979,7 @@ impl App {
             run: Option<String>,
         }
         let path = self.root.join(".vix").join("project.toml");
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = crate::authority::current().read_to_string(&path) else {
             return crate::tasks::lifecycle::LifecycleCommands::default();
         };
         let parsed: ProjectOverrideFile = toml::from_str(&text).unwrap_or_default();
@@ -5996,12 +5996,12 @@ impl App {
     /// The names of every entry directly inside `dir`, or empty on any error
     /// (missing directory, permissions, …).
     fn dir_entry_names(dir: &Path) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = crate::authority::current().read_dir(dir) else {
             return Vec::new();
         };
         entries
-            .flatten()
-            .filter_map(|e| e.file_name().into_string().ok())
+            .iter()
+            .filter_map(|e| e.name().to_str().map(str::to_string))
             .collect()
     }
 
@@ -6015,7 +6015,9 @@ impl App {
         let names = Self::dir_entry_names(dir);
         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
         let pyproject = if refs.contains(&"pyproject.toml") {
-            std::fs::read_to_string(dir.join("pyproject.toml")).ok()
+            crate::authority::current()
+                .read_to_string(&dir.join("pyproject.toml"))
+                .ok()
         } else {
             None
         };
@@ -6119,7 +6121,8 @@ impl App {
     /// return the merged `Discovered`-tier tasks (all seven sources
     /// `vix-tasks` supports). Cheap existence checks before each read.
     fn discovered_tasks_at(dir: &Path) -> Vec<crate::tasks::task::NamedTask> {
-        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
+        let auth = crate::authority::current();
+        let read = |name: &str| auth.read_to_string(&dir.join(name)).ok();
         let mut out = Vec::new();
         if let Some(body) = read("package.json") {
             let names = Self::dir_entry_names(dir);
@@ -6168,17 +6171,17 @@ impl App {
             }
         }
         let rakelib = dir.join("rakelib");
-        if rakelib.is_dir() {
+        if auth.is_dir(&rakelib) {
             for name in Self::dir_entry_names(&rakelib) {
                 if is_rake_file(&name)
-                    && let Ok(body) = std::fs::read_to_string(rakelib.join(&name))
+                    && let Ok(body) = auth.read_to_string(&rakelib.join(&name))
                 {
                     rakefiles.push((format!("rakelib/{name}"), body));
                 }
             }
         }
         if !rakefiles.is_empty() {
-            let use_bundler = dir.join("Gemfile").is_file();
+            let use_bundler = auth.is_file(&dir.join("Gemfile"));
             let refs: Vec<(&str, &str)> = rakefiles
                 .iter()
                 .map(|(n, b)| (n.as_str(), b.as_str()))
@@ -7516,12 +7519,13 @@ impl App {
                 }
                 continue;
             }
+            let auth = crate::authority::current();
             let mut dest = target.join(src.file_name().unwrap_or_default());
             // Copying into the same directory can't overwrite the source, so it
             // gets an auto-incremented "name copy" instead of a conflict prompt.
             if !cut && same_dir {
                 dest = crate::fileops::unique_copy_name(&target, &src);
-            } else if dest.exists() {
+            } else if auth.exists(&dest) {
                 if overwrite_all {
                     // fall through and overwrite
                 } else if skip_all {
@@ -7545,16 +7549,19 @@ impl App {
 
     fn perform_paste_one(&mut self, src: &Path, dest: &Path, cut: bool) {
         // Capture the canonical source before moving (it won't exist after).
-        let src_canon = src.canonicalize().unwrap_or_else(|_| src.to_path_buf());
+        let auth = crate::authority::current();
+        let src_canon = auth.canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
         let res = if cut {
-            crate::fileops::move_path(src, dest)
+            auth.move_path(src, dest)
         } else {
-            crate::fileops::copy_recursive(src, dest)
+            auth.copy_recursive(src, dest)
         };
         match res {
             Ok(()) => {
                 if cut {
-                    let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+                    let dest_canon = auth
+                        .canonicalize(dest)
+                        .unwrap_or_else(|_| dest.to_path_buf());
                     self.relocate_buffers(&src_canon, &dest_canon);
                 }
             }
@@ -7822,13 +7829,14 @@ impl App {
                 if let Some(c) = self.confirm.take() {
                     let use_trash = self.explorer_delete_uses_trash();
                     let mut removed = 0;
+                    let auth = crate::authority::current();
                     for path in &c.paths {
                         // Canonicalize before removing so buffer paths still match.
-                        let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+                        let canon = auth.canonicalize(path).unwrap_or_else(|_| path.clone());
                         let result = if use_trash {
-                            crate::fileops::trash_path(path)
+                            auth.trash(path)
                         } else {
-                            crate::fileops::remove_path(path)
+                            auth.remove_path(path)
                         };
                         match result {
                             Ok(()) => {
@@ -13294,11 +13302,12 @@ impl App {
         if new_path == cur {
             return;
         }
-        if new_path.exists() {
+        let auth = crate::authority::current();
+        if auth.exists(&new_path) {
             self.status = t!("status.rename_exists", name = new_path.display()).to_string();
             return;
         }
-        match std::fs::rename(&cur, &new_path) {
+        match auth.rename(&cur, &new_path) {
             Ok(()) => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.path = Some(new_path.clone());
@@ -14147,19 +14156,20 @@ fn do_replace(
 /// so the Workspace Dashboard's disk-size figure silently never populated
 /// there). Best-effort: unreadable entries are skipped.
 fn dir_size(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let auth = crate::authority::current();
+    let Ok(entries) = auth.read_dir(dir) else {
         return 0;
     };
     let mut total = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
+    for entry in entries {
+        let name = entry.name();
         if name == ".git" || name == "target" {
             continue;
         }
-        match entry.file_type() {
-            Ok(ft) if ft.is_dir() => total += dir_size(&entry.path()),
-            Ok(ft) if ft.is_file() => {
-                total += entry.metadata().map_or(0, |m| m.len());
+        match entry.kind {
+            crate::authority::FileKind::Dir => total += dir_size(&entry.path),
+            crate::authority::FileKind::File => {
+                total += auth.symlink_metadata(&entry.path).map_or(0, |m| m.len);
             }
             _ => {}
         }
@@ -14170,18 +14180,18 @@ fn dir_size(dir: &Path) -> u64 {
 /// Recursively count regular files under `dir`, skipping `.git` and `target`
 /// (the large generated trees). Best-effort: unreadable entries are skipped.
 fn count_files(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = crate::authority::current().read_dir(dir) else {
         return 0;
     };
     let mut count = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
+    for entry in entries {
+        let name = entry.name();
         if name == ".git" || name == "target" {
             continue;
         }
-        match entry.file_type() {
-            Ok(ft) if ft.is_dir() => count += count_files(&entry.path()),
-            Ok(ft) if ft.is_file() => count += 1,
+        match entry.kind {
+            crate::authority::FileKind::Dir => count += count_files(&entry.path),
+            crate::authority::FileKind::File => count += 1,
             _ => {}
         }
     }

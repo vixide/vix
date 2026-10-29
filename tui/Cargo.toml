@@ -259,7 +259,7 @@ vix-editorconfig = { workspace = true }
 vix-emmet = { workspace = true }
 # Text-file encodings: detect, decode, and encode back byte for byte (T661).
 vix-encoding = { workspace = true }
-# File browser (File → Open…): walkdir-backed listing with fuzzy search, sort, and filters.
+# File browser (File → Open…): authority-backed listing with fuzzy search, sort, and filters.
 vix-file-browser-panel = { workspace = true }
 # Information about the active editor file, plus the panel's row-selection state.
 vix-file-information-panel = { workspace = true }
@@ -405,8 +405,6 @@ vix-zid-tool = { workspace = true }
 ratatui = { workspace = true }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = { workspace = true }
-# Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
-ignore = { workspace = true }
 # Regular expressions for find/replace.
 regex = { workspace = true }
 # Settings serialization (confy handles the TOML; serde derives the schema).

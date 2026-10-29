@@ -180,28 +180,24 @@ impl Explorer {
     }
 
     fn walk(&self, dir: &Path, depth: usize, out: &mut Vec<Node>) {
-        let mut entries: Vec<_> = match std::fs::read_dir(dir) {
-            Ok(rd) => rd.flatten().collect(),
-            Err(_) => return,
+        // Through the authority slot (T710). Each entry is stat-ed once, while
+        // listing, so the sort key below can't change mid-sort (an entry
+        // created or removed mid-sort would otherwise answer differently for
+        // the same element and panic the comparator).
+        let Ok(mut entries) = vix_authority::current().read_dir(dir) else {
+            return;
         };
-        // Directories first, then case-insensitive name. Cached: the key stats
-        // the filesystem, and a plain `sort_by_key` would re-stat during the
-        // sort — an entry created or removed mid-sort would then answer
-        // differently for the same element and panic the comparator.
-        entries.sort_by_cached_key(|e| {
-            let p = e.path();
-            (!p.is_dir(), e.file_name().to_string_lossy().to_lowercase())
-        });
+        // Directories first, then case-insensitive name.
+        entries.sort_by_cached_key(|e| (!e.is_dir, e.name().to_string_lossy().to_lowercase()));
         for entry in entries {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().into_owned();
+            let name = entry.name().to_string_lossy().into_owned();
+            let path = entry.path;
             if name.starts_with('.') {
                 continue; // hide dotfiles
             }
-            let is_dir = path.is_dir();
+            let is_dir = entry.is_dir;
             // The link itself, regardless of what it points at.
-            let is_symlink =
-                std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink());
+            let is_symlink = entry.kind == vix_authority::FileKind::Symlink;
             // Files must pass the include/exclude filters; directories are kept so
             // the tree stays navigable.
             if !is_dir && !self.allows(&path) {

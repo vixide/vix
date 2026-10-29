@@ -83,33 +83,17 @@ impl App {
     /// always pruned (some projects don't ignore them), depth is bounded, and the
     /// index is capped to keep startup and matching responsive.
     pub(super) fn build_file_index(&mut self) {
+        const CAP: usize = 5000;
+        let auth = crate::authority::current();
         let mut out = Vec::new();
         for folder in &self.workspace_folders {
-            if out.len() >= 5000 {
+            if out.len() >= CAP {
                 break;
             }
-            let walker = ignore::WalkBuilder::new(folder)
-                .max_depth(Some(12))
-                .hidden(true) // skip dotfiles (matches the previous behavior)
-                .git_ignore(true)
-                .git_global(true)
-                .git_exclude(true)
-                .require_git(false) // apply .gitignore/.ignore even outside a git repo
-                .parents(true)
-                .filter_entry(|e| {
-                    // Prune heavy build/vendor dirs, but never the walk root itself.
-                    e.depth() == 0
-                        || !matches!(e.file_name().to_str(), Some("target" | "node_modules"))
-                })
-                .build();
-            for entry in walker.flatten() {
-                if out.len() >= 5000 {
-                    break;
-                }
-                if entry.file_type().is_some_and(|t| t.is_file()) {
-                    out.push(entry.into_path());
-                }
-            }
+            // Through the authority slot (T710); the local one walks with
+            // `ignore` exactly as before.
+            let opts = crate::authority::WalkOptions::file_index(CAP - out.len());
+            out.extend(auth.walk_files(folder, &opts));
         }
         self.file_index = out;
     }
@@ -323,6 +307,7 @@ impl App {
         if query.trim().is_empty() {
             return entries;
         }
+        let auth = crate::authority::current();
         for path in &self.file_index {
             if entries.len() >= MAX_RESULTS {
                 break;
@@ -331,10 +316,10 @@ impl App {
             if is_image_path(path) {
                 continue;
             }
-            if std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_FILE_BYTES) {
+            if auth.metadata(path).is_ok_and(|m| m.len > MAX_FILE_BYTES) {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(path) else {
+            let Ok(text) = auth.read_to_string(path) else {
                 continue;
             };
             let rel = path

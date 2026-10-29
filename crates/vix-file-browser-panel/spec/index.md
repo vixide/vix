@@ -3,12 +3,12 @@
 File browser panel (File → Open): recursive listing with fuzzy search,
 sorting, and filtering. This comprehensive overlay behind **File → Open…**
 (`file.open`, `Ctrl O`) offers live search (including fuzzy search) plus
-directory navigation over the current root directory. Walking uses the
-`walkdir` crate.
+directory navigation over the current root directory. Walking goes through
+the authority slot (`vix-authority`, T710).
 
 ## Listing
 
-Opening the browser walks the workspace root recursively (`walkdir`, walk
+Opening the browser walks the workspace root recursively (depth first, links not followed, walk
 order sorted by file name) and records, per entry: absolute path,
 root-relative path, name, directory flag, size in bytes, and the created /
 modified times as Unix seconds (`None` where the filesystem lacks them).
