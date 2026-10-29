@@ -1503,7 +1503,11 @@ impl App {
             .iter()
             .find(|t| t.path.as_deref() == Some(canon.as_path()))
             .map(crate::editor::Tab::text)
-            .or_else(|| crate::fileops::read_to_string_guarded(&abs).ok())
+            .or_else(|| {
+                crate::authority::current()
+                    .read_to_string_guarded(&abs)
+                    .ok()
+            })
             .unwrap_or_default();
         let (old, label) = match base {
             DiffBase::Head => (crate::git::head_blob(&self.root, rel), "HEAD".to_string()),

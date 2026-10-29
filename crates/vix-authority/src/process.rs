@@ -3,7 +3,6 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// One command-line argument.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,9 +120,10 @@ impl ProcessSpec {
 
     /// The `Command` that runs this spec on the local machine: exactly what
     /// the call sites built by hand before T710.
+    #[cfg(feature = "process")]
     #[must_use]
-    pub fn to_local_command(&self) -> Command {
-        let mut cmd = Command::new(&self.program);
+    pub fn to_local_command(&self) -> std::process::Command {
+        let mut cmd = std::process::Command::new(&self.program);
         for arg in &self.args {
             match arg {
                 Arg::Plain(a) => {
@@ -153,7 +153,7 @@ impl ProcessSpec {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "process"))]
 mod tests {
     use super::*;
 

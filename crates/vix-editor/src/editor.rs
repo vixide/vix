@@ -601,7 +601,9 @@ impl Editor {
     /// Open an image file in a tab, rendered with the given protocol.
     #[cfg(feature = "image")]
     pub fn open_image(&mut self, path: &Path, proto: ImageProtocol) {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canon = vix_authority::current()
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self
             .tabs
             .iter()
@@ -680,7 +682,11 @@ impl Editor {
     }
 
     fn open_with_limit(&mut self, path: &Path, preview: bool, max_bytes: u64) -> io::Result<()> {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        // Through the authority slot (T710): the workspace may not be local.
+        let auth = vix_authority::current();
+        let canon = auth
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self
             .tabs
             .iter()
@@ -695,14 +701,14 @@ impl Editor {
 
         // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
         // error; non-UTF-8 text opens lossily and read-only.
-        let fs_read_only = vix_fileops::is_unwritable(&canon);
+        let fs_read_only = auth.is_unwritable(&canon);
         let protected = self.read_only_paths.matches(&canon);
         let vix_fileops::TextFile {
             text: content,
             lossy,
             encoding,
             ..
-        } = vix_fileops::read_text_guarded(&canon, max_bytes)?;
+        } = auth.read_text_guarded(&canon, max_bytes)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
             editor,
@@ -750,6 +756,7 @@ impl Editor {
     /// errors (the file vanished) skip the buffer silently, as before.
     pub fn reload_clean_from_disk_checked(&mut self) -> Reload {
         let mut out = Reload::default();
+        let auth = vix_authority::current();
         for tab in &mut self.tabs {
             if tab.dirty || tab.image.is_some() {
                 continue;
@@ -763,7 +770,7 @@ impl Editor {
             } else {
                 self.max_text_bytes
             };
-            let (content, lossy) = match vix_fileops::read_text_guarded(&path, limit) {
+            let (content, lossy) = match auth.read_text_guarded(&path, limit) {
                 Ok(read) => {
                     tab.encoding = read.encoding;
                     (read.text, read.lossy)
@@ -829,15 +836,16 @@ impl Editor {
         // The guards of `read_text_guarded` (T571) minus its binary check: the
         // user picked this encoding on purpose, and UTF-16 without a BOM looks
         // binary.
-        let meta = std::fs::metadata(&path)?;
+        let auth = vix_authority::current();
+        let meta = auth.metadata(&path)?;
         let refuse = |why| Err(io::Error::new(io::ErrorKind::InvalidData, why));
         if !meta.is_file() {
             return refuse(vix_fileops::TextReadError::NotRegular);
         }
-        if meta.len() > limit {
+        if meta.len > limit {
             return refuse(vix_fileops::TextReadError::TooLarge);
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = auth.read(&path)?;
         let (text, lossy) = vix_encoding::decode_lossy(&bytes, encoding);
         let cursor = tab.editor.get_cursor();
         tab.editor.set_content(&text);
@@ -906,7 +914,7 @@ impl Editor {
         // Atomic, crash-safe save: a temp file is flushed and renamed over the
         // target, so a crash or full disk mid-write can't truncate the user's
         // file, and a concurrent reader never sees a half-written buffer.
-        vix_fileops::write_atomic(path, &bytes)?;
+        vix_authority::current().write_atomic(path, &bytes)?;
         self.tabs[idx].dirty = false;
         self.tabs[idx].preview = false;
         Ok(())

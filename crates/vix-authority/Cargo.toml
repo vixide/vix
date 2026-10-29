@@ -7,6 +7,13 @@ license.workspace = true
 repository.workspace = true
 description = "The authority slot: one trait that owns Vix's workspace file access and process spawning, with a local implementation and a temp-dir-backed fake."
 
+[features]
+# Build `Command`s for `Authority::command`. Off, no authority can start a
+# process (the call returns `Unsupported`), so the minimal build stays
+# spawn-free (T595); every crate's own `process` feature and the root `tasks`
+# feature turn it on.
+process = []
+
 [dependencies]
 ignore = { workspace = true }
 vix-fileops = { workspace = true }

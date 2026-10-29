@@ -50,6 +50,8 @@ pub struct FileStat {
     pub created: Option<SystemTime>,
     /// Whether the read-only permission/attribute is set.
     pub readonly: bool,
+    /// The Unix permission bits (`st_mode`), where the platform has them.
+    pub mode: Option<u32>,
 }
 
 impl FileStat {
@@ -63,6 +65,7 @@ impl FileStat {
             modified: None,
             created: None,
             readonly: false,
+            mode: None,
         }
     }
 
@@ -87,13 +90,28 @@ impl FileStat {
         self
     }
 
+    /// This stat with its Unix permission bits set.
+    #[must_use]
+    pub fn with_mode(mut self, mode: Option<u32>) -> Self {
+        self.mode = mode;
+        self
+    }
+
     /// The stat of a local `std::fs::Metadata`.
     #[must_use]
     pub fn from_std(m: &std::fs::Metadata) -> Self {
+        #[cfg(unix)]
+        let mode = {
+            use std::os::unix::fs::PermissionsExt as _;
+            Some(m.permissions().mode())
+        };
+        #[cfg(not(unix))]
+        let mode = None;
         Self::new(FileKind::from_std(m.file_type()), m.len())
             .with_modified(m.modified().ok())
             .with_created(m.created().ok())
             .with_readonly(m.permissions().readonly())
+            .with_mode(mode)
     }
 
     /// Whether this is a directory.

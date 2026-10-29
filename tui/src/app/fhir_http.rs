@@ -33,7 +33,7 @@ impl App {
     /// line or message log.
     fn fhir_profile(&mut self) -> Option<Profile> {
         let path = self.root.join(".vix").join("fhir.json");
-        let text = match std::fs::read_to_string(&path) {
+        let text = match crate::authority::current().read_to_string(&path) {
             Ok(t) => t,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 self.status = t!("status.fhir_no_profile").to_string();

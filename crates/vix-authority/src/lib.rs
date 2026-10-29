@@ -46,6 +46,14 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// The underlying I/O error.
     fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
 
+    /// Read at most `limit` bytes from the start of the file, bounding memory
+    /// even if the file is huge or grows while being read (`File::open` +
+    /// `take(limit)`). A result of exactly `limit` bytes means "at least".
+    ///
+    /// # Errors
+    /// The underlying I/O error.
+    fn read_limited(&self, path: &Path, limit: u64) -> io::Result<Vec<u8>>;
+
     /// Read the whole file as UTF-8 (`std::fs::read_to_string`).
     ///
     /// # Errors
@@ -197,9 +205,20 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// itself.
     ///
     /// # Errors
-    /// When the authority can't run processes at all (or, for the fake, when
-    /// the working directory escapes its namespace).
+    /// `Unsupported` in a build without the `process` feature, or when the
+    /// authority can't run processes at all (or, for the fake, when the
+    /// working directory escapes its namespace).
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command>;
+}
+
+/// The error [`Authority::command`] returns in a build without the `process`
+/// feature: that build never starts a process (T595).
+#[cfg(not(feature = "process"))]
+pub(crate) fn process_disabled() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        "this build cannot start processes",
+    )
 }
 
 /// The installed authority, if [`install`] was ever called.

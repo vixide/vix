@@ -85,7 +85,7 @@ lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
 # funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
-tasks = ["vix-format-tool/process"]
+tasks = ["vix-format-tool/process", "vix-authority/process"]
 hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
@@ -264,6 +264,7 @@ vix-file-browser-panel = { workspace = true }
 # Information about the active editor file, plus the panel's row-selection state.
 vix-file-information-panel = { workspace = true }
 # Filesystem helpers for the explorer's copy / cut / paste / delete.
+vix-authority = { workspace = true }
 vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
 vix-find-panel = { workspace = true }

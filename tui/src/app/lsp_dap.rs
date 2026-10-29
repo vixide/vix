@@ -925,6 +925,7 @@ impl App {
     /// dirty) and rewrite closed files on disk.
     pub(super) fn apply_workspace_edit(&mut self, edits: &[crate::lsp::FileEdits]) {
         let mut files = 0usize;
+        let auth = crate::authority::current();
         for (path, file_edits) in edits {
             if file_edits.is_empty() {
                 continue;
@@ -946,9 +947,9 @@ impl App {
                     tab.preview = false;
                     files += 1;
                 }
-            } else if let Ok(text) = std::fs::read_to_string(path) {
+            } else if let Ok(text) = auth.read_to_string(path) {
                 let new = apply_edits_to_text(&text, enc, file_edits);
-                if new != text && std::fs::write(path, new).is_ok() {
+                if new != text && auth.write(path, new.as_bytes()).is_ok() {
                     files += 1;
                 }
             }

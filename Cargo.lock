@@ -6183,6 +6183,7 @@ dependencies = [
  "ratatui",
  "ratatui-core",
  "ratatui-image",
+ "vix-authority",
  "vix-editor-core",
  "vix-encoding",
  "vix-fileops",
@@ -6232,6 +6233,7 @@ name = "vix-editorconfig"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
 ]
 
 [[package]]
@@ -6814,6 +6816,7 @@ dependencies = [
  "vix-ai-panel",
  "vix-align",
  "vix-ascii-character-picker",
+ "vix-authority",
  "vix-base-tool",
  "vix-base16",
  "vix-base64-tool",

@@ -2819,8 +2819,9 @@ impl App {
     /// difftool` driver invokes with (`$LOCAL $REMOTE`); see
     /// `docs/cli/index.md`.
     pub fn open_diff_files(&mut self, old: &Path, new: &Path) {
+        let auth = crate::authority::current();
         let read = |p: &Path| {
-            crate::fileops::read_to_string_guarded(p)
+            auth.read_to_string_guarded(p)
                 .map_err(|e| t!("msg.open_failed", error = e).to_string())
         };
         let (old_text, new_text) = match (read(old), read(new)) {
@@ -5375,11 +5376,12 @@ impl App {
 
         let mut reload_clean = false;
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
+        let auth = crate::authority::current();
         for tab in &self.editor.tabs {
             let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else {
                 continue;
             };
-            let Ok(mtime) = std::fs::metadata(path).and_then(|m| m.modified()) else {
+            let Some(mtime) = auth.metadata(path).ok().and_then(|m| m.modified) else {
                 continue;
             };
             let previous = self.disk_mtimes.insert(path.clone(), mtime);
@@ -6343,7 +6345,7 @@ impl App {
             return;
         }
         let path = self.resolve(input);
-        let Ok(text) = crate::fileops::read_to_string_guarded(&path) else {
+        let Ok(text) = crate::authority::current().read_to_string_guarded(&path) else {
             self.messages
                 .error(t!("msg.open_failed", error = path.display()).to_string());
             return;
@@ -6368,7 +6370,7 @@ impl App {
             self.status = t!("status.revert_no_file").to_string();
             return;
         };
-        match crate::fileops::read_to_string_guarded(&path) {
+        match crate::authority::current().read_to_string_guarded(&path) {
             Ok(content) => {
                 let cursor = tab.editor.get_cursor();
                 tab.editor.set_content(&content);
@@ -8025,7 +8027,9 @@ impl App {
     fn report_open_failure(&mut self, path: &Path, preview: bool, e: &std::io::Error) {
         use crate::fileops::TextReadError;
         let why = TextReadError::from_io(e);
-        let size = std::fs::metadata(path).map_or(0, |m| m.len());
+        let size = crate::authority::current()
+            .metadata(path)
+            .map_or(0, |m| m.len);
         let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
         if !preview && !over_hard_cap {
             let ask = match why {
@@ -8081,14 +8085,11 @@ impl App {
     /// Open a binary file in the byte editor, saving straight back to the file
     /// (not through a text buffer, which would corrupt non-UTF-8 bytes) (T571).
     fn open_binary_file(&mut self, path: &Path) {
-        use std::io::Read as _;
-        let mut bytes = Vec::new();
-        let read = std::fs::File::open(path).and_then(|f| {
-            f.take(crate::fileops::HARD_MAX_TEXT_BYTES + 1)
-                .read_to_end(&mut bytes)
-        });
+        // At most one byte past the ceiling, so a huge file can't exhaust memory.
+        let read =
+            crate::authority::current().read_limited(path, crate::fileops::HARD_MAX_TEXT_BYTES + 1);
         match read {
-            Ok(n) if (n as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
+            Ok(bytes) if (bytes.len() as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
                 self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(bytes));
                 self.edit_bytes_file = Some(path.to_path_buf());
             }
@@ -10131,19 +10132,20 @@ impl App {
     }
 
     fn open_recent_chooser(&mut self) {
+        let auth = crate::authority::current();
         let entries: Vec<RecentEntry> = self
             .settings
             .recent_files
             .iter()
             .map(PathBuf::from)
-            .filter(|p| p.is_file())
+            .filter(|p| auth.is_file(p))
             .map(|path| {
                 use crate::file_browser_panel::unix_secs;
-                let meta = std::fs::metadata(&path).ok();
+                let meta = auth.metadata(&path).ok();
                 RecentEntry {
-                    size: meta.as_ref().map_or(0, std::fs::Metadata::len),
-                    created: meta.as_ref().and_then(|m| unix_secs(m.created().ok())),
-                    modified: meta.as_ref().and_then(|m| unix_secs(m.modified().ok())),
+                    size: meta.as_ref().map_or(0, |m| m.len),
+                    created: meta.as_ref().and_then(|m| unix_secs(m.created)),
+                    modified: meta.as_ref().and_then(|m| unix_secs(m.modified)),
                     path,
                 }
             })
@@ -10553,7 +10555,7 @@ impl App {
         // A binary file opened straight into the byte editor is written back byte
         // for byte; going through a text buffer would corrupt it (T571).
         if let Some(path) = self.edit_bytes_file.clone() {
-            match crate::fileops::write_atomic(&path, &bytes) {
+            match crate::authority::current().write_atomic(&path, &bytes) {
                 Ok(()) => {
                     if let Some(hex) = self.edit_bytes.as_mut() {
                         hex.mark_saved();
@@ -12048,8 +12050,9 @@ impl App {
     /// project root.
     pub(crate) fn collect_todos(&self) -> Vec<crate::todo_tree::Item> {
         let mut items = Vec::new();
+        let auth = crate::authority::current();
         for path in &self.file_index {
-            let Ok(content) = crate::fileops::read_to_string_guarded(path) else {
+            let Ok(content) = auth.read_to_string_guarded(path) else {
                 continue;
             };
             let rel = path
@@ -12180,7 +12183,10 @@ impl App {
     /// The current text for a path: the open buffer if one points at it (so
     /// unsaved edits are searched), otherwise the file on disk.
     fn current_text(&self, path: &Path) -> Option<String> {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let auth = crate::authority::current();
+        let canon = auth
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         if let Some(tab) = self
             .editor
             .tabs
@@ -12189,11 +12195,11 @@ impl App {
         {
             return Some(tab.text());
         }
-        let meta = std::fs::metadata(path).ok()?;
-        if meta.len() > 2_000_000 {
+        let meta = auth.metadata(path).ok()?;
+        if meta.len > 2_000_000 {
             return None; // skip very large files
         }
-        crate::fileops::read_to_string_guarded(path).ok()
+        auth.read_to_string_guarded(path).ok()
     }
 
     fn run_workspace_search(&mut self) {
@@ -12396,7 +12402,7 @@ impl App {
                     continue;
                 }
             }
-            if let Err(e) = crate::fileops::write_text_in_file_encoding(path, new) {
+            if let Err(e) = crate::authority::current().write_text_in_file_encoding(path, new) {
                 self.messages
                     .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;

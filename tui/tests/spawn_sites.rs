@@ -14,6 +14,21 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
     (
+        "crates/vix-authority/src/lib.rs",
+        "the `Authority::command` signature (T710): builds no process itself",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/process.rs",
+        "`ProcessSpec::to_local_command`, the one place an authority builds a local `Command`",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/local.rs",
+        "`LocalAuthority::command` (returns `Unsupported` without `process`)",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
         "crates/vix-http-client/src/aad.rs",
         "`az account get-access-token` for {{$aadToken}} (argv array, no shell)",
         "`http` feature (vix-http-client is an optional dependency of the root)",

@@ -546,7 +546,7 @@ impl App {
                         .find(|t| t.path.as_deref() == Some(path.as_path()))
                         .map(crate::editor::Tab::text)
                 })
-                .or_else(|| std::fs::read_to_string(path).ok())
+                .or_else(|| crate::authority::current().read_to_string(path).ok())
                 .unwrap_or_default();
             let new = super::apply_edits_to_text(&old, enc, file_edits);
             let _ = writeln!(body, "--- {0}\n+++ {0}", path.display());
@@ -625,9 +625,11 @@ impl App {
     fn edit_run_configs(&mut self) {
         let dir = self.root.join(".vix");
         let path = dir.join("run.toml");
-        if !path.exists() {
-            let made = std::fs::create_dir_all(&dir)
-                .and_then(|()| std::fs::write(&path, RUN_CONFIG_TEMPLATE));
+        let auth = crate::authority::current();
+        if !auth.exists(&path) {
+            let made = auth
+                .create_dir_all(&dir)
+                .and_then(|()| auth.write(&path, RUN_CONFIG_TEMPLATE.as_bytes()));
             if let Err(e) = made {
                 self.messages
                     .error(t!("msg.command_failed", error = e).to_string());
@@ -697,7 +699,7 @@ impl App {
 
     /// Fill the overlay with the lines around 1-based `line` of `path`.
     fn show_peek(&mut self, path: &Path, line: usize) {
-        let Ok(text) = crate::fileops::read_to_string_guarded(path) else {
+        let Ok(text) = crate::authority::current().read_to_string_guarded(path) else {
             self.status = t!("status.peek_unreadable").to_string();
             return;
         };

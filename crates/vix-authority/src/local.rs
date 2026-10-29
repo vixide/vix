@@ -22,6 +22,10 @@ impl Authority for LocalAuthority {
         std::fs::read(path)
     }
 
+    fn read_limited(&self, path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+        read_limited_local(path, limit)
+    }
+
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
         std::fs::read_to_string(path)
     }
@@ -126,9 +130,25 @@ impl Authority for LocalAuthority {
         vix_fileops::which_on_path(name)
     }
 
+    #[cfg(feature = "process")]
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command> {
         Ok(spec.to_local_command())
     }
+
+    #[cfg(not(feature = "process"))]
+    fn command(&self, _spec: &ProcessSpec) -> io::Result<Command> {
+        Err(crate::process_disabled())
+    }
+}
+
+/// Read at most `limit` bytes of a local file.
+pub(crate) fn read_limited_local(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    use std::io::Read as _;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(limit)
+        .read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Walk a local directory with the `ignore` crate (ripgrep's engine) as `opts`
