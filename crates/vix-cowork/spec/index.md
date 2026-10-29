@@ -83,6 +83,6 @@ scroll or when that peer leaves.
 ## Tests
 
 Unit tests per module; property tests for the codec, paths, and an N-replica
-convergence run (`tests/converge.rs`): a host and three guests edit and undo
+convergence run (`crates/vix-cowork/tests/converge.rs`): a host and three guests edit and undo
 concurrently over delayed per-link queues, and every replica's CRDT text and
 its replay-only plain buffer must be identical at the end.

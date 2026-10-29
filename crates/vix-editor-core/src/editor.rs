@@ -178,6 +178,9 @@ pub struct Editor {
     /// non-vertical motion routes through [`Editor::set_cursor`]). This stops the
     /// classic drift where moving through a short line snaps the column inward.
     pub(crate) goal_col: Option<usize>,
+    /// Other participants' carets and selections (Cowork, T693), drawn under
+    /// the local cursor.
+    pub(crate) remote_carets: Vec<crate::remote::RemoteCaret>,
 }
 
 impl Editor {
@@ -241,6 +244,7 @@ impl Editor {
             cursor_style: None,
             carets: Vec::new(),
             goal_col: None,
+            remote_carets: Vec::new(),
         })
     }
 

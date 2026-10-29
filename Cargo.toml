@@ -125,6 +125,9 @@ clap_mangen = "0.3.3"
 # diamond-types for its stable text cursors, text-delta change events and
 # per-peer undo. MIT. `counter` (default) is not needed.
 loro = { version = "1.17", default-features = false }
+# Noise protocol (Cowork transport, T694): NK + psk0 over X25519, ChaCha20-Poly1305,
+# BLAKE2s. MIT OR Apache-2.0.
+snow = "0.10"
 
 # Internal crates, declared once (T601): members say `vix-x.workspace = true`.
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "2.0.0" }
@@ -166,6 +169,7 @@ vix-convert-from-yaml-into-json-tool = { path = "crates/vix-convert-from-yaml-in
 vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "2.0.0" }
 vix-coverage = { path = "crates/vix-coverage", version = "2.0.0" }
 vix-cowork = { path = "crates/vix-cowork", version = "2.0.0" }
+vix-cowork-net = { path = "crates/vix-cowork-net", version = "2.0.0" }
 vix-dap = { path = "crates/vix-dap", version = "2.0.0" }
 vix-db = { path = "crates/vix-db", version = "2.0.0" }
 vix-diff-view = { path = "crates/vix-diff-view", version = "2.0.0" }

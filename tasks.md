@@ -7988,18 +7988,32 @@ widgets, and a markup-hiding Markdown "compose" mode.
     (`im`, `bitmaps`, `sized-chunks`, `atomic-polyfill`; no vulnerabilities).
     Decision record in `spec/cowork`. **Not done:** the numbers are one machine,
     one run; no live web research on release cadence.
-- [ ] **T691 — `vix-cowork` core.** Pure document, peer, presence and
+- [x] **T691 — `vix-cowork` core.** Pure document, peer, presence and
   permission model; N-replica convergence tests incl. proptest; no I/O.
   **Large.** After T690.
+  - **Done 2026-10-29**: `vix-cowork` crate: `SharedDoc` (Loro), `Peer`/`Permission`,
+    `SharedPath` confinement, panic-free wire codec, presence, and the
+    `HostSession`/`GuestSession` state machines. 57 unit tests plus a proptest
+    host-and-three-guest convergence run with delayed delivery and undo.
+    **Not done:** only text buffers (no cursor-position undo grouping policy
+    beyond Loro's 1 s merge window); Loro's behavior on hostile update bytes is
+    covered by "never panics on garbage" tests, not a fuzz target.
 - [ ] **T692 — Editor bridge.** Local edits to ops and remote ops to buffer
   without moving the local cursor; per-user undo. Cap shared size.
   **Large.**
 - [ ] **T693 — Presence rendering.** Remote cursors and selections in
   `ui.rs`, theme-derived peer colors (contrast-checked), status-line names.
   **Medium.**
-- [ ] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
+- [x] **T694 — Transport and handshake (`vix-cowork-net`, feature `cowork`).**
   Encrypted, authenticated framing; invite token; host consent prompt;
   reconnect and resync. **Large.**
+  - **Done 2026-10-29**: `vix-cowork-net` (Noise `NKpsk0` over X25519/ChaCha20-Poly1305/
+    BLAKE2s via `snow`): single-use short-lived invite carrying the host key
+    (pinned) and a PSK; encrypted chunked frames; silent failure; handshake and
+    pending-guest caps; host consent via `Knock`. 11 loopback-socket tests incl.
+    a recording proxy proving nothing readable crosses the wire. **Not done:**
+    reconnect/resync (a dropped guest rejoins with a new invite), NAT traversal,
+    per-source-address rate limits.
 - [ ] **T695 — Cowork menu and panels.** Host/Join/Leave/Peers/Follow/
   Permissions, i18n in 15 locales, action catalog. **Medium.**
 - [ ] **T696 — Workspace sharing.** Shared file tree and search; host-only

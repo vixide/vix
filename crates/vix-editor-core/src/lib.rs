@@ -23,6 +23,9 @@ pub mod history;
 /// Multiple cursors ("carets") and the operations applied across them.
 pub mod multicursor;
 pub mod named;
+/// Collaboration support: the local edit log, applying remote edits, and
+/// drawing other participants' carets.
+pub mod remote;
 /// Rendering of the editor, including soft-wrap layout.
 pub mod render;
 /// Text selection ranges and selection-snapping modes.
