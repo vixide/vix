@@ -13,3 +13,10 @@ synchronous and unit-testable with no IO.
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior
+
+## Code action kinds
+
+`message::code_action_params_only` adds `context.only` (a list of
+`CodeActionKind`s) to a `textDocument/codeAction` request; the host uses
+`["refactor"]` for the Refactor menu and `["source.organizeImports"]` for
+Organize Imports. `code_action_params` is the unfiltered form.

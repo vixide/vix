@@ -8,6 +8,9 @@
 //! `App::transform_selection_or_buffer` and the latter via
 //! `App::rewrite_at_cursor`; everything here is unit-tested without a terminal.
 
+/// Whitespace and final-newline cleanup (the text half of Code Cleanup).
+pub mod cleanup;
+
 /// Convert all line endings to LF (`\n`), dropping any `\r`.
 #[must_use]
 pub fn to_lf(text: &str) -> String {

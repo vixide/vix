@@ -725,13 +725,31 @@ pub fn code_action_params(
     end: (u32, u32),
     diagnostics: &Value,
 ) -> Value {
+    code_action_params_only(uri, start, end, diagnostics, &[])
+}
+
+/// Like [`code_action_params`], but asking the server for only the listed
+/// `CodeActionKind`s (`context.only`), e.g. `["refactor"]` or
+/// `["source.organizeImports"]`. An empty `only` asks for every kind.
+#[must_use]
+pub fn code_action_params_only(
+    uri: &str,
+    start: (u32, u32),
+    end: (u32, u32),
+    diagnostics: &Value,
+    only: &[&str],
+) -> Value {
+    let mut context = json!({ "diagnostics": diagnostics });
+    if !only.is_empty() {
+        context["only"] = json!(only);
+    }
     json!({
         "textDocument": { "uri": uri },
         "range": {
             "start": { "line": start.0, "character": start.1 },
             "end": { "line": end.0, "character": end.1 }
         },
-        "context": { "diagnostics": diagnostics }
+        "context": context
     })
 }
 
@@ -1006,6 +1024,24 @@ fn parse_range(v: &Value) -> Option<Range> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_action_params_carry_the_only_filter_when_given() {
+        let none = code_action_params("file:///a.rs", (0, 0), (1, 0), &json!([]));
+        assert!(none["context"].get("only").is_none());
+        let p = code_action_params_only(
+            "file:///a.rs",
+            (0, 0),
+            (1, 0),
+            &json!([]),
+            &["refactor", "source.organizeImports"],
+        );
+        assert_eq!(
+            p["context"]["only"],
+            json!(["refactor", "source.organizeImports"])
+        );
+        assert_eq!(p["range"]["end"]["line"], 1);
+    }
 
     #[test]
     fn incoming_calls_parse_to_call_sites() {
