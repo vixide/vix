@@ -55,7 +55,8 @@ a keybinding, or an automatic trigger), not just present unused in
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
 | Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
-| Progress | automatic | A `$/progress` update (T123d — e.g. an initial index build) shows as a one-line status message (`"Indexing: 3/10 crates (30%)"`); an `"end"` report produces no message of its own, since the status line is ambient/best-effort already. |
+| Progress | automatic | `$/progress` work-done reports (T123d, T732) are tracked per server and token: `begin` adds a task, `report` updates its message/percentage, `end` removes it. While any task is in flight the status bar shows the newest one (`Lsp::progress_line`, e.g. `"rust: Indexing: 3/10 crates (30%) +1"`) and clears it on `end`; `LspEvent::Progress` is still emitted for `begin`/`report`. |
+| LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
 | Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
 | Completion | `Ctrl+Space` | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. |
@@ -217,6 +218,32 @@ tab switch cannot misroute them.
 ## Restart and server log (T576)
 
 Each server's stderr is captured on a reader thread into a per-language ring buffer of the last 2,000 lines, which survives restarts. `Lsp::server_log(path)` returns it under a `== language (command) ==` heading; **LSP → Show Server Log** opens it in a read-only tab. `Lsp::restart(path)` shuts the server(s) for `path` down, drops the diagnostics they published, resets the crash-respawn budget, spawns fresh ones and returns the files that were open on them; the host forgets their sync state so `didOpen` is replayed with current content on the next tick. **LSP → Restart Server** drives it.
+
+## Server status (T732)
+
+`Lsp::statuses()` returns one `ServerStatus` per configured language id, in
+configuration order: the language id, the command line, the extensions, the
+root (the first workspace folder), a `ServerState` (`NotStarted` — no
+matching file opened yet; `Starting` — spawned, `initialize` pending;
+`Running`; `Failed` — the command could not be spawned, or the crash-respawn
+budget ran out), the capabilities advertised in the `initialize` result
+(`vix_lsp_core::message::parse_capability_names`: every non-`false`, non-null
+key of `capabilities`, a trailing `Provider` dropped, sorted), the number of
+open documents, the in-flight progress lines, and the last `ServerError`
+since the last restart (`SpawnFailed`, `Crashed`, or `Request(message)` for a
+JSON-RPC error reply that was surfaced to the user). `Lsp::restart_language`
+restarts one server by language id, exactly like `Lsp::restart` does for one
+file's servers, and clears its error and failed state.
+
+**View → LSP Status…** (`lsp.status`) is a live overlay over
+`statuses()` (re-read every frame): one block per server — header with name
+and state, then command, root, extensions, open files, progress,
+capabilities (wrapped) and last error. ↑/↓ (or a click) highlight a server,
+`r`/Enter restarts it, Esc/`q` closes.
+
+Not done: per-server log viewing from the panel (the existing **Show Server
+Log** is per active file), stopping a server without restarting it, and
+showing more than the first workspace folder as the root.
 
 ## Cargo features
 
