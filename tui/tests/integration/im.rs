@@ -1,6 +1,7 @@
-//! The IM menu, panel and App wiring (T752), the status-bar indicator and
-//! notify policy (T754), and disk history (T755). The IRC round trip runs
-//! against an in-process fake server on 127.0.0.1; no test uses the network.
+//! The IM menu, panel and App wiring (T752), anchored threads (T753), the
+//! status-bar indicator and notify policy (T754), and disk history (T755).
+//! The IRC round trip runs against an in-process fake server on 127.0.0.1;
+//! no test uses the network.
 #![allow(
     clippy::wildcard_imports,
     reason = "every test needs a handful of the shared helpers in common.rs"
@@ -22,6 +23,9 @@ const IM_ACTIONS: &[&str] = &[
     "im.share_location",
     "im.comment_line",
     "im.threads",
+    "im.next_thread",
+    "im.prev_thread",
+    "im.resolve_thread",
     "im.status_available",
     "im.status_away",
     "im.status_busy",
@@ -462,4 +466,279 @@ mod irc {
         assert!(app.im.links.is_empty());
         server.join().unwrap();
     }
+}
+
+// ----- anchored threads (T753) ---------------------------------------------
+
+/// A fresh workspace (no thread files left from an earlier run) with
+/// `src/a.rs` open.
+fn thread_workspace(tag: &str) -> (PathBuf, App) {
+    let root = workspace(tag);
+    let _ = fs::remove_dir_all(root.join(".vix"));
+    fs::write(
+        root.join("src/a.rs"),
+        "fn a() {}\nfn b() {}\nfn c() {}\nfn d() {}\n",
+    )
+    .unwrap();
+    let mut app = app_at(&root);
+    app.open_initial(&root.join("src/a.rs"));
+    (root, app)
+}
+
+fn goto_line(app: &mut App, line: usize) {
+    let area = app.layout.editor;
+    app.editor.goto(line, Some(1), area);
+}
+
+fn thread_files(root: &Path) -> Vec<vix_im::Thread> {
+    let Ok(entries) = fs::read_dir(root.join(".vix/im/threads")) else {
+        return Vec::new();
+    };
+    let mut threads: Vec<vix_im::Thread> = entries
+        .map(|e| {
+            vix_im::Thread::from_json(&fs::read_to_string(e.unwrap().path()).unwrap()).unwrap()
+        })
+        .collect();
+    threads.sort_by_key(|t| t.start_line);
+    threads
+}
+
+fn marks(app: &mut App) -> Vec<(usize, vix_editor_core::editor::CommentMark)> {
+    app.refresh_thread_marks_if_stale();
+    app.editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .comment_marks()
+        .to_vec()
+}
+
+#[test]
+fn comment_on_line_starts_a_thread_then_replies_to_it() {
+    use vix_editor_core::editor::CommentMark;
+    let (root, mut app) = thread_workspace("im-thread-start");
+    goto_line(&mut app, 2);
+    app.run_action("im.comment_line");
+    assert!(app.prompt.is_some(), "a prompt asks for the comment");
+    type_line(&mut app, "why b?");
+    assert!(app.prompt.is_none());
+    let files = thread_files(&root);
+    assert_eq!(files.len(), 1, "the thread is written at once");
+    let t = &files[0];
+    assert_eq!(
+        (t.path.as_str(), t.start_line, t.end_line),
+        ("src/a.rs", 2, 2)
+    );
+    assert_eq!(t.anchor_text, "fn b() {}");
+    assert_eq!(t.messages[0].body, "why b?");
+    assert!(!t.resolved);
+    assert_eq!(marks(&mut app), [(1, CommentMark::Open)]);
+    assert!(!app.im.open, "commenting never opens the panel");
+    assert_eq!(app.focus, Focus::Editor);
+
+    // On the same line it is a reply, not a second thread.
+    app.run_action("im.comment_line");
+    type_line(&mut app, "because");
+    let files = thread_files(&root);
+    assert_eq!(files.len(), 1);
+    let bodies: Vec<&str> = files[0].messages.iter().map(|m| m.body.as_str()).collect();
+    assert_eq!(bodies, ["why b?", "because"]);
+
+    // An empty answer adds nothing.
+    app.run_action("im.comment_line");
+    type_line(&mut app, "");
+    assert_eq!(thread_files(&root)[0].messages.len(), 2);
+}
+
+#[test]
+fn a_selection_anchors_its_whole_line_range() {
+    let (root, mut app) = thread_workspace("im-thread-range");
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(10, 29); // "fn b() {}\nfn c() {}"
+    app.run_action("im.comment_line");
+    type_line(&mut app, "these two");
+    let t = &thread_files(&root)[0];
+    assert_eq!((t.start_line, t.end_line), (2, 3));
+    assert_eq!(t.anchor_text, "fn b() {}\nfn c() {}");
+}
+
+#[test]
+fn threads_follow_their_lines_as_the_buffer_changes_and_save_moves_them() {
+    use vix_editor_core::editor::CommentMark;
+    let (root, mut app) = thread_workspace("im-thread-move");
+    goto_line(&mut app, 3);
+    app.run_action("im.comment_line");
+    type_line(&mut app, "about c");
+    assert_eq!(marks(&mut app), [(2, CommentMark::Open)]);
+    // Two new lines at the top: the mark moves down with `fn c`.
+    goto_line(&mut app, 1);
+    for c in "// one\n// two\n".chars() {
+        if c == '\n' {
+            app.on_key(keycode(KeyCode::Enter));
+        } else {
+            app.on_key(key(c));
+        }
+    }
+    assert_eq!(marks(&mut app), [(4, CommentMark::Open)]);
+    assert_eq!(
+        thread_files(&root)[0].start_line,
+        3,
+        "an unsaved buffer does not move the stored line"
+    );
+    app.run_action("file.save");
+    assert_eq!(thread_files(&root)[0].start_line, 5, "saving moves it");
+    // Replace the line and its context: the thread is outdated, unmarked.
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor
+        .set_selection_range(0, tab.editor.code_ref().len_chars());
+    app.on_key(key('x'));
+    assert_eq!(marks(&mut app), []);
+}
+
+#[test]
+fn threads_list_jumps_resolves_and_reopens() {
+    use vix_editor_core::editor::CommentMark;
+    let (root, mut app) = thread_workspace("im-thread-list");
+    for (line, text) in [(2, "on b"), (4, "on d")] {
+        goto_line(&mut app, line);
+        app.run_action("im.comment_line");
+        type_line(&mut app, text);
+    }
+    goto_line(&mut app, 4);
+    app.run_action("im.threads");
+    let Some(vix::app::im::ImDialog::Threads { ids, selected }) = app.im_dialog.clone() else {
+        panic!("the Threads list opens");
+    };
+    assert_eq!(ids.len(), 2);
+    assert_eq!(selected, 1, "the thread at the cursor is highlighted");
+    app.on_key(key('r'));
+    assert!(
+        thread_files(&root)[1].resolved,
+        "r resolves, and it is saved"
+    );
+    assert!(app.im_dialog.is_some(), "the list stays open");
+    assert_eq!(
+        marks(&mut app),
+        [(1, CommentMark::Open), (3, CommentMark::Resolved)]
+    );
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.im_dialog.is_none(), "Enter jumps and closes");
+    assert_eq!(app.editor.cursor_1based().0, 2);
+    // Resolve or Reopen on the cursor's line.
+    goto_line(&mut app, 4);
+    app.run_action("im.resolve_thread");
+    assert!(!thread_files(&root)[1].resolved, "reopened");
+    goto_line(&mut app, 3);
+    app.run_action("im.resolve_thread");
+    assert!(
+        thread_files(&root).iter().all(|t| !t.resolved),
+        "no thread on line 3"
+    );
+    // Esc closes the list.
+    app.run_action("im.threads");
+    app.on_key(esc());
+    assert!(app.im_dialog.is_none());
+}
+
+#[test]
+fn next_and_previous_thread_wrap_around_the_file() {
+    let (_root, mut app) = thread_workspace("im-thread-step");
+    app.run_action("im.next_thread");
+    assert_eq!(app.editor.cursor_1based().0, 1, "no threads: nothing moves");
+    for line in [2, 4] {
+        goto_line(&mut app, line);
+        app.run_action("im.comment_line");
+        type_line(&mut app, "x");
+    }
+    goto_line(&mut app, 1);
+    app.run_action("im.next_thread");
+    assert_eq!(app.editor.cursor_1based().0, 2);
+    app.run_action("im.next_thread");
+    assert_eq!(app.editor.cursor_1based().0, 4);
+    app.run_action("im.next_thread");
+    assert_eq!(app.editor.cursor_1based().0, 2, "wraps to the first");
+    app.run_action("im.prev_thread");
+    assert_eq!(app.editor.cursor_1based().0, 4, "wraps to the last");
+    assert!(!app.im.open);
+}
+
+#[test]
+fn thread_files_from_elsewhere_load_and_unsafe_ones_are_skipped() {
+    use vix_editor_core::editor::CommentMark;
+    let root = workspace("im-thread-load");
+    let _ = fs::remove_dir_all(root.join(".vix"));
+    let dir = root.join(".vix/im/threads");
+    fs::create_dir_all(&dir).unwrap();
+    let lines = ["fn a() {}", "fn b() {}", "fn c() {}"];
+    let mut good = vix_im::Thread::new("from-git", "src/a.rs", &lines, 3, 3);
+    good.reply(Message::text("bob", 0, "see \u{1b}[31mthis"));
+    fs::write(dir.join("from-git.json"), good.to_json().unwrap()).unwrap();
+    let escape = vix_im::Thread::new("escape", "../outside.rs", &lines, 1, 1);
+    fs::write(dir.join("escape.json"), escape.to_json().unwrap()).unwrap();
+    let renamed = vix_im::Thread::new("other", "src/a.rs", &lines, 1, 1);
+    fs::write(dir.join("renamed.json"), renamed.to_json().unwrap()).unwrap();
+    fs::write(dir.join("junk.json"), "{").unwrap();
+
+    let mut app = app_at(&root);
+    app.open_initial(&root.join("src/a.rs"));
+    assert_eq!(marks(&mut app), [(2, CommentMark::Open)]);
+    let ids: Vec<&str> = app
+        .im
+        .threads
+        .threads
+        .iter()
+        .map(|t| t.id.as_str())
+        .collect();
+    assert_eq!(ids, ["from-git"], "only the safe, well-formed file loads");
+    assert_eq!(
+        app.im.threads.threads[0].messages[0].body, "see this",
+        "message text is sanitized"
+    );
+    assert!(!app.im.open && app.im_dialog.is_none(), "nothing pops up");
+}
+
+#[test]
+fn outdated_threads_have_no_mark_and_say_so_on_jump() {
+    let root = workspace("im-thread-outdated");
+    let _ = fs::remove_dir_all(root.join(".vix"));
+    let dir = root.join(".vix/im/threads");
+    fs::create_dir_all(&dir).unwrap();
+    let lines = ["unrelated", "text that", "is gone"];
+    let t = vix_im::Thread::new("gone", "src/a.rs", &lines, 2, 2);
+    fs::write(dir.join("gone.json"), t.to_json().unwrap()).unwrap();
+    let mut app = app_at(&root);
+    app.open_initial(&root.join("src/a.rs"));
+    assert_eq!(marks(&mut app), []);
+    app.run_action("im.threads");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.im.threads.outdated.contains("gone"));
+    assert!(app.im_dialog.is_none(), "Enter still opens the file");
+    assert!(
+        app.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some_and(|p| p.ends_with("src/a.rs"))
+    );
+}
+
+#[test]
+fn comment_needs_a_file_inside_the_workspace() {
+    let root = workspace("im-thread-nofile");
+    let _ = fs::remove_dir_all(root.join(".vix"));
+    let mut app = app_at(&root);
+    app.run_action("im.comment_line");
+    assert!(app.prompt.is_none(), "an untitled buffer has no thread");
+    app.open_initial(&root.join("../outside.rs"));
+    app.run_action("im.comment_line");
+    assert!(
+        app.prompt.is_none(),
+        "a file outside the root has none either"
+    );
+    app.run_action("im.threads");
+    assert!(app.im_dialog.is_none(), "no threads, no list");
+    assert!(!root.join(".vix").exists(), "nothing was written");
 }

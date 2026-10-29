@@ -48,6 +48,18 @@ bitflags::bitflags! {
     }
 }
 
+/// A comment-thread marker in the gutter-sign column (T753's anchored IM
+/// threads; usable by any host feature that attaches a discussion to a
+/// line). Drawn without color, so it reads in a monochrome theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CommentMark {
+    /// An open thread: `◆` at full intensity.
+    Open,
+    /// A resolved thread: `◇` in the line-number style.
+    Resolved,
+}
+
 /// Represents the text editor, which holds the code buffer, cursor, selection,
 /// theme, scroll offsets, highlight cache, clipboard, and user mark intervals.
 pub struct Editor {
@@ -102,6 +114,11 @@ pub struct Editor {
     /// Git diff gutter marks: `(line index, color)`, drawn as a colored bar in
     /// the line-number gutter.
     pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
+
+    /// Comment-thread marks: `(line index, mark)`. They share the
+    /// gutter-sign column with the diff/coverage bar and the debugger
+    /// markers; see [`Editor::set_comment_marks`] for the priority.
+    pub(crate) comment_marks: Vec<(usize, CommentMark)>,
 
     /// Foldable line ranges (from the language server): `(start_line, end_line)`,
     /// both 0-based. A range can be folded by its start line.
@@ -233,6 +250,7 @@ impl Editor {
             diagnostic_marks: None,
             word_marks: None,
             gutter_marks: None,
+            comment_marks: Vec::new(),
             fold_ranges: Vec::new(),
             folds: Vec::new(),
             inlay_hints: Vec::new(),
@@ -1001,6 +1019,40 @@ impl Editor {
     #[must_use]
     pub fn gutter_marks(&self) -> Option<&Vec<(usize, Color)>> {
         self.gutter_marks.as_ref()
+    }
+
+    /// Set the comment-thread marks: `(line index, mark)`, 0-based. The
+    /// gutter-sign column holds one glyph per line, chosen in this order:
+    /// the debugger's stopped line (`▶`), a breakpoint (`●`), a comment
+    /// thread (`◆` open, `◇` resolved), then the diff or coverage bar
+    /// (`▎`). A thread is something a person put on that line on purpose,
+    /// so it wins over the ambient change bar; the bar is still visible on
+    /// every other changed line. When two threads share a line, an open
+    /// one wins.
+    pub fn set_comment_marks(&mut self, mut marks: Vec<(usize, CommentMark)>) {
+        marks.sort_by_key(|&(line, mark)| (line, mark != CommentMark::Open));
+        marks.dedup_by_key(|&mut (line, _)| line);
+        self.comment_marks = marks;
+    }
+
+    /// Remove every comment-thread mark.
+    pub fn clear_comment_marks(&mut self) {
+        self.comment_marks.clear();
+    }
+
+    /// The comment-thread marks, sorted by line, one per line.
+    #[must_use]
+    pub fn comment_marks(&self) -> &[(usize, CommentMark)] {
+        &self.comment_marks
+    }
+
+    /// The comment-thread mark on `line` (0-based), if any.
+    #[must_use]
+    pub fn comment_mark(&self, line: usize) -> Option<CommentMark> {
+        self.comment_marks
+            .binary_search_by_key(&line, |&(l, _)| l)
+            .ok()
+            .map(|i| self.comment_marks[i].1)
     }
 
     /// Char ranges of comment and string tokens in the buffer, for the host's

@@ -73,10 +73,13 @@ pub(crate) struct ImState {
     /// The first conversation-list row on screen (set when drawn), so a
     /// click maps to the right conversation.
     pub(crate) list_top: usize,
+    /// The workspace's anchored threads (T753), loaded on first use.
+    pub(crate) threads: super::im_threads::ThreadStore,
 }
 
-/// A small IM dialog over the editor: pick an account, or confirm a share
-/// or a history wipe. Keys go here before anything else while it is open.
+/// A small IM dialog over the editor: pick an account, confirm a share or a
+/// history wipe, or list the anchored threads. Keys go here before anything
+/// else while it is open.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ImDialog {
     /// **Connect…** with several accounts: which one.
@@ -94,6 +97,13 @@ pub(crate) enum ImDialog {
         title: String,
         /// The snippet message.
         message: Message,
+    },
+    /// **Threads…**: the workspace's anchored threads (T753).
+    Threads {
+        /// Thread ids, sorted by path and line.
+        ids: Vec<String>,
+        /// The highlighted row.
+        selected: usize,
     },
     /// **Clear History**: wipe this conversation's messages.
     Clear {
@@ -194,6 +204,7 @@ impl ImState {
             verified: HashSet::new(),
             history_dir,
             list_top: 0,
+            threads: super::im_threads::ThreadStore::default(),
         };
         state.load_history(&ConversationId::new(NOTES), settings.im.history_days);
         state
@@ -320,7 +331,6 @@ impl App {
             "im.next_unread" => self.im_next_unread(),
             "im.share_selection" => self.im_share_selection(),
             "im.share_location" => self.im_share_location(),
-            "im.comment_line" | "im.threads" => self.status = t!("status.im_not_yet").to_string(),
             "im.status_available" => self.im_set_presence(Presence::Available),
             "im.status_away" => self.im_set_presence(Presence::Away),
             "im.status_busy" => self.im_set_presence(Presence::Busy),
@@ -328,7 +338,7 @@ impl App {
             "im.notify_mentions" => self.im_set_notify(NotifyPolicy::Mentions),
             "im.notify_off" => self.im_set_notify(NotifyPolicy::Off),
             "im.clear_history" => self.im_ask_clear(),
-            _ => return false,
+            _ => return self.run_im_thread_action(action),
         }
         true
     }
@@ -638,14 +648,7 @@ impl App {
     /// Open a message's code reference -- only inside the workspace root, only
     /// an existing file, never running anything.
     fn im_open_ref(&mut self, reference: &CodeRef) {
-        let inside = vix_im::resolve_in_root(&self.root, reference).filter(|p| {
-            p.is_file()
-                && match (p.canonicalize(), self.root.canonicalize()) {
-                    (Ok(file), Ok(root)) => file.starts_with(root),
-                    _ => false,
-                }
-        });
-        let Some(path) = inside else {
+        let Some(path) = self.im_inside_root(&reference.path) else {
             self.status =
                 t!("status.im_ref_outside", reference = reference.to_string()).to_string();
             return;
@@ -836,6 +839,9 @@ impl App {
                 KeyCode::Esc => {}
                 _ => self.im_dialog = Some(ImDialog::Accounts { names, selected }),
             },
+            ImDialog::Threads { ids, selected } => {
+                self.im_dialog = self.im_threads_key(key, ids, selected);
+            }
             ImDialog::Share { to, message, .. } if yes => self.im_send_snippet(&to, message),
             ImDialog::Clear { id, .. } if yes => self.im_clear(&id),
             _ if no => self.status = t!("status.im_cancelled").to_string(),

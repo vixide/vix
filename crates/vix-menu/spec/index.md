@@ -376,7 +376,9 @@ Code-aware chat (T752; design in `spec/instant-message/index.md`, user guide
 Disconnect (`im.disconnect`), Join Room… (`im.join`), Leave Room
 (`im.leave`), Direct Message… (`im.direct`); Next Unread (`im.next_unread`);
 Share Selection (`im.share_selection`), Share Location (`im.share_location`);
-Comment on Line… (`im.comment_line`), Threads… (`im.threads`); Status ▸
+Comment on Line… (`im.comment_line`), Threads… (`im.threads`), Next Thread
+(`im.next_thread`), Previous Thread (`im.prev_thread`), Resolve or Reopen
+Thread (`im.resolve_thread`; T753); Status ▸
 Available / Away / Busy (`im.status_*`); Notifications ▸ All Messages /
 Mentions Only / Off (`im.notify_*`); Clear History (`im.clear_history`).
 Without the `im` capability the five network items are filtered out.
