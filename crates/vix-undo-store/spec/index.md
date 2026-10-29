@@ -13,3 +13,18 @@ replayed onto text it doesn't match.
 - [persistent-undo](persistent-undo/index.md)
 - [redo](redo/index.md)
 - [undo](undo/index.md)
+
+## Local History (T720)
+
+`local_history::LocalHistory` is a second, independent store beside the undo
+tree: a timestamped whole-file snapshot per save, kept under
+`<config>/history/<hash of path>/<ms>.snap` (+ an optional `<ms>.label`).
+`snapshot` skips a save whose text equals the newest snapshot (unless it
+carries a label), refuses files over 5 MiB, and prunes past `with_keep(n)`
+(the `local_history_keep` setting, default 50), dropping unlabelled snapshots
+before labelled ones. `list`, `read` and `set_label` round it out. Two pure
+helpers serve the host: `unified_diff(old, new)` (`@@`-grouped, 3 lines of
+context) and `revert_range(current, snapshot, start, end)`, which replaces only
+the differences touching 0-based lines `start..end` with the snapshot's text.
+Errors are the typed `HistoryError` (`NotFound`, `Io`). The host is
+`tui/src/app/ide_parity.rs`; user docs are `docs/ide-parity/index.md`.

@@ -8219,19 +8219,63 @@ so, and the first task of each plan re-checks the facts it depends on.
 
 ### IDE parity (spec: [`spec/ide-parity`](spec/ide-parity/index.md))
 
-- [ ] **T720 — Local History.** Snapshots on save, label, diff view, revert a
+- [x] **T720 — Local History.** Snapshots on save, label, diff view, revert a
   range; on `vix-undo-store`. **Medium–Large.**
-- [ ] **T721 — Search Everywhere.** One fuzzy box, prefixes `>` `@` `:`.
+  - **Done 2026-10-29** (`feat/t720-ide-parity`): `vix-undo-store::local_history`
+    (`LocalHistory`, `unified_diff`, `revert_range`, typed `HistoryError`),
+    `local_history_keep` setting (0 = off), File → Local History… / Label…,
+    the new shared `vix-choice-list` overlay. **Not done:** snapshots are taken
+    only on save (not on idle or before risky operations), no deletion or
+    pruning UI, no side-by-side diff (read-only unified diff tab), no history
+    for unsaved or renamed files (keyed by canonical path), the store is not
+    shared across a rename.
+- [x] **T721 — Search Everywhere.** One fuzzy box, prefixes `>` `@` `:`.
   **Medium.**
-- [ ] **T722 — Refactor menu.** Surface LSP `refactor.*` code actions with
+  - **Done 2026-10-29:** Go → Search Everywhere opens the palette with an
+    `everywhere` flag; an unprefixed query mixes files, commands, current-file
+    symbols and workspace symbols (capped per kind), prefixes still narrow.
+    `recompute_palette` was split so `palette_entries(mode, query)` is reusable.
+    **Not done:** no settings or recent-files sections, no double-Shift
+    binding or default chord, results are not merged into one global score
+    ranking (kinds stay in fixed order), the title still reads "Files".
+- [x] **T722 — Refactor menu.** Surface LSP `refactor.*` code actions with
   preview. **Medium.**
-- [ ] **T723 — Organize imports and code cleanup.** `source.organizeImports`
+  - **Done 2026-10-29:** Tools → LSP → Refactor… sends `context.only =
+    ["refactor"]` (`code_action_params_only`, `request_code_action_only`) and
+    shows the existing chooser; `p` previews the selected action as a unified
+    diff tab. **Not tested** against a real `rust-analyzer` or second server
+    (no real servers in tests); command-only actions (no inline edit) cannot be
+    applied and say so.
+- [x] **T723 — Organize imports and code cleanup.** `source.organizeImports`
   plus a cleanup pipeline. **Small–Medium.**
-- [ ] **T724 — Named run configurations.** Saved, shareable, compound, with
+  - **Done 2026-10-29:** Tools → LSP → Organize Imports, and Edit → Code
+    Cleanup (`vix-textops::cleanup`: trailing whitespace, trailing blank lines,
+    final newline, then organize imports when a server handles the file).
+    **Not done:** the pipeline does not chain the formatter (async edits
+    would race the organize edit) and is not configurable or run on commit.
+- [x] **T724 — Named run configurations.** Saved, shareable, compound, with
   before-launch steps, in `vix-tasks`. **Medium.**
-- [ ] **T725 — Peek definition.** **Small–Medium.**
-- [ ] **T726 — CodeLens.** **Medium.**
-- [ ] **T727 — Postfix completion.** **Small.**
+  - **Done 2026-10-29:** `vix-tasks::run_config` (`.vix/run.toml`, `plan`,
+    `Plan::shell_command`), Project → Run Configuration… / Edit Run
+    Configurations. **Not done:** a compound's members share one output stream
+    and one running-command slot (no per-member tabs or stop), `cmd.exe` runs a
+    compound sequentially, no GUI editor, no debug-launch kind of configuration.
+- [x] **T725 — Peek definition.** **Small–Medium.**
+  - **Done 2026-10-29:** Tools → LSP → Peek Definition shows the lines around
+    the definition in the choice-list overlay (LSP, else the text-search
+    fallback). **Not done:** read-only popup only (no in-popup editing or
+    nested peek), the first of several definitions is shown, no syntax colors.
+- [x] **T726 — CodeLens.** **Medium.**
+  - **Done 2026-10-29 (partial):** the existing `lsp.code_lens` chooser already
+    ran lenses; it now sorts by line, shows line numbers and starts on the lens
+    at or after the cursor, and reports when there are none. **Not done:** lenses
+    are not drawn inline above their lines, are not auto-refreshed, and there
+    are no local (non-LSP) "Run test" lenses.
+- [x] **T727 — Postfix completion.** **Small.**
+  - **Done 2026-10-29:** `vix-snippets::postfix` templates for Rust, JS/TS,
+    Python, Go and C-like languages, expanded on Tab ahead of prefix snippets.
+    **Not done:** not offered in the completion popup, no user-defined postfix
+    templates, no type-aware filtering (`.some` expands on any expression).
 
 Order: T680 first (T684 builds on it), then T682, T683, T681, T685. Plans:
 spikes and the pure-core tasks (T690, T700, T710) before anything that
