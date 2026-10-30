@@ -691,3 +691,13 @@ kdbx
 # Login shells the SSH authority is tested under (crates/vix-authority/spec/ssh)
 tcsh
 mksh
+# Install-channel templates (T742, packaging/)
+checkver
+makepkg
+namcap
+nixpkgs
+PKGBUILD
+pkgs
+printsrcinfo
+SRCINFO
+wingetcreate

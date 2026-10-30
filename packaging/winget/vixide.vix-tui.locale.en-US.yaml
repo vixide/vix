@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+# Template (T742): not submitted to microsoft/winget-pkgs. See packaging/README.md.
+PackageIdentifier: vixide.vix-tui
+PackageVersion: 1.8.0
+PackageLocale: en-US
+Publisher: vixide
+PublisherUrl: https://github.com/vixide
+PublisherSupportUrl: https://github.com/vixide/vix/issues
+Author: Joel Parker Henderson
+PackageName: Vix
+PackageUrl: https://github.com/vixide/vix
+License: Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only
+LicenseUrl: https://github.com/vixide/vix/blob/main/LICENSE
+ShortDescription: A keyboard-friendly terminal text editor and IDE.
+Description: Vix is a keyboard-friendly terminal text editor and IDE with menus, a command palette, Git, LSP, a debugger, Org mode and a database workbench.
+Moniker: vix
+Tags:
+  - editor
+  - ide
+  - terminal
+  - text-editor
+  - tui
+ReleaseNotesUrl: https://github.com/vixide/vix/releases/tag/1.8.0
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

@@ -1,0 +1,110 @@
+# The container image (T743): ghcr.io/vixide/vix, built from docker/Dockerfile,
+# so `docker run --rm -it ghcr.io/vixide/vix` opens Vix on the demo workspace.
+#
+# Same tag trigger as release.yml, never a push to a branch. A manual run
+# (workflow_dispatch) builds both architectures as a dry run and pushes
+# nothing; only a release tag pushes. This workflow has NOT run yet: see
+# packaging/README.md for the one-time steps before the first tagged run.
+#
+# Each architecture builds natively (an emulated Rust build would take
+# hours), pushes by digest, and the `merge` job joins the two digests into one
+# multi-architecture tag.
+name: Container image
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - '**[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/vixide/vix
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, platform: linux/amd64, slug: amd64 }
+          - { os: ubuntu-24.04-arm, platform: linux/arm64, slug: arm64 }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: log in to ghcr.io
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build (and, for a tag, push by digest)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: ${{ github.event_name == 'push' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || 'type=cacheonly' }}
+      - name: record the digest
+        if: github.event_name == 'push'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.slug }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: tag the multi-architecture image
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The release tag (`2.0.0`, no `v` prefix), plus `latest` unless it is
+      # a prerelease (`2.0.0-rc.1`).
+      - name: create the manifest list
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tags="-t ${IMAGE}:${TAG}"
+          case "$TAG" in *-*) ;; *) tags="$tags -t ${IMAGE}:latest" ;; esac
+          sources=""
+          for d in *; do sources="$sources ${IMAGE}@sha256:$d"; done
+          # shellcheck disable=SC2086 # word-split into one argument each
+          docker buildx imagetools create $tags $sources
+      - name: inspect
+        env:
+          TAG: ${{ github.ref_name }}
+        run: docker buildx imagetools inspect "${IMAGE}:${TAG}"

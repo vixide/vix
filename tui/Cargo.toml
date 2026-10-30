@@ -45,6 +45,24 @@ npm-package = "vix"
 # included, same as the auto-included README/CHANGELOG/LICENSE.
 include = ["man/vix.1"]
 
+# `cargo binstall vix-tui` (T742): fetch dist's own release archive instead of
+# compiling. The names match the real 1.8.0 release assets: tags have no `v`
+# (`releases/download/1.8.0/`), the archives are `vix-tui-<target>.tar.xz`
+# with the binary under a `vix-tui-<target>/` directory, and Windows ships a
+# `.zip` with `vix.exe` at its root. See packaging/README.md.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/{ version }/{ name }-{ target }{ archive-suffix }"
+bin-dir = "{ name }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "txz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+bin-dir = "{ bin }{ binary-ext }"
+
 [package.metadata.wix]
 upgrade-guid = "FEEBD501-4333-4380-A051-E232AD127DED"
 path-guid = "DB77424D-5C03-419E-810B-73753D47005E"

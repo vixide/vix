@@ -1,0 +1,9 @@
+# The build context of docker/Dockerfile (T743): only what `cargo build`
+# and the image need.
+.git
+.claude
+target
+gui/target
+fuzz/target
+vixide.github.io
+**/node_modules
