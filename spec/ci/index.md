@@ -169,6 +169,21 @@ carets lie inside the text. A failure prints the seed, Vix's own stack frames an
 last events; `--seed N --iterations 1` replays it. It is not in the per-push gate;
 `scripts/check` runs only a three-iteration fixed-seed smoke so the driver cannot rot.
 
+### SSH authority against a real sshd (T719)
+
+`.github/workflows/ssh.yml` (GitHub only) runs [`scripts/test-ssh-local`](../../scripts/test-ssh-local)
+on `ubuntu-latest` after installing `openssh-server`. The script starts a throwaway sshd **as
+the runner user** (not root) on `127.0.0.1:22022` with a generated ed25519 host key and client
+key, public-key login only, and its own `authorized_keys`; the client side gets its own
+`ssh_config` (a `vix-test-sshd` host alias, a `known_hosts` holding exactly that host key,
+`StrictHostKeyChecking yes`, no agent), reached through an `ssh` wrapper first on `PATH` that
+adds `-F`. Nothing touches `~/.ssh` or the system sshd. It then runs only
+`a_real_host_conforms` (`crates/vix-authority/tests/ssh.rs`) with
+`VIX_TEST_SSH_HOST=vix-test-sshd`. Opt-in: path-filtered to `crates/vix-authority/**`, the
+script and the workflow, plus `workflow_dispatch`, so it never slows an unrelated push or PR.
+The per-push gate keeps testing the authority against a fake `ssh`. Developers run the same
+script locally (Linux or macOS). Not yet exercised on a runner (added 2026-10-30).
+
 ### Feature combinations (T587)
 
 All three forges (a `feature-combos` job on GitHub and GitLab, a step on

@@ -135,7 +135,12 @@ no temp files; error kinds; odd names (newline, quote, `$`, `*`, leading
 `-`, non-ASCII) list, read and walk; every installed login shell, and the decoder under every installed `/bin/sh` candidate (`dash`, `bash`, `ksh`, `mksh`); property
 tests for both quoting layers. `a_real_host_conforms` runs the suite against
 the host in `VIX_TEST_SSH_HOST` (`user@host` or a remote name) and does
-nothing without it (T719 adds the CI job). `tui/tests/authority_ssh.rs`
+nothing without it. [`scripts/test-ssh-local`](../../../../scripts/test-ssh-local) (T719) runs
+it against a throwaway non-root `sshd` on `127.0.0.1` with generated keys, its own
+`ssh_config` and `known_hosts` (host-key checking on) and an `ssh` wrapper on `PATH` that
+adds `-F`, never touching `~/.ssh`; `.github/workflows/ssh.yml` runs that script on
+`ubuntu-latest` when this crate changes, or on demand (GitHub only; see
+[`spec/ci`](../../../../spec/ci/index.md)). `tui/tests/authority_ssh.rs`
 installs an `SshAuthority` over the fake `ssh` and drives the App's open and
 save. Unit tests cover the URL forms, both `stat` flavors' replies and the
 walk filters.
