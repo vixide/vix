@@ -122,6 +122,15 @@ opens it, routes keys, puts copies on the clipboard, and polls it each tick
 (ticking every 50 ms while it indexes or searches);
 `tui/src/ui/large_file.rs` draws it over the editor region.
 
+### Public API
+
+| Module | Items |
+| --- | --- |
+| `source` | `Source` (`open`, `len`, `is_empty`, `read`, `line_start_containing`, `last_line_start`, `forward`, `forward_exact`, `back`, `lines_from`, `count_newlines`) and `LineSpan` (one line's byte range, CR kept) |
+| `index` | `LineIndex` (`build`, `build_with`, `wait`, `scanned`, `percent`, `is_done`, `failed`, `total_lines`, `checkpoints`, `stride`, `line_start`, `line_of`), `Lookup`, the pure `scan_chunk`, `DEFAULT_STRIDE` (1,024) |
+| `search` | `Search` (`start`, `percent`, `needle_len`, `direction`, `cancel`, `poll`, `wait`), `Direction`, `Found` (incl. `Cancelled`), the pure `find` |
+| `viewer` | `Viewer` (`open`, `path`, `index`, `index_mut`, `cursor`, `top`, `input`, `notice`, `busy`, `status`, `view`, `goto`, `search`, `handle_key`), `Outcome`, `InputKind`, `Notice` (translated by the host), `Target` and `parse_target` (line, percent, byte offset), `ViewLine`, `Status`, `COPY_LIMIT` |
+
 Measured numbers (time to first screen, goto-end, full index, search, peak
 memory) and how to reproduce them (`scripts/bench-large-file`) are in
 [`docs/performance`](../../../docs/performance/index.md#large-file-viewer-t733).

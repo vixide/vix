@@ -20,14 +20,13 @@ unflagged: it has no payoff and the heaviest coupling.
 
 ## The table
 
-| Feature | Owns action ids | Crates it will gate (T588+) |
+| Feature | Owns action ids | Crates and code it gates |
 | --- | --- | --- |
 | `sql` | `db.*`, `tools.edit_sql` | `vix-db`, `vix-edit-sql` |
 | `image` | (none; image tabs) | `image`, `ratatui-image` (43 exclusive crates; forwards to `vix-editor/image`) |
 | `script` | `script.*`, `script:*` | `vix-script` (rhai; `tui/src/app/scripts.rs`, with `scripts_off.rs` no-op stand-ins) |
 | `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
-| `http` | `tools.http_send`, `tools.http_copy_curl` | `vix-http-client` (`http_off.rs` stand-ins) |
-| `http` | `tools.http_send`, `tools.hl7_send` | `vix-http-client` (`http_off.rs` stand-ins) and `vix-hl7/net` (the MLLP socket sender; the HL7 parser and View stay in every build) |
+| `http` | `tools.http_*` (e.g. `tools.http_send`, `tools.http_copy_curl`), `tools.hl7_send` | `vix-http-client` (`http_off.rs` stand-ins) and `vix-hl7/net` (the MLLP socket sender; the HL7 parser and View stay in every build) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
 | `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `tui/src/app/git.rs`, with `git_off.rs` stand-ins |
 | `jj` | `jj.*` | (surface only: no crates; `tui/src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
@@ -35,7 +34,7 @@ unflagged: it has no payoff and the heaviest coupling.
 | `im` | `im.connect`, `im.disconnect`, `im.join`, `im.leave`, `im.direct` (only the network actions; the IM panel, Notes, sharing, status, notifications and history are in every build) | `vix-im-irc/net` (the IRC connection thread: TCP plus TLS via `rustls`/`webpki-roots`; the codec and client state machine stay compiled), with `tui/src/app/im_net.rs` and `im_off.rs` stand-ins beside the always-compiled `tui/src/app/im.rs`; part of the `net` and `full` umbrellas (T752) |
 | `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
-| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*`, `edit.pipe_selection`, `edit.insert_command_output` | the runners `spawn_shell`, `run_shell_filter` (Pipe Through Command, T659) and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
+| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*`, `edit.pipe_selection`, `edit.insert_command_output` | the runners `spawn_shell`, `run_shell_filter` (Pipe Through Command, T659) and `spawn_argv` in `tui/src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569); plus `vix-format-tool/process` (spawning the user's Prettier), `vix-authority/process` (building any `Command` through the authority) and `vix-authority/ssh` (the shell-based SSH authority behind remote editing, T712–T717: without `tasks`, a remote folder cannot be opened) |
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
 | `cowork` | `cowork.*` | `vix-cowork`, `vix-cowork-net` (real-time collaboration, T690-T697; `cowork_off.rs` stand-ins). **Not** in `full` or `default`: the default build has no collaboration or listening code. See `spec/cowork` |
 | `full` | umbrella for every capability except `cowork` (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
@@ -98,7 +97,8 @@ Every first-party site that starts a program is behind a feature: `vix-git` runn
 gated `terminal`, `sql` (SSH tunnels, keychain helpers) and `ai` (keychain helper). The
 `explorer_delete = "trash"` path uses `NSFileManager` on macOS rather than the crate's
 default `osascript` child. `format` is not a capability: `vix-format-tool` pretty-prints
-JSON/YAML/TOML in-process and starts nothing.
+JSON/YAML/TOML in-process; its one spawn, the user's Prettier, sits behind its own
+`process` feature, which root `tasks` turns on.
 
 Since T710 the workspace spawns (the shell and argv runners, `vix-git`,
 `vix-git-graph`, `vix-lsp`, `vix-dap`, Prettier) build their `Command` through

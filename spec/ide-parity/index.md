@@ -1,6 +1,6 @@
 # IDE parity assessment: Visual Studio and JetBrains
 
-**Status:** assessment and advice (2026-10-28); T720–T727 implemented (see [docs](../../docs/ide-parity/index.md)). Tasks T720–T729 in
+**Status:** assessment and advice (2026-10-28); T720–T727 implemented (see [docs](../../docs/ide-parity/index.md)). Tasks T720–T727 in
 [`tasks.md`](../../tasks.md).
 
 *Sources: the author's knowledge of Visual Studio, IntelliJ-platform IDEs
