@@ -28,7 +28,7 @@ use vix_cowork::{
 use vix_cowork_net::{Invite, Joined, Knock, Link, LinkEvent, Listener, NetError};
 use vix_editor_core::remote::{RemoteCaret, Splice};
 
-use super::{App, Prompt, PromptKind};
+use super::{App, Confirm, ConfirmKind, KeyCode, KeyEvent, Prompt, PromptKind};
 use crate::editor::REMOTE_PATH_PREFIX;
 
 /// How long an invite stays valid.
@@ -75,6 +75,14 @@ pub(crate) struct State {
     /// Files this guest asked the host for: they take the focus when they
     /// open; files shared for someone else open in the background.
     asked: std::collections::BTreeSet<SharedPath>,
+    /// Host (T697): the shared terminal's screen as guests last saw it, so
+    /// each tick sends only what changed since.
+    term_sent: Option<vt100::Screen>,
+    /// Guest (T697): this guest's copy of the host's shared terminal.
+    term_mirror: Option<vt100::Parser>,
+    /// Guest (T697): whether the shared-terminal overlay is open (it then
+    /// takes every key, like the integrated terminal).
+    term_view: bool,
 }
 
 impl Default for State {
@@ -91,6 +99,9 @@ impl Default for State {
             follow: Follow::default(),
             listed_at: None,
             asked: std::collections::BTreeSet::new(),
+            term_sent: None,
+            term_mirror: None,
+            term_view: false,
         }
     }
 }
@@ -166,6 +177,9 @@ impl App {
             "cowork.follow" => self.cowork_begin_follow(),
             "cowork.share_workspace" => self.cowork_toggle_workspace(),
             "cowork.files" => self.cowork_files(),
+            "cowork.share_terminal" => self.cowork_toggle_terminal_share(),
+            "cowork.terminal_input" => self.cowork_toggle_terminal_input(),
+            "cowork.terminal" => self.cowork_toggle_terminal_view(),
             _ => return false,
         }
         true
@@ -427,6 +441,7 @@ impl App {
         self.cowork.knock = None;
         self.cowork.last_cursor.clear();
         self.cowork.follow.stop();
+        self.cowork_forget_terminal();
         self.status = t!("status.cowork_left").to_string();
     }
 
@@ -482,6 +497,7 @@ impl App {
                     h.links.insert(peer.id, link);
                 }
                 self.cowork_send(&out);
+                self.cowork_terminal_for(peer.id);
                 self.status = t!("status.cowork_peer_joined", name = peer.name).to_string();
             }
             Err(e) => {
@@ -923,6 +939,297 @@ impl App {
         }
     }
 
+    // ----- shared terminal (T697) ---------------------------------------------
+    //
+    // The host shares the integrated terminal's *rendered screen*, never the
+    // PTY: guests get escape sequences that redraw it (a full screen, then
+    // per-tick differences), and the shell keeps running on the host only.
+    // Sharing and allowing input are each the host's explicit, confirmed act.
+
+    fn cowork_toggle_terminal_share(&mut self) {
+        let Some(host) = self.cowork.host.as_mut() else {
+            self.status = t!("status.cowork_not_hosting").to_string();
+            return;
+        };
+        if host.session.terminal_shared() {
+            let out = host.session.unshare_terminal();
+            self.cowork_send(&out);
+            self.cowork.term_sent = None;
+            self.status = t!("status.cowork_terminal_unshared").to_string();
+            return;
+        }
+        if self.terminal.is_none() {
+            self.status = t!("status.cowork_terminal_none").to_string();
+            return;
+        }
+        let guests = host.session.guests().count();
+        self.confirm = Some(Confirm {
+            message: t!("confirm.cowork_share_terminal", n = guests).to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::CoworkShareTerminal,
+        });
+    }
+
+    fn cowork_toggle_terminal_input(&mut self) {
+        let Some(host) = self.cowork.host.as_mut() else {
+            self.status = t!("status.cowork_not_hosting").to_string();
+            return;
+        };
+        if !host.session.terminal_shared() {
+            self.status = t!("status.cowork_terminal_not_shared").to_string();
+            return;
+        }
+        if host.session.terminal_input() {
+            let out = host.session.set_terminal_input(false);
+            self.cowork_send(&out);
+            self.status = t!("status.cowork_terminal_input_off").to_string();
+            return;
+        }
+        self.confirm = Some(Confirm {
+            message: t!("confirm.cowork_terminal_input").to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::CoworkTerminalInput,
+        });
+    }
+
+    /// Answer the share-terminal or allow-input confirmation: `y` does it,
+    /// `n` or Esc cancels, anything else waits.
+    pub(super) fn cowork_confirm_key(&mut self, kind: ConfirmKind, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y' | 'Y') => {
+                self.confirm = None;
+                if kind == ConfirmKind::CoworkShareTerminal {
+                    self.cowork_share_terminal_now();
+                } else {
+                    let out = self
+                        .cowork
+                        .host
+                        .as_mut()
+                        .filter(|h| h.session.terminal_shared())
+                        .map(|h| h.session.set_terminal_input(true));
+                    if let Some(out) = out {
+                        self.cowork_send(&out);
+                        self.status = t!("status.cowork_terminal_input_on").to_string();
+                    }
+                }
+            }
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                self.confirm = None;
+                self.status = t!("status.cowork_terminal_cancelled").to_string();
+            }
+            _ => {}
+        }
+    }
+
+    fn cowork_share_terminal_now(&mut self) {
+        let Some(screen) = self.terminal.as_ref().map(|t| t.lock().screen().clone()) else {
+            self.status = t!("status.cowork_terminal_none").to_string();
+            return;
+        };
+        let (rows, cols) = screen.size();
+        let bytes = screen.state_formatted();
+        let Some(host) = self.cowork.host.as_mut() else {
+            return;
+        };
+        let out = host.session.share_terminal(rows, cols, &bytes);
+        self.cowork_send(&out);
+        self.cowork.term_sent = Some(screen);
+        self.status = t!("status.cowork_terminal_shared").to_string();
+    }
+
+    /// A guest was just admitted: send it the shared terminal as the others
+    /// last saw it (later differences are relative to that screen).
+    fn cowork_terminal_for(&mut self, peer: PeerId) {
+        let (Some(host), Some(screen)) =
+            (self.cowork.host.as_ref(), self.cowork.term_sent.as_ref())
+        else {
+            return;
+        };
+        let (rows, cols) = screen.size();
+        let out = host
+            .session
+            .terminal_for(peer, rows, cols, &screen.state_formatted());
+        self.cowork_send(&out);
+    }
+
+    /// Host, once per tick: send what changed on the shared terminal (the
+    /// whole screen after a resize). If the terminal was closed, or a screen
+    /// is too large to send, stop sharing it.
+    fn cowork_pump_terminal(&mut self) {
+        if !self
+            .cowork
+            .host
+            .as_ref()
+            .is_some_and(|h| h.session.terminal_shared())
+        {
+            return;
+        }
+        let Some(screen) = self.terminal.as_ref().map(|t| t.lock().screen().clone()) else {
+            self.cowork_stop_terminal_share();
+            return;
+        };
+        let (rows, cols) = screen.size();
+        let same_size = self
+            .cowork
+            .term_sent
+            .as_ref()
+            .is_some_and(|prev| prev.size() == (rows, cols));
+        let bytes = match self.cowork.term_sent.as_ref() {
+            Some(prev) if same_size => screen.state_diff(prev),
+            _ => screen.state_formatted(),
+        };
+        if bytes.is_empty() {
+            return;
+        }
+        if bytes.len() > vix_cowork::wire::MAX_TERMINAL_BYTES {
+            self.cowork_stop_terminal_share();
+            return;
+        }
+        let Some(host) = self.cowork.host.as_mut() else {
+            return;
+        };
+        let out = if same_size {
+            host.session.terminal_output(&bytes)
+        } else {
+            host.session.share_terminal(rows, cols, &bytes)
+        };
+        self.cowork_send(&out);
+        self.cowork.term_sent = Some(screen);
+    }
+
+    fn cowork_stop_terminal_share(&mut self) {
+        let out = self
+            .cowork
+            .host
+            .as_mut()
+            .map(|h| h.session.unshare_terminal())
+            .unwrap_or_default();
+        self.cowork_send(&out);
+        self.cowork.term_sent = None;
+        self.status = t!("status.cowork_terminal_unshared").to_string();
+    }
+
+    /// Guest: the host sent its whole terminal screen.
+    fn cowork_terminal_screen(&mut self, rows: u16, cols: u16, screen: &[u8]) {
+        let first = self.cowork.term_mirror.is_none();
+        let mut mirror = vt100::Parser::new(rows, cols, 0);
+        mirror.process(screen);
+        self.cowork.term_mirror = Some(mirror);
+        if first {
+            // Announced, never opened over the guest's work: the overlay
+            // would take every key.
+            self.status = t!("status.cowork_terminal_offered").to_string();
+        }
+    }
+
+    fn cowork_terminal_input_status(&mut self) {
+        let can = self
+            .cowork
+            .guest
+            .as_ref()
+            .is_some_and(|g| g.session.can_type_in_terminal());
+        self.status = if can {
+            t!("status.cowork_terminal_can_type")
+        } else {
+            t!("status.cowork_terminal_read_only")
+        }
+        .to_string();
+    }
+
+    fn cowork_toggle_terminal_view(&mut self) {
+        if self.cowork.guest.is_none() {
+            self.status = t!("status.cowork_not_guest").to_string();
+            return;
+        }
+        if self.cowork.term_mirror.is_none() {
+            self.cowork.term_view = false;
+            self.status = t!("status.cowork_terminal_not_shared").to_string();
+            return;
+        }
+        self.cowork.term_view = !self.cowork.term_view;
+        if self.cowork.term_view {
+            self.cowork_terminal_input_status();
+        }
+    }
+
+    /// Guest: the shared terminal went away (closed, or the session ended).
+    fn cowork_forget_terminal(&mut self) {
+        self.cowork.term_mirror = None;
+        self.cowork.term_view = false;
+        self.cowork.term_sent = None;
+    }
+
+    /// Whether the guest's shared-terminal overlay is open (it takes keys).
+    #[must_use]
+    pub(super) fn cowork_terminal_viewing(&self) -> bool {
+        self.cowork.term_view && self.cowork.term_mirror.is_some()
+    }
+
+    /// A key while the shared-terminal overlay is open: `Ctrl+]` closes the
+    /// view (the host's shell keeps running); with input allowed, every other
+    /// key goes to the host's terminal; otherwise the status says it is
+    /// read-only.
+    pub(super) fn cowork_terminal_key(&mut self, key: KeyEvent) {
+        if Self::ctrl(&key) && matches!(key.code, KeyCode::Char(']')) {
+            self.cowork.term_view = false;
+            return;
+        }
+        let Some(guest) = self.cowork.guest.as_ref() else {
+            self.cowork_forget_terminal();
+            return;
+        };
+        let bytes = crate::terminal::encode_key(key);
+        if bytes.is_empty() {
+            return;
+        }
+        match guest.session.terminal_keys(&bytes) {
+            Ok(msg) => {
+                if guest.link.send(&msg).is_err() {
+                    self.cowork_guest_lost();
+                }
+            }
+            Err(_) => self.status = t!("status.cowork_terminal_read_only").to_string(),
+        }
+    }
+
+    /// The guest's view of the shared terminal for the renderer, with whether
+    /// this guest may type in it; `None` unless the overlay is open.
+    #[must_use]
+    pub(crate) fn cowork_terminal_view(&self) -> Option<(&vt100::Screen, bool)> {
+        if !self.cowork.term_view {
+            return None;
+        }
+        let mirror = self.cowork.term_mirror.as_ref()?;
+        let can = self
+            .cowork
+            .guest
+            .as_ref()
+            .is_some_and(|g| g.session.can_type_in_terminal());
+        Some((mirror.screen(), can))
+    }
+
+    /// Whether this guest may type in the host's shared terminal right now:
+    /// it is shared, the host allows input, and this guest has terminal
+    /// permission (T697).
+    #[must_use]
+    pub fn cowork_terminal_can_type(&self) -> bool {
+        self.cowork
+            .guest
+            .as_ref()
+            .is_some_and(|g| g.session.can_type_in_terminal())
+    }
+
+    /// The guest's copy of the host's shared terminal as plain text, or
+    /// `None` when no terminal is shared with it (T697). For tests and
+    /// diagnostics.
+    #[must_use]
+    pub fn cowork_terminal_text(&self) -> Option<String> {
+        self.cowork
+            .term_mirror
+            .as_ref()
+            .map(|m| m.screen().contents())
+    }
+
     // ----- the per-tick pump --------------------------------------------------
 
     /// Drive the session: finish a join, offer new guests for consent, feed
@@ -938,6 +1245,7 @@ impl App {
         self.cowork_pump_local();
         self.cowork_pump_remote();
         self.cowork_pump_presence();
+        self.cowork_pump_terminal();
         self.cowork_follow_tick();
     }
 
@@ -1087,6 +1395,7 @@ impl App {
             g.link.close();
         }
         self.cowork_release_guest_tabs();
+        self.cowork_forget_terminal();
         self.status = t!("status.cowork_left").to_string();
     }
 
@@ -1165,6 +1474,12 @@ impl App {
         for (asker, rel) in handled.open {
             self.cowork_open_for(asker, &rel);
         }
+        // Checked by the session: shared, input allowed, terminal permission.
+        for (_, keys) in handled.terminal_keys {
+            if let Some(term) = self.terminal.as_mut() {
+                term.send_bytes(&keys);
+            }
+        }
         for gone in handled.disconnect {
             if let Some(h) = self.cowork.host.as_mut()
                 && let Some(link) = h.links.remove(&gone)
@@ -1214,6 +1529,9 @@ impl App {
                     if p == Permission::View {
                         self.status = t!("status.cowork_view_only").to_string();
                     }
+                    if self.cowork.term_mirror.is_some() {
+                        self.cowork_terminal_input_status();
+                    }
                 }
                 GuestEvent::Refused(ErrorCode::TooLarge) => {
                     self.status = t!("status.cowork_too_large").to_string();
@@ -1233,6 +1551,19 @@ impl App {
                 GuestEvent::Ended => {
                     self.cowork_guest_lost();
                     return;
+                }
+                GuestEvent::TerminalScreen { rows, cols, screen } => {
+                    self.cowork_terminal_screen(rows, cols, &screen);
+                }
+                GuestEvent::TerminalOutput(bytes) => {
+                    if let Some(mirror) = self.cowork.term_mirror.as_mut() {
+                        mirror.process(&bytes);
+                    }
+                }
+                GuestEvent::TerminalInput(_) => self.cowork_terminal_input_status(),
+                GuestEvent::TerminalClosed => {
+                    self.cowork_forget_terminal();
+                    self.status = t!("status.cowork_terminal_closed").to_string();
                 }
                 _ => {}
             }
@@ -1373,6 +1704,40 @@ mod tests {
 
     fn p(s: &str) -> SharedPath {
         SharedPath::parse(s).unwrap()
+    }
+
+    /// T697: the host's shared-terminal stream rests on two `vt100` facts:
+    /// an unchanged screen diffs to nothing (so an idle terminal sends
+    /// nothing), and a guest that replays the full screen and then every
+    /// diff ends up with exactly the host's screen, cursor included.
+    #[test]
+    fn a_terminal_mirror_replays_the_hosts_screen_exactly() {
+        let mut host = vt100::Parser::new(6, 20, 0);
+        host.process(b"$ ls\r\n\x1b[1;31msrc\x1b[0m  tests\r\n$ ");
+        let mut sent = host.screen().clone();
+        assert!(host.screen().state_diff(&sent).is_empty(), "idle is silent");
+
+        let mut guest = vt100::Parser::new(6, 20, 0);
+        guest.process(&sent.state_formatted());
+        for chunk in [
+            &b"echo hi\r\nhi\r\n$ "[..],
+            b"\x1b[2J\x1b[H$ clear done",
+            b"\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7",
+        ] {
+            host.process(chunk);
+            guest.process(&host.screen().state_diff(&sent));
+            sent = host.screen().clone();
+            assert_eq!(guest.screen().contents(), host.screen().contents());
+            assert_eq!(
+                guest.screen().cursor_position(),
+                host.screen().cursor_position()
+            );
+        }
+        assert_eq!(
+            guest.screen().contents_formatted(),
+            host.screen().contents_formatted(),
+            "colors and attributes too"
+        );
     }
 
     /// T696: a guest-named path resolves only to a regular, non-private file

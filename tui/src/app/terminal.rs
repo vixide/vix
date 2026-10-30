@@ -20,9 +20,14 @@ impl App {
             self.terminal = None;
             return;
         }
+        // Before the first frame there is no editor area yet: start at a
+        // conventional 24x80 (the first draw resizes it to the overlay).
         let area = self.layout.editor;
-        let rows = area.height.max(1);
-        let cols = area.width.max(1);
+        let (rows, cols) = if area.height == 0 || area.width == 0 {
+            (24, 80)
+        } else {
+            (area.height, area.width)
+        };
         let shell = std::env::var("SHELL").unwrap_or_else(|_| {
             if cfg!(windows) {
                 "cmd.exe".to_string()
@@ -68,5 +73,12 @@ impl App {
     #[must_use]
     pub fn terminal_running(&self) -> bool {
         self.terminal.is_some()
+    }
+
+    /// The integrated terminal's visible screen as plain text (rows joined by
+    /// newlines), or `None` when it is closed. For tests and diagnostics.
+    #[must_use]
+    pub fn terminal_screen_text(&self) -> Option<String> {
+        self.terminal.as_ref().map(|t| t.lock().screen().contents())
     }
 }

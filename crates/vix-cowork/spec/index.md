@@ -67,10 +67,18 @@ is checked on the host's own `share`, on file lists and on open requests.
 `wire::Message` is the application payload inside one authenticated, encrypted
 frame: `Hello`, `Welcome`, `Open`, `Close`, `Update`, `Presence`,
 `SaveRequest`, `Saved`, `PermissionChanged`, `PeerJoined`, `PeerLeft`, `Leave`,
-`Error`, and for workspace sharing (T696) `ListFiles`, `FileList` (at most
-`MAX_LISTED_FILES` paths; a lying count allocates nothing) and `OpenRequest`.
+`Error`, for workspace sharing (T696) `ListFiles`, `FileList` (at most
+`MAX_LISTED_FILES` paths; a lying count allocates nothing) and `OpenRequest`,
+and for the shared terminal (T697, tags 17–21) `TerminalScreen` (size, the
+input flag and a whole screen), `TerminalOutput`, `TerminalKeys`,
+`TerminalInputAllowed` and `TerminalClose`. Terminal payloads are opaque
+escape-sequence bytes, capped at `MAX_TERMINAL_BYTES` (screens, output) and
+`MAX_TERMINAL_KEYS` (keys); a size of zero or over `MAX_TERMINAL_ROWS` x
+`MAX_TERMINAL_COLS` is refused (`WireProblem::BadTerminalSize`), and a flag
+byte other than 0 or 1 is an error.
 `Message::channel` names each message's family (`Channel::Control`,
-`Document`, `Presence`, `Workspace`); the module docs carry the tag table.
+`Document`, `Presence`, `Workspace`, `Terminal`); the module docs carry the
+tag table.
 Tags 48–63 (`RESERVED_CHAT_TAGS`) are kept for session chat (T756): they
 decode to `WireProblem::Reserved`, which `CoworkError::is_reserved_message`
 recognizes so a receiver skips the message instead of dropping the peer. `Message::encode` and `wire::decode` are hand-written, length-checked
@@ -96,6 +104,21 @@ presence and saves:
   one). While off, both are refused with `ErrorCode::PermissionDenied` and the
   guest stays connected. `refuse_to` builds a refusal for a request the host
   could not carry out. Guests see `GuestEvent::Files`.
+- **Shared terminal (T697).** Nothing until `share_terminal(rows, cols,
+  screen)`, which sends every guest the whole screen and starts
+  **read-only**; calling it again (a resize) sends the screen again and keeps the
+  input choice. `terminal_for` sends the screen to one late joiner,
+  `terminal_output` the per-tick difference, `set_terminal_input` allows or
+  stops typing, `unshare_terminal` ends it and forgets the input choice. A
+  guest's `TerminalKeys` is reported in `Handled::terminal_keys` only while
+  the terminal is shared, input is allowed and the guest's permission allows
+  `Action::Terminal`; otherwise it is refused with `PermissionDenied` and the
+  guest stays connected. The session never sees the PTY, only the bytes the
+  App gives it. Guests see `GuestEvent::TerminalScreen`, `TerminalOutput`,
+  `TerminalInput` and `TerminalClosed` (output and input changes for a
+  terminal never shared are dropped), and
+  `GuestSession::can_type_in_terminal`/`terminal_keys` refuse locally what
+  the host would refuse.
 
 ## Presence
 

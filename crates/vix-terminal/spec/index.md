@@ -20,6 +20,12 @@ it.
 - The PTY is resized to match the overlay each frame so the shell wraps correctly.
 - When the shell exits, `poll_terminal` closes the overlay and reports
   `status.terminal_closed`.
+- Opened before the first frame has been drawn (no editor area yet), the PTY
+  starts at 24 x 80 rather than 1 x 1; the first frame resizes it.
+- `Terminal::send_bytes` writes already-encoded input. Its one caller is
+  Cowork's shared terminal (T697, `spec/cowork`): keystrokes from a guest the
+  host allowed to type. The PTY itself never leaves this machine; only its
+  rendered screen is shared.
 
 ## As implemented in Vix
 

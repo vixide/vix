@@ -335,3 +335,113 @@ fn a_guest_browses_and_opens_files_only_once_the_tree_is_shared() {
         "the host's focus did not move"
     );
 }
+
+/// Run both pumps (and the host's terminal poll) for a while, for checks
+/// that something does *not* happen.
+#[cfg(unix)]
+fn settle(host: &mut App, guest: &mut App) {
+    for _ in 0..60 {
+        host.tick();
+        guest.poll_cowork();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Tick both apps until `pred` holds, failing after 10 s with both screens.
+#[cfg(unix)]
+fn until_screens(host: &mut App, guest: &mut App, pred: impl Fn(&str, &str) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let h = host.terminal_screen_text().unwrap_or_default();
+        let g = guest.cowork_terminal_text().unwrap_or_default();
+        if pred(&h, &g) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "terminal wait timed out\nhost:\n{h}\nguest:\n{g}"
+        );
+        host.tick();
+        guest.poll_cowork();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// T697: the host's terminal reaches a guest only after the host confirms
+/// sharing it; the guest sees it read-only until the host also confirms
+/// input; then keystrokes from a guest with terminal permission run in the
+/// host's shell. Closing the terminal ends the share. A real shell on a real
+/// PTY, over the encrypted loopback link.
+#[cfg(unix)]
+#[test]
+fn a_shared_terminal_is_read_only_until_the_host_allows_input() {
+    use vix::app::ConfirmKind;
+    let (mut host, mut guest, _file) = connected("term", "terminal");
+
+    // Sharing needs an open terminal, and then the host's confirmation.
+    host.run_action("cowork.share_terminal");
+    assert!(
+        host.confirm.is_none(),
+        "no terminal open: nothing to confirm"
+    );
+    host.run_action("tools.terminal");
+    assert!(host.terminal_running());
+    host.run_action("cowork.share_terminal");
+    assert_eq!(
+        host.confirm.as_ref().map(|c| c.kind),
+        Some(ConfirmKind::CoworkShareTerminal)
+    );
+    host.on_key(key('n'));
+    assert!(host.confirm.is_none());
+    settle(&mut host, &mut guest);
+    assert_eq!(guest.cowork_terminal_text(), None, "declined: nothing sent");
+
+    host.run_action("cowork.share_terminal");
+    host.on_key(key('y'));
+    pump(&mut host, &mut guest, |_, g| {
+        g.cowork_terminal_text().is_some()
+    });
+    assert!(
+        !guest.cowork_terminal_can_type(),
+        "a new share is read-only"
+    );
+
+    // The host's output streams to the guest.
+    type_str(&mut host, "expr 123400 + 56");
+    host.on_key(keycode(KeyCode::Enter));
+    until_screens(&mut host, &mut guest, |_, g| g.contains("123456"));
+
+    // Read-only: the guest's typing never reaches the host's shell.
+    guest.run_action("cowork.terminal");
+    type_str(&mut guest, "expr 500000 + 5");
+    guest.on_key(keycode(KeyCode::Enter));
+    settle(&mut host, &mut guest);
+    let screen = host.terminal_screen_text().unwrap_or_default();
+    assert!(!screen.contains("500000"), "{screen}");
+
+    // The host allows input (confirmed); now the guest's command runs.
+    host.run_action("cowork.terminal_input");
+    assert_eq!(
+        host.confirm.as_ref().map(|c| c.kind),
+        Some(ConfirmKind::CoworkTerminalInput)
+    );
+    host.on_key(key('y'));
+    pump(&mut host, &mut guest, |_, g| g.cowork_terminal_can_type());
+    type_str(&mut guest, "expr 777000 + 777");
+    guest.on_key(keycode(KeyCode::Enter));
+    until_screens(&mut host, &mut guest, |h, g| {
+        h.contains("777777") && g.contains("777777")
+    });
+
+    // Ctrl+] only hides the guest's view; the share goes on.
+    guest.on_key(ctrl(']'));
+    assert!(guest.cowork_terminal_text().is_some());
+
+    // Closing the host's terminal ends the share for everyone.
+    host.run_action("tools.terminal");
+    assert!(!host.terminal_running());
+    pump(&mut host, &mut guest, |_, g| {
+        g.cowork_terminal_text().is_none()
+    });
+    assert!(!guest.cowork_terminal_can_type());
+}

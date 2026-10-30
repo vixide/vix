@@ -45,7 +45,8 @@ Ada (192.0.2.10:52814) wants to join. Allow as: view, edit, terminal, or no
 ```
 
 Press **Enter** to let them in **view-only** (the default), type `edit` to let
-them type, or type `no` (or press **Esc**) to refuse.
+them type, `terminal` to let them type and also (once you allow it) type in a
+terminal you share, or type `no` (or press **Esc**) to refuse.
 
 ## Join a session
 
@@ -94,6 +95,29 @@ environment), cloud credentials, SSH keys, and key files such as `*.pem` and
 `*.key`. A guest can only reach files inside the host's project folder; a
 symbolic link that points outside it, or at a private file, is refused.
 
+## Share your terminal
+
+The host can show its integrated terminal (**Tools → Terminal**) to everyone
+in the session, for example to watch a build or a test run together. The
+terminal and its shell stay on the host's computer; guests see what it
+shows.
+
+1. Open the terminal, then choose **Tools → Cowork → Share Terminal**. Vix
+   asks first, and warns that guests will see **everything** the terminal
+   shows from then on, including any password, token or key printed in it.
+   Press `y` to share, `n` or **Esc** to keep it private.
+2. Guests are told that a terminal is shared. A guest chooses **Tools →
+   Cowork → Shared Terminal** to show it, and `Ctrl+]` to hide it again.
+3. A shared terminal is **read-only**. To let guests type, choose **Tools →
+   Cowork → Allow Terminal Input** and press `y`. Only guests you gave the
+   `terminal` level can then type, and anything they type runs in your
+   shell, as you. Choose **Allow Terminal Input** again to make it read-only.
+4. Choose **Share Terminal** again, or close the terminal, to stop sharing.
+   A new share always starts read-only.
+
+The guest sees the host's terminal at the host's size; a smaller window shows
+its top-left part.
+
 ## Security
 
 - **Encrypted, always.** Every byte after a short greeting is encrypted and
@@ -106,14 +130,18 @@ symbolic link that points outside it, or at a private file, is refused.
   to disk. A guest cannot reach a path outside the project.
 - **Limits.** A shared file can be at most 5 MB, and binary files are never
   shared.
+- **The terminal is opt-in twice.** Sharing it and letting guests type in it
+  are separate choices, each confirmed, and typing also needs the `terminal`
+  level. Clear anything secret off the screen before you share it.
 - Cowork has no relay or NAT traversal: the guest must be able to reach the
   host's address directly (the same network, a VPN, or a forwarded port).
 
 ## Not yet
 
 - A dropped connection does not reconnect: the host sends a new invite.
-- Searching the *contents* of the host's files, a shared terminal, and session
-  chat are not available yet. Chat is planned to travel inside the same
+- Searching the *contents* of the host's files and session chat are not
+  available yet. Only the integrated terminal can be shared (one at a time),
+  without its scrollback. Chat is planned to travel inside the same
   encrypted connection (see "Chat seam" in `spec/cowork/index.md`).
 
 See the design and decision record in `spec/cowork/index.md` and the crate

@@ -8210,11 +8210,32 @@ so, and the first task of each plan re-checks the facts it depends on.
     and a two-App loopback test. **Not done:** searching file *contents*
     across the shared tree (Find in Files over the host's workspace); new or
     deleted host files reach a guest only when it asks for the list again.
-- [ ] **T697 — Shared terminal (read-only default).** **Medium; optional.**
-  - **Not started** (2026-10-29): skipped as optional. `Permission::
-    EditTerminal` and `Action::Terminal` exist in `vix-cowork`, and a
-    `Channel` for terminal output would slot into the wire tag table the same
-    way chat does; nothing streams a terminal yet.
+- [x] **T697 — Shared terminal (read-only default).** **Medium; optional.**
+  - **Done 2026-10-30** (`feat/t697-shared-terminal`): **Share Terminal**
+    (host toggle, needs the integrated terminal open) asks first, warning
+    that guests see everything it shows, secrets included; a new share is
+    read-only. **Allow Terminal Input** (host toggle, confirmed again) lets
+    guests with the `terminal` level type; the host session checks shared +
+    allowed + `Action::Terminal` on every `TerminalKeys` and refuses without
+    dropping the guest. Guests open **Shared Terminal** (`Ctrl+]` hides it;
+    never opened over their work). The PTY stays on the host (local-only, not
+    routed through the T710 authority): guests get `vt100`'s rendering of the
+    screen (`TerminalScreen`), then per-tick differences (`TerminalOutput`,
+    silent when idle), and the whole screen again on resize or late join.
+    Five `Channel::Terminal` messages, tags 17–21, in the existing encrypted
+    frames; size, payload and key caps refused on decode. Tests: codec unit +
+    proptest round-trip, hostile-message refusals, a session test of the
+    whole permission matrix, a `vt100` diff-replay test, and a two-App
+    loopback test with a real shell (Unix). Also: the confirm dialog wraps
+    long messages; a terminal opened before the first frame starts at 24x80;
+    the `cowork` feature now implies `terminal`.
+  - **Not done:** only the one integrated terminal can be shared (not the OC
+    menu's container shells, not several at once); no scrollback; no mouse
+    reporting; input is allowed for every `terminal`-level guest at once, not
+    per guest; a guest smaller than the host's terminal sees it clipped, not
+    scaled or scrollable; the loopback test is Unix-only (it drives a real
+    PTY shell); differences are sent every tick with no rate limit beyond
+    the event loop's own cadence.
 
 ### OC — Open Container Initiative menu (spec: [`spec/open-container`](spec/open-container/index.md))
 

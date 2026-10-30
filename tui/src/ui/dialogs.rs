@@ -28,12 +28,24 @@ pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.confirm.as_ref() else {
         return;
     };
-    let width = (u16::try_from(c.message.chars().count()).unwrap_or(u16::MAX) + 6).min(area.width);
+    // Display columns, so wide (CJK) text is measured as it is drawn.
+    let cols = u16::try_from(Line::from(c.message.as_str()).width()).unwrap_or(u16::MAX);
+    let width = cols.saturating_add(6).min(area.width);
+    // A message wider than the screen (Cowork's terminal-sharing warning,
+    // T697) wraps onto more lines instead of being cut off.
+    let text_width = width.saturating_sub(2).max(1);
+    // Word wrapping can need one line more than the column count says.
+    let lines = if cols <= text_width {
+        1
+    } else {
+        cols.div_ceil(text_width) + 1
+    };
+    let y = area.y + area.height / 3;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
+        y,
         width,
-        height: 3,
+        height: lines.saturating_add(2).min(area.bottom().saturating_sub(y)),
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -44,7 +56,10 @@ pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} ", t!("ui.confirm")));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
-    frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(c.message.clone())).wrap(Wrap { trim: true }),
+        inner,
+    );
     right_align(app, frame, inner);
 }
 

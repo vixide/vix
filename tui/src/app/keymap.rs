@@ -138,6 +138,8 @@ impl App {
             || self.visible.contains(crate::app::Visible::CLOCK)
             || self.menu.is_open()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
+            // A Cowork guest's view of a shared terminal (T697).
+            || self.cowork_terminal_viewing()
     }
 
     fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
@@ -284,6 +286,28 @@ impl App {
         }
     }
 
+    /// Cowork's shared terminal (T697), ahead of the integrated terminal:
+    /// the host's share/allow-input confirmation is asked while its terminal
+    /// is open, so it answers first; and a guest's view of the host's
+    /// terminal, drawn over everything, takes every key while open.
+    fn try_cowork_terminal_key(&mut self, key: KeyEvent) -> bool {
+        if self.confirm.as_ref().is_some_and(|c| {
+            matches!(
+                c.kind,
+                crate::app::ConfirmKind::CoworkShareTerminal
+                    | crate::app::ConfirmKind::CoworkTerminalInput
+            )
+        }) {
+            self.confirm_key(key);
+            return true;
+        }
+        if self.cowork_terminal_viewing() {
+            self.cowork_terminal_key(key);
+            return true;
+        }
+        false
+    }
+
     /// Route `key` to the lower-priority list/panel overlays (choosers, tool
     /// panels, prompt, palette, search, menu). Returns `true` when one consumed
     /// the key. Split out of [`App::try_overlay_key`] to keep both within the
@@ -297,6 +321,9 @@ impl App {
                     return true;
                 }
             };
+        }
+        if self.try_cowork_terminal_key(key) {
+            return true;
         }
         // The integrated terminal captures all keys (forwarded to the shell)
         // except its close chord, handled inside the key handler.

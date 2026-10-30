@@ -762,6 +762,12 @@ pub enum ConfirmKind {
     /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
     /// file) from the Git panel (T657).
     GitDiscard,
+    /// Share the integrated terminal with the Cowork session's guests
+    /// (T697); the message warns that everything it shows is visible.
+    CoworkShareTerminal,
+    /// Let Cowork guests with terminal permission type in the shared
+    /// terminal (T697).
+    CoworkTerminalInput,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -7855,6 +7861,15 @@ impl App {
             .filter(|k| matches!(k, ConfirmKind::GitDiscard | ConfirmKind::StageAllAndCommit))
         {
             self.git_confirm_key(kind, key);
+            return;
+        }
+        if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {
+            matches!(
+                k,
+                ConfirmKind::CoworkShareTerminal | ConfirmKind::CoworkTerminalInput
+            )
+        }) {
+            self.cowork_confirm_key(kind, key);
             return;
         }
         match key.code {
