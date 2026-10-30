@@ -15,7 +15,7 @@ shipping it.
 
 A keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE") built
 on `ratatui`, organized as a **Cargo workspace** (edition 2024): a thin App
-shell (package `vix-tui` in `tui/`, `tui/src/`) over ~112 focused `vix-*` member crates
+shell (package `vix-tui` in `tui/`, `tui/src/`) over 140 focused `vix-*` member crates
 under `crates/`. `tui/src/lib.rs` re-exports each member crate under a short
 module name (`pub use vix_git as git;`), so `crate::git`, `crate::menu`, etc.
 still name them. The App shell itself is two large files with submodules:
@@ -41,7 +41,7 @@ leave the drift for later.
    `tui/src/ui.rs` (rendering only lives there). One action id, one
    `App::run_action` arm — never a second code path for the same command.
 3. **Internationalize new user-facing text.** Add the key to the right
-   `locales/*.yml` namespace file across every language it already carries,
+   `crates/vix-i18n/locales/*.yml` namespace file across every language it already carries,
    render with `t!`. Never hard-code a display string.
 4. **Document every new public item.** `#![deny(missing_docs)]` is on at
    every crate root; an undocumented `pub fn`/`struct`/field fails the build.
@@ -97,9 +97,10 @@ leave the drift for later.
   (`ln -s index.md README.md`), never a second copy that can drift.
 - **`llms.txt`/`llms.json`** (repo root) must stay under 40 KB and name the
   same set of links — `scripts/check-docs` gates both. If the curated map
-  changes, also update `vixide.github.io`'s `static/` copies by hand,
-  rewriting every relative link to `https://github.com/vixide/vix/blob/main/...`
-  (a separate repo with no `check-docs` of its own to catch drift).
+  changes, regenerate `vixide.github.io/static/llms.txt` and `llms.json` in
+  the same commit: the same text with every relative link rewritten to
+  `https://github.com/vixide/vix/blob/main/<path>` (`check-docs` does not
+  gate the site copies, so nothing else catches their drift).
 - **New crate**: `scripts/check-docs` fails if it has no `spec/index.md`, or
   if it's missing from `agents/share/crate-map.md`. Add both in the same
   change. It also checks that each crate's Cargo.toml `description` is a
@@ -117,7 +118,7 @@ leave the drift for later.
 | --- | --- |
 | Add/route a command | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
-| Add/translate UI text | `locales/*.yml` (+ `t!` at the call site) |
+| Add/translate UI text | `crates/vix-i18n/locales/*.yml` (+ `t!` at the call site) |
 | Add a setting | `crates/vix-settings/` |
 | Change the editor widget | `crates/vix-editor-core/` |
 | Change theme colors/model | `crates/vix-theme/`, `crates/vix-theme-model/` |
@@ -142,7 +143,7 @@ below) — never edit the sibling `../vixide.github.io` repo directly.
 
 ### One feature branch per change
 
-1. `git checkout -b <short-kebab-name>` off `main`.
+1. `git checkout -b <short-kebab-name>` off `main` — in your own git worktree when other agents share the checkout (merge big branches in a separate worktree too, never by switching the shared checkout's branch).
 2. Implement (Part 1 above), and confirm `scripts/check` is green **before**
    committing — don't commit red and fix in a follow-up.
 3. Commit with a trailer identifying the assisting agent, e.g.
@@ -181,11 +182,11 @@ below) — never edit the sibling `../vixide.github.io` repo directly.
 
 Changes to the site are ordinary commits under `vix/vixide.github.io/` — same
 branch, same `--no-ff` merge to `main`, same process as any other part of
-`vix`. Its own rule (`vixide.github.io/AGENTS.md`): `npm run build` must
-prerender cleanly before publishing. If the local Node is too old for a
+`vix`. Its own rule (`vixide.github.io/AGENTS.md`): `pnpm run check` and `pnpm run build` must pass
+before publishing. If the local Node is too old for a
 build-tool dependency, don't block on it — confirm the failure is
-pre-existing (reproduces on `main` before your change, e.g. via
-`git stash`) and that CI's pinned Node version
+pre-existing (reproduces on `main` before your change, e.g. in a
+separate worktree — never a bare `git stash`, whose stack every worktree shares) and that CI's pinned Node version
 (`vixide.github.io/.github/workflows/deploy.yml`) is new enough.
 
 Once merged to `vix`'s `main` (and `vix` itself is pushed — subtree push

@@ -21,7 +21,7 @@ is correct, then make them match — don't leave the drift for later.
    `tui/src/ui/*.rs` submodules). One action id, one `App::run_action` arm
    (routed through `tui/src/app.rs`'s own `tui/src/app/*.rs` submodules) — never a
    second code path for the same command.
-3. **Internationalize new user-facing text.** Add the key to the right `locales/*.yml` file
+3. **Internationalize new user-facing text.** Add the key to the right `crates/vix-i18n/locales/*.yml` file
    across all languages the file already carries, render with `t!`. Never
    hard-code a display string.
 4. **Document every new public item** — `#![deny(missing_docs)]` is on at
@@ -56,11 +56,15 @@ is correct, then make them match — don't leave the drift for later.
   (`ln -s index.md README.md`), never a second copy that can drift.
 - **`llms.txt`/`llms.json`** (repo root, see `spec/llms-json-and-llms-txt/index.md`)
   must stay under 40 KB and name the same set of links — `scripts/check-docs`
-  gates both. If the curated map changes, also update
-  `vixide.github.io`'s `static/` copies **by hand**, rewriting every relative
-  link to `https://github.com/vixide/vix/blob/main/...` (they're a separate
-  repo with no `check-docs` of its own to catch drift) — see `vix-ship` for
-  where that repo lives and how to verify its links before pushing.
+  gates both. If the curated map changes, regenerate
+  `vixide.github.io/static/llms.txt` and `llms.json` in the same commit: the
+  same text with every relative link rewritten to
+  `https://github.com/vixide/vix/blob/main/<path>` (`check-docs` does not gate
+  the site copies, so nothing else catches their drift).
+- **Run the whole gate.** `scripts/check` must end with `OK: … all passed`
+  before you commit; it also checks that `docs/reference/` and the man page
+  are regenerated (`cargo run --example list_commands -- --write`,
+  `cargo run --example generate_man`).
 - **New crate**: `scripts/check-docs` fails if it has no `spec/index.md`, or
   if it's missing from `agents/share/crate-map.md`. Add both in the same
   change.
