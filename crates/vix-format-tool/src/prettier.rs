@@ -108,12 +108,15 @@ pub fn resolve_binary(
     allow_project_local: bool,
 ) -> Option<PathBuf> {
     let start = file.parent()?;
+    // The project-local binary lives in the workspace, so it is looked up
+    // through the authority (T710); `PATH` is this machine's.
+    let auth = vix_authority::current();
     for dir in start.ancestors().filter(|_| allow_project_local) {
         let bin = dir.join("node_modules").join(".bin");
         if let Some(found) = exe_names()
             .iter()
             .map(|n| bin.join(n))
-            .find(|p| p.is_file())
+            .find(|p| auth.is_file(p))
         {
             return Some(found);
         }

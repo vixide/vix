@@ -114,8 +114,8 @@ impl App {
     /// A stable string key for the current workspace root (canonicalized when
     /// possible, so symlinked paths map to one session entry).
     pub(super) fn session_key(&self) -> String {
-        self.root
-            .canonicalize()
+        crate::authority::current()
+            .canonicalize(&self.root)
             .unwrap_or_else(|_| self.root.clone())
             .to_string_lossy()
             .into_owned()
@@ -153,7 +153,7 @@ impl App {
         let mut opened = 0usize;
         for (i, file) in ws.files.iter().enumerate() {
             let path = PathBuf::from(file);
-            if !path.is_file() {
+            if !crate::authority::current().is_file(&path) {
                 continue;
             }
             self.open_path(&path, false);

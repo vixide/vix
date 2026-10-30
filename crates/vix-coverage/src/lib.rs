@@ -83,7 +83,9 @@ impl Report {
             return Some(lines);
         }
         self.files.iter().find_map(|(recorded, lines)| {
-            let canon = Path::new(recorded).canonicalize().ok()?;
+            let canon = vix_authority::current()
+                .canonicalize(Path::new(recorded))
+                .ok()?;
             (canon == path).then_some(lines)
         })
     }

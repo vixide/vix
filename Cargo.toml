@@ -153,6 +153,7 @@ vix-ai-diff = { path = "crates/vix-ai-diff", version = "2.0.0" }
 vix-ai-panel = { path = "crates/vix-ai-panel", version = "2.0.0" }
 vix-align = { path = "crates/vix-align", version = "2.0.0" }
 vix-ascii-character-picker = { path = "crates/vix-ascii-character-picker", version = "2.0.0" }
+vix-authority = { path = "crates/vix-authority", version = "2.0.0" }
 vix-base-tool = { path = "crates/vix-base-tool", version = "2.0.0" }
 vix-base16 = { path = "crates/vix-base16", version = "2.0.0" }
 vix-base64-tool = { path = "crates/vix-base64-tool", version = "2.0.0" }

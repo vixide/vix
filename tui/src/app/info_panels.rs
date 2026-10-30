@@ -183,14 +183,12 @@ impl App {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             info.path = path.display().to_string();
-            if let Ok(meta) = std::fs::metadata(path) {
-                info.bytes = Some(meta.len());
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    info.mode = Some(meta.permissions().mode());
+            if let Ok(meta) = crate::authority::current().metadata(path) {
+                info.bytes = Some(meta.len);
+                if cfg!(unix) {
+                    info.mode = meta.mode;
                 }
-                if let Ok(modified) = meta.modified()
+                if let Some(modified) = meta.modified
                     && let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH)
                 {
                     info.modified_secs = i64::try_from(d.as_secs()).ok();

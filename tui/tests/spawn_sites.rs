@@ -14,6 +14,26 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
     (
+        "crates/vix-authority/src/lib.rs",
+        "the `Authority::command` signature (T710): builds no process itself",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/process.rs",
+        "`ProcessSpec::to_local_command`, the one place an authority builds a local `Command`",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/local.rs",
+        "`LocalAuthority::command` (returns `Unsupported` without `process`)",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/fake.rs",
+        "`FakeAuthority::command` (T711): defers to `LocalAuthority::command`",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
         "crates/vix-http-client/src/aad.rs",
         "`az account get-access-token` for {{$aadToken}} (argv array, no shell)",
         "`http` feature (vix-http-client is an optional dependency of the root)",
@@ -21,11 +41,6 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     (
         "crates/vix-git/src/lib.rs",
         "git process runners",
-        "`process` feature, enabled only by root `git`",
-    ),
-    (
-        "crates/vix-git-graph/src/lib.rs",
-        "git log / switch / cherry-pick runners for the Git graph",
         "`process` feature, enabled only by root `git`",
     ),
     (

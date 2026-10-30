@@ -30,7 +30,7 @@ impl App {
             return;
         }
         let path = self.resolve(input);
-        match std::fs::read_to_string(&path) {
+        match crate::authority::current().read_to_string(&path) {
             Ok(text) => {
                 let report = vix_coverage::parse(&text);
                 let files = report.file_count();

@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Left dock: the file explorer's lazily-expanded directory tree + selection."
 
 [dependencies]
+vix-authority = { workspace = true }
 regex = { workspace = true }
 vix-list-state = { workspace = true }
 

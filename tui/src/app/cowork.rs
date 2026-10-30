@@ -99,12 +99,13 @@ impl Default for State {
 /// file whose *canonical* path (symlinks followed) is still inside the root
 /// and still not private. Returns the path as spelled under the root.
 fn confine(root: &std::path::Path, rel: &SharedPath) -> Option<PathBuf> {
-    let real_root = root.canonicalize().ok()?;
+    let auth = crate::authority::current();
+    let real_root = auth.canonicalize(root).ok()?;
     let spelled = rel.under(root);
-    let resolved = spelled.canonicalize().ok()?;
+    let resolved = auth.canonicalize(&spelled).ok()?;
     let inside = resolved.strip_prefix(&real_root).ok()?;
     let real_rel = SharedPath::parse(&inside.to_string_lossy()).ok()?;
-    (resolved.is_file() && !real_rel.is_private()).then_some(spelled)
+    (auth.is_file(&resolved) && !real_rel.is_private()).then_some(spelled)
 }
 
 /// The shared path behind a shared-in (`cowork:`) tab.
@@ -242,7 +243,8 @@ impl App {
             .strip_prefix(&self.root)
             .map(PathBuf::from)
             .or_else(|_| {
-                let (p, r) = (path.canonicalize()?, self.root.canonicalize()?);
+                let auth = crate::authority::current();
+                let (p, r) = (auth.canonicalize(path)?, auth.canonicalize(&self.root)?);
                 p.strip_prefix(&r)
                     .map(PathBuf::from)
                     .map_err(|_| std::io::Error::other("outside the root"))

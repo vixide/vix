@@ -17,12 +17,12 @@ impl App {
         // A buffer backed by a file compares side by side, both sides
         // editable (T660); an untitled buffer keeps the unified overlay.
         if let Some(here) = self.editor.active_tab().and_then(|t| t.path.clone())
-            && other.is_file()
+            && crate::authority::current().is_file(&other)
         {
             self.open_compare_files(&other, &here);
             return;
         }
-        let Ok(other_text) = crate::fileops::read_to_string_guarded(&other) else {
+        let Ok(other_text) = crate::authority::current().read_to_string_guarded(&other) else {
             self.messages
                 .error(t!("msg.open_failed", error = other.display()).to_string());
             return;

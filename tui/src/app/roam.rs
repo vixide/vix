@@ -118,7 +118,7 @@ impl App {
             if path
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                && let Ok(content) = std::fs::read_to_string(path)
+                && let Ok(content) = crate::authority::current().read_to_string(path)
             {
                 let name = path
                     .strip_prefix(&self.root)
@@ -138,7 +138,7 @@ impl App {
             if path
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                && let Ok(content) = std::fs::read_to_string(path)
+                && let Ok(content) = crate::authority::current().read_to_string(path)
                 && crate::roam::node_title(&content).is_some_and(|t| t.to_ascii_lowercase() == want)
             {
                 return Some(path.clone());
@@ -151,13 +151,13 @@ impl App {
     /// failures on the message line. Returns whether the write succeeded.
     pub(super) fn roam_write_and_open(&mut self, path: &Path, content: &str) -> bool {
         if let Some(parent) = path.parent()
-            && let Err(e) = std::fs::create_dir_all(parent)
+            && let Err(e) = crate::authority::current().create_dir_all(parent)
         {
             self.messages
                 .error(t!("msg.save_failed", error = e).to_string());
             return false;
         }
-        if let Err(e) = std::fs::write(path, content) {
+        if let Err(e) = crate::authority::current().write(path, content.as_bytes()) {
             self.messages
                 .error(t!("msg.save_failed", error = e).to_string());
             return false;
@@ -176,7 +176,8 @@ impl App {
             return None;
         }
         if let Some(path) = self.roam_find_by_title(title) {
-            let id = std::fs::read_to_string(&path)
+            let id = crate::authority::current()
+                .read_to_string(&path)
                 .ok()
                 .and_then(|c| crate::roam::node_id(&c));
             self.open_path(&path, false);
@@ -204,7 +205,8 @@ impl App {
     /// whenever `self.root` itself didn't exist yet (Run H, T518).
     fn roam_find_or_create_node(&mut self, title: &str) -> Option<String> {
         if let Some(path) = self.roam_find_by_title(title) {
-            return std::fs::read_to_string(&path)
+            return crate::authority::current()
+                .read_to_string(&path)
                 .ok()
                 .and_then(|c| crate::roam::node_id(&c));
         }
@@ -214,9 +216,9 @@ impl App {
             .join(format!("{}.org", crate::roam::slugify(title)));
         let body = crate::roam::new_node(title, &id);
         if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            let _ = crate::authority::current().create_dir_all(parent);
         }
-        match std::fs::write(&path, &body) {
+        match crate::authority::current().write(&path, body.as_bytes()) {
             Ok(()) => {
                 self.build_file_index();
                 self.explorer.rebuild();
@@ -253,7 +255,8 @@ impl App {
             .iter()
             .filter(|p| {
                 p.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                    && std::fs::read_to_string(p)
+                    && crate::authority::current()
+                        .read_to_string(p)
                         .ok()
                         .and_then(|c| crate::roam::node_title(&c))
                         .is_some()
@@ -301,7 +304,7 @@ impl App {
             return;
         };
         let path = self.root.join(crate::roam::DAILIES_DIR).join(filename);
-        if path.exists() {
+        if crate::authority::current().exists(&path) {
             self.open_path(&path, false);
             return;
         }
@@ -325,7 +328,8 @@ impl App {
         let path = self.root.join(crate::roam::DAILIES_DIR).join(filename);
         let time = jiff::Zoned::now().strftime("%H:%M").to_string();
         let entry = crate::roam::daily_entry(&time, text);
-        let mut content = std::fs::read_to_string(&path)
+        let mut content = crate::authority::current()
+            .read_to_string(&path)
             .unwrap_or_else(|_| crate::roam::daily_template(&date, &crate::uuid_tool::v4()));
         if !content.ends_with('\n') {
             content.push('\n');
@@ -494,7 +498,7 @@ impl App {
         if target == path {
             return;
         }
-        match std::fs::rename(&path, &target) {
+        match crate::authority::current().rename(&path, &target) {
             Ok(()) => {
                 self.editor.close_active();
                 self.build_file_index();

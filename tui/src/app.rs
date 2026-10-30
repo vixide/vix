@@ -2833,8 +2833,9 @@ impl App {
     /// difftool` driver invokes with (`$LOCAL $REMOTE`); see
     /// `docs/cli/index.md`.
     pub fn open_diff_files(&mut self, old: &Path, new: &Path) {
+        let auth = crate::authority::current();
         let read = |p: &Path| {
-            crate::fileops::read_to_string_guarded(p)
+            auth.read_to_string_guarded(p)
                 .map_err(|e| t!("msg.open_failed", error = e).to_string())
         };
         let (old_text, new_text) = match (read(old), read(new)) {
@@ -5418,11 +5419,12 @@ impl App {
 
         let mut reload_clean = false;
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
+        let auth = crate::authority::current();
         for tab in &self.editor.tabs {
             let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else {
                 continue;
             };
-            let Ok(mtime) = std::fs::metadata(path).and_then(|m| m.modified()) else {
+            let Some(mtime) = auth.metadata(path).ok().and_then(|m| m.modified) else {
                 continue;
             };
             let previous = self.disk_mtimes.insert(path.clone(), mtime);
@@ -6020,7 +6022,7 @@ impl App {
             run: Option<String>,
         }
         let path = self.root.join(".vix").join("project.toml");
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = crate::authority::current().read_to_string(&path) else {
             return crate::tasks::lifecycle::LifecycleCommands::default();
         };
         let parsed: ProjectOverrideFile = toml::from_str(&text).unwrap_or_default();
@@ -6037,12 +6039,12 @@ impl App {
     /// The names of every entry directly inside `dir`, or empty on any error
     /// (missing directory, permissions, …).
     fn dir_entry_names(dir: &Path) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = crate::authority::current().read_dir(dir) else {
             return Vec::new();
         };
         entries
-            .flatten()
-            .filter_map(|e| e.file_name().into_string().ok())
+            .iter()
+            .filter_map(|e| e.name().to_str().map(str::to_string))
             .collect()
     }
 
@@ -6056,7 +6058,9 @@ impl App {
         let names = Self::dir_entry_names(dir);
         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
         let pyproject = if refs.contains(&"pyproject.toml") {
-            std::fs::read_to_string(dir.join("pyproject.toml")).ok()
+            crate::authority::current()
+                .read_to_string(&dir.join("pyproject.toml"))
+                .ok()
         } else {
             None
         };
@@ -6160,7 +6164,8 @@ impl App {
     /// return the merged `Discovered`-tier tasks (all seven sources
     /// `vix-tasks` supports). Cheap existence checks before each read.
     fn discovered_tasks_at(dir: &Path) -> Vec<crate::tasks::task::NamedTask> {
-        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
+        let auth = crate::authority::current();
+        let read = |name: &str| auth.read_to_string(&dir.join(name)).ok();
         let mut out = Vec::new();
         if let Some(body) = read("package.json") {
             let names = Self::dir_entry_names(dir);
@@ -6209,17 +6214,17 @@ impl App {
             }
         }
         let rakelib = dir.join("rakelib");
-        if rakelib.is_dir() {
+        if auth.is_dir(&rakelib) {
             for name in Self::dir_entry_names(&rakelib) {
                 if is_rake_file(&name)
-                    && let Ok(body) = std::fs::read_to_string(rakelib.join(&name))
+                    && let Ok(body) = auth.read_to_string(&rakelib.join(&name))
                 {
                     rakefiles.push((format!("rakelib/{name}"), body));
                 }
             }
         }
         if !rakefiles.is_empty() {
-            let use_bundler = dir.join("Gemfile").is_file();
+            let use_bundler = auth.is_file(&dir.join("Gemfile"));
             let refs: Vec<(&str, &str)> = rakefiles
                 .iter()
                 .map(|(n, b)| (n.as_str(), b.as_str()))
@@ -6386,7 +6391,7 @@ impl App {
             return;
         }
         let path = self.resolve(input);
-        let Ok(text) = crate::fileops::read_to_string_guarded(&path) else {
+        let Ok(text) = crate::authority::current().read_to_string_guarded(&path) else {
             self.messages
                 .error(t!("msg.open_failed", error = path.display()).to_string());
             return;
@@ -6411,7 +6416,7 @@ impl App {
             self.status = t!("status.revert_no_file").to_string();
             return;
         };
-        match crate::fileops::read_to_string_guarded(&path) {
+        match crate::authority::current().read_to_string_guarded(&path) {
             Ok(content) => {
                 let cursor = tab.editor.get_cursor();
                 tab.editor.set_content(&content);
@@ -7006,7 +7011,7 @@ impl App {
             return;
         };
         let path = PathBuf::from(&root);
-        if !path.is_dir() {
+        if !crate::authority::current().is_dir(&path) {
             self.status = t!("status.project_missing", path = root).to_string();
             return;
         }
@@ -7101,7 +7106,7 @@ impl App {
                 continue;
             }
             let p = PathBuf::from(f);
-            if p.exists() {
+            if crate::authority::current().exists(&p) {
                 self.open_path(&p, false);
             }
         }
@@ -7124,7 +7129,7 @@ impl App {
     /// so it needs no separate notification.
     fn workspace_add_folder(&mut self, path: &str) {
         let folder = self.resolve(path.trim());
-        if !folder.is_dir() {
+        if !crate::authority::current().is_dir(&folder) {
             self.status = t!("status.workspace_not_a_folder").to_string();
             return;
         }
@@ -7556,12 +7561,13 @@ impl App {
                 }
                 continue;
             }
+            let auth = crate::authority::current();
             let mut dest = target.join(src.file_name().unwrap_or_default());
             // Copying into the same directory can't overwrite the source, so it
             // gets an auto-incremented "name copy" instead of a conflict prompt.
             if !cut && same_dir {
                 dest = crate::fileops::unique_copy_name(&target, &src);
-            } else if dest.exists() {
+            } else if auth.exists(&dest) {
                 if overwrite_all {
                     // fall through and overwrite
                 } else if skip_all {
@@ -7585,16 +7591,19 @@ impl App {
 
     fn perform_paste_one(&mut self, src: &Path, dest: &Path, cut: bool) {
         // Capture the canonical source before moving (it won't exist after).
-        let src_canon = src.canonicalize().unwrap_or_else(|_| src.to_path_buf());
+        let auth = crate::authority::current();
+        let src_canon = auth.canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
         let res = if cut {
-            crate::fileops::move_path(src, dest)
+            auth.move_path(src, dest)
         } else {
-            crate::fileops::copy_recursive(src, dest)
+            auth.copy_recursive(src, dest)
         };
         match res {
             Ok(()) => {
                 if cut {
-                    let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+                    let dest_canon = auth
+                        .canonicalize(dest)
+                        .unwrap_or_else(|_| dest.to_path_buf());
                     self.relocate_buffers(&src_canon, &dest_canon);
                 }
             }
@@ -7862,13 +7871,14 @@ impl App {
                 if let Some(c) = self.confirm.take() {
                     let use_trash = self.explorer_delete_uses_trash();
                     let mut removed = 0;
+                    let auth = crate::authority::current();
                     for path in &c.paths {
                         // Canonicalize before removing so buffer paths still match.
-                        let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+                        let canon = auth.canonicalize(path).unwrap_or_else(|_| path.clone());
                         let result = if use_trash {
-                            crate::fileops::trash_path(path)
+                            auth.trash(path)
                         } else {
-                            crate::fileops::remove_path(path)
+                            auth.remove_path(path)
                         };
                         match result {
                             Ok(()) => {
@@ -8067,7 +8077,9 @@ impl App {
     fn report_open_failure(&mut self, path: &Path, preview: bool, e: &std::io::Error) {
         use crate::fileops::TextReadError;
         let why = TextReadError::from_io(e);
-        let size = std::fs::metadata(path).map_or(0, |m| m.len());
+        let size = crate::authority::current()
+            .metadata(path)
+            .map_or(0, |m| m.len);
         let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
         if !preview && !over_hard_cap {
             let ask = match why {
@@ -8123,14 +8135,11 @@ impl App {
     /// Open a binary file in the byte editor, saving straight back to the file
     /// (not through a text buffer, which would corrupt non-UTF-8 bytes) (T571).
     fn open_binary_file(&mut self, path: &Path) {
-        use std::io::Read as _;
-        let mut bytes = Vec::new();
-        let read = std::fs::File::open(path).and_then(|f| {
-            f.take(crate::fileops::HARD_MAX_TEXT_BYTES + 1)
-                .read_to_end(&mut bytes)
-        });
+        // At most one byte past the ceiling, so a huge file can't exhaust memory.
+        let read =
+            crate::authority::current().read_limited(path, crate::fileops::HARD_MAX_TEXT_BYTES + 1);
         match read {
-            Ok(n) if (n as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
+            Ok(bytes) if (bytes.len() as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
                 self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(bytes));
                 self.edit_bytes_file = Some(path.to_path_buf());
             }
@@ -8271,7 +8280,7 @@ impl App {
     /// Reopen the most recently closed tab whose file still exists.
     fn reopen_closed_tab(&mut self) {
         while let Some(path) = self.closed_tabs.pop() {
-            if path.is_file() {
+            if crate::authority::current().is_file(&path) {
                 self.with_jump(|s| {
                     s.open_path(&path, false);
                     s.focus = Focus::Editor;
@@ -8285,7 +8294,9 @@ impl App {
     /// Record a real (non-preview) file open at the front of the recent list,
     /// de-duplicated and capped. Stored canonicalized so reopening is reliable.
     fn record_recent(&mut self, path: &Path) {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canon = crate::authority::current()
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         let entry = canon.to_string_lossy().into_owned();
         let max = self.settings.recent_files_max;
         let recent = &mut self.settings.recent_files;
@@ -9051,7 +9062,7 @@ impl App {
             return;
         };
         let path = self.resolve(&path);
-        if path.is_file() {
+        if crate::authority::current().is_file(&path) {
             self.with_jump(|s| {
                 s.open_path(&path, false);
                 let area = s.editor_view();
@@ -10175,19 +10186,20 @@ impl App {
     }
 
     fn open_recent_chooser(&mut self) {
+        let auth = crate::authority::current();
         let entries: Vec<RecentEntry> = self
             .settings
             .recent_files
             .iter()
             .map(PathBuf::from)
-            .filter(|p| p.is_file())
+            .filter(|p| auth.is_file(p))
             .map(|path| {
                 use crate::file_browser_panel::unix_secs;
-                let meta = std::fs::metadata(&path).ok();
+                let meta = auth.metadata(&path).ok();
                 RecentEntry {
-                    size: meta.as_ref().map_or(0, std::fs::Metadata::len),
-                    created: meta.as_ref().and_then(|m| unix_secs(m.created().ok())),
-                    modified: meta.as_ref().and_then(|m| unix_secs(m.modified().ok())),
+                    size: meta.as_ref().map_or(0, |m| m.len),
+                    created: meta.as_ref().and_then(|m| unix_secs(m.created)),
+                    modified: meta.as_ref().and_then(|m| unix_secs(m.modified)),
                     path,
                 }
             })
@@ -10597,7 +10609,7 @@ impl App {
         // A binary file opened straight into the byte editor is written back byte
         // for byte; going through a text buffer would corrupt it (T571).
         if let Some(path) = self.edit_bytes_file.clone() {
-            match crate::fileops::write_atomic(&path, &bytes) {
+            match crate::authority::current().write_atomic(&path, &bytes) {
                 Ok(()) => {
                     if let Some(hex) = self.edit_bytes.as_mut() {
                         hex.mark_saved();
@@ -12092,8 +12104,9 @@ impl App {
     /// project root.
     pub(crate) fn collect_todos(&self) -> Vec<crate::todo_tree::Item> {
         let mut items = Vec::new();
+        let auth = crate::authority::current();
         for path in &self.file_index {
-            let Ok(content) = crate::fileops::read_to_string_guarded(path) else {
+            let Ok(content) = auth.read_to_string_guarded(path) else {
                 continue;
             };
             let rel = path
@@ -12224,7 +12237,10 @@ impl App {
     /// The current text for a path: the open buffer if one points at it (so
     /// unsaved edits are searched), otherwise the file on disk.
     fn current_text(&self, path: &Path) -> Option<String> {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let auth = crate::authority::current();
+        let canon = auth
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
         if let Some(tab) = self
             .editor
             .tabs
@@ -12233,11 +12249,11 @@ impl App {
         {
             return Some(tab.text());
         }
-        let meta = std::fs::metadata(path).ok()?;
-        if meta.len() > 2_000_000 {
+        let meta = auth.metadata(path).ok()?;
+        if meta.len > 2_000_000 {
             return None; // skip very large files
         }
-        crate::fileops::read_to_string_guarded(path).ok()
+        auth.read_to_string_guarded(path).ok()
     }
 
     fn run_workspace_search(&mut self) {
@@ -12420,7 +12436,9 @@ impl App {
         let mut changed = Vec::new();
         let mut buffer_only = 0usize;
         for (path, new) in plan {
-            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+            let canon = crate::authority::current()
+                .canonicalize(path)
+                .unwrap_or_else(|_| path.clone());
             let open = self
                 .editor
                 .tabs
@@ -12440,7 +12458,7 @@ impl App {
                     continue;
                 }
             }
-            if let Err(e) = crate::fileops::write_text_in_file_encoding(path, new) {
+            if let Err(e) = crate::authority::current().write_text_in_file_encoding(path, new) {
                 self.messages
                     .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;
@@ -13188,20 +13206,19 @@ impl App {
     /// and an existing file other than the buffer's own asks for a y/n
     /// overwrite confirmation instead of being replaced silently.
     fn request_save_as(&mut self, path: PathBuf) {
-        let is_link = path
-            .symlink_metadata()
-            .is_ok_and(|m| m.file_type().is_symlink());
-        if is_link && !path.exists() {
+        let auth = crate::authority::current();
+        let is_link = auth.symlink_metadata(&path).is_ok_and(|m| m.is_symlink());
+        if is_link && !auth.exists(&path) {
             self.messages
                 .error(t!("msg.save_as_dangling_symlink", path = path.display()).to_string());
             return;
         }
         let own = self.editor.active_tab().and_then(|t| t.path.clone());
         let same = own.is_some_and(|o| {
-            path.canonicalize()
-                .is_ok_and(|c| c == o.canonicalize().unwrap_or(o))
+            auth.canonicalize(&path)
+                .is_ok_and(|c| c == auth.canonicalize(&o).unwrap_or(o))
         });
-        if (is_link || path.exists()) && !same {
+        if (is_link || auth.exists(&path)) && !same {
             self.save_as_overwrite = Some(path.clone());
             self.confirm = Some(Confirm {
                 message: t!("confirm.save_as_overwrite", path = path.display()).to_string(),
@@ -13333,11 +13350,12 @@ impl App {
         if new_path == cur {
             return;
         }
-        if new_path.exists() {
+        let auth = crate::authority::current();
+        if auth.exists(&new_path) {
             self.status = t!("status.rename_exists", name = new_path.display()).to_string();
             return;
         }
-        match std::fs::rename(&cur, &new_path) {
+        match auth.rename(&cur, &new_path) {
             Ok(()) => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.path = Some(new_path.clone());
@@ -13593,7 +13611,7 @@ impl App {
             return;
         };
         let path = self.resolve(&file);
-        if path.is_file() {
+        if crate::authority::current().is_file(&path) {
             self.with_jump(|s| {
                 s.open_path(&path, false);
                 let area = s.editor_view();
@@ -13794,12 +13812,10 @@ fn display_key(k: &str) -> String {
 /// already exactly the text `cmd.exe` itself should parse, not user input
 /// reaching this function unquoted.
 #[cfg(all(windows, feature = "tasks"))]
-fn shell_command(script: &str) -> std::process::Command {
-    use std::os::windows::process::CommandExt;
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.arg("/C");
-    cmd.raw_arg(script);
-    cmd
+fn shell_command(script: &str) -> crate::authority::ProcessSpec {
+    crate::authority::ProcessSpec::new("cmd")
+        .arg("/C")
+        .raw_arg(script)
 }
 
 /// Start `script` in the platform shell in `dir` with stdin closed, stdout
@@ -13808,12 +13824,12 @@ fn shell_command(script: &str) -> std::process::Command {
 /// without `tasks` has none.
 #[cfg(feature = "tasks")]
 fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::process::Child> {
-    let mut command = shell_command(script);
+    let mut command =
+        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
     if no_tty {
         no_tty_prompts(&mut command);
     }
     command
-        .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -13850,10 +13866,10 @@ fn run_shell_filter(
             buf
         })
     }
-    let mut command = shell_command(script);
+    let mut command =
+        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
     no_tty_prompts(&mut command);
     let mut child = command
-        .current_dir(dir)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -13917,15 +13933,17 @@ fn spawn_argv(
     dir: &Path,
 ) -> std::io::Result<(std::process::Child, std::io::PipeReader)> {
     let (reader, writer) = std::io::pipe()?;
-    let resolved = crate::fileops::which_on_path(program).map_or_else(
+    let auth = crate::authority::current();
+    let resolved = auth.which(program).map_or_else(
         || std::ffi::OsString::from(program),
         std::path::PathBuf::into_os_string,
     );
-    let mut command = std::process::Command::new(resolved);
-    command.args(args);
+    let spec = crate::authority::ProcessSpec::new(resolved)
+        .args(args)
+        .current_dir(dir);
+    let mut command = auth.command(&spec)?;
     no_tty_prompts(&mut command);
     command
-        .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(writer.try_clone()?)
         .stderr(writer);
@@ -13984,10 +14002,10 @@ fn is_auth_failure_line(line: &str) -> bool {
 }
 
 #[cfg(all(not(windows), feature = "tasks"))]
-fn shell_command(script: &str) -> std::process::Command {
-    let mut cmd = std::process::Command::new("sh");
-    cmd.arg("-c").arg(script);
-    cmd
+fn shell_command(script: &str) -> crate::authority::ProcessSpec {
+    crate::authority::ProcessSpec::new("sh")
+        .arg("-c")
+        .arg(script)
 }
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
@@ -14187,19 +14205,20 @@ fn do_replace(
 /// so the Workspace Dashboard's disk-size figure silently never populated
 /// there). Best-effort: unreadable entries are skipped.
 fn dir_size(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let auth = crate::authority::current();
+    let Ok(entries) = auth.read_dir(dir) else {
         return 0;
     };
     let mut total = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
+    for entry in entries {
+        let name = entry.name();
         if name == ".git" || name == "target" {
             continue;
         }
-        match entry.file_type() {
-            Ok(ft) if ft.is_dir() => total += dir_size(&entry.path()),
-            Ok(ft) if ft.is_file() => {
-                total += entry.metadata().map_or(0, |m| m.len());
+        match entry.kind {
+            crate::authority::FileKind::Dir => total += dir_size(&entry.path),
+            crate::authority::FileKind::File => {
+                total += auth.symlink_metadata(&entry.path).map_or(0, |m| m.len);
             }
             _ => {}
         }
@@ -14210,18 +14229,18 @@ fn dir_size(dir: &Path) -> u64 {
 /// Recursively count regular files under `dir`, skipping `.git` and `target`
 /// (the large generated trees). Best-effort: unreadable entries are skipped.
 fn count_files(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = crate::authority::current().read_dir(dir) else {
         return 0;
     };
     let mut count = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
+    for entry in entries {
+        let name = entry.name();
         if name == ".git" || name == "target" {
             continue;
         }
-        match entry.file_type() {
-            Ok(ft) if ft.is_dir() => count += count_files(&entry.path()),
-            Ok(ft) if ft.is_file() => count += 1,
+        match entry.kind {
+            crate::authority::FileKind::Dir => count += count_files(&entry.path),
+            crate::authority::FileKind::File => count += 1,
             _ => {}
         }
     }

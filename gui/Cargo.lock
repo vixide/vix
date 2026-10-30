@@ -11494,6 +11494,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-authority"
+version = "2.0.0"
+dependencies = [
+ "ignore",
+ "vix-fileops",
+]
+
+[[package]]
 name = "vix-base-tool"
 version = "2.0.0"
 
@@ -11706,6 +11714,7 @@ name = "vix-coverage"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
 ]
 
 [[package]]
@@ -11713,6 +11722,7 @@ name = "vix-dap"
 version = "2.0.0"
 dependencies = [
  "serde_json",
+ "vix-authority",
  "vix-lsp-core",
  "vix-settings",
 ]
@@ -11812,6 +11822,7 @@ dependencies = [
  "ratatui",
  "ratatui-core",
  "ratatui-image",
+ "vix-authority",
  "vix-editor-core",
  "vix-encoding",
  "vix-fileops",
@@ -11849,6 +11860,7 @@ name = "vix-editorconfig"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
 ]
 
 [[package]]
@@ -11894,9 +11906,9 @@ dependencies = [
 name = "vix-file-browser-panel"
 version = "2.0.0"
 dependencies = [
+ "vix-authority",
  "vix-list-state",
  "vix-palette",
- "walkdir",
 ]
 
 [[package]]
@@ -11934,6 +11946,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "vix-authority",
 ]
 
 [[package]]
@@ -11941,6 +11954,7 @@ name = "vix-git"
 version = "2.0.0"
 dependencies = [
  "similar",
+ "vix-authority",
  "vix-civil-date",
  "vix-list-state",
 ]
@@ -11949,6 +11963,7 @@ dependencies = [
 name = "vix-git-graph"
 version = "2.0.0"
 dependencies = [
+ "vix-authority",
  "vix-list-state",
 ]
 
@@ -12013,6 +12028,7 @@ dependencies = [
  "serde_json",
  "ureq",
  "uuid",
+ "vix-authority",
 ]
 
 [[package]]
@@ -12109,6 +12125,7 @@ name = "vix-left-dock"
 version = "2.0.0"
 dependencies = [
  "regex",
+ "vix-authority",
  "vix-list-state",
 ]
 
@@ -12132,6 +12149,7 @@ name = "vix-lsp"
 version = "2.0.0"
 dependencies = [
  "serde_json",
+ "vix-authority",
  "vix-lsp-core",
  "vix-settings",
 ]
@@ -12398,6 +12416,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
+ "vix-authority",
 ]
 
 [[package]]
@@ -12470,7 +12489,6 @@ dependencies = [
  "clap",
  "confy",
  "crossterm",
- "ignore",
  "image",
  "include_dir",
  "jiff",
@@ -12493,6 +12511,7 @@ dependencies = [
  "vix-ai-panel",
  "vix-align",
  "vix-ascii-character-picker",
+ "vix-authority",
  "vix-base-tool",
  "vix-base16",
  "vix-base64-tool",
@@ -12681,7 +12700,7 @@ version = "2.0.0"
 dependencies = [
  "serde",
  "toml 1.1.8+spec-1.1.0",
- "vix-fileops",
+ "vix-authority",
 ]
 
 [[package]]

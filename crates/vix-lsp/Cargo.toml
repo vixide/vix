@@ -10,10 +10,11 @@ description = "LSP client: process management and document sync over `vix_lsp_co
 [features]
 default = ["process"]
 # Spawn language-server processes. Off, no server is ever started.
-process = []
+process = ["vix-authority/process"]
 
 [dependencies]
 serde_json = { workspace = true }
+vix-authority = { workspace = true }
 vix-lsp-core = { workspace = true }
 vix-settings = { workspace = true }
 

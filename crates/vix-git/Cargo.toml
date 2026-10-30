@@ -11,10 +11,11 @@ description = "Git integration: status/diff/staging via the git CLI."
 default = ["process"]
 # The runners that spawn the `git` CLI. Off, the crate is only its data types
 # and parsers (no process is ever started); the root `git` feature turns it on.
-process = []
+process = ["vix-authority/process"]
 
 [dependencies]
 similar = { workspace = true }
+vix-authority = { workspace = true }
 vix-civil-date = { workspace = true }
 vix-list-state = { workspace = true }
 

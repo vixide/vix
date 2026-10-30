@@ -13,9 +13,9 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::process::{Child, ChildStdin};
 #[cfg(feature = "process")]
-use std::process::{Command, Stdio};
+use std::process::Stdio;
+use std::process::{Child, ChildStdin};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use serde_json::{Value, json};
@@ -613,8 +613,11 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
 #[cfg(feature = "process")]
 fn spawn_adapter(adapter: &DebugAdapter) -> Option<Child> {
     let (prog, args) = adapter.command.split_first()?;
-    Command::new(prog)
-        .args(args)
+    // Built by the workspace authority (T710): a remote workspace runs its
+    // debug adapter where its files are.
+    vix_authority::current()
+        .command(&vix_authority::ProcessSpec::new(prog).args(args))
+        .ok()?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

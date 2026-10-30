@@ -85,7 +85,7 @@ lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
 # funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
-tasks = ["vix-format-tool/process"]
+tasks = ["vix-format-tool/process", "vix-authority/process"]
 hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
@@ -259,11 +259,12 @@ vix-editorconfig = { workspace = true }
 vix-emmet = { workspace = true }
 # Text-file encodings: detect, decode, and encode back byte for byte (T661).
 vix-encoding = { workspace = true }
-# File browser (File → Open…): walkdir-backed listing with fuzzy search, sort, and filters.
+# File browser (File → Open…): authority-backed listing with fuzzy search, sort, and filters.
 vix-file-browser-panel = { workspace = true }
 # Information about the active editor file, plus the panel's row-selection state.
 vix-file-information-panel = { workspace = true }
 # Filesystem helpers for the explorer's copy / cut / paste / delete.
+vix-authority = { workspace = true }
 vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
 vix-find-panel = { workspace = true }
@@ -406,8 +407,6 @@ vix-zid-tool = { workspace = true }
 ratatui = { workspace = true }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = { workspace = true }
-# Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
-ignore = { workspace = true }
 # Regular expressions for find/replace.
 regex = { workspace = true }
 # Settings serialization (confy handles the TOML; serde derives the schema).
@@ -477,6 +476,10 @@ workspace = true
 [[test]]
 name = "action_catalog"
 path = "tests/action_catalog.rs"
+
+[[test]]
+name = "authority_fake"
+path = "tests/authority_fake.rs"
 
 [[test]]
 name = "ai_provider_smoke"

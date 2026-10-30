@@ -636,7 +636,7 @@ impl App {
             {
                 continue;
             }
-            let Ok(content) = std::fs::read_to_string(&path) else {
+            let Ok(content) = crate::authority::current().read_to_string(&path) else {
                 continue;
             };
             if let Some(line) = crate::org::id_location(&content, id) {
@@ -672,13 +672,15 @@ impl App {
         let mut archive = path.into_os_string();
         archive.push("_archive");
         let archive = PathBuf::from(archive);
-        let mut existing = std::fs::read_to_string(&archive).unwrap_or_default();
+        let mut existing = crate::authority::current()
+            .read_to_string(&archive)
+            .unwrap_or_default();
         if !existing.is_empty() && !existing.ends_with('\n') {
             existing.push('\n');
         }
         existing.push_str(&block);
         existing.push('\n');
-        if let Err(e) = std::fs::write(&archive, existing) {
+        if let Err(e) = crate::authority::current().write(&archive, existing.as_bytes()) {
             self.messages
                 .error(t!("msg.save_failed", error = e).to_string());
             return;
@@ -1354,7 +1356,9 @@ impl App {
     /// write the result back and open it.
     fn file_capture_write(&mut self, rel: &str, build: impl FnOnce(&str) -> String) {
         let path = self.root.join(rel);
-        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let content = crate::authority::current()
+            .read_to_string(&path)
+            .unwrap_or_default();
         let new = build(&content);
         self.roam_write_and_open(&path, &new);
     }
@@ -1373,7 +1377,7 @@ impl App {
             if path
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                && let Ok(content) = std::fs::read_to_string(&path)
+                && let Ok(content) = crate::authority::current().read_to_string(&path)
                 && let Some(new) =
                     vix_org_capture::insert_under_id(&content, id, wrapped, prepend, empty_lines)
             {
@@ -1444,7 +1448,7 @@ impl App {
         };
         let mut out = Vec::new();
         for path in paths {
-            if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(content) = crate::authority::current().read_to_string(&path) {
                 let name = path
                     .strip_prefix(&self.root)
                     .unwrap_or(&path)
@@ -1599,7 +1603,7 @@ impl App {
             self.status = t!("status.org_agenda_no_task").to_string();
             return true;
         };
-        let Ok(content) = std::fs::read_to_string(&path) else {
+        let Ok(content) = crate::authority::current().read_to_string(&path) else {
             self.status = t!("status.org_agenda_error").to_string();
             return true;
         };
@@ -1607,7 +1611,10 @@ impl App {
             self.status = t!("status.org_not_headline").to_string();
             return true;
         };
-        if std::fs::write(&path, &new).is_err() {
+        if crate::authority::current()
+            .write(&path, new.as_bytes())
+            .is_err()
+        {
             self.status = t!("status.org_agenda_error").to_string();
             return true;
         }

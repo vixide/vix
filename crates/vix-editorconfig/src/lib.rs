@@ -51,8 +51,10 @@ impl Resolved {
 pub fn resolve(path: &Path) -> Resolved {
     let mut chain: Vec<(std::path::PathBuf, String)> = Vec::new();
     let mut dir = path.parent();
+    // The workspace's files, so through the authority slot (T710).
+    let auth = vix_authority::current();
     while let Some(d) = dir {
-        if let Ok(text) = std::fs::read_to_string(d.join(".editorconfig")) {
+        if let Ok(text) = auth.read_to_string(&d.join(".editorconfig")) {
             let is_root = preamble_is_root(&text);
             chain.push((d.to_path_buf(), text));
             if is_root {

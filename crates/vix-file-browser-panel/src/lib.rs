@@ -1,7 +1,7 @@
 //! The file browser panel's listing, search, sort, and filter state.
 //!
 //! Vix's File → Open… opens a *file browser*: a recursive listing of the
-//! current root directory (walked with `walkdir`) that the user narrows by
+//! current root directory (walked through the authority slot) that the user narrows by
 //! typing a query, reorders by name / size / date created / date modified, and
 //! navigates with the arrow keys (or the mouse). This crate is pure state and
 //! logic — walking, matching, ranking, and sorting — so it is tested without a
@@ -22,8 +22,6 @@
 
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
-
-use walkdir::WalkDir;
 
 /// Cap on the number of entries kept from one walk, so an enormous tree cannot
 /// stall the UI. When the cap is hit, [`Panel::truncated`] is set and the host
@@ -152,41 +150,55 @@ impl Panel {
         self.truncated = false;
         self.selected = 0;
         self.scroll = 0;
-        let show_hidden = self.show_hidden;
-        let walker = WalkDir::new(&self.root)
-            .min_depth(1)
-            .sort_by_file_name()
-            .into_iter()
-            .filter_entry(move |e| show_hidden || !is_hidden(e.file_name()));
-        for entry in walker.filter_map(Result::ok) {
+        let auth = vix_authority::current();
+        let root = self.root.clone();
+        self.walk(auth.as_ref(), &root);
+    }
+
+    /// Depth-first, name-sorted, links not followed: the order `walkdir`'s
+    /// `sort_by_file_name` gave before T710 routed this through the authority.
+    /// Returns `false` once [`Panel::max_entries`] is reached.
+    fn walk(&mut self, auth: &dyn vix_authority::Authority, dir: &Path) -> bool {
+        let Ok(mut children) = auth.read_dir(dir) else {
+            return true;
+        };
+        children.sort_by(|a, b| a.name().cmp(b.name()));
+        for entry in children {
+            if !self.show_hidden && is_hidden(entry.name()) {
+                continue;
+            }
             if self.entries.len() >= self.max_entries {
                 self.truncated = true;
-                break;
+                return false;
             }
             let rel = entry
-                .path()
+                .path
                 .strip_prefix(&self.root)
-                .unwrap_or_else(|_| entry.path())
+                .unwrap_or(&entry.path)
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("/");
-            let meta = entry.metadata().ok();
-            let is_dir = entry.file_type().is_dir();
+            let meta = auth.symlink_metadata(&entry.path).ok();
+            let is_dir = entry.kind == vix_authority::FileKind::Dir;
             self.entries.push(Entry {
-                path: entry.path().to_path_buf(),
+                path: entry.path.clone(),
                 rel,
-                name: entry.file_name().to_string_lossy().into_owned(),
+                name: entry.name().to_string_lossy().into_owned(),
                 is_dir,
                 size: if is_dir {
                     0
                 } else {
-                    meta.as_ref().map_or(0, std::fs::Metadata::len)
+                    meta.as_ref().map_or(0, |m| m.len)
                 },
-                created: meta.as_ref().and_then(|m| unix_secs(m.created().ok())),
-                modified: meta.as_ref().and_then(|m| unix_secs(m.modified().ok())),
+                created: meta.as_ref().and_then(|m| unix_secs(m.created)),
+                modified: meta.as_ref().and_then(|m| unix_secs(m.modified)),
             });
+            if is_dir && !self.walk(auth, &entry.path) {
+                return false;
+            }
         }
+        true
     }
 
     /// Indices into [`Panel::entries`] of the rows matching the current query,

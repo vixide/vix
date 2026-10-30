@@ -520,7 +520,7 @@ impl App {
             "rust-analyzer.runSingle" | "rust-analyzer.run" => {
                 if let Some((cmd, dir)) = arguments.get(0).and_then(runnable_command) {
                     let dir = dir
-                        .filter(|d| d.is_dir())
+                        .filter(|d| crate::authority::current().is_dir(d))
                         .unwrap_or_else(|| self.root.clone());
                     self.run_command_in(&dir, &cmd);
                     self.status = t!("status.lens_run", title = title).to_string();

@@ -124,7 +124,7 @@ pub fn parse(text: &str) -> Result<Vec<RunConfig>, RunConfigError> {
 /// # Errors
 /// As [`parse`].
 pub fn load(root: &Path) -> Result<Vec<RunConfig>, RunConfigError> {
-    match std::fs::read_to_string(root.join(".vix").join("run.toml")) {
+    match vix_authority::current().read_to_string(&root.join(".vix").join("run.toml")) {
         Ok(text) => parse(&text),
         Err(_) => Ok(Vec::new()),
     }

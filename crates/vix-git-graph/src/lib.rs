@@ -650,10 +650,15 @@ pub fn valid_name(s: &str) -> bool {
 
 #[cfg(feature = "process")]
 fn run(dir: &Path, args: &[&str]) -> Result<String, GraphError> {
-    let out = std::process::Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
+    // Built by the workspace authority (T710): a remote workspace runs git
+    // where its files are.
+    let out = vix_authority::current()
+        .command(
+            &vix_authority::ProcessSpec::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args),
+        )?
         .output()?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())

@@ -8,7 +8,7 @@ repository.workspace = true
 description = "File browser panel (File → Open): recursive listing with fuzzy search, sorting, and filtering."
 
 [dependencies]
-walkdir = { workspace = true }
+vix-authority = { workspace = true }
 vix-list-state = { workspace = true }
 vix-palette = { workspace = true }
 
