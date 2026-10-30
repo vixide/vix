@@ -48,6 +48,12 @@ pub(crate) enum ChoicePurpose {
         /// The lens per row.
         lenses: Vec<super::code_lens::Lens>,
     },
+    /// **File → Open Remote…** (T713): row 0 types a new name, the rest are
+    /// the recent remote names.
+    RecentRemote {
+        /// The recent names, for rows 1 and on.
+        names: Vec<String>,
+    },
 }
 
 /// The pick-one overlay and what its rows mean.
@@ -180,6 +186,11 @@ impl App {
                     && let Some(lens) = lenses.get(row)
                 {
                     self.run_lens(lens);
+                }
+            }
+            ChoicePurpose::RecentRemote { names } => {
+                if matches!(action, ChoiceAction::Primary) {
+                    self.choose_recent_remote(&names, row);
                 }
             }
             ChoicePurpose::Peek { path, line } => {

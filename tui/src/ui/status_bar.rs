@@ -36,7 +36,12 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
     // Language-server progress (T732) and Cowork participants, then git,
     // then IM's unread count and mention marker (T754).
-    let before_git = format!("{}{}", app.lsp_progress_segment(), app.cowork_segment());
+    let before_git = format!(
+        "{}{}{}",
+        app.remote_segment(),
+        app.lsp_progress_segment(),
+        app.cowork_segment()
+    );
     let segments = format!("{before_git}{git}{}{info}", app.im_status_segment());
     let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 

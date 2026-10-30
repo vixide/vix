@@ -1,15 +1,18 @@
 //! `vix ssh://user@host/path` (T712): open a remote workspace from the
 //! command line, before the UI starts.
 //!
-//! Experimental until T713 adds the Remote Open dialog, the status-bar host
-//! and the connection-lost state; until then a dropped connection shows up
-//! as ordinary file errors.
+//! This is the path that can prompt: `ssh` asks for a password, passphrase
+//! or host-key confirmation on the plain terminal before the UI starts.
+//! **File → Open Remote…** (T713, `tui/src/app/remote_session.rs`) connects
+//! without prompting instead, and `App::adopt_remote` gives both the same
+//! status-bar host, connection-lost state and trust prompt.
 
 use std::path::PathBuf;
 
 /// When `files` is exactly one remote name (`ssh://…` or `/ssh:…`), connect
 /// to it, install an [`crate::authority::ssh::SshAuthority`] in the
-/// authority slot, and return the workspace root to open. A remote
+/// authority slot, and return the target whose `path` is the workspace root
+/// to open (pass it to `App::adopt_remote` once the App exists). A remote
 /// directory becomes the root and `files` is emptied; a remote file's
 /// directory becomes the root and `files` holds the file's remote path.
 ///
@@ -22,7 +25,9 @@ use std::path::PathBuf;
 /// # Errors
 /// A translated message: the name doesn't parse, the connection or login
 /// failed, or the remote path doesn't exist.
-pub fn connect_cli(files: &mut Vec<PathBuf>) -> Result<Option<PathBuf>, String> {
+pub fn connect_cli(
+    files: &mut Vec<PathBuf>,
+) -> Result<Option<crate::authority::ssh::SshTarget>, String> {
     let [only] = files.as_slice() else {
         return Ok(None);
     };
@@ -32,9 +37,11 @@ pub fn connect_cli(files: &mut Vec<PathBuf>) -> Result<Option<PathBuf>, String> 
     }
     let target = crate::authority::ssh::SshTarget::parse(&name)
         .map_err(|e| t!("msg.remote_bad_name", name = name, error = e).to_string())?;
-    let (root, file) = connect(target)?;
+    let mut target = target;
+    let (root, file) = connect(target.clone())?;
     *files = file.into_iter().collect();
-    Ok(Some(root))
+    target.path = root.to_string_lossy().into_owned();
+    Ok(Some(target))
 }
 
 #[cfg(feature = "tasks")]

@@ -114,6 +114,11 @@ impl App {
     /// A stable string key for the current workspace root (canonicalized when
     /// possible, so symlinked paths map to one session entry).
     pub(super) fn session_key(&self) -> String {
+        // A remote workspace is keyed by its `ssh://` name (T713), so its
+        // state never mixes with a local folder of the same path.
+        if let Some(key) = self.remote_session_key() {
+            return key;
+        }
         crate::authority::current()
             .canonicalize(&self.root)
             .unwrap_or_else(|_| self.root.clone())
@@ -403,6 +408,13 @@ impl App {
                 t!("msg.session_save_failed", error = e).to_string(),
             );
         }
+        self.reroot_workspace(new_root, folders);
+        self.status = t!("status.project_switched", path = new_root.display()).to_string();
+    }
+
+    /// [`App::switch_workspace`] without saving the old session first (the
+    /// remote open saves it before the authority changes, T713).
+    pub(super) fn reroot_workspace(&mut self, new_root: &Path, folders: &[PathBuf]) {
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();
@@ -413,7 +425,7 @@ impl App {
         };
         self.explorer = Explorer::new(new_root.to_path_buf());
         self.lsp = crate::lsp::Lsp::new(
-            self.settings.subsystems.lsp_enabled,
+            self.lsp_allowed(),
             self.settings.lsp_servers.clone(),
             &self.workspace_folders,
         );
@@ -424,7 +436,6 @@ impl App {
             self.apply_session(&ws);
         }
         self.focus = Focus::Editor;
-        self.status = t!("status.project_switched", path = new_root.display()).to_string();
     }
 
     /// Open the user's settings file in the editor. Saves the current settings

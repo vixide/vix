@@ -104,6 +104,8 @@ impl App {
         self.poll_db_reconnect();
         // Drain IM connection events into the inbox (T752).
         self.poll_im();
+        // Finish a background remote connect or reconnect (T713).
+        self.poll_remote();
     }
 
     /// How long the loop may wait for input before ticking again: short

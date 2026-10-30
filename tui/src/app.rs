@@ -63,6 +63,7 @@ mod picker_panels;
 mod pipe;
 mod prettier;
 mod remote_search;
+mod remote_session;
 mod roam;
 #[cfg(feature = "script")]
 mod scripts;
@@ -173,6 +174,8 @@ pub enum Focus {
 pub enum PromptKind {
     /// Open-file prompt.
     Open,
+    /// A remote name to open (`ssh://…` or `/ssh:…`, T713).
+    OpenRemote,
     /// Save-as prompt.
     SaveAs,
     /// Rename the active file (input seeded with its current name).
@@ -771,6 +774,11 @@ pub enum ConfirmKind {
     /// Let Cowork guests with terminal permission type in the shared
     /// terminal (T697).
     CoworkTerminalInput,
+    /// A save found [`Confirm::paths`] (one file) changed on disk since the
+    /// buffer last read or wrote it (T713): overwrite, compare, or cancel.
+    SaveConflict,
+    /// Trust the open remote workspace to run its own code (T714).
+    TrustRemote,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -2149,6 +2157,8 @@ pub struct App {
     /// Last-seen on-disk modification time per open file path, for detecting
     /// external changes (auto-reload). Seeded lazily on first poll.
     disk_mtimes: std::collections::HashMap<PathBuf, std::time::SystemTime>,
+    /// The open remote workspace and any background connect (T713, T714).
+    pub(crate) remote: remote_session::RemoteState,
     /// Throttle anchor for the external-change poll; `None` until the first poll.
     last_disk_poll: Option<std::time::Instant>,
     /// When format-on-save triggered an async LSP format, the path to re-save once
@@ -2678,6 +2688,7 @@ impl App {
             pomodoro: None,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
+            remote: remote_session::RemoteState::default(),
             last_disk_poll: None,
             format_save_pending: None,
             last_auto_save: None,
@@ -2976,9 +2987,14 @@ impl App {
         if crate::capability::is_ai_action(action) && self.ai_refused() {
             return;
         }
+        // An untrusted remote workspace's own code waits for trust (T714).
+        if self.remote_trust_blocks(action) {
+            return;
+        }
         // Go-menu navigation and Org → Contacts live in their own dispatchers
         // (keeps this function within the line limit).
-        if self.go_action(action) || self.contacts_action(action) {
+        if self.go_action(action) || self.contacts_action(action) || self.run_remote_action(action)
+        {
             return;
         }
         match action {
@@ -4140,12 +4156,28 @@ impl App {
     /// trigger format-on-save — used both by [`App::save`] and the format-on-save
     /// re-save so the latter can't recurse.
     fn write_active_to_disk(&mut self) -> bool {
+        self.write_active_to_disk_with(false)
+    }
+
+    /// [`App::write_active_to_disk`]; `overwrite` skips the save-conflict
+    /// check (the user chose to overwrite, T713). A conflict opens the
+    /// overwrite / compare / cancel question; a lost remote connection
+    /// refuses the save and keeps the buffer as it is.
+    fn write_active_to_disk_with(&mut self, overwrite: bool) -> bool {
+        if self.remote_save_blocked() {
+            return false;
+        }
         let opts = self.save_options();
         // Captured before the attempt (T539, Run H): it doesn't change on
         // failure, and `save_active`'s `Err` case is a bare `io::Error` with
         // no path attached, so this is the only chance to name it.
         let path_before = self.editor.active_tab().and_then(|t| t.path.clone());
-        match self.editor.save_active(opts) {
+        let saved = if overwrite {
+            self.editor.save_active_overwriting(opts)
+        } else {
+            self.editor.save_active(opts)
+        };
+        match saved {
             Ok(p) => {
                 self.status = t!("status.saved", path = p.display()).to_string();
                 if self.lsp.handles(&p) {
@@ -4169,6 +4201,13 @@ impl App {
                 true
             }
             Err(e) => {
+                if crate::authority::WriteConflict::is(&e)
+                    && let Some(p) = path_before
+                {
+                    self.open_save_conflict(p);
+                    return false;
+                }
+                self.note_remote_error(&e);
                 let unmappable = e
                     .get_ref()
                     .and_then(|inner| inner.downcast_ref::<crate::encoding::Unmappable>());
@@ -5425,15 +5464,29 @@ impl App {
             return;
         }
         self.last_disk_poll = Some(std::time::Instant::now());
+        // Nothing to poll over a lost connection (each try would wait for
+        // `ssh`'s connect timeout); Reconnect resumes it (T713).
+        if self.remote_connection_lost() {
+            return;
+        }
 
         let mut reload_clean = false;
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
+        let mut lost = None;
         let auth = crate::authority::current();
         for tab in &self.editor.tabs {
             let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else {
                 continue;
             };
-            let Some(mtime) = auth.metadata(path).ok().and_then(|m| m.modified) else {
+            let stat = match auth.metadata(path) {
+                Ok(stat) => stat,
+                Err(e) if e.kind() == std::io::ErrorKind::NotConnected => {
+                    lost = Some(e);
+                    break;
+                }
+                Err(_) => continue,
+            };
+            let Some(mtime) = stat.modified else {
                 continue;
             };
             let previous = self.disk_mtimes.insert(path.clone(), mtime);
@@ -5445,6 +5498,11 @@ impl App {
                     reload_clean = true;
                 }
             }
+        }
+        if let Some(e) = lost
+            && self.note_remote_error(&e)
+        {
+            return;
         }
         if reload_clean {
             let n = self.reload_clean_buffers();
@@ -7817,6 +7875,9 @@ impl App {
     }
 
     fn confirm_key(&mut self, key: KeyEvent) {
+        if self.remote_confirm_key(key) {
+            return;
+        }
         if let Some(kind) = self
             .confirm
             .as_ref()
@@ -8098,10 +8159,16 @@ impl App {
     /// unless this was only an arrow-key preview (T571).
     fn report_open_failure(&mut self, path: &Path, preview: bool, e: &std::io::Error) {
         use crate::fileops::TextReadError;
+        // Over a lost connection, don't try another round trip for the size.
+        let lost = self.note_remote_error(e);
         let why = TextReadError::from_io(e);
-        let size = crate::authority::current()
-            .metadata(path)
-            .map_or(0, |m| m.len);
+        let size = if lost {
+            0
+        } else {
+            crate::authority::current()
+                .metadata(path)
+                .map_or(0, |m| m.len)
+        };
         let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
         if !preview && !over_hard_cap {
             let ask = match why {
@@ -13031,6 +13098,7 @@ impl App {
             return;
         };
         match prompt.kind {
+            PromptKind::OpenRemote => self.open_remote(&prompt.input),
             PromptKind::Open | PromptKind::SaveAs => {
                 self.accept_file_prompt(prompt.kind, prompt.input.trim());
             }

@@ -8347,10 +8347,62 @@ so, and the first task of each plan re-checks the facts it depends on.
     the remote `PATH` is a non-interactive `sh`'s; a remote process may
     outlive a killed local `ssh`; modification times are whole seconds; no real-sshd CI
     job (T719).
-- [ ] **T713 — Remote Open dialog, status, connection-lost state.**
+- [x] **T713 — Remote Open dialog, status, connection-lost state.**
   **Medium.**
-- [ ] **T714 — Trust and safety.** Untrusted-until-trusted remote
+  - Done 2026-10-30. **File → Open Remote…** (`file.open_remote`, menu +
+    palette): recent remotes (`Session::recent_remotes`, 10) above a *New
+    connection…* row and a `PromptKind::OpenRemote` prompt; connects on a
+    background thread (`App::poll_remote` each tick; `⟳ host` in the status
+    bar), saves the old session under its own key, installs the authority
+    and re-roots; refused with unsaved buffers. Prompting decided: the
+    dialog uses `BatchMode=yes` and never prompts; its error says to run
+    `ssh host` once / `ssh-add`, or to start with `vix ssh://…` (which
+    connects before the UI and can prompt) — suspending the TUI was
+    rejected as fragile. Status bar `⇄ user@host:port` (`(restricted)`
+    until trusted). Connection lost: `NotConnected` from an open, a save or
+    the change poll marks it once (warning + `⚠ host: connection lost`
+    segment); saves are refused before any `ssh` runs, the poll stops,
+    buffers stay dirty; **File → Reconnect Remote** reconnects in the
+    background. Saves in a remote workspace go through
+    `write_atomic_if_unchanged` with a per-tab `DiskStamp`
+    (`vix_editor` `Flags::CHECK_CONFLICTS`, captured before reading on
+    open, on reload and after save); a `WriteConflict` asks `o` overwrite /
+    `c` compare (diff of disk vs buffer) / `n` cancel. `App::adopt_remote`
+    is shared by the CLI and the dialog; remote session keys are the
+    `ssh://` name. Tests: `tui/src/app/remote_session.rs` unit tests and
+    `tui/tests/remote_ui.rs` (fake `ssh` by path: open, save, conflict,
+    lost, reconnect). NOT done: local files get no conflict check (a new
+    prompt would change behavior; documented); no Disconnect action, and no
+    way back to a local workspace other than opening one; a lost connection
+    is only detected by an open, a save or the change poll (explorer,
+    search and git failures stay ordinary errors), and the first failing
+    call can wait for `ssh`'s 15 s connect timeout on the UI thread; the
+    dialog can't answer passphrase/host-key prompts; reconnect doesn't
+    re-list the explorer or re-check open files beyond the save check;
+    project scripts never load for a remote workspace (their discovery is
+    local); no per-path routing (T712's list).
+- [x] **T714 — Trust and safety.** Untrusted-until-trusted remote
   workspace (T627), no secrets on argv, host-key policy documented. **Small.**
+  - Done 2026-10-30. Minimal trust for remote workspaces only (T627 not
+    done): `WorkspaceSession::remote_trusted`, keyed by the `ssh://` name
+    (per host and path) in the local session file; asked once on adopt
+    (`ConfirmKind::TrustRemote`, `y`/`n`, typed-ahead keys within 250 ms
+    ignored), **File → Trust Remote Workspace…** asks again. Untrusted:
+    `project.*` task/command actions, `run.start`, `lsp.code_lens_run` and
+    test lenses, `lsp.restart`, `script.run` refused (one check in
+    `run_action`); LSP rebuilt disabled until trusted; Prettier ignores the
+    project's `node_modules/.bin`. Fixed in passing: `Session::set_workspace`
+    reset `scripts_trusted` on every session save; it now carries both
+    trust answers forward. Host-key policy documented in
+    `crates/vix-authority/spec/ssh` and `docs/remote-editing` (no host-key
+    option ever passed, `BatchMode`, never writes `known_hosts`);
+    `tui/tests/remote_ui.rs` asserts no planted settings secret (AI key
+    command, DB password command) is on any `ssh` argv. NOT done: no trust
+    for local workspaces beyond T132's script prompt (T627); git, search
+    and user-typed commands still run in an untrusted remote workspace
+    (user-initiated; remote git applies `safe.directory`); Vix has no
+    environment activation to gate; the DAP/LSP gating is by action and
+    `Lsp` enablement, not at the process-spawn layer.
 - [x] **T715 — Remote search and git.** `rg`/`git` run remotely. **Medium.**
   - Done 2026-10-30. `Authority::is_local` (`true` only for
     `LocalAuthority`). `App::scan_index` (`tui/src/app/remote_search.rs`)

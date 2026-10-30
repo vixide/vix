@@ -491,6 +491,10 @@ name = "authority_ssh"
 path = "tests/authority_ssh.rs"
 
 [[test]]
+name = "remote_ui"
+path = "tests/remote_ui.rs"
+
+[[test]]
 name = "ai_provider_smoke"
 path = "tests/ai_provider_smoke.rs"
 

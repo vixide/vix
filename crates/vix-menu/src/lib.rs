@@ -164,6 +164,13 @@ const FILE: &[Item] = &[
         "Ctrl Shift O",
     ),
     Item::leaf("menu.item.file.switch_project", "file.switch_project", ""),
+    Item::leaf("menu.item.file.open_remote", "file.open_remote", ""),
+    Item::leaf(
+        "menu.item.file.reconnect_remote",
+        "file.reconnect_remote",
+        "",
+    ),
+    Item::leaf("menu.item.file.trust_remote", "file.trust_remote", ""),
     Item::leaf("menu.item.file.insert", "file.insert_file", ""),
     SEP,
     Item::leaf("menu.item.file.workspace_open", "workspace.open", ""),

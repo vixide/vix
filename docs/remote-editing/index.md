@@ -10,6 +10,59 @@ vix ssh://build-box:2222/~/src/app    # relative to the remote home
 vix /ssh:me@build-box:/srv/app/main.rs  # TRAMP's form; a file opens in its folder
 ```
 
+Or, from inside Vix, **File → Open Remote…** (also in the command palette):
+pick a recent remote or choose *New connection…* and type a name in either
+form. Vix connects in the background (the status bar shows `⟳ host`) and then
+opens the folder as the workspace. Save or close modified buffers first,
+since switching workspaces closes them.
+
+### Opening from the dialog never prompts
+
+The editor owns the terminal, so the dialog runs `ssh` in `BatchMode`: it
+cannot ask for a password, a passphrase or whether to trust a new host key.
+If the host needs one of those, the connection fails with a message that
+says what to do:
+
+- run `ssh build-box` once in a terminal to accept its host key (it is saved
+  in `~/.ssh/known_hosts`), or `ssh-add` to load your key into the agent; or
+- start Vix with `vix ssh://…` instead, which connects before the editor
+  takes over the screen and so can prompt normally.
+
+Keys in an agent, `ssh_config` and an existing shared connection all work
+from the dialog.
+
+## While you work
+
+- The status bar shows the host: `⇄ me@build-box`, or `⇄ me@build-box
+  (restricted)` until you trust the workspace (below).
+- **Saves check for changes on the remote side.** Each buffer remembers the
+  file's size and modification time from when it was read or last saved.
+  If the file changed since (someone else saved it, or a pull or checkout
+  rewrote it), the save doesn't overwrite it; Vix asks instead: `o`
+  overwrites, `c` shows the file on disk against your buffer so you can merge
+  by hand and save again, `n` (or Esc) leaves both alone. Local files are
+  saved as before, without this check.
+- **Connection lost.** If the connection drops, the status bar shows `⚠
+  host: connection lost` and a warning explains it. Your buffers stay open
+  with their edits; saving is refused (not attempted and failed) and the
+  check for files changed on disk pauses. **File → Reconnect Remote**
+  connects again in the background; then save as usual. A file that changed
+  remotely while you were away is caught by the check above.
+
+## Trust
+
+A remote workspace is untrusted until you say otherwise. The first time you
+open one, Vix asks whether to trust it (press `y` to trust, `n` for
+restricted mode; keys typed before the question appears are ignored). The
+answer is remembered on your machine for that host and folder; **File →
+Trust Remote Workspace…** asks again.
+
+In restricted mode you can browse, edit, search and save, but nothing the
+workspace itself defines runs: no tasks or project commands (**Project**
+menu), run configurations, test lenses, debugger, language servers, project
+scripts (`.vix/scripts`) or project-local Prettier (`node_modules/.bin`).
+Vix has no automatic environment activation to switch off.
+
 ## How it works
 
 Vix runs your system `ssh` for every file operation and process, so your
@@ -42,9 +95,15 @@ versions all work, and so does a `fish` or `csh` login shell.
 
 This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index.md)).
 
-- There is no **Open Remote…** dialog yet, no remote indicator in the status
-  bar, and no "connection lost" state: if the connection drops, operations
-  fail with ordinary file errors until you restart Vix.
+- Opening from the dialog can't answer a password, passphrase or host-key
+  question (see above). There is no **Disconnect**: open another folder or
+  quit.
+- A dropped connection is noticed when an open, a save or the change check
+  fails; until then an operation may wait for `ssh`'s 15-second connect
+  timeout. Other failures (the explorer listing, search) show as ordinary
+  errors.
+- Trust is per remote workspace only; local workspaces keep the existing
+  script-trust prompt (a general workspace-trust setting is T627).
 - Each operation is a round trip, so the once-a-second check for files
   changed on disk is slower than locally. A regular-expression search on a
   machine without `rg` reads every file, one round trip each; install
@@ -56,8 +115,12 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
 
 ## Safety
 
-- Vix never puts a password on the command line and never turns host-key
-  checking off; authentication is `ssh`'s own.
+- Vix never puts a password or other secret on the command line (a test
+  checks that none from your settings reaches `ssh`'s arguments), and never
+  turns host-key checking off: it passes no `StrictHostKeyChecking` or
+  `UserKnownHostsFile` option, so your `ssh_config` and `known_hosts` decide,
+  and it never accepts a new or changed host key for you. Authentication is
+  `ssh`'s own (keys, the agent, `SSH_ASKPASS`).
 - Every path and argument is quoted before it reaches the remote shell.
 - The connection's control socket lives in a private directory
   (`$XDG_RUNTIME_DIR/vix-ssh`, or `/tmp/vix-ssh-<uid>`), which Vix refuses to

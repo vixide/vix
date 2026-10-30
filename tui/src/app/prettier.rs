@@ -29,9 +29,12 @@ impl App {
     /// Whether this workspace's project-local tools are trusted (the
     /// persisted script-trust decision, T132).
     fn workspace_trusted(&self) -> bool {
-        self.load_session()
-            .workspace(&self.session_key())
-            .is_some_and(|w| w.scripts_trusted == Some(true))
+        // A remote workspace also needs its own trust (T714).
+        !self.remote_untrusted()
+            && self
+                .load_session()
+                .workspace(&self.session_key())
+                .is_some_and(|w| w.scripts_trusted == Some(true))
     }
 
     /// The configured Prettier path for `path`, or why there is none.
