@@ -23,6 +23,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
 | `smart_commit` | string | `"ask"` | What Git → Commit does when nothing is staged but files changed: `"ask"` (confirm, then stage everything with `git add -A`), `"always"` (stage everything without asking) or `"never"` (refuse). Any other value behaves as `"ask"`. |
+| `clipboard_provider` | string | `"auto"` | How copy/paste reach the clipboard: `"auto"` (OSC 52 over SSH — `SSH_TTY`/`SSH_CONNECTION` set — or when the system clipboard fails; the system clipboard otherwise), `"system"` (system clipboard only) or `"osc52"` (always write the terminal's OSC 52 escape, wrapped in tmux passthrough under `TMUX`; tmux needs `allow-passthrough on`). Under OSC 52, paste reads Vix's own last copy. Any other value behaves as `"auto"`. |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
@@ -101,6 +102,7 @@ show_whitespace = false
 show_explorer = true
 explorer_delete = "trash"
 smart_commit = "ask"
+clipboard_provider = "auto"
 show_messages = true
 show_status_bar = true
 show_scrollbar = true

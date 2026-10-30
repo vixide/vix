@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Copy over SSH and tmux with OSC 52** (T625): a new `clipboard_provider` setting — `"auto"` (default), `"system"` or `"osc52"`. With `auto`, copying over SSH (`SSH_TTY`/`SSH_CONNECTION` set), or when the system clipboard fails, writes the terminal's OSC 52 escape so the clipboard of the machine you are sitting at gets the text; under tmux it is wrapped in DCS passthrough (tmux needs `allow-passthrough on`). Paste under OSC 52 reads Vix's own last copy. `vix-clipboard` gains `Provider`, `Environment`, `select_backend`, `encode_osc52` and `configure`.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.

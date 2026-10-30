@@ -41,6 +41,10 @@ explorer_delete = "trash"
 # What Git -> Commit does when nothing is staged but files changed: "ask"
 # (default -- confirm, then `git add -A`), "always", or "never".
 smart_commit = "ask"
+# How copy/paste reach the clipboard: "auto" (default -- OSC 52 over SSH or
+# when the system clipboard fails, else the system clipboard), "system", or
+# "osc52" (always the terminal's OSC 52 escape; wrapped for tmux).
+clipboard_provider = "auto"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.
