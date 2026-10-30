@@ -396,6 +396,68 @@ kbd {
   gap: 2rem;
 }
 
+/* Theme gallery (src/lib/ThemeGallery.svelte). The slides sit in Lily's
+   `.carousel`, which the themes already style as a scroll-snap row; this
+   only sizes each slide to the full row and lays out the controls. */
+
+.site-theme-gallery {
+  max-width: 60rem;
+  margin: 1.5rem auto 0;
+}
+.site-theme-gallery .carousel {
+  position: relative;
+  gap: 0;
+  scrollbar-width: thin;
+}
+.site-theme-gallery .site-theme-slide {
+  flex: 0 0 100%;
+  padding: 0 0 0.75rem;
+}
+.site-theme-slide figcaption { text-align: center; }
+.site-theme-gallery-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.site-theme-gallery-controls .button { padding: 0.5rem 1rem; }
+.site-theme-gallery-status {
+  margin: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+.site-theme-gallery-status span {
+  font-size: 0.9rem;
+  color: var(--vix-text-muted);
+}
+.site-theme-gallery-names {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+.site-theme-gallery-name {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--vix-radius);
+  border: 1px solid var(--vix-border-strong);
+  background: var(--vix-card-bg);
+  color: var(--vix-text);
+  cursor: pointer;
+}
+.site-theme-gallery-name:hover { background: var(--vix-tint-bg); }
+.site-theme-gallery-name[aria-pressed='true'] {
+  background: var(--vix-primary);
+  border-color: var(--vix-primary);
+  color: var(--vix-on-primary);
+}
+
 /* Small layout helpers */
 
 .centered { margin-left: auto; margin-right: auto; }

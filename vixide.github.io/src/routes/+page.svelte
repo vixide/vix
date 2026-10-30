@@ -86,13 +86,6 @@
   ];
 </script>
 
-<svelte:head>
-  <meta
-    name="description"
-    content="Vix is a terminal text editor and IDE written in Rust, with familiar Ctrl/Cmd keys and a menu bar, plus built-in LSP, a debugger, Git and Jujutsu, Org mode, a database workbench, and an integrated terminal."
-  />
-</svelte:head>
-
 <section class="site-hero" aria-labelledby="hero-heading">
   <p class="section-heading-eyebrow">Terminal text editor and IDE · Rust · Free and open source</p>
   <h1 id="hero-heading">The terminal IDE that already knows your keys.</h1>

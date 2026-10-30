@@ -465,6 +465,7 @@ osascript
 pathed
 PATHEXT
 pexpect
+pyte
 pgpass
 pinentry
 pipx

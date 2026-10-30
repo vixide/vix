@@ -47,6 +47,20 @@
   // the page it was shared from, not a generic site name.
   const pageTitle = $derived(page.data.title ?? 'Vix');
 
+  // The same convention for the description: each route's load returns
+  // `{ description }`, and this layout renders it once as the page's
+  // `<meta name="description">` and again for Open Graph and Twitter.
+  const pageDescription = $derived(
+    page.data.description ?? 'Vix, a keyboard-friendly terminal text editor and IDE.'
+  );
+  const pageUrl = $derived(`https://vixide.github.io${page.url.pathname}`);
+
+  // Social cards need an absolute URL. The card is the main repo's
+  // docs/demos/social-card.png, copied verbatim.
+  const socialImage = 'https://vixide.github.io/assets/social-card.png';
+  const socialImageAlt =
+    'Vix, a keyboard-friendly terminal text editor and IDE: a real screenshot of Vix with a menu bar, a file explorer, a Rust file open in the editor, and a status bar.';
+
   // Vix ships no third-party endpoints of its own — each `href` builds the
   // destination URL from the shared page's own title, not a hardcoded one.
   // Order and labels follow lily-design-system-svelte-with-picker-bar/index.md;
@@ -86,19 +100,31 @@
 </script>
 
 <!--
-  Open Graph / Twitter card tags, so a shared link shows a title and a real
-  screenshot. The image is the overview demo until T740 adds a 1200x630 PNG
-  card.
+  The one <title> and description, plus Open Graph and Twitter card tags
+  (T740), so a shared link to any page shows that page's title, its
+  description and the social card: a 1200x630 PNG built around a real
+  screenshot of Vix (scripts/render-theme-gallery.py in the main repo).
 -->
 <svelte:head>
   <title>{pageTitle}</title>
+  <meta name="description" content={pageDescription} />
+  <link rel="canonical" href={pageUrl} />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Vix" />
+  <meta property="og:locale" content="en_US" />
   <meta property="og:title" content={pageTitle} />
-  <meta property="og:url" content={`https://vixide.github.io${page.url.pathname}`} />
-  <meta property="og:image" content="https://vixide.github.io/assets/demos/overview.gif" />
-  <meta property="og:image:alt" content="Vix in a terminal: a menu bar, a file explorer, an editor tab and a status bar." />
+  <meta property="og:description" content={pageDescription} />
+  <meta property="og:url" content={pageUrl} />
+  <meta property="og:image" content={socialImage} />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content={socialImageAlt} />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={pageTitle} />
+  <meta name="twitter:description" content={pageDescription} />
+  <meta name="twitter:image" content={socialImage} />
+  <meta name="twitter:image:alt" content={socialImageAlt} />
 </svelte:head>
 
 <a class="skip-link" href="#main">Skip to main content</a>

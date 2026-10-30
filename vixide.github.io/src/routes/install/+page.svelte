@@ -5,13 +5,6 @@
   const release = 'https://github.com/vixide/vix/releases/latest/download';
 </script>
 
-<svelte:head>
-  <meta
-    name="description"
-    content="Install Vix with Homebrew, an installer script, PowerShell, npm, or cargo — or download a prebuilt or minimal build, or a desktop GUI."
-  />
-</svelte:head>
-
 <section class="section prose centered">
   <h1>Install Vix</h1>
   <p>

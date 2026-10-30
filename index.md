@@ -318,7 +318,10 @@ Runnable examples live in [`tui/examples/`](tui/examples/) — for instance
 `cargo run --example headless_edit` (open, edit and save a file with no UI)
 and `cargo run --example list_commands` (print every command). The demo GIFs
 are [VHS](https://github.com/charmbracelet/vhs) scripts in
-[`docs/demos/`](docs/demos/), rendered by `scripts/render-demos.sh`.
+[`docs/demos/`](docs/demos/), rendered by `scripts/render-demos.sh`; the
+per-theme screenshots in [`docs/demos/themes/`](docs/demos/themes/) and the
+website's social card are captured from the real `vix` binary by
+`scripts/render-theme-gallery.py`.
 
 If Vix is useful to you, a ⭐ on [GitHub](https://github.com/vixide/vix)
 helps other people find it.

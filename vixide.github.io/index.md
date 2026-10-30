@@ -24,7 +24,8 @@ by default), a copyable install command, a real screenshot, a six-card
 "Why Vix" grid, recorded demos, the keys to start with, links to the
 documentation's `for-*-users` guides and feature comparison, the desktop
 GUIs, and the open-source/licensing facts. `/features/` is the grouped
-feature list with an on-page contents nav and every demo; `/install/` has
+feature list with an on-page contents nav, a theme gallery and every
+demo; `/install/` has
 every install route (Homebrew, installer script, PowerShell, npm, cargo,
 direct download, the minimal build, the desktop GUIs, building from source)
 and a first-run section. Every claim is checked against the main `vix`
@@ -35,7 +36,26 @@ Screenshots and demos are the main repo's `docs/demos/*.gif` recordings,
 copied verbatim into `static/assets/demos/` (the site is exported as its
 own repository, so it can't read them from `../docs` at build time).
 Every image carries `width`/`height` and alt text; all but the hero image
-load lazily.
+and the theme gallery's first slide load lazily.
+
+The theme gallery (`src/lib/ThemeGallery.svelte`) shows one real
+screenshot of Vix per bundled theme — the main repo's
+`docs/demos/themes/*.png`, made by its `scripts/render-theme-gallery.py`
+from the real `vix` binary in a pseudo-terminal, copied into
+`static/assets/demos/themes/`. The slides sit in Lily's headless
+`Carousel`, which the themes style as a scroll-snap row, so it works by
+swiping with JavaScript off; previous/next buttons and a button per theme
+scroll to a slide.
+
+## Social cards
+
+Every page carries Open Graph and Twitter card tags, rendered once by
+`+layout.svelte` from the page's `title` and `description` (see
+[AGENTS.md](AGENTS.md)). The image is `static/assets/social-card.png`, a
+1200×630 PNG of a real Vix screenshot under a title band, copied from the
+main repo's `docs/demos/social-card.png`. The same file is meant to be the
+GitHub repository's social preview, which is uploaded by hand in the
+repository settings.
 
 Install commands are shown by `src/lib/CopyCommand.svelte`: a code block
 plus Lily's headless `ClipboardCopyButton`, with a polite live region that
