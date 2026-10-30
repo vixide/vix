@@ -3,9 +3,11 @@
 //! prompt, and the trust prompt that keeps a remote workspace's own code from
 //! running until the user says so.
 //!
-//! The authority itself (`vix_authority::ssh::SshAuthority`) is T712's; this
-//! file is only the user surface around it. See `spec/remote-editing` and
-//! `crates/vix-authority/spec/ssh`.
+//! The authorities themselves (`vix_authority::ssh::SshAuthority`, T712;
+//! `vix_authority::container::ContainerAuthority`, T718) live in
+//! `vix-authority`; this file is only the user surface around them, for every
+//! remote name (`ssh://`, `docker://`, `podman://`, `k8s://`, `wsl://`). See
+//! `spec/remote-editing` and `crates/vix-authority/spec/ssh`.
 //!
 //! **Connecting from the dialog never prompts.** The TUI owns the terminal,
 //! so the dialog connects on a background thread with `ssh`'s `BatchMode`:
@@ -22,7 +24,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Instant;
 
 use vix_authority::Authority;
-use vix_authority::ssh::SshTarget;
+use vix_authority::remote::RemoteTarget;
 use vix_input::{KeyCode, KeyEvent};
 
 use super::ide_parity::{ChoiceList, ChoicePurpose};
@@ -58,10 +60,10 @@ const UNTRUSTED_BLOCKED: &[&str] = &[
 /// is up, and whether the user trusts it.
 #[derive(Debug, Clone)]
 pub(crate) struct RemoteSession {
-    /// The host (user, port) — its `path` is not kept up to date; the
-    /// workspace root is `App::root`.
-    target: SshTarget,
-    /// `user@host:port` for the status bar.
+    /// The host (user, port) or container — its path is not kept up to
+    /// date; the workspace root is `App::root`.
+    target: RemoteTarget,
+    /// `user@host:port` (or `docker:name`, …) for the status bar.
     label: String,
     /// An operation failed with `NotConnected`; saves wait for a reconnect.
     lost: bool,
@@ -72,17 +74,8 @@ pub(crate) struct RemoteSession {
 }
 
 impl RemoteSession {
-    fn new(target: SshTarget) -> Self {
-        let mut label = String::new();
-        if let Some(user) = &target.user {
-            label.push_str(user);
-            label.push('@');
-        }
-        label.push_str(&target.host);
-        if let Some(port) = target.port {
-            label.push(':');
-            label.push_str(&port.to_string());
-        }
+    fn new(target: RemoteTarget) -> Self {
+        let label = target.label();
         Self {
             target,
             label,
@@ -92,25 +85,28 @@ impl RemoteSession {
         }
     }
 
-    /// The canonical `ssh://` name of `root` on this host: the session key,
-    /// so state is per host and path.
+    /// The canonical name (`ssh://…`, `docker://…`, …) of `root` there: the
+    /// session key, so state is per host (container) and path.
     fn name_of(&self, root: &Path) -> String {
         let mut t = self.target.clone();
-        t.path = root.to_string_lossy().into_owned();
+        t.set_path(root.to_string_lossy().into_owned());
         t.to_url()
     }
 }
 
 /// What a background connect produced.
-struct Connected {
+pub(super) struct Connected {
     /// The connected authority, ready to install.
-    authority: Arc<dyn Authority>,
-    /// The host, with `path` the workspace root.
-    target: SshTarget,
+    pub(super) authority: Arc<dyn Authority>,
+    /// The host or container, with its path the workspace root.
+    pub(super) target: RemoteTarget,
     /// A file to open, when the name was a file (its directory is the root).
-    file: Option<PathBuf>,
+    pub(super) file: Option<PathBuf>,
     /// What to say about the remote agent (T717), if anything.
-    agent_note: Option<String>,
+    pub(super) agent_note: Option<String>,
+    /// The user already agreed to run this workspace's code (a dev
+    /// container they chose to build, T718), so it is trusted at once.
+    pub(super) trusted: bool,
 }
 
 /// A connect running on a background thread.
@@ -133,6 +129,18 @@ pub(crate) struct RemoteState {
     /// says (T717).
     #[cfg(feature = "tasks")]
     pub(crate) ssh_options: Option<vix_authority::ssh::SshOptions>,
+    /// How a container name runs its engine (tests point `program` at a
+    /// fake engine, T718). `None` is the defaults, as for `ssh_options`.
+    #[cfg(feature = "tasks")]
+    pub(crate) exec_options: Option<vix_authority::container::ExecOptions>,
+    /// The `devcontainer` CLI to run (tests point it at a fake). `None`
+    /// looks it up on `PATH` (T718).
+    #[cfg(feature = "oc")]
+    pub(crate) devcontainer_cli: Option<PathBuf>,
+    /// When the "build the dev container?" question opened (typed-ahead
+    /// keys are ignored, T655).
+    #[cfg(feature = "oc")]
+    pub(crate) devcontainer_prompt_at: Option<Instant>,
 }
 
 impl App {
@@ -148,14 +156,41 @@ impl App {
         self
     }
 
-    /// The options the next connect runs `ssh` with.
+    /// Run container names' engine as `options` says (an explicit fake
+    /// engine path for tests). Builder form, like [`App::with_ssh_options`].
     #[cfg(feature = "tasks")]
-    fn ssh_options(&self) -> vix_authority::ssh::SshOptions {
-        self.remote.ssh_options.clone().unwrap_or_else(|| {
-            vix_authority::ssh::SshOptions::default().with_agent(
-                vix_authority::ssh::AgentMode::from_setting(&self.settings.remote_agent),
-            )
-        })
+    #[must_use]
+    pub fn with_exec_options(mut self, options: vix_authority::container::ExecOptions) -> Self {
+        self.remote.exec_options = Some(options);
+        self
+    }
+
+    /// Run `program` as the `devcontainer` CLI (a fake, in tests).
+    #[cfg(feature = "oc")]
+    #[must_use]
+    pub fn with_devcontainer_cli(mut self, program: impl Into<PathBuf>) -> Self {
+        self.remote.devcontainer_cli = Some(program.into());
+        self
+    }
+
+    /// The options the next connect runs `ssh` and the container engines
+    /// with: the remote agent as the `remote_agent` setting says, unless a
+    /// test set its own.
+    #[cfg(feature = "tasks")]
+    pub(super) fn connect_options(&self) -> vix_authority::remote::ConnectOptions {
+        let agent = vix_authority::ssh::AgentMode::from_setting(&self.settings.remote_agent);
+        let ssh = self
+            .remote
+            .ssh_options
+            .clone()
+            .unwrap_or_else(|| vix_authority::ssh::SshOptions::default().with_agent(agent));
+        let exec =
+            self.remote.exec_options.clone().unwrap_or_else(|| {
+                vix_authority::container::ExecOptions::default().with_agent(agent)
+            });
+        vix_authority::remote::ConnectOptions::default()
+            .with_ssh(ssh)
+            .with_exec(exec)
     }
 
     /// Mark this App as working on `target`'s host, whose authority the
@@ -166,8 +201,8 @@ impl App {
     /// unless that was already decided (T714). Until it is trusted, its
     /// tasks, run configurations, debugger, language servers and
     /// project-local tools don't run.
-    pub fn adopt_remote(&mut self, target: SshTarget) {
-        let mut session = RemoteSession::new(target);
+    pub fn adopt_remote(&mut self, target: impl Into<RemoteTarget>) {
+        let mut session = RemoteSession::new(target.into());
         let key = session.name_of(&self.root);
         let mut store = self.load_session();
         session.trusted = store.workspace(&key).and_then(|w| w.remote_trusted);
@@ -215,9 +250,10 @@ impl App {
             .is_some_and(|s| s.trusted != Some(true))
     }
 
-    /// Connect to the remote name `name` (`ssh://…` or `/ssh:…`) in the
-    /// background and, once connected, make it the workspace (a directory)
-    /// or open it in its directory (a file). The same as accepting
+    /// Connect to the remote name `name` (`ssh://…`, `/ssh:…`, `docker://…`,
+    /// `podman://…`, `k8s://…` or `wsl://…`) in the background and, once
+    /// connected, make it the workspace (a directory) or open it in its
+    /// directory (a file). The same as accepting
     /// **File → Open Remote…**. Refused while buffers have unsaved edits,
     /// since the switch closes them.
     pub fn open_remote(&mut self, name: &str) {
@@ -233,7 +269,7 @@ impl App {
             self.status = t!("status.remote_unsaved_first").to_string();
             return;
         }
-        let target = match SshTarget::parse(name) {
+        let target = match RemoteTarget::parse(name) {
             Ok(t) => t,
             Err(e) => {
                 self.messages
@@ -343,7 +379,7 @@ impl App {
             return;
         }
         let mut target = session.target.clone();
-        target.path = self.root.to_string_lossy().into_owned();
+        target.set_path(self.root.to_string_lossy().into_owned());
         self.start_connect(target, true);
     }
 
@@ -351,19 +387,33 @@ impl App {
 
     /// Connect to `target` on a background thread; [`App::poll_remote`]
     /// picks up the result.
-    fn start_connect(&mut self, target: SshTarget, reconnect: bool) {
-        let label = RemoteSession::new(target.clone()).label;
-        let (tx, rx) = mpsc::channel();
+    fn start_connect(&mut self, target: RemoteTarget, reconnect: bool) {
+        let label = target.label();
         #[cfg(feature = "tasks")]
-        let options = self.ssh_options();
+        let options = self.connect_options();
+        self.start_remote_job(label, reconnect, move || {
+            #[cfg(feature = "tasks")]
+            let result = connect_worker(target, &options, false);
+            #[cfg(not(feature = "tasks"))]
+            let result = connect_worker(&target);
+            result
+        });
+    }
+
+    /// Run `job` (a connect, or a dev container build and then a connect) on
+    /// a background thread, showing `label` as connecting meanwhile;
+    /// [`App::poll_remote`] picks up the result.
+    pub(super) fn start_remote_job(
+        &mut self,
+        label: String,
+        reconnect: bool,
+        job: impl FnOnce() -> Result<Connected, String> + Send + 'static,
+    ) {
+        let (tx, rx) = mpsc::channel();
         let spawned = std::thread::Builder::new()
             .name("vix-remote-connect".into())
             .spawn(move || {
-                #[cfg(feature = "tasks")]
-                let result = connect_worker(target, options);
-                #[cfg(not(feature = "tasks"))]
-                let result = connect_worker(&target);
-                let _ = tx.send(result);
+                let _ = tx.send(job());
             });
         if let Err(e) = spawned {
             self.messages
@@ -387,12 +437,18 @@ impl App {
                 .warn(t!("msg.session_save_failed", error = e).to_string());
         }
         vix_authority::install(connected.authority);
-        let root = PathBuf::from(&connected.target.path);
+        let root = PathBuf::from(connected.target.path());
         // Set before re-rooting, so the session key and the language-server
         // switch already see the remote workspace.
         self.remote.session = Some(RemoteSession::new(connected.target.clone()));
         self.reroot_workspace(&root, &[]);
         self.adopt_remote(connected.target);
+        if connected.trusted && self.remote_untrusted() {
+            if self.confirm.as_ref().map(|c| c.kind) == Some(ConfirmKind::TrustRemote) {
+                self.confirm = None;
+            }
+            self.set_remote_trust(true);
+        }
         if let Some(note) = connected.agent_note {
             self.messages.info(note);
         }
@@ -575,6 +631,10 @@ impl App {
                 self.save_conflict_key(key);
                 true
             }
+            ConfirmKind::DevcontainerUp => {
+                self.devcontainer_confirm_key(key);
+                true
+            }
             _ => false,
         }
     }
@@ -666,26 +726,37 @@ impl App {
     }
 }
 
-/// Connect to `target` without prompting (`BatchMode`), resolve its path,
-/// and split it into a workspace root and an optional file to open.
+/// Connect to `target` without prompting (`ssh`'s `BatchMode`; a container
+/// engine never prompts), resolve its path, and split it into a workspace
+/// root and an optional file to open.
 #[cfg(feature = "tasks")]
-fn connect_worker(
-    target: SshTarget,
-    options: vix_authority::ssh::SshOptions,
+pub(super) fn connect_worker(
+    target: RemoteTarget,
+    options: &vix_authority::remote::ConnectOptions,
+    trusted: bool,
 ) -> Result<Connected, String> {
-    use vix_authority::ssh::SshAuthority;
-    let host = target.host.clone();
+    let host = target.host();
+    let is_ssh = matches!(target, RemoteTarget::Ssh(_));
     let failed = |e: io::Error| {
-        t!(
-            "msg.remote_connect_failed_batch",
-            host = host.clone(),
-            error = e
-        )
-        .to_string()
+        if is_ssh {
+            t!(
+                "msg.remote_connect_failed_batch",
+                host = host.clone(),
+                error = e
+            )
+            .to_string()
+        } else {
+            t!(
+                "msg.remote_container_failed",
+                name = host.clone(),
+                error = e
+            )
+            .to_string()
+        }
     };
-    let remote_path = PathBuf::from(&target.path);
-    let auth = SshAuthority::with_options(target.clone(), options).map_err(failed)?;
-    auth.connect(false).map_err(failed)?;
+    let remote_path = PathBuf::from(target.path());
+    let connection = target.connect(options, false).map_err(failed)?;
+    let auth = connection.authority;
     let path = auth.canonicalize(&remote_path).map_err(failed)?;
     let (root, file) = if auth.is_dir(&path) {
         (path, None)
@@ -695,20 +766,21 @@ fn connect_worker(
             .map_or_else(|| PathBuf::from("/"), Path::to_path_buf);
         (root, Some(path))
     };
-    let agent_note = crate::remote::agent_note(&host, &auth.agent_status());
+    let agent_note = crate::remote::agent_note(&target.label(), &connection.agent);
     let mut target = target;
-    target.path = root.to_string_lossy().into_owned();
+    target.set_path(root.to_string_lossy().into_owned());
     Ok(Connected {
-        authority: Arc::new(auth),
+        authority: auth,
         target,
         file,
         agent_note,
+        trusted,
     })
 }
 
-/// Without `tasks` Vix starts no process, so it can't run `ssh`.
+/// Without `tasks` Vix starts no process, so it can't run `ssh` or an engine.
 #[cfg(not(feature = "tasks"))]
-fn connect_worker(_target: &SshTarget) -> Result<Connected, String> {
+fn connect_worker(_target: &RemoteTarget) -> Result<Connected, String> {
     Err(t!("msg.capability_missing", name = "tasks").to_string())
 }
 
@@ -716,6 +788,7 @@ fn connect_worker(_target: &SshTarget) -> Result<Connected, String> {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+    use vix_authority::ssh::SshTarget;
 
     fn app(tag: &str) -> (App, PathBuf) {
         let dir = std::env::temp_dir().join(format!("vix-remote-ui-{tag}-{}", std::process::id()));

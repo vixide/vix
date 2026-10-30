@@ -43,4 +43,4 @@ Serve Vix\*(Aqs remote\-agent protocol over stdin/stdout instead of starting the
 Print help
 .TP
 [\fIFILES\fR]
-File(s) to open on startup; the last one is focused. A single `\-` reads standard input into an unsaved scratch buffer instead of opening a file (e.g. `git show HEAD:path | vix \-`). A single `ssh://[user@]host[:port]/path` (or `/ssh:host:/path`) works on that folder over SSH (experimental)
+File(s) to open on startup; the last one is focused. A single `\-` reads standard input into an unsaved scratch buffer instead of opening a file (e.g. `git show HEAD:path | vix \-`). A single `ssh://[user@]host[:port]/path` (or `/ssh:host:/path`) works on that folder over SSH (experimental); `docker://[user@]container/path`, `podman://…`, `k8s://namespace/pod/container/path` and `wsl://distro/path` work inside a running container, pod or WSL distribution

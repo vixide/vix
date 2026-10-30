@@ -513,6 +513,10 @@ name = "remote_ui"
 path = "tests/remote_ui.rs"
 
 [[test]]
+name = "remote_container"
+path = "tests/remote_container.rs"
+
+[[test]]
 name = "authority_remote_tools"
 path = "tests/authority_remote_tools.rs"
 

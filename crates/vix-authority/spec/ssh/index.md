@@ -9,6 +9,12 @@ nothing is installed remotely.
 root `tasks` feature). Experimental user surface: `vix ssh://…` on the
 command line ([`docs/remote-editing`](../../../../docs/remote-editing/index.md)).
 
+Since T718, `SshAuthority` is `ShellAuthority<SshTransport>`: everything
+below except *Connection* and the `ssh` command lines is the generic shell
+authority, which `ContainerAuthority` ([`spec/container`](../container/index.md))
+runs through `docker exec`, `podman exec`, `kubectl exec` or `wsl.exe`
+instead. The public API is unchanged.
+
 ## Remote names (`ssh::SshTarget`, always built)
 
 - `ssh://[user@]host[:port][/path]`: the user and path are `%`-decoded; an

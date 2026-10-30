@@ -5,8 +5,9 @@
 //! Today the only production implementation is [`LocalAuthority`], which does
 //! exactly what Vix always did (it delegates to `vix-fileops`' guarded and
 //! atomic helpers and to `std`). The point of the trait is that a remote
-//! authority (SSH, T712; a remote agent, T717; containers, T718) can be
-//! installed in the same slot later without touching the call sites.
+//! authority (SSH, T712; a remote agent, T717; containers, Kubernetes and
+//! WSL, T718) can be installed in the same slot without touching the call
+//! sites.
 //!
 //! The slot is process-wide: [`current`] returns the installed authority (the
 //! local one until something calls [`install`]). Configuration, themes,
@@ -17,9 +18,11 @@
 
 pub mod agent;
 pub mod conformance;
+pub mod container;
 mod fake;
 mod local;
 mod process;
+pub mod remote;
 pub mod ssh;
 mod types;
 

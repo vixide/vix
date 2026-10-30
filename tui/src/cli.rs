@@ -28,7 +28,10 @@ pub struct Cli {
     /// reads standard input into an unsaved scratch buffer instead of
     /// opening a file (e.g. `git show HEAD:path | vix -`). A single
     /// `ssh://[user@]host[:port]/path` (or `/ssh:host:/path`) works on that
-    /// folder over SSH (experimental).
+    /// folder over SSH (experimental); `docker://[user@]container/path`,
+    /// `podman://…`, `k8s://namespace/pod/container/path` and
+    /// `wsl://distro/path` work inside a running container, pod or WSL
+    /// distribution.
     pub files: Vec<std::path::PathBuf>,
 
     /// UI language as a locale code (e.g. en, es, fr, de, cy). Overrides the

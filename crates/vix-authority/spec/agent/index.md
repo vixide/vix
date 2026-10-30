@@ -109,8 +109,9 @@ request or its answer would not fit in a frame.
 - `AgentAuthority` implements `Authority` over a connected agent (a
   `Command` such as `ssh host vix --remote-agent`, or any reader and
   writer); `command` goes to the authority given to `with_commands`, or is
-  `Unsupported`. It is the piece a container authority (T718: `docker exec
-  … vix --remote-agent`) can reuse. `watch(paths, interval)` returns a
+  `Unsupported`. (T718's `ContainerAuthority` uses the same client through
+  the shared shell authority, started with `docker exec -i … vix
+  --remote-agent`; see [`spec/container`](../container/index.md).) `watch(paths, interval)` returns a
   `Watch` (`changed()` drains, `next_timeout(d)` waits; dropping it sends
   `Unwatch`).
 - `Authority::metadata_batch(paths)` (new, defaulting to one `metadata`

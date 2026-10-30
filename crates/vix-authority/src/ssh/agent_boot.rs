@@ -1,5 +1,5 @@
-//! Finding, uploading and starting the remote agent for [`SshAuthority`]
-//! (T717).
+//! Finding, uploading and starting the remote agent for a shell authority
+//! (`SshAuthority`, T717; `ContainerAuthority`, T718).
 //!
 //! One shell round trip reports the remote `uname -sm` and every candidate
 //! `vix` (the per-user cache, then `PATH`) with its `--version --json`. A
@@ -14,11 +14,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::authority::{SshAuthority, code};
+use super::authority::{ShellAuthority, code};
 use super::quote::{bytes_path, path_bytes, sh_quote};
+use super::transport::Transport;
 use crate::agent::{AgentClient, VERSION};
 
-/// Whether [`SshAuthority::connect`] tries the remote agent.
+/// Whether connecting (`SshAuthority::connect`,
+/// `ContainerAuthority::connect`) tries the remote agent.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AgentMode {
@@ -190,11 +192,11 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
         })
 }
 
-impl SshAuthority {
+impl<T: Transport> ShellAuthority<T> {
     /// Find, upload (as the options allow) and start the remote agent, and
     /// route file operations through it from now on. Never fails: when no
     /// agent can run, the shell scripts stay in use, and the returned (and
-    /// [`SshAuthority::agent_status`]) status says why.
+    /// [`ShellAuthority::agent_status`]) status says why.
     pub fn start_agent(&self) -> AgentStatus {
         let status = self.try_start_agent();
         self.set_agent_status(status.clone());
@@ -202,7 +204,7 @@ impl SshAuthority {
     }
 
     fn try_start_agent(&self) -> AgentStatus {
-        let mode = self.options().agent;
+        let mode = self.transport().agent_mode();
         if mode == AgentMode::Off {
             return AgentStatus::Off;
         }
@@ -253,12 +255,13 @@ impl SshAuthority {
         }
     }
 
-    /// The bytes of the binary to upload: [`super::SshOptions::agent_binary`],
+    /// The bytes of the binary to upload: the transport's agent binary
+    /// ([`super::SshOptions::agent_binary`]),
     /// else this process's executable when it is a `vix` (a GUI front end
     /// or a test harness is not an agent).
     fn local_agent_binary(&self) -> io::Result<Vec<u8>> {
-        let path = if let Some(p) = &self.options().agent_binary {
-            p.clone()
+        let path = if let Some(p) = self.transport().agent_binary() {
+            p.to_path_buf()
         } else {
             let exe = std::env::current_exe()?;
             if exe.file_stem().and_then(|s| s.to_str()) != Some("vix") {
@@ -299,7 +302,8 @@ impl SshAuthority {
         Ok(bytes_path(&out))
     }
 
-    /// Start `path --remote-agent` over `ssh` and complete the handshake.
+    /// Start `path --remote-agent` over the transport (`ssh`, `docker exec`,
+    /// …) and complete the handshake.
     fn launch_agent(&self, path: &Path) -> io::Result<()> {
         let mut script = b"exec ".to_vec();
         script.extend(sh_quote(&path_bytes(path)));

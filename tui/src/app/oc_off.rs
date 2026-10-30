@@ -23,4 +23,10 @@ impl App {
     pub(super) fn oc_mouse(&mut self, _mouse: MouseEvent) {
         debug_assert!(self.oc.is_none());
     }
+
+    /// No dev containers in this build (`ConfirmKind::DevcontainerUp` is
+    /// never asked); close whatever is open.
+    pub(super) fn devcontainer_confirm_key(&mut self, _key: KeyEvent) {
+        self.confirm = None;
+    }
 }

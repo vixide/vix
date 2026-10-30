@@ -127,12 +127,34 @@ pub const DECODER: &str =
 /// shell. The script's stdin is the SSH channel's stdin.
 #[must_use]
 pub fn envelope(script: &[u8]) -> String {
+    format!("exec /bin/sh -c '{DECODER}' vix {}", octal(script))
+}
+
+/// The argument vector that runs `script` in `/bin/sh` when nothing parses
+/// it as a command line first (`docker exec`, `kubectl exec`, `wsl.exe
+/// --exec`; T718): `/bin/sh -c <DECODER> vix <octal digits>`. The same
+/// decoder as [`envelope`], so the script is never re-quoted on the way:
+/// whatever a platform's argv quoting does, it only ever sees the fixed
+/// decoder and digits.
+#[must_use]
+pub fn sh_argv(script: &[u8]) -> [String; 5] {
+    [
+        "/bin/sh".into(),
+        "-c".into(),
+        DECODER.into(),
+        "vix".into(),
+        octal(script),
+    ]
+}
+
+/// Three octal digits per byte.
+fn octal(script: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut digits = String::with_capacity(script.len() * 3);
     for b in script {
         let _ = write!(digits, "{b:03o}");
     }
-    format!("exec /bin/sh -c '{DECODER}' vix {digits}")
+    digits
 }
 
 #[cfg(test)]

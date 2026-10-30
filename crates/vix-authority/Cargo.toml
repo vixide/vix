@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The authority slot: one trait that owns Vix's workspace file access and process spawning, with local and SSH implementations and a temp-dir-backed fake."
+description = "The authority slot: one trait that owns Vix's workspace file access and process spawning, with local, SSH and container implementations and a temp-dir-backed fake."
 
 [features]
 # Build `Command`s for `Authority::command`. Off, no authority can start a

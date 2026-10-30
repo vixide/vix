@@ -1,8 +1,9 @@
 # Remote editing
 
-**Experimental.** Vix can work on a folder on another machine over SSH, with
-your own settings, themes and keybindings, and the remote machine's files and
-tools. Nothing needs to be installed on the remote side; if Vix is there, it
+**Experimental.** Vix can work on a folder on another machine over SSH, or
+inside a running container, Kubernetes pod or WSL distribution (see
+[Containers](#containers)), with your own settings, themes and keybindings,
+and the remote side's files and tools. Nothing needs to be installed on the remote side; if Vix is there, it
 is used to go faster (see [The remote agent](#the-remote-agent)).
 
 ```sh
@@ -31,6 +32,55 @@ says what to do:
 
 Keys in an agent, `ssh_config` and an existing shared connection all work
 from the dialog.
+
+## Containers
+
+The same works inside a running container, a container in a Kubernetes pod,
+or a WSL distribution: Vix runs each command through the engine's `exec`
+instead of `ssh`, so nothing needs to be installed inside but a POSIX `sh`
+and the usual commands.
+
+```sh
+vix docker://web/srv/app              # a running Docker container (name or id)
+vix podman://node@api/~/src           # Podman, as user node, under its home
+vix k8s://dev/web-7f9c/app/srv        # namespace/pod/container in Kubernetes
+vix wsl://Ubuntu/home/me/src          # a WSL distribution (from Windows)
+```
+
+**File → Open Remote…** takes these names too. From the **OC** menu,
+**Open Workspace in Container…** lists the containers: select a running one
+and press `w`, and the Open Remote prompt is filled in with its name; finish
+the path inside and press Enter.
+
+Everything in this page applies: the status bar shows `⇄ docker:web`,
+saves are atomic and checked for changes inside, a stopped container shows
+as a lost connection (**File → Reconnect Remote** once it runs again), a new
+container workspace is untrusted until you trust it, and **Tools →
+Terminal** opens a login shell inside (`$SHELL`, else `bash`, else `sh`).
+Language servers, tasks and git run inside the container. The `remote_agent`
+setting applies too: with `"upload"`, Vix copies itself in when the
+container runs the same operating system and architecture, checked the same
+way.
+
+Environment variables for tasks and servers reach Docker and Podman by name
+(`-e NAME`, the value read from Vix's side), never on the command line.
+`kubectl` and `wsl.exe` have no such option, so for those they are part of
+the command line, as over SSH.
+
+### Dev containers
+
+**OC → Reopen in Dev Container** opens the current project in its dev
+container (`devcontainer.json` in the `.devcontainer` folder, or `.devcontainer.json`). It
+needs the [`devcontainer` CLI](https://github.com/devcontainers/cli)
+(`npm install -g @devcontainers/cli`); Vix says so if it isn't installed.
+Building a dev container runs the project's own Dockerfile, features and
+lifecycle commands, so Vix asks first; then it runs `devcontainer up
+--workspace-folder .` in the background (with `--docker-path podman` when
+the `oc_engine` setting, or what is installed, is Podman) and opens the
+workspace folder the CLI reports, as the `remoteUser` the configuration
+names, as a trusted workspace. Vix reads `devcontainer.json` (comments
+allowed) only for `workspaceFolder` and `remoteUser` as fallbacks; the CLI
+does everything else.
 
 ## While you work
 
@@ -168,6 +218,9 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
   output aren't supported (locally or remotely).
 - Stopping a task or closing the terminal ends the local `ssh`; a remote
   program that ignores the closed connection may keep running there.
+- Containers: a container without `/bin/sh` (a "distroless" image) can't
+  be opened. nerdctl has no name form yet. Kubernetes and WSL have been
+  tested only against a stand-in for `kubectl` and `wsl.exe`.
 
 ## Safety
 
@@ -200,6 +253,12 @@ on and your `~/.ssh`, your SSH agent and any system `sshd` are left alone.
 Everything lives in one temporary directory that is removed afterwards
 (`VIX_TEST_SSH_KEEP=1` keeps it, with the server's log). The same script runs
 in GitHub Actions whenever the SSH code changes.
+
+For containers, `VIX_TEST_DOCKER=1 cargo test -p vix-authority --features ssh
+--test container a_real_docker_container_conforms` starts a throwaway
+`alpine` container with your `docker` (Podman's `docker` works too), runs
+the same suite inside it, and removes it; `VIX_TEST_DOCKER=<name>` uses a
+running container instead.
 
 To test against another machine instead, set `VIX_TEST_SSH_HOST` to a host
 your `ssh` can reach without a prompt (`user@host` or `ssh://host:port`) and

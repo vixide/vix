@@ -24,6 +24,7 @@
 //! the output or a typed [`OciError`].
 
 pub mod argv;
+pub mod devcontainer;
 pub mod parse;
 
 pub use parse::{Container, Image, Network, Pod, Volume};

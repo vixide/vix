@@ -1,4 +1,5 @@
-//! `vix ssh://user@host/path` (T712): open a remote workspace from the
+//! `vix ssh://user@host/path` (T712) and `vix docker://container/path` (and
+//! `podman://`, `k8s://`, `wsl://`; T718): open a remote workspace from the
 //! command line, before the UI starts.
 //!
 //! This is the path that can prompt: `ssh` asks for a password, passphrase
@@ -9,9 +10,12 @@
 
 use std::path::PathBuf;
 
-/// When `files` is exactly one remote name (`ssh://…` or `/ssh:…`), connect
-/// to it, install an [`crate::authority::ssh::SshAuthority`] in the
-/// authority slot, and return the target whose `path` is the workspace root
+use crate::authority::remote::RemoteTarget;
+
+/// When `files` is exactly one remote name (`ssh://…`, `/ssh:…`,
+/// `docker://…`, `podman://…`, `k8s://…`, `wsl://…`), connect to it, install
+/// its authority ([`crate::authority::ssh::SshAuthority`] or
+/// [`crate::authority::container::ContainerAuthority`]) in the authority slot, and return the target whose `path` is the workspace root
 /// to open (pass it to `App::adopt_remote` once the App exists). A remote
 /// directory becomes the root and `files` is emptied; a remote file's
 /// directory becomes the root and `files` holds the file's remote path.
@@ -32,20 +36,20 @@ use std::path::PathBuf;
 pub fn connect_cli(
     files: &mut Vec<PathBuf>,
     remote_agent: &str,
-) -> Result<Option<(crate::authority::ssh::SshTarget, Option<String>)>, String> {
+) -> Result<Option<(RemoteTarget, Option<String>)>, String> {
     let [only] = files.as_slice() else {
         return Ok(None);
     };
     let name = only.to_string_lossy().into_owned();
-    if !crate::authority::ssh::SshTarget::is_remote(&name) {
+    if !RemoteTarget::is_remote(&name) {
         return Ok(None);
     }
-    let target = crate::authority::ssh::SshTarget::parse(&name)
+    let target = RemoteTarget::parse(&name)
         .map_err(|e| t!("msg.remote_bad_name", name = name, error = e).to_string())?;
     let mut target = target;
-    let (root, file, note) = connect(target.clone(), remote_agent)?;
+    let (root, file, note) = connect(&target, remote_agent)?;
     *files = file.into_iter().collect();
-    target.path = root.to_string_lossy().into_owned();
+    target.set_path(root.to_string_lossy().into_owned());
     Ok(Some((target, note)))
 }
 
@@ -85,19 +89,16 @@ pub fn agent_note(host: &str, status: &crate::authority::ssh::AgentStatus) -> Op
 type Connected = (PathBuf, Option<PathBuf>, Option<String>);
 
 #[cfg(feature = "tasks")]
-fn connect(
-    target: crate::authority::ssh::SshTarget,
-    remote_agent: &str,
-) -> Result<Connected, String> {
-    use crate::authority::Authority as _;
-    use crate::authority::ssh::{AgentMode, SshAuthority, SshOptions};
-    let host = target.host.clone();
+fn connect(target: &RemoteTarget, remote_agent: &str) -> Result<Connected, String> {
+    use crate::authority::remote::ConnectOptions;
+    use crate::authority::ssh::AgentMode;
+    let host = target.host();
     let failed =
         |e: std::io::Error| t!("msg.remote_connect_failed", host = host, error = e).to_string();
-    let remote_path = PathBuf::from(&target.path);
-    let options = SshOptions::default().with_agent(AgentMode::from_setting(remote_agent));
-    let auth = SshAuthority::with_options(target, options).map_err(failed)?;
-    auth.connect(true).map_err(failed)?;
+    let remote_path = PathBuf::from(target.path());
+    let options = ConnectOptions::default().with_agent(AgentMode::from_setting(remote_agent));
+    let connection = target.connect(&options, true).map_err(failed)?;
+    let auth = connection.authority;
     let path = auth.canonicalize(&remote_path).map_err(failed)?;
     let (root, file) = if auth.is_dir(&path) {
         (path, None)
@@ -107,17 +108,14 @@ fn connect(
             .map_or_else(|| PathBuf::from("/"), std::path::Path::to_path_buf);
         (root, Some(path))
     };
-    let note = agent_note(&host, &auth.agent_status());
-    crate::authority::install(std::sync::Arc::new(auth));
+    let note = agent_note(&target.label(), &connection.agent);
+    crate::authority::install(auth);
     Ok((root, file, note))
 }
 
 /// Without `tasks` Vix starts no process, so it can't run `ssh`.
 #[cfg(not(feature = "tasks"))]
-fn connect(
-    _target: crate::authority::ssh::SshTarget,
-    _remote_agent: &str,
-) -> Result<Connected, String> {
+fn connect(_target: &RemoteTarget, _remote_agent: &str) -> Result<Connected, String> {
     Err(t!("msg.capability_missing", name = "tasks").to_string())
 }
 
@@ -144,5 +142,7 @@ mod tests {
         let mut files = vec![PathBuf::from("ssh://-oProxyCommand=x/y")];
         assert!(connect_cli(&mut files, "off").is_err());
         assert_eq!(files.len(), 1, "the arguments are untouched");
+        let mut files = vec![PathBuf::from("docker://-it/x")];
+        assert!(connect_cli(&mut files, "off").is_err());
     }
 }

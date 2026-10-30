@@ -188,7 +188,8 @@ fn main() -> io::Result<()> {
         vix::theme_model::background::set_detected(detect_terminal_background());
     }
 
-    // `vix ssh://user@host/path` (T712): connect now, while `ssh` can still
+    // `vix ssh://user@host/path` (T712), or a container name such as
+    // `vix docker://web/srv` (T718): connect now, while `ssh` can still
     // prompt on the plain terminal, and work on the remote directory.
     let remote = match vix::remote::connect_cli(&mut cli.files, &settings.remote_agent) {
         Ok(target) => target,
@@ -199,7 +200,7 @@ fn main() -> io::Result<()> {
     };
     let root = remote.as_ref().map_or_else(
         || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        |(t, _)| PathBuf::from(&t.path),
+        |(t, _)| PathBuf::from(t.path()),
     );
     let mut app = App::new(root, settings);
     // The status-bar host, conflict-checked saves and the trust prompt

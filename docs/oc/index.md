@@ -23,13 +23,22 @@ opens the object's `inspect` JSON in a read-only tab, and `Esc` closes.
 
 | List | Keys |
 | ---- | ---- |
-| Containers | `s` start, `x` stop, `t` restart, `p` pause or unpause, `l` logs to the bottom dock, `e` shell (an `exec -it` terminal), `c` copy `http://localhost:PORT` for the first published port, `a` show or hide stopped containers |
+| Containers | `s` start, `x` stop, `t` restart, `p` pause or unpause, `l` logs to the bottom dock, `e` shell (an `exec -it` terminal), `w` open a workspace inside it (Docker or Podman; see [remote editing](../remote-editing/index.md#containers)), `c` copy `http://localhost:PORT` for the first published port, `a` show or hide stopped containers |
 | Images | `u` run, `g` tag, `p` pull, `P` push |
 | Every list | `d` or `Delete` remove, `D` prune that list |
 
 Run asks for `IMAGE [name=NAME] [port=HOST:CTR]...` and runs detached. Build
 (**OC → Build Image…**) asks for `FILE [tag=REF] [context=DIR]`, seeded with a
 `Containerfile` or `Dockerfile` in the workspace root.
+
+## Container workspaces and dev containers
+
+**OC → Open Workspace in Container…** opens the container list; `w` on a
+running container opens **File → Open Remote…** with its name filled in
+(`docker://web/`), so you can work on the files inside it. **OC → Reopen in
+Dev Container** builds and starts the project's dev container with the
+`devcontainer` CLI (it asks first) and opens it. Both are described in
+[remote editing](../remote-editing/index.md#containers).
 
 ## Compose
 

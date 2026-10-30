@@ -727,3 +727,6 @@ riscv
 unwatch
 Unwatch
 VIXAGENT
+KUBECONFIG
+WSLENV
+distroless

@@ -779,6 +779,10 @@ pub enum ConfirmKind {
     SaveConflict,
     /// Trust the open remote workspace to run its own code (T714).
     TrustRemote,
+    /// Build and start the workspace's dev container with the
+    /// `devcontainer` CLI, then open it (T718). [`Confirm::paths`] holds the
+    /// `devcontainer.json`.
+    DevcontainerUp,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).

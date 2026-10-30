@@ -8524,6 +8524,55 @@ so, and the first task of each plan re-checks the facts it depends on.
     path only).
 - [ ] **T718 — Other authorities.** Dev containers, `docker exec`/`podman`
   (with OC), Kubernetes, WSL. **Large; later.**
+  - **Progress 2026-10-30** (`feat/t718-container-authorities`): containers
+    and dev containers are done; Kubernetes and WSL are implemented but only
+    verified against a fake engine, so T718 stays open for T718a/T718b.
+    T712's script layer became `ShellAuthority<T: Transport>` (`SshAuthority`
+    = it over `SshTransport`, public API unchanged; nothing duplicated), and
+    `ContainerAuthority` = it over `ExecTransport`: `docker`/`podman exec -i
+    [-u] [-e NAME]… CTR`, `kubectl exec -i -n NS -c CTR POD --`, `wsl.exe -d
+    D [-u] --exec`, each followed by `/bin/sh -c <decoder> vix <digits>`
+    (`ssh::quote::sh_argv`, the same octal envelope). Docker/Podman pass
+    environment values by name (never on argv); the terminal adds `-t`; the
+    engine's 125/-1 or its "no such container" text is `NotConnected`. The
+    remote agent works unchanged inside (found, or uploaded over `exec -i`
+    stdin with the SHA-256 checked inside, same OS/arch, opt-in; `docker cp`
+    was not used, to keep one verified code path). Names: `docker://`,
+    `podman://`, `k8s://ns/pod/ctr/path`, `wsl://` (`ContainerTarget`,
+    hostile names refused); `remote::RemoteTarget` covers every remote name,
+    and the App (`remote_session.rs`, `tui/src/remote.rs`) uses it for `vix
+    <name>`, **File → Open Remote…**, status bar, session key, reconnect and
+    trust (T714 applies). OC: **Open Workspace in Container…**
+    (`oc.open_workspace`; `w` on a running container fills the Open Remote
+    prompt) and **Reopen in Dev Container** (`oc.devcontainer_reopen`: needs
+    `devcontainer.json` and the `devcontainer` CLI, asks first, runs
+    `devcontainer up --workspace-folder <root>` [`--docker-path podman`],
+    opens the reported container as `remoteUser` at
+    `remoteWorkspaceFolder`, trusted; `vix-oci::devcontainer` reads JSONC).
+    Tests: `conformance::run` passes for all four kinds against a fake engine
+    (`crates/vix-authority/tests/container.rs`), and against a real container with
+    `VIX_TEST_DOCKER=1` (run 2026-10-30: Podman 5.8 behind `docker`, alpine);
+    `tui/tests/remote_container.rs` drives Open Remote and the dev container
+    flow with fakes. Spec: `crates/vix-authority/spec/container`.
+  - [ ] **T718a — Kubernetes against a real cluster.** Run
+    `conformance::run` through `kubectl exec` against a `kind`/`k3d`
+    cluster behind an opt-in `VIX_TEST_K8S=ns/pod/ctr` test (mirroring
+    `VIX_TEST_DOCKER`), and a GitHub-only workflow that starts `kind` when
+    `crates/vix-authority/**` changes. Check what `kubectl exec` prints and
+    exits with for a missing pod/container and a dropped API connection, and
+    extend `ExecTransport::lost` to match. **Small–medium.**
+  - [ ] **T718b — WSL on a real Windows host.** Run the suite through
+    `wsl.exe -d <distro> --exec` from a Windows build (CI `windows-latest`
+    has WSL off; needs a self-hosted runner or a manual run), confirm
+    Windows argv quoting of the decoder round-trips, find `wsl.exe`'s exit
+    status for a missing distribution (assumed -1), and decide whether
+    environment values should travel through `WSLENV` instead of argv.
+    **Medium.**
+  - [ ] **T718c — nerdctl and pickers.** A `nerdctl://` form once its `exec
+    -e NAME` behavior is verified (the OC panel refuses it today); a
+    Kubernetes pod/container picker (`kubectl get pods -o json`) and a WSL
+    distribution picker (`wsl.exe -l -q`) in **File → Open Remote…**, so
+    those names need not be typed. **Small.**
 - [x] **T719 — Optional opt-in CI job against a real local `sshd`.**
   **Small.**
   - **Done 2026-10-30** (`feat/t719-sshd-ci`): `scripts/test-ssh-local`
