@@ -191,6 +191,32 @@ on exit is non-fatal: it surfaces as a warning message rather than blocking the
 quit. Settings are also saved on demand when you open the file via **Vix →
 Settings…**.
 
+## Live reload (T626)
+
+Editing `config.toml` takes effect without a restart. When `App::save` writes
+the buffer whose path is the active settings file (`App::settings_path` when
+set, else `Settings::config_path()`, compared after canonicalizing), the host
+re-reads it with `Settings::try_load_from`. **Vix → Reload Settings**
+(`vix.reload_settings`) does the same on demand, without saving a buffer.
+
+- **On error** (e.g. a TOML syntax error) the current in-memory settings are
+  kept unchanged and an error message (`msg.settings_reload_failed`) is
+  posted, so a half-typed edit never resets everything to defaults.
+- **On success** `App::apply_settings(old, new)` installs the new settings and
+  re-resolves what was derived from them at startup: the theme (including the
+  `theme_light`/`theme_dark` pair), the keymap (an unknown id falls back to
+  Apple with the same error as at startup, and a changed keymap resets
+  per-keymap modal state), the UI locale (an unknown code is ignored), and
+  the time zone; then it rebuilds the menus (the View → Theme list is
+  re-scanned, so a newly added custom theme appears). Each piece is
+  re-applied only when its setting changed, because theme and locale are
+  process-global.
+
+Most other settings are read from `App::settings` at the point of use, so they
+take effect immediately too. The editor display flags copied into each tab at
+startup (line numbers, soft wrap, whitespace) are not re-applied by a reload;
+their View-menu toggles still work.
+
 ## As implemented in Vix
 
 `crates/vix-settings/src/lib.rs` defines the `Settings` struct (every field, its doc comment,
@@ -203,7 +229,9 @@ and its default), its 11 `#[serde(flatten)]`'d bool-group sub-structs (T149:
 helpers, all backed by `confy` under the app name `vix` and config stem
 `config`.
 `tui/src/main.rs` calls `Settings::load()` at startup. In `tui/src/app.rs`,
-`open_settings_file` handles the `vix.settings` menu action (save-then-open), and
+`open_settings_file` handles the `vix.settings` menu action (save-then-open),
+`reload_settings_from_disk` and `apply_settings` (in `tui/src/app/session.rs`)
+implement live reload, and
 `on_exit` persists settings (and shuts down LSP) when Vix quits.
 
 [`confy`]: https://crates.io/crates/confy

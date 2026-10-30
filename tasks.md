@@ -7250,7 +7250,7 @@ new action.
   passthrough under `TMUX`. Reads fall back to the internal register.
   Tests: a pure `encode_osc52(text, tmux)`, and provider selection from a
   fake environment. **Small.**
-- [ ] **T626 — Live settings reload.** Saving `config.toml` from
+- [x] **T626 — Live settings reload.** Saving `config.toml` from
   `open_settings_file` (`tui/src/app/session.rs:416`) doesn't re-apply
   settings, because `App::save` (`tui/src/app.rs:3744`) never reloads, so
   changes need a restart. Helix has `:config-reload`, and Zed applies
@@ -7260,6 +7260,7 @@ new action.
   re-resolves the theme, keymap, and locale and rebuilds the menus. Also
   add a `vix.reload_settings` action. Tests: save a changed config and the
   theme or keymap switches; bad TOML keeps the old settings. **Small.**
+  Done: `App::save` reloads the settings file via `reload_settings_from_disk` → `apply_settings`; `vix.reload_settings` in the Vix menu; tests in `tui/tests/integration/save.rs`.
 - [ ] **T627 — Per-project and per-language settings.**
   `Settings::try_load` (`crates/vix-settings/src/lib.rs:637`) reads only
   user config. `.vix/` holds only tasks, project, and scripts, and there

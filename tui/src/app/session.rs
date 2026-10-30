@@ -441,7 +441,7 @@ impl App {
     /// Open the user's settings file in the editor. Saves the current settings
     /// first so the file exists (and reflects in-app changes) before opening.
     pub(super) fn open_settings_file(&mut self) {
-        let Some(path) = Settings::config_path() else {
+        let Some(path) = self.settings_file_path() else {
             self.status = t!("status.settings_no_path").to_string();
             return;
         };
@@ -454,6 +454,72 @@ impl App {
             s.open_path(&path, false);
             s.focus = Focus::Editor;
         });
+    }
+
+    /// The settings file this app reads and writes: [`App::settings_path`]
+    /// when set, else the user's `config.toml` (`None` when its location
+    /// can't be determined).
+    pub(super) fn settings_file_path(&self) -> Option<PathBuf> {
+        self.settings_path.clone().or_else(Settings::config_path)
+    }
+
+    /// Whether `path` names the settings file, comparing canonical paths when
+    /// both resolve (so a symlinked config directory still matches).
+    pub(super) fn is_settings_file(&self, path: &Path) -> bool {
+        let Some(config) = self.settings_file_path() else {
+            return false;
+        };
+        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        canon(path) == canon(&config)
+    }
+
+    /// `vix.reload_settings`, and the hook `App::save` runs after writing the
+    /// settings file (T626): re-read it and apply it live. A load failure (a
+    /// TOML syntax error, say) keeps the current settings and posts an error
+    /// message instead of falling back to defaults.
+    pub(super) fn reload_settings_from_disk(&mut self) {
+        let Some(path) = self.settings_file_path() else {
+            self.status = t!("status.settings_no_path").to_string();
+            return;
+        };
+        match Settings::try_load_from(&path) {
+            Ok(new) => {
+                let old = std::mem::take(&mut self.settings);
+                self.apply_settings(&old, new);
+                self.status = t!("status.settings_reloaded").to_string();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.settings_reload_failed", error = e).to_string()),
+        }
+    }
+
+    /// Install `new` as the live settings and re-resolve what was derived
+    /// from them at startup (T626): theme, keymap, locale and time zone, each
+    /// only when its setting changed from `old` (theme and locale are
+    /// process-global), then rebuild the menus.
+    pub(super) fn apply_settings(&mut self, old: &Settings, new: Settings) {
+        self.settings = new;
+        let themes = Self::available_custom_themes();
+        if Self::effective_theme(old) != Self::effective_theme(&self.settings) {
+            Self::apply_saved_theme_from(&Self::effective_theme(&self.settings), &themes);
+            self.editor.refresh_theme();
+            self.theme_preview = None;
+        }
+        if old.keymap != self.settings.keymap {
+            self.validate_keymap();
+            self.reset_keymap_modes();
+        }
+        if old.locale != self.settings.locale
+            && let Some(loc) = crate::locale_model::by_code(&self.settings.locale)
+        {
+            rust_i18n::set_locale(loc.code);
+        }
+        if old.time_zone != self.settings.time_zone {
+            let _ = crate::time_zone_model::set_active(&self.settings.time_zone);
+        }
+        crate::menu::set_theme_names(crate::theme_model::theme_names(&themes));
+        crate::menu::set_action_filter(crate::capability::is_available);
     }
 
     /// Open the **Vix → Export Settings…** prompt (T555).
