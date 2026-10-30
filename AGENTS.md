@@ -45,13 +45,15 @@ editor — see [index.md](index.md) for scope.
   vendored: `scripts/copy-lily-themes.js` copies its `dist/*.css` into the
   gitignored `static/assets/themes/` on every `dev`/`build`. Never commit or
   hand-edit a theme file; upgrade the package instead.
-- **`page.data.title` convention**: every route's `+page.ts` `load` returns
-  `{ title }`; `+layout.svelte` renders the one `<title>` from
-  `page.data.title` and passes the same string to `PickerBar`'s
-  `shareProps.title`, so a shared link always carries the title of the
-  page it was shared from. A page's own `<svelte:head>` should carry
-  `<meta name="description">` only — never `<title>`, or it fights the
-  layout's.
+- **`page.data` convention**: every route's `+page.ts` `load` returns
+  `{ title, description }`; `+layout.svelte` renders the one `<title>` and
+  `<meta name="description">` from them, the Open Graph and Twitter card
+  tags (title, description, canonical URL, and the 1200×630
+  `static/assets/social-card.png`), and passes the title to `PickerBar`'s
+  `shareProps.title`, so a shared link always carries the title and
+  description of the page it was shared from. A page should not add its
+  own `<title>`, description or social tags in `<svelte:head>`, or they
+  fight the layout's.
 - Theme colors/radii/fonts (`--color-primary`, `--lily-surface`, etc.)
   live in the theme stylesheets. Don't add an application-specific theme
   file; `style.css`'s own `:root` block only aliases a handful of `--vix-*`
@@ -63,7 +65,12 @@ editor — see [index.md](index.md) for scope.
   `.site-hero` does) so a theme's rule for a same-named Lily hook can't
   leak in.
 - Demo GIFs in `static/assets/demos/` are verbatim copies of the main
-  repo's `docs/demos/*.gif`; re-copy them when those are re-rendered.
+  repo's `docs/demos/*.gif`, the theme screenshots in
+  `static/assets/demos/themes/` of its `docs/demos/themes/*.png`, and
+  `static/assets/social-card.png` of its `docs/demos/social-card.png`;
+  re-copy them when those are re-rendered (`scripts/render-theme-gallery.py`
+  makes the PNGs). The theme list in `src/routes/features/+page.svelte`
+  must match the main repo's `tui/themes/*.json`.
 - Keep feature copy in sync with the `vix` repo's own `index.md` — this site
   paraphrases it, not the other way round; when `vix`'s feature list changes,
   update `src/routes/features/+page.svelte` and the home page's card grid to

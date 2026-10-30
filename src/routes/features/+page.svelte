@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ThemeGallery from '#lib/ThemeGallery.svelte';
+
   const docs = 'https://vixide.github.io/vix/';
 
   const sections = [
@@ -9,6 +11,7 @@
     { id: 'data', label: 'Data and documents' },
     { id: 'org', label: 'Org mode' },
     { id: 'keys', label: 'Keys, themes and languages' },
+    { id: 'themes', label: 'Theme gallery' },
     { id: 'trust', label: 'Safety and control' },
     { id: 'tools', label: 'Other tools' },
     { id: 'desktop', label: 'Desktop GUIs' },
@@ -16,6 +19,33 @@
   ];
 
   // Every recording in the main repo's docs/demos/, copied verbatim.
+  // Every bundled theme (the main repo's tui/themes/*.json), the default
+  // Dark first, then by name; each slug names its screenshot,
+  // docs/demos/themes/<slug>.png, copied verbatim.
+  const themes = [
+    { slug: 'dark', name: 'Dark' },
+    { slug: 'catppuccin-mocha', name: 'Catppuccin Mocha' },
+    { slug: 'darker', name: 'Darker' },
+    { slug: 'darkest', name: 'Darkest' },
+    { slug: 'dracula', name: 'Dracula' },
+    { slug: 'gruvbox-dark', name: 'Gruvbox Dark' },
+    { slug: 'high-contrast', name: 'High Contrast' },
+    { slug: 'light', name: 'Light' },
+    { slug: 'lighter', name: 'Lighter' },
+    { slug: 'lightest', name: 'Lightest' },
+    { slug: 'monokai', name: 'Monokai' },
+    { slug: 'nord', name: 'Nord' },
+    { slug: 'one-dark', name: 'One Dark' },
+    { slug: 'phosphor-amber-monochrome', name: 'Phosphor Amber Monochrome' },
+    { slug: 'phosphor-green-monochrome', name: 'Phosphor Green Monochrome' },
+    { slug: 'phosphor-white-monochrome', name: 'Phosphor White Monochrome' },
+    { slug: 'safelight-red-monochrome', name: 'Safelight Red Monochrome' },
+    { slug: 'solarized-dark', name: 'Solarized Dark' },
+    { slug: 'solarized-light', name: 'Solarized Light' },
+    { slug: 'tokyo-night', name: 'Tokyo Night' },
+    { slug: 'turbo', name: 'Turbo' }
+  ];
+
   const demos = [
     { file: 'overview', title: 'Overview', text: 'Open a file, edit, save, find, and browse the keyboard shortcuts.' },
     { file: 'palette', title: 'Command palette', text: 'Fuzzy file search across the workspace, then command mode.' },
@@ -27,13 +57,6 @@
     { file: 'themes', title: 'Syntax highlighting', text: 'The default theme across a range of Rust constructs.' }
   ];
 </script>
-
-<svelte:head>
-  <meta
-    name="description"
-    content="Everything Vix does: editing, navigation, LSP, a DAP debugger, Git and Jujutsu, a database workbench, Org mode, ten keymaps, themes, scripting, desktop GUIs, and recorded demos."
-  />
-</svelte:head>
 
 <section class="section prose centered">
   <h1>Features</h1>
@@ -168,11 +191,27 @@
     <ul>
       <li><strong>Ten keymaps</strong> — Apple (the default), VS Code for macOS and Windows, Emacs, Vi, Spacemacs, IntelliJ for macOS and Windows, Eclipse, and Sublime Text, switchable live from <strong>View → Keymap</strong>. On macOS, <kbd>Command</kbd> works wherever <kbd>Control</kbd> does.</li>
       <li><strong>Discoverable</strong> — a menu bar for every action, a searchable overlay of every shortcut (<kbd>F1</kbd>), and full mouse support.</li>
-      <li><strong>Themes</strong> — 21 bundled, including high-contrast and Catppuccin; <code>theme = "auto"</code> follows your terminal's light or dark background; a theme editor; and your own JSON themes.</li>
+      <li><strong>Themes</strong> — 21 bundled, including high-contrast and Catppuccin (see the <a href="#themes">theme gallery</a>); <code>theme = "auto"</code> follows your terminal's light or dark background; a theme editor; and your own JSON themes.</li>
       <li><strong>Languages</strong> — the interface is translated into 15 languages, including Arabic, Bengali, Chinese, Hindi, Japanese, Russian, Welsh, Irish and Scottish Gaelic.</li>
       <li><strong>Focus</strong> — Zen mode hides the docks and status bar; a breadcrumb bar shows <code>file ▸ symbol</code>; the status bar shows language, line ending, encoding, selection size and position.</li>
     </ul>
   </div>
+</section>
+
+<section class="section" id="themes" aria-labelledby="themes-heading">
+  <header class="section-heading">
+    <p class="section-heading-eyebrow">21 bundled themes</p>
+    <h2 id="themes-heading">Theme gallery</h2>
+  </header>
+  <div class="prose centered">
+    <p>
+      Each picture is a real screenshot of Vix on the same demo workspace,
+      one per bundled theme. Switch themes live from
+      <strong>View → Theme</strong>, or set <code>theme</code> in
+      <code>config.toml</code> to a theme's name.
+    </p>
+  </div>
+  <ThemeGallery {themes} />
 </section>
 
 <section class="section" id="trust" aria-labelledby="trust-heading">
