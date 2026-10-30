@@ -7884,31 +7884,7 @@ impl App {
         match key.code {
             KeyCode::Char('y' | 'Y') => {
                 if let Some(c) = self.confirm.take() {
-                    let use_trash = self.explorer_delete_uses_trash();
-                    let mut removed = 0;
-                    let auth = crate::authority::current();
-                    for path in &c.paths {
-                        // Canonicalize before removing so buffer paths still match.
-                        let canon = auth.canonicalize(path).unwrap_or_else(|_| path.clone());
-                        let result = if use_trash {
-                            auth.trash(path)
-                        } else {
-                            auth.remove_path(path)
-                        };
-                        match result {
-                            Ok(()) => {
-                                self.close_buffers_under(&canon);
-                                removed += 1;
-                            }
-                            Err(e) => self.messages.error(
-                                t!("msg.delete_failed", path = path.display(), error = e)
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    self.explorer.clear_marks();
-                    self.explorer.rebuild();
-                    self.status = t!("status.deleted_n", n = removed).to_string();
+                    self.delete_confirmed(&c.paths);
                 }
             }
             KeyCode::Char('n' | 'N') | KeyCode::Esc => {
@@ -7917,6 +7893,34 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Delete (or trash) the confirmed explorer paths, closing their buffers.
+    fn delete_confirmed(&mut self, paths: &[PathBuf]) {
+        let use_trash = self.explorer_delete_uses_trash();
+        let mut removed = 0;
+        let auth = crate::authority::current();
+        for path in paths {
+            // Canonicalize before removing so buffer paths still match.
+            let canon = auth.canonicalize(path).unwrap_or_else(|_| path.clone());
+            let result = if use_trash {
+                auth.trash(path)
+            } else {
+                auth.remove_path(path)
+            };
+            match result {
+                Ok(()) => {
+                    self.close_buffers_under(&canon);
+                    removed += 1;
+                }
+                Err(e) => self
+                    .messages
+                    .error(t!("msg.delete_failed", path = path.display(), error = e).to_string()),
+            }
+        }
+        self.explorer.clear_marks();
+        self.explorer.rebuild();
+        self.status = t!("status.deleted_n", n = removed).to_string();
     }
 
     /// Move open buffers when their file (or containing directory) is moved.
