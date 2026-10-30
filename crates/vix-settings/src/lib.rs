@@ -79,6 +79,9 @@ pub struct Settings {
     /// Whole-subsystem on/off switches: LSP, modal engine, inline blame (T149).
     #[serde(flatten)]
     pub subsystems: SubsystemSettings,
+    /// Language-server completion behavior (T612).
+    #[serde(flatten)]
+    pub completion: CompletionSettings,
     /// Channels for surfacing state changes outside the visible screen —
     /// e.g. a terminal bell, for someone not looking at the screen when a
     /// background command finishes (T557).
@@ -545,6 +548,27 @@ impl Default for SubsystemSettings {
     }
 }
 
+/// Language-server completion behavior (T612). Its own group rather than a
+/// fourth bool in [`SubsystemSettings`], which holds whole-subsystem
+/// switches, not per-feature behavior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct CompletionSettings {
+    /// Request LSP completion automatically while typing an identifier or a
+    /// server trigger character (debounced), instead of only on `Ctrl+Space`.
+    /// On by default.
+    pub lsp_auto_complete: bool,
+}
+
+impl Default for CompletionSettings {
+    fn default() -> Self {
+        CompletionSettings {
+            lsp_auto_complete: true,
+        }
+    }
+}
+
 /// One configured language server (a `lsp_servers` entry).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LspServer {
@@ -574,6 +598,7 @@ impl Default for Settings {
             typing: TypingSettings::default(),
             startup: StartupSettings::default(),
             subsystems: SubsystemSettings::default(),
+            completion: CompletionSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
             smart_commit: "ask".to_string(),
@@ -889,7 +914,7 @@ fn cmd_double_quote(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        EditorBehaviorSettings, GutterSettings, PanelSettings, SaveSettings,
+        CompletionSettings, EditorBehaviorSettings, GutterSettings, PanelSettings, SaveSettings,
         SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings, ViewportSettings,
         cmd_double_quote, sh_single_quote,
     };
@@ -1161,6 +1186,10 @@ theme = "light"
         assert_eq!(
             s.subsystems.lsp_enabled,
             SubsystemSettings::default().lsp_enabled
+        );
+        assert_eq!(
+            s.completion.lsp_auto_complete,
+            CompletionSettings::default().lsp_auto_complete
         );
     }
 

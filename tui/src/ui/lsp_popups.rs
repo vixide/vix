@@ -35,24 +35,27 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
     let Some(popup) = app.completion.as_ref() else {
         return;
     };
-    if popup.items.is_empty() {
+    // The filtered view (T612) -- empty while an incomplete list's
+    // re-request is in flight, or nothing matches yet.
+    let shown: Vec<&crate::lsp_core::CompletionItem> = popup.visible_items().collect();
+    if shown.is_empty() {
         return;
     }
     let area = app.layout.editor;
     if area.width < 16 || area.height < 4 {
         return;
     }
-    let max_rows = 10.min(popup.items.len());
+    let max_rows = 10.min(shown.len());
     // Scroll so the highlighted row stays visible.
     let start = if popup.selected >= max_rows {
         popup.selected + 1 - max_rows
     } else {
         0
     };
-    let end = (start + max_rows).min(popup.items.len());
+    let end = (start + max_rows).min(shown.len());
 
     // Width from the widest visible label (+detail), capped to the area.
-    let widest = popup.items[start..end]
+    let widest = shown[start..end]
         .iter()
         .map(|it| {
             it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3)
@@ -81,7 +84,7 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
     };
 
     frame.render_widget(Clear, rect);
-    let rows: Vec<ListItem> = popup.items[start..end]
+    let rows: Vec<ListItem> = shown[start..end]
         .iter()
         .map(|it| {
             let mut spans = vec![Span::raw(it.label.clone())];

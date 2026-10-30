@@ -7097,7 +7097,7 @@ new action.
 
 ### Language intelligence & editing
 
-- [ ] **T612 — Completion filters as you type, auto-triggers, and applies
+- [x] **T612 — Completion filters as you type, auto-triggers, and applies
   `textEdit`/`additionalTextEdits`.**
   - In `tui/src/app/lsp_dap.rs:668-672`, any key other than
     Up/Down/Enter/Tab/Esc closes the popup.
@@ -7120,6 +7120,8 @@ new action.
 
   Tests: parsers; typing narrows the list; range and import edits apply; a
   trigger char opens the popup. **Medium.**
+  Done: new `tui/src/app/completion.rs` (popup filter/accept/auto-trigger),
+  `CompletionList`, `lsp_auto_complete` (default on, 100 ms debounce).
 - [ ] **T613 — LSP snippet completions.** `message.rs:78` advertises
   `"snippetSupport": false`, but `vix-snippets` already has a
   `$1`/`${1:x}`/`$0` tabstop engine. Fix: advertise true, keep

@@ -100,8 +100,10 @@ pub enum LspEvent {
         /// Target column, in the server's encoding units.
         character: u32,
     },
-    /// A completion response: candidates to offer.
-    Completion(Vec<vix_lsp_core::CompletionItem>),
+    /// A completion response: candidates to offer, and whether the list is
+    /// incomplete (T612). Sent even when empty, so a re-request for an
+    /// incomplete list that now matches nothing can close the popup.
+    Completion(vix_lsp_core::CompletionList),
     /// A references response: every (file, 0-based line, character) location.
     References(Vec<(PathBuf, u32, u32)>),
     /// A `prepareCallHierarchy` result: the symbol item to query calls for.
@@ -253,6 +255,9 @@ struct Server {
     /// all. `parse_semantic_tokens` resolves a response's numeric type
     /// indices against this.
     semantic_tokens_legend: Vec<String>,
+    /// This server's completion trigger characters, read at `initialize`
+    /// (T612, `capabilities.completionProvider.triggerCharacters`).
+    completion_triggers: Vec<String>,
     /// Whether this server's `initialize` response asked to be told about
     /// workspace-folder changes (T123f) — see
     /// `message::parse_workspace_folders_change_support`.
@@ -671,15 +676,45 @@ impl Lsp {
         );
     }
 
-    /// Request completion candidates at `(line, character)`.
+    /// Request completion candidates at `(line, character)` — an explicit
+    /// invocation (`triggerKind` 1).
     pub fn request_completion(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(
+        self.request_completion_with(path, line, character, None, false);
+    }
+
+    /// Request completion candidates at `(line, character)` with a
+    /// `CompletionContext` (T612): `trigger` is the trigger character just
+    /// typed, `for_incomplete` re-requests a list the server marked
+    /// `isIncomplete`. See `message::completion_params`.
+    pub fn request_completion_with(
+        &mut self,
+        path: &Path,
+        line: u32,
+        character: u32,
+        trigger: Option<char>,
+        for_incomplete: bool,
+    ) {
+        self.send_request(
             path,
             "textDocument/completion",
-            line,
-            character,
             Pending::Completion,
+            |uri| message::completion_params(uri, line, character, trigger, for_incomplete),
         );
+    }
+
+    /// Whether `ch` is a completion trigger character for any server
+    /// handling `path` (T612) — the union of every matching server's
+    /// `initialize`-time `triggerCharacters`.
+    #[must_use]
+    pub fn is_completion_trigger(&self, path: &Path, ch: char) -> bool {
+        self.enabled
+            && self.configs_for(path).iter().any(|c| {
+                self.servers.get(&c.language_id).is_some_and(|s| {
+                    s.completion_triggers
+                        .iter()
+                        .any(|t| t.chars().eq(std::iter::once(ch)))
+                })
+            })
     }
 
     /// Request the implementation location(s) at `(line, character)` (jumps to
@@ -1412,10 +1447,7 @@ impl Lsp {
                 }
             }
             Pending::Completion => {
-                let items = message::parse_completion(result);
-                if !items.is_empty() {
-                    events.push(LspEvent::Completion(items));
-                }
+                events.push(LspEvent::Completion(message::parse_completion(result)));
             }
             Pending::References => {
                 let locs: Vec<(PathBuf, u32, u32)> = message::parse_locations(result)
@@ -1562,6 +1594,7 @@ impl Lsp {
         if let Some(result) = msg.get("result") {
             server.encoding = message::parse_position_encoding(result);
             server.semantic_tokens_legend = message::parse_semantic_tokens_legend(result);
+            server.completion_triggers = message::parse_completion_trigger_characters(result);
             server.workspace_folders_change_support =
                 message::parse_workspace_folders_change_support(result);
         }
@@ -1646,6 +1679,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         docs: HashMap::new(),
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),
+        completion_triggers: Vec::new(),
         workspace_folders_change_support: false,
         ready: false,
         queue: Vec::new(),
