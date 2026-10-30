@@ -119,6 +119,21 @@ the server as `triggerKind` 2 with its `triggerCharacter`, an identifier
 character as `triggerKind` 1. Silent when no server handles the file.
 `Ctrl+Space` (`lsp.complete`) still requests immediately.
 
+**Snippet completions (T613).** The client advertises
+`completionItem.snippetSupport: true`, and each `CompletionItem` keeps its
+`insertTextFormat` (`insert_text_format`; `is_snippet` for format 2). An
+accepted snippet item goes through the same range replacement and
+`additionalTextEdits` as above, but inserts its body as parsed by the
+shared `vix-snippet-tool` tabstop engine in its LSP dialect
+(`parse_lsp`): the tabstop markers are removed, choices insert their first
+option, and variables resolve to their default text or to nothing. A
+tabstop session then starts over the inserted text — the same session the
+snippet picker uses — so `$1`'s placeholder is selected, Tab moves to `$2`,
+…, then `$0`, a further Tab (or Esc) ends it, and a nested placeholder
+typed over is skipped. Accepting a snippet item while a session is
+already running replaces that session. A plain-text item (format 1, or
+none) is inserted verbatim, `$` and all.
+
 **Multiple servers.** Each handling server's reply arrives as its own
 `LspEvent::Completion` and replaces the popup's list (unchanged from
 T123b); trigger characters are the union across every server handling the

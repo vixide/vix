@@ -7123,13 +7123,14 @@ new action.
   trigger char opens the popup. **Medium.**
   Done: new `tui/src/app/completion.rs` (popup filter/accept/auto-trigger),
   `CompletionList`, `lsp_auto_complete` (default on, 100 ms debounce).
-- [ ] **T613 — LSP snippet completions.** `message.rs:78` advertises
+- [x] **T613 — LSP snippet completions.** `message.rs:78` advertises
   `"snippetSupport": false`, but `vix-snippets` already has a
   `$1`/`${1:x}`/`$0` tabstop engine. Fix: advertise true, keep
   `insertTextFormat`, and on accept with format 2 hand the body to the
   `vix-snippets` parser to start a tabstop session. Tests: Tab moves to
   `$2` then `$0`; plain text is unchanged; nested placeholders work.
   Depends on T612's accept path. **Small.**
+  Done: `snippetSupport: true`, `CompletionItem.insert_text_format`, `vix_snippet_tool::parse_lsp` (nested/choices/variables) driving the picker's tabstop session from `accept_completion`.
 - [x] **T614 — Inline diagnostics, and the message at the cursor.**
   `refresh_diagnostic_marks` (`lsp_dap.rs:404-440`) sends only underline
   spans. `goto_diagnostic` (`:786`) moves without showing any text, and

@@ -106,18 +106,20 @@ impl CompletionPopup {
     }
 }
 
-/// Resolve every edit of accepting `item` to char spans in the buffer, then
-/// return them as LSP edits for [`apply_edits_to_text`] plus the cursor's
-/// char offset afterwards. The main edit replaces the item's `textEdit`
-/// range — its end stretched to the cursor when the user typed past it — or,
-/// with no range, the typed word `[anchor, cursor)`. Additional edits that
-/// overlap the main edit are dropped (the protocol forbids them).
+/// Resolve every edit of accepting `item` — inserting `insert` (its text, or
+/// a snippet's text with the tabstop markers removed) — to char spans in the
+/// buffer, then return them as LSP edits for [`apply_edits_to_text`] plus
+/// the cursor's char offset afterwards (just past `insert`). The main edit
+/// replaces the item's `textEdit` range — its end stretched to the cursor
+/// when the user typed past it — or, with no range, the typed word
+/// `[anchor, cursor)`. Additional edits that overlap the main edit are
+/// dropped (the protocol forbids them).
 fn completion_edits(
     code: &crate::editor_core::code::Code,
     enc: Encoding,
     item: &CompletionItem,
-    anchor: usize,
-    cursor: usize,
+    insert: &str,
+    (anchor, cursor): (usize, usize),
 ) -> (Vec<(Range, String)>, usize) {
     let (start, end) = match item.range {
         Some(r) => {
@@ -149,8 +151,8 @@ fn completion_edits(
             },
         }
     };
-    let mut edits = vec![(to_range(start, end), item.insert_text.clone())];
-    let mut caret = start + item.insert_text.chars().count();
+    let mut edits = vec![(to_range(start, end), insert.to_string())];
+    let mut caret = start + insert.chars().count();
     for (r, text) in &item.additional_edits {
         let a = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
         let b = lsp_pos_to_char(code, r.end.line, r.end.character, enc).max(a);
@@ -235,6 +237,9 @@ impl App {
 
     /// Accept the highlighted candidate: replace its range (or the typed
     /// word) with its text and apply its additional edits, as one undo step.
+    /// A snippet item (`insertTextFormat` 2, T613) inserts its body with the
+    /// tabstop markers removed and starts a tabstop session over it, so Tab
+    /// walks `$1`, `$2`, … then `$0`.
     pub(super) fn accept_completion(&mut self) {
         let Some(popup) = self.completion.take() else {
             return;
@@ -252,10 +257,21 @@ impl App {
         if tab.is_image() || tab.read_only {
             return;
         }
+        let snippet = item
+            .is_snippet()
+            .then(|| crate::snippet_tool::parse_lsp(&item.insert_text));
+        let insert = snippet
+            .as_ref()
+            .map_or(item.insert_text.as_str(), |p| &p.text);
         let text = tab.editor.get_content();
         let cursor = tab.editor.get_cursor();
-        let (edits, caret) =
-            completion_edits(tab.editor.code_ref(), enc, &item, popup.anchor, cursor);
+        let (edits, caret) = completion_edits(
+            tab.editor.code_ref(),
+            enc,
+            &item,
+            insert,
+            (popup.anchor, cursor),
+        );
         let new = apply_edits_to_text(&text, enc, &edits);
         if new != text {
             tab.editor.set_content(&new);
@@ -264,6 +280,12 @@ impl App {
         }
         tab.editor.set_cursor(caret.min(new.chars().count()));
         tab.editor.focus(&area);
+        if let Some(parsed) = snippet {
+            // The caret sits just past the inserted text, wherever additional
+            // edits moved it, so the snippet's text begins here.
+            let base = caret.saturating_sub(parsed.text.chars().count());
+            self.start_snippet_session(base, &parsed.stops);
+        }
     }
 
     /// Handle a key while the completion popup is open. Returns true if consumed.
@@ -630,6 +652,107 @@ mod tests {
         assert_eq!(app.completion_popup().unwrap().anchor, 0, "anchor kept");
         app.on_completion_list(CompletionList::new(Vec::new(), true));
         assert!(app.completion.is_none(), "an empty reply closes it");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The selected span `(start, end)`, or `(cursor, cursor)` with none.
+    fn sel(app: &mut App) -> (usize, usize) {
+        let ed = &mut app.editor.active_tab_mut().unwrap().editor;
+        match ed.get_selection() {
+            Some(s) if !s.is_empty() => s.sorted(),
+            _ => (ed.get_cursor(), ed.get_cursor()),
+        }
+    }
+
+    fn snippet(label: &str, body: &str) -> CompletionItem {
+        let mut item = CompletionItem::new(label, body);
+        item.insert_text_format = Some(2);
+        item
+    }
+
+    #[test]
+    fn a_snippet_item_starts_a_tabstop_session() {
+        let (mut app, dir) = app_with("snippet", "x = fo");
+        app.on_completion_list(CompletionList::new(
+            vec![snippet("foo", "foo(${1:a}, ${2:b})$0")],
+            false,
+        ));
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(text(&app), "x = foo(a, b)");
+        assert_eq!(sel(&mut app), (8, 9), "$1's placeholder is selected");
+        key(&mut app, KeyCode::Char('z'));
+        key(&mut app, KeyCode::Char('z'));
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(text(&app), "x = foo(zz, b)");
+        assert_eq!(
+            sel(&mut app),
+            (12, 13),
+            "Tab moves to $2, shifted by the edit"
+        );
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(sel(&mut app), (14, 14), "then to $0");
+        key(&mut app, KeyCode::Tab);
+        assert!(!app.snippet_active(), "Tab past $0 ends the session");
+        assert_eq!(text(&app), "x = foo(zz, b)", "and inserts nothing");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_plain_text_item_is_inserted_verbatim() {
+        let (mut app, dir) = app_with("plain", "co");
+        let mut item = CompletionItem::new("cost", "cost${1:x}$0");
+        item.insert_text_format = Some(1);
+        app.on_completion_list(CompletionList::new(vec![item], false));
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(text(&app), "cost${1:x}$0", "format 1 is not a snippet");
+        assert!(!app.snippet_active());
+        assert_eq!(sel(&mut app), (12, 12));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nested_placeholders_are_visited_unless_typed_over() {
+        let (mut app, dir) = app_with("nested", "");
+        let body = "f(${1:x, ${2:y}})$0";
+        app.on_completion_list(CompletionList::new(vec![snippet("f", body)], false));
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(text(&app), "f(x, y)");
+        assert_eq!(sel(&mut app), (2, 6), "$1 spans its nested $2");
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(
+            sel(&mut app),
+            (5, 6),
+            "kept $1, so Tab reaches the nested $2"
+        );
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(sel(&mut app), (7, 7));
+
+        // Typing over $1 removes the nested $2 with it: Tab goes to $0.
+        app.on_completion_list(CompletionList::new(vec![snippet("f", body)], false));
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(text(&app), "f(x, y)f(x, y)");
+        key(&mut app, KeyCode::Char('q'));
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(text(&app), "f(x, y)f(q)");
+        assert_eq!(sel(&mut app), (11, 11), "straight to $0");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_snippet_with_a_range_and_an_import_edit() {
+        let (mut app, dir) = app_with("snippet-range", "fn main() {\n    let m = Has");
+        let mut item = snippet("HashMap::new", "HashMap::with_capacity(${1:n})$0");
+        item.range = Some(range(1, 12, 15));
+        item.additional_edits = vec![(range(0, 0, 0), "use std::collections::HashMap;\n".into())];
+        app.on_completion_list(CompletionList::new(vec![item], false));
+        key(&mut app, KeyCode::Enter);
+        let want =
+            "use std::collections::HashMap;\nfn main() {\n    let m = HashMap::with_capacity(n)";
+        assert_eq!(text(&app), want);
+        let n = want.chars().count() - 2;
+        assert_eq!(sel(&mut app), (n, n + 1), "$1 lands after the import shift");
+        key(&mut app, KeyCode::Tab);
+        assert_eq!(sel(&mut app), (n + 2, n + 2), "then $0");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

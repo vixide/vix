@@ -678,11 +678,22 @@ impl App {
             return;
         }
         self.status = t!("status.snippet_inserted").to_string();
-        if parsed.stops.is_empty() {
+        self.start_snippet_session(base, &parsed.stops);
+    }
+
+    /// Arm a tabstop session over `stops` (offsets relative to `base`, the
+    /// char offset where the snippet's text now begins) and select the
+    /// first; nothing when there are no stops. Shared by the snippet picker,
+    /// prefix/postfix expansion, and LSP snippet completions (T613).
+    pub(super) fn start_snippet_session(
+        &mut self,
+        base: usize,
+        stops: &[crate::snippet_tool::Stop],
+    ) {
+        if stops.is_empty() {
             return;
         }
-        let stops: Vec<(usize, usize)> = parsed
-            .stops
+        let stops: Vec<(usize, usize)> = stops
             .iter()
             .map(|s| (base + s.start, base + s.end))
             .collect();
@@ -722,7 +733,19 @@ impl App {
             let Some(sess) = self.snippet_session.as_mut() else {
                 return;
             };
-            let cur_end = sess.stops[sess.index].1;
+            let (cur_start, cur_end) = sess.stops[sess.index];
+            // A later stop nested inside the current field (`${1:a ${2:b}}`)
+            // was typed over once the user edited that field: drop it.
+            if cursor != cur_end {
+                let current = sess.index;
+                let mut i = 0;
+                sess.stops.retain(|&(s, e)| {
+                    let nested = s >= cur_start && e <= cur_end && s < cur_end;
+                    let keep = i <= current || !nested;
+                    i += 1;
+                    keep
+                });
+            }
             // Shift every later stop by the net length change the user made at the
             // current field (cursor vs. the field's original end).
             for (s, e) in &mut sess.stops {

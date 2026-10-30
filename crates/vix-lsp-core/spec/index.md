@@ -15,7 +15,9 @@ synchronous and unit-testable with no IO.
 `message::parse_completion` returns a `CompletionList` (`items` +
 `is_incomplete`); each `CompletionItem` carries its `textEdit` range,
 `additionalTextEdits`, `filterText`, `sortText`, `kind`, and
-`commitCharacters` alongside the label/insert text/detail/resolve data.
+`commitCharacters` alongside the label/insert text/detail/resolve data,
+plus its `insertTextFormat` (T613; `CompletionItem::is_snippet` for format
+2, which `initialize_params` advertises via `snippetSupport: true`).
 `message::completion_params` builds a request with a `CompletionContext`
 (`triggerKind` 1 invoked, 2 trigger character, 3 re-trigger for an
 incomplete list) and `message::parse_completion_trigger_characters` reads
