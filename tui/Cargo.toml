@@ -543,6 +543,10 @@ name = "i18n_keys"
 path = "tests/i18n_keys.rs"
 
 [[test]]
+name = "keymaps_reference"
+path = "tests/keymaps_reference.rs"
+
+[[test]]
 name = "lsp_smoke"
 path = "tests/lsp_smoke.rs"
 
