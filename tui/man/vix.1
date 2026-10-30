@@ -4,7 +4,7 @@
 .SH NAME
 vix \- Vix: Simple Terminal Rust IDE
 .SH SYNOPSIS
-\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-\-plugin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Vix: Simple Terminal Rust IDE
 .SH OPTIONS
@@ -32,6 +32,9 @@ Bundle `config.toml`, `macros.toml`, `keybindings.toml`, the user dictionary, an
 .TP
 \fB\-\-import\-settings\fR \fI<PATH>\fR
 Restore a bundle written by `\-\-export\-settings` (or **Vix → Export Settings…**) from `PATH`, then exit without starting the editor — any file about to be overwritten is renamed to `<name>.bak` first. Also reachable from a running session via **Vix → Import Settings…**
+.TP
+\fB\-\-plugin\fR \fI<COMMAND>\fR\fI \fR\fI<ARG>\fR
+Manage Rhai plugins, then exit without starting the editor: `install <git\-url>[@rev]` clones a plugin into the scripts directory and pins its commit in `plugins.lock` (disabled until enabled in **Vix → Plugins…**); `list` shows them; `update [NAME]` moves one (or all) to the newest commit, disabling any whose code changed; `remove NAME` deletes one with its trust record. See `crates/vix\-script/spec/index.md`, "Plugins"
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

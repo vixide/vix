@@ -119,6 +119,7 @@ impl App {
             task_chooser,
             macro_chooser,
             script_chooser,
+            plugin_chooser,
             clipboard_chooser,
             workspace_chooser,
             diff_view,
@@ -352,6 +353,7 @@ impl App {
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(script_chooser, script_chooser_key);
+        panel!(plugin_chooser, plugin_chooser_key);
         panel!(clipboard_chooser, clipboard_key);
         panel!(workspace_chooser, workspace_chooser_key);
         panel!(diff_view, diff_view_key);

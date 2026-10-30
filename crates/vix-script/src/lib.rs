@@ -15,6 +15,7 @@
 
 mod discovery;
 mod engine;
+pub mod plugins;
 
 pub use discovery::{DiscoveredScript, discover};
 pub use engine::{
@@ -38,9 +39,21 @@ pub fn load_all(
     global_dir: Option<&std::path::Path>,
     project_dir: Option<&std::path::Path>,
 ) -> (Vec<LoadedScript>, Vec<LoadError>) {
+    load_discovered(runtime, discover(global_dir, project_dir))
+}
+
+/// Load each already-discovered script through `runtime` — [`load_all`]'s
+/// second half, for a host that adds scripts from another source first
+/// (enabled plugins, [`plugins::discover_enabled`]). Same skip-and-report
+/// rule as [`load_all`].
+#[must_use]
+pub fn load_discovered(
+    runtime: &Runtime,
+    scripts: Vec<DiscoveredScript>,
+) -> (Vec<LoadedScript>, Vec<LoadError>) {
     let mut loaded = Vec::new();
     let mut errors = Vec::new();
-    for found in discover(global_dir, project_dir) {
+    for found in scripts {
         match std::fs::read_to_string(&found.path) {
             Ok(source) => match runtime.load(&found.stem, &source) {
                 Ok(script) => loaded.push(script),

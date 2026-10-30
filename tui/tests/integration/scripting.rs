@@ -12,6 +12,112 @@
 
 use crate::integration::common::*;
 
+// ----- Rhai plugins (T637) --------------------------------------------------
+
+/// Vix → Plugins… lists an installed plugin; Enter enables it (its scripts
+/// load, namespaced `<plugin>/<file>`) and Enter again disables it, dropping
+/// the trust record from `plugins.lock`. The plugin is laid out by hand —
+/// the git side is covered by `crates/vix-script/tests/plugins.rs`.
+#[test]
+fn plugin_chooser_enables_and_disables_a_plugin() {
+    use vix_script::plugins::{LockEntry, Lockfile, PluginState};
+    let dir = unique_dir("plugin-chooser");
+    let scripts = dir.join("config/scripts");
+    let lock_path = dir.join("config/plugins.lock");
+    fs::create_dir_all(scripts.join("caseplug")).unwrap();
+    fs::write(
+        scripts.join("caseplug/up.rhai"),
+        r#"
+        register_command("up", "Plugin Up", "on_up");
+        fn on_up() { set_buffer_text("from plugin"); }
+        "#,
+    )
+    .unwrap();
+    Lockfile {
+        plugins: vec![LockEntry {
+            name: "caseplug".into(),
+            url: "file:///nowhere/caseplug.git".into(),
+            rev: None,
+            commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            trusted: None,
+        }],
+    }
+    .save(&lock_path)
+    .unwrap();
+
+    let mut app = app_at(&dir).with_plugin_paths(&scripts, &lock_path);
+    app.load_scripts();
+    app.run_action("script.run");
+    assert!(
+        app.script_chooser.is_none(),
+        "a disabled plugin loads nothing"
+    );
+
+    app.run_action("script.plugins");
+    let chooser = app.plugin_chooser.as_ref().expect("plugin chooser opens");
+    assert_eq!(chooser.rows.len(), 1);
+    assert_eq!(chooser.rows[0].name, "caseplug");
+    assert_eq!(chooser.rows[0].state, PluginState::Disabled);
+
+    app.on_key(keycode(KeyCode::Enter)); // enable
+    assert_eq!(
+        app.plugin_chooser.as_ref().unwrap().rows[0].state,
+        PluginState::Enabled
+    );
+    let lock = Lockfile::load(&lock_path).unwrap();
+    assert!(lock.get("caseplug").unwrap().trusted.is_some());
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.plugin_chooser.is_none());
+    app.run_action("script.run");
+    let commands = &app
+        .script_chooser
+        .as_ref()
+        .expect("plugin command loaded")
+        .commands;
+    assert_eq!(commands[0].0, "caseplug/up");
+    app.on_key(keycode(KeyCode::Esc));
+
+    app.run_action("script.plugins");
+    app.on_key(keycode(KeyCode::Enter)); // disable
+    let lock = Lockfile::load(&lock_path).unwrap();
+    assert_eq!(lock.get("caseplug").unwrap().trusted, None, "trust dropped");
+    app.on_key(keycode(KeyCode::Esc));
+    app.run_action("script.run");
+    assert!(
+        app.script_chooser.is_none(),
+        "disabled again: nothing loads"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn plugins_menu_item_lives_in_the_vix_menu() {
+    let vix = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.vix")
+        .expect("Vix menu");
+    assert!(vix.items.iter().any(|it| it.action == "script.plugins"));
+}
+
+/// `vix --plugin` with a bad command prints usage and fails; `list` on an
+/// empty lock succeeds.
+#[test]
+fn plugin_cli_usage_and_empty_list() {
+    let dir = unique_dir("plugin-cli");
+    let paths = vix_script::plugins::PluginPaths {
+        scripts_dir: dir.join("scripts"),
+        lock_path: dir.join("plugins.lock"),
+    };
+    let bad = vix::plugin_cli::run(&["frobnicate".to_string()], &paths);
+    assert!(!bad.ok);
+    let list = vix::plugin_cli::run(&["list".to_string()], &paths);
+    assert!(list.ok);
+    assert_eq!(list.lines.len(), 1);
+    let missing = vix::plugin_cli::run(&["remove".to_string(), "nope".to_string()], &paths);
+    assert!(!missing.ok);
+    fs::remove_dir_all(&dir).ok();
+}
+
 // ----- vix-script host wiring (improvement plan T103) ----------------------
 
 #[test]

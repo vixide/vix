@@ -7,9 +7,20 @@ license.workspace = true
 repository.workspace = true
 description = "Rhai-based user scripting: load, sandbox, and run scripts against the active buffer."
 
+[features]
+# Plugin install/update (T637): clone and fetch plugins with the user's `git`.
+# Off, the crate still reads `plugins.lock`, loads enabled plugins, and can
+# enable/disable/remove them; it just never starts a process. The App shell
+# turns this on only when both its `script` and `git` features are on.
+plugins = ["dep:vix-git", "vix-git/process"]
+
 [dependencies]
 jiff = { workspace = true }
 rhai = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+toml = { workspace = true }
+vix-git = { path = "../vix-git", version = "2.0.0", default-features = false, optional = true }
 vix-macros = { workspace = true }
 
 [lints]

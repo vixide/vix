@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Rhai plugin installer** (T637): `vix --plugin install <git-url>[@rev]`, `list`, `update [name]` and `remove <name>` install git repositories of `.rhai` scripts into `<config dir>/scripts/<name>/`, pinned by commit in `<config dir>/plugins.lock`. A new plugin is disabled until you enable it in **Vix → Plugins…**; an update that changes its code, or a local edit, disables it again; removing or disabling forgets the trust; and a plugin with a symlink pointing outside its directory is refused. Plugin scripts run in the same sandbox as any other script.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.

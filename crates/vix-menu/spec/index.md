@@ -51,6 +51,11 @@ Help**.
   (type the new key as text), and reset a user override to its built-in
   default (T204, `crates/vix-keybinding-editor-panel/spec/index.md`).
 - Settings — open `settings.toml` directly in the editor.
+- Export Settings… / Import Settings… — write or restore a settings bundle
+  (T555, `crates/vix-settings-bundle/spec/index.md`).
+- Plugins… (`script.plugins`) — list installed Rhai plugins and enable or
+  disable each (T637, `crates/vix-script/spec/index.md`, "Plugins");
+  hidden in a build without the `script` capability.
 - *separator*
 - Quit (`Ctrl+Q`) — quit Vix.
 

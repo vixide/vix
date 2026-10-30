@@ -175,6 +175,30 @@ pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         draw_list_chooser(frame, area, &t!("ui.scripts"), &hint, &labels, c.selected);
 }
 
+/// Vix → Plugins… (T637): one row per installed plugin — name, translated
+/// state, short commit.
+#[cfg(feature = "script")]
+pub(super) fn draw_plugin_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.plugin_chooser.as_ref() else {
+        return;
+    };
+    let labels: Vec<String> = c
+        .rows
+        .iter()
+        .map(|r| {
+            format!(
+                "{} — {} — {}",
+                r.name,
+                t!(r.state.i18n_key()),
+                r.commit.get(..12).unwrap_or(&r.commit)
+            )
+        })
+        .collect();
+    let hint = t!("ui.plugins_hint");
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.plugins"), &hint, &labels, c.selected);
+}
+
 pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(selected) = app.git_panel.as_ref().map(|p| p.selected) else {
         return;

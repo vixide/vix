@@ -664,6 +664,7 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.settings", "vix.settings", ""),
     Item::leaf("menu.item.vix.export_settings", "vix.export_settings", ""),
     Item::leaf("menu.item.vix.import_settings", "vix.import_settings", ""),
+    Item::leaf("menu.item.vix.plugins", "script.plugins", ""),
     SEP,
     Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),
 ];

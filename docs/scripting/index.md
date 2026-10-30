@@ -3,7 +3,8 @@
 Vix ships every command compiled in — there's no plugin marketplace. Rhai
 scripting is the escape hatch: drop a small [Rhai](https://rhai.rs/) `.rhai`
 file on disk and get a new command palette entry, a new key binding, or a
-one-off buffer transform, without a rebuild.
+one-off buffer transform, without a rebuild. Scripts someone else publishes
+in a git repository can be installed as a **plugin** (§ Plugins below).
 
 ## Where scripts live
 
@@ -25,6 +26,43 @@ so a script you deleted or renamed doesn't leave anything stale behind.
 A script that fails to parse, or whose top level raises an error, is skipped
 — its file name and the error go to the message drawer, and every *other*
 script still loads normally. One broken script never takes scripting down.
+
+## Plugins
+
+A plugin is a git repository whose top level holds `.rhai` scripts.
+Manage plugins from the command line; each command prints a short report
+and exits without opening the editor:
+
+```sh
+vix --plugin install https://example.com/me/vix-case.git      # default branch
+vix --plugin install https://example.com/me/vix-case.git@v1   # a branch, tag or commit
+vix --plugin list
+vix --plugin update            # every plugin; or: vix --plugin update vix-case
+vix --plugin remove vix-case
+```
+
+`install` clones into `<config dir>/scripts/<name>/` (the name is the URL's
+last segment without `.git`) and pins the exact commit in
+`<config dir>/plugins.lock`. It uses your own `git`, so your credentials
+and SSH agent work as usual.
+
+**A new plugin is disabled.** Open **Vix → Plugins…**, highlight it, and
+press Enter to enable it (Enter again disables it). Enabling trusts the
+plugin's files exactly as they are at that moment:
+
+- If `update` brings in changed code, the plugin is disabled again until
+  you re-enable it, so you get the chance to look at what changed. An
+  update with no file changes keeps it enabled.
+- If you edit a plugin's files yourself, it shows as *changed since
+  enabled* and stops loading until you enable it again.
+- Disabling or removing a plugin forgets the trust; reinstalling starts
+  disabled.
+- A plugin containing a symlink that points outside its own directory is
+  refused at install, and an update that adds one is undone.
+
+Plugin scripts run in exactly the same sandbox as every other script (see
+§ What scripts can't do) — installing a plugin grants nothing extra. Their
+commands appear in the palette as `script:<plugin>/<file>:<command>`.
 
 ## Writing a script
 

@@ -483,6 +483,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `save` | Save | Catalog |
 | `save_all` | Save All | Catalog |
 | `save_as` | Save As… | Catalog |
+| `script.plugins` | Plugins… | Menu |
 | `script.reload` | Reload | Menu |
 | `script.run` | Run… | Menu |
 | `scroll_down` | Scroll Down | Catalog |
@@ -679,4 +680,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**672 actions.**
+**673 actions.**

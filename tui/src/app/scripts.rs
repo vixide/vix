@@ -15,7 +15,6 @@ use super::{
     script_current_line_text,
 };
 use crate::palette::{self, Action as PAction, Entry};
-use crate::settings::Settings;
 
 impl App {
     /// How many commands every loaded script registered, in total.
@@ -49,18 +48,33 @@ impl App {
     /// (Re)load every `.rhai` script from the global scripts directory
     /// (`Settings::scripts_dir()`) — always trusted, the user put them there
     /// directly — and, only if this workspace's project scripts are trusted
-    /// (T132), this workspace's `.vix/scripts/`. Replaces `self.scripts`
+    /// (T132), this workspace's `.vix/scripts/`, plus every enabled plugin
+    /// (T637, `<scripts dir>/<name>/*.rhai`). Replaces `self.scripts`
     /// wholesale — a script that was deleted or renamed since the last load
     /// leaves no stale command behind. Called once at startup (`main.rs`,
     /// after `App::new`) and again by `script.reload`. Any script that
     /// fails to read or load is skipped; its error goes to the message
     /// drawer, every other script still loads.
     pub fn load_scripts(&mut self) {
-        let global = Settings::scripts_dir();
+        let paths = self.plugin_paths();
+        let global = paths.as_ref().map(|p| p.scripts_dir.clone());
         let project = self.root.join(".vix").join("scripts");
         let project = self.project_scripts_trusted().then_some(project.as_path());
-        let (scripts, errors) =
-            vix_script::load_all(&self.script_runtime, global.as_deref(), project);
+        let mut found = vix_script::discover(global.as_deref(), project);
+        // Enabled plugins (T637): stems `<plugin>/<file>`, so never shadowed.
+        if let Some(paths) = &paths {
+            match vix_script::plugins::discover_enabled(paths) {
+                Ok(plugin_scripts) => found.extend(plugin_scripts),
+                Err(e) => self.messages.error(
+                    t!(
+                        "msg.plugin_failed",
+                        error = crate::plugin_cli::error_text(&e)
+                    )
+                    .to_string(),
+                ),
+            }
+        }
+        let (scripts, errors) = vix_script::load_discovered(&self.script_runtime, found);
         self.scripts = scripts;
         for err in errors {
             self.messages.error(
@@ -72,6 +86,143 @@ impl App {
                 .to_string(),
             );
         }
+    }
+
+    /// Use `scripts_dir` (global scripts and installed plugins) and
+    /// `lock_path` (`plugins.lock`) instead of the user's config directory —
+    /// for tests and embedders, the same shape as [`App::with_session_path`].
+    #[must_use]
+    pub fn with_plugin_paths(
+        mut self,
+        scripts_dir: impl Into<std::path::PathBuf>,
+        lock_path: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        self.plugin_paths = Some(vix_script::plugins::PluginPaths {
+            scripts_dir: scripts_dir.into(),
+            lock_path: lock_path.into(),
+        });
+        self
+    }
+
+    /// Where global scripts, plugins and `plugins.lock` live: the override
+    /// from [`App::with_plugin_paths`], else the user's config directory.
+    fn plugin_paths(&self) -> Option<vix_script::plugins::PluginPaths> {
+        self.plugin_paths
+            .clone()
+            .or_else(crate::plugin_cli::default_paths)
+    }
+
+    /// `script.plugins` (Vix → Plugins…, T637): list every installed plugin
+    /// with its state, or say there are none.
+    pub(super) fn open_plugin_chooser(&mut self) {
+        let Some(paths) = self.plugin_paths() else {
+            self.status = t!("status.no_plugins").to_string();
+            return;
+        };
+        let lock = match vix_script::plugins::Lockfile::load(&paths.lock_path) {
+            Ok(lock) => lock,
+            Err(e) => {
+                self.messages.error(
+                    t!(
+                        "msg.plugin_failed",
+                        error = crate::plugin_cli::error_text(&e)
+                    )
+                    .to_string(),
+                );
+                return;
+            }
+        };
+        if lock.plugins.is_empty() {
+            self.status = t!("status.no_plugins").to_string();
+            return;
+        }
+        let rows = lock
+            .plugins
+            .iter()
+            .map(|e| super::PluginRow {
+                name: e.name.clone(),
+                commit: e.commit.clone(),
+                state: vix_script::plugins::state(&paths, e),
+            })
+            .collect();
+        let selected = self.plugin_chooser.as_ref().map_or(0, |c| c.selected);
+        self.plugin_chooser = Some(super::PluginChooser { rows, selected });
+        if let Some(c) = self.plugin_chooser.as_mut() {
+            c.selected = c.selected.min(c.rows.len() - 1);
+        }
+    }
+
+    pub(super) fn plugin_chooser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.plugin_chooser.as_mut() {
+                    let n = c.rows.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.plugin_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.rows.len();
+                }
+            }
+            KeyCode::Enter => self.toggle_selected_plugin(),
+            KeyCode::Esc => self.plugin_chooser = None,
+            _ => {}
+        }
+    }
+
+    pub(super) fn plugin_chooser_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.plugin_chooser.as_mut()
+            && idx < c.rows.len()
+        {
+            c.selected = idx;
+            self.toggle_selected_plugin();
+        }
+    }
+
+    /// Enable the highlighted plugin (trusting its files as they are now) or
+    /// disable it (dropping its trust record), then reload scripts and
+    /// refresh the chooser. A missing plugin can't be enabled.
+    fn toggle_selected_plugin(&mut self) {
+        use vix_script::plugins::PluginState;
+        let Some(paths) = self.plugin_paths() else {
+            return;
+        };
+        let Some((name, state)) = self
+            .plugin_chooser
+            .as_ref()
+            .and_then(|c| c.rows.get(c.selected))
+            .map(|r| (r.name.clone(), r.state))
+        else {
+            return;
+        };
+        let result = match state {
+            PluginState::Enabled => vix_script::plugins::disable(&paths, &name)
+                .map(|()| t!("status.plugin_disabled", name = name.clone())),
+            PluginState::Disabled | PluginState::Changed => {
+                vix_script::plugins::enable(&paths, &name)
+                    .map(|()| t!("status.plugin_enabled", name = name.clone()))
+            }
+            PluginState::Missing => {
+                Err(vix_script::plugins::PluginError::NotInstalled(name.clone()))
+            }
+        };
+        match result {
+            Ok(status) => {
+                self.load_scripts();
+                self.resolve_key_overrides();
+                self.status = status.to_string();
+            }
+            Err(e) => self.messages.error(
+                t!(
+                    "msg.plugin_failed",
+                    error = crate::plugin_cli::error_text(&e)
+                )
+                .to_string(),
+            ),
+        }
+        self.open_plugin_chooser();
     }
 
     /// `script.reload` (Tools → Scripts → Reload): re-run discovery,

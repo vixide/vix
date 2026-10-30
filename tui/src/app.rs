@@ -988,6 +988,33 @@ pub struct ScriptChooser {
     pub selected: usize,
 }
 
+/// Stand-in for the plugin chooser in a build without the `script` feature;
+/// never constructed (`App::plugin_chooser` stays `None`).
+#[cfg(not(feature = "script"))]
+pub enum PluginChooser {}
+
+/// One row of the plugin chooser: an installed plugin and whether it loads.
+#[cfg(feature = "script")]
+pub struct PluginRow {
+    /// The plugin's name (its directory under the scripts directory).
+    pub name: String,
+    /// Its pinned commit.
+    pub commit: String,
+    /// Whether it loads now.
+    pub state: vix_script::plugins::PluginState,
+}
+
+/// The plugin chooser (Vix → Plugins…, `script.plugins`, T637): every
+/// installed plugin with its state. Enter enables a disabled (or changed)
+/// plugin and disables an enabled one, then reloads scripts.
+#[cfg(feature = "script")]
+pub struct PluginChooser {
+    /// One row per `plugins.lock` entry, in lock order.
+    pub rows: Vec<PluginRow>,
+    /// Index of the highlighted row.
+    pub selected: usize,
+}
+
 /// A script's `prompt(message, on_submit)` request awaiting an answer: which
 /// loaded script (`App::scripts` index) and which of its `fn`s to re-invoke
 /// with the entered text once `App::prompt` (`PromptKind::Script`) is
@@ -1812,6 +1839,14 @@ pub struct App {
     key_overrides: std::collections::HashMap<String, String>,
     /// Script-command chooser overlay (Tools → Scripts → Run…), when open.
     pub(crate) script_chooser: Option<ScriptChooser>,
+    /// Plugin chooser overlay (Vix → Plugins…, T637), when open.
+    pub(crate) plugin_chooser: Option<PluginChooser>,
+    /// Where plugins and `plugins.lock` live. `None` — the normal case —
+    /// uses the user's config directory; set via [`App::with_plugin_paths`]
+    /// to keep a run out of it (tests, embedders). When set, its
+    /// `scripts_dir` is also the global scripts directory.
+    #[cfg(feature = "script")]
+    pub(crate) plugin_paths: Option<vix_script::plugins::PluginPaths>,
     /// A script's `prompt(...)` request awaiting an answer, while
     /// `App::prompt` (`PromptKind::Script`) is open.
     #[cfg(feature = "script")]
@@ -2394,6 +2429,9 @@ impl App {
             scripts: Vec::new(),
             key_overrides: std::collections::HashMap::new(),
             script_chooser: None,
+            plugin_chooser: None,
+            #[cfg(feature = "script")]
+            plugin_paths: None,
             #[cfg(feature = "script")]
             pending_script_prompt: None,
             clipboard_ring: Vec::new(),
@@ -2826,6 +2864,8 @@ impl App {
             "script.run" => self.open_script_chooser(),
             #[cfg(feature = "script")]
             "script.reload" => self.reload_scripts(),
+            #[cfg(feature = "script")]
+            "script.plugins" => self.open_plugin_chooser(),
             "keybindings.reload" => self.reload_key_overrides(),
             "keybindings.editor" => self.open_keybinding_editor(),
             "tools.test" => self.run_tests(),
@@ -8317,6 +8357,7 @@ impl App {
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
         panel!(script_chooser, script_chooser_mouse);
+        panel!(plugin_chooser, plugin_chooser_mouse);
         panel!(clipboard_chooser, clipboard_mouse);
         panel!(workspace_chooser, workspace_chooser_mouse);
         panel!(outline, outline_mouse);

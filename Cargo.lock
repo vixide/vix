@@ -5608,6 +5608,10 @@ version = "2.0.0"
 dependencies = [
  "jiff",
  "rhai",
+ "serde",
+ "sha2 0.11.1",
+ "toml 1.1.8+spec-1.1.0",
+ "vix-git",
  "vix-macros",
 ]
 

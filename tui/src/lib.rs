@@ -48,6 +48,7 @@ vix_i18n::surface!();
 pub mod app;
 pub mod capability;
 pub mod cli;
+pub mod plugin_cli;
 pub use vix_case as case;
 pub use vix_clipboard as clipboard;
 pub use vix_editor::editor;

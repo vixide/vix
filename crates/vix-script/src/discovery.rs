@@ -47,7 +47,7 @@ pub fn discover(global_dir: Option<&Path>, project_dir: Option<&Path>) -> Vec<Di
 
 /// Add every `*.rhai` file directly inside `dir` (not its subdirectories) to
 /// `by_stem`, keyed by file stem.
-fn collect_into(dir: &Path, by_stem: &mut BTreeMap<String, PathBuf>) {
+pub(crate) fn collect_into(dir: &Path, by_stem: &mut BTreeMap<String, PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return; // missing/unreadable directory: nothing to contribute
     };

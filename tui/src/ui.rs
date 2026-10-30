@@ -34,14 +34,14 @@ mod tool_panels;
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
-#[cfg(feature = "script")]
-use choosers::draw_script_chooser;
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
     draw_diff_view, draw_git_log, draw_git_panel, draw_location_chooser, draw_macro_chooser,
     draw_recent_chooser, draw_refile_chooser, draw_spell_suggest, draw_task_chooser,
     draw_workspace_chooser,
 };
+#[cfg(feature = "script")]
+use choosers::{draw_plugin_chooser, draw_script_chooser};
 use dialogs::{
     draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
     draw_structural_replace, draw_unsaved, draw_wgrep_confirm,
@@ -589,6 +589,10 @@ fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     #[cfg(feature = "script")]
     if app.script_chooser.is_some() {
         draw_script_chooser(app, frame, area);
+    }
+    #[cfg(feature = "script")]
+    if app.plugin_chooser.is_some() {
+        draw_plugin_chooser(app, frame, area);
     }
     if app.diff_view.is_some() {
         draw_diff_view(app, frame, area);
