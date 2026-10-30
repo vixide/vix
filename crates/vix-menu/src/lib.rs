@@ -662,6 +662,7 @@ const VIX: &[Item] = &[
     SEP,
     Item::leaf("menu.item.vix.keybindings", "keybindings.editor", ""),
     Item::leaf("menu.item.vix.settings", "vix.settings", ""),
+    Item::leaf("menu.item.vix.reload_settings", "vix.reload_settings", ""),
     Item::leaf("menu.item.vix.export_settings", "vix.export_settings", ""),
     Item::leaf("menu.item.vix.import_settings", "vix.import_settings", ""),
     SEP,

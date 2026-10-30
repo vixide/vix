@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Live settings reload** (T626): saving `config.toml` (opened with **Vix → Settings…**) applies it at once, with no restart: the theme, keymap, language and time zone switch and the menus are rebuilt. A file that doesn't parse keeps the current settings and reports the error instead of falling back to defaults. **Vix → Reload Settings** (`vix.reload_settings`) re-reads the file on demand.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.

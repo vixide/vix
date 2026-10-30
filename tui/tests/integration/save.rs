@@ -1,4 +1,5 @@
-//! T654: Save All and the Save As overwrite / dangling-symlink guards.
+//! T654: Save All and the Save As overwrite / dangling-symlink guards;
+//! T626: saving the settings file reloads it live.
 #![allow(
     clippy::wildcard_imports,
     reason = "every test needs a handful of the shared helpers in common.rs"
@@ -142,5 +143,93 @@ fn save_as_refuses_a_dangling_symlink_target() {
         !dir.join("missing.txt").exists(),
         "nothing written through it"
     );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// An app whose settings file is `config` inside a temp dir (never the
+/// user's real `config.toml`), with that file opened in the active tab.
+fn app_editing_config(dir: &Path, config: &Path) -> App {
+    Settings::default().save_to(config).unwrap();
+    let mut app = app_at(dir).with_settings_path(config);
+    app.editor.open(config, false).unwrap();
+    app
+}
+
+/// The serialized text of default settings with `keymap` set to `id`.
+fn config_text_with_keymap(dir: &Path, id: &str) -> String {
+    let scratch = dir.join("scratch.toml");
+    let mut settings = Settings::default();
+    settings.keymap = id.to_string();
+    settings.save_to(&scratch).unwrap();
+    fs::read_to_string(&scratch).unwrap()
+}
+
+#[test]
+fn saving_the_settings_file_applies_a_changed_keymap_live() {
+    // T626: no restart needed after editing config.toml.
+    let dir = unique_dir("settings-reload");
+    let config = dir.join("config.toml");
+    let mut app = app_editing_config(&dir, &config);
+    assert_eq!(app.settings.keymap, "apple");
+    let text = config_text_with_keymap(&dir, "sublime");
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor.set_content(&text);
+    tab.dirty = true;
+
+    app.run_action("file.save");
+
+    assert_eq!(app.settings.keymap, "sublime", "the saved keymap is live");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn saving_a_broken_settings_file_keeps_the_current_settings() {
+    let dir = unique_dir("settings-reload-bad");
+    let config = dir.join("config.toml");
+    let mut app = app_editing_config(&dir, &config);
+    app.settings.keymap = "eclipse".to_string();
+    let before = app.messages.items.len();
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor.set_content("keymap = [unclosed\n");
+    tab.dirty = true;
+
+    app.run_action("file.save");
+
+    assert_eq!(
+        app.settings.keymap, "eclipse",
+        "a parse error keeps the in-memory settings, not the defaults"
+    );
+    assert!(app.messages.items.len() > before, "the failure is reported");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn reload_settings_action_rereads_the_file_without_a_save() {
+    let dir = unique_dir("settings-reload-action");
+    let config = dir.join("config.toml");
+    let mut app = app_editing_config(&dir, &config);
+    let text = config_text_with_keymap(&dir, "eclipse");
+    fs::write(&config, text).unwrap();
+
+    app.run_action("vix.reload_settings");
+
+    assert_eq!(app.settings.keymap, "eclipse");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn saving_some_other_toml_file_does_not_reload_settings() {
+    let dir = unique_dir("settings-reload-other");
+    let config = dir.join("config.toml");
+    let mut app = app_editing_config(&dir, &config);
+    let other = dir.join("other.toml");
+    fs::write(&other, config_text_with_keymap(&dir, "sublime")).unwrap();
+    app.editor.open(&other, false).unwrap();
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.dirty = true;
+
+    app.run_action("file.save");
+
+    assert_eq!(app.settings.keymap, "apple");
     fs::remove_dir_all(&dir).ok();
 }

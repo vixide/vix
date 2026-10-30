@@ -2962,6 +2962,7 @@ impl App {
                 self.welcome = Some(WelcomePanel::open(crate::doctor::format_report(&checks)));
             }
             "vix.settings" => self.open_settings_file(),
+            "vix.reload_settings" => self.reload_settings_from_disk(),
             "vix.export_settings" => self.open_export_settings_prompt(),
             "vix.import_settings" => self.open_import_settings_prompt(),
             "vix.about" => {
@@ -3820,6 +3821,13 @@ impl App {
         }
         if !self.write_active_to_disk() {
             return;
+        }
+        // T626: saving the settings file applies it live.
+        if self
+            .active_path()
+            .is_some_and(|p| self.is_settings_file(&p))
+        {
+            self.reload_settings_from_disk();
         }
         // Format on save: re-format via the language server, then re-save once the
         // edits land (see `apply_lsp_edits`). The plain save above already wrote
