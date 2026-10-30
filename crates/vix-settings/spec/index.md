@@ -208,9 +208,9 @@ re-reads it with `Settings::try_load_from`. **Vix → Reload Settings**
   Apple with the same error as at startup, and a changed keymap resets
   per-keymap modal state), the UI locale (an unknown code is ignored), the
   time zone, and the clipboard provider (T625); then it rebuilds the
-  menus (the View → Theme list is re-scanned, so a newly added custom theme appears). Each piece is
-  re-applied only when its setting changed, because theme and locale are
-  process-global.
+  menus (the View → Theme list is re-scanned, so a newly added custom theme
+  appears). Each piece is re-applied only when its setting changed, because
+  theme, locale and clipboard provider are process-global.
 
 Most other settings are read from `App::settings` at the point of use, so they
 take effect immediately too. The editor display flags copied into each tab at
