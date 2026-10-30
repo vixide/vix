@@ -17,11 +17,18 @@
 //! - [`output`] — the `Output` model and MIME selection.
 //! - [`ansi`] — ANSI escape stripping for tracebacks.
 //! - [`cell`] — `# %%` code cells in a plain source file.
-//! - [`org`] — the Org `#+RESULTS:` formatter (insert, replace, clear).
+//! - [`org`] — the Org `#+RESULTS:` formatter (insert, replace, append,
+//!   clear).
+//! - [`babel`] — the Org header arguments a run honors (`:results`,
+//!   `:file`, `:eval`) and the result text of a run's outputs.
+//! - [`image`] — base64 `image/png` and `image/jpeg` decoding with size
+//!   caps checked before any pixel is decoded.
 
 pub mod ansi;
+pub mod babel;
 pub mod cell;
 pub mod connection;
+pub mod image;
 pub mod kernelspec;
 pub mod message;
 pub mod org;

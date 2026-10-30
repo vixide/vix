@@ -1,6 +1,7 @@
-//! The `jupyter` capability (T734c/T734d, `spec/jupyter`): Jupyter kernels
+//! The `jupyter` capability (T734c–T734g, `spec/jupyter`): Jupyter kernels
 //! started from their kernelspecs, code sent to them from the editor, and
-//! their output streamed into the bottom dock.
+//! their output streamed into the bottom dock, an Org block's `#+RESULTS:`
+//! or an image tab.
 //!
 //! - **Kernels.** One per language per workspace, held here as
 //!   [`vix_jupyter::KernelHandle`]s. A kernel starts only on an explicit
@@ -15,19 +16,28 @@
 //!   text with ANSI codes removed, under a `[*] <kernel>` header, followed by
 //!   a `[n] <kernel>: done/failed` line when the reply arrives. The last
 //!   output's first line also shows as an end-of-line hint after the code.
-//!   Images are a placeholder line for now (T734g).
-//! - **Trust.** An Org block is confirmed before its first run unless the
-//!   workspace is trusted (the persisted T132 decision; T734f adds the
-//!   `jupyter_confirm_evaluate` setting). A selection, cell or line is
-//!   something the user sends on purpose and is never prompted.
+//!   An image opens in an image tab (T734g, [`results`]).
+//! - **Org babel** (T734e). An Org `src` block's run (also `C-c C-c` in
+//!   the block) writes its `#+RESULTS:` when the reply arrives, following
+//!   the block's `:results`, `:file` and `:eval` header arguments.
+//! - **Trust** (T734f). An Org block asks before it runs as the
+//!   `jupyter_confirm_evaluate` setting says (by default: its first run in a
+//!   session, unless the workspace is trusted; always for a file outside
+//!   the workspace), and the answer "always in this workspace" is
+//!   persisted. Kernelspecs inside the workspace are used only when it is
+//!   trusted. A selection, cell or line is something the user sends on
+//!   purpose and is never prompted.
+
+mod results;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent};
 use vix_jupyter::core::ansi::strip_ansi;
+use vix_jupyter::core::babel::{self, Eval, Handling, Header};
 use vix_jupyter::core::cell;
-use vix_jupyter::core::kernelspec::normalize_language;
+use vix_jupyter::core::kernelspec::{self, normalize_language};
 use vix_jupyter::core::message::ReplyStatus;
 use vix_jupyter::core::{ConnectionInfo, KernelSpec, Output, Payload};
 use vix_jupyter::{DeathReason, KernelEvent, KernelHandle, KernelState, LaunchOptions, RequestId};
@@ -41,6 +51,10 @@ const HINT_CHARS: usize = 60;
 const CONFIRM_CODE_LINES: usize = 3;
 /// How many characters of the code the dock header quotes.
 const HEADER_CODE_CHARS: usize = 60;
+/// The most output bytes an Org run keeps for its `#+RESULTS:` (a hostile
+/// or runaway kernel cannot grow memory without bound); later outputs still
+/// reach the dock, which is capped on its own.
+const MAX_ORG_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
 
 /// Every running kernel, and what the App needs to route their output.
 #[derive(Default)]
@@ -58,6 +72,12 @@ pub(crate) struct State {
     approved: HashSet<(Option<PathBuf>, String)>,
     /// The Org block run waiting for the trust confirmation.
     pending_block: Option<Run>,
+    /// Whether that confirmation offers "always in this workspace".
+    pending_always: bool,
+    /// Where images opened in a tab are written (T734g), made on first
+    /// use and removed with the App.
+    #[cfg(feature = "image")]
+    images: Option<vix_jupyter::PrivateDir>,
 }
 
 /// The kernel picker's rows, and the run waiting for the chosen kernel.
@@ -84,8 +104,24 @@ pub(crate) struct Run {
     hint_line: usize,
     /// Run and Advance: the line to move the cursor to.
     advance_to: Option<usize>,
-    /// Whether the code is an Org `src` block (trust-gated).
-    org_block: bool,
+    /// The Org `src` block the code is (trust-gated; writes `#+RESULTS:`).
+    org: Option<OrgRun>,
+}
+
+/// An Org `src` block run: where the block starts and its header arguments.
+#[derive(Debug, Clone)]
+pub(crate) struct OrgRun {
+    /// The `#+begin_src` line (0-based) when the run was asked for.
+    begin: usize,
+    /// Its header arguments.
+    header: Header,
+}
+
+impl OrgRun {
+    /// Whether the run writes `#+RESULTS:` (anything but `:results silent`).
+    fn writes(&self) -> bool {
+        self.header.handling != Handling::Silent
+    }
 }
 
 /// One running kernel.
@@ -104,7 +140,7 @@ struct Kernel {
     runs: HashMap<RequestId, InFlight>,
 }
 
-/// A request in flight: where its hint goes, and the hint so far.
+/// A request in flight: where its hint or results go, and what came back.
 struct InFlight {
     /// The buffer's file, if any.
     path: Option<PathBuf>,
@@ -114,6 +150,14 @@ struct InFlight {
     line: usize,
     /// The last output's first line.
     hint: Option<String>,
+    /// The code sent (to find an Org block again when the reply arrives).
+    code: String,
+    /// The Org block, when the run is one.
+    org: Option<OrgRun>,
+    /// The outputs so far, kept only for an Org run that writes results.
+    outputs: Vec<Output>,
+    /// The bytes of text and data in `outputs`.
+    kept: usize,
 }
 
 /// Kernel controls that act on the current kernel.
@@ -135,8 +179,8 @@ struct Target {
     language: String,
     /// The last line of the code (or the `#+end_src` line).
     last: usize,
-    /// Whether it is an Org `src` block.
-    org_block: bool,
+    /// The Org `src` block it is, if any.
+    org: Option<OrgRun>,
 }
 
 impl App {
@@ -261,14 +305,9 @@ impl App {
             return false;
         }
         match key.code {
-            KeyCode::Char('y' | 'Y') => {
-                self.confirm = None;
-                if let Some(run) = self.jupyter.pending_block.take() {
-                    self.jupyter
-                        .approved
-                        .insert((run.path.clone(), run.code.clone()));
-                    self.jupyter_dispatch(run);
-                }
+            KeyCode::Char('y' | 'Y') => self.jupyter_confirmed(false),
+            KeyCode::Char('a' | 'A') if self.jupyter.pending_always => {
+                self.jupyter_confirmed(true);
             }
             KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 self.confirm = None;
@@ -276,6 +315,24 @@ impl App {
                 self.status = t!("status.jupyter_run_cancelled").to_string();
             }
             _ => {}
+        }
+        true
+    }
+
+    /// Org `C-c C-c` (T734e): in an Org `src` block, evaluate the block
+    /// (even with a selection) and return `true`; elsewhere `false`, so
+    /// `C-c C-c` does what it does outside a block.
+    pub(super) fn jupyter_org_ctrl_c(&mut self) -> bool {
+        let Some(target) = self.jupyter_block_target() else {
+            return false;
+        };
+        if self.jupyter_remote_refused() {
+            return true;
+        }
+        if target.code.trim().is_empty() {
+            self.status = t!("status.jupyter_nothing_to_run").to_string();
+        } else {
+            self.jupyter_run_target(target, false);
         }
         true
     }
@@ -323,40 +380,135 @@ impl App {
             self.status = t!("status.jupyter_nothing_to_run").to_string();
             return;
         };
+        self.jupyter_run_target(target, advance);
+    }
+
+    /// Run `target`: refuse an Org block with `:eval no`/`never`, ask first
+    /// when the trust rules say so, else send it.
+    fn jupyter_run_target(&mut self, target: Target, advance: bool) {
+        if let Some(org) = &target.org
+            && let Eval::Never(value) = &org.header.eval
+        {
+            self.status = t!("status.jupyter_eval_never", value = value).to_string();
+            return;
+        }
         let run = Run {
             path: self.editor.active_tab().and_then(|t| t.path.clone()),
             tab: self.editor.active,
             hint_line: target.last,
             advance_to: advance.then_some(target.last + 1),
-            org_block: target.org_block,
+            org: target.org,
             code: target.code,
             language: target.language,
         };
-        let approved = self
-            .jupyter
-            .approved
-            .contains(&(run.path.clone(), run.code.clone()));
-        if run.org_block && !approved && !self.workspace_trusted() {
-            self.jupyter_confirm_block(run);
-            return;
+        match self.jupyter_ask(&run) {
+            Some(offer_always) => self.jupyter_confirm_block(run, offer_always),
+            None => self.jupyter_dispatch(run),
         }
-        self.jupyter_dispatch(run);
     }
 
-    /// Ask before the first run of an Org block in an untrusted workspace.
-    fn jupyter_confirm_block(&mut self, run: Run) {
+    /// Whether `run` asks before it runs (T734f), and if so whether the
+    /// question offers "always in this workspace". `None` runs at once.
+    /// Only an Org block ever asks: `:eval query` always; otherwise as
+    /// `jupyter_confirm_evaluate` says (`untrusted`, the default: the first
+    /// run of each block in a session unless the workspace is trusted, and
+    /// always for a file outside the workspace; `always`; `never`).
+    fn jupyter_ask(&self, run: &Run) -> Option<bool> {
+        let org = run.org.as_ref()?;
+        if org.header.eval == Eval::Query {
+            return Some(false);
+        }
+        match self.settings.jupyter_confirm_evaluate.as_str() {
+            "never" => None,
+            "always" => Some(false),
+            _ => {
+                let approved = self
+                    .jupyter
+                    .approved
+                    .contains(&(run.path.clone(), run.code.clone()));
+                if approved {
+                    None
+                } else if !self.jupyter_in_workspace(run.path.as_deref()) {
+                    Some(false)
+                } else {
+                    (!self.jupyter_trusted()).then_some(true)
+                }
+            }
+        }
+    }
+
+    /// Whether `path` (a buffer's file; `None` for an unsaved buffer) is
+    /// inside the workspace root.
+    fn jupyter_in_workspace(&self, path: Option<&Path>) -> bool {
+        let Some(path) = path else {
+            return true;
+        };
+        let authority = crate::authority::current();
+        let root = authority
+            .canonicalize(&self.root)
+            .unwrap_or_else(|_| self.root.clone());
+        let path = authority
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
+        path.starts_with(&root)
+    }
+
+    /// Whether the workspace is trusted for Jupyter: the persisted T132
+    /// script-trust decision, or an earlier "always in this workspace"
+    /// answer to the run confirmation.
+    fn jupyter_trusted(&self) -> bool {
+        self.workspace_trusted()
+            || (!self.remote_untrusted()
+                && self
+                    .load_session()
+                    .workspace(&self.session_key())
+                    .is_some_and(|w| w.jupyter_trusted == Some(true)))
+    }
+
+    /// Ask before running an Org block.
+    fn jupyter_confirm_block(&mut self, run: Run, offer_always: bool) {
         let quoted: Vec<&str> = run.code.lines().take(CONFIRM_CODE_LINES).collect();
-        self.confirm = Some(Confirm {
-            message: t!(
+        let code = quoted.join(" ⏎ ");
+        let message = if offer_always {
+            t!(
+                "confirm.jupyter_block_always",
+                language = run.language,
+                code = code
+            )
+        } else {
+            t!(
                 "confirm.jupyter_block",
                 language = run.language,
-                code = quoted.join(" ⏎ ")
+                code = code
             )
-            .to_string(),
+        };
+        self.confirm = Some(Confirm {
+            message: message.to_string(),
             paths: Vec::new(),
             kind: ConfirmKind::JupyterRunBlock,
         });
         self.jupyter.pending_block = Some(run);
+        self.jupyter.pending_always = offer_always;
+    }
+
+    /// The confirmation was answered yes (`always`: for every block in this
+    /// workspace, persisted): run the waiting block.
+    fn jupyter_confirmed(&mut self, always: bool) {
+        self.confirm = None;
+        if always {
+            let key = self.session_key();
+            let mut session = self.load_session();
+            session.set_jupyter_trusted(&key, Some(true));
+            self.store_session_or_warn(&session);
+            self.messages
+                .info(t!("msg.jupyter_trusted_always").to_string());
+        }
+        if let Some(run) = self.jupyter.pending_block.take() {
+            self.jupyter
+                .approved
+                .insert((run.path.clone(), run.code.clone()));
+            self.jupyter_dispatch(run);
+        }
     }
 
     /// Send `run` to its language's kernel: the running one, else the
@@ -420,9 +572,11 @@ impl App {
         .to_string();
     }
 
-    /// **Clear Results**: remove the end-of-line result hint from the active
-    /// buffer. (Org `#+RESULTS:` blocks are T734e.)
+    /// **Clear Results**: remove the Org block's `#+RESULTS:` at the cursor
+    /// (one undo step) and the end-of-line result hint from the active
+    /// buffer.
     fn jupyter_clear_results(&mut self) {
+        self.jupyter_clear_org_results();
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_inlay_hints(Vec::new());
         }
@@ -431,12 +585,23 @@ impl App {
 
     // ----- kernels -----------------------------------------------------------
 
-    /// The installed kernelspecs.
+    /// The installed kernelspecs. A kernelspec directory inside the
+    /// workspace (such as an activated `.venv`) counts only when the
+    /// workspace is trusted, which also adds its `.venv` and `venv`
+    /// kernelspecs (T734f).
     fn jupyter_specs(&self) -> Vec<KernelSpec> {
-        match &self.jupyter.kernel_dirs {
-            Some(dirs) => vix_jupyter::discover::kernelspecs_in(dirs),
-            None => vix_jupyter::discover::kernelspecs(&vix_jupyter::discover::path_env()),
-        }
+        let dirs = match &self.jupyter.kernel_dirs {
+            Some(dirs) => dirs.clone(),
+            None => kernelspec::kernel_dirs(&vix_jupyter::discover::path_env()),
+        };
+        let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let dirs = dirs.iter().map(|d| canonical(d)).collect();
+        let root = canonical(&self.root);
+        vix_jupyter::discover::kernelspecs_in(&kernelspec::gate_project_dirs(
+            dirs,
+            &root,
+            self.jupyter_trusted(),
+        ))
     }
 
     /// Open the kernel picker, or say how to install a kernel when there is
@@ -575,6 +740,10 @@ impl App {
                 tab: run.tab,
                 line: run.hint_line,
                 hint: None,
+                code: run.code.clone(),
+                org: run.org,
+                outputs: Vec::new(),
+                kept: 0,
             },
         );
         self.jupyter.last = Some(kernel.spec.name.clone());
@@ -609,17 +778,7 @@ impl App {
                 }
                 self.status = t!("status.jupyter_ready", name = name).to_string();
             }
-            KernelEvent::Output { request, output } => {
-                let lines = output_lines(&output);
-                if let Some(run) = self.jupyter.kernels[i].runs.get_mut(&request)
-                    && let Some(first) = lines.iter().find(|l| !l.trim().is_empty())
-                {
-                    run.hint = Some(first.trim().to_owned());
-                }
-                for line in lines {
-                    self.bottom_dock.push(line);
-                }
-            }
+            KernelEvent::Output { request, output } => self.jupyter_output(i, &request, output),
             KernelEvent::Reply {
                 request,
                 status,
@@ -643,7 +802,49 @@ impl App {
         false
     }
 
-    /// A request finished: its dock footer and end-of-line hint.
+    /// One output of kernel `i`: its dock lines, an image shown (or kept
+    /// for an Org block's results), and the hint so far.
+    fn jupyter_output(&mut self, i: usize, request: &RequestId, output: Output) {
+        let mut lines = output_lines(&output);
+        let (ours, writes_org) = self.jupyter.kernels[i]
+            .runs
+            .get(request)
+            .map_or((false, false), |r| {
+                (true, r.org.as_ref().is_some_and(OrgRun::writes))
+            });
+        let hint = lines
+            .iter()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| l.trim().to_owned());
+        if let Some((mime, b64)) = babel::first_image(std::slice::from_ref(&output)) {
+            // An Org block's image is saved with its results; a kernel's
+            // image nobody asked for is not opened.
+            if !writes_org {
+                let note = if ours {
+                    self.jupyter_show_image(mime, &b64)
+                } else {
+                    t!("ui.jupyter_image_placeholder", mime = mime).to_string()
+                };
+                lines.insert(0, note);
+            }
+        }
+        if let Some(run) = self.jupyter.kernels[i].runs.get_mut(request) {
+            if hint.is_some() {
+                run.hint = hint;
+            }
+            let weight = output_weight(&output);
+            if writes_org && run.kept.saturating_add(weight) <= MAX_ORG_OUTPUT_BYTES {
+                run.kept += weight;
+                run.outputs.push(output);
+            }
+        }
+        for line in lines {
+            self.bottom_dock.push(line);
+        }
+    }
+
+    /// A request finished: its dock footer, and its Org `#+RESULTS:` or
+    /// end-of-line hint.
     fn jupyter_reply(
         &mut self,
         i: usize,
@@ -668,14 +869,17 @@ impl App {
             }
         };
         self.bottom_dock.push(footer.to_string());
-        if let Some(hint) = &run.hint {
+        if run.org.as_ref().is_some_and(OrgRun::writes) {
+            self.jupyter_write_results(&run, status);
+        } else if let Some(hint) = &run.hint {
             self.jupyter_set_hint(&run, hint);
         }
     }
 
-    /// Show `hint` at the end of the run's line, in its buffer if still open.
-    fn jupyter_set_hint(&mut self, run: &InFlight, hint: &str) {
-        let index = match &run.path {
+    /// The tab of a run's buffer, if still open: by file, or (an unsaved
+    /// buffer) the same tab index if it still has no file.
+    fn jupyter_tab_index(&self, path: Option<&PathBuf>, tab: usize) -> Option<usize> {
+        match path {
             Some(path) => self
                 .editor
                 .tabs
@@ -684,10 +888,15 @@ impl App {
             None => self
                 .editor
                 .tabs
-                .get(run.tab)
+                .get(tab)
                 .is_some_and(|t| t.path.is_none())
-                .then_some(run.tab),
-        };
+                .then_some(tab),
+        }
+    }
+
+    /// Show `hint` at the end of the run's line, in its buffer if still open.
+    fn jupyter_set_hint(&mut self, run: &InFlight, hint: &str) {
+        let index = self.jupyter_tab_index(run.path.as_ref(), run.tab);
         let Some(tab) = index.and_then(|i| self.editor.tabs.get_mut(i)) else {
             return;
         };
@@ -742,43 +951,69 @@ impl App {
             if last > first && code.ends_with('\n') {
                 last -= 1;
             }
-            return target(code, language, last, false);
+            return target(code, language, last, None);
         }
         let line = editor.cursor_line();
-        let lines: Vec<&str> = text.split('\n').collect();
-        if let Some((begin, end, block_language)) = crate::org::src_block_at(&text, line) {
-            let code = lines[begin + 1..end].join("\n");
-            let block_language = if block_language.is_empty() {
-                language
-            } else {
-                block_language
-            };
-            return target(code, block_language, end, true);
+        if let Some(block) = block_target(&text, line, &language) {
+            return (!block.code.trim().is_empty()).then_some(block);
         }
+        let lines: Vec<&str> = text.split('\n').collect();
         if let Some(cell) = cell::cell_at(&text, line, &editor.comment_prefix()) {
             let last = cell.body.end.saturating_sub(1).max(cell.body.start);
             let code = lines
                 .get(cell.body)
                 .map(|l| l.join("\n").trim_end().to_owned())
                 .unwrap_or_default();
-            return target(code, language, last, false);
+            return target(code, language, last, None);
         }
         target(
             lines.get(line).copied().unwrap_or_default().to_owned(),
             language,
             line,
-            false,
+            None,
         )
+    }
+
+    /// The Org `src` block at the cursor as a run target (its code may be
+    /// blank), or `None` outside any block.
+    fn jupyter_block_target(&self) -> Option<Target> {
+        let tab = self.editor.active_tab().filter(|t| !t.is_image())?;
+        let text = tab.editor.get_content();
+        block_target(&text, tab.editor.cursor_line(), tab.editor.language())
     }
 }
 
+/// The Org `src` block around `line` as a run target (an empty block
+/// language means the buffer's `language`; the code may be blank), or
+/// `None` outside any block.
+fn block_target(text: &str, line: usize, language: &str) -> Option<Target> {
+    let (begin, end, block_language) = crate::org::src_block_at(text, line)?;
+    let lines: Vec<&str> = text.split('\n').collect();
+    let code = lines[begin + 1..end].join("\n");
+    let language = if block_language.is_empty() {
+        language.to_owned()
+    } else {
+        block_language
+    };
+    let org = OrgRun {
+        begin,
+        header: Header::parse(lines[begin]),
+    };
+    Some(Target {
+        code,
+        language,
+        last: end,
+        org: Some(org),
+    })
+}
+
 /// A [`Target`], or `None` for blank code.
-fn target(code: String, language: String, last: usize, org_block: bool) -> Option<Target> {
+fn target(code: String, language: String, last: usize, org: Option<OrgRun>) -> Option<Target> {
     (!code.trim().is_empty()).then_some(Target {
         code,
         language,
         last,
-        org_block,
+        org,
     })
 }
 
@@ -797,9 +1032,9 @@ fn clip(text: &str, max: usize) -> String {
     out
 }
 
-/// One output as dock lines: plain text with ANSI codes removed, an image as
-/// a placeholder line (T734g) plus its `text/plain` form, and a note when a
-/// richer form (such as HTML) was dropped.
+/// One output as dock lines: plain text with ANSI codes removed, an image's
+/// `text/plain` form (the image itself is shown by the caller), and a note
+/// when a richer form (such as HTML) was dropped.
 fn output_lines(output: &Output) -> Vec<String> {
     let text = match output {
         Output::Result { data, .. } | Output::Display { data, .. } => {
@@ -808,12 +1043,10 @@ fn output_lines(output: &Output) -> Vec<String> {
             };
             match choice.payload {
                 Payload::Base64(_) => {
-                    let mut lines =
-                        vec![t!("ui.jupyter_image_placeholder", mime = choice.mime).to_string()];
-                    if let Some(plain) = data.text("text/plain") {
-                        lines.extend(text_lines(&plain));
-                    }
-                    return lines;
+                    return data
+                        .text("text/plain")
+                        .map(|plain| text_lines(&plain))
+                        .unwrap_or_default();
                 }
                 Payload::Text(text) => {
                     let mut lines = text_lines(&text);
@@ -827,6 +1060,24 @@ fn output_lines(output: &Output) -> Vec<String> {
         other => other.plain_text(),
     };
     text_lines(&text)
+}
+
+/// About how many bytes `output` holds: its text, or its MIME data.
+fn output_weight(output: &Output) -> usize {
+    match output {
+        Output::Stream { text, .. } => text.len(),
+        Output::Result { data, .. } | Output::Display { data, .. } => data
+            .0
+            .values()
+            .map(|v| v.as_str().map_or_else(|| v.to_string().len(), str::len))
+            .sum(),
+        Output::Error {
+            ename,
+            evalue,
+            traceback,
+        } => ename.len() + evalue.len() + traceback.iter().map(String::len).sum::<usize>(),
+        _ => 0,
+    }
 }
 
 /// `text` without ANSI codes, split into lines, without a trailing empty one.
@@ -876,16 +1127,29 @@ mod tests {
     }
 
     #[test]
-    fn an_image_is_a_placeholder_then_its_plain_text() {
+    fn an_image_leaves_its_plain_text() {
         let out = Output::Display {
             data: bundle(&[("image/png", "iVBORw0KGgo="), ("text/plain", "<Image>")]),
             display_id: None,
             update: false,
         };
-        let lines = output_lines(&out);
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].contains("image/png"), "{lines:?}");
-        assert_eq!(lines[1], "<Image>");
+        assert_eq!(output_lines(&out), ["<Image>"]);
+    }
+
+    #[test]
+    fn a_block_target_reads_its_header() {
+        let text = "#+begin_src python :results output\nprint(1)\n#+end_src\n";
+        let Some(t) = block_target(text, 1, "org") else {
+            panic!("no block target");
+        };
+        assert_eq!(t.code, "print(1)");
+        assert_eq!(t.last, 2);
+        let org = t.org.unwrap_or_else(|| unreachable!());
+        assert_eq!(org.begin, 0);
+        assert_eq!(org.header.collect, babel::Collect::Output);
+        let blank = block_target("#+begin_src python\n\n#+end_src", 0, "org");
+        assert!(blank.is_some_and(|t| t.code.trim().is_empty()));
+        assert!(block_target("plain", 0, "org").is_none());
     }
 
     #[test]

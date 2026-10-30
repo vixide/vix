@@ -196,6 +196,11 @@ project_snippets = "config/snippets/snippets.json"
 coverage_path = ""
 # Width (columns) of the test-results panel.
 test_width = 40
+# When running an Org src block in a Jupyter kernel asks first
+# (docs/jupyter/index.md), for a build with the `jupyter` feature:
+# "untrusted" asks before a block's first run unless the workspace is
+# trusted; "always" asks every time; "never" never asks.
+jupyter_confirm_evaluate = "untrusted"
 
 # Configured language servers, matched to files by extension. Empty by
 # default -- Vix ships no built-in server. Shown here with one real

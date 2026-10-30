@@ -741,3 +741,10 @@ distroless
 PROGRAMDATA
 Jupytext
 Spyder
+halfblocks
+IHDR
+linspace
+numpy
+matplotlib
+Matplotlib
+pyplot

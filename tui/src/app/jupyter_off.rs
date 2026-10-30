@@ -38,6 +38,12 @@ impl App {
         String::new()
     }
 
+    /// Org `C-c C-c` never evaluates a block in this build.
+    pub(super) fn jupyter_org_ctrl_c(&mut self) -> bool {
+        let State(()) = &self.jupyter;
+        false
+    }
+
     /// No Jupyter confirmation can be open.
     pub(super) fn jupyter_confirm_key(&mut self, _key: KeyEvent) -> bool {
         let State(()) = &self.jupyter;

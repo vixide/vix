@@ -1,15 +1,17 @@
 # Jupyter kernel REPL
 
-**Status:** spike done 2026-10-30 (T734). The protocol core and the
-transport are built (T734a, T734b, 2026-10-30):
+**Status:** v1 built, 2026-10-30 (T734, all of T734a–T734h). The protocol
+core and the transport are
 [`vix-jupyter-core`](../../crates/vix-jupyter-core/spec/index.md) and
 [`vix-jupyter`](../../crates/vix-jupyter/spec/index.md), tested against an
-in-process fake kernel and, opt-in, a real ipykernel. The App wiring and the
-run targets with dock output are built too (T734c, T734d, 2026-10-30; see
-[App wiring](#app-wiring-t734c-t734d) for what they do today). Org
-`#+RESULTS:`, the full trust rules, images and the size decision are
-T734e–T734h in [`tasks.md`](../../tasks.md). This page records the decision
-and the v1 design.
+in-process fake kernel and, opt-in, a real ipykernel. The App wiring, run
+targets and dock output (T734c, T734d), Org babel evaluation (T734e), the
+trust rules (T734f) and images (T734g) are described in
+[App wiring](#app-wiring-t734c-t734d) and the sections after it, which say
+where the build differs from the design above them. The size measurement
+and the recommendation on `full` are in [Size](#size-t734h). The user guide
+is [`docs/jupyter`](../../docs/jupyter/index.md). This page records the
+decision and the v1 design.
 
 ## Goal
 
@@ -303,16 +305,17 @@ narrows the design above:
 - **Dock output.** `[*] <display name>` and `  » <first code line>` when
   sent; each output's lines as they arrive (streams and values as plain text
   with ANSI removed; an error as `ename: evalue` plus the traceback; an image
-  as a translated `[image/png image: …]` placeholder line plus its
-  `text/plain` form, until T734g; a translated note when a richer form was
-  dropped); then `[n] <display name>: done`, `failed` or `not run` on the
-  reply. A kernel's own output with no request of ours (such as the note an
+  as a translated line saying what became of it (opened in a tab, saved for
+  an Org link, refused, or cannot be shown) plus its `text/plain` form; a
+  translated note when a richer form was dropped); then
+  `[n] <display name>: done`, `failed` or `not run` on the reply. A kernel's own output with no request of ours (such as the note an
   interrupt prints) goes to the dock too.
 - **End-of-line hint.** The last output's first non-blank line, cut to 60
   characters, after the code's last line, through the editor's inlay-hint
   rendering. It replaces the buffer's inlay hints until the language server
-  next sends its own. **Clear Results** clears it; the Org `#+RESULTS:` half
-  is T734e.
+  next sends its own. An Org block that writes `#+RESULTS:` gets no hint
+  (`:results silent` does). **Clear Results** clears it, and in an Org block
+  also removes the block's `#+RESULTS:`.
 - **Controls** act on the kernel for the language at the cursor, else the
   one that ran code last, else the first.
 - **Status bar.** `<spec name> <state> [n]` for that same kernel, after the
@@ -324,17 +327,133 @@ narrows the design above:
   (with the stderr tail in the dock).
 - **Remote.** Start, Run, Run and Advance and Restart are refused with a
   translated warning while `vix_authority::current()` is not local.
-- **Trust, minimal.** An Org block's first run in a session asks
-  (`ConfirmKind::JupyterRunBlock`: language and first three lines; `y` runs,
-  `n`/Esc cancels) unless the workspace is trusted, which today means the
-  persisted T132 decision (and, remote, T714). A selection, cell or line is
-  never prompted. T734f adds `jupyter_confirm_evaluate`, "always in this
-  workspace", and the project-local kernelspec rule.
+- **Trust.** See [Trust and safety](#trust-and-safety-t734f).
 - **Test hooks.** `App::with_jupyter_kernel_dirs` (discover only in given
   directories) and `App::with_jupyter_connection` (attach a spec name to an
   already-running local kernel instead of launching its argv) start nothing
   by themselves; `jupyter_kernels`, `jupyter_picker_rows` and
   `jupyter_confirm_open` report state.
+
+## Org babel (T734e)
+
+Built in `tui/src/app/jupyter.rs` and `tui/src/app/jupyter/results.rs`, with
+the pure parts in `vix-jupyter-core`'s `babel` and `org` modules.
+
+- **Running a block.** **Run** with the cursor in a `src` block (fences
+  included), or `C-c C-c` (`org.ctrl_c_ctrl_c`) there. `C-c C-c` always runs
+  the whole block, even with a selection, and in a block it comes before the
+  table and checkbox meanings; outside a block, and in a build without the
+  capability, it does what it did before. Its remote refusal and trust
+  questions are the same as **Run**'s.
+- **Header arguments** come from the `#+begin_src` line only (not
+  `#+header:` lines or `header-args` properties): `:results` `value` (the
+  default) or `output`, `replace` (the default), `append` or `silent`;
+  `:file`; `:eval`. `:eval no`/`never` refuses with a status line and starts
+  nothing; `:eval query` asks before every run, whatever the setting says.
+- **What the result is.** `value` is everything the run shows, in order:
+  printed text, values, displays and errors, as a notebook cell shows them.
+  This differs from Org's own `value` (the last expression only): a kernel
+  has no separate return-value channel, and it is what `ob-jupyter` users
+  expect. `output` is printed text and errors only. When the run produced an
+  image, the result is a `[[file:…]]` link to it instead (the first image;
+  see [Images](#images-t734g)); if it cannot be saved, the text forms are
+  written instead.
+- **Writing.** On the reply (not on `aborted`), Vix finds the block again:
+  at the line it started on if its code is unchanged, else the first block
+  with the same code; if neither, it writes nothing and says so. It then
+  replaces, appends to (`results_append_edit`) or inserts the `#+RESULTS:`
+  block in Org's format, setting the buffer's text in **one undo step** and
+  keeping the cursor on the same text. Outputs are collected only for a run
+  that writes, and only up to 4 MiB of text and data (later ones still reach
+  the dock); a `silent` run gets the dock and the end-of-line hint, like
+  any other code. The dock gets every output either way.
+- **Clear Results** in a block removes its `#+RESULTS:` (and the blank lines
+  before it), also one undo step.
+
+## Trust and safety (T734f)
+
+- **Who asks.** Only an Org block run asks; a selection, cell or line is
+  something the user sends on purpose and never asks. The
+  `jupyter_confirm_evaluate` setting decides: `untrusted` (the default) asks
+  before a block's first run in a session unless the workspace is trusted,
+  and always for a file outside the workspace root; `always` asks before
+  every run; `never` never asks. `:eval query` asks regardless, and
+  `:eval never` refuses regardless.
+- **Trusted** means the persisted T132 script-trust decision, or an earlier
+  "always in this workspace" answer (and, remote, T714 — though a remote
+  workspace never starts a kernel).
+- **The question** (`ConfirmKind::JupyterRunBlock`) quotes the language and
+  the block's first three lines. `y` runs (and remembers the block for the
+  session), `n`/Esc cancels. In an untrusted workspace, for a file inside it,
+  it also offers `a`, "always in this workspace", persisted as
+  `WorkspaceSession::jupyter_trusted` in the session file the same way the
+  T132 decision is (`Session::set_jupyter_trusted`). `a` is not offered for
+  a file outside the workspace, for `:eval query`, or under `always`.
+- **Project kernelspecs.** A kernelspec directory inside the workspace (an
+  activated `.venv`, a `$JUPYTER_PATH` entry in the repository, or a
+  directory passed to the test hook) is used only when the workspace is
+  trusted for Jupyter; then `<root>/.venv` and `<root>/venv`'s
+  `share/jupyter/kernels` are searched too (`gate_project_dirs`). Paths are
+  canonicalized before the comparison.
+- **Remote workspaces** start no kernel (Start, Run, Run and Advance, Restart
+  and `C-c C-c` in a block are refused), and **no stdin** is sent
+  (`allow_stdin: false`), both from T734c and kept.
+
+## Images (T734g)
+
+- **Decoding.** `image/png` and `image/jpeg` are decoded from base64 by
+  `vix_jupyter_core::image::decode`, which refuses data over 16 MiB, data
+  that is not the claimed type, and images over 16,384 pixels on a side or
+  16 Mi pixels in all, reading the size from the header before any pixel is
+  decoded. A refused image gets a translated dock line (`too large` or `not
+  valid image data`) and its `text/plain` form; nothing is opened or
+  written.
+- **Any buffer but a writing Org block.** The image is written to a private
+  `0700` scratch directory (`vix_jupyter::PrivateDir`, removed when Vix
+  exits) as `<sha256-prefix>.png|jpg` and opened through the same path as
+  any image file (`App::open_image`: `ratatui-image`, a view-only image tab
+  that takes focus). Without the `image` capability, or in a terminal
+  without graphics, the dock says the image cannot be shown here, and has
+  its `text/plain` form. An image from a kernel output with no request of
+  ours is never opened.
+- **An Org block that writes results.** The first image is saved to the
+  block's `:file` path, or `<org-file-stem>-images/<sha256-prefix>.<ext>`,
+  relative to the Org file's folder (the workspace root for an unsaved
+  buffer), creating folders as needed, and the result is a `[[file:…]]`
+  link to it. A `:file` that is absolute or has a `..` component is refused
+  with a message, and the text forms are written instead. Saving needs no
+  `image` capability.
+
+## Size (T734h)
+
+Measured 2026-10-30 on macOS (Apple Silicon, `aarch64-apple-darwin`), rustc
+1.99.1, with the workspace's `[profile.release]` (`lto = "thin"`,
+`opt-level = "z"`, `strip = true`; `[profile.dist]` inherits it), building
+`cargo build --release -p vix-tui --bin vix` with and without
+`--features jupyter`, everything else default (`full`):
+
+| Build | Stripped `vix` |
+| ----- | -------------- |
+| default (`full`) | 26,836,752 bytes (25.59 MiB) |
+| default + `jupyter` | 27,763,584 bytes (26.48 MiB) |
+| **Delta** | **+926,832 bytes (+0.88 MiB, +3.5%)** |
+
+This is the whole feature as built (transport, ZeroMQ, Org babel, images,
+trust), below the spike's +1.36 MB upper bound because Vix already links
+tokio, `regex`, `sha2`, `hmac` and `base64`. It adds 8 crates to the
+lock file (see option C).
+
+**Recommendation (for the user to decide; `full` is unchanged):** add
+`jupyter` to `full`. The cost is under 1 MiB (3.5%). Nothing it adds runs
+without an explicit action: no kernel starts on open, restore or save, Org
+blocks are trust-gated, project kernelspecs need a trusted workspace,
+remote workspaces are refused, and the client opens no listening TCP port
+(IPC on Unix; loopback TCP it connects to on Windows). That is the
+difference from `cowork`, which listens and stays out. The argument against
+is supply chain: `zeromq` 0.7.0 is days old and brings 8 crates into the
+default build; `cargo deny` passes for all of them. Keep it out of the
+`minimal` profile either way. If it joins `full`, `scripts/check` and CI
+can drop their separate `--features jupyter` runs.
 
 ## Testing
 
@@ -358,4 +477,17 @@ narrows the design above:
   the remote refusal, and `Ctrl+Shift+Enter`. `real_ipykernel_runs_code`
   runs a multi-line selection against a real ipykernel when
   `VIX_JUPYTER_PYTHON` is set (passed against ipykernel 7.4.0 on
-  2026-10-30). T734e adds the Org `#+RESULTS:` checks.
+  2026-10-30). T734e–T734g add (with a `"never"` setting where trust is not
+  the point): Org results inserted, replaced (no extra undo step), undone in
+  one step, appended (`:results output append`, through `C-c C-c`) and
+  `silent`; `:eval never` refuses and `:eval query` asks every time; Clear
+  Results removes `#+RESULTS:`; "always in this workspace" is persisted and
+  honored by a new App, a file outside the workspace still asks without
+  offering it, and `always` asks every run; project kernelspecs appear only
+  once the workspace is trusted; an image opens in an image tab (a
+  halfblocks picker) and a header-claimed 100000×10 PNG is refused; an Org
+  image is saved to `:file` or `<stem>-images/` for its link, and an
+  escaping `:file` or an oversized image is not written.
+  `real_ipykernel_writes_org_results` runs an Org `:results output` block
+  and a `:file` image block against a real ipykernel (passed against
+  ipykernel 7.4.0 on 2026-10-30).

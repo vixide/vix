@@ -8769,7 +8769,7 @@ editor by completion, diagnostics and never losing work first.
     in the viewer; display-width-aware columns for wide characters;
     cold-cache numbers (the benchmark measures warm-cache only). The site
     now quotes the number (features page, 2026-10-30 docs harmonize).
-- [ ] **T734 — Jupyter kernel REPL (spike first).** Send a selection or
+- [x] **T734 — Jupyter kernel REPL (spike first).** Send a selection or
   an Org `src` block to a Jupyter kernel and show the result inline or in
   the dock (Zed has a kernel REPL). The spike decides whether the
   ZeroMQ dependency is acceptable or a `jupyter console` subprocess is
@@ -8836,21 +8836,47 @@ editor by completion, diagnostics and never losing work first.
     only the hint (the `#+RESULTS:` half is T734e); images are a dock
     placeholder (T734g). Tests: `tui/tests/jupyter.rs` (12, an in-process
     fake kernel; the real-ipykernel one passed against ipykernel 7.4.0).
-  - [ ] **T734e — Org babel evaluation.** Run the `src` block at point,
+  - [x] **T734e — Org babel evaluation.** Run the `src` block at point,
     and `C-c C-c` in a block. Write `#+RESULTS:` (insert or replace)
     following `:results`, `:file` and `:eval`. Map `jupyter-<lang>`
     languages. Update the `vix-org` babel spec. **Medium.**
-  - [ ] **T734f — Trust and safety.** Add the `jupyter_confirm_evaluate`
+  - [x] **T734f — Trust and safety.** Add the `jupyter_confirm_evaluate`
     setting and confirm runs in an untrusted workspace (T132/T627).
     Use a project-local kernelspec only when the workspace is trusted.
     Refuse in a remote workspace, and send no stdin. **Small.**
-  - [ ] **T734g — Images.** Decode `image/png` and `image/jpeg`. Open
+  - [x] **T734g — Images.** Decode `image/png` and `image/jpeg`. Open
     them in an image tab, or save them for an Org `[[file:…]]` link.
     Without the `image` capability, show the `text/plain` form.
     **Small–Medium.**
-  - [ ] **T734h — Docs and promotion.** Add a `docs/jupyter` user guide
+  - [x] **T734h — Docs and promotion.** Add a `docs/jupyter` user guide
     and a CHANGELOG entry. Measure the real `vix` binary-size delta, then
     decide whether `jupyter` joins `full`. **Small.**
+  - **T734e–T734h done 2026-10-30** (`feat/t734eh-jupyter-finish`), closing
+    T734. Org babel: `C-c C-c` or Run in a `src` block writes `#+RESULTS:`
+    (one undo step) following `:results value/output`,
+    `replace/append/silent`, `:file` and `:eval no/never/query`; Clear
+    Results removes it (new `vix_jupyter_core::babel`,
+    `org::results_append_edit`; `tui/src/app/jupyter/results.rs`). Trust:
+    the `jupyter_confirm_evaluate` setting (`untrusted`/`always`/`never`),
+    `a` = "always in this workspace" persisted as
+    `WorkspaceSession::jupyter_trusted`, files outside the workspace always
+    ask, project kernelspecs only in a trusted workspace
+    (`kernelspec::gate_project_dirs`). Images: `vix_jupyter_core::image`
+    decodes PNG/JPEG with caps (16 MiB, 16,384 px a side, 16 Mi pixels,
+    checked from the header) and the App opens them in an image tab from a
+    private `0700` directory (`vix_jupyter::PrivateDir`) or saves them for
+    an Org `[[file:…]]` link (a `:file` outside the Org file's folder is
+    refused). Tests: `tui/tests/jupyter.rs` grew to 21 (8 new, plus
+    `real_ipykernel_writes_org_results`, which passed against ipykernel
+    7.4.0). Size: stripped release `vix` 26,836,752 → 27,763,584 bytes
+    with `jupyter` (+0.88 MiB, +3.5%, macOS arm64). Recommendation recorded
+    in `spec/jupyter` § Size: add `jupyter` to `full`; **`full` is
+    unchanged — the user decides.** **Not done** (deliberately out of v1):
+    `#+header:` lines and `header-args` properties, Org `:results`
+    formats (`table`, `raw`, `drawer`, `file`), `prepend`, several images
+    per block (only the first is linked), `update_display_data` in place,
+    stdin (`input()`), remote kernels, widgets, HTML/SVG rendering, kernel
+    completion, `.ipynb` editing, and one kernel per file.
 - [ ] **T735 — Translations in Rhai scripts.** Let a script ship its own
   strings per locale through the same catalog `t!` reads, so script
   commands appear in the user's language (Fresh plugins can). After
@@ -8961,8 +8987,8 @@ editor by completion, diagnostics and never losing work first.
 Order: T670 and the Run M daily-driver items first; then T730, T740,
 T732 (small, visible); T742 → T743 → T744 before the 2.0 launch kit
 (T745); T746 and T747 need the user's decisions; T731, T733 and T734 are
-spec- or spike-first. *(2026-10-30: T730–T733, T740 and T741 are done and
-T734's spike is done; see "Suggested execution order" for what is left.)*
+spec- or spike-first. *(2026-10-30: T730–T734, T740 and T741 are done;
+see "Suggested execution order" for what is left.)*
 
 ## Run S (IM — instant messaging, 2026-10-29)
 
@@ -9284,8 +9310,9 @@ everything in Q except T718. What is open, by run:
   T670 (the musl release build crashes).
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730–T733, T740, T741 and T744 are done. T734 has its spike done
-  and T734a–T734h open; T735 waits for T637. T742 and T743 have their files
+- **Run R:** T730–T734, T740, T741 and T744 are done (T734's `jupyter`
+  feature is still opt-in; whether it joins `full` is the user's call);
+  T735 waits for T637. T742 and T743 have their files
   (templates and a container image) but no channel is verified or
   published, so neither is done. T745–T748 are open; T746 and T747 need the
   user's decisions.

@@ -152,6 +152,15 @@ pub struct WorkspaceSession {
     /// (restricted mode). Unused for a local workspace.
     #[serde(default)]
     pub remote_trusted: Option<bool>,
+
+    // ----- Jupyter evaluation trust (T734f) ---------------------------------
+    /// Whether Org `src` blocks in this workspace run in a Jupyter kernel
+    /// without asking first: `Some(true)` once the user answered "always in
+    /// this workspace" to the run confirmation. `None` (the default, and
+    /// what an older `session.toml` loads as) keeps asking. It also lets the
+    /// workspace's own kernelspecs (`.venv/share/jupyter/kernels`) be used.
+    #[serde(default)]
+    pub jupyter_trusted: Option<bool>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -308,6 +317,25 @@ impl Session {
         }
     }
 
+    /// Record the Jupyter evaluation trust decision for `root` (T734f).
+    /// Like [`Self::set_scripts_trusted`], it creates a minimal entry for a
+    /// root with no saved session yet and leaves everything else alone.
+    pub fn set_jupyter_trusted(&mut self, root: &str, trusted: Option<bool>) {
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.root == root) {
+            ws.jupyter_trusted = trusted;
+        } else {
+            self.workspaces.insert(
+                0,
+                WorkspaceSession {
+                    root: root.to_string(),
+                    jupyter_trusted: trusted,
+                    ..Default::default()
+                },
+            );
+            self.workspaces.truncate(MAX_WORKSPACES);
+        }
+    }
+
     /// Put `name` (a canonical `ssh://` name) at the front of
     /// [`Session::recent_remotes`], dropping an older copy and anything past
     /// [`MAX_RECENT_REMOTES`].
@@ -320,7 +348,8 @@ impl Session {
     /// Insert or replace the session for its root, moving it to the front and
     /// capping the total number of retained workspaces.
     ///
-    /// The trust decisions (`scripts_trusted`, `remote_trusted`) are not part
+    /// The trust decisions (`scripts_trusted`, `remote_trusted`,
+    /// `jupyter_trusted`) are not part
     /// of a captured session, so a `ws` that leaves one unset keeps the
     /// prior entry's answer rather than forgetting it.
     pub fn set_workspace(&mut self, mut ws: WorkspaceSession) {
@@ -336,6 +365,7 @@ impl Session {
         if let Some(old) = self.workspaces.iter().find(|w| w.root == ws.root) {
             ws.scripts_trusted = ws.scripts_trusted.or(old.scripts_trusted);
             ws.remote_trusted = ws.remote_trusted.or(old.remote_trusted);
+            ws.jupyter_trusted = ws.jupyter_trusted.or(old.jupyter_trusted);
         }
         self.workspaces.retain(|w| w.root != ws.root);
         self.workspaces.insert(0, ws);
@@ -449,6 +479,18 @@ mod tests {
             s.workspace("/a").unwrap().files,
             vec!["/a/x.rs".to_string()]
         );
+    }
+
+    #[test]
+    fn jupyter_trust_is_kept_across_workspace_saves() {
+        let mut s = Session::default();
+        s.set_jupyter_trusted("/j", Some(true));
+        assert_eq!(s.workspace("/j").unwrap().jupyter_trusted, Some(true));
+        s.set_workspace(WorkspaceSession {
+            root: "/j".into(),
+            ..Default::default()
+        });
+        assert_eq!(s.workspace("/j").unwrap().jupyter_trusted, Some(true));
     }
 
     #[test]

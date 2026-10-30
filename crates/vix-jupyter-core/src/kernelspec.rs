@@ -308,9 +308,61 @@ pub fn kernel_dirs(env: &PathEnv) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Virtual-environment folders, relative to a workspace root, whose
+/// `share/jupyter/kernels` [`gate_project_dirs`] adds in a trusted
+/// workspace.
+pub const PROJECT_ENVS: [&str; 2] = [".venv", "venv"];
+
+/// The `kernels` directories to search for a workspace at `root`, given
+/// the standard `dirs` (T734f): in a `trusted` workspace, `dirs` plus each
+/// [`PROJECT_ENVS`] environment's `share/jupyter/kernels`; otherwise `dirs`
+/// without any directory inside `root`, so a cloned repository cannot
+/// supply the program a kernel runs. Paths are compared as given, so the
+/// caller passes them canonicalized.
+#[must_use]
+pub fn gate_project_dirs(dirs: Vec<PathBuf>, root: &Path, trusted: bool) -> Vec<PathBuf> {
+    if !trusted {
+        return dirs.into_iter().filter(|d| !d.starts_with(root)).collect();
+    }
+    let mut out = dirs;
+    for env in PROJECT_ENVS {
+        let dir = root.join(env).join("share").join("jupyter").join("kernels");
+        if !out.contains(&dir) {
+            out.push(dir);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_dirs_need_trust() {
+        let root = Path::new("/w");
+        let dirs = vec![
+            PathBuf::from("/home/u/.local/share/jupyter/kernels"),
+            PathBuf::from("/w/.venv/share/jupyter/kernels"),
+        ];
+        assert_eq!(
+            gate_project_dirs(dirs.clone(), root, false),
+            [PathBuf::from("/home/u/.local/share/jupyter/kernels")]
+        );
+        assert_eq!(
+            gate_project_dirs(dirs, root, true),
+            [
+                PathBuf::from("/home/u/.local/share/jupyter/kernels"),
+                PathBuf::from("/w/.venv/share/jupyter/kernels"),
+                PathBuf::from("/w/venv/share/jupyter/kernels"),
+            ]
+        );
+        // `/wx` is not inside `/w`.
+        assert_eq!(
+            gate_project_dirs(vec![PathBuf::from("/wx/kernels")], root, false).len(),
+            1
+        );
+    }
 
     const IPYKERNEL: &str = r#"{
      "argv": ["python", "-m", "ipykernel_launcher", "-f", "{connection_file}"],
