@@ -23,7 +23,10 @@ the same dialog, and the OC menu.
 - `Authority` (trait, `Send + Sync + Debug`). One method per operation the
   App used to call directly, with the same semantics and errors:
   `read`, `read_to_string`, `read_text_guarded` (the T571 guards and T661
-  encoding detection), `read_to_string_guarded`, `write` (plain, truncating),
+  encoding detection), `stream_text_guarded` (the same, handing plain UTF-8
+  to a sink block by block so opening a large file needs no file-sized copy,
+  T749; the default reads the whole file and returns `TextStream::Whole`,
+  and only `LocalAuthority` streams), `read_to_string_guarded`, `write` (plain, truncating),
   `write_atomic`, `write_text_in_file_encoding`, `metadata`,
   `symlink_metadata`, `exists`/`is_dir`/`is_file`, `canonicalize`,
   `read_dir`, `create_dir_all`, `rename`, `remove_file`, `remove_path`,

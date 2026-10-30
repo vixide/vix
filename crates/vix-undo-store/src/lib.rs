@@ -85,9 +85,18 @@ pub fn save(file: &Path, content: &str, history: &History) {
 /// applied). `None` when absent, unreadable, or mismatched.
 #[must_use]
 pub fn load(file: &Path, content: &str) -> Option<History> {
+    load_with(file, || content.to_owned())
+}
+
+/// [`load`], asking for the buffer's text only when a saved history exists
+/// to compare it with. Opening a file that was never edited with
+/// persistent undo on — the common case — then costs no copy of its text
+/// (on a 100 MB file, 100 MB, T749).
+#[must_use]
+pub fn load_with(file: &Path, content: impl FnOnce() -> String) -> Option<History> {
     let text = std::fs::read_to_string(store_path(file)?).ok()?;
     let stored: Stored = serde_json::from_str(&text).ok()?;
-    (stored.hash == sha(content)).then_some(stored.history)
+    (stored.hash == sha(&content())).then_some(stored.history)
 }
 
 #[cfg(test)]

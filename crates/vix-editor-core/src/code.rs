@@ -55,6 +55,26 @@ fn compiled_query(lang: &str, language: &Language, source: &str) -> Result<Rc<Qu
     Ok(query)
 }
 
+thread_local! {
+    /// How many whole-buffer passes ([`Code::get_content`],
+    /// [`Code::max_line_chars`]) this thread has made: see [`full_text_scans`].
+    static FULL_TEXT_SCANS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn note_full_text_scan() {
+    FULL_TEXT_SCANS.with(|n| n.set(n.get().wrapping_add(1)));
+}
+
+/// How many whole-buffer passes — a full copy of the text
+/// ([`Code::get_content`]) or a full scan ([`Code::max_line_chars`]) — this
+/// thread has made so far. A diagnostic counter for tests: an idle frame or
+/// tick on an unchanged buffer must not raise it, because on a 100 MB file
+/// each pass costs tens of milliseconds and, for a copy, 100 MB (T749).
+#[must_use]
+pub fn full_text_scans() -> u64 {
+    FULL_TEXT_SCANS.with(std::cell::Cell::get)
+}
+
 /// A change event reported to a change callback:
 /// `(start_line, start_col, end_line, end_col, text)`.
 pub(crate) type ChangeEvent = (usize, usize, usize, usize, String);
@@ -310,8 +330,23 @@ impl Code {
         lang: &str,
         custom_highlights: Option<HashMap<String, String>>,
     ) -> Result<Self> {
+        Self::from_rope(Rope::from_str(text), lang, custom_highlights)
+    }
+
+    /// [`Code::new`] over text already in a rope — built while a file was
+    /// read, say — so no `String` copy of it is ever needed (T749).
+    ///
+    /// # Errors
+    ///
+    /// As [`Code::new`].
+    pub fn from_rope(
+        content: Rope,
+        lang: &str,
+        custom_highlights: Option<HashMap<String, String>>,
+    ) -> Result<Self> {
+        let len = content.len_bytes();
         let mut code = Self {
-            content: Rope::from_str(text),
+            content,
             lang: lang.to_string(),
             tree: None,
             parser: None,
@@ -344,8 +379,8 @@ impl Code {
             // `None` (every tree-dependent method already handles that
             // gracefully, returning no highlights/ranges) until `poll_parse`
             // installs the result. Below the threshold, behavior is unchanged.
-            let tree = if text.len() < ASYNC_PARSE_THRESHOLD {
-                parser.parse(text, None)
+            let tree = if len < ASYNC_PARSE_THRESHOLD {
+                parser.parse(code.content.to_string(), None)
             } else {
                 None
             };
@@ -356,7 +391,7 @@ impl Code {
             code.query = Some(query);
             code.injection_parsers = Some(iparsers);
             code.injection_queries = Some(iqueries);
-            if code.tree.is_none() && text.len() >= ASYNC_PARSE_THRESHOLD {
+            if code.tree.is_none() && len >= ASYNC_PARSE_THRESHOLD {
                 // `request_async_parse` uses `self.edit_gen` as the request's
                 // generation, and a freshly created worker's own `installed`
                 // field also starts at 0 -- without this bump, generation 0's
@@ -373,7 +408,8 @@ impl Code {
                     // spawn failed) -- fall back to a synchronous parse
                     // rather than leaving this buffer permanently
                     // unhighlighted.
-                    code.tree = code.parser.as_mut().and_then(|p| p.parse(text, None));
+                    let text = code.content.to_string();
+                    code.tree = code.parser.as_mut().and_then(|p| p.parse(&text, None));
                 }
             }
         }
@@ -488,7 +524,56 @@ impl Code {
     /// `tasks.md` for two real examples of this trap and its fix).
     #[must_use]
     pub fn get_content(&self) -> String {
-        self.content.to_string()
+        note_full_text_scan();
+        // One allocation of the exact size. `Rope::to_string` goes through
+        // `Display`, which grows the `String` by doubling: for a 100 MB buffer
+        // that was ~256 MB of allocations per call, and the freed blocks stay
+        // resident on some allocators (T749).
+        let mut out = String::with_capacity(self.content.len_bytes());
+        for chunk in self.content.chunks() {
+            out.push_str(chunk);
+        }
+        out
+    }
+
+    /// The longest line's length in characters, not counting its line break
+    /// (`\n` or `\r\n`), as `get_content().lines().map(|l| l.chars().count())
+    /// .max()` would compute it — but scanned from the rope's chunks in place,
+    /// without copying the text. O(n); callers on a per-frame path cache it on
+    /// [`Code::revision`] (see `Editor::max_line_width`).
+    #[must_use]
+    pub fn max_line_chars(&self) -> usize {
+        note_full_text_scan();
+        let mut max = 0;
+        // Characters so far of a line that continues into the next chunk.
+        let mut cur = 0usize;
+        let mut ends_cr = false;
+        for chunk in self.content.chunks() {
+            let mut pieces = chunk.split('\n').peekable();
+            while let Some(piece) = pieces.next() {
+                let line_ends = pieces.peek().is_some();
+                if line_ends && cur == 0 && piece.len() <= max {
+                    // A whole line no longer in bytes than the longest so
+                    // far can't be longer in characters: skip counting.
+                    continue;
+                }
+                if !piece.is_empty() {
+                    // `chars().count()` is std's vectorized count.
+                    cur += piece.chars().count();
+                    ends_cr = piece.ends_with('\r');
+                }
+                if line_ends {
+                    // A line break follows: the line ends (`\r\n` counts as
+                    // the break, as `str::lines` treats it).
+                    max = max.max(cur - usize::from(ends_cr));
+                    cur = 0;
+                    ends_cr = false;
+                }
+            }
+        }
+        // A last line without a line break: a lone `\r` at its end is text
+        // to `str::lines`, so it counts here too.
+        max.max(cur)
     }
 
     /// Return the text between two character offsets as a `String`.
@@ -1537,6 +1622,46 @@ pub fn grapheme_width(g: RopeSlice) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T749: the chunk scan agrees with the `String`-based definition it
+    /// replaced, on line breaks, multi-byte text, and a buffer large enough
+    /// to span many rope chunks.
+    #[test]
+    fn max_line_chars_matches_lines_of_the_text() {
+        let long = "é".repeat(3000) + "\r\n" + &"x".repeat(10) + "\n";
+        // Many `\r\n`s, so some straddle the rope's chunk boundaries.
+        let crlf = "abcdefghij\r\n".repeat(3000) + "k\r";
+        let short_then_long = "x\r\n".repeat(4000) + &"y".repeat(5000);
+        for text in [
+            "",
+            "\n",
+            "abc",
+            "abc\n",
+            "a\r\nbcd\r\n",
+            "ab\r",
+            "a\r\r\nb",
+            "日本語\nab\n",
+            long.as_str(),
+            crlf.as_str(),
+            short_then_long.as_str(),
+        ] {
+            let code = Code::new(text, "", None).unwrap();
+            let want = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+            assert_eq!(code.max_line_chars(), want, "{text:?}");
+            assert_eq!(code.get_content(), text);
+        }
+    }
+
+    /// Both whole-buffer passes are counted, so a test can assert that an
+    /// idle frame makes none (T749).
+    #[test]
+    fn whole_buffer_passes_are_counted() {
+        let code = Code::new("one\ntwo\n", "", None).unwrap();
+        let before = full_text_scans();
+        let _ = code.get_content();
+        let _ = code.max_line_chars();
+        assert_eq!(full_text_scans() - before, 2);
+    }
 
     #[test]
     fn test_insert() {

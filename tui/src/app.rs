@@ -2218,6 +2218,13 @@ pub struct App {
     /// Terminal image picker; `None` until set from a real terminal (so tests
     /// and headless use construct fine), and on terminals without graphics.
     pub picker: Option<ImagePicker>,
+    /// How to ask the terminal for its graphics support, installed by the
+    /// terminal front end and run once, the first time an image is opened
+    /// (T749). Probing at startup instead cost every launch a round trip of
+    /// terminal queries — and ~250 ms on a terminal that never answers them
+    /// — although most sessions never show an image. `None` (tests, the GUI
+    /// front ends) leaves [`App::picker`] as it is.
+    pub image_probe: Option<fn() -> Option<ImagePicker>>,
     /// Persisted user settings.
     pub settings: Settings,
     /// Settings file this app persists to. `None` — the normal case — uses the
@@ -2735,6 +2742,7 @@ impl App {
             bookmarks: Vec::new(),
             nav_idx: 0,
             picker: None,
+            image_probe: None,
             zen_saved: None,
             macro_state: MacroState::Idle,
             macro_keys: Vec::new(),
@@ -8323,10 +8331,11 @@ impl App {
     /// Restore the active buffer's persisted undo tree, if one was saved for this
     /// file and its content still matches.
     fn restore_persistent_undo(&mut self, path: &Path) {
-        let Some(content) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+        let Some(tab) = self.editor.active_tab() else {
             return;
         };
-        if let Some(history) = crate::undo_store::load(path, &content)
+        // The text is copied only when a saved history exists (T749).
+        if let Some(history) = crate::undo_store::load_with(path, || tab.text())
             && let Some(tab) = self.editor.active_tab_mut()
         {
             tab.editor.code_mut().set_history(history);
@@ -8595,6 +8604,12 @@ impl App {
 
     #[cfg(feature = "image")]
     fn open_image(&mut self, path: &Path) {
+        // The terminal is asked about graphics on first use, not at startup.
+        if self.picker.is_none()
+            && let Some(probe) = self.image_probe.take()
+        {
+            self.picker = probe();
+        }
         let Some(picker) = self.picker.as_ref() else {
             self.messages.warn(t!("msg.image_needs_terminal"));
             return;

@@ -71,7 +71,18 @@ Capabilities:
   (spaces or a tab).
 
 Image files (`.png`, `.jpg`, `.gif`, and similar) open in a view-only image tab
-rather than the text editor; editing commands are no-ops on those tabs.
+rather than the text editor; editing commands are no-ops on those tabs. The
+terminal is asked which image protocol it speaks (kitty, iTerm2, Sixel, or
+half blocks) the first time an image is opened, not at startup
+(`App::image_probe`, installed by the terminal front end, T749): the probe is
+a round trip of terminal queries every launch used to pay for, ~250 ms on a
+terminal that doesn't answer them, although most sessions show no image.
+
+**Opening a file** reads it through the authority's `stream_text_guarded`
+(T749): plain UTF-8 streams straight into the new buffer's rope
+(`CodeEditor::from_rope`, language detection reading only the first line for
+a shebang), so opening a 100 MB file holds about 100 MB, not that plus a
+`String` copy; any other encoding is decoded whole, as before.
 
 **Reloading clean buffers** (`Editor::reload_clean_from_disk_checked`, after
 a branch switch or an external change) reads each file through the same guard

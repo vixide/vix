@@ -183,6 +183,9 @@ whole file and lists every test in file order as `(line, TestMatch)`, the line
 being the one that names the test (Rust: the `fn` line after `#[test]`). The
 host draws a local **Run test** code lens on each of those lines where the
 language server put no lens of its own (see `spec/ide-parity`).
+`knows_tests_in(ext)` says whether either function knows a test syntax for a
+file extension, so the host skips copying a buffer's text for a file in which
+they would find nothing — a 100 MB log, say (T749).
 
 ## As implemented in Vix
 

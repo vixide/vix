@@ -406,6 +406,10 @@ impl App {
             return Vec::new();
         };
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        // No test syntax for this kind of file: don't copy its text (T749).
+        if !crate::tasks::test_at_point::knows_tests_in(ext) {
+            return Vec::new();
+        }
         let rel = path
             .strip_prefix(&self.root)
             .unwrap_or(path)

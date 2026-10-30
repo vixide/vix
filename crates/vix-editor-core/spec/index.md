@@ -30,6 +30,20 @@ The host routes a snake_case id through `App::run_named_action(id)`:
 Every action has a smoke test in `tui/tests/integration/catalog.rs`
 (`catalog_<snake>()`), and its own page under `spec/<kebab>/index.md`.
 
+## Large buffers (T749)
+
+The buffer is a rope; nothing on a per-frame path copies or scans all of it.
+`Code::get_content` (a full `String` copy) allocates once at the exact size
+instead of growing by doubling. `Editor::max_line_width` (asked on every frame
+to decide whether a horizontal scrollbar is needed) is cached on the buffer's
+`revision` and computed by `Code::max_line_chars`, a scan of the rope's chunks
+in place that skips counting any line no longer in bytes than the longest so
+far (~20 ms per edit on a 100 MB file; an idle frame costs nothing). `Code::
+from_rope` / `Editor::from_rope` build a buffer from a rope the host already
+has. `code::full_text_scans()` counts this thread's whole-buffer passes
+(`get_content`, `max_line_chars`) so tests can assert an idle frame makes
+none.
+
 ## Code lens rows (T726)
 
 `Editor::set_code_lenses(Vec<(line, label)>)` gives a line a **virtual row

@@ -12,6 +12,7 @@
 
 #[cfg(feature = "ai")]
 mod ai;
+mod big_buffer;
 mod catalog;
 mod common;
 mod compare;
