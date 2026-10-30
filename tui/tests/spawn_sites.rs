@@ -128,6 +128,16 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "OS keychain helper (AI keys)",
         "optional dep of root `ai` feature",
     ),
+    (
+        "crates/vix-jupyter/src/kernel.rs",
+        "launches a Jupyter kernel from its kernelspec argv (T734b; key only in the 0600 connection file)",
+        "`process` feature, enabled only by root `jupyter` (opt-in, not in `full`)",
+    ),
+    (
+        "crates/vix-jupyter/src/worker.rs",
+        "relaunches the kernel on restart and kills it on shutdown (T734b)",
+        "`process` feature, enabled only by root `jupyter` (opt-in, not in `full`)",
+    ),
 ];
 
 /// Text that means "this file can start a process". Thread builders

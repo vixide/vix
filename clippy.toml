@@ -1,4 +1,5 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
-# `IRCv3` is a protocol name (vix-im-irc), not a code item; ".." keeps the defaults.
-doc-valid-idents = ["IRCv3", ".."]
+# `IRCv3` (vix-im-irc) and `ZeroMQ`, `IOPub`, `IPython` (vix-jupyter) are
+# protocol and product names, not code items; ".." keeps the defaults.
+doc-valid-idents = ["IRCv3", "ZeroMQ", "IOPub", "IPython", ".."]

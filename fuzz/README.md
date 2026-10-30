@@ -50,6 +50,7 @@ function, where it runs on every `cargo test`.
 | `structured_convert` | The four JSON⇄YAML/JSON⇄TOML `Tools → Convert` crates | Converting valid JSON to YAML/TOML and back reparses to an *equivalent* value (exact for strings/bools/null/structure; a tiny relative tolerance for numbers, since decimal-text float formatting isn't bit-exact — found on the first run: a 30-significant-digit float's last digit shifted) |
 | `macro_tokens` | `vix-macros`: `decode_key`/`decode`, the `macros.toml` token parser | No panic on any token text (a user can hand-edit the file); a token that decodes re-encodes to a non-empty token |
 | `im_message` | `vix-im`: `sanitize`/`sanitize_multiline`, `find_refs` + `resolve_in_root`, `find_mentions`, `parse_input`, `history::decode`, `Thread::from_json` + `reanchor` | Everything received from another person is handled totally; sanitized text holds no control or bidi-override character and sanitizing is idempotent; reference and mention ranges are on char boundaries |
+| `jupyter_wire` | `vix-jupyter-core`: the Jupyter wire codec (`wire::decode`/`encode`), typed contents, `Output`, `strip_ansi` | Decoding is total; frames not signed with the key never get as far as JSON parsing; signed attacker-chosen JSON types and renders without a panic; error text and stripped text hold no control character except newline and tab |
 
 ## Adding a target
 

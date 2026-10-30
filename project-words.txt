@@ -737,3 +737,4 @@ headlessly
 KUBECONFIG
 WSLENV
 distroless
+PROGRAMDATA

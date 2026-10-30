@@ -1,0 +1,47 @@
+[package]
+name = "vix-jupyter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Jupyter kernel transport: kernelspec discovery, kernel launch with a private connection file, and a signed ZeroMQ client on a worker thread."
+
+[features]
+default = ["process"]
+# Launch kernels and talk to them over ZeroMQ. Off, only kernelspec
+# discovery and the event types are built: no sockets, no processes.
+process = ["dep:zeromq", "dep:tokio", "dep:getrandom", "dep:jiff", "dep:nix"]
+
+[dependencies]
+vix-jupyter-core = { workspace = true }
+serde_json = { workspace = true }
+zeromq = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
+
+# Unix: IPC (Unix-domain sockets in the private runtime directory), and
+# SIGINT for kernels whose `interrupt_mode` is "signal" (the default).
+[target.'cfg(unix)'.dependencies]
+zeromq = { workspace = true, optional = true, features = ["ipc-transport"] }
+nix = { workspace = true, optional = true }
+
+[dev-dependencies]
+vix-jupyter-core = { workspace = true }
+tokio = { workspace = true }
+zeromq = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+zeromq = { workspace = true, features = ["ipc-transport"] }
+
+[[test]]
+name = "fake_kernel"
+required-features = ["process"]
+
+[[test]]
+name = "ipykernel_smoke"
+required-features = ["process"]
+
+[lints]
+workspace = true

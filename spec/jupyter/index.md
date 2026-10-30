@@ -1,8 +1,13 @@
 # Jupyter kernel REPL
 
-**Status:** spike done 2026-10-30 (T734). Nothing is implemented yet; this
-page records the decision and the v1 design. Implementation is split into
-T734a–T734h in [`tasks.md`](../../tasks.md).
+**Status:** spike done 2026-10-30 (T734). The protocol core and the
+transport are built (T734a, T734b, 2026-10-30):
+[`vix-jupyter-core`](../../crates/vix-jupyter-core/spec/index.md) and
+[`vix-jupyter`](../../crates/vix-jupyter/spec/index.md), tested against an
+in-process fake kernel and, opt-in, a real ipykernel. Nothing in the App uses
+them yet: the menu, actions, output routing, trust prompts and images are
+T734c–T734h in [`tasks.md`](../../tasks.md). This page records the decision
+and the v1 design.
 
 ## Goal
 
