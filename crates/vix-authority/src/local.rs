@@ -18,6 +18,10 @@ impl Authority for LocalAuthority {
         "local"
     }
 
+    fn is_local(&self) -> bool {
+        true
+    }
+
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
         std::fs::read(path)
     }

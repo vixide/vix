@@ -44,6 +44,15 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// logs and tests. Never shown to the user.
     fn name(&self) -> &'static str;
 
+    /// Whether this authority's paths are this machine's own and reading a
+    /// file is a cheap local call (T715). `false` (the default, so a new
+    /// authority is treated as remote) makes the App's project-wide searches
+    /// run a search tool (`rg`, else `grep`) through [`Authority::command`]
+    /// instead of reading every indexed file one round trip at a time.
+    fn is_local(&self) -> bool {
+        false
+    }
+
     /// Read the whole file (`std::fs::read`).
     ///
     /// # Errors
@@ -338,5 +347,6 @@ mod tests {
     #[test]
     fn the_slot_defaults_to_local() {
         assert_eq!(current().name(), "local");
+        assert!(current().is_local());
     }
 }

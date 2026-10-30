@@ -62,6 +62,7 @@ mod org_table;
 mod picker_panels;
 mod pipe;
 mod prettier;
+mod remote_search;
 mod roam;
 #[cfg(feature = "script")]
 mod scripts;
@@ -76,6 +77,7 @@ mod terminal_off;
 mod tutor;
 
 use std::collections::VecDeque;
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use crate::editor_core::actions::{
@@ -98,6 +100,7 @@ use vix_input::KeyModifiers;
 /// feature; never constructed, so `App::picker` stays `None`.
 #[cfg(not(feature = "image"))]
 pub enum ImagePicker {}
+use crate::workspace_search::tool::ToolQuery;
 use regex::Regex;
 
 use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
@@ -12122,27 +12125,27 @@ impl App {
     /// `.gitignore`), capped at 2,000. Paths in the items are relative to the
     /// project root.
     pub(crate) fn collect_todos(&self) -> Vec<crate::todo_tree::Item> {
+        let tags = crate::todo_tree::DEFAULT_TAGS;
+        let query = ToolQuery::any_of(tags).max_filesize(crate::authority::MAX_TEXT_BYTES);
         let mut items = Vec::new();
-        let auth = crate::authority::current();
-        for path in &self.file_index {
-            let Ok(content) = auth.read_to_string_guarded(path) else {
-                continue;
-            };
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
-            items.extend(crate::todo_tree::scan(
-                &rel,
-                &content,
-                crate::todo_tree::DEFAULT_TAGS,
-            ));
+        self.scan_index(&query, remote_search::Source::Disk, &|_| true, |line| {
+            // `scan` is line-by-line, so one line at a time finds the same
+            // tags; only its line number needs restoring.
+            items.extend(
+                crate::todo_tree::scan(line.rel, line.text, tags)
+                    .into_iter()
+                    .map(|mut it| {
+                        it.line = line.number;
+                        it
+                    }),
+            );
             if items.len() >= 2000 {
                 items.truncate(2000);
-                break;
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-        }
+        });
         items
     }
 
@@ -12215,35 +12218,29 @@ impl App {
         let Ok(re) = Regex::new(&pat) else {
             return Vec::new();
         };
+        let query = remote_search::buffers_query(ToolQuery::regex_only(pat));
         let mut hits = Vec::new();
-        for path in &self.file_index {
-            let Some(content) = self.current_text(path) else {
-                continue;
-            };
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
-            for (i, line) in content.lines().enumerate() {
-                if re.is_match(line) {
-                    let byte = line.find(symbol).unwrap_or(0);
-                    let col = line[..byte].chars().count() + 1;
-                    let clipped: String = line.trim_start().chars().take(120).collect();
-                    hits.push(Hit {
-                        path: path.clone(),
-                        rel: rel.clone(),
-                        line: i + 1,
-                        col,
-                        display: format!("{rel}:{}: {clipped}", i + 1),
-                        text: clipped,
-                    });
-                    if hits.len() >= 200 {
-                        return hits;
-                    }
-                }
+        self.scan_index(&query, remote_search::Source::Buffers, &|_| true, |line| {
+            if !re.is_match(line.text) {
+                return ControlFlow::Continue(());
             }
-        }
+            let byte = line.text.find(symbol).unwrap_or(0);
+            let col = line.text[..byte].chars().count() + 1;
+            let clipped: String = line.text.trim_start().chars().take(120).collect();
+            hits.push(Hit {
+                path: line.path.to_path_buf(),
+                rel: line.rel.to_string(),
+                line: line.number,
+                col,
+                display: format!("{}:{}: {clipped}", line.rel, line.number),
+                text: clipped,
+            });
+            if hits.len() >= 200 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
         hits
     }
 
@@ -12306,42 +12303,41 @@ impl App {
         };
 
         let filter = ps.path_filter();
+        let query = remote_search::buffers_query(ToolQuery::search(
+            &ps.query,
+            ps.flags.contains(WorkspaceFlags::REGEX),
+            ps.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
+        ));
         let mut hits: Vec<Hit> = Vec::new();
-        let mut files = 0usize;
-        'outer: for path in &self.file_index {
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
-            if !filter.allows(&rel.replace('\\', "/")) {
-                continue;
-            }
-            let Some(content) = self.current_text(path) else {
-                continue;
-            };
-            let mut file_had_hit = false;
-            for (i, line) in content.lines().enumerate() {
-                if let Some(m) = re.find(line) {
-                    file_had_hit = true;
-                    let clipped = crate::workspace_search::clip(line);
-                    hits.push(Hit {
-                        path: path.clone(),
-                        rel: rel.clone(),
-                        line: i + 1,
-                        col: m.start() + 1,
-                        display: format!("{rel}:{}: {clipped}", i + 1),
-                        text: clipped,
-                    });
-                    if hits.len() >= 5000 {
-                        break 'outer;
-                    }
+        let mut files = remote_search::FileCount::default();
+        self.scan_index(
+            &query,
+            remote_search::Source::Buffers,
+            &|rel| filter.allows(&rel.replace('\\', "/")),
+            |line| {
+                files.enter(line.path);
+                let Some(m) = re.find(line.text) else {
+                    return ControlFlow::Continue(());
+                };
+                files.hit();
+                let clipped = crate::workspace_search::clip(line.text);
+                hits.push(Hit {
+                    path: line.path.to_path_buf(),
+                    rel: line.rel.to_string(),
+                    line: line.number,
+                    col: m.start() + 1,
+                    display: format!("{}:{}: {clipped}", line.rel, line.number),
+                    text: clipped,
+                });
+                if hits.len() >= 5000 {
+                    files.cap();
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
                 }
-            }
-            if file_had_hit {
-                files += 1;
-            }
-        }
+            },
+        );
+        let files = files.total();
 
         if let Some(p) = self.workspace_search.as_mut() {
             p.status = if hits.is_empty() {
@@ -13298,36 +13294,33 @@ impl App {
         self.visible.set(Visible::BOTTOM_DOCK, true);
         self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ search \"{query}\""));
+        let query = remote_search::buffers_query(ToolQuery::search(query, regex, case_sensitive));
         let mut count = 0usize;
-        let mut files = 0usize;
-        for path in self.file_index.clone() {
-            let Some(content) = self.current_text(&path) else {
-                continue;
+        let mut files = remote_search::FileCount::default();
+        let mut out = Vec::new();
+        self.scan_index(&query, remote_search::Source::Buffers, &|_| true, |line| {
+            files.enter(line.path);
+            let Some(m) = re.find(line.text) else {
+                return ControlFlow::Continue(());
             };
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .into_owned();
-            let mut had_hit = false;
-            for (i, line) in content.lines().enumerate() {
-                if let Some(m) = re.find(line) {
-                    had_hit = true;
-                    count += 1;
-                    let clipped: String = line.trim_start().chars().take(120).collect();
-                    self.bottom_dock
-                        .push(format!("{rel}:{}:{}: {clipped}", i + 1, m.start() + 1));
-                    if count >= 5000 {
-                        break;
-                    }
-                }
-            }
-            if had_hit {
-                files += 1;
-            }
+            files.hit();
+            count += 1;
+            let clipped: String = line.text.trim_start().chars().take(120).collect();
+            out.push(format!(
+                "{}:{}:{}: {clipped}",
+                line.rel,
+                line.number,
+                m.start() + 1
+            ));
             if count >= 5000 {
-                break;
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
+        });
+        let files = files.total();
+        for line in out {
+            self.bottom_dock.push(line);
         }
         self.bottom_dock
             .push(format!("[{count} matches in {files} files]"));

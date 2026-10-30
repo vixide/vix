@@ -96,7 +96,7 @@ error output.
 ### Processes
 
 `command(spec)` returns a `Command` running `ssh … HOST <envelope>` whose
-script is: `cd -- <cwd> || exit 1`, then `KEY=<value>; export KEY` or
+script is: `cd -P -- <cwd> || exit 1` (T715: `-P` resolves `..` physically, as a local `chdir` does), then `KEY=<value>; export KEY` or
 `unset KEY` for each environment change in order, then `exec <program>
 <args…>`, every word quoted. An option-shaped program or an invalid variable
 name is refused (`InvalidInput`). `Arg::Raw` is an ordinary argument (the

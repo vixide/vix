@@ -11,6 +11,7 @@ description = "Search (and replace) across every file under the workspace root, 
 bitflags = { workspace = true }
 regex = { workspace = true }
 rust-i18n = { workspace = true }
+serde_json = { workspace = true }
 vix-find-panel = { workspace = true }
 vix-i18n = { workspace = true }
 

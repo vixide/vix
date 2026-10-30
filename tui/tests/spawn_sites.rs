@@ -14,6 +14,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
     (
+        "tui/src/app/remote_search.rs",
+        "`rg`/`grep` for project-wide search under a non-local authority (T715; argv only, no shell)",
+        "`tasks` feature (without it the scan stays in-process)",
+    ),
+    (
         "crates/vix-authority/src/lib.rs",
         "the `Authority::command` signature (T710): builds no process itself",
         "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",

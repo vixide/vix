@@ -704,3 +704,6 @@ libzmq
 runtimed
 runtimelib
 smol
+cdup
+chdir
+prefilter

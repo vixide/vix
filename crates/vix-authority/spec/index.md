@@ -6,7 +6,7 @@ It lets a remote machine stand in for the local one. The cross-cutting design is
 [`spec/remote-editing`](../../../spec/remote-editing/index.md); this crate is
 its first piece (T710, T711).
 
-**Status:** Shipped (T710, T711; finished 2026-10-29; T712 2026-10-30).
+**Status:** Shipped (T710, T711; finished 2026-10-29; T712 and T715 2026-10-30).
 `LocalAuthority` is installed by default. `SshAuthority` (the `ssh`
 feature, [`spec/ssh`](ssh/index.md)) is installed only by the experimental
 `vix ssh://…` command line.
@@ -27,6 +27,13 @@ feature, [`spec/ssh`](ssh/index.md)) is installed only by the experimental
   `FileStat` the caller saw, or it appeared or vanished (`same_version`).
   The default checks with `metadata` first; the SSH authority checks and
   writes in one remote script.
+- `is_local()` (T715) says whether the authority's paths are this
+  machine's and a read is a cheap local call: `true` for `LocalAuthority`,
+  `false` by default (so a new authority counts as remote), for
+  `FakeAuthority` and for `SshAuthority`. When it is `false`, the App's
+  project-wide searches run `rg` (else `grep`) through `command` instead of
+  reading every file ([`vix-workspace-search`'s
+  spec](../../vix-workspace-search/spec/index.md#remote-search-t715)).
 - `current()` returns the installed authority (the local one while the slot
   is empty); `install(authority)` replaces it and returns the previous one.
   The slot is process-wide, like Fresh's single authority: one Vix process
@@ -82,7 +89,7 @@ workspace.
 | Editor | open (canonicalize, `is_unwritable`, guarded read), reload from disk, reopen with encoding, save (`write_atomic`) — `vix-editor`; App save-all/replace-in-files writes and the apply-file-plan canonicalization, the external-change mtime poll, large-file open checks, Save As guards (dangling link, overwrite), reopen-closed-tab, recent-file canonicalization, session tab restore and the session key, jump-to-location checks (bottom dock, test results, debug stops, code-lens run directory) |
 | Explorer | the tree listing (`vix-left-dock`), copy/cut/paste/delete/trash, rename, new file/folder |
 | File browser | **File → Open…** listing (`vix-file-browser-panel`) |
-| Search | the fuzzy file finder index (`walk_files`) and symbol search reads |
+| Search | the fuzzy file finder index (`walk_files`) and workspace-symbol reads; under a non-local authority, workspace search, search to dock, the TODO finder/Todo Tree and go-to-definition run `rg`/`grep` through `command` (T715), and otherwise read each file |
 | Workspaces | the `.vix-workspace` file load/save and its folder containment check (`vix-workspace`), switching projects, adding a folder |
 | Tasks | project-type detection, discovered-task manifests, `tasks.toml` and `.vix/run.toml` (`vix-tasks`), `.vix/project.toml`, `.editorconfig` |
 | Org | `id:` link following, archive to `<file>_archive`, capture into project files, the agenda over the file index (and `org_agenda_files`), agenda TODO cycling; every Org-roam node, daily note, rename and backlink read (all under the workspace root) |

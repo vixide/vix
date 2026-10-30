@@ -36,6 +36,8 @@ pub struct Call {
 ///   real trash.
 /// - `command` runs the program locally, with its working directory mapped
 ///   into the backing directory.
+/// - `is_local` is `false` (T715): the App searches it with a tool run
+///   through `command`, as it would a remote machine.
 /// - Every call is recorded; see [`FakeAuthority::calls`].
 #[derive(Debug)]
 pub struct FakeAuthority {
@@ -358,6 +360,8 @@ mod tests {
     fn paths_map_into_the_backing_directory_and_back() {
         let dir = scratch("map");
         let fake = FakeAuthority::new(&dir).unwrap();
+        // The fake stands in for a remote machine (T715).
+        assert!(!fake.is_local());
         fake.write(Path::new("/a.txt"), b"hi").unwrap();
         assert_eq!(std::fs::read(fake.backing().join("a.txt")).unwrap(), b"hi");
         assert_eq!(

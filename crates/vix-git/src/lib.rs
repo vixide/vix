@@ -577,6 +577,13 @@ fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
 /// Where a directory sits inside its git working tree: the tree's top level
 /// and the directory's own path below it (`git rev-parse --show-prefix`,
 /// e.g. `"sub/"`, empty at the top level).
+///
+/// `top` is the directory joined with `--show-cdup` (`sub/../`), never git's
+/// own absolute `--show-toplevel` (T715): that is the path as the machine
+/// running git spells it, which under a fake or a remote authority need not
+/// be an authority path. Changing into it resolves `..` physically (a local
+/// `chdir`, the SSH authority's `cd -P`), so it lands on the same directory
+/// `--show-toplevel` names, symlinks included.
 #[derive(Clone, Debug)]
 struct RepoLoc {
     top: PathBuf,
@@ -594,13 +601,18 @@ fn locate(dir: &Path) -> Option<RepoLoc> {
     if let Some(loc) = cache.lock().ok()?.get(dir) {
         return Some(loc.clone());
     }
-    let out = git(dir, &["rev-parse", "--show-toplevel", "--show-prefix"]).ok()?;
+    let out = git(dir, &["rev-parse", "--show-cdup", "--show-prefix"]).ok()?;
     if !out.status.success() {
         return None;
     }
     let text = String::from_utf8_lossy(&out.stdout);
     let mut lines = text.lines();
-    let top = PathBuf::from(lines.next().filter(|t| !t.is_empty())?);
+    let cdup = lines.next()?;
+    let top = if cdup.is_empty() {
+        dir.to_path_buf()
+    } else {
+        dir.join(cdup)
+    };
     let prefix = lines.next().unwrap_or("").to_string();
     let loc = RepoLoc { top, prefix };
     if let Ok(mut map) = cache.lock() {

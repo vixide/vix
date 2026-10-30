@@ -47,6 +47,18 @@ remove, watch, spawn, and the terminal. `LocalAuthority` is today's behavior.
    (links to [`../open-container/index.md`](../open-container/index.md)),
    Kubernetes, WSL.
 
+**Search and git (T715, done 2026-10-30).** Under a non-local authority
+(`Authority::is_local` is `false`) the App's project-wide scans run one
+`rg --json` (else, for a literal query, `grep -rnF`) on the remote through
+`Authority::command` instead of a read per file, re-check every line with
+the local regex and keep only indexed files, so results match the local
+search; a regex without `rg` falls back to per-file reads. Every git and jj
+invocation already ran through the authority (T710); `vix-git` now derives
+the repository top level from `--show-cdup` rather than git's own absolute
+`--show-toplevel`, so it stays an authority path. Details:
+[`vix-workspace-search`](../../crates/vix-workspace-search/spec/index.md#remote-search-t715),
+[`vix-git`](../../crates/vix-git/spec/index.md#where-git-runs-t710-t715).
+
 Path form: `ssh://user@host[:port]/abs/path` on the command line and in the
 UI; TRAMP-style `/ssh:host:/path` accepted as an alias.
 

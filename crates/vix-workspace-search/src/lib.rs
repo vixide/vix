@@ -11,6 +11,8 @@ vix_i18n::surface!();
 
 use std::path::PathBuf;
 
+pub mod tool;
+
 use vix_find_panel::Field;
 
 /// One matching line.
@@ -254,15 +256,14 @@ impl WorkspaceSearch {
         if self.query.len() < 2 {
             return None;
         }
-        let mut core = if self.flags.contains(Flags::REGEX) {
-            self.query.clone()
-        } else {
-            regex::escape(&self.query)
-        };
-        if !self.flags.contains(Flags::CASE_SENSITIVE) {
-            core = format!("(?i){core}");
-        }
-        Some(core)
+        Some(
+            tool::ToolQuery::search(
+                &self.query,
+                self.flags.contains(Flags::REGEX),
+                self.flags.contains(Flags::CASE_SENSITIVE),
+            )
+            .regex,
+        )
     }
 
     /// Move the selection up one hit.

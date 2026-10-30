@@ -483,6 +483,10 @@ name = "authority_fake"
 path = "tests/authority_fake.rs"
 
 [[test]]
+name = "authority_search"
+path = "tests/authority_search.rs"
+
+[[test]]
 name = "authority_ssh"
 path = "tests/authority_ssh.rs"
 

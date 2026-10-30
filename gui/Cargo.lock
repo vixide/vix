@@ -12714,6 +12714,7 @@ dependencies = [
  "bitflags 2.13.2",
  "regex",
  "rust-i18n",
+ "serde_json",
  "vix-find-panel",
  "vix-i18n",
 ]

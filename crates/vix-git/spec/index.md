@@ -68,7 +68,7 @@ Every runner that takes a file path takes it **relative to `dir`** (the
 workspace root), which may be a subdirectory of the working tree. Git reads
 `HEAD:<path>` / `:<path>` blob names and `update-index --cacheinfo` paths from
 the repository top level, and `git status --porcelain` prints top-level paths,
-so the crate resolves `git rev-parse --show-toplevel --show-prefix` once per
+so the crate resolves `git rev-parse --show-cdup --show-prefix` once per
 directory (cached; only successes are cached), runs each path-taking command
 with the top level as its working directory, and joins the prefix onto the
 path (resolving `.`/`..` lexically). [`status`] converts its rows back, so a
@@ -76,6 +76,24 @@ path (resolving `.`/`..` lexically). [`status`] converts its rows back, so a
 outside it; those rows round-trip through [`stage`]/[`unstage`]. A path that
 can't be mapped (absolute, or climbing above the top level) is passed to git
 unchanged from `dir`, so git reports its own error.
+
+The top level is `dir` joined with `--show-cdup` (`sub/../`), not git's
+absolute `--show-toplevel` (T715): that is the path as the machine running
+git spells it, which under a remote or fake authority need not be one of the
+authority's paths. Changing into `dir/sub/../` resolves `..` physically (a
+local `chdir`, the SSH authority's `cd -P`), so it is the same directory,
+symlinks included.
+
+## Where git runs (T710, T715)
+
+Every runner builds its `git` with `git_command`, through
+`vix_authority::current().command(…)`: under the SSH authority git runs on
+the remote host, in the remote working directory, and every path in its
+output is a remote path relative to `dir`. Nothing here reads the
+repository's files directly (the one local file read, `gpg-agent.conf`, is
+the user's own signing setup). `tui/tests/authority_search.rs` runs
+`status` and `head_blob` under a `FakeAuthority` and asserts the `git`
+`command` call; `tui/tests/authority_ssh.rs` runs status over a fake `ssh`.
 
 ## Literal pathspecs (T651)
 

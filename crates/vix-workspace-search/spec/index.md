@@ -34,6 +34,16 @@ In Workspace…**.
   baseline-checked, line-ending-preserving rewrite an editable-results save
   applies to each file (see *Write safety* below).
 
+- `tool` (T715) — `ToolQuery` (the Rust regex for `rg`, the fixed strings
+  `grep -F` can run instead, case folding, a file-size cap; built by
+  `search`, `any_of` and `regex_only`), `Tool` (`Rg`/`Grep`: `program()`,
+  `args(&query)`, `parse(line, known)`) and `ToolLine` (`rel`, `line`,
+  `text`). `parse_rg_json` reads `rg --json` `match` messages (a non-UTF-8
+  path or line is skipped); `parse_grep` splits `path:line:text` at the
+  first `:digits:` whose path the caller knows, so a `:` in a file name
+  can't misplace it. `pattern()` is `ToolQuery::search(…).regex`, so the
+  panel and the tool can't drift.
+
 ## What lives where
 
 This crate holds only the panel's *state* — pure data plus the small pieces
@@ -43,6 +53,37 @@ open buffers, so it drives the actual scan: reading each candidate file
 (open buffers in their current, possibly-unsaved state; everything else from
 disk), matching `pattern()` against each line, and filtering paths through
 `path_filter()`. Rendering lives in `tui/src/ui.rs`.
+
+## Remote search (T715)
+
+The App's scans (this panel, **Search in Workspace (to dock)**, the TODO
+finder and Todo Tree, and go-to-definition without a language server) share
+one walk, `App::scan_index` (`tui/src/app/remote_search.rs`). Under the
+local authority it reads every indexed file in-process, exactly as before.
+Under any authority whose `is_local()` is `false` (SSH, the test fake) it
+runs one search tool there through `Authority::command`, in each workspace
+folder:
+
+- `rg --json --no-config --no-messages --hidden [--max-filesize N] -e
+  <regex> -- .` when the authority's `which("rg")` finds it; rg's default
+  regex engine is the `regex` crate, so the pattern is the panel's own.
+- else, for a literal query only, `grep -r -n -I -H -F [-i]
+  --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target -e
+  <word>… -- .` (`-i` only for an ASCII query: `grep`'s case folding
+  follows the remote locale).
+- else (a regex without `rg`), or when the tool can't start or fails
+  without output (exit status other than 0 or 1), the in-process walk —
+  through the authority, one read per file.
+
+The tool is a prefilter. Every line it reports is re-checked with the same
+Rust regex, only files the file index holds (and the path filter allows)
+count, and lines are ordered by the file's position in the index and then
+line number — the in-process order — so results and counts match the local
+search (`tui/tests/authority_search.rs` compares the two). Paths in the
+output are relative to the tool's working directory and joined onto the
+workspace folder: they are authority paths, never looked up locally. Files
+an open buffer shows are scanned from the buffer (unsaved text, as
+locally). A tool may report at most 50,000 lines before it is stopped.
 
 ## Editable search results ("wgrep"-style, T211)
 
