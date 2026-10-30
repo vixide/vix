@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use crate::{Authority, FileKind, ProcessSpec, WalkOptions};
+use crate::{Authority, FileKind, ProcessSpec, WalkOptions, WriteConflict};
 
 /// Collects failures without stopping at the first.
 struct Report(Vec<String>);
@@ -47,6 +47,7 @@ pub fn run(auth: &dyn Authority, scratch: &Path) -> Vec<String> {
     );
 
     files(auth, scratch, &mut r);
+    conflicts(auth, scratch, &mut r);
     listing(auth, scratch, &mut r);
     moves(auth, scratch, &mut r);
     processes(auth, scratch, &mut r);
@@ -129,6 +130,47 @@ fn files(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
             "canonicalize is idempotent",
         );
     }
+}
+
+/// [`Authority::write_atomic_if_unchanged`] (T712): writes only over the
+/// version the caller saw.
+fn conflicts(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
+    let a = scratch.join("a.txt");
+    let fresh = scratch.join("fresh.txt");
+    let conflict = |res: std::io::Result<()>| res.is_err_and(|e| WriteConflict::is(&e));
+    let Some(seen) = r.ok(auth.metadata(&a), "metadata before a checked write") else {
+        return;
+    };
+    r.ok(
+        auth.write_atomic_if_unchanged(&a, b"checked\n", Some(&seen)),
+        "write_atomic_if_unchanged over the version seen",
+    );
+    r.check(
+        auth.read_to_string(&a).ok().as_deref() == Some("checked\n"),
+        "write_atomic_if_unchanged writes",
+    );
+    r.check(
+        conflict(auth.write_atomic_if_unchanged(&a, b"lost\n", Some(&seen))),
+        "write_atomic_if_unchanged refuses a changed file",
+    );
+    r.check(
+        conflict(auth.write_atomic_if_unchanged(&a, b"lost\n", None)),
+        "write_atomic_if_unchanged refuses a file that appeared",
+    );
+    r.check(
+        conflict(auth.write_atomic_if_unchanged(&fresh, b"lost\n", Some(&seen))),
+        "write_atomic_if_unchanged refuses a file that vanished",
+    );
+    r.check(
+        auth.read_to_string(&a).ok().as_deref() == Some("checked\n"),
+        "a refused write changes nothing",
+    );
+    r.ok(
+        auth.write_atomic_if_unchanged(&fresh, b"new\n", None),
+        "write_atomic_if_unchanged creates a new file",
+    );
+    r.check(auth.is_file(&fresh), "the new file exists");
+    r.ok(auth.remove_file(&fresh), "remove the new file");
 }
 
 fn listing(auth: &dyn Authority, scratch: &Path, r: &mut Report) {

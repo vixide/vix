@@ -19,6 +19,7 @@ pub mod conformance;
 mod fake;
 mod local;
 mod process;
+pub mod ssh;
 mod types;
 
 pub use fake::{Call, FakeAuthority};
@@ -94,6 +95,30 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// # Errors
     /// When both the atomic write and its in-place fallback fail.
     fn write_atomic(&self, path: &Path, data: &[u8]) -> io::Result<()>;
+
+    /// [`Authority::write_atomic`], but only if the file is still the version
+    /// the caller last saw (T712): `expected` is its stat then, or `None` if
+    /// it did not exist. A file that changed length or modification time
+    /// (compared in whole seconds, the precision a remote `stat` reports),
+    /// appeared, or vanished is left alone and the call fails with a
+    /// [`WriteConflict`]. A remote authority checks and writes in one
+    /// round trip; the default checks with [`Authority::metadata`] first.
+    ///
+    /// # Errors
+    /// A [`WriteConflict`] (see [`WriteConflict::is`]), or as
+    /// [`Authority::write_atomic`].
+    fn write_atomic_if_unchanged(
+        &self,
+        path: &Path,
+        data: &[u8],
+        expected: Option<&FileStat>,
+    ) -> io::Result<()> {
+        let now = self.metadata(path).ok();
+        if !same_version(expected, now.as_ref()) {
+            return Err(WriteConflict::error());
+        }
+        self.write_atomic(path, data)
+    }
 
     /// Atomically replace a text file's contents in the encoding it already
     /// has (`vix_fileops::write_text_in_file_encoding`).
@@ -212,6 +237,59 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// authority can't run processes at all (or, for the fake, when the
     /// working directory escapes its namespace).
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command>;
+}
+
+/// The refusal inside the `io::Error` from
+/// [`Authority::write_atomic_if_unchanged`]: the file changed since the
+/// caller read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WriteConflict;
+
+impl std::fmt::Display for WriteConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the file changed since it was read")
+    }
+}
+
+impl std::error::Error for WriteConflict {}
+
+impl WriteConflict {
+    /// The `io::Error` (kind `Other`) carrying a conflict.
+    #[must_use]
+    pub fn error() -> io::Error {
+        io::Error::other(Self)
+    }
+
+    /// Whether `e` reports a conflict.
+    #[must_use]
+    pub fn is(e: &io::Error) -> bool {
+        e.get_ref()
+            .is_some_and(<dyn std::error::Error + Send + Sync>::is::<Self>)
+    }
+}
+
+/// Whether a file is still the version `expected` describes: both missing,
+/// or both present with the same length and the same modification time in
+/// whole seconds (a missing time on either side compares equal).
+#[must_use]
+pub fn same_version(expected: Option<&FileStat>, now: Option<&FileStat>) -> bool {
+    match (expected, now) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            let secs = |s: &FileStat| {
+                s.modified
+                    .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+            };
+            a.len == b.len
+                && match (secs(a), secs(b)) {
+                    (Some(x), Some(y)) => x == y,
+                    _ => true,
+                }
+        }
+        _ => false,
+    }
 }
 
 /// The error [`Authority::command`] returns in a build without the `process`

@@ -11,6 +11,7 @@ list; this page adds usage detail and the `git` integration snippets.
 | `vix FILE...` | Open one or more files; the last one is focused. |
 | `vix FILE:LINE:COL` | Open `FILE` and jump straight to `LINE`, column `COL` (both 1-based). |
 | `vix -` | Read standard input into an unsaved scratch buffer instead of opening a file — e.g. `git show HEAD:path/to/file \| vix -`. |
+| `vix ssh://[USER@]HOST[:PORT]/PATH` | **Experimental** (T712). Work on a folder (or file) on another machine over SSH: the remote directory becomes the workspace, and its files, explorer, search, git and tasks go through `ssh`. TRAMP's `/ssh:[USER@]HOST[#PORT]:/PATH` works too, and `ssh://HOST/~/src` starts from the remote home. Vix connects before the editor starts, so `ssh` can ask for a password or a host-key confirmation as usual; later commands share that connection. Nothing is installed remotely: it needs a POSIX `sh` and the usual commands (`cat`, `stat`, `find`, `mv`). Settings, themes and keybindings stay local. See [remote editing](../remote-editing/index.md). |
 
 ## Options
 

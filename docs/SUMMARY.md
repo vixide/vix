@@ -98,6 +98,7 @@
 - [Org](org/index.md)
 - [Outline Panel](outline-panel/index.md)
 - [Persistent Undo](undo-store/index.md)
+- [Remote Editing](remote-editing/index.md)
 - [QR Code](qr-code/index.md)
 - [Roam](roam/index.md)
 - [Snippets](snippets/index.md)

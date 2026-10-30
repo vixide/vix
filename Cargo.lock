@@ -5833,6 +5833,7 @@ name = "vix-authority"
 version = "2.0.0"
 dependencies = [
  "ignore",
+ "proptest",
  "vix-fileops",
 ]
 

@@ -13824,10 +13824,25 @@ fn shell_command(script: &str) -> crate::authority::ProcessSpec {
 /// without `tasks` has none.
 #[cfg(feature = "tasks")]
 fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::process::Child> {
-    let mut command =
-        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
+    spawn_shell_on(&*crate::authority::current(), script, dir, no_tty)
+}
+
+/// [`spawn_shell`] under a chosen authority: the AI `cli` provider always
+/// runs on this machine (T712), wherever the workspace is.
+#[cfg(feature = "tasks")]
+fn spawn_shell_on(
+    auth: &dyn crate::authority::Authority,
+    script: &str,
+    dir: &Path,
+    no_tty: bool,
+) -> std::io::Result<std::process::Child> {
+    let mut spec = shell_command(script).current_dir(dir);
     if no_tty {
-        no_tty_prompts(&mut command);
+        spec = no_tty_prompts(spec);
+    }
+    let mut command = auth.command(&spec)?;
+    if no_tty {
+        detach_from_tty(&mut command);
     }
     command
         .stdin(std::process::Stdio::null())
@@ -13866,9 +13881,9 @@ fn run_shell_filter(
             buf
         })
     }
-    let mut command =
-        crate::authority::current().command(&shell_command(script).current_dir(dir))?;
-    no_tty_prompts(&mut command);
+    let mut command = crate::authority::current()
+        .command(&no_tty_prompts(shell_command(script).current_dir(dir)))?;
+    detach_from_tty(&mut command);
     let mut child = command
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -13941,8 +13956,8 @@ fn spawn_argv(
     let spec = crate::authority::ProcessSpec::new(resolved)
         .args(args)
         .current_dir(dir);
-    let mut command = auth.command(&spec)?;
-    no_tty_prompts(&mut command);
+    let mut command = auth.command(&no_tty_prompts(spec))?;
+    detach_from_tty(&mut command);
     command
         .stdin(std::process::Stdio::null())
         .stdout(writer.try_clone()?)
@@ -13962,6 +13977,19 @@ fn spawn_shell(_script: &str, _dir: &Path, _no_tty: bool) -> std::io::Result<std
     ))
 }
 
+/// Without `tasks` Vix never starts a shell.
+#[cfg(all(feature = "ai", not(feature = "tasks")))]
+fn spawn_shell_on(
+    _auth: &dyn crate::authority::Authority,
+    _script: &str,
+    _dir: &Path,
+    _no_tty: bool,
+) -> std::io::Result<std::process::Child> {
+    Err(std::io::Error::other(
+        t!("msg.capability_missing", name = "tasks").to_string(),
+    ))
+}
+
 /// Environment that stops a background VCS command (git, ssh, credential
 /// helpers) from prompting on `/dev/tty` over vix's raw-mode UI (T570).
 /// `GIT_SSH_COMMAND` is only added when the user hasn't chosen their own ssh.
@@ -13974,15 +14002,24 @@ fn no_tty_prompt_env(user_ssh_set: bool) -> Vec<(&'static str, &'static str)> {
     env
 }
 
-/// Apply [`no_tty_prompt_env`] and, on Unix, a fresh process group so the
-/// child can't take terminal input (SIGTTIN) either.
+/// Add [`no_tty_prompt_env`] to `spec`. It goes in the spec, not on the
+/// `Command`, so a remote authority sets it on the remote side too (T712):
+/// over SSH, a `Command`'s own environment only reaches the local `ssh`.
 #[cfg(feature = "tasks")]
-fn no_tty_prompts(cmd: &mut std::process::Command) {
+fn no_tty_prompts(spec: crate::authority::ProcessSpec) -> crate::authority::ProcessSpec {
     let user_ssh_set =
         std::env::var_os("GIT_SSH_COMMAND").is_some() || std::env::var_os("GIT_SSH").is_some();
-    for (k, v) in no_tty_prompt_env(user_ssh_set) {
-        cmd.env(k, v);
-    }
+    no_tty_prompt_env(user_ssh_set)
+        .into_iter()
+        .fold(spec, |spec, (k, v)| spec.env(k, v))
+}
+
+/// On Unix, a fresh process group, so the child (for a remote authority, the
+/// local `ssh`) can't take terminal input (SIGTTIN) either. Over SSH there
+/// is no remote terminal at all (`ssh -T`), so the remote command can't
+/// prompt on one.
+#[cfg(feature = "tasks")]
+fn detach_from_tty(cmd: &mut std::process::Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

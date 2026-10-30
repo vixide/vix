@@ -514,6 +514,19 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     fs::File::open(path)?
         .take(max_bytes + 1)
         .read_to_end(&mut bytes)?;
+    decode_text(bytes, max_bytes)
+}
+
+/// The decoding half of [`read_text_guarded`], for bytes read some other way
+/// (a remote authority reads them over SSH, T712): refuse more than
+/// `max_bytes` or binary content, detect the encoding, and decode.
+///
+/// # Errors
+///
+/// An `InvalidData` error wrapping [`TextReadError::TooLarge`] or
+/// [`TextReadError::Binary`].
+pub fn decode_text(mut bytes: Vec<u8>, max_bytes: u64) -> io::Result<TextFile> {
+    let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
     if bytes.len() as u64 > max_bytes {
         return Err(refuse(TextReadError::TooLarge));
     }
@@ -568,7 +581,20 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
 /// corrupt it) or `text` has a character its encoding can't hold (with the
 /// [`vix_encoding::Unmappable`] inside); otherwise the read or write error.
 pub fn write_text_in_file_encoding(path: &Path, text: &str) -> io::Result<()> {
-    let encoding = match read_text_guarded(path, HARD_MAX_TEXT_BYTES) {
+    let bytes = encode_like(read_text_guarded(path, HARD_MAX_TEXT_BYTES), text)?;
+    write_atomic(path, &bytes)
+}
+
+/// The bytes [`write_text_in_file_encoding`] writes: `text` encoded the way
+/// `existing` (the guarded read of the file about to be replaced) was, UTF-8
+/// when it was not found. Shared with remote authorities (T712).
+///
+/// # Errors
+///
+/// `InvalidData` when `existing` was lossy or `text` can't be encoded;
+/// `existing`'s own error unless it is `NotFound`.
+pub fn encode_like(existing: io::Result<TextFile>, text: &str) -> io::Result<Vec<u8>> {
+    let encoding = match existing {
         Ok(file) if file.lossy => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -579,9 +605,7 @@ pub fn write_text_in_file_encoding(path: &Path, text: &str) -> io::Result<()> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => vix_encoding::TextEncoding::UTF8,
         Err(e) => return Err(e),
     };
-    let bytes = vix_encoding::encode(text, encoding)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    write_atomic(path, &bytes)
+    vix_encoding::encode(text, encoding).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 /// Read a user-chosen text file for a feature that only wants its contents

@@ -34,6 +34,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
     ),
     (
+        "crates/vix-authority/src/ssh/authority.rs",
+        "`SshAuthority` (T712): every remote operation runs the system `ssh` (argv only, no local shell)",
+        "`ssh` feature (implies `process`), enabled only by root `tasks`",
+    ),
+    (
         "crates/vix-http-client/src/aad.rs",
         "`az account get-access-token` for {{$aadToken}} (argv array, no shell)",
         "`http` feature (vix-http-client is an optional dependency of the root)",

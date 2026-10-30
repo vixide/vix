@@ -687,3 +687,6 @@ VXCW
 netrc
 pypirc
 kdbx
+# Login shells the SSH authority is tested under (crates/vix-authority/spec/ssh)
+tcsh
+mksh

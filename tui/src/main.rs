@@ -85,7 +85,7 @@ fn query_background_colour() -> Option<(u8, u8, u8)> {
 }
 
 fn main() -> io::Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
     if cli.version {
         if cli.json {
@@ -171,7 +171,17 @@ fn main() -> io::Result<()> {
         vix::theme_model::background::set_detected(detect_terminal_background());
     }
 
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // `vix ssh://user@host/path` (T712): connect now, while `ssh` can still
+    // prompt on the plain terminal, and work on the remote directory.
+    let remote_root = match vix::remote::connect_cli(&mut cli.files) {
+        Ok(root) => root,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(2);
+        }
+    };
+    let root = remote_root
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let mut app = App::new(root, settings);
     if let Some(e) = settings_load_error {
         app.warn_settings_load_failed(&e);

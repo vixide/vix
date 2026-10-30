@@ -4,7 +4,7 @@
 
 use super::{
     AiDest, AiDiffState, AiMsg, AiReplace, AiTarget, App, Focus, KeyCode, KeyEvent, Prompt,
-    PromptKind, spawn_shell,
+    PromptKind, spawn_shell_on,
 };
 
 impl App {
@@ -339,7 +339,17 @@ impl App {
         // explicitly closed rather than left to the default of inheriting
         // this process's own stdin, which is never what a background
         // command should be reading from regardless of platform (T547).
-        let mut child = match spawn_shell(&cmd, &self.root, false) {
+        // The AI CLI is the user's own tool, signed in on this machine, and
+        // its prompt file is a local temp file: it always runs here, even
+        // when the workspace is remote (T712). There, it runs in the temp
+        // directory, since the workspace root is not a local directory.
+        let local = crate::authority::LocalAuthority;
+        let dir = if crate::authority::current().name() == "local" {
+            self.root.clone()
+        } else {
+            std::env::temp_dir()
+        };
+        let mut child = match spawn_shell_on(&local, &cmd, &dir, false) {
             Ok(c) => c,
             Err(e) => {
                 self.messages
