@@ -6,7 +6,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use vix_cowork::wire::{ErrorCode, Message};
+use vix_cowork::wire::{ChatKind, ChatLine, ErrorCode, Message};
 use vix_cowork::{
     DEFAULT_CAP_BYTES, GuestEvent, GuestSession, HostSession, PeerId, Permission, SharedPath,
 };
@@ -118,7 +118,9 @@ fn a_full_session_runs_over_encrypted_loopback() -> Res {
             return Err("closed early".into());
         };
         for e in guest.handle(m)? {
-            if let GuestEvent::Opened(p, text) = e {
+            if let GuestEvent::Opened(p, text) = e
+                && !p.is_session_notes()
+            {
                 opened = Some((p, text));
             }
         }
@@ -329,20 +331,31 @@ fn nothing_readable_crosses_the_wire() -> Res {
         assert_eq!(o.to, peer.id);
         link.send(&o.msg)?;
     }
+    // T756: a chat line rides the same encrypted frames.
+    for o in host.chat(ChatLine {
+        from: PeerId::HOST,
+        time_utc: 0,
+        body: "chat-okapi-phrase".into(),
+        kind: ChatKind::Text,
+    })? {
+        link.send(&o.msg)?;
+    }
     let joined = t.join().map_err(|_| "panic")??;
     let mut guest = GuestSession::from_welcome(&joined.welcome, DEFAULT_CAP_BYTES)?;
     let mut reader = joined.reader;
     reader.set_timeout(Some(T))?;
-    let mut seen_text = false;
-    for _ in 0..8 {
+    let (mut seen_text, mut seen_chat) = (false, false);
+    for _ in 0..12 {
         let m = reader.recv()?;
-        let _ = guest.handle(m.clone());
-        if matches!(m, Message::Open { .. }) {
-            seen_text = true;
+        for e in guest.handle(m.clone())? {
+            seen_chat |= matches!(e, GuestEvent::Chat(l) if l.body == "chat-okapi-phrase" && l.from == PeerId::HOST);
+        }
+        seen_text |= matches!(&m, Message::Open { path, .. } if path.as_str() == "secret.txt");
+        if seen_text && seen_chat {
             break;
         }
     }
-    assert!(seen_text);
+    assert!(seen_text && seen_chat);
     std::thread::sleep(Duration::from_millis(50));
     let wire = log.lock().map_err(|_| "poisoned")?.clone();
     assert!(wire.len() > 100, "the spy saw the session");
@@ -351,6 +364,7 @@ fn nothing_readable_crosses_the_wire() -> Res {
         b"HostNameQuokka",
         b"hunter2-pangolin",
         b"secret.txt",
+        b"chat-okapi-phrase",
     ] {
         assert!(
             !wire.windows(needle.len()).any(|w| w == needle),

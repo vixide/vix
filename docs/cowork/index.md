@@ -69,6 +69,19 @@ A view-only guest's shared tabs are read-only until the host grants edit.
   line they are on. Any key or click of your own stops following. Choose
   **Follow…** again with an empty number to stop.
 - **Peers** lists everyone, with their number and permission.
+- **Chat.** Every session has a chat: the **Session** conversation in the IM
+  panel (**IM → Chat Panel**). It needs nothing set up and rides the same
+  encrypted connection. Each line is signed with the sender's verified
+  identity (`ana #2`), and the panel lists who is in which file. Nothing pops
+  up: a new line raises the unread count in the status bar. Type `/follow 2`
+  there to follow participant 2. See [IM](../im/index.md#session-chat-cowork).
+- **Session Notes** opens one Markdown buffer the whole session shares, for
+  an agenda, decisions or a to-do list. The host and edit guests write it,
+  view-only guests read it. It is not a file: Save does nothing, so copy it
+  into a file to keep it.
+- **Mute in Chat…** (host) stops relaying a guest's chat lines; choosing it
+  again for the same number unmutes them. **Remove Guest…** (host) ends a
+  guest's part in the session; they need a new invite to come back.
 - **Permissions…** (host) changes a guest's level: type the guest's number and
   `view`, `edit` or `terminal`, for example `2 edit`.
 - **Leave Session** ends your part. When the host leaves, the session ends for
@@ -139,10 +152,11 @@ its top-left part.
 ## Not yet
 
 - A dropped connection does not reconnect: the host sends a new invite.
-- Searching the *contents* of the host's files and session chat are not
-  available yet. Only the integrated terminal can be shared (one at a time),
-  without its scrollback. Chat is planned to travel inside the same
-  encrypted connection (see "Chat seam" in `spec/cowork/index.md`).
+- Searching the *contents* of the host's files is not available yet. Only
+  the integrated terminal can be shared (one at a time), without its
+  scrollback.
+- Chat has no history beyond the session, no private messages between two
+  participants, and threads on lines are still shared through Git only.
 
 See the design and decision record in `spec/cowork/index.md` and the crate
 specifications in `crates/vix-cowork/spec/index.md` and

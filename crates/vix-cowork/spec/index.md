@@ -62,6 +62,10 @@ Symlink checks need I/O and live in the App's workspace sharing (T696).
 credentials, `.git`, `.vix` settings; the full list is in `spec/cowork`). It
 is checked on the host's own `share`, on file lists and on open requests.
 
+`SharedPath::session_notes()` (`.vix/cowork/notes.md`, T759) names the
+session's shared Markdown notes. It is private on purpose: no real file at
+that path can be shared, listed or opened in its place.
+
 ## Wire messages
 
 `wire::Message` is the application payload inside one authenticated, encrypted
@@ -76,16 +80,24 @@ escape-sequence bytes, capped at `MAX_TERMINAL_BYTES` (screens, output) and
 `MAX_TERMINAL_KEYS` (keys); a size of zero or over `MAX_TERMINAL_ROWS` x
 `MAX_TERMINAL_COLS` is refused (`WireProblem::BadTerminalSize`), and a flag
 byte other than 0 or 1 is an error.
+Session chat (T756, tags 48 and 49) is `Chat(ChatLine)` and `ChatMuted`. A
+`ChatLine` carries the sender's `PeerId`, a UTC millisecond time, a body of
+at most `MAX_CHAT_BYTES` (16 KB) and a `ChatKind`: `Text`, `Action`,
+`Location` (a `SharedPath`, line and column) or `Snippet` (language of at
+most `MAX_NAME_BYTES`, `SharedPath`, line range, code of at most
+`MAX_CHAT_BYTES`). An over-long field, invalid UTF-8, a hostile path, an
+unknown kind or a mute flag other than 0 or 1 is refused on decode.
 `Message::channel` names each message's family (`Channel::Control`,
-`Document`, `Presence`, `Workspace`, `Terminal`); the module docs carry the
-tag table.
-Tags 48–63 (`RESERVED_CHAT_TAGS`) are kept for session chat (T756): they
+`Document`, `Presence`, `Workspace`, `Terminal`, `Chat`); the module docs
+carry the tag table.
+Tags 50–63 (`RESERVED_CHAT_TAGS`) stay free for later chat messages: they
 decode to `WireProblem::Reserved`, which `CoworkError::is_reserved_message`
 recognizes so a receiver skips the message instead of dropping the peer. `Message::encode` and `wire::decode` are hand-written, length-checked
 on every field, capped at `MAX_MESSAGE_BYTES`, and total: a property test
 feeds arbitrary and mutated bytes and requires an error, not a panic. Paths in
 messages go through `SharedPath::parse` on decode. The host stamps the real
-peer id on every relayed `Presence`; the sender's value is ignored.
+peer id on every relayed `Presence` and `Chat`; the sender's value is
+ignored.
 
 ## Sessions
 
@@ -119,6 +131,25 @@ presence and saves:
   terminal never shared are dropped), and
   `GuestSession::can_type_in_terminal`/`terminal_keys` refuse locally what
   the host would refuse.
+- **Session chat (T756).** `HostSession::chat` sends the host's line to every
+  guest; a guest's `Chat` is stamped with its connection's id, relayed to
+  every other guest (never echoed) and reported in `Handled::chat`.
+  `GuestSession::chat` builds a guest's line. Any permission level may chat.
+  `check_chat` refuses a line over the caps before it is sent (the receiver's
+  decoder would otherwise end the link). `set_muted(id, bool)` mutes or
+  unmutes a guest and tells it (`ChatMuted`, `GuestEvent::Muted`); a muted
+  guest's line is refused with `PermissionDenied` and never relayed, and
+  `GuestSession::chat` refuses locally while muted. `kick(id)` removes a
+  guest: it gets `Error { Removed }`, the others `PeerLeft`; the caller closes
+  the connection. Guests see `GuestEvent::Chat`, and `GuestEvent::PeerJoined`
+  / `PeerLeft` (name included) for changes after their own join, not for the
+  roster they receive on joining.
+- **Session notes (T759).** `HostSession::new` creates the empty notes
+  document (`SharedPath::session_notes`); `admit` sends it to every guest
+  like any shared buffer, and edits, undo and presence work on it unchanged
+  (a guest needs edit to write it). It is not a file: `shared()` does not
+  list it, `unshare` leaves it, `share` and open requests refuse its path
+  (private), and a `SaveRequest` for it is refused with `BadPath`.
 
 ## Presence
 

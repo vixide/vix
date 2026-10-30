@@ -7,17 +7,19 @@ position — and it never interrupts you. IM never opens, focuses or pops
 anything up on its own; new messages raise a count in the status bar, and you
 open the panel when you choose.
 
-There are two kinds of conversation today:
+There are three kinds of conversation today:
 
 - **Notes** — local, only you, always there. It works with no network and no
   account, so every menu item has somewhere to go. Use it as a scratch log of
   code references.
+- **Session** — the people in your Cowork session (see below). It appears
+  when a session starts and is gone when it ends; there is nothing to set up.
 - **IRC** rooms and direct messages, through an account you configure. IRC is
   an open, vendor-neutral protocol; Vix speaks IRCv3 over TLS.
 
 Beside conversations there are **threads anchored to lines** of your files
-(see below), which need no network either. Session chat with the people in a
-Cowork session and Matrix are planned (see `spec/instant-message/index.md`).
+(see below), which need no network either. Matrix is planned (see
+`spec/instant-message/index.md`).
 
 ## The panel
 
@@ -55,6 +57,7 @@ text (`3 unread`, `@`), not shown by color alone. A nick in an IRC room shows
 | `/nick NEW` | Change your nick |
 | `/topic [TEXT]` | Show or set the room's topic |
 | `/status available\|away\|busy` | Set your presence |
+| `/follow [N]` | In a Cowork session, follow participant `N`; with no number, stop |
 | `/clear` | Clear the conversation on screen |
 
 An unknown command is an error and is never sent as text; the line stays so
@@ -111,6 +114,42 @@ workspace is ignored.
 The gutter has one sign per line. When several apply, the debugger's
 stopped line (`▶`) comes first, then a breakpoint (`●`), then a thread, then
 the git change or coverage bar (`▎`).
+
+## Session chat (Cowork)
+
+When you host or join a [Cowork](../cowork/index.md) session, a **Session**
+conversation appears in the list. Nothing opens: like every other
+conversation it raises the unread count, and you open the panel when you
+choose. It needs no account and no server — its lines travel inside the
+session's own encrypted, authenticated connection — and it is dropped, with
+its messages, when the session ends. It is never written to disk history.
+
+- **Who said it.** Every line shows the sender's identity as the session
+  verified it: the name the host confirmed when the person joined, and the
+  number the session gave them (`ana #2`; the host is always `#1`). The host
+  stamps it, so nobody can speak as someone else.
+- **Who is where.** While the Session conversation is selected, the panel
+  lists everyone above the messages, each with the shared file their cursor is
+  in (or the session notes), and `(you)`, `(host)`, `(muted)` and
+  `(following)` written out.
+- **Code.** Share Selection and Share Location work here too. A guest who
+  presses Enter on a reference opens the host's file if it is already shared
+  in, or asks the host for it (the host must have shared its file tree).
+- **Follow.** `/follow 2` follows participant 2 from buffer to buffer, as
+  **Tools → Cowork → Follow…** does; `/follow` alone, or any key or click in
+  your own view, stops.
+- **Moderation (host).** **Tools → Cowork → Mute in Chat…** stops relaying a
+  guest's lines (asking again unmutes); **Remove Guest…** ends their part in
+  the session. Everyone sees a line in the conversation when either happens,
+  and when someone joins or leaves.
+- Anyone in the session can talk, including view-only guests.
+
+**Session notes.** **Tools → Cowork → Session Notes** opens one Markdown
+buffer shared by everyone in the session — Zed's channel notes, kept for the
+length of a session. It never opens on its own. The host and guests with
+edit rights write it; view-only guests read it. It is not a file: Save does
+nothing (copy the text into a file to keep it), and when the session ends it
+stays behind as an unsaved buffer.
 
 ## Connecting to IRC
 
@@ -186,7 +225,9 @@ selected conversation's messages and its file, after asking.
   left-to-right or right-to-left, is otherwise shown as sent.
 - Remote text never becomes a terminal hyperlink or any other escape
   sequence.
-- Nothing is sent without you asking: no file names, no presence.
+- Nothing is sent without you asking: no file names, no presence. In a
+  Cowork session the other participants see the shared file your cursor is
+  in, as Cowork itself already shows them.
 - Blocked nicks are hidden locally.
 
 ## Building without it

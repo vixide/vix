@@ -10,7 +10,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use unicode_width::UnicodeWidthChar as _;
-use vix_im::{ConversationId, Message, MessageKind};
+use vix_im::{ConversationId, ConversationKind, Message, MessageKind};
 
 use crate::app::im::ImDialog;
 use crate::app::{App, Focus};
@@ -109,25 +109,55 @@ pub(super) fn draw_im_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let list_h = u16::try_from(count)
         .unwrap_or(u16::MAX)
         .clamp_fit(1, (inner.height / 4).max(1));
+    // The session's participants and where they are (T759), above its
+    // messages, only while the session conversation is selected.
+    let roster = if app
+        .im
+        .panel
+        .conversation(&app.im.inbox)
+        .is_some_and(|c| c.kind == ConversationKind::Session)
+    {
+        app.cowork_roster()
+    } else {
+        Vec::new()
+    };
+    let roster_h = u16::try_from(roster.len())
+        .unwrap_or(u16::MAX)
+        .min(inner.height / 4);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(list_h),
+            Constraint::Length(roster_h),
             Constraint::Min(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
         .split(inner);
     draw_list(app, frame, chunks[0]);
-    draw_messages(app, frame, chunks[1]);
-    draw_input(app, frame, chunks[2], focused);
+    draw_roster(&roster, frame, chunks[1]);
+    draw_messages(app, frame, chunks[2]);
+    draw_input(app, frame, chunks[3], focused);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.im_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[3],
+        chunks[4],
     );
+}
+
+/// The session roster (T759), dim, one participant per row.
+fn draw_roster(roster: &[String], frame: &mut Frame, area: Rect) {
+    if area.height == 0 {
+        return;
+    }
+    let lines: Vec<Line> = roster
+        .iter()
+        .take(usize::from(area.height))
+        .map(|row| Line::from(Span::styled(row.clone(), theme::dim())))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 /// The conversation list, scrolled to keep the selection in view.

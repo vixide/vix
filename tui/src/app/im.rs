@@ -36,6 +36,10 @@ pub(crate) use super::im_off::Link;
 /// The id of the local Notes conversation, present in every build.
 pub(crate) const NOTES: &str = "notes";
 
+/// The id of the Cowork session's conversation (T756). It exists only while
+/// a session is open and is never written to disk history.
+pub(crate) const SESSION: &str = "cowork/session";
+
 /// The most lines a shared snippet may carry; a larger selection is refused
 /// rather than flooding a room.
 pub(crate) const MAX_SNIPPET_LINES: usize = 50;
@@ -234,7 +238,12 @@ impl ImState {
     }
 
     /// The JSONL file for a conversation, when disk history is on.
+    /// The session conversation (T756) lives only as long as its session
+    /// and is never written.
     pub(crate) fn history_path(&self, id: &ConversationId) -> Option<PathBuf> {
+        if id.as_str() == SESSION {
+            return None;
+        }
         self.history_dir
             .as_ref()
             .map(|d| d.join(history_file_name(id)))
@@ -278,6 +287,7 @@ impl ImState {
     pub(crate) fn title(&self, id: &ConversationId) -> String {
         match self.inbox.get(id) {
             Some(c) if c.kind == ConversationKind::Notes => t!("ui.im_notes").to_string(),
+            Some(c) if c.kind == ConversationKind::Session => t!("ui.im_session").to_string(),
             Some(c) => c.title.clone(),
             None => String::new(),
         }
@@ -537,6 +547,15 @@ impl App {
         let Some(id) = self.im.selected_id() else {
             return;
         };
+        if id.as_str() == SESSION {
+            let message = if action {
+                Message::action(String::new(), now_ms(), text)
+            } else {
+                Message::text(String::new(), now_ms(), text)
+            };
+            self.cowork_chat_send(message);
+            return;
+        }
         if let Some(route) = self.im.routes.get(&id).cloned() {
             let Some(target) = route.target else {
                 self.status = t!("status.im_not_a_room").to_string();
@@ -603,6 +622,7 @@ impl App {
             Command::Nick(nick) => self.im_nick(&nick),
             Command::Topic(topic) => self.im_topic(topic),
             Command::Status(presence) => self.im_set_presence(presence),
+            Command::Follow(who) => self.cowork_follow_from_chat(who.as_deref()),
             Command::Clear => {
                 if let Some(id) = self.im.selected_id()
                     && let Some(c) = self.im.inbox.get_mut(&id)
@@ -648,6 +668,9 @@ impl App {
     /// Open a message's code reference -- only inside the workspace root, only
     /// an existing file, never running anything.
     fn im_open_ref(&mut self, reference: &CodeRef) {
+        if self.cowork_open_ref(reference) {
+            return;
+        }
         let Some(path) = self.im_inside_root(&reference.path) else {
             self.status =
                 t!("status.im_ref_outside", reference = reference.to_string()).to_string();
@@ -666,7 +689,15 @@ impl App {
     }
 
     /// A path for sharing: relative to the workspace root when inside it.
+    /// A buffer shared in from a Cowork host (`cowork:src/a.rs`) is named by
+    /// its path under the host's root.
     fn im_share_path(&self, path: &Path) -> String {
+        if let Some(shared) = path
+            .to_str()
+            .and_then(|p| p.strip_prefix(crate::editor::REMOTE_PATH_PREFIX))
+        {
+            return shared.to_string();
+        }
         let relative = path
             .strip_prefix(&self.root)
             .ok()
@@ -742,6 +773,10 @@ impl App {
 
     /// Send a confirmed snippet.
     fn im_send_snippet(&mut self, to: &ConversationId, message: Message) {
+        if to.as_str() == SESSION {
+            self.cowork_chat_send(message);
+            return;
+        }
         if let Some(route) = self.im.routes.get(to).cloned() {
             let (Some(target), MessageKind::Snippet { code, .. }) = (route.target, &message.kind)
             else {
@@ -778,6 +813,12 @@ impl App {
         );
         let path = self.im_share_path(&path);
         let body = format!("{path}:{line}:{column}");
+        if to.as_str() == SESSION {
+            let mut message = Message::text(String::new(), now_ms(), body);
+            message.kind = MessageKind::Location { path, line, column };
+            self.cowork_chat_send(message);
+            return;
+        }
         if let Some(route) = self.im.routes.get(&to).cloned() {
             let Some(target) = route.target else {
                 self.status = t!("status.im_not_a_room").to_string();

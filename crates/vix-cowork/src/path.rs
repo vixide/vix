@@ -13,6 +13,9 @@ use std::path::PathBuf;
 /// The longest accepted path, in bytes.
 pub const MAX_PATH_BYTES: usize = 1024;
 
+/// The spelling of [`SharedPath::session_notes`].
+const SESSION_NOTES: &str = ".vix/cowork/notes.md";
+
 /// A validated, normalized, root-relative path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SharedPath(String);
@@ -51,6 +54,22 @@ impl SharedPath {
             return Err(PathProblem::Empty.into());
         }
         Ok(Self(parts.join("/")))
+    }
+
+    /// The session's shared Markdown notes (T759): one scratch buffer per
+    /// session, never a file on disk. It lives under `.vix/`, which
+    /// [`is_private`](Self::is_private) refuses, so no real file at that path
+    /// can be shared, listed or opened in its place, and a guest cannot ask
+    /// for it as a file.
+    #[must_use]
+    pub fn session_notes() -> Self {
+        Self(SESSION_NOTES.to_string())
+    }
+
+    /// Whether this is [`session_notes`](Self::session_notes).
+    #[must_use]
+    pub fn is_session_notes(&self) -> bool {
+        self.0 == SESSION_NOTES
     }
 
     /// The normalized `/`-separated form (the wire and map-key form).
@@ -136,6 +155,17 @@ mod tests {
             Err(CoworkError::BadPath(p)) => p,
             other => panic!("expected a path problem for {raw:?}, got {other:?}"),
         }
+    }
+
+    /// T759: the notes path parses as itself and is private, so it can never
+    /// stand for a real file.
+    #[test]
+    fn session_notes_is_a_valid_private_path() {
+        let notes = SharedPath::session_notes();
+        assert_eq!(SharedPath::parse(notes.as_str()).unwrap(), notes);
+        assert!(notes.is_private());
+        assert!(notes.is_session_notes());
+        assert!(!SharedPath::parse("notes.md").unwrap().is_session_notes());
     }
 
     #[test]

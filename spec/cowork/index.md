@@ -2,7 +2,8 @@
 
 **Status:** implemented behind the opt-in `cowork` Cargo feature (2026-10-29):
 T690–T696 are done; T697 (shared terminal, read-only by default) landed
-2026-10-30. The task list
+2026-10-30, and so did IM's session chat, roster and session notes over the
+same link (T756, T759; see "Session chat" below). The task list
 records what each task left out. User guide: `docs/cowork/index.md`. Tasks
 T690–T697 in
 [`tasks.md`](../../tasks.md). Supersedes the "Collaborative editing" entry in
@@ -78,12 +79,13 @@ is not a hosted service and it does not replace git.
   remote selections as a tinted range; the name appears in the status line and
   a peers panel.
 - **Follow mode:** pin the viewport to a peer; any local scroll unpins.
-- Chat is out of scope for v1 (use the call you are already on); the wire
-  format keeps room for it (see "Chat seam").
+- Chat was out of scope for v1; it landed with IM (T756) as a message family
+  in the same encrypted frames (see "Session chat").
 - Menu: **Tools → Cowork** holds Host Session…, New Invite, Share This Buffer,
   Stop Sharing This Buffer, Share File Tree, Share Terminal, Allow Terminal
-  Input, Join Session…, Shared Files…, Shared Terminal, Peers, Follow…,
-  Permissions… and Leave Session (a submenu rather than a new
+  Input, Join Session…, Shared Files…, Shared Terminal, Peers, Session Notes,
+  Mute in Chat…, Remove Guest…, Follow…, Permissions… and Leave Session (a
+  submenu rather than a new
   top-level menu, so the menu bar's Alt mnemonics stay put). Each is also a
   `Cowork: …` palette command. All text goes through `t!` in every locale.
   The actions are `cowork.*` and are hidden, like the menu, in a build without
@@ -208,23 +210,54 @@ shares, to file lists and to open requests: the directories `.git`, `.ssh`,
 and their `.pub`); and the extensions `.pem`, `.key`, `.p12`, `.pfx`, `.jks`,
 `.keystore`, `.kdbx`, `.gpg`. Matching ignores ASCII case.
 
-## Chat seam
+## Session chat (T756) and session notes (T759)
 
-Session chat (IM, task T756 in the instant-messaging plan) will be a separate
-message family inside the same encrypted, authenticated frames, so a Cowork
-session gets chat with nothing more to set up or trust. The wire format
-already leaves room for it:
+Session chat (`spec/instant-message`) is a separate message family inside the
+same encrypted, authenticated frames, so a Cowork session has chat with
+nothing more to set up or trust.
 
-- Every `wire::Message` has a `Channel` (`Control`, `Document`, `Presence`,
-  `Workspace`, `Terminal`); T756 adds `Channel::Chat` and its messages.
-- Tags 48–63 are reserved for chat (`wire::RESERVED_CHAT_TAGS`). Today such a
-  message decodes to `WireProblem::Reserved`, and the transport's reader
-  skips it instead of closing the link (`CoworkError::is_reserved_message`),
-  so a peer that speaks chat can share a session with one that does not.
-  `Link::send_encoded` carries an already encoded payload, which is how the
-  test proves the skip.
-- Chat routing belongs in the session layer: the host will relay chat by
-  channel, stamping the sender's verified peer id as it does for presence.
+- **Wire.** `Channel::Chat`: `Chat(ChatLine)` (tag 48: sender, UTC time,
+  body, and a kind of text, action, location or snippet, with paths as
+  `SharedPath`s and bodies and code capped at `MAX_CHAT_BYTES`, 16 KB) and
+  `ChatMuted` (tag 49). Tags 50–63 stay reserved
+  (`wire::RESERVED_CHAT_TAGS`): such a message decodes to
+  `WireProblem::Reserved` and the transport's reader skips it instead of
+  closing the link, so a later chat message can share a session with this
+  build. A build from before T756 skips tags 48 and 49 the same way.
+- **Routing.** The host relays a guest's line to every other guest (never
+  back to the sender), stamping the connection's verified peer id over
+  whatever the sender claimed, as it does for presence. Any permission level
+  may chat; view-only guests too.
+- **Identity.** A line's author is shown as the name the host confirmed at
+  consent plus the peer number (`ana #2`, the host `#1`). The number keeps a
+  guest from passing as someone with the same name, or as you.
+- **Host moderation.** **Mute in Chat…** (`cowork.mute`, host, by number;
+  again to unmute) makes the host refuse and not relay a guest's lines and
+  tells the guest (`ChatMuted`); muting does not change what it may edit.
+  **Remove Guest…** (`cowork.remove`, host, by number) sends
+  `Error { Removed }`, tells the others the guest left, and closes its
+  connection; it needs a new invite to come back.
+- **The conversation.** The App adds a `Session` conversation to the IM inbox
+  when a session starts (host or guest) and drops it when the session ends.
+  It is never written to disk history and never opens or focuses the panel;
+  a line raises the unread count. Joins, leaves and mutes are system lines.
+  `/follow N` in the panel follows participant `N` (as **Follow…**).
+- **Presence in the panel (T759).** While the session conversation is
+  selected the panel lists every participant with the shared file their
+  cursor is in (or the notes) and `you`, `host`, `muted`, `following` as
+  words.
+- **Session notes (T759).** One Markdown document per session, created empty
+  with the session (`SharedPath::session_notes`, `.vix/cowork/notes.md`). It
+  syncs through the same CRDT path as a shared buffer (edits, per-user undo,
+  presence, follow). **Session Notes** (`cowork.notes`) opens it in a
+  `cowork:` tab on the host or a guest; it never opens on its own. The host
+  and edit guests write it, view guests read it. It is not a file: the path is
+  private, so no file can be shared, listed or opened in its place; Save does
+  nothing (a guest's save request for it is refused); closing its tab does not
+  end it; and when the session ends it is left as an unsaved buffer.
+- **References.** For a guest, Enter on a code reference in the session
+  conversation opens the host's shared-in buffer at that line, or asks the
+  host to share the file (T696 rules: the file tree must be shared).
 
 ## Risks
 
@@ -239,7 +272,9 @@ already leaves room for it:
 ## Out of scope for v1
 
 Hosted relay service, voice/video, audio, cloud accounts, collaborative
-debugging, guest-side LSP.
+debugging, guest-side LSP. For chat: history beyond the session, private
+messages between two participants, and sharing anchored threads (T753) over
+the session (they are shared through Git).
 
 ## Decision record (T690, 2026-10-29)
 

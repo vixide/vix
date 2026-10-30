@@ -33,8 +33,11 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `cowork.invite` | New Invite | Menu |
 | `cowork.join` | Join Session… | Menu |
 | `cowork.leave` | Leave Session | Menu |
+| `cowork.mute` | Mute in Chat… | Menu |
+| `cowork.notes` | Session Notes | Menu |
 | `cowork.peers` | Peers | Menu |
 | `cowork.permissions` | Permissions… | Menu |
+| `cowork.remove` | Remove Guest… | Menu |
 | `cowork.share` | Share This Buffer | Menu |
 | `cowork.share_terminal` | Share Terminal | Menu |
 | `cowork.share_workspace` | Share File Tree | Menu |
@@ -748,4 +751,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**741 actions.**
+**744 actions.**

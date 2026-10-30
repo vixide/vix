@@ -78,7 +78,8 @@ the root, and the root itself is not a file. The caller checks existence
 `parse_input(line)` returns `Input::Text` or `Input::Command`: `/me TEXT`,
 `/join ROOM [KEY]`, `/part [ROOM] [REASON]` (the first word is a room only
 with a channel prefix `#&+!`), `/msg NICK TEXT`, `/nick NEW`,
-`/topic [TEXT]`, `/status available|away|busy`, `/clear`. Names ignore ASCII
+`/topic [TEXT]`, `/status available|away|busy`, `/follow [PEER]` (T759: a
+Cowork participant's number, or nothing to stop), `/clear`. Names ignore ASCII
 case. `//text` is the text `/text`. Errors: `Unknown(name)` (never sent as
 text), `MissingArgument(command)`, `InvalidStatus(value)`.
 

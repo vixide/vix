@@ -717,3 +717,7 @@ pkgs
 printsrcinfo
 SRCINFO
 wingetcreate
+unmute
+unmutes
+unmuted
+unmuting

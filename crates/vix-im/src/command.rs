@@ -1,7 +1,7 @@
 //! The input line's slash commands.
 //!
-//! `/me`, `/join`, `/part`, `/msg`, `/nick`, `/topic`, `/status` and
-//! `/clear`. Command names are matched without regard to ASCII case. An
+//! `/me`, `/join`, `/part`, `/msg`, `/nick`, `/topic`, `/status`,
+//! `/follow` and `/clear`. Command names are matched without regard to ASCII case. An
 //! unknown command is an error and is never sent as text; to send text that
 //! starts with `/`, double it (`//etc/hosts` sends `/etc/hosts`).
 
@@ -54,6 +54,9 @@ pub enum Command {
     Status(Presence),
     /// `/clear` — clear the selected conversation's messages on screen.
     Clear,
+    /// `/follow [PEER]` — follow a Cowork participant (T759) by the number
+    /// the session shows for them; with nothing, stop following.
+    Follow(Option<String>),
 }
 
 /// Why a line could not be parsed.
@@ -125,6 +128,7 @@ pub fn parse_input(line: &str) -> Result<Input, CommandError> {
             )
         }
         "clear" => Command::Clear,
+        "follow" => Command::Follow((!args.is_empty()).then(|| split_word(args).0.to_string())),
         _ => return Err(CommandError::Unknown(name.to_string())),
     };
     Ok(Input::Command(command))
@@ -217,6 +221,9 @@ mod tests {
         );
         assert_eq!(cmd("/status Busy"), Command::Status(Presence::Busy));
         assert_eq!(cmd("/clear"), Command::Clear);
+        assert_eq!(cmd("/follow 2"), Command::Follow(Some("2".into())));
+        assert_eq!(cmd("/Follow  3 now"), Command::Follow(Some("3".into())));
+        assert_eq!(cmd("/follow"), Command::Follow(None));
     }
 
     #[test]
