@@ -267,6 +267,14 @@ pub struct Settings {
     /// an `[im]` table. Passwords are never stored here: an account's SASL
     /// password comes from the `VIX_IM_PASSWORD_<NAME>` environment variable.
     pub im: ImSettings,
+    /// Which Jupyter kernelspec runs each language (T734c, `spec/jupyter`):
+    /// a `[jupyter_kernels]` table of language → kernelspec name, such as
+    /// `python = "python3"`. **Run → Jupyter → Run** uses it when no kernel
+    /// for the language is running yet. Languages are matched lowercased,
+    /// and an `ob-jupyter` style `jupyter-python` key means `python`. Empty
+    /// (the default) picks the first installed kernelspec for the language.
+    /// Only read in a build with the `jupyter` capability.
+    pub jupyter_kernels: std::collections::BTreeMap<String, String>,
 }
 
 /// The `[im]` table: IM preferences and IRC accounts (T752).
@@ -786,6 +794,7 @@ impl Default for Settings {
             coverage_path: String::new(),
             db_connections: Vec::new(),
             im: ImSettings::default(),
+            jupyter_kernels: std::collections::BTreeMap::new(),
         }
     }
 }

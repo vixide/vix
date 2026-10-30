@@ -976,6 +976,8 @@ impl App {
     ///   Left`/`Right` (also matching the table's Alt-only `nav.back`/
     ///   `nav.forward` rows) resolves in the same order the original
     ///   dispatch did.
+    /// - `Ctrl+Shift+Enter` (Jupyter Run, T734c) — focus-gated the same way,
+    ///   and only with the `jupyter` capability built in.
     /// - `Alt+Up`/`Down` and `Alt+n`/`p` (line move/column-select,
     ///   next/prev search selection) — also focus-gated, checked after the
     ///   table since they never share a key with anything in it.
@@ -997,6 +999,14 @@ impl App {
                 }
                 KeyCode::Left => {
                     self.run_action("edit.select_less");
+                    return true;
+                }
+                // Jupyter Run (T734c; Zed's REPL key). Only with the
+                // capability built in, so the key keeps its old meaning
+                // otherwise. Terminals deliver it only with the kitty
+                // keyboard protocol.
+                KeyCode::Enter if crate::capability::Capability::Jupyter.enabled() => {
+                    self.run_action("jupyter.run");
                     return true;
                 }
                 _ => {}

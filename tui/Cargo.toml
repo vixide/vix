@@ -117,8 +117,8 @@ net = ["http", "ai", "sql", "im"]
 cowork = ["dep:vix-cowork", "dep:vix-cowork-net", "terminal"]
 # Jupyter kernel REPL (T734, spec/jupyter). Opt-in and NOT part of `full`
 # until its size cost is measured inside Vix (T734h). T734a/b built the
-# protocol core and the ZeroMQ transport; the App wiring is T734c, so the
-# feature links the transport but nothing calls it yet.
+# protocol core and the ZeroMQ transport; T734c/d wire it into the App
+# (Run → Jupyter, `tui/src/app/jupyter.rs`).
 jupyter = ["dep:vix-jupyter", "vix-jupyter/process"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
@@ -466,6 +466,9 @@ unicode-width = { workspace = true }
 clap_mangen = { workspace = true }
 criterion = { workspace = true }
 insta = { workspace = true }
+# The in-process fake Jupyter kernel in `tests/jupyter.rs` (T734c).
+tokio = { workspace = true }
+zeromq = { workspace = true }
 
 # Benchmarks run with Criterion's own harness, not libtest's.
 [[bench]]
@@ -504,6 +507,11 @@ workspace = true
 [[test]]
 name = "action_catalog"
 path = "tests/action_catalog.rs"
+
+[[test]]
+name = "jupyter"
+path = "tests/jupyter.rs"
+required-features = ["jupyter"]
 
 [[test]]
 name = "authority_fake"

@@ -104,6 +104,8 @@ impl App {
         self.poll_db_reconnect();
         // Drain IM connection events into the inbox (T752).
         self.poll_im();
+        // Kernel events: outputs into the dock, state into the status bar (T734c).
+        self.poll_jupyter();
         // Finish a background remote connect or reconnect (T713).
         self.poll_remote();
         // The Large File Viewer's search result or pending goto (T733).
@@ -131,6 +133,7 @@ impl App {
             || self.db_reconnect_running()
             || self.editor_drag_active()
             || self.im_connected()
+            || self.jupyter_busy()
             || self.large_file_busy()
         {
             Duration::from_millis(50)

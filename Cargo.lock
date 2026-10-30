@@ -7026,6 +7026,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_norway",
+ "tokio",
  "toml 1.1.8+spec-1.1.0",
  "unicode-width 0.2.3",
  "vix-action-catalog",
@@ -7166,6 +7167,7 @@ dependencies = [
  "vix-x11-color-picker",
  "vix-zid-tool",
  "vt100",
+ "zeromq",
 ]
 
 [[package]]

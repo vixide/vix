@@ -4,9 +4,11 @@
 transport are built (T734a, T734b, 2026-10-30):
 [`vix-jupyter-core`](../../crates/vix-jupyter-core/spec/index.md) and
 [`vix-jupyter`](../../crates/vix-jupyter/spec/index.md), tested against an
-in-process fake kernel and, opt-in, a real ipykernel. Nothing in the App uses
-them yet: the menu, actions, output routing, trust prompts and images are
-T734c–T734h in [`tasks.md`](../../tasks.md). This page records the decision
+in-process fake kernel and, opt-in, a real ipykernel. The App wiring and the
+run targets with dock output are built too (T734c, T734d, 2026-10-30; see
+[App wiring](#app-wiring-t734c-t734d) for what they do today). Org
+`#+RESULTS:`, the full trust rules, images and the size decision are
+T734e–T734h in [`tasks.md`](../../tasks.md). This page records the decision
 and the v1 design.
 
 ## Goal
@@ -270,6 +272,70 @@ could feed the completion popup), `.ipynb` editing, Jupyter-server or
 websocket and remote kernels, the kernel debugger, SVG and HTML rendering,
 and one kernel per file.
 
+## App wiring (T734c, T734d)
+
+Built in `tui/src/app/jupyter.rs`, with `jupyter_off.rs` stand-ins for a
+build without the feature. What it does today, where it differs from or
+narrows the design above:
+
+- **Capability.** `Capability::Jupyter` owns the `jupyter.` prefix, so menus
+  and the palette hide the actions and `run_action` refuses them in a build
+  without the feature. `Ctrl+Shift+Enter` is a focus-gated host-side key in
+  `global_shared_key` (every keymap), bound only when the capability is built
+  in; otherwise the key keeps its old meaning.
+- **Menu.** Run → Jupyter: Start Kernel…, Run, Run and Advance, Interrupt
+  Kernel, Restart Kernel, Shut Down Kernel, Clear Results. Each is also a
+  `cmd.jupyter_*` palette entry.
+- **Run targets.** Selection, then the Org `src` block
+  (`vix_org::src_block_at`; its body, its language, and an empty language
+  means the buffer's), then the `%%` cell (`vix_jupyter_core::cell`; the body
+  with trailing blank lines dropped), then the current line. Blank code runs
+  nothing. Run and Advance moves the cursor to the line after the code (for a
+  cell, the next marker; for a block, the line after `#+end_src`).
+- **Choosing a kernel** is as designed: a kernel already serving the
+  language; else `jupyter_kernels` (keys normalized like languages); else the
+  first spec that `runs` the language; else the picker
+  (`vix_choice_list`, one row per spec: display name, language, full argv),
+  and the run waits for the choice. A kernel started for a language also
+  serves the language that asked for it (so a `.txt` line sent to the picked
+  Python kernel finds it next time). Starting a spec that is already running
+  reuses it. The kernel's working directory is the workspace root.
+- **Dock output.** `[*] <display name>` and `  » <first code line>` when
+  sent; each output's lines as they arrive (streams and values as plain text
+  with ANSI removed; an error as `ename: evalue` plus the traceback; an image
+  as a translated `[image/png image: …]` placeholder line plus its
+  `text/plain` form, until T734g; a translated note when a richer form was
+  dropped); then `[n] <display name>: done`, `failed` or `not run` on the
+  reply. A kernel's own output with no request of ours (such as the note an
+  interrupt prints) goes to the dock too.
+- **End-of-line hint.** The last output's first non-blank line, cut to 60
+  characters, after the code's last line, through the editor's inlay-hint
+  rendering. It replaces the buffer's inlay hints until the language server
+  next sends its own. **Clear Results** clears it; the Org `#+RESULTS:` half
+  is T734e.
+- **Controls** act on the kernel for the language at the cursor, else the
+  one that ran code last, else the first.
+- **Status bar.** `<spec name> <state> [n]` for that same kernel, after the
+  Cowork segment.
+- **Polling.** `App::poll_jupyter` drains every kernel's events on the tick;
+  the loop polls fast while a kernel is starting, busy or has a request in
+  flight. `Ready` marks a starting kernel idle. A kernel's `Dead` event
+  removes it: `Shutdown` is a status line, anything else an error message
+  (with the stderr tail in the dock).
+- **Remote.** Start, Run, Run and Advance and Restart are refused with a
+  translated warning while `vix_authority::current()` is not local.
+- **Trust, minimal.** An Org block's first run in a session asks
+  (`ConfirmKind::JupyterRunBlock`: language and first three lines; `y` runs,
+  `n`/Esc cancels) unless the workspace is trusted, which today means the
+  persisted T132 decision (and, remote, T714). A selection, cell or line is
+  never prompted. T734f adds `jupyter_confirm_evaluate`, "always in this
+  workspace", and the project-local kernelspec rule.
+- **Test hooks.** `App::with_jupyter_kernel_dirs` (discover only in given
+  directories) and `App::with_jupyter_connection` (attach a spec name to an
+  already-running local kernel instead of launching its argv) start nothing
+  by themselves; `jupyter_kernels`, `jupyter_picker_rows` and
+  `jupyter_confirm_open` report state.
+
 ## Testing
 
 - `vix-jupyter-core`: unit and property tests for the codec (round trip,
@@ -281,6 +347,15 @@ and one kernel per file.
   is the same approach as the fake LSP and DAP servers (T608).
 - An optional smoke test that runs only when `VIX_JUPYTER_PYTHON` points at a
   Python with `ipykernel`, like `ai_provider_smoke`.
-- App: build an `App`, run `jupyter.run` against the fake kernel, then check
-  the Org buffer's `#+RESULTS:` and the dock lines (state, never translated
-  text).
+- App (`tui/tests/jupyter.rs`, `--features jupyter`): an in-process fake
+  kernel on loopback TCP, attached through an explicit kernelspec in a
+  temporary directory (no `PATH` or environment edits). It checks that
+  nothing starts without an action, the run targets in order and Run and
+  Advance, the dock lines (untranslated kernel output, never translated
+  text) and the hint, errors without ANSI codes, the image placeholder, the
+  Org-block confirmation, interrupt, the picker (Start Kernel… and a
+  language with no spec), a missing kernel program, no kernelspec at all,
+  the remote refusal, and `Ctrl+Shift+Enter`. `real_ipykernel_runs_code`
+  runs a multi-line selection against a real ipykernel when
+  `VIX_JUPYTER_PYTHON` is set (passed against ipykernel 7.4.0 on
+  2026-10-30). T734e adds the Org `#+RESULTS:` checks.

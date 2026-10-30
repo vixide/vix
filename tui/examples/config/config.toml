@@ -321,3 +321,9 @@ accounts = []
 # tls = true
 # channels = ["#vix"]
 # sasl_user = "ana"
+
+# Which Jupyter kernelspec runs each language (docs/jupyter/index.md), for a
+# build with the `jupyter` feature. Empty uses the first installed kernelspec
+# for the language.
+[jupyter_kernels]
+# python = "python3"

@@ -20,6 +20,7 @@ decides what they mean. The feature design and the choice of ZeroMQ are in
 | `kernelspec` | `KernelSpec::parse` (`kernel.json`), `argv_for` (`{connection_file}`, `{resource_dir}`), `runs` (language match, `jupyter-python` = `python`), and the search path: `PathEnv`, `data_dirs`, `kernel_dirs`, `user_data_dir`. |
 | `output` | `Output` (`Stream`, `Result`, `Display`, `Error`), `MimeBundle::choose`, `Choice`, `Payload`. |
 | `ansi` | `strip_ansi`. |
+| `cell` | `# %%` code cells (T734d): `is_marker` (the language's line-comment prefix, then `%%`) and `cell_at`, the `Cell` around a line (its marker and body range; lines above the first marker are a cell of their own; `None` when the text has no marker). |
 | `org` | `results_block`, `find_results`, `results_edit`, `apply`. |
 
 ## Wire codec

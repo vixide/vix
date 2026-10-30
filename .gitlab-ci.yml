@@ -154,6 +154,10 @@ feature-combos:
     # The opt-in `cowork` feature is in no default build: lint and test it here.
     - cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
     - cargo test -p vix-tui --features cowork --lib cowork
+    # The opt-in `jupyter` feature likewise (T734c).
+    - cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
+    - cargo test -p vix-tui --features jupyter --lib jupyter
+    - cargo test -p vix-tui --features jupyter --test jupyter
     - cargo hack check -p vix-tui --each-feature --no-dev-deps
 
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's

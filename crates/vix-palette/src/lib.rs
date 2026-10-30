@@ -392,6 +392,14 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.insert_zid", "tools.insert.zid.256"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
+    // Jupyter (T734c): hidden by the capability filter unless built with `jupyter`.
+    ("cmd.jupyter_start", "jupyter.start"),
+    ("cmd.jupyter_run", "jupyter.run"),
+    ("cmd.jupyter_run_advance", "jupyter.run_advance"),
+    ("cmd.jupyter_interrupt", "jupyter.interrupt"),
+    ("cmd.jupyter_restart", "jupyter.restart"),
+    ("cmd.jupyter_shutdown", "jupyter.shutdown"),
+    ("cmd.jupyter_clear_results", "jupyter.clear_results"),
     // Cowork (T695): hidden by the capability filter unless built with `cowork`.
     ("cmd.cowork_host", "cowork.host"),
     ("cmd.cowork_invite", "cowork.invite"),

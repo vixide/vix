@@ -87,6 +87,7 @@
 - [IM (instant messaging)](im/index.md)
 - [Hunspell](hunspell/index.md)
 - [Insert](insert/index.md)
+- [Jupyter Kernels](jupyter/index.md)
 - [Language Server Protocol](language-server-protocol/index.md)
 - [Large File Viewer](large-file-viewer/index.md)
 - [Markdown Preview](markdown-preview/index.md)

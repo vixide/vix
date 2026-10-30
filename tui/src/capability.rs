@@ -45,11 +45,14 @@ pub enum Capability {
     /// Real-time collaboration (`cowork`): hosting or joining a shared
     /// session over an encrypted socket. Off by default.
     Cowork,
+    /// Jupyter kernels (`jupyter`): Vix starts the installed kernel programs
+    /// and runs code in them over ZeroMQ. Off by default (T734).
+    Jupyter,
 }
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 15] = [
+    pub const ALL: [Capability; 16] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -65,6 +68,7 @@ impl Capability {
         Capability::Tasks,
         Capability::Hunspell,
         Capability::Cowork,
+        Capability::Jupyter,
     ];
 
     /// The Cargo feature (and user-visible) name.
@@ -86,6 +90,7 @@ impl Capability {
             Capability::Tasks => "tasks",
             Capability::Hunspell => "hunspell",
             Capability::Cowork => "cowork",
+            Capability::Jupyter => "jupyter",
         }
     }
 
@@ -108,6 +113,7 @@ impl Capability {
             Capability::Tasks => cfg!(feature = "tasks"),
             Capability::Hunspell => cfg!(feature = "hunspell"),
             Capability::Cowork => cfg!(feature = "cowork"),
+            Capability::Jupyter => cfg!(feature = "jupyter"),
         }
     }
 
@@ -129,6 +135,7 @@ impl Capability {
             ("jj.", Capability::Jj),
             ("oc.", Capability::Oc),
             ("cowork.", Capability::Cowork),
+            ("jupyter.", Capability::Jupyter),
             // Only IM's network actions; the panel, Notes, sharing, status
             // and history work in every build.
             ("im.connect", Capability::Im),
@@ -250,6 +257,16 @@ mod tests {
     fn cowork_is_off_unless_asked_for() {
         assert_eq!(Capability::Cowork.enabled(), cfg!(feature = "cowork"));
         assert_eq!(is_available("cowork.host"), cfg!(feature = "cowork"));
+    }
+
+    #[test]
+    fn jupyter_is_off_unless_asked_for() {
+        assert_eq!(
+            Capability::for_action("jupyter.run"),
+            Some(Capability::Jupyter)
+        );
+        assert_eq!(Capability::Jupyter.enabled(), cfg!(feature = "jupyter"));
+        assert_eq!(is_available("jupyter.start"), cfg!(feature = "jupyter"));
     }
 
     #[test]

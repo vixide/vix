@@ -16,9 +16,11 @@
 //!   environment.
 //! - [`output`] — the `Output` model and MIME selection.
 //! - [`ansi`] — ANSI escape stripping for tracebacks.
+//! - [`cell`] — `# %%` code cells in a plain source file.
 //! - [`org`] — the Org `#+RESULTS:` formatter (insert, replace, clear).
 
 pub mod ansi;
+pub mod cell;
 pub mod connection;
 pub mod kernelspec;
 pub mod message;

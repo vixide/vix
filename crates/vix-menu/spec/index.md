@@ -271,6 +271,7 @@ Actions are `run.*`.
 | Add Watch…        | Evaluate an expression each time execution stops             |
 | Evaluate…         | A one-off expression (REPL) into the bottom dock             |
 | Toggle Debug Panel | The call stack / variables / watches side panel             |
+| Jupyter ▸         | Start Kernel…, Run (`Ctrl+Shift+Enter`), Run and Advance, Interrupt / Restart / Shut Down Kernel, Clear Results (`jupyter.*`, the opt-in `jupyter` feature; see [`spec/jupyter`](../../../spec/jupyter/index.md)) |
 
 ## Tools menu
 
