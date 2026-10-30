@@ -37,7 +37,7 @@ jobs:
       PLAN: ${{ inputs.plan }}
       DISPATCH_TAG: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Resolve the release tag

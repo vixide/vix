@@ -229,7 +229,7 @@ nothing about it is forge-specific, so GitLab and Codeberg can add it later.
 
 ## GitLab
 
-Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the
+Stages `check` → `test` → `release`, on the pinned `rust:1.97` image (the
 MSRV — see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.md)). The
 `workflow.rules` block runs pipelines for merge requests, the default branch,
 and tags, but never a duplicate branch pipeline beside an open merge request.

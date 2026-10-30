@@ -63,7 +63,7 @@ started requiring a newer toolchain than the policy allows.
 
 ## Current value
 
-As of the most recent update to this document, stable Rust is **1.98**, so the
-MSRV is **1.96**. If stable has moved on since, this document is stale in its
+As of the most recent update to this document, stable Rust is **1.99**, so the
+MSRV is **1.97**. If stable has moved on since, this document is stale in its
 example only — the rule above is what binds, and `Cargo.toml` must be brought
 back in line with it.

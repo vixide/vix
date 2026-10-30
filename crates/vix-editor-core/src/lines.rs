@@ -326,7 +326,7 @@ impl Editor {
 /// A 64-bit seed from the OS RNG (falls back to a fixed seed if unavailable).
 fn random_seed() -> u64 {
     let mut buf = [0u8; 8];
-    if getrandom::getrandom(&mut buf).is_err() {
+    if getrandom::fill(&mut buf).is_err() {
         return 0x9E37_79B9_7F4A_7C15; // golden-ratio constant fallback
     }
     u64::from_le_bytes(buf)

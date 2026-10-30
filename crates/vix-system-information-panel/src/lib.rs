@@ -176,61 +176,69 @@ fn env_or(keys: &[&str], fallback: &str) -> String {
 }
 
 /// The "Operating System" and "CPU" sections (host identity + processor facts).
-fn os_and_cpu_rows(sys: &System, unknown: &str) -> Vec<Row> {
+fn os_and_cpu_rows(sys: Option<&System>, unknown: &str) -> Vec<Row> {
     let mut rows = vec![
         Row::heading(&t!("info.operating_system")),
         Row::pair(
             &t!("info.name"),
-            System::name().unwrap_or_else(|| unknown.to_string()),
+            System::name().unwrap_or_else(|_| unknown.to_string()),
         ),
         Row::pair(
             &t!("info.version"),
-            System::long_os_version().unwrap_or_else(|| unknown.to_string()),
+            System::long_os_version().unwrap_or_else(|_| unknown.to_string()),
         ),
         Row::pair(
             &t!("info.kernel"),
-            System::kernel_version().unwrap_or_else(|| unknown.to_string()),
+            System::kernel_version().unwrap_or_else(|_| unknown.to_string()),
         ),
         Row::pair(
             &t!("info.hostname"),
-            System::host_name().unwrap_or_else(|| unknown.to_string()),
+            System::host_name().unwrap_or_else(|_| unknown.to_string()),
         ),
         Row::pair(&t!("info.architecture"), std::env::consts::ARCH),
         Row::heading(&t!("info.cpu")),
     ];
-    if let Some(cpu) = sys.cpus().first() {
+    if let Some(cpu) = sys.and_then(|sys| sys.cpus().first()) {
         let brand = cpu.brand().trim();
         if !brand.is_empty() {
             rows.push(Row::pair(&t!("info.model"), brand));
         }
         rows.push(Row::pair(&t!("info.vendor"), cpu.vendor_id()));
     }
-    if let Some(physical) = sysinfo::System::physical_core_count() {
+    if let Ok(physical) = sysinfo::System::physical_core_count() {
         rows.push(Row::pair(&t!("info.physical_cores"), physical.to_string()));
     }
-    rows.push(Row::pair(
-        &t!("info.logical_cores"),
-        sys.cpus().len().to_string(),
-    ));
+    if let Some(sys) = sys {
+        rows.push(Row::pair(
+            &t!("info.logical_cores"),
+            sys.cpus().len().to_string(),
+        ));
+    }
     rows
 }
 
 /// The "Memory" and "Storage" sections (RAM/swap totals + per-disk free space).
-fn memory_and_storage_rows(sys: &System) -> Vec<Row> {
-    let mut rows = vec![
-        Row::heading(&t!("info.memory")),
-        Row::pair(&t!("info.total_ram"), human_bytes(sys.total_memory())),
-        Row::pair(&t!("info.used_ram"), human_bytes(sys.used_memory())),
-        Row::pair(
-            &t!("info.available_ram"),
-            human_bytes(sys.available_memory()),
-        ),
-        Row::pair(&t!("info.total_swap"), human_bytes(sys.total_swap())),
-        Row::pair(&t!("info.used_swap"), human_bytes(sys.used_swap())),
-    ];
+fn memory_and_storage_rows(sys: Option<&System>) -> Vec<Row> {
+    let mut rows = Vec::new();
+    if let Some(sys) = sys {
+        rows.extend([
+            Row::heading(&t!("info.memory")),
+            Row::pair(&t!("info.total_ram"), human_bytes(sys.total_memory())),
+            Row::pair(&t!("info.used_ram"), human_bytes(sys.used_memory())),
+            Row::pair(
+                &t!("info.available_ram"),
+                human_bytes(sys.available_memory()),
+            ),
+            Row::pair(&t!("info.total_swap"), human_bytes(sys.total_swap())),
+            Row::pair(&t!("info.used_swap"), human_bytes(sys.used_swap())),
+        ]);
+    }
 
-    let disks = Disks::new_with_refreshed_list();
-    if !disks.is_empty() {
+    // sysinfo 0.40 reports an unsupported platform as an `Err`; treat it the
+    // same as "no disks" and leave the Storage section out.
+    if let Ok(disks) = Disks::new_with_refreshed_list()
+        && !disks.is_empty()
+    {
         rows.push(Row::heading(&t!("info.storage")));
         for disk in &disks {
             let mount = disk.mount_point().display().to_string();
@@ -248,12 +256,15 @@ fn memory_and_storage_rows(sys: &System) -> Vec<Row> {
 
 /// The "Uptime" and "Environment" sections (load average + shell env vars).
 fn uptime_and_environment_rows(unknown: &str) -> Vec<Row> {
-    let load = System::load_average();
+    let load = System::load_average().unwrap_or_default();
     let cwd =
         std::env::current_dir().map_or_else(|_| unknown.to_string(), |p| p.display().to_string());
     vec![
         Row::heading(&t!("info.uptime")),
-        Row::pair(&t!("info.system_uptime"), human_uptime(System::uptime())),
+        Row::pair(
+            &t!("info.system_uptime"),
+            System::uptime().map_or_else(|_| unknown.to_string(), human_uptime),
+        ),
         Row::pair(
             &t!("info.load_average"),
             t!(
@@ -275,12 +286,16 @@ fn uptime_and_environment_rows(unknown: &str) -> Vec<Row> {
 /// Gather a fresh snapshot of host system information into display rows.
 #[must_use]
 pub fn gather() -> Vec<Row> {
-    let mut sys = System::new_all();
-    sys.refresh_all();
     let unknown = t!("info.unknown").to_string();
+    // sysinfo 0.40 returns `Err` on a platform it doesn't support; fall back
+    // to leaving the CPU-count and Memory facts out rather than no panel.
+    let sys = System::new_all().ok().map(|mut sys| {
+        sys.refresh_all();
+        sys
+    });
 
-    let mut rows = os_and_cpu_rows(&sys, &unknown);
-    rows.extend(memory_and_storage_rows(&sys));
+    let mut rows = os_and_cpu_rows(sys.as_ref(), &unknown);
+    rows.extend(memory_and_storage_rows(sys.as_ref()));
     rows.extend(uptime_and_environment_rows(&unknown));
     rows
 }

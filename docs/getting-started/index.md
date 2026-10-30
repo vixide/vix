@@ -81,7 +81,7 @@ source with `cargo build --profile minimal --no-default-features`, or keep what 
 with `--features sql,git,…` (see
 [`spec/cargo-features/index.md`](../../spec/cargo-features/index.md)).
 
-**From source** (needs a Rust toolchain, 1.96+):
+**From source** (needs a Rust toolchain, 1.97+):
 
 ```sh
 git clone https://github.com/vixide/vix.git

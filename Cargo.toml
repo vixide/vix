@@ -19,7 +19,7 @@ exclude = ["tui/examples/demo-workspace/rust-app"]
 [workspace.package]
 version = "2.0.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.97"
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/vixide/vix"
 homepage = "https://github.com/vixide/vix"
@@ -56,7 +56,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 confy = "2.0.0"
 # The platform data directory (IM disk history, T755); the version confy
 # already pulls in, so no new crate.
-etcetera = "0.10"
+etcetera = "0.11"
 clap = { version = "4.6.7", features = ["derive"] }
 rust-i18n = "4.2.4"
 base64 = "0.23"
@@ -71,7 +71,7 @@ zeroize = "1"
 # AGPL-3.0-only, which is incompatible with the license Vix offers. Do not
 # bump without replacing the calculator's evaluator — `cargo deny` fails on it.
 evalexpr = "11"
-getrandom = "0.2"
+getrandom = "0.4"
 htmd = "0.5"
 jiff = "0.2"
 # XML for the REST Client's `{{name.response.body.//xpath}}` (MIT OR Apache-2.0,
@@ -82,7 +82,7 @@ pulldown-cmark = "0.13"
 sha2 = "0.11"
 similar = { version = "3", features = ["inline"] }
 spellbook = "0.4"
-sysinfo = "0.39"
+sysinfo = "0.40"
 toml = "1.1"
 md-5 = "0.11"
 crc32fast = "1"
@@ -97,11 +97,11 @@ qrcode = { version = "0.14", default-features = false }
 portable-pty = "0.9"
 vt100 = "0.15"
 anyhow = "1.0"
-arboard = { version = "3.6", default-features = false }
-rhai = "1.26"
+arboard = { version = "3.7", default-features = false }
+rhai = "1.27"
 ratatui-core = "0.1"
 ropey = "1.6"
-rust-embed = { version = "8.12", features = ["include-exclude"] }
+rust-embed = { version = "8.13", features = ["include-exclude"] }
 streaming-iterator = "0.1"
 tree-sitter = "0.27"
 unicode-segmentation = "1.13"
@@ -116,14 +116,14 @@ tree-sitter-html = { version = "0.23.2" }
 tree-sitter-java = { version = "0.23.5" }
 tree-sitter-javascript = { version = "0.25" }
 tree-sitter-json = { version = "0.24.8" }
-tree-sitter-md = { version = "0.5.3" }
+tree-sitter-md = { version = "0.5.4" }
 tree-sitter-python = { version = "0.25" }
 tree-sitter-rust = { version = "0.24" }
 tree-sitter-toml-ng = { version = "0.7.0" }
 tree-sitter-typescript = { version = "0.23" }
 tree-sitter-yaml = { version = "0.7" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
-tokio = { version = "1.53.1", features = ["rt", "net", "time", "sync", "macros"] }
+tokio = { version = "1.54.1", features = ["rt", "net", "time", "sync", "macros"] }
 futures-util = { version = "0.3", default-features = false }
 mimalloc = "0.1"
 # Fast byte search (newline counting and substring search) for the Large
