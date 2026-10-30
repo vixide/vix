@@ -8892,10 +8892,27 @@ editor by completion, diagnostics and never losing work first.
     - **`nix run`:** see T742; unverified.
     - **Left:** publish the image and verify `nix run`, then list both on
       the README and site.
-- [ ] **T744 — Measured claims.** Startup time and memory for Vix, Vim,
+- [x] **T744 — Measured claims.** Startup time and memory for Vix, Vim,
   Helix, Micro and Neovim on the same files with `hyperfine`, in a
   reproducible script with the machine stated, published in
   `docs/performance`. Only then may the site quote a number. **Medium.**
+  - **Done 2026-10-30:** `scripts/bench-editors` (Python stdlib) measures
+    time to first screen, memory of the whole process tree and idle CPU
+    for Vix, Vim, Neovim, Helix, Emacs, micro, nano and mg (Kakoune not
+    installed) on a 10,000-line Rust file and a 100 MB log, config
+    disabled, in a pty that answers terminal queries. Not `hyperfine`: it
+    times process exit, and an interactive editor's first screen needs a
+    pty harness. Results, machine, versions, commands and caveats are in
+    `docs/performance/index.md` ("Startup and memory vs other editors").
+    Vix: 41 ms / 34 MiB on the 10k-line file (behind nano, Vim, Neovim;
+    ahead of Emacs, Helix); 99 ms but **1.1 GiB** on the 100 MB file, the
+    most measured. The README FAQ quotes exactly that. The site was not
+    changed: its working tree holds another session's uncommitted
+    SvelteKit 3 migration, and it quotes no performance numbers today.
+    Follow-ups worth a task: the text buffer's ~11× memory on a 100 MB
+    file and its ~7.5% idle CPU afterwards; and Vix's ~250 ms startup
+    stall in a terminal that does not answer `ESC [ 5 n` (the image
+    protocol probe).
 - [ ] **T745 — 2.0 launch kit.** A "What's new in 2.0" page on the site,
   release notes written for users rather than library authors, and
   announcement drafts for the user to post. Nothing is posted without the
@@ -9240,10 +9257,10 @@ everything in Q except T718. What is open, by run:
   T670 (the musl release build crashes).
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730–T733, T740 and T741 are done. T734 has its spike done
+- **Run R:** T730–T733, T740, T741 and T744 are done. T734 has its spike done
   and T734a–T734h open; T735 waits for T637. T742 and T743 have their files
   (templates and a container image) but no channel is verified or
-  published, so neither is done. T744–T748 are open; T746 and T747 need the
+  published, so neither is done. T745–T748 are open; T746 and T747 need the
   user's decisions.
 - **Run S:** T750–T756 and T759 are done; T757 (docs, site and demo) and
   T758 (Matrix, spike first) are open.
@@ -9345,10 +9362,10 @@ CI-discovered rounds to get genuinely right on Windows).
 18. **Run R (improvements and promotion, 2026-10-29):** T670 and the
     Run M daily-driver items (T612, T614, T615, T625–T627, T629) first;
     then T730, T740, T732; T742 → T743 → T744 → T745. T746 and T747 wait
-    for the user's decisions. T730–T733, T740 and T741 are done; T670 and
-    the daily-driver items are still open. Next: verify each T742 channel
-    on a real machine or runner (Nix first, since T743's `nix run` needs
-    it), publish the container image, then T744.
+    for the user's decisions. T730–T733, T740, T741 and T744 are done;
+    T670 and the daily-driver items are still open. Next: verify each T742
+    channel on a real machine or runner (Nix first, since T743's `nix run`
+    needs it) and publish the container image.
 
 19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
     then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
