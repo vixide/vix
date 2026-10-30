@@ -691,3 +691,16 @@ kdbx
 # Login shells the SSH authority is tested under (crates/vix-authority/spec/ssh)
 tcsh
 mksh
+
+# Jupyter kernel protocol (spec/jupyter, T734)
+ename
+evalue
+evcxr
+HMAC
+ipykernel
+kernelspec
+kernelspecs
+libzmq
+runtimed
+runtimelib
+smol

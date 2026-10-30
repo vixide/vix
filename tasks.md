@@ -8524,6 +8524,56 @@ editor by completion, diagnostics and never losing work first.
   the dock (Zed has a kernel REPL). The spike decides whether the
   ZeroMQ dependency is acceptable or a `jupyter console` subprocess is
   enough. **Medium–Large.**
+  - **Spike done 2026-10-30** (`feat/t734-jupyter-spike`; spec:
+    [`spec/jupyter`](spec/jupyter/index.md)). Decision: use the pure-Rust
+    `zeromq` crate (zmq.rs; MIT, no `unsafe`) with Vix's own small
+    Jupyter wire codec, behind an opt-in `jupyter` feature. The spike ran a
+    standalone prototype outside the workspace against ipykernel 7.4 in a
+    temporary venv. It did a real `execute_request` round trip over TCP and
+    over IPC. The kernel was ready in 161–191 ms, each execute took 2–4 ms,
+    and multi-line code, streams, errors and `image/png` bundles all came
+    back. It adds 8 crates, all passing Vix's `deny.toml`, and about +1.36
+    MB to a stripped binary (an upper bound). `jupyter console` piped
+    through a subprocess was rejected: it splits multi-line code into
+    separate cells, needs prompt scraping, and loses every image. A Python
+    `jupyter_client` JSON-lines bridge is the fallback. `runtimelib`
+    (Zed's) changes too often for now (majors 4 and 5 shipped a day
+    apart), and `zmq` needs the C++ libzmq. Remaining work:
+  - [ ] **T734a — `vix-jupyter-core`.** A pure crate with the wire codec
+    (HMAC sign/verify, frames), typed messages, the connection file,
+    kernelspec parsing and search paths, the `Output`/MIME model, ANSI
+    stripping, and the Org `#+RESULTS:` formatter. Fixture tests use
+    messages captured from the spike. **Medium.**
+  - [ ] **T734b — `vix-jupyter` transport.** Launch from kernelspec argv
+    with a 0700 runtime dir, a 0600 connection file and IPC on Unix. A
+    tokio `current_thread` worker thread owns the shell, IOPub and control
+    sockets; the App polls a `KernelEvent` channel. Interrupt, restart and
+    shutdown. Tests use an in-process fake kernel (ROUTER plus PUB), plus
+    an opt-in real-ipykernel smoke test. **Medium.**
+  - [ ] **T734c — App wiring.** The opt-in `jupyter` capability feature,
+    with `scripts/check` and CI lint and test runs for it. The Run →
+    Jupyter submenu and the `jupyter.*` actions (palette, catalog, i18n
+    in every locale). The kernelspec picker, the `jupyter_kernels`
+    setting, a status-bar kernel segment, and `Ctrl+Shift+Enter`.
+    **Medium.**
+  - [ ] **T734d — Run targets and dock output.** Selection, then `# %%`
+    cell, then the current line. Output goes to the bottom dock, plus an
+    end-of-line result hint. Add Run and Advance. **Small–Medium.**
+  - [ ] **T734e — Org babel evaluation.** Run the `src` block at point,
+    and `C-c C-c` in a block. Write `#+RESULTS:` (insert or replace)
+    following `:results`, `:file` and `:eval`. Map `jupyter-<lang>`
+    languages. Update the `vix-org` babel spec. **Medium.**
+  - [ ] **T734f — Trust and safety.** Add the `jupyter_confirm_evaluate`
+    setting and confirm runs in an untrusted workspace (T132/T627).
+    Use a project-local kernelspec only when the workspace is trusted.
+    Refuse in a remote workspace, and send no stdin. **Small.**
+  - [ ] **T734g — Images.** Decode `image/png` and `image/jpeg`. Open
+    them in an image tab, or save them for an Org `[[file:…]]` link.
+    Without the `image` capability, show the `text/plain` form.
+    **Small–Medium.**
+  - [ ] **T734h — Docs and promotion.** Add a `docs/jupyter` user guide
+    and a CHANGELOG entry. Measure the real `vix` binary-size delta, then
+    decide whether `jupyter` joins `full`. **Small.**
 - [ ] **T735 — Translations in Rhai scripts.** Let a script ship its own
   strings per locale through the same catalog `t!` reads, so script
   commands appear in the user's language (Fresh plugins can). After
