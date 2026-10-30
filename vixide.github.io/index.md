@@ -21,16 +21,22 @@ The site is for a visitor deciding in about 30 seconds whether to try Vix.
 The home page leads with what Vix is (a terminal text editor and IDE in
 Rust, with familiar Ctrl/Cmd keys and a menu bar rather than modal editing
 by default), a copyable install command, a real screenshot, a six-card
-"Why Vix" grid, recorded demos, the keys to start with, links to the
-documentation's `for-*-users` guides and feature comparison, the desktop
-GUIs, and the open-source/licensing facts. `/features/` is the grouped
-feature list with an on-page contents nav, a theme gallery and every
-demo; `/install/` has
-every install route (Homebrew, installer script, PowerShell, npm, cargo,
-direct download, the minimal build, the desktop GUIs, building from source)
-and a first-run section. Every claim is checked against the main `vix`
+"Why Vix" grid, a short "Coming in 2.0" list, recorded demos, the keys to
+start with, links to the documentation's `for-*-users` guides and feature
+comparison, the desktop GUIs, and the open-source/licensing facts.
+`/features/` is the grouped feature list with an on-page contents nav, a
+"New in 2.0" section, a theme gallery and every demo; `/install/` has every
+published install route (Homebrew, installer script, Linux packages,
+PowerShell, npm, cargo, direct download, the minimal build, the desktop
+GUIs, building from source, with or without Cowork), a short list of the
+channels that are templates only and not yet published, and a first-run
+section. Every claim is checked against the main `vix`
 repo (its `index.md`, `docs/`, crate specs and `CHANGELOG.md`); no number or
-feature appears here that the repo doesn't state.
+feature appears here that the repo doesn't state. Features from the
+`vix` changelog's `[Unreleased]` section (the coming 2.0) are labelled as
+not released yet wherever they appear, and the only performance numbers
+quoted are ones in the repo's `docs/performance/index.md`, with the machine
+and conditions it gives.
 
 Screenshots and demos are the main repo's `docs/demos/*.gif` recordings,
 copied verbatim into `static/assets/demos/` (the site is exported as its

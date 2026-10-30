@@ -23,6 +23,17 @@
     { value: '0', label: 'lines of unsafe Rust' }
   ];
 
+  // Highlights of the unreleased 2.0, from the main repo's CHANGELOG.md
+  // ([Unreleased]); the full list is on the features page.
+  const whatsNew = [
+    { title: 'Remote editing over SSH', text: 'work on a folder on another machine from File → Open Remote… or vix ssh://host/path, with nothing installed there (experimental).' },
+    { title: 'Cowork', text: 'edit the same files together in real time, encrypted, with no server in between (an opt-in build feature).' },
+    { title: 'IM menu', text: 'code-aware chat and comment threads anchored to lines of your files.' },
+    { title: 'IDE features', text: 'Local History, Search Everywhere, a Refactor menu, run configurations, Peek Definition and CodeLens.' },
+    { title: 'Large File Viewer', text: 'a 4 GiB log opens to its first screen in under a millisecond, in under 5 MiB of memory (Apple M4 Max, warm cache).' },
+    { title: 'Containers and more', text: 'an OC menu for Docker, Podman and nerdctl, an MCP server mode, and a switch that turns AI off.' }
+  ];
+
   const audiences = [
     {
       heading: 'You live in the terminal but miss your IDE',
@@ -65,7 +76,7 @@
     },
     {
       q: 'Does it work over SSH and in tmux?',
-      a: 'Yes. Vix is a terminal program, so run it on the remote machine as you would any other. Opening a remote project from a local Vix is planned.'
+      a: 'Yes. Vix is a terminal program, so run it on the remote machine as you would any other. Vix 2.0, not released yet, also opens a folder on another machine from your local Vix over SSH (vix ssh://host/path, or File → Open Remote…). That is experimental.'
     },
     {
       q: 'Can my company use it?',
@@ -150,14 +161,16 @@
     </Card>
     <Card heading="Git and Jujutsu" href="/features/#code">
       <p class="card-description">
-        Stage, unstage or revert one hunk at a time, blame, stash, branches
-        and a merge-conflict resolver — plus a full Jujutsu menu.
+        Stage, unstage or revert one hunk at a time, blame, stash, branches,
+        an interactive commit graph and a merge-conflict resolver — plus a
+        full Jujutsu menu.
       </p>
     </Card>
     <Card heading="Beyond code" href="/features/#data">
       <p class="card-description">
         An Org-mode suite with Org-roam, a SQLite/PostgreSQL/MySQL workbench,
-        an HTTP client, and table, JSON/YAML and hex editing views.
+        a REST client for <code>.http</code> files, a container menu for
+        Docker and Podman, and table, JSON/YAML and hex editing views.
       </p>
     </Card>
     <Card heading="Careful by default" href="/features/#trust">
@@ -173,6 +186,24 @@
         through experimental desktop front ends.
       </p>
     </Card>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="new-heading">
+  <header class="section-heading">
+    <p class="section-heading-eyebrow">Coming in 2.0</p>
+    <h2 id="new-heading">What's new in the next release</h2>
+  </header>
+  <div class="prose centered">
+    <ul>
+      {#each whatsNew as item (item.title)}
+        <li><strong>{item.title}</strong> — {item.text}</li>
+      {/each}
+    </ul>
+    <p class="small-print">
+      2.0 is not released yet; the current release is 1.8.
+      <a href="/features/#new">Everything new in 2.0</a>.
+    </p>
   </div>
 </section>
 
