@@ -7,7 +7,9 @@
 
 use serde_json::{Value, json};
 
-use crate::{CompletionItem, Diagnostic, Location, Position, Range, SemanticToken, Severity};
+use crate::{
+    CompletionItem, CompletionList, Diagnostic, Location, Position, Range, SemanticToken, Severity,
+};
 
 /// One file's text edits within a workspace edit: `(uri, [(range, new_text)])`.
 pub type UriEdits = (String, Vec<(Range, String)>);
@@ -71,11 +73,17 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // The document-symbol parser already keeps a response's
                 // nested `children`, so this is accurate, not aspirational.
                 "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
+                // T612: `textEdit` may be an `InsertReplaceEdit`, and
+                // `commitCharacters` are honored; `contextSupport` because
+                // requests carry a `CompletionContext`.
                 "completion": {
                     "completionItem": {
                         "snippetSupport": false,
-                        "documentationFormat": ["plaintext"]
-                    }
+                        "documentationFormat": ["plaintext"],
+                        "insertReplaceSupport": true,
+                        "commitCharactersSupport": true
+                    },
+                    "contextSupport": true
                 },
                 "signatureHelp": {},
                 "codeAction": {},
@@ -1122,38 +1130,116 @@ pub fn parse_incoming_calls(result: &Value) -> Vec<Location> {
 }
 
 /// Parse a `textDocument/completion` result (`CompletionItem[]` or a
-/// `CompletionList` `{ items: [...] }`) into completion candidates.
+/// `CompletionList` `{ isIncomplete, items: [...] }`) into a
+/// [`CompletionList`] (T612: a bare array is complete).
 #[must_use]
-pub fn parse_completion(result: &Value) -> Vec<CompletionItem> {
-    let items = match result {
-        Value::Array(arr) => arr.as_slice(),
-        Value::Object(o) => o
-            .get("items")
-            .and_then(Value::as_array)
-            .map_or(&[][..], |a| a.as_slice()),
-        _ => &[][..],
+pub fn parse_completion(result: &Value) -> CompletionList {
+    let (items, is_incomplete) = match result {
+        Value::Array(arr) => (arr.as_slice(), false),
+        Value::Object(o) => (
+            o.get("items")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |a| a.as_slice()),
+            o.get("isIncomplete")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        ),
+        _ => (&[][..], false),
     };
-    items.iter().filter_map(parse_completion_item).collect()
+    CompletionList::new(
+        items.iter().filter_map(parse_completion_item).collect(),
+        is_incomplete,
+    )
 }
 
 fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
     let label = v.get("label")?.as_str()?.to_string();
+    let text_edit = v.get("textEdit");
     // Prefer an explicit textEdit/insertText; otherwise insert the label.
-    let insert_text = v
-        .get("textEdit")
+    let insert_text = text_edit
         .and_then(|e| e.get("newText"))
         .and_then(Value::as_str)
         .or_else(|| v.get("insertText").and_then(Value::as_str))
         .unwrap_or(&label)
         .to_string();
-    let detail = v.get("detail").and_then(Value::as_str).map(str::to_string);
-    let data = v.get("data").cloned();
+    // A `TextEdit` has `range`; an `InsertReplaceEdit` has `insert`/`replace`
+    // -- take the insert range, the LSP default insert mode.
+    let range = text_edit.and_then(|e| {
+        e.get("range")
+            .or_else(|| e.get("insert"))
+            .and_then(parse_range)
+    });
+    let additional_edits = v
+        .get("additionalTextEdits")
+        .map(parse_text_edits)
+        .unwrap_or_default();
+    let string = |key: &str| v.get(key).and_then(Value::as_str).map(str::to_string);
+    let commit_chars = v
+        .get("commitCharacters")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| c.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
     Some(CompletionItem {
+        detail: string("detail"),
+        filter_text: string("filterText"),
+        sort_text: string("sortText"),
+        data: v.get("data").cloned(),
+        range,
+        additional_edits,
+        kind: v
+            .get("kind")
+            .and_then(Value::as_u64)
+            .and_then(|k| u32::try_from(k).ok()),
+        commit_chars,
         label,
         insert_text,
-        detail,
-        data,
     })
+}
+
+/// The server's completion trigger characters, read from an `initialize`
+/// result (`capabilities.completionProvider.triggerCharacters`, T612) —
+/// typing one asks for completion even outside a word (e.g. `.`). Empty
+/// when the server lists none.
+#[must_use]
+pub fn parse_completion_trigger_characters(result: &Value) -> Vec<String> {
+    result
+        .get("capabilities")
+        .and_then(|c| c.get("completionProvider"))
+        .and_then(|p| p.get("triggerCharacters"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A `textDocument/completion` params body with a `CompletionContext`
+/// (T612): `trigger` is the trigger character that prompted the request
+/// (`triggerKind` 2), `for_incomplete` re-requests an incomplete list
+/// (`triggerKind` 3), and neither is an explicit or identifier-typed
+/// invocation (`triggerKind` 1).
+#[must_use]
+pub fn completion_params(
+    uri: &str,
+    line: u32,
+    character: u32,
+    trigger: Option<char>,
+    for_incomplete: bool,
+) -> Value {
+    let mut params = position_params(uri, line, character);
+    let context = match (trigger, for_incomplete) {
+        (_, true) => json!({ "triggerKind": 3 }),
+        (Some(c), false) => json!({ "triggerKind": 2, "triggerCharacter": c.to_string() }),
+        (None, false) => json!({ "triggerKind": 1 }),
+    };
+    params["context"] = context;
+    params
 }
 
 fn parse_position(v: &Value) -> Option<Position> {
@@ -1608,13 +1694,15 @@ mod tests {
 
     #[test]
     fn completion_handles_list_and_array_and_insert_text() {
-        let items = parse_completion(&json!({
+        let list = parse_completion(&json!({
             "items": [
                 { "label": "push", "detail": "fn(self, T)" },
                 { "label": "pop", "insertText": "pop()" },
                 { "label": "len", "textEdit": { "newText": "len()", "range": {} } }
             ]
         }));
+        assert!(!list.is_incomplete, "isIncomplete defaults to false");
+        let items = list.items;
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].insert_text, "push", "falls back to the label");
         assert_eq!(items[1].insert_text, "pop()");
@@ -1695,6 +1783,96 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn completion_keeps_ranges_additional_edits_filter_sort_kind_commit_chars() {
+        let list = parse_completion(&json!({
+            "isIncomplete": true,
+            "items": [
+                {
+                    "label": "HashMap",
+                    "kind": 22,
+                    "filterText": "HashMapStd",
+                    "sortText": "0001",
+                    "commitCharacters": [":", "("],
+                    "textEdit": {
+                        "newText": "HashMap",
+                        "range": {
+                            "start": { "line": 3, "character": 4 },
+                            "end": { "line": 3, "character": 6 }
+                        }
+                    },
+                    "additionalTextEdits": [{
+                        "newText": "use std::collections::HashMap;\n",
+                        "range": {
+                            "start": { "line": 0, "character": 0 },
+                            "end": { "line": 0, "character": 0 }
+                        }
+                    }]
+                },
+                {
+                    "label": "Vec",
+                    "textEdit": {
+                        "newText": "Vec",
+                        "insert": {
+                            "start": { "line": 3, "character": 4 },
+                            "end": { "line": 3, "character": 5 }
+                        },
+                        "replace": {
+                            "start": { "line": 3, "character": 4 },
+                            "end": { "line": 3, "character": 8 }
+                        }
+                    }
+                }
+            ]
+        }));
+        assert!(list.is_incomplete);
+        let map = &list.items[0];
+        let range = map.range.expect("textEdit range kept");
+        assert_eq!((range.start.line, range.start.character), (3, 4));
+        assert_eq!(range.end.character, 6);
+        assert_eq!(map.additional_edits.len(), 1);
+        assert_eq!(
+            map.additional_edits[0].1,
+            "use std::collections::HashMap;\n"
+        );
+        assert_eq!(map.filter_key(), "HashMapStd");
+        assert_eq!(map.sort_key(), "0001");
+        assert_eq!(map.kind, Some(22));
+        assert!(map.is_commit_char('('));
+        assert!(!map.is_commit_char('.'));
+        // An InsertReplaceEdit keeps its insert range.
+        let vec = &list.items[1];
+        assert_eq!(vec.range.map(|r| r.end.character), Some(5));
+        assert_eq!(vec.filter_key(), "Vec", "filter falls back to the label");
+        assert_eq!(vec.additional_edits.len(), 0);
+        // A bare array is a complete list.
+        assert!(!parse_completion(&json!([{ "label": "x" }])).is_incomplete);
+    }
+
+    #[test]
+    fn completion_trigger_characters_and_context_params() {
+        let init = json!({ "capabilities": {
+            "completionProvider": { "triggerCharacters": [".", ":"] }
+        }});
+        assert_eq!(parse_completion_trigger_characters(&init), vec![".", ":"]);
+        assert_eq!(
+            parse_completion_trigger_characters(&json!({ "capabilities": {} })).len(),
+            0
+        );
+        let p = completion_params("file:///a.rs", 1, 2, Some('.'), false);
+        assert_eq!(p["context"]["triggerKind"], 2);
+        assert_eq!(p["context"]["triggerCharacter"], ".");
+        assert_eq!(p["position"]["character"], 2);
+        assert_eq!(
+            completion_params("file:///a.rs", 1, 2, None, true)["context"]["triggerKind"],
+            3
+        );
+        assert_eq!(
+            completion_params("file:///a.rs", 1, 2, None, false)["context"]["triggerKind"],
+            1
+        );
     }
 
     #[test]

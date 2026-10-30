@@ -16,11 +16,9 @@
 
 use std::path::{Path, PathBuf};
 
-use vix_input::{KeyCode, KeyEvent};
-
 use super::{
-    App, CompletionPopup, Focus, Prompt, PromptKind, apply_edits_to_text, char_to_lsp_pos,
-    lsp_pos_to_char, severity_color,
+    App, Focus, Prompt, PromptKind, apply_edits_to_text, char_to_lsp_pos, lsp_pos_to_char,
+    severity_color,
 };
 use crate::editor::SEARCH_MARK;
 use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
@@ -398,7 +396,9 @@ impl App {
     /// loop ticks faster then, so responses feel prompt).
     #[must_use]
     pub fn lsp_busy(&self) -> bool {
-        self.lsp.busy()
+        // A pending debounced auto-completion (T612) needs the fast tick to
+        // fire on time.
+        self.lsp.busy() || self.completion_due.is_some()
     }
 
     /// Rebuild the active editor's diagnostic underline marks from the latest
@@ -565,14 +565,9 @@ impl App {
         }
         let items = titles
             .into_iter()
-            .map(|t| crate::lsp_core::CompletionItem {
-                insert_text: format!("{t}{suffix}"),
-                label: t,
-                detail: None,
-                data: None,
-            })
+            .map(|t| crate::lsp_core::CompletionItem::new(t.clone(), format!("{t}{suffix}")))
             .collect();
-        self.completion = Some(CompletionPopup { items, selected: 0 });
+        self.open_completion(items);
     }
 
     /// Populate the completion popup with contact emails (`mailto: true`) or
@@ -597,22 +592,20 @@ impl App {
                 .iter()
                 .filter_map(|c| {
                     let email = c.field("EMAIL")?;
-                    Some(crate::lsp_core::CompletionItem {
-                        label: format!("{} <{email}>", c.name),
-                        insert_text: format!("{email}][{}{suffix}", c.name),
-                        detail: None,
-                        data: None,
-                    })
+                    Some(crate::lsp_core::CompletionItem::new(
+                        format!("{} <{email}>", c.name),
+                        format!("{email}][{}{suffix}", c.name),
+                    ))
                 })
                 .collect()
         } else {
             contacts
                 .iter()
-                .map(|c| crate::lsp_core::CompletionItem {
-                    label: c.name.clone(),
-                    insert_text: format!("{}{suffix}", c.name),
-                    detail: None,
-                    data: None,
+                .map(|c| {
+                    crate::lsp_core::CompletionItem::new(
+                        c.name.clone(),
+                        format!("{}{suffix}", c.name),
+                    )
                 })
                 .collect()
         };
@@ -623,93 +616,7 @@ impl App {
             self.status = t!("status.org_contacts_no_matches").to_string();
             return;
         }
-        self.completion = Some(CompletionPopup { items, selected: 0 });
-    }
-
-    fn accept_completion(&mut self) {
-        let Some(popup) = self.completion.take() else {
-            return;
-        };
-        let Some(item) = popup.items.get(popup.selected) else {
-            return;
-        };
-        let prefix = self.word_prefix_before_cursor();
-        // If the candidate begins with what's typed, insert only the remainder so
-        // the prefix is not duplicated; otherwise insert it whole.
-        let insert = if !prefix.is_empty() && item.insert_text.starts_with(&prefix) {
-            item.insert_text[prefix.len()..].to_string()
-        } else {
-            item.insert_text.clone()
-        };
-        let area = self.layout.editor;
-        if self.editor.insert_str(&insert, area) {
-            self.mark_active_dirty();
-        }
-    }
-
-    /// Handle a key while the completion popup is open. Returns true if consumed.
-    pub(super) fn completion_key(&mut self, key: KeyEvent) -> bool {
-        if self.completion.is_none() {
-            return false;
-        }
-        match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.completion.as_mut() {
-                    p.selected = p.selected.saturating_sub(1);
-                }
-                self.resolve_selected_completion();
-                true
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.completion.as_mut()
-                    && p.selected + 1 < p.items.len()
-                {
-                    p.selected += 1;
-                }
-                self.resolve_selected_completion();
-                true
-            }
-            KeyCode::Enter | KeyCode::Tab => {
-                self.accept_completion();
-                true
-            }
-            KeyCode::Esc => {
-                self.completion = None;
-                true
-            }
-            _ => {
-                // Any other key dismisses the popup and is handled normally.
-                self.completion = None;
-                false
-            }
-        }
-    }
-
-    /// Lazily fetch fuller detail for the highlighted completion item via
-    /// `completionItem/resolve`, when it has no detail yet but carries resolve
-    /// data.
-    pub(super) fn resolve_selected_completion(&mut self) {
-        let Some(path) = self.active_path() else {
-            return;
-        };
-        if !self.lsp.handles(&path) {
-            return;
-        }
-        let Some(popup) = self.completion.as_ref() else {
-            return;
-        };
-        let Some(item) = popup.items.get(popup.selected) else {
-            return;
-        };
-        if item.detail.is_some() {
-            return; // already has detail to show
-        }
-        let Some(data) = item.data.clone() else {
-            return;
-        };
-        let label = item.label.clone();
-        self.lsp
-            .request_completion_resolve(&path, &label, Some(&data));
+        self.open_completion(items);
     }
 
     /// Go to the definition of the symbol under the cursor. When a language

@@ -63,6 +63,7 @@ while True:
     if method == 'initialize':
         send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
             'positionEncoding':'utf-16',
+            'completionProvider':{'triggerCharacters':['.']},
             'semanticTokensProvider':{'legend':{
                 'tokenTypes':['keyword','variable'],'tokenModifiers':[]},
                 'full':True}}}})
@@ -85,6 +86,12 @@ while True:
                              'severity':1,'message':'mock error'}]}})
     elif method == 'textDocument/hover':
         send({'jsonrpc':'2.0','id':mid,'result':{'contents':{'kind':'plaintext','value':'mock hover'}}})
+    elif method == 'textDocument/completion':
+        # Echo the request's CompletionContext so a test can check it (T612).
+        ctx = msg['params'].get('context', {})
+        send({'jsonrpc':'2.0','id':mid,'result':{'isIncomplete':False,'items':[
+            {'label':'len','detail':'kind=%s char=%s' % (
+                ctx.get('triggerKind'), ctx.get('triggerCharacter'))}]}})
     elif method == 'textDocument/signatureHelp':
         send({'jsonrpc':'2.0','id':mid,'error':{'code':-32603,'message':'mock signature help failure'}})
     elif method == 'textDocument/prepareRename':
@@ -898,6 +905,59 @@ fn typing_an_open_paren_auto_triggers_signature_help_in_a_live_app() {
         Some("fn f(a: i32)\n→ a: i32"),
         "typing `(` should have auto-triggered signature help and populated the hover popup"
     );
+}
+
+/// T612: typing one of the server's `initialize`-advertised trigger
+/// characters (the mock lists `.`) in a live `App` auto-requests completion
+/// after the debounce, reporting `triggerKind` 2 and the character, and the
+/// reply opens the popup -- the whole `on_key` -> `completion_after_key` ->
+/// `poll_completion_due` -> `Lsp::request_completion_with` -> `poll_lsp`
+/// path, as a user would hit it.
+#[test]
+fn typing_a_trigger_character_auto_opens_the_completion_popup() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+
+    let root = std::env::temp_dir().join(format!("vix-lsp-app-complete-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    });
+
+    let mut app = App::new(root.clone(), settings);
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut typed = false;
+    while Instant::now() < deadline && app.completion_popup().is_none() {
+        app.poll_lsp();
+        if !typed && !app.lsp.diagnostics_for(&file).is_empty() {
+            app.on_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+            app.on_key(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE));
+            typed = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    let popup = app
+        .completion_popup()
+        .expect("typing `.` should have auto-opened the completion popup");
+    let item = popup.selected_item().expect("one candidate shown");
+    assert_eq!(item.label, "len");
+    assert_eq!(item.detail.as_deref(), Some("kind=2 char=."));
 }
 
 #[test]

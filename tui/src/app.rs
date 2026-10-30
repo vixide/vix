@@ -7,6 +7,7 @@ mod ai_off;
 mod code_lens;
 mod command_palette;
 mod compare;
+mod completion;
 mod coverage;
 #[cfg(feature = "cowork")]
 mod cowork;
@@ -1648,13 +1649,7 @@ pub struct HoverPopup {
     pub text: String,
 }
 
-/// LSP completion overlay: the candidate list and the highlighted row.
-pub struct CompletionPopup {
-    /// Candidate items, in server order.
-    pub items: Vec<crate::lsp_core::CompletionItem>,
-    /// Index of the highlighted candidate.
-    pub selected: usize,
-}
+pub use completion::CompletionPopup;
 
 bitflags::bitflags! {
     /// Which of [`App`]'s UI surfaces are currently shown (T149): each bit is
@@ -2166,6 +2161,9 @@ pub struct App {
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
     pub(crate) completion: Option<CompletionPopup>,
+    /// A debounced auto-completion request (T612): when to send it, and the
+    /// trigger character that scheduled it (`None` for a word character).
+    pub(crate) completion_due: Option<(std::time::Instant, Option<char>)>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Color Converter dialog (Tools → Color Converter…), when open.
@@ -2719,6 +2717,7 @@ impl App {
             test_selected: 0,
             hover: None,
             completion: None,
+            completion_due: None,
             dialog: None,
             color_converter: None,
             unit_converter: None,
@@ -6835,6 +6834,7 @@ impl App {
             }
         }
         self.maybe_auto_signature_help(key.code);
+        self.completion_after_key(key);
     }
 
     /// Auto-trigger signature help right after typing `(` or `,` inside a
@@ -7427,9 +7427,12 @@ impl App {
     /// definition jumps, completion). Called once per event-loop iteration.
     pub fn poll_lsp(&mut self) {
         if !self.lsp.is_active() {
+            self.completion_due = None;
             return;
         }
         self.lsp_sync_active();
+        // T612: a debounced auto-completion request whose delay has passed.
+        self.poll_completion_due();
         for event in self.lsp.poll() {
             match event {
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
@@ -7444,15 +7447,12 @@ impl App {
                         self.lsp_jump(&path, line, character);
                     }
                 }
-                crate::lsp::LspEvent::Completion(items) => {
-                    if !items.is_empty() {
-                        self.completion = Some(CompletionPopup { items, selected: 0 });
-                        self.resolve_selected_completion();
-                    }
-                }
+                crate::lsp::LspEvent::Completion(list) => self.on_completion_list(list),
                 crate::lsp::LspEvent::CompletionDetail(text) => {
-                    if let Some(popup) = self.completion.as_mut()
-                        && let Some(item) = popup.items.get_mut(popup.selected)
+                    if let Some(item) = self
+                        .completion
+                        .as_mut()
+                        .and_then(CompletionPopup::selected_item_mut)
                     {
                         item.detail = Some(text);
                     }

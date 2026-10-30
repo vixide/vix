@@ -10,6 +10,19 @@ the language server, pumps its stdout bytes through [`frame::Decoder`], and
 writes [`frame::encode`]d requests to its stdin — so everything here stays
 synchronous and unit-testable with no IO.
 
+## Completion (T612)
+
+`message::parse_completion` returns a `CompletionList` (`items` +
+`is_incomplete`); each `CompletionItem` carries its `textEdit` range,
+`additionalTextEdits`, `filterText`, `sortText`, `kind`, and
+`commitCharacters` alongside the label/insert text/detail/resolve data.
+`message::completion_params` builds a request with a `CompletionContext`
+(`triggerKind` 1 invoked, 2 trigger character, 3 re-trigger for an
+incomplete list) and `message::parse_completion_trigger_characters` reads
+`capabilities.completionProvider.triggerCharacters` from an `initialize`
+result. How the host filters, triggers, and applies them is specified in
+the [lsp spec](../../vix-lsp/spec/index.md#completion-t612).
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

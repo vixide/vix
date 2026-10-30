@@ -73,7 +73,8 @@ features (`syntax-common` by default, `syntax-all` for everything).
 
 `tui/src/app/*.rs` (T141) holds most of `App`'s actual logic, one file per feature
 area: `keymap.rs` (`on_key` + the ten keymap dispatchers), `git.rs` (git/jj),
-`scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `roam.rs`,
+`scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `completion.rs`
+(the completion popup: filter, accept, auto-trigger — T612), `roam.rs`,
 `org_table.rs`, `org.rs`, `insert_tools.rs`, `picker_panels.rs`,
 `info_panels.rs`. `tui/src/ui/*.rs` (T142, done) holds `ui.rs`'s draw functions,
 one file per overlay/panel family, across 22 submodules (`ui.rs` itself down

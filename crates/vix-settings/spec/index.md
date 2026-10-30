@@ -91,6 +91,7 @@ field is absent.
 | `spellcheck` | boolean | `false` | Underline misspelled words in comments and strings. |
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations. Empty = autodetect only. |
 | `lsp_enabled` | boolean | `true` | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers are launched. |
+| `lsp_auto_complete` | boolean | `true` | Request LSP completion automatically while typing an identifier or a server trigger character (debounced), instead of only on `Ctrl+Space`. |
 | `lsp_servers` | array of tables | `[]` | Configured language servers, matched to files by extension (see below). |
 | `show_welcome_dialog` | boolean | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves as soon as the dialog has been shown once, so it appears on the first run only; set it back to `true` to see it again. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |

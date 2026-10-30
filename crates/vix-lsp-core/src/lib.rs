@@ -84,7 +84,8 @@ pub struct Diagnostic {
 }
 
 /// One completion candidate.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct CompletionItem {
     /// Label shown in the list.
     pub label: String,
@@ -95,6 +96,83 @@ pub struct CompletionItem {
     /// Opaque server payload round-tripped to `completionItem/resolve` to fetch
     /// fuller detail/documentation lazily.
     pub data: Option<serde_json::Value>,
+    /// The range the item's `textEdit` replaces (T612) — a plain `TextEdit`'s
+    /// `range`, or an `InsertReplaceEdit`'s `insert` range. `None` when the
+    /// server sent no `textEdit`: the host then replaces the typed word.
+    pub range: Option<Range>,
+    /// The item's `additionalTextEdits` (T612): edits elsewhere in the
+    /// document applied together with the item, e.g. an auto-import line.
+    pub additional_edits: Vec<(Range, String)>,
+    /// `filterText`: what typed text is matched against (falls back to the
+    /// label — see [`CompletionItem::filter_key`]).
+    pub filter_text: Option<String>,
+    /// `sortText`: how the item orders against its peers (falls back to the
+    /// label — see [`CompletionItem::sort_key`]).
+    pub sort_text: Option<String>,
+    /// The LSP `CompletionItemKind` number (1 = Text … 25 = `TypeParameter`).
+    pub kind: Option<u32>,
+    /// `commitCharacters`: typing one of these while the item is selected
+    /// accepts it before the character is inserted.
+    pub commit_chars: Vec<String>,
+}
+
+impl CompletionItem {
+    /// A plain candidate showing `label` and inserting `insert_text`, with no
+    /// range, extra edits, filter/sort text, kind, or commit characters —
+    /// what the host's own non-LSP completers (Org-roam node titles,
+    /// Org-contacts) build.
+    #[must_use]
+    pub fn new(label: impl Into<String>, insert_text: impl Into<String>) -> Self {
+        CompletionItem {
+            label: label.into(),
+            insert_text: insert_text.into(),
+            ..CompletionItem::default()
+        }
+    }
+
+    /// The text typed input is fuzzy-matched against: `filterText`, else the
+    /// label.
+    #[must_use]
+    pub fn filter_key(&self) -> &str {
+        self.filter_text.as_deref().unwrap_or(&self.label)
+    }
+
+    /// The text the item sorts by: `sortText`, else the label.
+    #[must_use]
+    pub fn sort_key(&self) -> &str {
+        self.sort_text.as_deref().unwrap_or(&self.label)
+    }
+
+    /// Whether typing `ch` commits (accepts) this item.
+    #[must_use]
+    pub fn is_commit_char(&self, ch: char) -> bool {
+        self.commit_chars
+            .iter()
+            .any(|c| c.chars().eq(std::iter::once(ch)))
+    }
+}
+
+/// A `textDocument/completion` result (T612): the candidates plus whether the
+/// server considers the list incomplete (`isIncomplete`), meaning further
+/// typing should re-request rather than only filter.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub struct CompletionList {
+    /// Candidate items, in server order.
+    pub items: Vec<CompletionItem>,
+    /// `CompletionList.isIncomplete` (`false` for a bare `CompletionItem[]`).
+    pub is_incomplete: bool,
+}
+
+impl CompletionList {
+    /// A list of `items`, incomplete when `is_incomplete`.
+    #[must_use]
+    pub fn new(items: Vec<CompletionItem>, is_incomplete: bool) -> Self {
+        CompletionList {
+            items,
+            is_incomplete,
+        }
+    }
 }
 
 /// A source location: a document URI and a range within it.

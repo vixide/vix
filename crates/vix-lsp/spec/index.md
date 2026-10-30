@@ -59,7 +59,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
 | Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
-| Completion | `Ctrl+Space` | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. |
+| Completion | `Ctrl+Space`, or automatically while typing (T612) | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. See § Completion below for filtering, auto-trigger, and how an accepted item is applied. |
 | Signature Help | `lsp.signature_help`, or automatically right after typing `(`/`,` inside a call | Popup with the active parameter highlighted. |
 | Find References | `lsp.references` (Tools → Language Server) | Every reference across the workspace, not just the current file. |
 | Rename | `lsp.rename` | Sends `textDocument/prepareRename` first (T134): a server-validated "not renameable here" shows a status message instead of opening a prompt that would only fail, and a server-supplied placeholder seeds the prompt when one is given. A server with no `prepareRename` support falls back to the pre-T134 behavior (host's own word-under-cursor guess) rather than erroring. Applies the resulting `workspace/applyEdit` across every affected file. |
@@ -74,6 +74,55 @@ a keybinding, or an automatic trigger), not just present unused in
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
 | Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
 | Semantic Tokens | automatic, re-requested on content change (T123a) | `textDocument/semanticTokens/full`, decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
+
+## Completion (T612)
+
+**Parsing.** `parse_completion` returns a `CompletionList`: the items plus
+`is_incomplete` (`CompletionList.isIncomplete`; a bare `CompletionItem[]`
+is complete). Each `CompletionItem` keeps, besides `label`/`insert_text`/
+`detail`/`data`: the `textEdit` range (`range`, or an `InsertReplaceEdit`'s
+`insert` range), `additionalTextEdits` (`additional_edits` — e.g. the
+auto-import line), `filterText`, `sortText`, `kind`, and
+`commitCharacters`. The client advertises `insertReplaceSupport` and
+`commitCharactersSupport` to match. The server's
+`completionProvider.triggerCharacters` are read at `initialize` and kept
+per server (`Lsp::is_completion_trigger`).
+
+**Filtering as you type.** The popup keeps the server's full list and a
+fuzzy-filtered, ranked view of it (`vix-palette`'s `fuzzy_score`), matched
+against each item's `filterText` (else its label) using the text typed
+between the popup's anchor (the start of the word at the cursor when the
+list arrived) and the cursor. Ties and the empty query fall back to
+`sortText` (else label) order. Typing an identifier character (letter,
+digit, `_`) or Backspace keeps the popup open and re-filters it; when the
+list was `isIncomplete`, each such edit re-requests completion
+(`triggerKind` 3) and the reply replaces the full list. The popup closes
+when the cursor leaves the word (moves before the anchor or off the line),
+when nothing matches a complete list, or on any other key. Typing one of
+the selected item's commit characters accepts it first, then inserts the
+character.
+
+**Accepting.** An item with a `textEdit` range replaces that range —
+its end extended to the cursor, since the user may have typed past it while
+the reply was in flight — with the item's text; one without replaces the
+typed word prefix (the pre-T612 behavior, which the non-LSP Org-roam and
+Org-contacts completers still use). The item's `additionalTextEdits` are
+applied in the same step through the same `apply_edits_to_text` as rename
+and formatting, as one undo step, and the cursor lands after the inserted
+text (shifted by any additional edit before it).
+
+**Auto-trigger.** With `lsp_auto_complete` on (the default), typing an
+identifier character or one of the server's trigger characters while no
+popup is open requests completion after a short debounce (100 ms), so a
+burst of keystrokes sends one request; a trigger character is reported to
+the server as `triggerKind` 2 with its `triggerCharacter`, an identifier
+character as `triggerKind` 1. Silent when no server handles the file.
+`Ctrl+Space` (`lsp.complete`) still requests immediately.
+
+**Multiple servers.** Each handling server's reply arrives as its own
+`LspEvent::Completion` and replaces the popup's list (unchanged from
+T123b); trigger characters are the union across every server handling the
+file.
 
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 
