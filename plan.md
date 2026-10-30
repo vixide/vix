@@ -31,6 +31,16 @@ editor, but the *platform around it* — extensibility, performance evidence,
 CI, docs depth, onboarding — has not kept pace. The highest-leverage work is
 now in that platform.
 
+**Status (2026-10-30).** The baseline above is historical. Phases 0–5 and
+Runs A–L, N and P are done; the workspace has 140 crates and is versioned
+2.0.0 (unreleased; 1.8.0 is the latest release). Of the 2026-10-28 plans,
+Cowork, OC and IDE parity are implemented, and remote editing is done
+except T718 (other authorities). Of Run R, the AI-off switch, MCP server,
+LSP status, Large File Viewer, social cards and theme gallery are done;
+the install channels (T742, T743) exist only as unverified templates.
+Of Run S (IM), everything but the demo (T757) and Matrix (T758) is done.
+The live list is `tasks.md` § "Suggested execution order".
+
 ## Hard rules (apply to every task)
 
 These come from `AGENTS.md` / `CLAUDE.md` and are non-negotiable:
@@ -585,7 +595,7 @@ Tasks: **Run S, T750–T759.**
 - **Scope creep on scripting/modal.** Both are editors-within-the-editor.
   Mitigation: spec-first with an explicit v1 cut line; land vertical slices
   that are each shippable.
-- **Docs drift.** 98 crates × hand-written pages will rot. Mitigation:
+- **Docs drift.** 140 crates × hand-written pages will rot. Mitigation:
   generate what is data (Phase 3.3), link-check in CI, and keep the
   spec-per-crate discipline as the deep source with docs as the friendly
   layer.

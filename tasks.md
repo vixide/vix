@@ -8713,11 +8713,13 @@ editor by completion, diagnostics and never losing work first.
     [`docs/performance`](docs/performance/index.md#large-file-viewer-t733)
     and quoted in the README. **Not done:** editing large files (out of
     scope by design); remote files — the viewer is local-only (no ranged
-    read on the `Authority` trait yet, deliberately left while T717 reworks
-    `vix-authority`); regex search, search wrap-around and match counts;
-    following a growing file; mouse scrolling in the viewer; display-width-
-    aware columns for wide characters; cold-cache numbers (the benchmark
-    measures warm-cache only); the vixide.github.io site copy of the number.
+    read on the `Authority` trait yet; it was left while T717 reworked
+    `vix-authority`, and T717 has since landed, so a ranged read is the next
+    step once T718's changes to the trait settle); regex search, search
+    wrap-around and match counts; following a growing file; mouse scrolling
+    in the viewer; display-width-aware columns for wide characters;
+    cold-cache numbers (the benchmark measures warm-cache only). The site
+    now quotes the number (features page, 2026-10-30 docs harmonize).
 - [ ] **T734 — Jupyter kernel REPL (spike first).** Send a selection or
   an Org `src` block to a Jupyter kernel and show the result inline or in
   the dock (Zed has a kernel REPL). The spike decides whether the
@@ -8866,7 +8868,8 @@ editor by completion, diagnostics and never losing work first.
 Order: T670 and the Run M daily-driver items first; then T730, T740,
 T732 (small, visible); T742 → T743 → T744 before the 2.0 launch kit
 (T745); T746 and T747 need the user's decisions; T731, T733 and T734 are
-spec- or spike-first.
+spec- or spike-first. *(2026-10-30: T730–T733, T740 and T741 are done and
+T734's spike is done; see "Suggested execution order" for what is left.)*
 
 ## Run S (IM — instant messaging, 2026-10-29)
 
@@ -9038,6 +9041,11 @@ free-floating chat does not; never pop up on your own.
 - [ ] **T757 — Docs, site and demo.** A user guide, a VHS demo of
   sharing a selection and opening its reference, and a features-page
   entry. **Small.**
+  - **Progress 2026-10-30:** the user guide exists
+    ([`docs/im`](docs/im/index.md), in `docs/SUMMARY.md`), and the site's
+    features page has an IM entry under "New in 2.0". **Left:** the VHS
+    tape in `docs/demos/` (share a selection in the Notes conversation, then
+    Enter on its `path:line` reference) and its GIF on the features page.
 - [ ] **T758 — Matrix bridge (spike first).** Decide between
   `matrix-sdk` in-process (pre-1.0, heavy, but real Olm/Megolm E2EE)
   and talking to a local Pantalaimon or iamb out of process; behind its
@@ -9170,7 +9178,30 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-09-14**: Run A is fully done. Run B is done except
+**Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
+everything in Q except T718. What is open, by run:
+
+- **Run M:** T611–T638 and T644 are open; T610 is partly done (the
+  `*-tool` converters and `vix-db`'s `Session` still return
+  `Result<_, String>`); T608 is half done (the DAP mock-adapter tests
+  exist; the `vix-editor` unit-test half remains). The daily-driver items T612, T614, T615, T625–T627 and T629 come
+  first.
+- **Run O:** T663, T664, T665, T666, T667 and T671 are open (T659–T662 and
+  T668 are done), plus the late findings T669 (apt/dnf repositories) and
+  T670 (the musl release build crashes).
+- **Run Q:** only T718 (other authorities: dev containers,
+  `docker exec`/`podman`) is open, and it is in progress.
+- **Run R:** T730–T733, T740 and T741 are done. T734 has its spike done
+  and T734a–T734h open; T735 waits for T637. T742 and T743 have their files
+  (templates and a container image) but no channel is verified or
+  published, so neither is done. T744–T748 are open; T746 and T747 need the
+  user's decisions.
+- **Run S:** T750–T756 and T759 are done; T757 (docs, site and demo) and
+  T758 (Matrix, spike first) are open.
+
+The recommended next order is in items 13–19 below.
+
+**Earlier status (2026-09-14)**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
 **Run C (T201–T211) is fully done.** **Run D (docs) is fully done —
 T301–T309, all nine tasks.** `scripts/docs-coverage` reports
@@ -9260,15 +9291,19 @@ CI-discovered rounds to get genuinely right on Windows).
 17. **Run Q (user requests, 2026-10-28):** T680 first, then T682, T683,
     T681, T684, T685. The four plans (Cowork, OC, Remote editing, IDE
     parity) start with their spike or pure-core task; T710 lands alone.
+    **Done except T718** (in progress).
 
 18. **Run R (improvements and promotion, 2026-10-29):** T670 and the
     Run M daily-driver items (T612, T614, T615, T625–T627, T629) first;
     then T730, T740, T732; T742 → T743 → T744 → T745. T746 and T747 wait
-    for the user's decisions.
+    for the user's decisions. T730–T733, T740 and T741 are done; T670 and
+    the daily-driver items are still open. Next: verify each T742 channel
+    on a real machine or runner (Nix first, since T743's `nix run` needs
+    it), publish the container image, then T744.
 
 19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
     then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
-    last.
+    last. **T750–T756 and T759 are done**; T757 and T758 are open.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
