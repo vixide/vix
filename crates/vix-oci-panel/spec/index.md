@@ -10,7 +10,7 @@ is [`vix-oci`](../../vix-oci/spec/index.md).
 
 `Panel` is pure state; it never starts a process. `Panel::key(key, page)`
 returns a `Request` for the App to carry out: `Reload`, `Inspect`, `Logs`,
-`Shell`, `OpenPort`, `Exec(Pending)`, `Close`, `ReadOnly`, `Invalid`, or
+`Shell`, `OpenWorkspace`, `OpenPort`, `Exec(Pending)`, `Close`, `ReadOnly`, `Invalid`, or
 `None`. One panel holds all five lists and a `kind`; `Tab` / `Shift+Tab`
 cycle `Container`, `Image`, `Volume`, `Network` and (only when
 `Engine::has_pods`) `Pod`.
@@ -23,7 +23,9 @@ cycle `Container`, `Image`, `Volume`, `Network` and (only when
 - All lists: arrows, PageUp/PageDown, `Tab`/`Shift+Tab` kind, `r` reload,
   `Enter`/`i` inspect, `d`/`Delete` remove (confirm), `Esc`/`q` close.
 - Containers: `s` start, `x` stop, `t` restart, `p` pause or unpause, `l`
-  logs, `e` shell (running only), `o` open the first published host port,
+  logs, `e` shell (running only), `w` open a workspace in it (running
+  only; T718, [`spec/remote-editing`](../../../spec/remote-editing/index.md)),
+  `o` open the first published host port,
   `a` toggle stopped containers.
 - Images: `u` run (prompt, then confirm), `g` tag, `p` pull (prompt, then
   confirm), `P` push (confirm).
@@ -35,7 +37,7 @@ cycle `Container`, `Image`, `Volume`, `Network` and (only when
   unpause and tag run at once.
 - Read-only mode (`oc_mode = "read-only"`): every key above that would change
   engine state answers `Request::ReadOnly` before any command is built.
-  Listing, inspect, logs, shell and open-port remain.
+  Listing, inspect, logs, shell, open-workspace and open-port remain.
 - Input is checked by `vix_oci::argv::check`; a refused value is
   `Request::Invalid` and nothing runs. Run takes `IMAGE [name=N] [port=H:C]...`
   and is always detached; Build takes `FILE [tag=REF] [context=DIR]`.

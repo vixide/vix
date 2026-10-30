@@ -1,6 +1,6 @@
 # Authority
 
-The authority slot: one trait that owns Vix's workspace file access and process spawning, with local and SSH implementations and a temp-dir-backed fake.
+The authority slot: one trait that owns Vix's workspace file access and process spawning, with local, SSH and container implementations and a temp-dir-backed fake.
 
 It lets a remote machine stand in for the local one. The cross-cutting design is
 [`spec/remote-editing`](../../../spec/remote-editing/index.md); this crate is
@@ -13,6 +13,10 @@ feature, [`spec/ssh`](ssh/index.md)) is installed by the experimental
 side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
 The remote agent (`vix --remote-agent`, T717, [`spec/agent`](agent/index.md))
 speeds it up when a `vix` of the same version is on the remote machine.
+`ContainerAuthority` (T718, [`spec/container`](container/index.md)) is the
+same shell authority over `docker exec`, `podman exec`, `kubectl exec` or
+`wsl.exe`, installed by `vix docker://…` (`podman://`, `k8s://`, `wsl://`),
+the same dialog, and the OC menu.
 
 ## API
 
@@ -96,6 +100,19 @@ speeds it up when a `vix` of the same version is on the remote machine.
   and `/ssh:user@host#port:/path`; `ssh::quote` is the shell quoting; both
   are always built. `SshAuthority` and `SshOptions` need the `ssh` feature
   (which implies `process`). See [`spec/ssh`](ssh/index.md).
+- `ssh::ShellAuthority<T: Transport>` (T718): the shell-script authority,
+  generic over how a script reaches `/bin/sh` on the other side.
+  `SshAuthority` is `ShellAuthority<SshTransport>`; `ContainerAuthority` is
+  `ShellAuthority<ExecTransport>`. `ssh::quote::sh_argv` is the encoded
+  script as an argument vector for a transport that runs no shell first.
+- `container` (T718): `ContainerTarget` and `ExecKind` (always built) parse
+  `docker://`, `podman://`, `k8s://` and `wsl://` names; `ContainerAuthority`,
+  `ExecTransport` and `ExecOptions` need the `ssh` feature. See
+  [`spec/container`](container/index.md).
+- `remote` (T718): `RemoteTarget`, any remote name (`Ssh` or `Container`),
+  with `parse`, `to_url`, `label` and `path`; with the `ssh` feature,
+  `connect(&ConnectOptions, interactive)` returns a `Connection` (the
+  authority and its agent status). The App uses only this.
 - `agent` (T717, always built): the remote agent's frame codec
   (`agent::wire`), the agent itself (`agent::serve`, `serve_stdio`, what
   `vix --remote-agent` runs) and `AgentAuthority`, an authority over a
@@ -108,8 +125,10 @@ speeds it up when a `vix` of the same version is on the remote machine.
   `LocalAuthority` and `FakeAuthority` in the crate's integration test, and
   against `SshAuthority` over a fake `ssh` in `crates/vix-authority/tests/ssh.rs` (and over a real
   host when `VIX_TEST_SSH_HOST` is set), and against `AgentAuthority` and
-  the agent-backed `SshAuthority` (T717). It includes the conflict check
-  and `metadata_batch`.
+  the agent-backed `SshAuthority` (T717), and against `ContainerAuthority`
+  for all four kinds over a fake engine in `crates/vix-authority/tests/container.rs` (and a
+  real Docker/Podman container when `VIX_TEST_DOCKER` is set, T718). It
+  includes the conflict check and `metadata_batch`.
 
 ## What goes through the authority
 
@@ -173,7 +192,10 @@ machine running the UI even when the workspace is remote.
   on a remote host it runs there (T717) rather than through an authority.
 - **Diagnostics and integrations with their own transport**: `vix --doctor`
   (checks the local install), the OCI engine CLI's own runner and engine
-  lookup (`vix-oci`, `oc.rs`'s `which_on_path`; T718 owns containers), the
+  lookup (`vix-oci`, `oc.rs`'s `which_on_path`; the OC panel manages the
+  engine from this machine, and a container *workspace* goes through
+  `ContainerAuthority`, T718), the `devcontainer` CLI (it builds on this
+  machine's engine), the
   integrated terminal's PTY itself (always local; what runs on it comes from
   `Authority::terminal`, T716), Hunspell as an external checker.
 - **Implementation and tooling**: `vix-fileops` (the local implementation's

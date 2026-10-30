@@ -9,6 +9,9 @@
 //! that changes the engine's state has already been shown to the user (or is a
 //! plain start/stop) by the panel before it reaches [`App::oc_exec`].
 //!
+//! Container workspaces (T718: **Open Workspace in Container…**, **Reopen in
+//! Dev Container**) are in the `workspace` submodule.
+//!
 //! Long or chatty commands (logs, builds, pulls, pushes, runs, Compose) stream
 //! into the bottom dock through the same no-shell runner Git and Jujutsu use;
 //! short ones run to completion and report in the status line.
@@ -20,6 +23,8 @@ use crate::oci::{Engine, OciError, parse};
 use crate::oci_panel::{BUILD_FILES, COMPOSE_FILES, Mode, Panel, Pending, Purpose, Request, Rows};
 
 use super::{App, rect_contains};
+
+mod workspace;
 
 /// The user-facing text of an engine error, with the install hint for a
 /// missing engine.
@@ -60,6 +65,8 @@ impl App {
                 service: None,
                 tail: 200,
             }),
+            "oc.open_workspace" => self.oc_open_workspace(),
+            "oc.devcontainer_reopen" => self.oc_devcontainer_reopen(),
             _ => return false,
         }
         true
@@ -325,6 +332,7 @@ impl App {
             Request::Inspect(kind, id) => self.oc_inspect(kind, &id),
             Request::Logs(id) => self.oc_logs(&id),
             Request::Shell(id) => self.oc_shell(&id),
+            Request::OpenWorkspace(name) => self.oc_workspace_prompt(&name),
             Request::PortUrl(port) => {
                 let url = format!("http://localhost:{port}");
                 if let Some(t) = self.editor.active_tab_mut() {

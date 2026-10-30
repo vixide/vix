@@ -1,6 +1,9 @@
 # Remote editing
 
-**Status:** in progress (proposed 2026-10-28; T710–T717 and T719 done; T718, other authorities such as dev containers and `docker exec`, is open). User guide: [`docs/remote-editing`](../../docs/remote-editing/index.md). Tasks T710–T719 in
+**Status:** in progress (proposed 2026-10-28; T710–T717 and T719 done; T718
+containers, Kubernetes, WSL and dev containers done 2026-10-30, with real
+Kubernetes/WSL runs left as T718a/T718b). User guide:
+[`docs/remote-editing`](../../docs/remote-editing/index.md). Tasks T710–T719 in
 [`tasks.md`](../../tasks.md). Promotes the "Remote/SSH editing" Ideas-backlog
 entry, which already names Fresh's *authority* design as the model.
 
@@ -45,7 +48,7 @@ remove, watch, spawn, and the terminal. `LocalAuthority` is today's behavior.
    found on the remote's `PATH` or uploaded on request (checksum-verified).
 3. **Phase 3, other authorities.** Dev containers, `docker exec`, `podman`
    (links to [`../open-container/index.md`](../open-container/index.md)),
-   Kubernetes, WSL.
+   Kubernetes, WSL. Done (T718, below).
 
 **Remote agent (T717, done 2026-10-30).** Phase 2's file side:
 `vix --remote-agent` answers a length-prefixed binary protocol on the SSH
@@ -100,7 +103,62 @@ an untrusted workspace's terminal opens in the remote home directory. Details:
 [`vix-authority/spec/ssh`](../../crates/vix-authority/spec/ssh/index.md#the-terminal-t716).
 
 Path form: `ssh://user@host[:port]/abs/path` on the command line and in the
-UI; TRAMP-style `/ssh:host:/path` accepted as an alias.
+UI; TRAMP-style `/ssh:host:/path` accepted as an alias. Containers (T718):
+`docker://[user@]container/path`, `podman://…`,
+`k8s://namespace/pod/container/path`, `wsl://[user@]distro/path`.
+
+## Containers (T718)
+
+Done 2026-10-30. Details:
+[`crates/vix-authority/spec/container`](../../crates/vix-authority/spec/container/index.md).
+
+- **One shell authority, two transports.** T712's script layer became
+  `ShellAuthority<T: Transport>`; `SshAuthority` is it over `ssh`,
+  `ContainerAuthority` over `docker exec -i`, `podman exec -i`, `kubectl exec
+  -i … --` or `wsl.exe -d … --exec`. The scripts, their quoting, the error
+  codes, `metadata_batch`, the walk, conflict-checked saves and the remote
+  agent are the same code; only how a script reaches `/bin/sh` differs. The
+  agent is found, uploaded (over `exec -i`'s stdin, SHA-256 checked inside,
+  same OS/architecture only, opt-in) and started exactly as over SSH.
+- **Names.** `vix_authority::remote::RemoteTarget` is any remote name; the
+  App (`remote_session.rs`, `tui/src/remote.rs`) holds one instead of an
+  `SshTarget`, so `vix docker://web/srv`, **File → Open Remote…**, the
+  status bar (`⇄ docker:web`), the session key (`docker://web/srv`), the
+  recent remotes, connection lost/reconnect and trust work unchanged for
+  every form. A container connect never prompts; its failure says to check
+  that the container runs and the engine is installed
+  (`msg.remote_container_failed`).
+- **Processes.** `command()` is `ENGINE exec -i [-u U] [-e NAME]… CTR
+  /bin/sh -c <decoder> vix <digits>`: Docker and Podman get environment
+  variables by name, their values in the engine's own environment, never on
+  argv. `terminal()` adds `-t`. Tasks, git, search, LSP and DAP run inside
+  the container as they run on an SSH host (T715, T716).
+- **OC menu.** **Open Workspace in Container…** (`oc.open_workspace`) opens
+  the container list; `w` on a running Docker or Podman container fills the
+  Open Remote prompt with `docker://name/`. The panel answers `w` in
+  read-only mode too (it changes nothing in the engine).
+- **Dev containers.** **OC → Reopen in Dev Container**
+  (`oc.devcontainer_reopen`): with a `devcontainer.json` in `.devcontainer/` (or
+  `.devcontainer.json`) in a local workspace and the `devcontainer` CLI on
+  `PATH` (else `msg.devcontainer_cli_missing`, with the `npm` command), it
+  asks first (`ConfirmKind::DevcontainerUp`: building runs the project's
+  Dockerfile, features and lifecycle commands, so this is the T714 trust gate
+  for a workspace that is still local; keys within 250 ms are ignored, as
+  T655), then runs `devcontainer up --workspace-folder <root>` (plus
+  `--docker-path podman` when the `oc_engine` setting, else detection, says
+  Podman) in the background and connects to the container id it reports, as
+  `remoteUser` (from the CLI, else `devcontainer.json`), at
+  `remoteWorkspaceFolder` (else `workspaceFolder`, else
+  `/workspaces/<name>`). Because the user just agreed to run its code, that
+  workspace is trusted at once. Vix does not implement the Dev Container
+  specification; `vix-oci::devcontainer` reads only those fields (JSONC).
+- **Trust.** Every container workspace is untrusted until trusted, keyed by
+  its name and path, exactly as an SSH one (except the dev container case
+  above).
+- **Kubernetes and WSL** fall out of the same transport (`kubectl exec` has
+  no `-e`, so their environment values are exported by the script, on argv
+  as over SSH). They are tested against the fake engine only: T718a (a real
+  cluster) and T718b (a real WSL host) remain.
 
 ## The hard part: the local-only model
 
@@ -219,6 +277,9 @@ session. What goes remote: files, search, git, LSP, DAP, tasks, terminal.
 
 ## Testing
 
-A fake authority backed by a temp dir proves the trait. The SSH authority is
+A fake authority backed by a temp dir proves the trait. The container
+authorities run the conformance suite against a fake engine script (named by
+path) and, with `VIX_TEST_DOCKER`, against a real Docker or Podman container
+(T718). The SSH authority is
 tested against a local `sshd` only in an opt-in CI job; unit tests use a fake
 `ssh` script on `PATH` (the same technique as the DAP mock).

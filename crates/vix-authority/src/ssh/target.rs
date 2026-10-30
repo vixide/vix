@@ -22,7 +22,8 @@ pub struct SshTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TargetError {
-    /// The name starts with neither `ssh://` nor `/ssh:`.
+    /// The name starts with none of the remote forms (`ssh://`, `/ssh:`, and
+    /// the container forms of [`crate::container::ContainerTarget`]).
     NotRemote,
     /// No host was given.
     MissingHost,
@@ -37,17 +38,22 @@ pub enum TargetError {
     /// The path is relative (other than `~`), holds a NUL byte, or has a bad
     /// `%` escape.
     BadPath,
+    /// A container name (the container, pod, namespace, Kubernetes container
+    /// or WSL distribution, T718) is missing, option-shaped, or holds a
+    /// character such names never have.
+    BadName,
 }
 
 impl std::fmt::Display for TargetError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::NotRemote => "not an ssh:// or /ssh: path",
+            Self::NotRemote => "not a remote name (ssh://, docker://, podman://, k8s://, wsl://)",
             Self::MissingHost => "no host name",
             Self::BadHost => "invalid host name",
             Self::BadUser => "invalid user name",
             Self::BadPort => "invalid port",
             Self::BadPath => "invalid remote path",
+            Self::BadName => "invalid or missing container, pod or distribution name",
         })
     }
 }
@@ -253,7 +259,7 @@ fn check_user(user: &str) -> Result<(), TargetError> {
     Ok(())
 }
 
-fn check_path(path: &str) -> Result<String, TargetError> {
+pub(crate) fn check_path(path: &str) -> Result<String, TargetError> {
     if path.is_empty() {
         return Ok("~".into());
     }
@@ -268,7 +274,7 @@ fn check_path(path: &str) -> Result<String, TargetError> {
 }
 
 /// Decode `%XX` escapes (the result must be UTF-8).
-fn percent_decode(text: &str) -> Result<String, TargetError> {
+pub(crate) fn percent_decode(text: &str) -> Result<String, TargetError> {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -287,7 +293,7 @@ fn percent_decode(text: &str) -> Result<String, TargetError> {
 }
 
 /// Encode `%`, whitespace, control characters, `?` and `#` as `%XX`.
-fn percent_encode(text: &str) -> String {
+pub(crate) fn percent_encode(text: &str) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {

@@ -734,3 +734,6 @@ unmuting
 pread
 memchr
 headlessly
+KUBECONFIG
+WSLENV
+distroless

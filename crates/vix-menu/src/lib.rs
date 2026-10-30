@@ -1658,6 +1658,13 @@ const OC: &[Item] = &[
     Item::leaf("menu.item.oc.networks", "oc.networks", ""),
     Item::leaf("menu.item.oc.pods", "oc.pods", ""),
     SEP,
+    Item::leaf("menu.item.oc.open_workspace", "oc.open_workspace", ""),
+    Item::leaf(
+        "menu.item.oc.devcontainer_reopen",
+        "oc.devcontainer_reopen",
+        "",
+    ),
+    SEP,
     Item::sub("menu.item.oc.compose", OC_COMPOSE),
     SEP,
     Item::leaf("menu.item.oc.build", "oc.build", ""),

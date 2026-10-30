@@ -44,6 +44,16 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`ssh` feature (implies `process`), enabled only by root `tasks`",
     ),
     (
+        "crates/vix-authority/src/ssh/transport.rs",
+        "the `Transport::shell` signature (T718): builds no process itself",
+        "`ssh` feature (implies `process`), enabled only by root `tasks`",
+    ),
+    (
+        "crates/vix-authority/src/container/exec.rs",
+        "`ContainerAuthority` (T718): every operation runs `docker`/`podman`/`kubectl exec` or `wsl.exe --exec` (argv only, no local shell)",
+        "`ssh` feature (implies `process`), enabled only by root `tasks`",
+    ),
+    (
         "crates/vix-authority/src/agent/client.rs",
         "`AgentClient::spawn` (T717): starts the remote agent's transport (`ssh … vix --remote-agent`) from a caller-built `Command`",
         "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",

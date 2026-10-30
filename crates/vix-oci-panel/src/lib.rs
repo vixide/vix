@@ -89,6 +89,9 @@ pub enum Request {
     Logs(String),
     /// Open an interactive shell in the running container.
     Shell(String),
+    /// Open a workspace inside the running container (T718): the
+    /// container's name (its id when it has none).
+    OpenWorkspace(String),
     /// Copy `http://localhost:PORT` for the container's first published port.
     PortUrl(u16),
     /// Run this command (already confirmed where it needed to be).
@@ -461,6 +464,18 @@ impl Panel {
                     Request::None
                 };
             }
+            'w' => {
+                return if ctr.is_running() {
+                    let name = if ctr.name.is_empty() {
+                        ctr.id
+                    } else {
+                        ctr.name
+                    };
+                    Request::OpenWorkspace(name)
+                } else {
+                    Request::None
+                };
+            }
             's' => ContainerOp::Start,
             'x' => ContainerOp::Stop,
             't' => ContainerOp::Restart,
@@ -775,7 +790,17 @@ mod tests {
         let mut p = panel(false);
         p.down();
         assert_eq!(p.key(press(KeyCode::Char('e')), 5), Request::None);
+        assert_eq!(p.key(press(KeyCode::Char('w')), 5), Request::None);
         assert_eq!(p.key(press(KeyCode::Char('o')), 5), Request::PortUrl(8080));
+    }
+
+    #[test]
+    fn open_workspace_names_a_running_container_even_read_only() {
+        let mut p = panel(true);
+        assert!(matches!(
+            p.key(press(KeyCode::Char('w')), 5),
+            Request::OpenWorkspace(_)
+        ));
     }
 
     #[test]

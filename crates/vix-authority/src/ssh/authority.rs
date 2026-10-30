@@ -1,6 +1,8 @@
-//! [`SshAuthority`] (T712): the workspace on another machine, reached with
-//! the system `ssh` and plain POSIX `sh` + coreutils on the remote side.
+//! [`ShellAuthority`]: the workspace on another machine, reached through a
+//! [`Transport`] and plain POSIX `sh` + coreutils on the other side, and
+//! [`SshAuthority`] (T712), the one whose transport is the system `ssh`.
 
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::io::{self, BufRead as _};
 use std::path::{Path, PathBuf};
@@ -12,6 +14,7 @@ use super::agent_boot::{AgentMode, AgentStatus};
 use super::quote::{bytes_path, envelope, glob_escape, os_bytes, path_bytes, quote_path, sh_quote};
 use super::stat::{StatFlavor, epoch_secs};
 use super::target::SshTarget;
+use super::transport::Transport;
 use crate::agent::wire::{Expect as WireExpect, Op};
 use crate::agent::{AgentClient, Fail, Watch};
 use crate::{
@@ -39,7 +42,7 @@ pub(super) mod code {
     /// No `sha256sum`, `shasum` or `openssl` to check an upload with.
     pub(in crate::ssh) const NO_HASH_TOOL: i32 = 112;
     /// `ssh` itself failed (connection, authentication, host key).
-    pub(super) const SSH: i32 = 255;
+    pub(in crate::ssh) const SSH: i32 = 255;
 }
 
 /// How [`SshAuthority`] runs `ssh`. Everything else (keys, agent,
@@ -125,20 +128,24 @@ impl SshOptions {
     }
 }
 
-/// A remote machine as Vix's workspace, over the system `ssh` (T712).
+/// A shell authority: the workspace on another machine (or in a container),
+/// reached through a [`Transport`] that runs plain POSIX `sh` + coreutils
+/// there (T712, T718).
 ///
-/// Each operation runs one short POSIX `sh` script on the remote side
-/// (`cat`, `head`, `stat`, `find`, `mv`, …) through a shared `ControlMaster`
-/// connection, so there is nothing to install there. Paths are the remote
-/// machine's own absolute paths (`~` and `~/…` name its home directory).
-/// Every path and argument is single-quoted, and the whole script is sent
-/// so that a `fish` or `csh` login shell can't misread it.
+/// Each operation runs one short `sh` script on the other side (`cat`,
+/// `head`, `stat`, `find`, `mv`, …), so there is nothing to install there.
+/// Paths are that machine's own absolute paths (`~` and `~/…` name its home
+/// directory). Every path and argument is single-quoted, and the whole
+/// script travels as octal digits behind a fixed decoder, so no login shell
+/// or argv re-quoting can misread it. When the remote agent (T717) runs
+/// there, file operations go to it instead.
+///
+/// [`SshAuthority`] is this over `ssh`;
+/// [`crate::container::ContainerAuthority`] is this over `docker exec`,
+/// `podman exec`, `kubectl exec` or `wsl.exe`.
 #[derive(Debug)]
-pub struct SshAuthority {
-    target: SshTarget,
-    options: SshOptions,
-    /// The control socket pattern (`<dir>/%C`), when multiplexing.
-    control_path: Option<String>,
+pub struct ShellAuthority<T: Transport> {
+    transport: T,
     flavor: OnceLock<StatFlavor>,
     seq: AtomicU64,
     /// The running remote agent, if any (T717).
@@ -146,70 +153,21 @@ pub struct SshAuthority {
     agent_status: Mutex<AgentStatus>,
 }
 
-impl SshAuthority {
-    /// An authority for `target`'s host, with default [`SshOptions`]. Nothing
-    /// connects until the first operation (or [`SshAuthority::connect`]).
-    ///
-    /// # Errors
-    /// The private control-socket directory could not be made safe.
-    pub fn new(target: SshTarget) -> io::Result<Self> {
-        Self::with_options(target, SshOptions::default())
-    }
+/// A remote machine as Vix's workspace, over the system `ssh` (T712): a
+/// [`ShellAuthority`] whose transport is [`SshTransport`].
+pub type SshAuthority = ShellAuthority<SshTransport>;
 
-    /// An authority for `target`'s host, run as `options` says.
-    ///
-    /// # Errors
-    /// The control-socket directory could not be created, or exists but is
-    /// not a private (mode 0700) directory owned by this user.
-    pub fn with_options(target: SshTarget, options: SshOptions) -> io::Result<Self> {
-        let control_path = if options.multiplex && cfg!(unix) {
-            let dir = match &options.control_dir {
-                Some(dir) => dir.clone(),
-                None => default_control_dir()?,
-            };
-            private_dir(&dir)?;
-            control_pattern(&dir)
-        } else {
-            None
-        };
-        Ok(Self {
-            target,
-            options,
-            control_path,
-            flavor: OnceLock::new(),
-            seq: AtomicU64::new(0),
-            agent: RwLock::new(None),
-            agent_status: Mutex::new(AgentStatus::Off),
-        })
-    }
+/// The `ssh` transport: one host, reached with the system `ssh` through a
+/// shared `ControlMaster` connection.
+#[derive(Debug)]
+pub struct SshTransport {
+    target: SshTarget,
+    options: SshOptions,
+    /// The control socket pattern (`<dir>/%C`), when multiplexing.
+    control_path: Option<String>,
+}
 
-    /// Whether commands share one connection. Off when
-    /// [`SshOptions::multiplex`] is, on Windows, and when the control
-    /// directory's path is too long (or oddly named) for a socket.
-    #[must_use]
-    pub fn multiplexed(&self) -> bool {
-        self.control_path.is_some()
-    }
-
-    /// The host this authority works on (its path is the workspace the
-    /// caller opened; the authority itself is not tied to it).
-    #[must_use]
-    pub fn target(&self) -> &SshTarget {
-        &self.target
-    }
-
-    /// The `ssh` command up to and including the destination, with no remote
-    /// command: `ssh -T -o … [-p PORT] [-l USER] -- HOST`. No secret is ever
-    /// on it; authentication is `ssh`'s own (keys, agent, `SSH_ASKPASS`).
-    #[must_use]
-    pub fn base_command(&self) -> Command {
-        self.ssh(self.options.batch_mode)
-    }
-
-    fn ssh(&self, batch: bool) -> Command {
-        self.ssh_with(batch, false)
-    }
-
+impl SshTransport {
     /// The `ssh` command up to the destination; `tty` asks for a remote
     /// pseudo-terminal (`-t`, the integrated terminal) instead of none
     /// (`-T`, every other operation).
@@ -241,13 +199,92 @@ impl SshAuthority {
         cmd.arg("--").arg(&self.target.host);
         cmd
     }
+}
 
-    /// The `ssh` command that runs `script` in the remote `/bin/sh`.
-    #[must_use]
-    pub fn script_command(&self, script: &[u8]) -> Command {
-        let mut cmd = self.base_command();
+impl Transport for SshTransport {
+    fn name(&self) -> &'static str {
+        "ssh"
+    }
+
+    fn label(&self) -> String {
+        self.target.host.clone()
+    }
+
+    fn shell(&self, script: &[u8], tty: bool, _env_names: &[&str]) -> Command {
+        let mut cmd = self.ssh_with(self.options.batch_mode, tty);
         cmd.arg(envelope(script));
         cmd
+    }
+
+    /// `ssh`'s own failures (connection, authentication, host key) are 255.
+    fn lost(&self, status: i32, _stderr: &str) -> bool {
+        status == code::SSH
+    }
+
+    fn agent_mode(&self) -> AgentMode {
+        self.options.agent
+    }
+
+    fn agent_binary(&self) -> Option<&Path> {
+        self.options.agent_binary.as_deref()
+    }
+}
+
+impl ShellAuthority<SshTransport> {
+    /// An authority for `target`'s host, with default [`SshOptions`]. Nothing
+    /// connects until the first operation (or [`SshAuthority::connect`]).
+    ///
+    /// # Errors
+    /// The private control-socket directory could not be made safe.
+    pub fn new(target: SshTarget) -> io::Result<Self> {
+        Self::with_options(target, SshOptions::default())
+    }
+
+    /// An authority for `target`'s host, run as `options` says.
+    ///
+    /// # Errors
+    /// The control-socket directory could not be created, or exists but is
+    /// not a private (mode 0700) directory owned by this user.
+    pub fn with_options(target: SshTarget, options: SshOptions) -> io::Result<Self> {
+        let control_path = if options.multiplex && cfg!(unix) {
+            let dir = match &options.control_dir {
+                Some(dir) => dir.clone(),
+                None => default_control_dir()?,
+            };
+            private_dir(&dir)?;
+            control_pattern(&dir)
+        } else {
+            None
+        };
+        Ok(Self::over(SshTransport {
+            target,
+            options,
+            control_path,
+        }))
+    }
+
+    /// Whether commands share one connection. Off when
+    /// [`SshOptions::multiplex`] is, on Windows, and when the control
+    /// directory's path is too long (or oddly named) for a socket.
+    #[must_use]
+    pub fn multiplexed(&self) -> bool {
+        self.transport.control_path.is_some()
+    }
+
+    /// The host this authority works on (its path is the workspace the
+    /// caller opened; the authority itself is not tied to it).
+    #[must_use]
+    pub fn target(&self) -> &SshTarget {
+        &self.transport.target
+    }
+
+    /// The `ssh` command up to and including the destination, with no remote
+    /// command: `ssh -T -o … [-p PORT] [-l USER] -- HOST`. No secret is ever
+    /// on it; authentication is `ssh`'s own (keys, agent, `SSH_ASKPASS`).
+    #[must_use]
+    pub fn base_command(&self) -> Command {
+        self.transport
+            .ssh_with(self.transport.options.batch_mode, false)
     }
 
     /// Open the shared connection and learn the remote `stat` flavor. With
@@ -259,7 +296,7 @@ impl SshAuthority {
     /// `ssh` failed to connect or authenticate (its own message), or the
     /// remote has no usable `sh`/`stat`.
     pub fn connect(&self, interactive: bool) -> io::Result<()> {
-        let mut cmd = self.ssh(!interactive);
+        let mut cmd = self.transport.ssh_with(!interactive, false);
         cmd.arg(envelope(super::stat::PROBE.as_bytes()));
         let out = if interactive {
             cmd.stdin(Stdio::inherit()).stderr(Stdio::inherit());
@@ -267,24 +304,91 @@ impl SshAuthority {
         } else {
             cmd.stdin(Stdio::null()).output()?
         };
-        let reply = finish(&self.target.host, &out)?;
-        let flavor = StatFlavor::from_probe(&reply)
-            .ok_or_else(|| io::Error::other("the remote stat command was not recognized"))?;
-        let _ = self.flavor.set(flavor);
-        if self.options.agent != AgentMode::Off {
-            self.start_agent();
-        }
-        Ok(())
+        let reply = finish(&self.transport, &out)?;
+        self.finish_connect(&reply)
     }
 
     /// The options this authority runs `ssh` with.
     #[must_use]
     pub fn options(&self) -> &SshOptions {
-        &self.options
+        &self.transport.options
     }
 
-    /// What became of the remote agent (T717) on the last
-    /// [`SshAuthority::connect`] or [`SshAuthority::start_agent`].
+    /// Close the shared connection (`ssh -O exit`), if there is one.
+    pub fn disconnect(&self) {
+        self.set_agent(None);
+        let t = &self.transport;
+        let Some(path) = &t.control_path else {
+            return;
+        };
+        let mut cmd = Command::new(&t.options.program);
+        cmd.arg("-o").arg(format!("ControlPath={path}"));
+        if let Some(port) = t.target.port {
+            cmd.arg("-p").arg(port.to_string());
+        }
+        if let Some(user) = &t.target.user {
+            cmd.arg("-l").arg(user);
+        }
+        cmd.args(["-O", "exit", "--"]).arg(&t.target.host);
+        let _ = cmd
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+impl<T: Transport> ShellAuthority<T> {
+    /// A shell authority over `transport`. Nothing runs until the first
+    /// operation.
+    pub fn over(transport: T) -> Self {
+        Self {
+            transport,
+            flavor: OnceLock::new(),
+            seq: AtomicU64::new(0),
+            agent: RwLock::new(None),
+            agent_status: Mutex::new(AgentStatus::Off),
+        }
+    }
+
+    /// The transport this authority runs its scripts through.
+    #[must_use]
+    pub fn transport(&self) -> &T {
+        &self.transport
+    }
+
+    /// The command that runs `script` in the other side's `/bin/sh`.
+    #[must_use]
+    pub fn script_command(&self, script: &[u8]) -> Command {
+        self.transport.shell(script, false, &[])
+    }
+
+    /// Learn the other side's `stat` flavor from a probe reply, then start
+    /// the remote agent when the transport asks for it.
+    fn finish_connect(&self, reply: &[u8]) -> io::Result<()> {
+        let flavor = StatFlavor::from_probe(reply)
+            .ok_or_else(|| io::Error::other("the remote stat command was not recognized"))?;
+        let _ = self.flavor.set(flavor);
+        if self.transport.agent_mode() != AgentMode::Off {
+            self.start_agent();
+        }
+        Ok(())
+    }
+
+    /// Check that the other side answers and has a usable `sh` and `stat`,
+    /// then start the remote agent when the transport's options ask for it
+    /// (T717). Never prompts.
+    ///
+    /// # Errors
+    /// The transport failed (`NotConnected`, with its message), or the other
+    /// side has no usable `sh`/`stat`.
+    pub fn probe(&self) -> io::Result<()> {
+        let reply = self.run(super::stat::PROBE.as_bytes(), None)?;
+        self.finish_connect(&reply)
+    }
+
+    /// What became of the remote agent (T717) on the last connect or
+    /// [`ShellAuthority::start_agent`].
     #[must_use]
     pub fn agent_status(&self) -> AgentStatus {
         self.agent_status
@@ -326,6 +430,11 @@ impl SshAuthority {
             .unwrap_or_else(PoisonError::into_inner) = status;
     }
 
+    /// Stop the remote agent, if one is running; the shell scripts take over.
+    pub fn stop_agent(&self) {
+        self.set_agent(None);
+    }
+
     /// The running agent, if its connection is still up.
     fn agent(&self) -> Option<Arc<AgentClient>> {
         self.agent
@@ -338,37 +447,13 @@ impl SshAuthority {
 
     /// Run `f` through the agent: `None` when there is none, or it can't do
     /// this one (the caller then runs its shell script).
-    fn via<T>(&self, f: impl FnOnce(&AgentClient) -> Result<T, Fail>) -> Option<io::Result<T>> {
+    fn via<R>(&self, f: impl FnOnce(&AgentClient) -> Result<R, Fail>) -> Option<io::Result<R>> {
         let agent = self.agent()?;
         match f(&agent) {
             Ok(v) => Some(Ok(v)),
             Err(Fail::Io(e)) => Some(Err(e)),
             Err(Fail::Unavailable) => None,
         }
-    }
-
-    /// Close the shared connection (`ssh -O exit`), if there is one.
-    pub fn disconnect(&self) {
-        self.set_agent(None);
-        if self.control_path.is_none() {
-            return;
-        }
-        let mut cmd = Command::new(&self.options.program);
-        if let Some(path) = &self.control_path {
-            cmd.arg("-o").arg(format!("ControlPath={path}"));
-        }
-        if let Some(port) = self.target.port {
-            cmd.arg("-p").arg(port.to_string());
-        }
-        if let Some(user) = &self.target.user {
-            cmd.arg("-l").arg(user);
-        }
-        cmd.args(["-O", "exit", "--"]).arg(&self.target.host);
-        let _ = cmd
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
     }
 
     /// Run `script` remotely with `input` on its stdin; its stdout on
@@ -397,7 +482,7 @@ impl SshAuthority {
             }
             child.wait_with_output()
         })?;
-        finish(&self.target.host, &out)
+        finish(&self.transport, &out)
     }
 
     /// The remote `stat` flavor, probed on first use.
@@ -489,7 +574,15 @@ impl SshAuthority {
 
     /// The remote script that runs `spec`: `cd`, environment changes, then
     /// `exec` the program with its arguments, every word quoted.
-    fn process_script(spec: &ProcessSpec) -> io::Result<Vec<u8>> {
+    ///
+    /// With `by_name` (a transport that passes variables by name, T718),
+    /// each variable whose last change sets it is left out of the script
+    /// and returned with its value instead, for the caller to pass by name
+    /// (`docker exec -e NAME`, the value in the local command's
+    /// environment); a variable whose last change removes it is `unset` by
+    /// the script. Applying the changes in order and keeping each name's
+    /// last one is the same thing, since names are independent.
+    fn process_script(spec: &ProcessSpec, by_name: bool) -> io::Result<(Vec<u8>, PassedEnv)> {
         let invalid = |what: &str| io::Error::new(io::ErrorKind::InvalidInput, what.to_string());
         let program = path_bytes(Path::new(spec.program()));
         if program.is_empty() || program.starts_with(b"-") {
@@ -500,11 +593,22 @@ impl SshAuthority {
             // `-P`: resolve `..` physically, as a local `chdir` does.
             sh = sh.t("cd -P -- ").path(dir).t(" || exit 1\n");
         }
-        for (key, value) in spec.envs() {
+        let mut passed: Vec<(String, OsString)> = Vec::new();
+        for (i, (key, value)) in spec.envs().iter().enumerate() {
             let key = key
                 .to_str()
                 .filter(|k| is_env_name(k))
                 .ok_or_else(|| invalid("invalid environment variable name"))?;
+            if by_name {
+                let later = spec.envs()[i + 1..].iter().any(|(k, _)| k == key);
+                if later {
+                    continue;
+                }
+                if let Some(v) = value {
+                    passed.push((key.to_string(), v.clone()));
+                    continue;
+                }
+            }
             sh = match value {
                 Some(v) => sh
                     .t(key)
@@ -519,9 +623,12 @@ impl SshAuthority {
             let (Arg::Plain(a) | Arg::Raw(a)) = arg;
             sh = sh.t(" ").word(&os_bytes(a));
         }
-        Ok(sh.t("\n").done())
+        Ok((sh.t("\n").done(), passed))
     }
 }
+
+/// Environment variables passed by name, with their values (T718).
+type PassedEnv = Vec<(String, OsString)>;
 
 /// What a save expects to find before it overwrites.
 #[derive(Clone, Copy)]
@@ -604,16 +711,30 @@ fn is_env_name(name: &str) -> bool {
 }
 
 /// The stdout of a finished remote script, or the error its status names.
-fn finish(host: &str, out: &Output) -> io::Result<Vec<u8>> {
+fn finish(transport: &impl Transport, out: &Output) -> io::Result<Vec<u8>> {
     use io::ErrorKind as K;
+    let host = transport.label();
     let Some(status) = out.status.code() else {
-        return Err(io::Error::other(format!("{host}: ssh was terminated")));
+        return Err(io::Error::other(format!(
+            "{host}: {} was terminated",
+            transport.name()
+        )));
     };
     if status == 0 {
         return Ok(out.stdout.clone());
     }
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
     let err = |kind: K, what: &str| io::Error::new(kind, format!("{host}: {what}"));
+    if transport.lost(status, &stderr) {
+        return Err(io::Error::new(
+            K::NotConnected,
+            if stderr.is_empty() {
+                format!("{host}: {} failed", transport.name())
+            } else {
+                format!("{host}: {stderr}")
+            },
+        ));
+    }
     Err(match status {
         code::NOT_FOUND => err(K::NotFound, "no such file or directory"),
         code::DENIED => err(K::PermissionDenied, "permission denied"),
@@ -636,14 +757,6 @@ fn finish(host: &str, out: &Output) -> io::Result<Vec<u8>> {
         code::NO_HASH_TOOL => err(
             K::Unsupported,
             "no sha256sum, shasum or openssl on the remote host to check an upload",
-        ),
-        code::SSH => io::Error::new(
-            K::NotConnected,
-            if stderr.is_empty() {
-                format!("{host}: ssh failed")
-            } else {
-                format!("{host}: {stderr}")
-            },
         ),
         _ if stderr.is_empty() => io::Error::other(format!("{host}: exit status {status}")),
         _ => io::Error::other(format!("{host}: {stderr}")),
@@ -733,9 +846,9 @@ fn control_pattern(dir: &Path) -> Option<String> {
     Some(format!("{}/%C", dir.replace('%', "%%")))
 }
 
-impl Authority for SshAuthority {
+impl<T: Transport> Authority for ShellAuthority<T> {
     fn name(&self) -> &'static str {
-        "ssh"
+        self.transport.name()
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
@@ -1057,7 +1170,14 @@ impl Authority for SshAuthority {
     }
 
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command> {
-        Ok(self.script_command(&Self::process_script(spec)?))
+        let by_name = self.transport.passes_env_by_name();
+        let (script, passed) = Self::process_script(spec, by_name)?;
+        let names: Vec<&str> = passed.iter().map(|(k, _)| k.as_str()).collect();
+        let mut cmd = self.transport.shell(&script, false, &names);
+        for (key, value) in &passed {
+            cmd.env(key, value);
+        }
+        Ok(cmd)
     }
 
     fn shell_is_posix(&self) -> bool {
@@ -1075,9 +1195,8 @@ impl Authority for SshAuthority {
         if let Some(dir) = cwd {
             sh = sh.t("cd -P -- ").path(dir).t("\n");
         }
-        let script = sh.t("exec \"${SHELL:-/bin/sh}\" -l\n").done();
-        let mut cmd = self.ssh_with(self.options.batch_mode, true);
-        cmd.arg(envelope(&script));
+        let script = sh.t(self.transport.login_shell()).done();
+        let cmd = self.transport.shell(&script, true, &[]);
         Ok(ProcessSpec::new(cmd.get_program()).args(cmd.get_args()))
     }
 }
@@ -1091,7 +1210,7 @@ fn clone_error(e: &io::Error) -> io::Error {
 /// well under any `ARG_MAX`.
 const STAT_BATCH: usize = 200;
 
-impl SshAuthority {
+impl<T: Transport> ShellAuthority<T> {
     /// [`Authority::metadata_batch`] without the agent: one script per
     /// [`STAT_BATCH`] paths, printing one line per path (`o` and the stat,
     /// `n` for a missing path, `e` for a failed `stat`).
@@ -1122,7 +1241,7 @@ impl SshAuthority {
             .done();
         let reply = self.run(&script, None)?;
         let lines: Vec<&[u8]> = reply.split(|&b| b == b'\n').collect();
-        let host = &self.target.host;
+        let host = self.transport.label();
         Ok((0..paths.len())
             .map(|i| match lines.get(i).and_then(|l| l.split_first()) {
                 Some((b'o', rest)) => flavor.parse(rest).ok_or_else(|| {

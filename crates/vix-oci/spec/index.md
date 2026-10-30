@@ -41,6 +41,23 @@ needs no HTTP or socket code.
    times and byte sizes. A field an engine does not report is empty, not an
    error. `pretty` formats `inspect` output.
 
+## Dev containers (T718)
+
+`devcontainer` reads just enough to reopen a workspace in its dev container;
+the `devcontainer` CLI does the rest (Vix does not implement the Dev
+Container specification). `CONFIG_FILES` is where the configuration lives
+(`devcontainer.json` in `.devcontainer/`, then `.devcontainer.json`); `parse_config`
+reads it as JSONC (`strip_jsonc` drops `//` and `/* */` comments and
+trailing commas outside strings) and keeps `name`, `workspaceFolder` and
+`remoteUser`; `up_argv(workspace, docker_path)` builds `up
+--workspace-folder <dir> [--docker-path <podman>]`; `parse_up` reads the
+CLI's result line (`{"outcome":"success","containerId":…}`, or the error's
+`message` and `description`); `workspace_folder` picks the folder inside:
+what `up` reported, else `workspaceFolder` with
+`${localWorkspaceFolderBasename}` filled in, else `/workspaces/<basename>`.
+The App runs it (see
+[`spec/remote-editing`](../../../spec/remote-editing/index.md#containers-t718)).
+
 ## Running
 
 With the `process` feature (default) `run(program, args, stdin)` starts the

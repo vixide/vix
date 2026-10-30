@@ -374,10 +374,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `oc.compose_logs` | Logs | Menu |
 | `oc.compose_up` | Up | Menu |
 | `oc.containers` | Containers… | Menu |
+| `oc.devcontainer_reopen` | Reopen in Dev Container | Menu |
 | `oc.engine_choose` | Choose | Menu |
 | `oc.engine_detect` | Detect | Menu |
 | `oc.images` | Images… | Menu |
 | `oc.networks` | Networks… | Menu |
+| `oc.open_workspace` | Open Workspace in Container… | Menu |
 | `oc.pods` | Pods… | Menu |
 | `oc.prune` | Prune… | Menu |
 | `oc.pull` | Pull Image… | Menu |
@@ -752,4 +754,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**745 actions.**
+**747 actions.**

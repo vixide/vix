@@ -1,7 +1,8 @@
 # OC — Open Container Initiative menu
 
-**Status:** implemented (T700–T708) apart from registry login, Dev
-Containers and per-service Compose logs; see the Done notes under each task in
+**Status:** implemented (T700–T708) apart from registry login and
+per-service Compose logs; container workspaces and Dev Containers came with
+T718 ([`spec/remote-editing`](../remote-editing/index.md#containers-t718)); see the Done notes under each task in
 [`tasks.md`](../../tasks.md). User guide: [`docs/oc`](../../docs/oc/index.md).
 Crates: [`vix-oci`](../../crates/vix-oci/spec/index.md) and
 [`vix-oci-panel`](../../crates/vix-oci-panel/spec/index.md).
@@ -58,7 +59,17 @@ Detection order: the `oc_engine` setting, then `docker`, then `podman`, then
 
 **OC** → Engine ▸ (Detect, Choose), Containers…, Images…, Volumes…, Networks…,
 Pods… (Podman only), Compose ▸ (Up, Down, Logs), Build Image…, Run Image…,
-Registries ▸ (Login, Push, Pull), Prune…, Dev Container ▸ (Open, later).
+Registries ▸ (Login, Push, Pull), Prune…, **Open Workspace in Container…**
+and **Reopen in Dev Container** (T718).
+
+**Open Workspace in Container…** (`oc.open_workspace`) opens the container
+list; `w` on a running container (Docker or Podman) fills **File → Open
+Remote…**'s prompt with `docker://name/` (or `podman://`) for the path inside.
+**Reopen in Dev Container** (`oc.devcontainer_reopen`) needs a
+`devcontainer.json` and the `devcontainer` CLI, asks first (it runs the
+project's Dockerfile and lifecycle commands), runs `devcontainer up`, and
+opens the container it reports. Both land in a `ContainerAuthority`
+([`vix-authority/spec/container`](../../crates/vix-authority/spec/container/index.md)).
 
 Panels follow the Git and DB panels: a list with a detail pane, `j/k` movement
 (`vix-list-state`), and per-row actions. Logs stream into the bottom dock.
