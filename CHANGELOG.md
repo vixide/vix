@@ -59,6 +59,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Fixed
 
+- **Reference VS Code keymaps** ([`keymaps/`](keymaps/index.md)): the three `keymaps/visual-studio-code-for-{linux,macos,windows}/keybindings.json` files were saved GitHub HTML pages, not keybindings. They now hold VS Code 1.144.0's real default keybindings, downloaded from the raw files of `codebling/vs-code-default-keybindings`, with the source, commit and date recorded in `keymaps/index.md`. These files are reference material only (Vix's VS Code keymap is the hand-written table in `vix-keybindings`), so the editor's behavior is unchanged. A new test, `tui/tests/keymaps_reference.rs`, parses every `keymaps/**/*.json` as JSONC and fails if one is not a keybindings array.
 - **Blame with unsaved edits** (T657): Blame Line and inline blame now blame the buffer as shown (`git blame --contents -`), so after inserting or deleting lines they no longer report another line's commit.
 - **The single-color themes are all one color**: they no longer highlight code in another theme's blue, orange and green, draw a blue cursor, or show gutter marks, spell-check underlines, diagnostics or the terminal pane in other colors. Each now draws the whole screen in its own color on black, with a reverse-video cursor. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
 - **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.

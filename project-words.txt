@@ -278,6 +278,7 @@ jdtls
 affordances
 kilolines
 unjudging
+codebling
 
 # Forges & CI/CD (spec/ci)
 codeberg
