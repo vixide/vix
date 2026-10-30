@@ -16,6 +16,11 @@ as on the command line. [`staged_diff`] (T125) is one of these: it feeds
 panel's `g` key) — see `docs/menus/index.md`'s AI menu section. With
 `ai = "off"` (T730) `g` warns that AI is off and runs neither `git diff` nor
 the assistant.
+[`run`] (T637) is the generic one: any argument list, run through the same
+`PATH`-resolved `git` binary, stdout on success or a [`GitError`]. Its one
+caller outside this crate is the Rhai plugin installer
+(`crates/vix-script/spec/index.md`, "Plugins"), which needs
+`clone`/`fetch`/`checkout`/`rev-parse` and has no dedicated runner for them.
 - **History** (T207): [`log`]/[`file_log`] (parsed by the pure, unit-tested
 [`parse_log`]) list commits into a [`LogPanel`]; [`show_commit`]/
 [`show_file_at`]/[`resolve_short_sha`] read a commit's diff or a file's

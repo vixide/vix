@@ -683,6 +683,30 @@ fn git_stdout(dir: &Path, args: &[&str]) -> Option<String> {
 }
 
 #[cfg(feature = "process")]
+/// Run `git` with `args` in `dir` through the same `PATH`-resolved binary as
+/// every other runner here, returning trimmed stdout on success. For callers
+/// outside this crate that need a git operation this crate has no dedicated
+/// runner for — the Rhai plugin installer's `clone`/`fetch`/`checkout`
+/// (`crates/vix-script/spec/index.md`, T637). Each argument is passed
+/// literally (no shell); the caller is responsible for refusing
+/// option-shaped values where a positional one is meant.
+///
+/// # Errors
+///
+/// [`GitError::NotInstalled`] when `git` can't be found,
+/// [`GitError::Failed`] when it exits unsuccessfully (carrying its stderr),
+/// and [`GitError::Io`] for any other failure to run it.
+pub fn run(dir: &Path, args: &[&str]) -> Result<String, GitError> {
+    match git(dir, args) {
+        Ok(o) if o.status.success() => {
+            Ok(String::from_utf8_lossy(&o.stdout).trim_end().to_string())
+        }
+        Ok(o) => Err(GitError::from_output(&o)),
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[cfg(feature = "process")]
 /// Whether `dir` is inside a git working tree.
 #[must_use]
 pub fn is_repo(dir: &Path) -> bool {

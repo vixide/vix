@@ -127,6 +127,7 @@ impl App {
             encoding_chooser,
             http_env_chooser,
             script_chooser,
+            plugin_chooser,
             clipboard_chooser,
             workspace_chooser,
             diff_view,
@@ -398,6 +399,7 @@ impl App {
         panel!(encoding_chooser, encoding_key);
         panel!(http_env_chooser, http_env_key);
         panel!(script_chooser, script_chooser_key);
+        panel!(plugin_chooser, plugin_chooser_key);
         panel!(clipboard_chooser, clipboard_key);
         panel!(workspace_chooser, workspace_chooser_key);
         panel!(diff_view, diff_view_key);

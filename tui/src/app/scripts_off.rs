@@ -29,6 +29,16 @@ impl App {
         debug_assert!(self.script_chooser.is_none());
     }
 
+    /// The plugin chooser can't be open, so it never takes a key.
+    pub(super) fn plugin_chooser_key(&mut self, _key: KeyEvent) {
+        debug_assert!(self.plugin_chooser.is_none());
+    }
+
+    /// The plugin chooser can't be open, so it never takes a click.
+    pub(super) fn plugin_chooser_mouse(&mut self, _mouse: MouseEvent) {
+        debug_assert!(self.plugin_chooser.is_none());
+    }
+
     /// The script chooser can't be open, so it never takes a click.
     pub(super) fn script_chooser_mouse(&mut self, _mouse: MouseEvent) {
         debug_assert!(self.script_chooser.is_none());

@@ -184,6 +184,9 @@ fn main() -> io::Result<()> {
     if handle_settings_bundle_flags(&cli, &settings) {
         return Ok(());
     }
+    if let Some(args) = &cli.plugin {
+        handle_plugin_command(args);
+    }
 
     // `theme = "auto"`: find out whether the terminal is light or dark before the
     // App applies its theme (T579). Nothing is asked for any other theme value.
@@ -340,6 +343,20 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal) {
     }
     #[cfg(not(unix))]
     let _ = terminal;
+}
+
+/// Handle `vix --plugin …` (T637): print the report and exit — with status 1
+/// when the command failed, so a script driving it can tell.
+fn handle_plugin_command(args: &[String]) -> ! {
+    let report = vix::plugin_cli::run_cli(args);
+    for line in &report.lines {
+        if report.ok {
+            println!("{line}");
+        } else {
+            eprintln!("{line}");
+        }
+    }
+    std::process::exit(i32::from(!report.ok));
 }
 
 /// Handle `--export-settings`/`--import-settings` (T555), printing a short

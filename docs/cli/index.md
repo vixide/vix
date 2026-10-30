@@ -25,6 +25,7 @@ list; this page adds usage detail and the `git` integration snippets.
 | `--import-settings <PATH>` | Restore a bundle written by `--export-settings` from `PATH` (backing up any file it replaces first), then exit. Also reachable via **Vix → Import Settings…**. |
 | `--mcp [DIR]` | Serve the Model Context Protocol over stdin/stdout instead of starting the editor, so an AI agent can read the workspace (`DIR`, or the current directory) as Vix sees it: open buffers, symbols, outline, offline diagnostics and SQLite schemas. Read-only — see [MCP server](../mcp-server/index.md). |
 | `--remote-agent` | Serve Vix's remote-agent protocol over stdin/stdout instead of starting the editor. A Vix on another machine starts this over SSH to work on this machine's files faster; not for interactive use — see [Remote editing](../remote-editing/index.md#the-remote-agent). |
+| `--plugin <COMMAND> [ARG]` | Manage Rhai plugins, then exit: `install <git-url>[@rev]`, `list`, `update [name]`, `remove <name>`. A new plugin is disabled until enabled in **Vix → Plugins…** — see `docs/scripting/index.md` and `crates/vix-script/spec/index.md`. |
 | `--version` | Print the version and exit. |
 | `--version --json` | Print `{"name":"vix","version":"…","capabilities":[…]}` instead of plain text, for scripts/tooling. `capabilities` lists the optional areas compiled into this build. |
 | `--help` | Full flag reference (clap-generated, always in sync with the binary). |

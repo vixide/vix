@@ -7368,7 +7368,7 @@ new action.
   means a directory), and deletes. Confirm through `ReplaceConfirm` and
   apply via `vix-fileops`, respecting `explorer_delete`. Tests: a pure
   diff that includes a cycle where two names are swapped. **Medium.**
-- [ ] **T637 — Rhai plugin installer.** `vix-script` has load paths but
+- [x] **T637 — Rhai plugin installer.** `vix-script` has load paths but
   no install, update, or registry. micro has `-plugin install/update/
   remove/list`. Fix: add `vix --plugin install <git-url>[@rev]`, plus
   `list`, `update`, and `remove`, in `tui/src/cli.rs`. Clone into
@@ -7382,6 +7382,11 @@ new action.
   - Removing or disabling a plugin must drop its trust record, so it
     can't be reused stale (#961/#1009).
   - Symlinks in a cloned plugin must not escape `scripts_dir()` (#936).
+  - **Done 2026-10-30** on `feat/t637-plugin-installer`: new
+    `crates/vix-script/src/plugins.rs` (git via a new `vix_git::run`, behind
+    a `plugins` feature), trust pinned to a SHA-256 of the plugin's files and
+    a new plugin starting disabled; the symlink boundary is the plugin's own
+    directory. Spec: `crates/vix-script/spec/index.md`, "Plugins".
 - [ ] **T638 — Undo tree visualizer.** `edit.undo_branch` only cycles
   branches (`crates/vix-editor-core/src/code.rs:1010`), and the tree in
   `history.rs:20` is never drawn. undotree and Emacs vundo both draw it.

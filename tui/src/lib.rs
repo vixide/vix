@@ -51,6 +51,7 @@ pub mod cli;
 pub mod mcp;
 pub mod remote;
 pub use vix_authority as authority;
+pub mod plugin_cli;
 pub use vix_case as case;
 pub use vix_clipboard as clipboard;
 pub use vix_editor::editor;

@@ -4,7 +4,7 @@
 .SH NAME
 vix \- Vix: Simple Terminal Rust IDE
 .SH SYNOPSIS
-\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-\-mcp\fR] [\fB\-\-remote\-agent\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-\-mcp\fR] [\fB\-\-remote\-agent\fR] [\fB\-\-plugin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Vix: Simple Terminal Rust IDE
 .SH OPTIONS
@@ -38,6 +38,9 @@ Serve the Model Context Protocol over stdin/stdout instead of starting the edito
 .TP
 \fB\-\-remote\-agent\fR
 Serve Vix\*(Aqs remote\-agent protocol over stdin/stdout instead of starting the editor. A Vix on another machine starts this over SSH to work on this machine\*(Aqs files faster; it is not for interactive use. File\-system operations only; exits when its input ends. See `docs/remote\-editing`
+.TP
+\fB\-\-plugin\fR \fI<COMMAND>\fR\fI \fR\fI<ARG>\fR
+Manage Rhai plugins, then exit without starting the editor: `install <git\-url>[@rev]` clones a plugin into the scripts directory and pins its commit in `plugins.lock` (disabled until enabled in **Vix → Plugins…**); `list` shows them; `update [NAME]` moves one (or all) to the newest commit, disabling any whose code changed; `remove NAME` deletes one with its trust record. See `crates/vix\-script/spec/index.md`, "Plugins"
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

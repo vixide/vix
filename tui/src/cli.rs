@@ -102,4 +102,14 @@ pub struct Cli {
     /// `docs/remote-editing`.
     #[arg(long)]
     pub remote_agent: bool,
+
+    /// Manage Rhai plugins, then exit without starting the editor:
+    /// `install <git-url>[@rev]` clones a plugin into the scripts directory
+    /// and pins its commit in `plugins.lock` (disabled until enabled in
+    /// **Vix → Plugins…**); `list` shows them; `update [NAME]` moves one
+    /// (or all) to the newest commit, disabling any whose code changed;
+    /// `remove NAME` deletes one with its trust record. See
+    /// `crates/vix-script/spec/index.md`, "Plugins".
+    #[arg(long, num_args = 1..=2, value_names = ["COMMAND", "ARG"])]
+    pub plugin: Option<Vec<String>>,
 }

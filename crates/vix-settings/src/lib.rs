@@ -1020,6 +1020,16 @@ impl Settings {
             .and_then(|p| p.parent().map(|d| d.join("scripts")))
     }
 
+    /// The Rhai plugin lock (`<config dir>/plugins.lock`, T637), or `None` if
+    /// the config location cannot be determined. See
+    /// `crates/vix-script/spec/index.md`, "Plugins".
+    #[must_use]
+    pub fn plugins_lock_path() -> Option<std::path::PathBuf> {
+        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("plugins.lock")))
+    }
+
     /// File holding the user's personal spellcheck word list, one word per line
     /// (`<config dir>/user_dictionary.txt`), or `None` if the config location
     /// cannot be determined. Words added via the spell-suggest popup persist here.

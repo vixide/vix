@@ -53,7 +53,8 @@ Two locations, both non-recursive, both `*.rhai` only:
 | Project | `<root>/.vix/scripts/*.rhai` | `App::root`, the same `<root>/.vix/…` pattern `vix-tasks` already uses for `.vix/project.toml` and the `.vix/tasks.toml` fallback — no upward parent-directory search |
 
 Both directories are optional; a missing one is not an error, just nothing
-to load from there.
+to load from there. A third source, installed **plugins** (enabled ones
+only, `<config dir>/scripts/<name>/*.rhai`), is described in § Plugins.
 
 **Load timing**: all scripts under both paths load once at startup (after
 `App::new`, before the first frame — mirrors how `vix-tasks` loads project
@@ -296,6 +297,130 @@ opened is, and "never crash" is the literal bar (tasks.md T101):
   `set_buffer_text`/`set_selection_text`, rather than mutating
   incrementally) — worth saying explicitly in the T105 sample-script docs,
   not just here.
+
+## Plugins (T637)
+
+A **plugin** is a git repository of Rhai scripts, installed with one
+command instead of copied by hand. It adds no capability: a plugin's
+scripts run in exactly the sandbox above (same registered functions, same
+`DummyModuleResolver`, same resource limits). Installing a plugin only
+decides *where the files come from* and *whether they load*.
+
+### Commands
+
+| Command | Effect |
+| ------- | ------ |
+| `vix --plugin install <git-url>[@rev]` | clone into `<scripts dir>/<name>/`, check out `rev` (a branch, tag or commit; default: the remote's default branch), pin the resulting commit in `plugins.lock`. The plugin starts **disabled**. |
+| `vix --plugin list` | print every plugin in `plugins.lock`: name, state, short commit, URL |
+| `vix --plugin update [name]` | fetch and move one plugin (or every plugin) to the newest commit of its `rev` (or of the remote's default branch), re-pinning the lock |
+| `vix --plugin remove <name>` | delete `<scripts dir>/<name>/` and its lock entry, trust record included |
+
+Each prints a short report and exits without starting the editor, the same
+shape as `--doctor`/`--export-settings`. Inside Vix, **Vix → Plugins…**
+(`script.plugins`) opens a chooser listing every installed plugin with its
+state; Enter enables a disabled (or changed) plugin and disables an enabled
+one, then reloads scripts. The `script.` prefix puts the action under the
+`script` capability, so a build without scripting hides it.
+
+`<name>` is the URL's last path segment with any `.git` suffix removed
+(`https://example.com/me/vix-case.git` → `vix-case`): ASCII letters,
+digits, `.`, `_` and `-`, at most 64 characters, not starting with `.` or
+`-`. A URL or rev that starts with `-` (option-shaped) is refused before
+`git` runs. `rev` is the text after the last `@` that comes after the last
+`/` and `:` — so `git@host:me/repo.git` has no rev, and
+`file:///srv/repo.git@v1` has rev `v1`.
+
+### Layout
+
+```text
+<config dir>/
+  plugins.lock                 # TOML, one [[plugin]] table per plugin
+  scripts/                     # Settings::scripts_dir()
+    loose.rhai                 # a global script, as before
+    <name>/                    # one installed plugin (a git checkout, detached HEAD)
+      *.rhai                   # its scripts: top level only, non-recursive
+      ...                      # anything else is ignored by discovery
+```
+
+A plugin's scripts load with stem `<name>/<file stem>` (`vix-case/upper.rhai`
+→ `vix-case/upper`), so its palette ids are `script:vix-case/upper:<id>` and
+can never collide with a global or project script (those stems have no
+`/`). Only regular files at the plugin's top level load; a subdirectory, a
+symlink, or a non-`.rhai` file does not — the same rule as the global
+directory. Later work that adds plugin data (T735, script translations)
+keeps it in subdirectories of `<name>/`, which discovery never reads as
+code.
+
+### `plugins.lock`
+
+```toml
+[[plugin]]
+name = "vix-case"
+url = "https://example.com/me/vix-case.git"
+rev = "v1"                     # omitted when none was given
+commit = "3f1c…"               # the full commit checked out
+trusted = "9a0e…"              # SHA-256 of the trusted code; omitted while disabled
+```
+
+A missing file is an empty lock. An unreadable or malformed one is reported
+and loads no plugin. It is written to a temporary file and renamed, so a
+crash mid-write never leaves a half-written lock.
+
+### Trust
+
+A plugin loads only when its entry's `trusted` digest equals the digest of
+its directory **now**: SHA-256 over every file and symlink under
+`<name>/` (`.git` excluded), each recorded with its relative path, sorted.
+Enabling records the current digest; disabling removes it. Three rules
+follow, each a bug another editor's plugin manager shipped (ttt #992,
+#961/#1009, #936):
+
+- **An update that changes the code does not inherit trust.** `update`
+  recomputes the digest after checkout and clears `trusted` when it
+  differs, so the plugin comes back disabled. Because the check runs at
+  every load against the live files, a local edit after enabling disables
+  it too (state *changed*) until the user enables it again. An update that
+  leaves every file identical keeps its trust.
+- **Remove and disable drop the trust record.** It lives in the lock entry
+  itself; `remove` deletes the entry, `disable` clears the field. Nothing
+  is kept elsewhere, so reinstalling the same URL starts disabled.
+- **Symlinks cannot escape.** After every clone or update, each symlink
+  under `<name>/` must resolve (following any chain) to a path inside
+  `<name>/`. A link that points outside — or doesn't resolve — fails
+  `install` (the clone is deleted, nothing is locked) and fails `update`
+  (the previous commit is checked out again). Discovery never follows a
+  symlinked `.rhai` file either, as a second line.
+
+The boundary is the plugin's own directory, stricter than the scripts
+directory: one plugin cannot link into another's files.
+
+### Git
+
+Install and update shell out to the user's `git` through `vix_git::run` —
+the same `PATH`-resolved binary every other git feature uses, so
+credentials, SSH agents and proxies behave as on the command line. Every
+call passes `-c protocol.ext.allow=never`; clone uses
+`--no-recurse-submodules` and a staging directory (`.<name>.installing`)
+that is renamed into place only after the symlink check passes. These live
+behind `vix-script`'s `plugins` Cargo feature (`dep:vix-git` +
+`vix-git/process`), which the App shell turns on only with **both** its
+`script` and `git` features; without it, `install`/`update` report that git
+is not in this build, while `list`, `remove`, the chooser and loading still
+work.
+
+### Code
+
+`crates/vix-script/src/plugins.rs`: `PluginPaths`, `Lockfile`/`LockEntry`
+(`parse`, `to_toml`, `load`, `save`), `parse_spec`, `name_from_url`,
+`digest`, `state`, `enable`, `disable`, `remove`, `check_symlinks`,
+`discover_enabled`, and (feature `plugins`) `install`/`update`. Host wiring:
+`tui/src/cli.rs` (`--plugin`), `tui/src/plugin_cli.rs` (argument dispatch
+and the translated report, `run_cli`), `tui/src/main.rs`
+(`handle_plugin_command`), `tui/src/app/scripts.rs` (`App::load_scripts`,
+`App::with_plugin_paths`, `open_plugin_chooser`).
+Tests: `crates/vix-script/tests/plugins.rs` (lockfile round trip, install
+from a `file://` bare repo made in a temp dir, and the three trust rules),
+`tui/tests/integration/scripting.rs` (the chooser).
 
 ## Packaging: a Cargo feature again (T586)
 
