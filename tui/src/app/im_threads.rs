@@ -95,19 +95,23 @@ impl ThreadStore {
 /// Read every `<id>.json` in `dir`. A file that is not a thread, whose id is
 /// unsafe or does not match its name, or whose path is absolute or climbs
 /// out with `..`, is skipped.
+///
+/// The directory is a workspace directory, so it is read through the
+/// authority (T712): over SSH the threads come from the remote checkout.
 fn load_dir(dir: &Path) -> Vec<Thread> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let auth = crate::authority::current();
+    let Ok(entries) = auth.read_dir(dir) else {
         return Vec::new();
     };
     entries
-        .filter_map(Result::ok)
+        .into_iter()
         .filter_map(|e| {
-            let path = e.path();
+            let path = e.path;
             let stem = path.file_stem()?.to_str()?.to_string();
             if path.extension()? != "json" {
                 return None;
             }
-            let text = std::fs::read_to_string(&path).ok()?;
+            let text = auth.read_to_string(&path).ok()?;
             let thread = Thread::from_json(&text).ok()?;
             (thread.id == stem && thread.file_name().is_some() && is_relative_path(&thread.path))
                 .then_some(thread)
@@ -215,7 +219,11 @@ impl App {
             .ok()
             .map(Path::to_path_buf)
             .or_else(|| {
-                let (file, root) = (path.canonicalize().ok()?, self.root.canonicalize().ok()?);
+                let auth = crate::authority::current();
+                let (file, root) = (
+                    auth.canonicalize(path).ok()?,
+                    auth.canonicalize(&self.root).ok()?,
+                );
                 file.strip_prefix(root).ok().map(Path::to_path_buf)
             })?;
         let text = relative.to_string_lossy().replace('\\', "/");
@@ -341,8 +349,10 @@ impl App {
         let (Some(name), Ok(json)) = (thread.file_name(), thread.to_json()) else {
             return;
         };
-        let written = std::fs::create_dir_all(&dir)
-            .and_then(|()| std::fs::write(dir.join(name), format!("{json}\n")));
+        let auth = crate::authority::current();
+        let written = auth
+            .create_dir_all(&dir)
+            .and_then(|()| auth.write_atomic(&dir.join(name), format!("{json}\n").as_bytes()));
         match written {
             Ok(()) => {
                 self.im.threads.moved.remove(id);
@@ -430,8 +440,9 @@ impl App {
                 let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
                 let dir = self.im_threads_dir();
                 let store = &self.im.threads;
+                let auth = crate::authority::current();
                 let id = vix_im::thread::new_id(now_ms(), |id| {
-                    store.get(id).is_some() || dir.join(format!("{id}.json")).exists()
+                    store.get(id).is_some() || auth.exists(&dir.join(format!("{id}.json")))
                 });
                 let mut thread = Thread::new(id.clone(), path, &buffer_lines(&text), start, end);
                 thread.reply(message);
@@ -630,9 +641,10 @@ impl App {
             column: None,
             end_line: None,
         };
+        let auth = crate::authority::current();
         vix_im::resolve_in_root(&self.root, &reference).filter(|p| {
-            p.is_file()
-                && match (p.canonicalize(), self.root.canonicalize()) {
+            auth.is_file(p)
+                && match (auth.canonicalize(p), auth.canonicalize(&self.root)) {
                     (Ok(file), Ok(root)) => file.starts_with(root),
                     _ => false,
                 }

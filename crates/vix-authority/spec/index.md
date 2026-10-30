@@ -75,6 +75,7 @@ workspace.
 | Workspaces | the `.vix-workspace` file load/save and its folder containment check (`vix-workspace`), switching projects, adding a folder |
 | Tasks | project-type detection, discovered-task manifests, `tasks.toml` and `.vix/run.toml` (`vix-tasks`), `.vix/project.toml`, `.editorconfig` |
 | Org | `id:` link following, archive to `<file>_archive`, capture into project files, the agenda over the file index (and `org_agenda_files`), agenda TODO cycling; every Org-roam node, daily note, rename and backlink read (all under the workspace root) |
+| IM | a message's code reference (`im_inside_root`: exists, is a file, canonical path inside the root), the share-path and thread-path root-relative fallbacks, and the anchored review threads under `<root>/.vix/im/threads/*.json` (list, read, atomic write, id-collision probe) — they are committed workspace files |
 | HTTP client | `.vix/http-env.json` and the active-environment file (`vix-http-client` `env`), `{{$dotenv}}` and `< file` request bodies (`rest`). The request itself is sent from this machine. |
 | Other | Cowork's path confinement, coverage-report path matching (`vix-coverage`), LSP diagnostic path keying (`vix-lsp`), jj/git repo probes for **init**, the OC build/compose file lookup, Prettier's project-local `node_modules/.bin` lookup |
 | Processes | the task/workspace-search/shell-filter shell (`spawn_shell`, `run_shell_filter`), direct argv runs (`spawn_argv`: git/jj/oc commands, program resolved with `Authority::which`), every `vix-git` runner (`git_command`), `vix-git-graph`, LSP servers, DAP adapters, the Prettier formatter (and its working-directory check) |
@@ -102,8 +103,8 @@ machine running the UI even when the workspace is remote.
   remote workspace will want the per-path routing below).
 - **State Vix keeps about the session**: session save/restore storage
   (`vix-session`), the undo store and Local History (`vix-undo-store`), IM
-  logs, drafts and attachments (`tui/src/app/im.rs`; its code-reference
-  resolver also stays local for now, see *Not done*), the DB workbench's
+  logs, drafts and attachments (`tui/src/app/im.rs`; these are the user's
+  chat history, not workspace files), the DB workbench's
   query history and saved queries.
 - **Temp files and credentials**: `write_private_temp` and the files AI and
   git hand to a local CLI (`ai.rs` removes its prompt temp file), the
@@ -142,8 +143,8 @@ probes in the App were routed too (they are filesystem calls that the
 
 ### Not done (T710 follow-ups)
 
-- `tui/src/app/im.rs` resolves a message's code reference with
-  `Path::is_file`/`canonicalize` locally; left alone while T753 reworks IM.
+- ~~`tui/src/app/im.rs` resolves a message's code reference locally~~ —
+  routed 2026-10-30 (T712 step 1), together with the anchored-thread files.
 - The AI `cli` provider runs through the routed shell but writes its prompt
   to a *local* temp file. Under a remote authority that file must be sent
   along (or the provider pinned local) — decide in T712.
@@ -159,7 +160,9 @@ tests check path mapping, escape refusal (relative, `..` above `/`, a symlink
 out), call recording and the trash directory; `the_slot_*` checks the default.
 `tui/tests/authority_fake.rs` (its own test binary, because the slot is
 process-wide) installs a `FakeAuthority` and drives the App's explorer
-listing, open and save against `/proj`, a path that exists only inside it.
+listing, open and save against `/proj`, a path that exists only inside it,
+and starts an IM review thread whose file lands in the fake's
+`/proj/.vix/im/threads`.
 
 ## Next (T712)
 
