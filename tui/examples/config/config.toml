@@ -55,6 +55,9 @@ oc_mode = "full"
 # when the system clipboard fails, else the system clipboard), "system", or
 # "osc52" (always the terminal's OSC 52 escape; wrapped for tmux).
 clipboard_provider = "auto"
+# Which lines show their language-server diagnostic as dimmed end-of-line
+# text: "off", "cursor-line" (default -- the cursor's line only), or "all".
+inline_diagnostics = "cursor-line"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.

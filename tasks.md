@@ -7130,7 +7130,7 @@ new action.
   `vix-snippets` parser to start a tabstop session. Tests: Tab moves to
   `$2` then `$0`; plain text is unchanged; nested placeholders work.
   Depends on T612's accept path. **Small.**
-- [ ] **T614 — Inline diagnostics, and the message at the cursor.**
+- [x] **T614 — Inline diagnostics, and the message at the cursor.**
   `refresh_diagnostic_marks` (`lsp_dap.rs:404-440`) sends only underline
   spans. `goto_diagnostic` (`:786`) moves without showing any text, and
   messages appear only in the Problems panel. Helix 25.01 and Neovim 0.11
@@ -7142,6 +7142,7 @@ new action.
   end-of-line virtual-text primitive is reused by T617 (inline values)
   and T620 (color swatches). Tests: a render snapshot, truncation at
   width, the three modes, and goto showing the message. **Small–medium.**
+  *Done:* `inline_diagnostics` setting, `vix_lsp::inline` selection rules, the generic `vix_editor_core::virtual_text` layer (both renderers), status-line follow, and a goto off-by-one fix.
 - [ ] **T615 — Incremental `didChange` and ranged semantic tokens.**
   `message.rs:157-163` always sends the full text, and `lsp_dap.rs:378`
   sends the whole buffer on every revision. The `vix-lsp` spec (line 75)

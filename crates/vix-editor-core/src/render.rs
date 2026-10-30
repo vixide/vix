@@ -511,8 +511,9 @@ impl Editor {
     }
 
     /// Draw the optional end-of-line virtual note (e.g. inline git blame) for
-    /// `line_idx`, dimmed after the line content. Only when not horizontally
-    /// scrolled and the note is for this line.
+    /// `line_idx`, dimmed after the line content, then every layer's
+    /// end-of-line virtual text (T614) after that. The note is drawn only when
+    /// not horizontally scrolled and the note is for this line.
     #[allow(
         clippy::too_many_arguments,
         reason = "a draw helper split out of draw_text_lines; its inputs are the frame state it was carved from"
@@ -527,28 +528,42 @@ impl Editor {
         right_edge: u16,
         draw_y: u16,
     ) {
-        if self.offset_x != 0 {
+        let mut note_end = None;
+        if self.offset_x == 0
+            && let Some((nl, note)) = self.eol_note.as_ref()
+            && *nl == line_idx
+            && !note.is_empty()
+        {
+            let full = self
+                .code_ref()
+                .char_slice(line_start_char, line_start_char + line_len);
+            let lw: usize = RopeGraphemes::new(&full)
+                .map(|g| grapheme_width_and_chars_len(g).0)
+                .sum();
+            let nx = text_x + u16::try_from(lw + 2).unwrap_or(u16::MAX);
+            if nx < right_edge {
+                let avail = (right_edge - nx) as usize;
+                let shown: String = note.chars().take(avail).collect();
+                let style = self.whitespace_style.add_modifier(Modifier::ITALIC);
+                buf.set_string(nx, draw_y, &shown, style);
+                note_end =
+                    Some(usize::from(nx) + unicode_width::UnicodeWidthStr::width(shown.as_str()));
+            }
+        }
+        // Skip measuring the line on the (usual) frame with no virtual text.
+        if !self.has_eol_texts(line_idx) {
             return;
         }
-        let Some((nl, note)) = self.eol_note.as_ref() else {
-            return;
-        };
-        if *nl != line_idx || note.is_empty() {
-            return;
-        }
-        let full = self
-            .code_ref()
-            .char_slice(line_start_char, line_start_char + line_len);
-        let lw: usize = RopeGraphemes::new(&full)
-            .map(|g| grapheme_width_and_chars_len(g).0)
-            .sum();
-        let nx = text_x + u16::try_from(lw + 2).unwrap_or(u16::MAX);
-        if nx < right_edge {
-            let avail = (right_edge - nx) as usize;
-            let shown: String = note.chars().take(avail).collect();
-            let style = self.whitespace_style.add_modifier(Modifier::ITALIC);
-            buf.set_string(nx, draw_y, &shown, style);
-        }
+        let content_end = note_end.unwrap_or_else(|| {
+            let mut end = usize::from(text_x)
+                + self.line_width_from(line_idx, self.offset_x)
+                + usize::from(self.inlay_shift(line_idx, usize::MAX));
+            if self.offset_x == 0 && self.fold_marker(line_idx) == Some(true) {
+                end += 3; // the folded line's `...`
+            }
+            end
+        });
+        self.draw_eol_texts(buf, line_idx, content_end, right_edge, draw_y);
     }
 
     /// Draw a line's text with inline hints inserted at their columns (the real

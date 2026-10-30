@@ -165,6 +165,13 @@ pub struct Editor {
     /// view only.
     pub(crate) eol_note: Option<(usize, String)>,
 
+    /// End-of-line virtual text per producer, sorted by layer (T614) — see
+    /// [`crate::virtual_text`].
+    pub(crate) eol_texts: Vec<(
+        crate::virtual_text::VirtualTextLayer,
+        Vec<crate::virtual_text::EolText>,
+    )>,
+
     /// Debugger breakpoint lines (0-based), drawn as a marker in the gutter.
     pub(crate) breakpoints: Vec<usize>,
 
@@ -279,6 +286,7 @@ impl Editor {
             max_width_cache: Cell::new(None),
             flags: Flags::SHOW_LINE_NUMBERS | Flags::AUTO_PAIR,
             eol_note: None,
+            eol_texts: Vec::new(),
             breakpoints: Vec::new(),
             debug_line: None,
             whitespace_style: Style::default().fg(Color::DarkGray),

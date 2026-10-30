@@ -800,7 +800,10 @@ impl App {
                 .unwrap_or_else(|| lines.last().copied().unwrap_or(cur))
         };
         let area = self.editor_view();
-        self.editor.goto(target as usize, None, area);
+        // `target` is a 0-based LSP line; `goto` takes a 1-based one (T614:
+        // passing it unconverted landed one line above the diagnostic).
+        self.editor.goto(target as usize + 1, None, area);
+        self.show_cursor_diagnostic();
     }
 
     /// On a linked-editing response: store the ranges (as char offsets) and

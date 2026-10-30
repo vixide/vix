@@ -13,6 +13,8 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
+pub mod inline;
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::io::{Read, Write};

@@ -47,6 +47,7 @@ mod im_net;
 mod im_off;
 pub(crate) mod im_threads;
 mod info_panels;
+mod inline_diagnostics;
 mod insert_tools;
 #[cfg(feature = "jj")]
 mod jj;
@@ -2139,6 +2140,9 @@ pub struct App {
     /// recomputed only when the cursor moves to a different line.
     #[cfg(feature = "git")]
     blame_cache: Option<(PathBuf, usize)>,
+    /// What the status line last showed for the cursor's diagnostic (T614), so
+    /// it updates only when the cursor's line or its diagnostic changes.
+    diag_status: inline_diagnostics::DiagStatus,
     /// Debug Adapter Protocol client (one active session).
     pub(crate) dap: crate::dap::Dap,
     /// Breakpoints per file: absolute path → set of 1-based lines.
@@ -2700,6 +2704,7 @@ impl App {
             lsp_synced: std::collections::HashMap::new(),
             #[cfg(feature = "git")]
             blame_cache: None,
+            diag_status: None,
             dap: crate::dap::Dap::new(),
             breakpoints: std::collections::HashMap::new(),
             dap_stopped: None,
@@ -7523,6 +7528,7 @@ impl App {
         // stay correct across new publishes and tab switches alike (cheap — it
         // just maps the stored diagnostics for the active file).
         self.refresh_diagnostic_marks();
+        self.refresh_inline_diagnostics();
     }
 
     /// The identifier characters immediately before the cursor (the typed prefix
