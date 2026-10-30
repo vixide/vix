@@ -18,11 +18,19 @@ immediately.
 | `gd` | Scottish Gaelic   | Gàidhlig | `zh` | Chinese     | 中文     |
 |      |                   |          | `ja` | Japanese    | 日本語   |
 
+These fifteen are **complete**: every key in `crates/vix-i18n/locales/*.yml`
+has a translation in each of them.
+
+The language chooser also offers twelve more that are only started: Italian
+(`it`), Korean (`ko`), Turkish (`tr`), Dutch (`nl`), Vietnamese (`vi`),
+Indonesian (`id`), Thai (`th`), Persian (`fa`), Ukrainian (`uk`) and Greek
+(`el`) translate the top-level menu titles, and the two playful ones, Klingon
+(`tlh`) and Sindarin (`sjn`), a handful of keys more. The list itself is
+`vix_locale_model::LOCALES`.
+
 English is the **fallback**: any key missing from another language renders its
 English text, so a partially-translated language still works everywhere.
-Coverage varies — English, Spanish, French, German, and Welsh are complete; the
-others currently translate the menu bar and theme names and fall back to English
-for the rest. Filling them in is YAML-only (see below). Right-to-left
+Filling one in is YAML-only (see below). Right-to-left
 scripts (e.g. Arabic) are reordered into visual order after each frame is drawn
 (UAX #9), controlled by the `bidi` setting: `"auto"` (default; on when the UI
 language is right-to-left), `"on"`, or `"off"`. Turn it off if your terminal
@@ -62,7 +70,7 @@ welcome messages appear in the chosen language.
   `lib.rs` parses each locale's blob lazily, only when something actually
   asks for a translation in it (T517). Every other crate still reads through
   `vix_i18n::t!` unchanged.
-- All translation strings live under `locales/`, one file per key namespace
+- All translation strings live under `crates/vix-i18n/locales/`, one file per key namespace
   (`menu.yml`, `status.yml`, …, T148) — rust-i18n merges every file in the
   directory into one table, each following its own "version 2" format (every
   language under each dotted key).

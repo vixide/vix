@@ -88,6 +88,7 @@
 - [Hunspell](hunspell/index.md)
 - [Insert](insert/index.md)
 - [Language Server Protocol](language-server-protocol/index.md)
+- [Large File Viewer](large-file-viewer/index.md)
 - [Markdown Preview](markdown-preview/index.md)
 - [MCP Server](mcp-server/index.md)
 - [OC (containers)](oc/index.md)

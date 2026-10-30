@@ -34,6 +34,21 @@ Highlights:
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
 - [Large File Viewer](large-file-viewer/index.md): view multi-gigabyte files
   read-only without loading them.
+- New in 2.0 (unreleased): [Remote Editing](remote-editing/index.md) (a
+  folder over SSH, experimental) · [Cowork](cowork/index.md) (real-time
+  co-editing, opt-in `cowork` build) · [IM](im/index.md) (code-aware chat,
+  threads on lines, IRCv3) · [MCP Server](mcp-server/index.md) (`vix --mcp`)
+  · [IDE Parity Features](ide-parity/index.md) (Local History, Search
+  Everywhere, Refactor, run configurations, …) · [OC](oc/index.md)
+  (containers) · [Git Graph](git-graph/index.md) · [Todo Tree](todo-tree/index.md)
+  · [Prettier](prettier/index.md) · [FHIR Client](fhir-client/index.md) ·
+  [HL7](hl7/index.md).
+- Start and switch: [Getting Started](getting-started/index.md) ·
+  [Comparison](comparison/index.md) · pages for users of
+  [Vim](for-vim-users/index.md), [Emacs](for-emacs-users/index.md),
+  [Helix](for-helix-users/index.md),
+  [VS Code](for-visual-studio-code-users/index.md),
+  [IntelliJ](for-intellij-users/index.md) and others.
 - Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,
   Lorem ipsum, Date/Time) · [Snippets](snippets/index.md) (with tabstops) ·
   [QR Code](qr-code/index.md) ·
@@ -90,7 +105,8 @@ Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
 - [agents/share/crate-map.md](../agents/share/crate-map.md) — every module and file.
 - [agents/share/glossary.md](../agents/share/glossary.md) — shared terminology.
 - [Performance](performance/index.md) — `cargo bench` baselines for the
-  per-keystroke and per-frame hot paths.
+  per-keystroke and per-frame hot paths, cold start, the Large File Viewer
+  benchmark and the binary-size budget.
 
 ## For AI tools
 

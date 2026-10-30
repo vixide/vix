@@ -150,8 +150,8 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/release
 Prebuilt archives (`.tar.xz`, `.zip`, `.msi`) are attached to every
 [GitHub Release](https://github.com/vixide/vix/releases), along with a
 **minimal build** (`vix-minimal-<target>`): no DB workbench, scripting,
-terminal, HTTP client, AI, Git/Jujutsu, language servers, debug adapters or
-syntax highlighting; no TLS stack, no network connections, and Vix starts no
+terminal, HTTP client, AI, Git/Jujutsu, containers, IRC, remote editing,
+language servers, debug adapters or syntax highlighting; no TLS stack, no network connections, and Vix starts no
 other program. See [Getting Started](docs/getting-started/index.md) for every
 option, and use a [Nerd Font](https://www.nerdfonts.com/) for the best-looking
 icons (Vix falls back to plain characters without one).
@@ -199,10 +199,30 @@ leap-style jump labels; structural selection; position history
 operations; a Todo Tree; Zen mode and a breadcrumb bar.
 
 **Code intelligence.** LSP diagnostics, hover, completion, references, call
-hierarchy, rename, code actions, code lens and inlay hints; a DAP debugger
+hierarchy, rename, code actions, code lens and inlay hints, with server
+progress in the status bar and **View → LSP Status…**; a DAP debugger
 with breakpoints, stepping, call stack, variables, watches and a REPL; a test
 runner with jump-to-failure; dependency sources open read-only so Go to
-Definition can't lead to an accidental edit.
+Definition can't lead to an accidental edit. From JetBrains and Visual
+Studio: Local History, Search Everywhere, Refactor… and Organize Imports,
+named run configurations, Peek Definition and postfix completion
+([IDE parity](docs/ide-parity/index.md)).
+
+**Remote and together.** Open a folder on another machine over SSH with
+`vix ssh://host/path` or **File → Open Remote…** — search, Git, language
+servers, the debugger, tasks and the terminal run on the remote host
+([remote editing](docs/remote-editing/index.md), experimental). An **IM**
+menu for code-aware chat: `path:line` references that open on Enter, threads
+anchored to lines, and IRCv3 channels ([IM](docs/im/index.md)). Real-time
+co-editing with shared cursors, terminal, chat and notes
+([Cowork](docs/cowork/index.md)) is an opt-in build feature
+(`--features cowork`), not part of the released binaries.
+
+**AI, on your terms.** An AI menu and chat panel that run the assistant CLI of
+your choice, or an Anthropic, OpenAI or Ollama HTTP API, on a selection;
+`ai = "off"` hides all of it without a rebuild. `vix --mcp` serves a
+read-only view of a workspace to AI agents over the Model Context Protocol
+([MCP server](docs/mcp-server/index.md)).
 
 **Version control.** Git status, diff, blame, stage/unstage/revert per hunk,
 branches, stash, amend, an interactive commit graph and a merge-conflict
@@ -213,8 +233,7 @@ rebase, undo, and push/fetch.
 discovered from npm/yarn/pnpm/bun, Deno, Composer, just, go-task, Rake and
 Make; test-at-point; an integrated terminal; a REST client for `.http` files
 with environments, variables and request chaining; a container menu for
-Docker, Podman and nerdctl; FHIR and HL7 v2 tools; an AI menu that runs the
-assistant CLI of your choice on a selection.
+Docker, Podman and nerdctl; FHIR and HL7 v2 tools.
 
 **Data and documents.** A database workbench for SQLite, PostgreSQL and MySQL
 with embedded drivers, a schema browser, autocomplete, a filterable result
@@ -271,8 +290,9 @@ ships in the one `vix` binary. Rhai scripts are there for adding your own
 commands, not for filling gaps.
 
 **Does it work over SSH and in tmux?** Yes — Vix is a terminal program, so
-run it on the remote machine as you would any other. Opening a remote
-project from a local Vix is [planned](tasks.md).
+run it on the remote machine as you would any other. Or keep Vix local and
+open the remote folder over SSH (`vix ssh://host/path`); that is
+[experimental](docs/remote-editing/index.md).
 
 **Can my company use it?** Pick whichever of the five licenses suits you.
 For locked-down machines, the minimal build makes no network connections
