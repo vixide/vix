@@ -5834,6 +5834,7 @@ version = "2.0.0"
 dependencies = [
  "ignore",
  "proptest",
+ "sha2 0.11.1",
  "vix-fileops",
 ]
 

@@ -517,6 +517,10 @@ name = "authority_remote_tools"
 path = "tests/authority_remote_tools.rs"
 
 [[test]]
+name = "remote_agent"
+path = "tests/remote_agent.rs"
+
+[[test]]
 name = "ai_provider_smoke"
 path = "tests/ai_provider_smoke.rs"
 

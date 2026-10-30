@@ -5,12 +5,15 @@ use std::fmt::Write as _;
 use std::io::{self, BufRead as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 
+use super::agent_boot::{AgentMode, AgentStatus};
 use super::quote::{bytes_path, envelope, glob_escape, os_bytes, path_bytes, quote_path, sh_quote};
 use super::stat::{StatFlavor, epoch_secs};
 use super::target::SshTarget;
+use crate::agent::wire::{Expect as WireExpect, Op};
+use crate::agent::{AgentClient, Fail, Watch};
 use crate::{
     Arg, Authority, DirEntry, FileKind, FileStat, HARD_MAX_TEXT_BYTES, ProcessSpec, TextFile,
     TextReadError, WalkOptions, WriteConflict,
@@ -18,7 +21,7 @@ use crate::{
 
 /// Exit statuses the remote scripts use to report an error kind; anything
 /// else is reported with the remote's own error output.
-mod code {
+pub(super) mod code {
     pub(super) const NOT_FOUND: i32 = 100;
     pub(super) const DENIED: i32 = 101;
     pub(super) const EXISTS: i32 = 102;
@@ -29,6 +32,12 @@ mod code {
     pub(super) const NOT_REGULAR: i32 = 107;
     pub(super) const UNSUPPORTED: i32 = 108;
     pub(super) const TOO_LARGE: i32 = 109;
+    /// The uploaded agent's SHA-256 did not match (T717).
+    pub(in crate::ssh) const CHECKSUM: i32 = 110;
+    /// The uploaded agent does not run, or reports another version.
+    pub(in crate::ssh) const NOT_RUNNABLE: i32 = 111;
+    /// No `sha256sum`, `shasum` or `openssl` to check an upload with.
+    pub(in crate::ssh) const NO_HASH_TOOL: i32 = 112;
     /// `ssh` itself failed (connection, authentication, host key).
     pub(super) const SSH: i32 = 255;
 }
@@ -55,6 +64,13 @@ pub struct SshOptions {
     pub batch_mode: bool,
     /// `ConnectTimeout`, in seconds.
     pub connect_timeout_secs: u32,
+    /// Whether [`SshAuthority::connect`] starts the remote agent (T717).
+    /// Off by default here; the App sets it from the `remote_agent`
+    /// setting.
+    pub agent: AgentMode,
+    /// The binary [`AgentMode::Upload`] uploads. `None` is this process's
+    /// own executable, when it is `vix`.
+    pub agent_binary: Option<PathBuf>,
 }
 
 impl Default for SshOptions {
@@ -66,6 +82,8 @@ impl Default for SshOptions {
             control_persist_secs: 600,
             batch_mode: true,
             connect_timeout_secs: 15,
+            agent: AgentMode::Off,
+            agent_binary: None,
         }
     }
 }
@@ -91,6 +109,20 @@ impl SshOptions {
         self.control_dir = Some(dir.into());
         self
     }
+
+    /// These options with the remote agent `mode` (T717).
+    #[must_use]
+    pub fn with_agent(mut self, mode: AgentMode) -> Self {
+        self.agent = mode;
+        self
+    }
+
+    /// These options uploading `binary` as the agent.
+    #[must_use]
+    pub fn with_agent_binary(mut self, binary: impl Into<PathBuf>) -> Self {
+        self.agent_binary = Some(binary.into());
+        self
+    }
 }
 
 /// A remote machine as Vix's workspace, over the system `ssh` (T712).
@@ -109,6 +141,9 @@ pub struct SshAuthority {
     control_path: Option<String>,
     flavor: OnceLock<StatFlavor>,
     seq: AtomicU64,
+    /// The running remote agent, if any (T717).
+    agent: RwLock<Option<Arc<AgentClient>>>,
+    agent_status: Mutex<AgentStatus>,
 }
 
 impl SshAuthority {
@@ -143,6 +178,8 @@ impl SshAuthority {
             control_path,
             flavor: OnceLock::new(),
             seq: AtomicU64::new(0),
+            agent: RwLock::new(None),
+            agent_status: Mutex::new(AgentStatus::Off),
         })
     }
 
@@ -234,11 +271,85 @@ impl SshAuthority {
         let flavor = StatFlavor::from_probe(&reply)
             .ok_or_else(|| io::Error::other("the remote stat command was not recognized"))?;
         let _ = self.flavor.set(flavor);
+        if self.options.agent != AgentMode::Off {
+            self.start_agent();
+        }
         Ok(())
+    }
+
+    /// The options this authority runs `ssh` with.
+    #[must_use]
+    pub fn options(&self) -> &SshOptions {
+        &self.options
+    }
+
+    /// What became of the remote agent (T717) on the last
+    /// [`SshAuthority::connect`] or [`SshAuthority::start_agent`].
+    #[must_use]
+    pub fn agent_status(&self) -> AgentStatus {
+        self.agent_status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Whether file operations currently go through the remote agent.
+    #[must_use]
+    pub fn agent_running(&self) -> bool {
+        self.agent().is_some()
+    }
+
+    /// Watch `paths` for changes on the remote side through the agent,
+    /// checked every `interval` there (T717).
+    ///
+    /// # Errors
+    /// `Unsupported` when no agent is running (the shell scripts can't
+    /// watch), or the agent's refusal.
+    pub fn watch(&self, paths: &[PathBuf], interval: std::time::Duration) -> io::Result<Watch> {
+        match self.agent() {
+            Some(a) => a.watch(paths, interval),
+            None => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "watching needs the remote agent",
+            )),
+        }
+    }
+
+    pub(super) fn set_agent(&self, client: Option<AgentClient>) {
+        *self.agent.write().unwrap_or_else(PoisonError::into_inner) = client.map(Arc::new);
+    }
+
+    pub(super) fn set_agent_status(&self, status: AgentStatus) {
+        *self
+            .agent_status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = status;
+    }
+
+    /// The running agent, if its connection is still up.
+    fn agent(&self) -> Option<Arc<AgentClient>> {
+        self.agent
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .filter(|a| a.is_alive())
+            .map(Arc::clone)
+    }
+
+    /// Run `f` through the agent: `None` when there is none, or it can't do
+    /// this one (the caller then runs its shell script).
+    fn via<T>(&self, f: impl FnOnce(&AgentClient) -> Result<T, Fail>) -> Option<io::Result<T>> {
+        let agent = self.agent()?;
+        match f(&agent) {
+            Ok(v) => Some(Ok(v)),
+            Err(Fail::Io(e)) => Some(Err(e)),
+            Err(Fail::Unavailable) => None,
+        }
     }
 
     /// Close the shared connection (`ssh -O exit`), if there is one.
     pub fn disconnect(&self) {
+        self.set_agent(None);
         if self.control_path.is_none() {
             return;
         }
@@ -262,6 +373,10 @@ impl SshAuthority {
 
     /// Run `script` remotely with `input` on its stdin; its stdout on
     /// success, or the error its exit status names.
+    pub(super) fn run_script(&self, script: &[u8], input: Option<&[u8]>) -> io::Result<Vec<u8>> {
+        self.run(script, input)
+    }
+
     fn run(&self, script: &[u8], input: Option<&[u8]>) -> io::Result<Vec<u8>> {
         let mut cmd = self.script_command(script);
         cmd.stdin(if input.is_some() {
@@ -314,6 +429,11 @@ impl SshAuthority {
         flavor
             .parse(&out)
             .ok_or_else(|| io::Error::other("unexpected reply from the remote stat command"))
+    }
+
+    /// A unique suffix for a temporary name.
+    pub(super) fn save_token(&self) -> String {
+        self.token()
     }
 
     /// A name no other save is using, for a temp file next to its target.
@@ -505,6 +625,18 @@ fn finish(host: &str, out: &Output) -> io::Result<Vec<u8>> {
         code::NOT_REGULAR => io::Error::new(K::InvalidData, TextReadError::NotRegular),
         code::TOO_LARGE => io::Error::new(K::InvalidData, TextReadError::TooLarge),
         code::UNSUPPORTED => err(K::Unsupported, "no trash command on the remote host"),
+        code::CHECKSUM => err(
+            K::InvalidData,
+            "the uploaded agent's SHA-256 checksum did not match; nothing was installed",
+        ),
+        code::NOT_RUNNABLE => err(
+            K::Unsupported,
+            "the uploaded agent does not run on the remote host; nothing was installed",
+        ),
+        code::NO_HASH_TOOL => err(
+            K::Unsupported,
+            "no sha256sum, shasum or openssl on the remote host to check an upload",
+        ),
         code::SSH => io::Error::new(
             K::NotConnected,
             if stderr.is_empty() {
@@ -607,6 +739,9 @@ impl Authority for SshAuthority {
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if let Some(r) = self.via(|a| a.read_all(path)) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", path)
             .t(READABLE)
@@ -616,6 +751,9 @@ impl Authority for SshAuthority {
     }
 
     fn read_limited(&self, path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+        if let Some(r) = self.via(|a| a.read(path, limit)) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", path)
             .t(READABLE)
@@ -630,6 +768,9 @@ impl Authority for SshAuthority {
     }
 
     fn read_text_guarded(&self, path: &Path, max_bytes: u64) -> io::Result<TextFile> {
+        if let Some(r) = self.via(|a| a.read_text(path, max_bytes)) {
+            return vix_fileops::decode_text(r?, max_bytes);
+        }
         // The size check runs remotely, so a huge file is never sent; `head`
         // bounds the transfer even if the file grows meanwhile.
         let script = Sh::new()
@@ -645,6 +786,9 @@ impl Authority for SshAuthority {
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        if let Some(r) = self.via(|a| a.write(path, data)) {
+            return r;
+        }
         let parent = path.parent().unwrap_or(path);
         let script = Sh::new()
             .set("p", path)
@@ -656,6 +800,9 @@ impl Authority for SshAuthority {
     }
 
     fn write_atomic(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        if let Some(r) = self.via(|a| a.write_atomic(path, data, WireExpect::Any)) {
+            return r;
+        }
         self.write_atomic_checked(path, data, Expect::Any)
     }
 
@@ -665,6 +812,10 @@ impl Authority for SshAuthority {
         data: &[u8],
         expected: Option<&FileStat>,
     ) -> io::Result<()> {
+        let wire = expected.map_or(WireExpect::Absent, |s| WireExpect::Version(*s));
+        if let Some(r) = self.via(|a| a.write_atomic(path, data, wire)) {
+            return r;
+        }
         self.write_atomic_checked(path, data, expected.map_or(Expect::Absent, Expect::Version))
     }
 
@@ -675,14 +826,30 @@ impl Authority for SshAuthority {
     }
 
     fn metadata(&self, path: &Path) -> io::Result<FileStat> {
+        if let Some(r) = self.via(|a| a.stat(path, true)) {
+            return r;
+        }
         self.stat(path, true)
     }
 
     fn symlink_metadata(&self, path: &Path) -> io::Result<FileStat> {
+        if let Some(r) = self.via(|a| a.stat(path, false)) {
+            return r;
+        }
         self.stat(path, false)
     }
 
+    fn metadata_batch(&self, paths: &[&Path]) -> Vec<io::Result<FileStat>> {
+        if let Some(r) = self.via(|a| a.stat_many(paths)) {
+            return r.unwrap_or_else(|e| paths.iter().map(|_| Err(clone_error(&e))).collect());
+        }
+        self.stat_batch(paths)
+    }
+
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        if let Some(r) = self.via(|a| a.canonicalize(path)) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", path)
             .t("[ -e \"$p\" ] || exit 100\n")
@@ -698,6 +865,9 @@ impl Authority for SshAuthority {
     }
 
     fn read_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+        if let Some(r) = self.via(|a| a.read_dir(dir)) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", dir)
             .t("[ -e \"$p\" ] || exit 100\n[ -d \"$p\" ] || exit 104\n\
@@ -726,6 +896,13 @@ impl Authority for SshAuthority {
     }
 
     fn create_dir_all(&self, dir: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::CreateDirAll {
+                path: path_bytes(dir),
+            })
+        }) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", dir)
             .t("[ -e \"$p\" ] && ! [ -d \"$p\" ] && exit 102\nexec mkdir -p -- \"$p\"\n")
@@ -734,11 +911,26 @@ impl Authority for SshAuthority {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::Rename {
+                from: path_bytes(from),
+                to: path_bytes(to),
+            })
+        }) {
+            return r;
+        }
         let script = Sh::new().set("a", from).set("b", to).t(MOVE).done();
         self.run(&script, None).map(drop)
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::RemoveFile {
+                path: path_bytes(path),
+            })
+        }) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", path)
             .t("[ -e \"$p\" ] || [ -h \"$p\" ] || exit 100\n\
@@ -748,6 +940,13 @@ impl Authority for SshAuthority {
     }
 
     fn remove_path(&self, path: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::RemovePath {
+                path: path_bytes(path),
+            })
+        }) {
+            return r;
+        }
         // `rm -r` removes a symlink as a link; it never follows one.
         let script = Sh::new()
             .set("p", path)
@@ -757,11 +956,27 @@ impl Authority for SshAuthority {
     }
 
     fn move_path(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::MovePath {
+                from: path_bytes(from),
+                to: path_bytes(to),
+            })
+        }) {
+            return r;
+        }
         // `mv` already copies and removes across file systems.
         self.rename(from, to)
     }
 
     fn copy_recursive(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::CopyRecursive {
+                from: path_bytes(from),
+                to: path_bytes(to),
+            })
+        }) {
+            return r;
+        }
         let script = Sh::new()
             .set("a", from)
             .set("b", to)
@@ -780,6 +995,13 @@ impl Authority for SshAuthority {
     }
 
     fn trash(&self, path: &Path) -> io::Result<()> {
+        if let Some(r) = self.via(|a| {
+            a.simple(Op::Trash {
+                path: path_bytes(path),
+            })
+        }) {
+            return r;
+        }
         let script = Sh::new()
             .set("p", path)
             .t("[ -e \"$p\" ] || [ -h \"$p\" ] || exit 100\n\
@@ -791,6 +1013,9 @@ impl Authority for SshAuthority {
     }
 
     fn is_unwritable(&self, path: &Path) -> bool {
+        if let Some(r) = self.via(|a| a.is_unwritable(path)) {
+            return r.unwrap_or(false);
+        }
         let script = Sh::new()
             .set("p", path)
             .t("[ -f \"$p\" ] && ! [ -w \"$p\" ]\n")
@@ -799,6 +1024,9 @@ impl Authority for SshAuthority {
     }
 
     fn walk_files(&self, root: &Path, opts: &WalkOptions) -> Vec<PathBuf> {
+        if let Some(r) = self.via(|a| a.walk(root, opts)) {
+            return r.unwrap_or_default();
+        }
         self.walk(root, opts).unwrap_or_default()
     }
 
@@ -809,6 +1037,9 @@ impl Authority for SshAuthority {
             || name.chars().any(|c| c.is_whitespace() || c.is_control())
         {
             return None;
+        }
+        if let Some(r) = self.via(|a| a.which(name)) {
+            return r.ok().flatten();
         }
         let script = Sh::new()
             .t("n=")
@@ -851,7 +1082,61 @@ impl Authority for SshAuthority {
     }
 }
 
+/// A copy of `e` (kind and message) for each path of a failed batch.
+fn clone_error(e: &io::Error) -> io::Error {
+    io::Error::new(e.kind(), e.to_string())
+}
+
+/// Paths per [`SshAuthority::stat_batch`] script, so the command line stays
+/// well under any `ARG_MAX`.
+const STAT_BATCH: usize = 200;
+
 impl SshAuthority {
+    /// [`Authority::metadata_batch`] without the agent: one script per
+    /// [`STAT_BATCH`] paths, printing one line per path (`o` and the stat,
+    /// `n` for a missing path, `e` for a failed `stat`).
+    fn stat_batch(&self, paths: &[&Path]) -> Vec<io::Result<FileStat>> {
+        let mut out = Vec::with_capacity(paths.len());
+        for chunk in paths.chunks(STAT_BATCH) {
+            match self.stat_chunk(chunk) {
+                Ok(stats) => out.extend(stats),
+                Err(e) => out.extend(chunk.iter().map(|_| Err(clone_error(&e)))),
+            }
+        }
+        out
+    }
+
+    fn stat_chunk(&self, paths: &[&Path]) -> io::Result<Vec<io::Result<FileStat>>> {
+        let flavor = self.flavor()?;
+        let mut sh = Sh::new().t("for p in");
+        for p in paths {
+            sh = sh.t(" ").path(p);
+        }
+        let script = sh
+            .t("; do\n  if [ -e \"$p\" ]; then\n    s=$(")
+            .t(flavor.command(true))
+            .t(
+                " \"$p\" 2>/dev/null) && printf 'o%s\\n' \"$s\" || printf 'e\\n'\n  \
+                else printf 'n\\n'; fi\ndone\n",
+            )
+            .done();
+        let reply = self.run(&script, None)?;
+        let lines: Vec<&[u8]> = reply.split(|&b| b == b'\n').collect();
+        let host = &self.target.host;
+        Ok((0..paths.len())
+            .map(|i| match lines.get(i).and_then(|l| l.split_first()) {
+                Some((b'o', rest)) => flavor.parse(rest).ok_or_else(|| {
+                    io::Error::other("unexpected reply from the remote stat command")
+                }),
+                Some((b'n', _)) => Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("{host}: no such file or directory"),
+                )),
+                _ => Err(io::Error::other(format!("{host}: stat failed"))),
+            })
+            .collect())
+    }
+
     /// [`Authority::walk_files`]: `git ls-files` when ignore files are
     /// honored and `root` is in a git work tree (git's own ignore rules),
     /// else `find`. Read as a stream and cut off at the limit.

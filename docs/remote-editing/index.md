@@ -2,7 +2,8 @@
 
 **Experimental.** Vix can work on a folder on another machine over SSH, with
 your own settings, themes and keybindings, and the remote machine's files and
-tools. Nothing is installed on the remote side.
+tools. Nothing needs to be installed on the remote side; if Vix is there, it
+is used to go faster (see [The remote agent](#the-remote-agent)).
 
 ```sh
 vix ssh://me@build-box/srv/app        # a folder: it becomes the workspace
@@ -106,6 +107,37 @@ versions all work, and so does a `fish` or `csh` login shell.
   on your machine. So does the AI command-line provider, which runs where
   you are signed in to it.
 
+## The remote agent
+
+When the remote machine has `vix` of **exactly the same version** as yours,
+Vix starts it there as a helper (`vix --remote-agent`) over the same SSH
+connection, and file operations go through it instead of one shell command
+each: opening, saving, listing, the file finder's walk, and the
+once-a-second check for files changed on disk (all open files in one
+request). Anything it can't do (a file over 64 MiB, running a program)
+still uses the shell commands, and if it stops, Vix carries on with them.
+The Messages drawer says when the agent is in use, or why it isn't.
+
+Vix looks for it in `~/.cache/vix/agent/<version>/vix` (or under
+`$XDG_CACHE_HOME`) and on the remote `PATH`. The `remote_agent` setting
+decides the rest:
+
+```toml
+remote_agent = "installed"   # default: use one that is already there
+remote_agent = "upload"      # ...and copy this vix there if there is none
+remote_agent = "off"         # shell commands only
+```
+
+With `"upload"`, and only when the remote machine runs the same operating
+system on the same processor architecture, Vix copies its own binary into
+that cache folder (private to you, mode 0700). The remote side computes the
+copy's SHA-256 (`sha256sum`, `shasum` or `openssl`) and compares it with
+yours before the file is made executable, then runs it once to check its
+version; on any mismatch the copy is deleted and nothing is installed. The
+upload is off by default because it writes a large executable into your
+remote home over what may be a slow link, which some hosts' policies don't
+allow; turn it on for machines where that's fine.
+
 ## Limits
 
 This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index.md)).
@@ -119,10 +151,11 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
   errors.
 - Trust is per remote workspace only; local workspaces keep the existing
   script-trust prompt (a general workspace-trust setting is T627).
-- Each operation is a round trip, so the once-a-second check for files
-  changed on disk is slower than locally. A regular-expression search on a
-  machine without `rg` reads every file, one round trip each; install
-  `ripgrep` there for fast search. Workspace symbol search (`@@` in the
+- Without the remote agent each operation is a round trip (the
+  once-a-second check for files changed on disk is one round trip for all
+  open files either way). A regular-expression search on a machine
+  without `rg` reads every file, one round trip each; install `ripgrep`
+  there for fast search. Workspace symbol search (`@@` in the
   palette), structural replace and the Org agenda still read every file.
 - Moving a file to the trash needs `gio` or `trash-put` on the remote
   machine; without one, use delete (or set `explorer_delete = "hard"`).

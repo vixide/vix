@@ -112,6 +112,17 @@ fn files(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
         auth.metadata(&scratch.join("missing")).is_err(),
         "metadata of a missing path errors",
     );
+    let missing = scratch.join("missing");
+    let batch = auth.metadata_batch(&[a.as_path(), missing.as_path(), scratch]);
+    r.check(
+        batch.len() == 3
+            && batch[0].as_ref().is_ok_and(|s| s.is_file() && s.len == 6)
+            && batch[1]
+                .as_ref()
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+            && batch[2].as_ref().is_ok_and(crate::FileStat::is_dir),
+        "metadata_batch answers each path in order",
+    );
     r.check(
         auth.read(&scratch.join("missing")).is_err(),
         "read of a missing path errors",

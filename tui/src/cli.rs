@@ -91,4 +91,12 @@ pub struct Cli {
     /// as an argument, or the current directory. See `spec/mcp-server`.
     #[arg(long)]
     pub mcp: bool,
+
+    /// Serve Vix's remote-agent protocol over stdin/stdout instead of
+    /// starting the editor. A Vix on another machine starts this over SSH
+    /// to work on this machine's files faster; it is not for interactive
+    /// use. File-system operations only; exits when its input ends. See
+    /// `docs/remote-editing`.
+    #[arg(long)]
+    pub remote_agent: bool,
 }

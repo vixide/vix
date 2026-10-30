@@ -717,3 +717,13 @@ pkgs
 printsrcinfo
 SRCINFO
 wingetcreate
+
+# Remote agent (T717)
+dgst
+fuzzable
+hexdigit
+illumos
+riscv
+unwatch
+Unwatch
+VIXAGENT

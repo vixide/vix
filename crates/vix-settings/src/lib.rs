@@ -93,6 +93,16 @@ pub struct Settings {
     /// value falls back to `"trash"`, the safer default, rather than
     /// silently hard-deleting on a typo.
     pub explorer_delete: String,
+    /// Whether a remote (SSH) workspace uses the Vix remote agent (T717),
+    /// which answers file operations over one connection instead of one
+    /// shell command each: `"installed"` (default — use a `vix` of exactly
+    /// this version already on the remote machine, on its `PATH` or in
+    /// `~/.cache/vix/agent/<version>/`, and never upload one), `"upload"`
+    /// (also copy this `vix` there when it has none and the remote
+    /// operating system and machine match; the copy's SHA-256 is checked on
+    /// the remote side before it is made executable) or `"off"` (shell
+    /// commands only). Any other value behaves as `"installed"`.
+    pub remote_agent: String,
     /// What Git → Commit does when nothing is staged but the tree has
     /// changes (T577): `"ask"` (default — confirm, then `git add -A`),
     /// `"always"` (stage everything without asking) or `"never"` (refuse).
@@ -727,6 +737,7 @@ impl Default for Settings {
             language_features: LanguageFeatureSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
+            remote_agent: "installed".to_string(),
             smart_commit: "ask".to_string(),
             oc_engine: "auto".to_string(),
             oc_mode: "full".to_string(),

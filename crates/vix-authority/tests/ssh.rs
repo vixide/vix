@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proptest::prelude::*;
 use vix_authority::ssh::quote::{envelope, quote_path, sh_quote};
-use vix_authority::ssh::{SshAuthority, SshOptions, SshTarget};
+use vix_authority::ssh::{AgentMode, AgentStatus, SshAuthority, SshOptions, SshTarget};
 use vix_authority::{Authority, ProcessSpec, WriteConflict, conformance};
 
 static SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -48,9 +48,16 @@ fn cleanup(dir: &Path) {
 /// Write a fake `ssh` into `dir` that logs its arguments to `dir/argv.log`
 /// and runs the remote command with `login_shell -c`.
 fn fake_ssh(dir: &Path, login_shell: &str) -> PathBuf {
+    fake_ssh_with(dir, login_shell, "")
+}
+
+/// [`fake_ssh`] that runs `prelude` (shell text, e.g. `export HOME=…`)
+/// before the remote command: the "remote" environment, set in the child
+/// script rather than in this process.
+fn fake_ssh_with(dir: &Path, login_shell: &str, prelude: &str) -> PathBuf {
     let log = dir.join("argv.log");
     let script = format!(
-        "#!/bin/sh\n\
+        "#!/bin/sh\n{prelude}\n\
          printf '%s\\n' \"$@\" >> {log}\n\
          while [ $# -gt 0 ]; do\n\
            case $1 in\n\
@@ -429,6 +436,190 @@ fn the_decoder_runs_in_every_posix_sh() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+/// How many `ssh` runs the fake has logged (each starts with `-T`).
+fn ssh_runs(dir: &Path) -> usize {
+    std::fs::read_to_string(dir.join("argv.log"))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| *l == "-T")
+        .count()
+}
+
+#[test]
+fn a_batch_stat_is_one_round_trip_without_the_agent() {
+    let dir = scratch("batch");
+    let auth = authority(&dir, "/bin/sh");
+    auth.connect(false).unwrap();
+    let files: Vec<PathBuf> = (0..30).map(|i| dir.join(format!("f {i}'s"))).collect();
+    for f in files.iter().step_by(3) {
+        std::fs::write(f, "abc").unwrap();
+    }
+    let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+    let before = ssh_runs(&dir);
+    let stats = auth.metadata_batch(&refs);
+    assert_eq!(ssh_runs(&dir) - before, 1, "one ssh run for 30 stats");
+    for (i, s) in stats.iter().enumerate() {
+        if i % 3 == 0 {
+            assert_eq!(s.as_ref().unwrap().len, 3);
+        } else {
+            assert_eq!(s.as_ref().unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        }
+    }
+    assert!(!auth.agent_running());
+    assert_eq!(auth.agent_status(), AgentStatus::Off);
+    cleanup(&dir);
+}
+
+/// A stand-in for a `vix` binary: answers `--version --json` with
+/// `version` and nothing else (it is not an agent).
+fn fake_vix(dir: &Path, version: &str) -> (PathBuf, Vec<u8>) {
+    let body = format!(
+        "#!/bin/sh\ncase $1 in --version) printf '{{\"name\":\"vix\",\"version\":\"%s\",\"capabilities\":[]}}\\n' '{version}' ;; *) exit 3 ;; esac\n"
+    )
+    .into_bytes();
+    let path = dir.join(format!("fake-vix-{version}"));
+    std::fs::write(&path, &body).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    (path, body)
+}
+
+/// An authority whose "remote" has its own home and cache under `dir`
+/// and a `PATH` without any `vix`.
+fn isolated_authority(dir: &Path, options: SshOptions) -> SshAuthority {
+    let prelude = format!(
+        "export HOME={home} XDG_CACHE_HOME={cache} PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+        home = String::from_utf8(sh_quote(dir.join("home").to_str().unwrap().as_bytes())).unwrap(),
+        cache =
+            String::from_utf8(sh_quote(dir.join("cache").to_str().unwrap().as_bytes())).unwrap(),
+    );
+    std::fs::create_dir_all(dir.join("home")).unwrap();
+    let target = SshTarget::parse("ssh://me@example.invalid/srv").unwrap();
+    let options = options
+        .with_program(fake_ssh_with(dir, "/bin/sh", &prelude))
+        .with_control_dir(control_dir(dir));
+    SshAuthority::with_options(target, options).unwrap()
+}
+
+fn sha256_of(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .fold(String::new(), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
+}
+
+/// Everything left in the agent cache directory.
+fn cache_contents(dir: &Path) -> Vec<String> {
+    let agent = dir
+        .join("cache/vix/agent")
+        .join(vix_authority::agent::VERSION);
+    std::fs::read_dir(agent)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn an_upload_with_the_wrong_checksum_installs_nothing() {
+    let dir = scratch("upload-bad");
+    let auth = isolated_authority(&dir, SshOptions::default());
+    let (_, body) = fake_vix(&dir, vix_authority::agent::VERSION);
+    let wrong = sha256_of(b"something else");
+    let err = auth.upload_agent(&body, &wrong).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData, "{err}");
+    assert!(
+        cache_contents(&dir).is_empty(),
+        "{:?}",
+        cache_contents(&dir)
+    );
+    // Not a hash at all: refused before anything is sent.
+    let before = ssh_runs(&dir);
+    assert_eq!(
+        auth.upload_agent(&body, "nope").unwrap_err().kind(),
+        std::io::ErrorKind::InvalidInput
+    );
+    assert_eq!(ssh_runs(&dir), before);
+    cleanup(&dir);
+}
+
+#[test]
+fn an_upload_of_another_version_installs_nothing() {
+    let dir = scratch("upload-other");
+    let auth = isolated_authority(&dir, SshOptions::default());
+    let (_, body) = fake_vix(&dir, "0.0.0-other");
+    let err = auth.upload_agent(&body, &sha256_of(&body)).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::Unsupported, "{err}");
+    assert_eq!(cache_contents(&dir), Vec::<String>::new());
+    cleanup(&dir);
+}
+
+#[test]
+fn a_verified_upload_lands_in_a_private_cache() {
+    let dir = scratch("upload-ok");
+    let auth = isolated_authority(&dir, SshOptions::default());
+    let (_, body) = fake_vix(&dir, vix_authority::agent::VERSION);
+    let path = auth.upload_agent(&body, &sha256_of(&body)).unwrap();
+    let want = dir
+        .join("cache/vix/agent")
+        .join(vix_authority::agent::VERSION)
+        .join("vix");
+    assert_eq!(path, want);
+    assert_eq!(std::fs::read(&want).unwrap(), body);
+    let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&want), 0o700);
+    assert_eq!(mode(want.parent().unwrap()), 0o700);
+    assert_eq!(cache_contents(&dir), ["vix"], "no temp file left");
+    cleanup(&dir);
+}
+
+#[test]
+fn without_a_vix_there_the_shell_scripts_stay() {
+    let dir = scratch("agent-none");
+    let auth = isolated_authority(&dir, SshOptions::default().with_agent(AgentMode::Installed));
+    auth.connect(false).unwrap();
+    assert_eq!(auth.agent_status(), AgentStatus::NotInstalled);
+    assert!(!auth.agent_running());
+    // Everything still works.
+    let failures = conformance::run(&auth, &dir.join("work"));
+    assert_eq!(failures, Vec::<String>::new());
+    assert_eq!(
+        cache_contents(&dir),
+        Vec::<String>::new(),
+        "Installed never uploads"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn an_uploaded_binary_that_is_no_agent_falls_back() {
+    let dir = scratch("agent-fake");
+    let (fake, _) = fake_vix(&dir, vix_authority::agent::VERSION);
+    let options = SshOptions::default()
+        .with_agent(AgentMode::Upload)
+        .with_agent_binary(&fake);
+    let auth = isolated_authority(&dir, options);
+    auth.connect(false).unwrap();
+    // Uploaded and verified, but it doesn't speak the protocol.
+    assert!(
+        matches!(auth.agent_status(), AgentStatus::Unavailable(_)),
+        "{:?}",
+        auth.agent_status()
+    );
+    assert!(!auth.agent_running());
+    assert_eq!(cache_contents(&dir), ["vix"]);
+    assert!(auth.is_dir(&dir));
+    // A second connect finds the cached copy (and again can't use it).
+    let again = isolated_authority(&dir, SshOptions::default().with_agent(AgentMode::Installed));
+    assert_eq!(again.start_agent(), auth.agent_status());
+    cleanup(&dir);
 }
 
 #[test]

@@ -109,6 +109,8 @@ struct Connected {
     target: SshTarget,
     /// A file to open, when the name was a file (its directory is the root).
     file: Option<PathBuf>,
+    /// What to say about the remote agent (T717), if anything.
+    agent_note: Option<String>,
 }
 
 /// A connect running on a background thread.
@@ -126,9 +128,11 @@ pub(crate) struct RemoteState {
     /// The open remote workspace, if any.
     pub(crate) session: Option<RemoteSession>,
     pending: Option<Pending>,
-    /// How the dialog runs `ssh` (tests point `program` at a fake).
+    /// How the dialog runs `ssh` (tests point `program` at a fake). `None`
+    /// is the defaults, with the remote agent as the `remote_agent` setting
+    /// says (T717).
     #[cfg(feature = "tasks")]
-    pub(crate) ssh_options: vix_authority::ssh::SshOptions,
+    pub(crate) ssh_options: Option<vix_authority::ssh::SshOptions>,
 }
 
 impl App {
@@ -140,8 +144,18 @@ impl App {
     #[cfg(feature = "tasks")]
     #[must_use]
     pub fn with_ssh_options(mut self, options: vix_authority::ssh::SshOptions) -> Self {
-        self.remote.ssh_options = options;
+        self.remote.ssh_options = Some(options);
         self
+    }
+
+    /// The options the next connect runs `ssh` with.
+    #[cfg(feature = "tasks")]
+    fn ssh_options(&self) -> vix_authority::ssh::SshOptions {
+        self.remote.ssh_options.clone().unwrap_or_else(|| {
+            vix_authority::ssh::SshOptions::default().with_agent(
+                vix_authority::ssh::AgentMode::from_setting(&self.settings.remote_agent),
+            )
+        })
     }
 
     /// Mark this App as working on `target`'s host, whose authority the
@@ -341,7 +355,7 @@ impl App {
         let label = RemoteSession::new(target.clone()).label;
         let (tx, rx) = mpsc::channel();
         #[cfg(feature = "tasks")]
-        let options = self.remote.ssh_options.clone();
+        let options = self.ssh_options();
         let spawned = std::thread::Builder::new()
             .name("vix-remote-connect".into())
             .spawn(move || {
@@ -379,6 +393,9 @@ impl App {
         self.remote.session = Some(RemoteSession::new(connected.target.clone()));
         self.reroot_workspace(&root, &[]);
         self.adopt_remote(connected.target);
+        if let Some(note) = connected.agent_note {
+            self.messages.info(note);
+        }
         if let Some(file) = connected.file {
             self.open_path(&file, false);
         }
@@ -401,6 +418,9 @@ impl App {
         let host = self.remote_host().unwrap_or_default().to_string();
         self.messages
             .info(t!("msg.remote_reconnected", host = host).to_string());
+        if let Some(note) = connected.agent_note {
+            self.messages.info(note);
+        }
         self.status = t!("status.remote_reconnected", host = host).to_string();
     }
 
@@ -675,12 +695,14 @@ fn connect_worker(
             .map_or_else(|| PathBuf::from("/"), Path::to_path_buf);
         (root, Some(path))
     };
+    let agent_note = crate::remote::agent_note(&host, &auth.agent_status());
     let mut target = target;
     target.path = root.to_string_lossy().into_owned();
     Ok(Connected {
         authority: Arc::new(auth),
         target,
         file,
+        agent_note,
     })
 }
 

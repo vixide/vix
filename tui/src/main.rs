@@ -84,9 +84,11 @@ fn query_background_colour() -> Option<(u8, u8, u8)> {
     vix::theme_model::background::parse_osc11_reply(&reply)
 }
 
-fn main() -> io::Result<()> {
-    let mut cli = Cli::parse();
-
+/// The modes that print or serve and exit before anything else runs (no
+/// settings load, which would create `config.toml`; no terminal, clipboard
+/// or keyring): `--version`, `--remote-agent` and `--mcp`. Returns whether
+/// one ran; a failed server exits with status 1.
+fn run_early_modes(cli: &Cli) -> bool {
     if cli.version {
         if cli.json {
             let capabilities = vix::capability::enabled_names()
@@ -101,15 +103,30 @@ fn main() -> io::Result<()> {
         } else {
             println!("vix {}", env!("CARGO_PKG_VERSION"));
         }
-        return Ok(());
+        return true;
     }
-
-    // `--mcp` (T731) runs before anything that could write: no settings load
-    // (which would create `config.toml`), no clipboard or keyring opt-in.
+    // `--remote-agent` (T717): a Vix on another machine drives this process
+    // over the SSH channel. Exits when its input ends.
+    if cli.remote_agent {
+        if vix::authority::agent::serve_stdio().is_err() {
+            std::process::exit(1);
+        }
+        return true;
+    }
+    // `--mcp` (T731).
     if cli.mcp {
         if !vix::mcp::run(&cli.files, cli.locale.as_deref()) {
             std::process::exit(1);
         }
+        return true;
+    }
+    false
+}
+
+fn main() -> io::Result<()> {
+    let mut cli = Cli::parse();
+
+    if run_early_modes(&cli) {
         return Ok(());
     }
 
@@ -173,7 +190,7 @@ fn main() -> io::Result<()> {
 
     // `vix ssh://user@host/path` (T712): connect now, while `ssh` can still
     // prompt on the plain terminal, and work on the remote directory.
-    let remote = match vix::remote::connect_cli(&mut cli.files) {
+    let remote = match vix::remote::connect_cli(&mut cli.files, &settings.remote_agent) {
         Ok(target) => target,
         Err(message) => {
             eprintln!("{message}");
@@ -182,13 +199,16 @@ fn main() -> io::Result<()> {
     };
     let root = remote.as_ref().map_or_else(
         || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        |t| PathBuf::from(&t.path),
+        |(t, _)| PathBuf::from(&t.path),
     );
     let mut app = App::new(root, settings);
     // The status-bar host, conflict-checked saves and the trust prompt
     // (T713, T714), before `start` loads scripts or restores the session.
-    if let Some(target) = remote {
+    if let Some((target, agent_note)) = remote {
         app.adopt_remote(target);
+        if let Some(note) = agent_note {
+            app.messages.info(note);
+        }
     }
     if let Some(e) = settings_load_error {
         app.warn_settings_load_failed(&e);

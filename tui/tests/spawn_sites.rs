@@ -44,6 +44,21 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`ssh` feature (implies `process`), enabled only by root `tasks`",
     ),
     (
+        "crates/vix-authority/src/agent/client.rs",
+        "`AgentClient::spawn` (T717): starts the remote agent's transport (`ssh … vix --remote-agent`) from a caller-built `Command`",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/agent/authority.rs",
+        "`AgentAuthority::spawn` (T717, `process` only) and `command`, which defers to the authority given to `with_commands`",
+        "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",
+    ),
+    (
+        "crates/vix-authority/src/ssh/agent_boot.rs",
+        "`SshAuthority::start_agent` (T717): starts `vix --remote-agent` over the same `ssh` command line (argv only)",
+        "`ssh` feature (implies `process`), enabled only by root `tasks`",
+    ),
+    (
         "crates/vix-http-client/src/aad.rs",
         "`az account get-access-token` for {{$aadToken}} (argv array, no shell)",
         "`http` feature (vix-http-client is an optional dependency of the root)",
