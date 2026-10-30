@@ -370,7 +370,8 @@ impl SshAuthority {
         }
         let mut sh = Sh::new();
         if let Some(dir) = spec.cwd() {
-            sh = sh.t("cd -- ").path(dir).t(" || exit 1\n");
+            // `-P`: resolve `..` physically, as a local `chdir` does.
+            sh = sh.t("cd -P -- ").path(dir).t(" || exit 1\n");
         }
         for (key, value) in spec.envs() {
             let key = key

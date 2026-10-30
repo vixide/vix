@@ -8351,7 +8351,33 @@ so, and the first task of each plan re-checks the facts it depends on.
   **Medium.**
 - [ ] **T714 — Trust and safety.** Untrusted-until-trusted remote
   workspace (T627), no secrets on argv, host-key policy documented. **Small.**
-- [ ] **T715 — Remote search and git.** `rg`/`git` run remotely. **Medium.**
+- [x] **T715 — Remote search and git.** `rg`/`git` run remotely. **Medium.**
+  - Done 2026-10-30. `Authority::is_local` (`true` only for
+    `LocalAuthority`). `App::scan_index` (`tui/src/app/remote_search.rs`)
+    is the one walk behind Find in Workspace, Search in Workspace (to dock),
+    the TODO finder/Todo Tree and go-to-definition's fallback: local reads
+    each file as before; non-local runs `rg --json` (else `grep -rnF` for a
+    literal query) per workspace folder through `Authority::command`,
+    re-checks each line with the local regex, keeps only indexed files,
+    scans open buffers in-process, and orders by index position, so output
+    matches the local search (tested). Pure argv/parsers in
+    `vix_workspace_search::tool`. Git/jj already ran through the authority
+    (T710); fixed `vix-git`'s `locate` to use `--show-cdup` (git's absolute
+    `--show-toplevel` is the runner's spelling, not an authority path; it
+    broke `head_blob` under the fake) and the SSH authority's `cd -P`.
+    Tests: `tui/tests/authority_search.rs` (fake: dock search, unsaved
+    buffer, Todo Tree, go-to-definition, remote-vs-local parity, git
+    status/HEAD blob/diff marks with the `git` `command` call asserted;
+    SSH over a fake `ssh`: one tool run, ≤5 round trips for 41 files).
+    NOT done: workspace symbol search (palette `@@`), structural replace
+    (workspace scope), the Org agenda and Org-roam scans still read each
+    file through the authority; a regex search without remote `rg` reads
+    each file; `grep` can't skip files over the size cap and its `-i` is
+    ASCII-only; the scan is synchronous (a slow link blocks the UI per
+    keystroke in Find in Workspace) and `which rg` is one extra round trip
+    per search (no cache); the grep fallback path is unit-tested but not
+    exercised end to end (a test can't hide the host's `rg` without
+    editing `PATH`); wgrep's apply step still reads each edited file.
 - [ ] **T716 — Remote LSP and tasks/terminal.** **Large.**
 - [ ] **T717 — Remote agent (`vix --remote-agent`).** Framed protocol over
   stdio, batching, file watching, checksum-verified upload. **Large.**

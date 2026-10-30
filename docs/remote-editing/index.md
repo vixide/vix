@@ -27,7 +27,11 @@ versions all work, and so does a `fish` or `csh` login shell.
   renames it into place, keeping the file's permissions and writing through a
   symbolic link.
 - **Explorer, File → Open, the file finder, search, git and tasks** work on
-  the remote machine, in the workspace. The file finder honors `.gitignore`
+  the remote machine, in the workspace. Find in Workspace, Search in
+  Workspace (to dock), the TODO finder and Todo Tree, and go to definition
+  run one `rg` on the remote machine (or `grep` for a plain-text search when
+  `rg` isn't installed there), so a search is one round trip, not one per
+  file. The file finder honors `.gitignore`
   when the folder is a git work tree. Language servers and debug adapters
   are started there too, but are not yet tested remotely (T716).
 - **Settings, themes, keybindings, snippets, session and undo history** stay
@@ -41,8 +45,11 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
 - There is no **Open Remote…** dialog yet, no remote indicator in the status
   bar, and no "connection lost" state: if the connection drops, operations
   fail with ordinary file errors until you restart Vix.
-- Each operation is a round trip, so large searches and the once-a-second
-  check for files changed on disk are slower than locally.
+- Each operation is a round trip, so the once-a-second check for files
+  changed on disk is slower than locally. A regular-expression search on a
+  machine without `rg` reads every file, one round trip each; install
+  `ripgrep` there for fast search. Workspace symbol search (`@@` in the
+  palette), structural replace and the Org agenda still read every file.
 - Moving a file to the trash needs `gio` or `trash-put` on the remote
   machine; without one, use delete (or set `explorer_delete = "hard"`).
 - The integrated terminal opens a local shell.
