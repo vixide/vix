@@ -133,6 +133,16 @@ up to 90 minutes; `GITHUB_TOKEN`-created releases cannot trigger a second workfl
 No installers: dist builds one app per package and every installer assumes one
 binary per target. Not exercised on a runner until the next tag.
 
+### Container image (T743)
+
+`.github/workflows/container.yml` (GitHub only, hand-written) builds
+`docker/Dockerfile` natively on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm`
+(arm64) on the same version-tag trigger, pushes each by digest to
+`ghcr.io/vixide/vix`, and joins them into `:<tag>` plus `:latest` (not for a
+prerelease tag). It never runs on a branch push; a manual `workflow_dispatch`
+run builds both architectures and pushes nothing. It has not run yet. See
+[`packaging/index.md`](../../packaging/index.md).
+
 ### Mutation testing (T606)
 
 `.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly and on demand over

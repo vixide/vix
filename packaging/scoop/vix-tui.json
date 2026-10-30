@@ -1,0 +1,32 @@
+{
+    "version": "1.8.0",
+    "description": "Vix: a keyboard-friendly terminal text editor and IDE (the `vix` command).",
+    "homepage": "https://github.com/vixide/vix",
+    "license": "Apache-2.0|BSD-3-Clause|MIT|GPL-3.0-only",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/vixide/vix/releases/download/1.8.0/vix-tui-x86_64-pc-windows-msvc.zip",
+            "hash": "6907ee0ea350f5713287d06268a77824b00889c75b1eca6779fee00d0635bf48"
+        }
+    },
+    "bin": "vix.exe",
+    "checkver": {
+        "github": "https://github.com/vixide/vix"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/vixide/vix/releases/download/$version/vix-tui-x86_64-pc-windows-msvc.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                }
+            },
+            "arm64": {
+                "url": "https://github.com/vixide/vix/releases/download/$version/vix-tui-aarch64-pc-windows-msvc.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                }
+            }
+        }
+    }
+}

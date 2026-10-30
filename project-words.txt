@@ -707,3 +707,13 @@ smol
 cdup
 chdir
 prefilter
+# Install-channel templates (T742, packaging/)
+checkver
+makepkg
+namcap
+nixpkgs
+PKGBUILD
+pkgs
+printsrcinfo
+SRCINFO
+wingetcreate

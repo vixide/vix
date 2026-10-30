@@ -8699,9 +8699,38 @@ editor by completion, diagnostics and never losing work first.
   (`nix run github:vixide/vix`), AUR, `cargo binstall` metadata and mise,
   each verified on a real machine or CI runner before it is listed.
   Fresh lists about fourteen channels. Goes with T669. **Medium.**
+  - **Progress 2026-10-30** (`feat/t742-t743-install-channels`): the files
+    exist; nothing is published or submitted. See
+    [`packaging/index.md`](packaging/index.md).
+    - **`cargo binstall`:** `[package.metadata.binstall]` in
+      `tui/Cargo.toml`. Checked by hand against the real 1.8.0 assets (no
+      `v` in tags; `.tar.xz` with a `vix-tui-<target>/` directory; Windows
+      `.zip` with `vix.exe` at the root). Not run with `cargo binstall`.
+    - **Nix:** `flake.nix`. Unverified: Nix is not installed here, so there
+      is no `flake.lock` yet.
+    - **winget, Scoop, AUR:** templates under `packaging/` with the real
+      1.8.0 URLs and SHA-256 sums. The JSON and YAML parse and the
+      PKGBUILD passes `bash -n`; none has been installed with its tool.
+    - **mise:** commands documented, no file needed. Not run.
+    - **Left:** verify each channel on a real machine or runner, then
+      submit or publish it, then move it into the main install list.
 - [ ] **T743 — Try without installing.** `nix run` (from T742) and a
   container image (`ghcr.io/vixide/vix`) so `docker run -it` opens Vix on
   a demo workspace; list both on the README and site. **Small–Medium.**
+  - **Progress 2026-10-30** (`feat/t742-t743-install-channels`):
+    - **Image:** `docker/Dockerfile` (multi-stage, `--profile dist`
+      default features, non-root `vix` user, the demo workspace as a git
+      repository, `ENTRYPOINT ["vix"]`) and `.dockerignore`. Verified
+      locally on arm64 Docker: it builds, `docker run --rm vix
+      --version` prints `vix 2.0.0`, and `docker run --rm -it` in a
+      110×30 pseudo-terminal draws Vix with the demo workspace in the
+      explorer and the welcome overlay.
+    - **Publishing:** `.github/workflows/container.yml` pushes
+      `ghcr.io/vixide/vix` on a release tag only (a manual run builds
+      without pushing). It has never run.
+    - **`nix run`:** see T742; unverified.
+    - **Left:** publish the image and verify `nix run`, then list both on
+      the README and site.
 - [ ] **T744 — Measured claims.** Startup time and memory for Vix, Vim,
   Helix, Micro and Neovim on the same files with `hyperfine`, in a
   reproducible script with the machine stated, published in

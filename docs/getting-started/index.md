@@ -89,6 +89,33 @@ cd vix
 cargo build --release   # binary at target/release/vix
 ```
 
+### Not yet published / unverified
+
+> **None of these work yet.** They are templates in this repository (T742,
+> T743), waiting to be verified on a real machine or CI runner and then
+> published. Until then, use one of the channels above. The commands below
+> are what each channel will look like; see
+> [`packaging/index.md`](../../packaging/index.md) for the status of each.
+
+- **winget** (Windows): `winget install vixide.vix-tui`. Manifest not yet
+  submitted to winget-pkgs.
+- **Scoop** (Windows): `scoop install vix-tui` from a Vix bucket. The bucket
+  does not exist yet.
+- **AUR** (Arch): `vix-tui-bin`, for example `yay -S vix-tui-bin`. Not yet
+  pushed to the AUR.
+- **`cargo binstall`**: `cargo binstall vix-tui`. The metadata ships with
+  the next crates.io release of `vix-tui`.
+- **Nix**: `nix run github:vixide/vix` to try it, `nix profile install
+  github:vixide/vix` to install it. The flake has not been built with Nix
+  yet.
+- **mise**: `mise use -g cargo:vix-tui`, or
+  `mise use -g "ubi:vixide/vix[matching=vix-tui,exe=vix]"`. Not yet
+  tested.
+- **Container image** (try without installing): `docker run --rm -it
+  ghcr.io/vixide/vix` opens Vix on a demo workspace. The image builds and
+  runs from [`docker/Dockerfile`](../../docker/Dockerfile), but it is not
+  published to ghcr.io yet.
+
 ## First launch
 
 ```sh

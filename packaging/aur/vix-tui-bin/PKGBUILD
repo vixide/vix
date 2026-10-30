@@ -1,0 +1,29 @@
+# Maintainer: Joel Parker Henderson <joel@joelparkerhenderson.com>
+#
+# Template (T742): an AUR `-bin` package that repackages the release's own
+# glibc archive. Not pushed to the AUR. See packaging/README.md.
+pkgname=vix-tui-bin
+pkgver=1.8.0
+pkgrel=1
+pkgdesc='Vix: a keyboard-friendly terminal text editor and IDE (the vix command)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/vixide/vix'
+license=('Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only')
+depends=('gcc-libs' 'glibc')
+optdepends=('git: the Git menu'
+            'jujutsu: the Jujutsu menu')
+provides=('vix-tui')
+conflicts=('vix-tui')
+options=('!strip' '!debug')
+source_x86_64=("${url}/releases/download/${pkgver}/vix-tui-x86_64-unknown-linux-gnu.tar.xz")
+source_aarch64=("${url}/releases/download/${pkgver}/vix-tui-aarch64-unknown-linux-gnu.tar.xz")
+sha256sums_x86_64=('98402d053e5a674e7f032e0f537c63f995e08a69d3d315ab733252a0dd05a895')
+sha256sums_aarch64=('9299c9f86b4f62b34922088caea58fe2474e48ac29bf15a6b02b89113686b562')
+
+package() {
+  cd "vix-tui-${CARCH}-unknown-linux-gnu"
+  install -Dm755 vix "${pkgdir}/usr/bin/vix"
+  install -Dm644 vix.1 "${pkgdir}/usr/share/man/man1/vix.1"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}
