@@ -80,6 +80,9 @@ roxmltree = "0.21"
 percent-encoding = "2"
 pulldown-cmark = "0.13"
 sha2 = "0.11"
+# HMAC-SHA256 signing of Jupyter wire messages (T734, spec/jupyter); the
+# version `hkdf` already pulls in, on the same `digest` 0.11 as `sha2`.
+hmac = "0.13"
 similar = { version = "3", features = ["inline"] }
 spellbook = "0.4"
 sysinfo = "0.40"
@@ -147,6 +150,13 @@ loro = { version = "1.17", default-features = false }
 # Noise protocol (Cowork transport, T694): NK + psk0 over X25519, ChaCha20-Poly1305,
 # BLAKE2s. MIT OR Apache-2.0.
 snow = "0.10"
+# Pure-Rust ZeroMQ (zmq.rs; MIT, no `unsafe`) for the Jupyter kernel client
+# (T734, spec/jupyter): chosen in a measured spike over a `jupyter console`
+# subprocess, a Python bridge, `runtimelib` and the C++ libzmq bindings.
+# Only `vix-jupyter/process` (the opt-in `jupyter` feature) links it.
+# Features: the tokio runtime and TCP everywhere; the `ipc-transport`
+# feature (Unix-domain sockets) is added for Unix only, in vix-jupyter.
+zeromq = { version = "0.7", default-features = false, features = ["tokio-runtime", "tcp-transport"] }
 
 # Internal crates, declared once (T601): members say `vix-x.workspace = true`.
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "2.0.0" }
@@ -229,6 +239,8 @@ vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", ver
 vix-keybindings = { path = "crates/vix-keybindings", version = "2.0.0" }
 vix-keyboard-shortcut-panel = { path = "crates/vix-keyboard-shortcut-panel", version = "2.0.0" }
 vix-keymap-model = { path = "crates/vix-keymap-model", version = "2.0.0" }
+vix-jupyter = { path = "crates/vix-jupyter", version = "2.0.0" }
+vix-jupyter-core = { path = "crates/vix-jupyter-core", version = "2.0.0" }
 vix-large-file = { path = "crates/vix-large-file", version = "2.0.0" }
 vix-left-dock = { path = "crates/vix-left-dock", version = "2.0.0" }
 vix-list-state = { path = "crates/vix-list-state", version = "2.0.0" }

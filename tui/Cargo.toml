@@ -115,6 +115,11 @@ net = ["http", "ai", "sql", "im"]
 # `full`: the default build carries no collaboration or listening code. It
 # implies `terminal`: a guest renders and types into a shared terminal (T697).
 cowork = ["dep:vix-cowork", "dep:vix-cowork-net", "terminal"]
+# Jupyter kernel REPL (T734, spec/jupyter). Opt-in and NOT part of `full`
+# until its size cost is measured inside Vix (T734h). T734a/b built the
+# protocol core and the ZeroMQ transport; the App wiring is T734c, so the
+# feature links the transport but nothing calls it yet.
+jupyter = ["dep:vix-jupyter", "vix-jupyter/process"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -311,6 +316,8 @@ vix-http-client = { workspace = true, optional = true }
 # Real-time collaboration: the pure core and the encrypted transport (the `cowork` feature).
 vix-cowork = { workspace = true, optional = true }
 vix-cowork-net = { workspace = true, optional = true }
+# Jupyter kernel transport (the `jupyter` feature; `process` adds ZeroMQ).
+vix-jupyter = { path = "../crates/vix-jupyter", version = "2.0.0", default-features = false, optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { workspace = true }
 # Data and table state for the keybinding editor overlay (rebind/reset).

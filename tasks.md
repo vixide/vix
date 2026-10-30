@@ -8789,17 +8789,30 @@ editor by completion, diagnostics and never losing work first.
     `jupyter_client` JSON-lines bridge is the fallback. `runtimelib`
     (Zed's) changes too often for now (majors 4 and 5 shipped a day
     apart), and `zmq` needs the C++ libzmq. Remaining work:
-  - [ ] **T734a — `vix-jupyter-core`.** A pure crate with the wire codec
+  - [x] **T734a — `vix-jupyter-core`.** A pure crate with the wire codec
     (HMAC sign/verify, frames), typed messages, the connection file,
     kernelspec parsing and search paths, the `Output`/MIME model, ANSI
     stripping, and the Org `#+RESULTS:` formatter. Fixture tests use
     messages captured from the spike. **Medium.**
-  - [ ] **T734b — `vix-jupyter` transport.** Launch from kernelspec argv
+  - [x] **T734b — `vix-jupyter` transport.** Launch from kernelspec argv
     with a 0700 runtime dir, a 0600 connection file and IPC on Unix. A
     tokio `current_thread` worker thread owns the shell, IOPub and control
     sockets; the App polls a `KernelEvent` channel. Interrupt, restart and
     shutdown. Tests use an in-process fake kernel (ROUTER plus PUB), plus
     an opt-in real-ipykernel smoke test. **Medium.**
+  - **T734a and T734b done 2026-10-30** (`feat/t734ab-jupyter-core`):
+    crates `vix-jupyter-core` and `vix-jupyter`, a `jupyter_wire` fuzz
+    target, and a `jupyter` feature in `tui/Cargo.toml` that links the
+    transport but is used by nothing yet. The real-ipykernel smoke test
+    (`VIX_JUPYTER_PYTHON`) passed against ipykernel 7.4.0 in a throwaway venv,
+    including SIGINT interrupt and restart. Two differences from the
+    plan: the fixture tests use contents in ipykernel 7's shape rather than
+    bytes captured by the spike (the spike kept no captures), and an
+    `execute_reply` is held until IOPub's `idle` for the request (at most
+    1 s), so the App sees it after every output. Size: a standalone binary
+    using the whole transport is +1.58 MB (stripped release, against one
+    that only discovers kernelspecs); `vix` with `--features jupyter` but
+    no caller is +68 KB. T734h measures the real cost once T734c uses it.
   - [ ] **T734c — App wiring.** The opt-in `jupyter` capability feature,
     with `scripts/check` and CI lint and test runs for it. The Run →
     Jupyter submenu and the `jupyter.*` actions (palette, catalog, i18n
