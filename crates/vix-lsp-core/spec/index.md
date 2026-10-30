@@ -23,6 +23,28 @@ incomplete list) and `message::parse_completion_trigger_characters` reads
 result. How the host filters, triggers, and applies them is specified in
 the [lsp spec](../../vix-lsp/spec/index.md#completion-t612).
 
+## Document sync and semantic token requests (T615)
+
+`sync::SyncKind::from_initialize` reads `capabilities.textDocumentSync`
+(`2` is incremental, anything else full). `sync::diff(old, new, encoding)`
+returns the one `ContentChange` (an LSP `Range` of the old text plus its
+replacement) that turns `old` into `new`, or `None` when they are equal:
+the common prefix and suffix are kept, columns are in the given encoding,
+every LSP line break counts, and a CRLF pair or a multi-byte character is
+never split. `sync::apply` applies a change exactly as a server does (it is
+the reference the diff is property-tested against), on top of
+`sync::position_at` / `sync::offset_at`. `message::did_change_incremental_params`
+builds the ranged `didChange`.
+
+For semantic tokens, `message::parse_semantic_tokens_support` reads whether a
+server offers `range` and `full.delta`; `semantic_tokens_range_params` and
+`semantic_tokens_delta_params` build those requests;
+`parse_semantic_tokens_reply` returns a reply's raw `data` or delta `edits`
+with its `resultId`; `apply_semantic_tokens_edits` applies the edits to the
+previous data; and `decode_semantic_tokens` decodes data against the legend.
+How the host uses them is in the
+[lsp spec](../../vix-lsp/spec/index.md#semantic-token-requests-t615).
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

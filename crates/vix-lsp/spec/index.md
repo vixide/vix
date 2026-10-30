@@ -13,7 +13,8 @@ position maths — all pure and unit-tested). The host (`crates/vix-lsp/src/lib.
 it launches a server per language, reads its framed stdout on a background thread
 (an `mpsc` channel, like the run-command feature), writes requests to stdin, runs
 the `initialize`/`initialized` handshake, and keeps each open document in sync with
-full-text `didChange`. `App::poll_lsp` drains server messages once per event-loop
+`didChange` — one ranged change when the server negotiated incremental sync,
+the whole text otherwise (T615, § Document sync). `App::poll_lsp` drains server messages once per event-loop
 iteration.
 
 There is **no built-in server** — Vix launches only what you configure.
@@ -73,7 +74,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Selection Range | expand/shrink selection | Walks the server's `parent` chain of enclosing ranges around the cursor. |
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
 | Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
-| Semantic Tokens | automatic, re-requested on content change (T123a) | `textDocument/semanticTokens/full`, decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
+| Semantic Tokens | automatic, re-requested on content change and on scrolling (T123a, T615) | `textDocument/semanticTokens/range` for the lines around the view when the server offers it, else `full/delta` or `full` (§ Semantic token requests), decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
 
 ## Completion (T612)
 
@@ -269,8 +270,77 @@ converts between those and the editor's char offsets per line with
 
 Edits are detected with the editor's monotonic content revision: once per
 event-loop tick the active document is compared to the last value synced, and a
-`didChange` (full text) is sent only when it actually changed. The first sync of a
-file sends `didOpen`; closing its tab sends `didClose`.
+`didChange` is sent only when it actually changed. The first sync of a file sends
+`didOpen`; closing its tab sends `didClose`.
+
+**Incremental sync (T615).** The server's `capabilities.textDocumentSync` (a
+number, or `TextDocumentSyncOptions.change`) is read at `initialize`
+(`vix_lsp_core::sync::SyncKind`). For a server that asked for `2`
+(incremental), `Lsp` keeps the text it last sent that server for each open
+document and sends one ranged change: the common prefix and suffix of the old
+and new text are kept and the middle replaced (`vix_lsp_core::sync::diff`).
+Every other server gets the full text (`1`; also `0` and an absent capability,
+for which the full text is always safe), and so does a server whose
+`initialize` has not been answered yet, since its encoding and sync kind are
+still unknown. A text equal to the last one sent sends nothing and does not
+bump the version.
+
+The change is computed from two whole texts, not replayed from the editor's
+edit history, so every way a buffer changes gives a correct change with no
+extra hook: typing, several carets editing at once (one change spanning the
+first to the last edit), undo and redo, formatting and workspace edits, a
+reload from disk, and a Cowork peer's edits (`apply_remote_edits`, which bump
+the revision but are deliberately absent from the editor's edit log). The edit
+log (`start_edit_log`/`take_edit_log`) was not reused for this: it records only
+local edits, it has a single consumer (the Cowork session drains it), and a tab
+is synced only while active, so the log would have to buffer every edit made
+to a background tab. Remote-authority workspaces need nothing special either:
+the diff works on the buffer text, whatever machine the server runs on.
+
+Positions in the change use the server's negotiated encoding (UTF-8, UTF-16 or
+UTF-32), count every LSP line break (`\n`, `\r\n`, `\r`), and never fall
+between the `\r` and `\n` of a CRLF pair; a diff that would start or end
+inside a multi-byte character backs off to its boundary. A property test
+(`vix-lsp-core`'s `sync` tests) applies generated edit sequences, including
+an undo back to the start, and checks the server-side result equals the
+buffer after every step in all three encodings; `tui/tests/lsp_smoke.rs`
+checks the same end to end against a Python mock server that applies each
+change itself, for typing, several carets, undo, redo and a remote edit, and
+that a full-sync server still gets the whole text.
+
+## Semantic token requests (T615)
+
+The client advertises `semanticTokens.requests` `{ "full": { "delta": true },
+"range": true }`, and reads the server's offer from
+`semanticTokensProvider` at `initialize` (`message::parse_semantic_tokens_support`).
+`Lsp::request_semantic_tokens(path, visible)` sends each server:
+
+| Server offers | Request |
+| ------------- | ------- |
+| `range`, and the host passed the visible range | `semanticTokens/range` for that range |
+| `full.delta`, and a full result with a `resultId` is stored for the document | `semanticTokens/full/delta` with `previousResultId` |
+| otherwise | `semanticTokens/full` |
+
+A full or delta reply with a `resultId` is kept as the base for the next delta
+(only for a server that offers deltas). A delta reply's `edits` are applied to
+that base (`message::apply_semantic_tokens_edits`, highest `start` first); one
+that cannot be applied drops the base, so the next request is a full one. A
+range reply is never kept as a base. Each request records the document version
+it was made against, like the T652 edit-returning requests, and a reply for a
+version the server no longer has is not shown (it is still kept as a delta
+base, since the server's next delta is computed against it).
+
+The host (`App::poll_semantic_tokens`, `tui/src/app/semantic_tokens.rs`) asks
+once a server for the document is ready and has offered tokens
+(`Lsp::semantic_tokens_ranged`), after the active document is synced. Switching
+to a document, or reopening one after a server restart, asks at once; a change
+to the same document waits 150 ms (`SEMANTIC_DEBOUNCE`) so a burst of
+keystrokes sends one request. For a ranged server the request covers a window
+of lines aligned to the view's height and reaching one view above and below
+the visible lines (`token_window`); scrolling within the window sends nothing,
+and scrolling out of it asks again after the same debounce. The reply replaces
+the whole semantic-token layer, so lines outside the window lose their tokens
+until they are scrolled to.
 
 **Edit-returning replies are tied to their document (T652).** Formatting,
 range formatting and linked-editing requests record the path, URI and the

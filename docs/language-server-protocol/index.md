@@ -49,8 +49,12 @@ Most actions live under **Tools → Language Server** and the command palette
 | **Inlay hints** | Inline type/parameter annotations (toggle in **View → Editor**). | `inlayHint` |
 | **Linked editing** | Edit linked ranges (e.g. an open/close tag pair) together. | `linkedEditingRange` |
 
-Lifecycle (`initialize`/`initialized`/`shutdown`/`exit`) and full-document sync
-(`didOpen`/`didChange`/`didClose`/`didSave`) are handled automatically.
+Lifecycle (`initialize`/`initialized`/`shutdown`/`exit`) and document sync
+(`didOpen`/`didChange`/`didClose`/`didSave`) are handled automatically. A server
+that asks for incremental sync is sent only the changed range of each edit;
+others get the whole document. Semantic tokens are requested for the lines
+around the view when the server supports ranges, and refreshed shortly after
+you stop typing or scroll elsewhere.
 
 ## Server status and progress
 

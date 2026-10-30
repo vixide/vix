@@ -102,8 +102,9 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // (`publishDiagnostics`) — some servers only enable pull
                 // support for clients that declare this.
                 "diagnostic": {},
-                // T123a: only `full` (whole-document) requests -- no
-                // `range` or `full.delta` in v1. `tokenTypes`/
+                // T123a, T615: `full`, `full/delta` and `range` requests
+                // (the host asks for the viewport when `range` is offered,
+                // else a delta against the last full result). `tokenTypes`/
                 // `tokenModifiers` list the LSP 3.17 standard set; per
                 // spec a server may still report types/modifiers outside
                 // it (its own `semanticTokensProvider.legend` is
@@ -111,7 +112,7 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // hard filter — `parse_semantic_tokens` decodes against
                 // whatever legend the server actually sent.
                 "semanticTokens": {
-                    "requests": { "full": true },
+                    "requests": { "full": { "delta": true }, "range": true },
                     "tokenTypes": [
                         "namespace", "type", "class", "enum", "interface",
                         "struct", "typeParameter", "parameter", "variable",
@@ -170,6 +171,46 @@ pub fn did_change_full_params(uri: &str, version: i64, text: &str) -> Value {
         "textDocument": { "uri": uri, "version": version },
         "contentChanges": [ { "text": text } ]
     })
+}
+
+/// `textDocument/didChange` params using incremental sync (T615): each
+/// change replaces a range of the text the server last received.
+#[must_use]
+pub fn did_change_incremental_params(
+    uri: &str,
+    version: i64,
+    changes: &[crate::sync::ContentChange],
+) -> Value {
+    let changes: Vec<Value> = changes
+        .iter()
+        .map(|c| json!({ "range": range_json(c.range), "text": c.text }))
+        .collect();
+    json!({
+        "textDocument": { "uri": uri, "version": version },
+        "contentChanges": changes
+    })
+}
+
+/// An LSP `Range` object.
+fn range_json(range: Range) -> Value {
+    json!({
+        "start": { "line": range.start.line, "character": range.start.character },
+        "end": { "line": range.end.line, "character": range.end.character }
+    })
+}
+
+/// `textDocument/semanticTokens/range` params (T615): the tokens for `range`
+/// only, typically the visible part of the document.
+#[must_use]
+pub fn semantic_tokens_range_params(uri: &str, range: Range) -> Value {
+    json!({ "textDocument": { "uri": uri }, "range": range_json(range) })
+}
+
+/// `textDocument/semanticTokens/full/delta` params (T615): the edits since
+/// the result named `previous_result_id`.
+#[must_use]
+pub fn semantic_tokens_delta_params(uri: &str, previous_result_id: &str) -> Value {
+    json!({ "textDocument": { "uri": uri }, "previousResultId": previous_result_id })
 }
 
 /// `textDocument/didClose` params.
@@ -516,13 +557,151 @@ pub fn parse_workspace_diagnostics(result: &Value) -> Vec<(String, Vec<Diagnosti
 /// rather than treated as fatal to the rest.
 #[must_use]
 pub fn parse_semantic_tokens(result: &Value, legend: &[String]) -> Vec<SemanticToken> {
-    let Some(data) = result.get("data").and_then(Value::as_array) else {
+    let Some(data) = result.get("data") else {
         return Vec::new();
     };
-    let nums: Vec<u32> = data
+    decode_semantic_tokens(&u32_array(data), legend)
+}
+
+/// A JSON array of unsigned integers; anything else is skipped.
+fn u32_array(data: &Value) -> Vec<u32> {
+    data.as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Which `semanticTokens` requests a server offers
+/// (`capabilities.semanticTokensProvider`, T615).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SemanticTokensSupport {
+    /// `textDocument/semanticTokens/range` (`range` is `true` or an object).
+    pub range: bool,
+    /// `textDocument/semanticTokens/full/delta` (`full.delta` is `true`).
+    pub delta: bool,
+}
+
+/// Read [`SemanticTokensSupport`] from an `initialize` result.
+#[must_use]
+pub fn parse_semantic_tokens_support(result: &Value) -> SemanticTokensSupport {
+    let Some(provider) = result
+        .get("capabilities")
+        .and_then(|c| c.get("semanticTokensProvider"))
+    else {
+        return SemanticTokensSupport::default();
+    };
+    let offered = |v: Option<&Value>| v.is_some_and(|v| v.as_bool().unwrap_or(v.is_object()));
+    SemanticTokensSupport {
+        range: offered(provider.get("range")),
+        delta: provider
+            .get("full")
+            .and_then(|f| f.get("delta"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }
+}
+
+/// One `SemanticTokensEdit` of a `full/delta` reply: replace `delete_count`
+/// integers of the previous `data` array at `start` with `data`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticTokensEdit {
+    /// Index into the previous `data` array.
+    pub start: u32,
+    /// How many integers to remove there.
+    pub delete_count: u32,
+    /// The integers to insert there.
+    pub data: Vec<u32>,
+}
+
+/// A semantic-tokens reply in raw (still encoded) form (T615): a whole
+/// `data` array, or a `full/delta` reply's edits against the previous one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SemanticTokensReply {
+    /// A `SemanticTokens` result (`full` or `range`, or a delta request the
+    /// server answered in full).
+    Data {
+        /// The result id to send as `previousResultId` next time, if any.
+        result_id: Option<String>,
+        /// The encoded tokens.
+        data: Vec<u32>,
+    },
+    /// A `SemanticTokensDelta` result.
+    Edits {
+        /// The result id to send as `previousResultId` next time, if any.
+        result_id: Option<String>,
+        /// The edits, in the order the server sent them.
+        edits: Vec<SemanticTokensEdit>,
+    },
+}
+
+/// A non-negative JSON integer field as `u32`, or 0.
+fn u32_field(v: &Value, key: &str) -> u32 {
+    v.get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(0)
+}
+
+/// Parse a `semanticTokens/*` result into its raw form; `None` for `null` or
+/// a result with neither `data` nor `edits`.
+#[must_use]
+pub fn parse_semantic_tokens_reply(result: &Value) -> Option<SemanticTokensReply> {
+    let result_id = result
+        .get("resultId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if let Some(data) = result.get("data") {
+        return Some(SemanticTokensReply::Data {
+            result_id,
+            data: u32_array(data),
+        });
+    }
+    let edits = result
+        .get("edits")?
+        .as_array()?
         .iter()
-        .filter_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()))
+        .map(|e| SemanticTokensEdit {
+            start: u32_field(e, "start"),
+            delete_count: u32_field(e, "deleteCount"),
+            data: e.get("data").map(u32_array).unwrap_or_default(),
+        })
         .collect();
+    Some(SemanticTokensReply::Edits { result_id, edits })
+}
+
+/// Apply a `full/delta` reply's `edits` to the `previous` data array. The
+/// edits all refer to `previous`, so they are applied from the highest
+/// `start` down; `None` if one falls outside it or two overlap (the client
+/// then asks for the full result again).
+#[must_use]
+pub fn apply_semantic_tokens_edits(
+    previous: &[u32],
+    edits: &[SemanticTokensEdit],
+) -> Option<Vec<u32>> {
+    let mut sorted: Vec<&SemanticTokensEdit> = edits.iter().collect();
+    sorted.sort_by_key(|e| std::cmp::Reverse(e.start));
+    let mut data = previous.to_vec();
+    let mut limit = data.len();
+    for e in sorted {
+        let start = e.start as usize;
+        let end = start.checked_add(e.delete_count as usize)?;
+        if end > limit {
+            return None;
+        }
+        data.splice(start..end, e.data.iter().copied());
+        limit = start;
+    }
+    Some(data)
+}
+
+/// Decode an encoded semantic-tokens `data` array against `legend` — the
+/// shared half of [`parse_semantic_tokens`] (T615: a delta reply is decoded
+/// after its edits are applied).
+#[must_use]
+pub fn decode_semantic_tokens(nums: &[u32], legend: &[String]) -> Vec<SemanticToken> {
     let mut tokens = Vec::new();
     let mut line = 0_u32;
     let mut character = 0_u32;
@@ -1644,13 +1823,122 @@ mod tests {
     fn capabilities_declare_semantic_tokens_full_requests() {
         let params = initialize_params(None, &[]);
         let semantic = &params["capabilities"]["textDocument"]["semanticTokens"];
-        assert_eq!(semantic["requests"]["full"], true);
+        assert_eq!(semantic["requests"]["full"]["delta"], true);
+        assert_eq!(semantic["requests"]["range"], true);
         assert!(
             semantic["tokenTypes"]
                 .as_array()
                 .unwrap()
                 .contains(&json!("function"))
         );
+    }
+
+    #[test]
+    fn incremental_did_change_carries_ranged_changes() {
+        let change = crate::sync::ContentChange {
+            range: Range {
+                start: Position {
+                    line: 1,
+                    character: 2,
+                },
+                end: Position {
+                    line: 1,
+                    character: 4,
+                },
+            },
+            text: "xy".into(),
+        };
+        let params = did_change_incremental_params("file:///a.rs", 7, &[change]);
+        assert_eq!(params["textDocument"]["version"], 7);
+        let c = &params["contentChanges"][0];
+        assert_eq!(c["range"]["start"], json!({ "line": 1, "character": 2 }));
+        assert_eq!(c["range"]["end"], json!({ "line": 1, "character": 4 }));
+        assert_eq!(c["text"], "xy");
+    }
+
+    #[test]
+    fn semantic_tokens_support_reads_range_and_delta() {
+        let support = |provider: Value| {
+            parse_semantic_tokens_support(
+                &json!({ "capabilities": { "semanticTokensProvider": provider } }),
+            )
+        };
+        assert_eq!(
+            support(json!({ "full": { "delta": true }, "range": true })),
+            SemanticTokensSupport {
+                range: true,
+                delta: true
+            }
+        );
+        assert_eq!(
+            support(json!({ "full": true, "range": {} })),
+            SemanticTokensSupport {
+                range: true,
+                delta: false
+            }
+        );
+        assert_eq!(
+            support(json!({ "full": true })),
+            SemanticTokensSupport::default()
+        );
+        assert_eq!(
+            parse_semantic_tokens_support(&json!({})),
+            SemanticTokensSupport::default()
+        );
+    }
+
+    #[test]
+    fn semantic_tokens_range_and_delta_params() {
+        let range = Range {
+            start: Position {
+                line: 3,
+                character: 0,
+            },
+            end: Position {
+                line: 40,
+                character: 0,
+            },
+        };
+        let p = semantic_tokens_range_params("file:///a.rs", range);
+        assert_eq!(p["range"]["end"]["line"], 40);
+        let p = semantic_tokens_delta_params("file:///a.rs", "r1");
+        assert_eq!(p["previousResultId"], "r1");
+    }
+
+    #[test]
+    fn semantic_tokens_delta_edits_apply_to_the_previous_data() {
+        let reply = parse_semantic_tokens_reply(&json!({
+            "resultId": "2",
+            "edits": [
+                { "start": 5, "deleteCount": 5 },
+                { "start": 0, "deleteCount": 1, "data": [1] }
+            ]
+        }))
+        .unwrap();
+        let SemanticTokensReply::Edits { result_id, edits } = reply else {
+            panic!("expected edits");
+        };
+        assert_eq!(result_id.as_deref(), Some("2"));
+        let previous = [0, 0, 3, 0, 0, 1, 2, 3, 1, 0];
+        assert_eq!(
+            apply_semantic_tokens_edits(&previous, &edits),
+            Some(vec![1, 0, 3, 0, 0])
+        );
+        // An edit past the end means the client must ask for everything.
+        let bad = [SemanticTokensEdit {
+            start: 9,
+            delete_count: 5,
+            data: Vec::new(),
+        }];
+        assert_eq!(apply_semantic_tokens_edits(&previous, &bad), None);
+        assert_eq!(
+            parse_semantic_tokens_reply(&json!({ "resultId": "1", "data": [0, 0, 1, 0, 0] })),
+            Some(SemanticTokensReply::Data {
+                result_id: Some("1".into()),
+                data: vec![0, 0, 1, 0, 0]
+            })
+        );
+        assert_eq!(parse_semantic_tokens_reply(&Value::Null), None);
     }
 
     #[test]
