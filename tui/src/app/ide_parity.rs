@@ -620,10 +620,12 @@ impl App {
                 return;
             }
         };
-        let shell = if cfg!(windows) {
-            crate::tasks::run_config::Shell::Cmd
-        } else {
+        // The shell where the configuration runs (T716): a remote
+        // workspace's is POSIX even from a Windows client.
+        let shell = if crate::authority::current().shell_is_posix() {
             crate::tasks::run_config::Shell::Posix
+        } else {
+            crate::tasks::run_config::Shell::Cmd
         };
         let command = plan.shell_command(shell);
         let root = self.root.clone();

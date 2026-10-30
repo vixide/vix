@@ -27,6 +27,21 @@ it.
   host allowed to type. The PTY itself never leaves this machine; only its
   rendered screen is shared.
 
+## Remote workspaces (T716)
+
+The PTY is always this machine's; what runs on it comes from the workspace
+authority (`vix_authority::Authority::terminal`). Locally that is the shell
+above, in the workspace root, unchanged. In an SSH workspace it is `ssh -t` over
+the workspace's shared connection (`ControlMaster`), whose far end starts the
+remote user's login shell (`$SHELL -l`, else `/bin/sh -l`) in the remote
+workspace directory; the local `ssh` starts in Vix's own working directory.
+In an untrusted remote workspace (T714) the remote shell starts in the remote
+home directory instead, so nothing the workspace defines (a shell `cd` hook,
+an `.envrc`) runs by itself, and the status line says so
+(`status.remote_terminal_home`). Closing the terminal kills the local `ssh`,
+which ends the remote shell. `Terminal::open_command` takes any `OsStr`
+program and arguments.
+
 ## As implemented in Vix
 
 The `terminal` module owns the PTY/child/parser and the key encoder (unit tested).
@@ -37,5 +52,8 @@ polls fast while a terminal is open so output appears promptly.
 ## Limitations
 
 - Mouse reporting is not forwarded to the shell.
+- A remote terminal needs a connection that doesn't prompt (`BatchMode`, as
+  every remote operation); with connection sharing off (Windows' OpenSSH, or
+  a control directory path too long for a socket) it makes a new connection.
 - Scrollback beyond the visible grid is not shown (the grid tracks the live
   screen only).

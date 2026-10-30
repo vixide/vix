@@ -6,7 +6,7 @@ It lets a remote machine stand in for the local one. The cross-cutting design is
 [`spec/remote-editing`](../../../spec/remote-editing/index.md); this crate is
 its first piece (T710, T711).
 
-**Status:** Shipped (T710, T711; finished 2026-10-29; T712 and T715 2026-10-30).
+**Status:** Shipped (T710, T711; finished 2026-10-29; T712, T715 and T716 2026-10-30).
 `LocalAuthority` is installed by default. `SshAuthority` (the `ssh`
 feature, [`spec/ssh`](ssh/index.md)) is installed by the experimental
 `vix ssh://…` command line and by **File → Open Remote…** (T713; the App
@@ -35,6 +35,26 @@ side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
   project-wide searches run `rg` (else `grep`) through `command` instead of
   reading every file ([`vix-workspace-search`'s
   spec](../../vix-workspace-search/spec/index.md#remote-search-t715)).
+- `shell_is_posix()` (T716) says whether `command` runs on a POSIX system,
+  so a shell command line for it is `sh -c` rather than `cmd /C`: this
+  machine's platform by default, always `true` for `SshAuthority` (so a
+  Windows client's tasks, run configurations and **Run Command…** run `sh`
+  on its remote).
+- `terminal(shell, cwd)` (T716) returns the `ProcessSpec` the integrated
+  terminal puts on a **local** pseudo-terminal: for `LocalAuthority`,
+  `shell` in `cwd` (exactly the old behavior); for `FakeAuthority`, `shell`
+  in `cwd`'s backing directory (the backing root when `cwd` is `None`); for
+  `SshAuthority`, `ssh -t` over the shared connection into the remote login
+  shell in `cwd` ([`spec/ssh`](ssh/index.md#the-terminal-t716)). `cwd` is
+  an authority path, `None` meaning the home directory on that side. The
+  default serves a local authority and refuses (`Unsupported`) for any
+  other, so a new remote authority must say how its terminal works.
+- `can_run(auth, program)` (T716): whether `program` can start under
+  `auth` — `which` for a bare name, `is_file` for one with a `/`. The
+  language-server and debug-adapter spawns call it under a non-local
+  authority, so a server missing on the remote side fails to start as it
+  would locally (an `ssh` that starts and then reports "not found" would
+  look like a crash and be respawned).
 - `current()` returns the installed authority (the local one while the slot
   is empty); `install(authority)` replaces it and returns the previous one.
   The slot is process-wide, like Fresh's single authority: one Vix process
@@ -97,7 +117,7 @@ workspace.
 | IM | a message's code reference (`im_inside_root`: exists, is a file, canonical path inside the root), the share-path and thread-path root-relative fallbacks, and the anchored review threads under `<root>/.vix/im/threads/*.json` (list, read, atomic write, id-collision probe) — they are committed workspace files |
 | HTTP client | `.vix/http-env.json` and the active-environment file (`vix-http-client` `env`), `{{$dotenv}}` and `< file` request bodies (`rest`). The request itself is sent from this machine. |
 | Other | Cowork's path confinement, coverage-report path matching (`vix-coverage`), LSP diagnostic path keying (`vix-lsp`), jj/git repo probes for **init**, the OC build/compose file lookup, Prettier's project-local `node_modules/.bin` lookup |
-| Processes | the task/workspace-search/shell-filter shell (`spawn_shell`, `run_shell_filter`), direct argv runs (`spawn_argv`: git/jj/oc commands, program resolved with `Authority::which`), every `vix-git` runner (`git_command`), `vix-git-graph`, LSP servers, DAP adapters, the Prettier formatter (and its working-directory check) |
+| Processes | the task/workspace-search/shell-filter shell (`spawn_shell`, `run_shell_filter`; `sh -c` or `cmd /C` by `shell_is_posix`), direct argv runs (`spawn_argv`: git/jj/oc commands, program resolved with `Authority::which`), every `vix-git` runner (`git_command`), `vix-git-graph`, LSP servers and DAP adapters (looked up with `can_run` and started in the workspace when not local, T716), the Prettier formatter (and its working-directory check), the integrated terminal's process (`terminal`, T716) |
 
 Library crates that only receive text or paths from the App (parsers,
 panels, `vix-org`, `vix-im`'s resolvers, …) don't touch the authority; the
@@ -140,8 +160,8 @@ machine running the UI even when the workspace is remote.
 - **Diagnostics and integrations with their own transport**: `vix --doctor`
   (checks the local install), the OCI engine CLI's own runner and engine
   lookup (`vix-oci`, `oc.rs`'s `which_on_path`; T718 owns containers), the
-  integrated terminal's PTY (T716 owns a remote terminal), Hunspell as an
-  external checker.
+  integrated terminal's PTY itself (always local; what runs on it comes from
+  `Authority::terminal`, T716), Hunspell as an external checker.
 - **Implementation and tooling**: `vix-fileops` (the local implementation's
   engine), `vix-authority` itself, and the action catalog's source scan
   (`vix-action-catalog` `dispatch_scan`, used by tests and the docs

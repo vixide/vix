@@ -104,7 +104,27 @@ remote is POSIX). The caller configures stdio and spawns as before; anything
 it sets on the `Command` itself (environment, working directory, process
 group) applies to the local `ssh`, not the remote program, so call sites put
 those in the spec. Stopping the local `ssh` closes the channel; a remote
-program that ignores its closed stdin/stdout may keep running (T716/T717).
+program that ignores its closed stdin/stdout may keep running (T717).
+
+Language servers and debug adapters (T716) go through `command` like any
+other process. Their stdio is the `ssh` channel, so the framed protocol needs
+no proxy; the App looks each one up first with `vix_authority::can_run`
+(one `command -v` round trip) and starts it in the workspace root. Their
+paths are the remote's own, so a `file://` URI built from an authority path
+is already the URI the remote server expects.
+
+### The terminal (T716)
+
+`terminal(_, cwd)` returns `ssh -t -o BatchMode=… -o ConnectTimeout=… -o
+ControlMaster=auto -o ControlPath=… -o ControlPersist=… [-p] [-l] -- HOST
+<envelope>`: the same options and shared connection as every operation,
+with `-t` (a remote pseudo-terminal) in place of `-T`. The script is `cd -P
+-- <cwd>` (left out when `cwd` is `None`; a failing `cd` leaves the shell in
+the home directory with `cd`'s own message) then `exec "${SHELL:-/bin/sh}"
+-l`, the remote user's login shell. The local shell name is not used, and
+the spec sets no local working directory. The App runs it on a local PTY;
+`TERM` travels with `ssh` as usual. Closing the terminal kills the local
+`ssh`, which closes the remote session (the remote shell gets a hangup).
 
 ## T710 leftovers decided here
 
@@ -133,7 +153,8 @@ round-trips, and `env_remove` removes a variable the local process had;
 saves write through links, keep the mode, refuse a stale version and leave
 no temp files; error kinds; odd names (newline, quote, `$`, `*`, leading
 `-`, non-ASCII) list, read and walk; every installed login shell, and the decoder under every installed `/bin/sh` candidate (`dash`, `bash`, `ksh`, `mksh`); property
-tests for both quoting layers. `a_real_host_conforms` runs the suite against
+tests for both quoting layers. `a_real_host_conforms` runs the suite (and, T716,
+`can_run` and the terminal's script without a PTY) against
 the host in `VIX_TEST_SSH_HOST` (`user@host` or a remote name) and does
 nothing without it. [`scripts/test-ssh-local`](../../../../scripts/test-ssh-local) (T719) runs
 it against a throwaway non-root `sshd` on `127.0.0.1` with generated keys, its own
@@ -142,7 +163,10 @@ adds `-F`, never touching `~/.ssh`; `.github/workflows/ssh.yml` runs that script
 `ubuntu-latest` when this crate changes, or on demand (GitHub only; see
 [`spec/ci`](../../../../spec/ci/index.md)). `tui/tests/authority_ssh.rs`
 installs an `SshAuthority` over the fake `ssh` and drives the App's open and
-save. Unit tests cover the URL forms, both `stat` flavors' replies and the
+save; `tui/tests/authority_remote_tools.rs` (T716) drives a language server,
+a debug adapter, a run configuration and the terminal over it, and
+`the_terminal_is_a_login_shell_over_ssh_t_in_the_workspace` checks the
+terminal's argv and runs its script. Unit tests cover the URL forms, both `stat` flavors' replies and the
 walk filters.
 
 ## Host keys and secrets (T714)
@@ -169,8 +193,8 @@ password-like values planted in the settings.
   dialog; trust prompt~~ — T713, T714 (see
   [`spec/remote-editing`](../../../../spec/remote-editing/index.md)).
 - Per-path routing (a local file opened while a remote workspace is
-  installed still goes to the remote); remote search with `rg` (T715);
-  remote LSP/DAP path mapping and a remote terminal (T716).
+  installed still goes to the remote). ~~Remote search with `rg`~~ (T715);
+  ~~remote LSP/DAP path mapping and a remote terminal~~ (T716).
 - Batching: the external-change poll stats each open file over its own round
   trip (T717's agent).
 - The remote `PATH` is that of a non-interactive `sh` (profile files are not

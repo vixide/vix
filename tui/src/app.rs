@@ -13491,10 +13491,10 @@ impl App {
         // both: `{ … ; } 2>&1` groups a `;`/`&&`-chained POSIX command so the
         // redirect covers all of it, not just its last stage; `cmd.exe` has
         // no `{ }` but its own `( … )` grouping does the same job (T547).
-        let script = if cfg!(windows) {
-            format!("({cmd}) 2>&1")
-        } else {
+        let script = if crate::authority::current().shell_is_posix() {
             format!("{{ {cmd} ; }} 2>&1")
+        } else {
+            format!("({cmd}) 2>&1")
         };
         // Explicitly closed rather than inherited: a background command has
         // no business reading from vix's own stdin (the terminal device vix
@@ -13865,8 +13865,10 @@ fn display_key(k: &str) -> String {
     }
 }
 
-/// Build a `Command` that runs `script` as one shell command line on this
-/// platform: `sh -c script` on Unix, `cmd /C script` on Windows (T547).
+/// Build a `Command` that runs `script` as one shell command line where
+/// `auth` runs it: `sh -c script` on a POSIX side, `cmd /C script` on
+/// Windows (T547). The side is the authority's, not this machine's (T716):
+/// a Windows client's SSH workspace runs `sh` on its POSIX remote.
 /// Mirrors `toggle_terminal`'s own interactive-shell choice, but for the
 /// "run one command line, capture its output" shape `run_command_in`/
 /// `spawn_ai_cli` both need instead of an interactive PTY session.
@@ -13891,11 +13893,20 @@ fn display_key(k: &str) -> String {
 /// to the command line completely unescaped — safe here because it is
 /// already exactly the text `cmd.exe` itself should parse, not user input
 /// reaching this function unquoted.
-#[cfg(all(windows, feature = "tasks"))]
-fn shell_command(script: &str) -> crate::authority::ProcessSpec {
-    crate::authority::ProcessSpec::new("cmd")
-        .arg("/C")
-        .raw_arg(script)
+#[cfg(feature = "tasks")]
+fn shell_command(
+    auth: &dyn crate::authority::Authority,
+    script: &str,
+) -> crate::authority::ProcessSpec {
+    if auth.shell_is_posix() {
+        crate::authority::ProcessSpec::new("sh")
+            .arg("-c")
+            .arg(script)
+    } else {
+        crate::authority::ProcessSpec::new("cmd")
+            .arg("/C")
+            .raw_arg(script)
+    }
 }
 
 /// Start `script` in the platform shell in `dir` with stdin closed, stdout
@@ -13916,7 +13927,7 @@ fn spawn_shell_on(
     dir: &Path,
     no_tty: bool,
 ) -> std::io::Result<std::process::Child> {
-    let mut spec = shell_command(script).current_dir(dir);
+    let mut spec = shell_command(auth, script).current_dir(dir);
     if no_tty {
         spec = no_tty_prompts(spec);
     }
@@ -13961,8 +13972,10 @@ fn run_shell_filter(
             buf
         })
     }
-    let mut command = crate::authority::current()
-        .command(&no_tty_prompts(shell_command(script).current_dir(dir)))?;
+    let auth = crate::authority::current();
+    let mut command = auth.command(&no_tty_prompts(
+        shell_command(&*auth, script).current_dir(dir),
+    ))?;
     detach_from_tty(&mut command);
     let mut child = command
         .stdin(std::process::Stdio::piped())
@@ -14116,13 +14129,6 @@ fn is_auth_failure_line(line: &str) -> bool {
         || l.contains("host key verification failed")
         || l.contains("could not read username")
         || l.contains("could not read password")
-}
-
-#[cfg(all(not(windows), feature = "tasks"))]
-fn shell_command(script: &str) -> crate::authority::ProcessSpec {
-    crate::authority::ProcessSpec::new("sh")
-        .arg("-c")
-        .arg(script)
 }
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over

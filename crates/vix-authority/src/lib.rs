@@ -246,6 +246,42 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// authority can't run processes at all (or, for the fake, when the
     /// working directory escapes its namespace).
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command>;
+
+    /// Whether [`Authority::command`] runs on a POSIX system, so a shell
+    /// script for it is `sh -c` rather than Windows' `cmd /C` (T716). The
+    /// default is this machine's platform; the SSH authority's remote is
+    /// always POSIX, even from a Windows client.
+    fn shell_is_posix(&self) -> bool {
+        !cfg!(windows)
+    }
+
+    /// The process that opens an interactive shell for the integrated
+    /// terminal (T716). It runs **on this machine**, on a local
+    /// pseudo-terminal: for the local authority it is `shell` itself in
+    /// `cwd`; for a remote one it is a client (`ssh -t`) whose far end
+    /// starts the remote user's login shell in `cwd` (an authority path).
+    /// `cwd` of `None` means the home directory on the authority's side. The
+    /// returned spec's own working directory, when set, is a local one.
+    ///
+    /// The default serves a local authority only (a remote one has nothing
+    /// local to put on a PTY), so any other authority must override it.
+    ///
+    /// # Errors
+    /// `Unsupported` when the authority has no interactive shell to offer,
+    /// or the spec can't be built (an invalid path).
+    fn terminal(&self, shell: &str, cwd: Option<&Path>) -> io::Result<ProcessSpec> {
+        if !self.is_local() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "this workspace has no interactive shell",
+            ));
+        }
+        let spec = ProcessSpec::new(shell);
+        Ok(match cwd {
+            Some(dir) => spec.current_dir(dir),
+            None => spec,
+        })
+    }
 }
 
 /// The refusal inside the `io::Error` from
@@ -275,6 +311,22 @@ impl WriteConflict {
     pub fn is(e: &io::Error) -> bool {
         e.get_ref()
             .is_some_and(<dyn std::error::Error + Send + Sync>::is::<Self>)
+    }
+}
+
+/// Whether `program` can be started under `auth` (T716): an executable on
+/// its `PATH` ([`Authority::which`], resolved on the authority's side), or,
+/// for a name with a `/`, a file at that path. A remote language server or
+/// debug adapter is looked up this way before it is spawned, so a missing
+/// one fails to start as it would locally rather than as an `ssh` that
+/// starts and then exits ("not found" looks like a crash). One round trip
+/// over SSH.
+#[must_use]
+pub fn can_run(auth: &dyn Authority, program: &str) -> bool {
+    if program.contains('/') {
+        auth.is_file(Path::new(program))
+    } else {
+        auth.which(program).is_some()
     }
 }
 
@@ -348,5 +400,28 @@ mod tests {
     fn the_slot_defaults_to_local() {
         assert_eq!(current().name(), "local");
         assert!(current().is_local());
+    }
+
+    #[test]
+    fn the_terminal_runs_the_local_shell_or_maps_the_fake_directory() {
+        let local = LocalAuthority
+            .terminal("/bin/zsh", Some(Path::new("/w")))
+            .unwrap();
+        assert_eq!(local.program(), "/bin/zsh");
+        assert_eq!(local.get_args().len(), 0);
+        assert_eq!(local.cwd(), Some(Path::new("/w")));
+        assert_eq!(LocalAuthority.shell_is_posix(), !cfg!(windows));
+
+        let dir = std::env::temp_dir().join(format!("vix-authority-term-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("proj")).unwrap();
+        let fake = FakeAuthority::new(&dir).unwrap();
+        let spec = fake.terminal("sh", Some(Path::new("/proj"))).unwrap();
+        assert_eq!(spec.cwd(), Some(fake.backing().join("proj").as_path()));
+        assert_eq!(
+            fake.terminal("sh", None).unwrap().cwd(),
+            Some(fake.backing())
+        );
+        assert!(fake.terminal("sh", Some(Path::new("/../x"))).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

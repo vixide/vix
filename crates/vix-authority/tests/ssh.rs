@@ -208,6 +208,65 @@ fn a_process_spec_becomes_a_quoted_remote_script() {
     cleanup(&dir);
 }
 
+/// T716: the integrated terminal's process is `ssh -t` over the shared
+/// connection, and its script starts the remote login shell in the
+/// workspace directory (or the home directory without one).
+#[test]
+fn the_terminal_is_a_login_shell_over_ssh_t_in_the_workspace() {
+    let dir = scratch("terminal");
+    let auth = authority(&dir, "/bin/sh");
+    assert!(auth.shell_is_posix());
+    let cwd = dir.join("a 'proj'");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let spec = auth.terminal("/ignored/local/shell", Some(&cwd)).unwrap();
+    assert_eq!(spec.cwd(), None, "no local working directory is chosen");
+    let args: Vec<String> = spec
+        .get_args()
+        .iter()
+        .map(|a| match a {
+            vix_authority::Arg::Plain(a) | vix_authority::Arg::Raw(a) => {
+                a.to_string_lossy().into_owned()
+            }
+            _ => String::new(),
+        })
+        .collect();
+    assert_eq!(args[0], "-t", "a remote pseudo-terminal: {args:?}");
+    assert!(args.iter().any(|a| a.starts_with("ControlPath=")));
+    assert!(args.iter().any(|a| a == "BatchMode=yes"));
+    let host = args.iter().position(|a| a == "--").unwrap() + 1;
+    assert_eq!(args[host], "example.invalid");
+    assert_eq!(args.len(), host + 2, "one remote command word");
+    assert!(!args[host + 1].contains("proj"), "the script is encoded");
+
+    let got = run_terminal(&spec);
+    let want = std::fs::canonicalize(&cwd).unwrap();
+    assert_eq!(got.trim_end(), want.display().to_string());
+    // No directory: the remote home.
+    let home = run_terminal(&auth.terminal("sh", None).unwrap());
+    assert!(!home.trim_end().ends_with("'proj'"), "{home}");
+    cleanup(&dir);
+}
+
+/// Run a terminal spec without a PTY (`$SHELL -l` then reads commands from
+/// stdin) and return what `pwd -P` printed.
+fn run_terminal(spec: &ProcessSpec) -> String {
+    use std::io::Write as _;
+    let mut cmd = spec.to_local_command();
+    cmd.env("SHELL", "/bin/sh")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"pwd -P\nexit\n")
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    String::from_utf8(out.stdout).unwrap()
+}
+
 #[test]
 fn saves_write_through_links_keep_the_mode_and_report_conflicts() {
     let dir = scratch("save");
@@ -389,6 +448,11 @@ fn a_real_host_conforms() {
     auth.connect(false).unwrap();
     let scratch = PathBuf::from(format!("/tmp/vix-authority-ssh-{}", std::process::id()));
     let failures = conformance::run(&auth, &scratch);
+    // T716: the remote program lookup and the terminal's script.
+    assert!(vix_authority::can_run(&auth, "sh"));
+    assert!(!vix_authority::can_run(&auth, "vix-t716-no-such-program"));
+    let shown = run_terminal(&auth.terminal("sh", Some(Path::new("/tmp"))).unwrap());
+    assert!(shown.lines().any(|l| l.ends_with("/tmp")), "{shown:?}");
     auth.disconnect();
     assert_eq!(failures, Vec::<String>::new());
 }

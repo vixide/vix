@@ -286,6 +286,10 @@ impl App {
                 )
             })
             .collect();
+        // A remote adapter starts in the workspace root, not the remote
+        // home (T716); a local one keeps Vix's own working directory.
+        let remote = !crate::authority::current().is_local();
+        self.dap.set_workdir(remote.then(|| self.root.clone()));
         if self.dap.start(&adapter, &path.to_string_lossy(), bps) {
             self.visible.set(crate::app::Visible::DEBUG_PANEL, true);
             self.status = t!("status.debug_started").to_string();

@@ -8430,7 +8430,48 @@ so, and the first task of each plan re-checks the facts it depends on.
     per search (no cache); the grep fallback path is unit-tested but not
     exercised end to end (a test can't hide the host's `rg` without
     editing `PATH`); wgrep's apply step still reads each edited file.
-- [ ] **T716 — Remote LSP and tasks/terminal.** **Large.**
+- [x] **T716 — Remote LSP and tasks/terminal.** **Large.**
+  - Done 2026-10-30. LSP: under a non-local authority a server is looked
+    up on the remote side first (`vix_authority::can_run`: `which`, or
+    `is_file` for a configured path), starts in the first workspace
+    folder, and gets `processId: null`; diagnostic keys are no longer
+    canonicalized there (it was a round trip per publish and per
+    `diagnostics_for`, i.e. every frame). URIs were already built from
+    authority paths, which over SSH are the remote paths, and every reply
+    path already went through the authority; now tested. DAP: same lookup;
+    `Dap::set_workdir` (the App passes the root when not local).
+    Tasks/run configs/**Run Command…**/test lenses already ran through the
+    authority in the workspace; fixed their shell choice
+    (`Authority::shell_is_posix`, so a Windows client runs `sh -c`, not
+    `cmd /C`, on its remote; the run-configuration plan too). Terminal:
+    `Authority::terminal(shell, cwd)` says what runs on the local PTY —
+    the shell itself locally (unchanged), `ssh -t` over the shared
+    `ControlPath` into `cd -P <cwd>; exec "${SHELL:-/bin/sh}" -l` for SSH,
+    the shell in the backing directory for the fake; an untrusted remote
+    workspace's terminal starts in the remote home
+    (`status.remote_terminal_home`). `Terminal::open_command` takes
+    `OsStr`s. Tests: `tui/tests/authority_remote_tools.rs` (Python mock
+    server and adapter under a `FakeAuthority` and over a fake `ssh`:
+    `rootUri`/folders/`didOpen` URIs, `processId`, server cwd,
+    diagnostics keys, definition jump, `workspace/applyEdit` to an
+    unopened file, a missing server failing to spawn, adapter cwd and
+    launch path and the stop jump, run-configuration cwd, terminal in the
+    workspace / remote home, the trust gate) and the SSH terminal argv
+    and script in `crates/vix-authority/tests/ssh.rs`;
+    `a_real_host_conforms` (so `scripts/test-ssh-local`, run green here
+    against a throwaway localhost `sshd`) also checks `can_run` and runs
+    the terminal script (without a PTY). NOT done: no real-host language
+    server, debugger or PTY test; the remote `PATH` for
+    servers, adapters and tasks is a non-interactive `sh`'s (no profile;
+    configure absolute paths); `can_run` is one extra round trip per
+    spawn, uncached, on the UI thread; TCP-port debug adapters (and any
+    port forwarding) unsupported; killing a task, server or terminal ends
+    only the local `ssh` (a remote program ignoring the hangup may
+    linger, T717); the OC **exec** terminal still uses the workspace root
+    as its local working directory (T718); diagnostics for a file the
+    remote server names through a different spelling (a symlink) key
+    separately; untrusted-terminal gating is "start in the home
+    directory", not a refusal (user-typed, like **Run Command…**).
 - [ ] **T717 — Remote agent (`vix --remote-agent`).** Framed protocol over
   stdio, batching, file watching, checksum-verified upload. **Large.**
 - [ ] **T718 — Other authorities.** Dev containers, `docker exec`/`podman`
