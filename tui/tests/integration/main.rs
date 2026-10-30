@@ -31,6 +31,7 @@ mod ide_parity;
 mod im;
 mod keybindings;
 mod keymaps;
+mod large_file;
 mod lsp;
 mod mcp;
 mod menu;

@@ -12121,6 +12121,14 @@ name = "vix-keymap-model"
 version = "2.0.0"
 
 [[package]]
+name = "vix-large-file"
+version = "2.0.0"
+dependencies = [
+ "memchr",
+ "vix-input",
+]
+
+[[package]]
 name = "vix-left-dock"
 version = "2.0.0"
 dependencies = [
@@ -12577,6 +12585,7 @@ dependencies = [
  "vix-keybindings",
  "vix-keyboard-shortcut-panel",
  "vix-keymap-model",
+ "vix-large-file",
  "vix-left-dock",
  "vix-list-state",
  "vix-locale-model",

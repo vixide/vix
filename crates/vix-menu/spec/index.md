@@ -62,6 +62,7 @@ OC · Tools · Help**. IM and OC have no Alt mnemonic.
 | *— separator —* | | |
 | Open…        | `Ctrl+O`       | Open an existing file       |
 | Open Recent… | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
+| Open in Large File Viewer… | | View a huge file read-only, chunk by chunk (`file.open_large`, T733; `crates/vix-large-file/spec`) |
 | Insert File… | | Insert another file's contents at the cursor |
 | Save         | `Ctrl+S`       | Save the file               |
 | Save As… | `Ctrl+Shift+S` | Save under a different name; asks before overwriting an existing file and refuses a dangling symlink |

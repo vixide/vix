@@ -46,6 +46,7 @@ Project · OC · Tools · Help**.
 | New               | `Ctrl+N`       | Create a new buffer                     |
 | Open…             | `Ctrl+O`       | Open an existing file                   |
 | Open Recent…      | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
+| Open in Large File Viewer… |  | View a huge file read-only without loading it ([Large File Viewer](../large-file-viewer/index.md)) |
 | Save              | `Ctrl+S`       | Save the file                           |
 | Save As…          | `Ctrl+Shift+S` | Save under a different name (asks before overwriting) |
 | Save All          |                | Save every tab with unsaved edits       |

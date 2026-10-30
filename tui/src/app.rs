@@ -50,6 +50,7 @@ mod insert_tools;
 #[cfg(feature = "jj")]
 mod jj;
 mod keymap;
+mod large_file;
 mod lsp_dap;
 mod lsp_status;
 mod modal;
@@ -174,6 +175,8 @@ pub enum Focus {
 pub enum PromptKind {
     /// Open-file prompt.
     Open,
+    /// A file to open in the Large File Viewer (T733).
+    OpenLargeFile,
     /// A remote name to open (`ssh://…` or `/ssh:…`, T713).
     OpenRemote,
     /// Save-as prompt.
@@ -765,6 +768,9 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
+    /// Open [`Confirm::paths`] (one file) in the Large File Viewer: it is
+    /// past the 1 GiB ceiling a text buffer may hold (T733).
+    OpenLargeViewer,
     /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
     /// file) from the Git panel (T657).
     GitDiscard,
@@ -1502,6 +1508,8 @@ pub struct Layout {
     pub edit_value: Rect,
     /// Body rectangle of the open byte (hex) editor.
     pub edit_bytes: Rect,
+    /// Text rows of the open Large File Viewer (T733).
+    pub large_file: Rect,
     /// Body rectangle of the open SQL statement editor.
     pub edit_sql: Rect,
     /// Schema-tree body of the open DB workbench, for paging/scroll sizing.
@@ -1988,6 +1996,8 @@ pub struct App {
     /// The file the byte editor edits directly (a binary file opened from the
     /// confirmation, T571), or `None` when it edits the active text buffer.
     edit_bytes_file: Option<PathBuf>,
+    /// The Large File Viewer overlay (T733), when open.
+    pub(crate) large_file: Option<crate::large_file::Viewer>,
     /// SQL statement editor overlay, when open.
     pub(crate) edit_sql: Option<crate::edit_sql::Editor>,
     /// DB workbench overlay (`spec/db`), when open.
@@ -2607,6 +2617,7 @@ impl App {
             edit_value: None,
             edit_bytes: None,
             edit_bytes_file: None,
+            large_file: None,
             edit_sql: None,
             db: None,
             qrcode: None,
@@ -2902,6 +2913,7 @@ impl App {
                 self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
+            "file.open_large" => self.open_large_file_prompt(),
             "file.insert_file" => self.open_insert_file_prompt(),
             "file.switch_project" => self.open_workspace_chooser(),
             "workspace.open" => self.prompt_workspace(PromptKind::WorkspaceOpen),
@@ -7878,21 +7890,28 @@ impl App {
         if self.remote_confirm_key(key) {
             return;
         }
-        if let Some(kind) = self
-            .confirm
-            .as_ref()
-            .map(|c| c.kind)
-            .filter(|k| matches!(k, ConfirmKind::OpenLarge | ConfirmKind::OpenBinary))
-        {
+        if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {
+            matches!(
+                k,
+                ConfirmKind::OpenLarge | ConfirmKind::OpenBinary | ConfirmKind::OpenLargeViewer
+            )
+        }) {
+            let take_path =
+                |app: &mut Self| app.confirm.take().and_then(|c| c.paths.into_iter().next());
             match key.code {
                 KeyCode::Char('y' | 'Y') => {
-                    if let Some(path) = self.confirm.take().and_then(|c| c.paths.into_iter().next())
-                    {
-                        if kind == ConfirmKind::OpenLarge {
-                            self.open_path_with(&path, false, true);
-                        } else {
-                            self.open_binary_file(&path);
+                    if let Some(path) = take_path(self) {
+                        match kind {
+                            ConfirmKind::OpenLarge => self.open_path_with(&path, false, true),
+                            ConfirmKind::OpenLargeViewer => self.open_large_file_viewer(&path),
+                            _ => self.open_binary_file(&path),
                         }
+                    }
+                }
+                // A large file can open read-only in the viewer instead (T733).
+                KeyCode::Char('v' | 'V') if kind == ConfirmKind::OpenLarge => {
+                    if let Some(path) = take_path(self) {
+                        self.open_large_file_viewer(&path);
                     }
                 }
                 KeyCode::Char('n' | 'N') | KeyCode::Esc => {
@@ -8170,16 +8189,39 @@ impl App {
                 .map_or(0, |m| m.len)
         };
         let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
-        if !preview && !over_hard_cap {
+        // The Large File Viewer reads local files only (T733).
+        let viewer = !lost && crate::authority::current().is_local();
+        if !preview && (!over_hard_cap || viewer) {
             let ask = match why {
-                Some(TextReadError::TooLarge) => Some((
-                    ConfirmKind::OpenLarge,
+                Some(TextReadError::TooLarge) if over_hard_cap => Some((
+                    ConfirmKind::OpenLargeViewer,
                     t!(
-                        "confirm.open_large",
+                        "confirm.open_large_viewer",
                         path = path.display(),
                         mb = size.div_ceil(1024 * 1024)
                     )
                     .to_string(),
+                )),
+                Some(TextReadError::TooLarge) => Some((
+                    ConfirmKind::OpenLarge,
+                    if viewer {
+                        format!(
+                            "{} {}",
+                            t!(
+                                "confirm.open_large",
+                                path = path.display(),
+                                mb = size.div_ceil(1024 * 1024)
+                            ),
+                            t!("confirm.open_large_view_hint")
+                        )
+                    } else {
+                        t!(
+                            "confirm.open_large",
+                            path = path.display(),
+                            mb = size.div_ceil(1024 * 1024)
+                        )
+                        .to_string()
+                    },
                 )),
                 Some(TextReadError::Binary) => Some((
                     ConfirmKind::OpenBinary,
@@ -13101,6 +13143,13 @@ impl App {
             PromptKind::OpenRemote => self.open_remote(&prompt.input),
             PromptKind::Open | PromptKind::SaveAs => {
                 self.accept_file_prompt(prompt.kind, prompt.input.trim());
+            }
+            PromptKind::OpenLargeFile => {
+                let raw = prompt.input.trim();
+                if !raw.is_empty() {
+                    let path = self.resolve(raw);
+                    self.open_large_file_viewer(&path);
+                }
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),

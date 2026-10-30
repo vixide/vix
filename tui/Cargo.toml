@@ -263,6 +263,8 @@ vix-diff-view = { workspace = true }
 vix-doctor = { path = "../crates/vix-doctor", version = "2.0.0", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { workspace = true }
+# The Large File Viewer (T733): a read-only, chunked view of huge files.
+vix-large-file = { workspace = true }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
 vix-edit-outline = { workspace = true }
 # The SQL edit surface: a statement-oriented view of a `.sql` buffer.

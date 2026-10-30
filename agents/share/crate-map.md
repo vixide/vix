@@ -132,6 +132,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
 | Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-theme-model` (the JSON theme model + serialization), `vix-base16` (bundled base16 color themes), `vix-theme-editor-panel` (T202: **Vix → Theme → Edit Theme…** — list a theme's 15 color slots, edit each via the existing X11 color picker, live preview, Save As). |
 | Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`), `vix-edit-table` (T152: CSV/TSV spreadsheet grid, `Grid` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`vix-column-view`, above, is this family's Org-specific sibling.) |
+| Large files | `vix-large-file` (T733: the Large File Viewer — a read-only, chunked view of multi-gigabyte files: `Source` positioned reads (`read_at`/`seek_read`, no memory map), a background sparse `LineIndex` (every 1,024th line), a streamed cancellable `Search`, and the `Viewer` state with `handle_key` → `Outcome`; local files only; **File → Open in Large File Viewer…** and the T571 size-limit confirmation). |
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
 | Info panels | `vix-text-information-panel`, `vix-file-information-panel`, `vix-system-information-panel`, `vix-status-bar-panel`, `vix-workspace-dashboard-panel`, `vix-outline-panel`, `vix-todo-tree`, `vix-choice-list`, `vix-welcome-panel`. |
@@ -150,7 +151,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 138 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 140 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

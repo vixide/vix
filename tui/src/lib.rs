@@ -169,6 +169,7 @@ pub use vix_edit_bytes as edit_bytes;
 pub use vix_edit_outline as edit_outline;
 #[cfg(feature = "sql")]
 pub use vix_edit_sql as edit_sql;
+pub use vix_large_file as large_file;
 /// Stand-in for the SQL editor in a build without the `sql` feature; see [`db`].
 #[cfg(not(feature = "sql"))]
 pub mod edit_sql {

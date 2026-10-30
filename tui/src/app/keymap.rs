@@ -74,6 +74,7 @@ impl App {
             edit_outline,
             edit_value,
             edit_bytes,
+            large_file,
             edit_sql,
             file_browser,
             recent_chooser,
@@ -334,6 +335,7 @@ impl App {
         panel!(edit_outline, edit_outline_key);
         panel!(edit_value, edit_value_key);
         panel!(edit_bytes, edit_bytes_key);
+        panel!(large_file, large_file_key);
         panel!(edit_sql, edit_sql_key);
         panel!(file_browser, file_browser_key);
         panel!(recent_chooser, recent_key);

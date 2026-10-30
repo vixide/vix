@@ -23,6 +23,7 @@ mod hints;
 mod hl7;
 mod im;
 mod info_panels;
+mod large_file;
 mod lsp_popups;
 mod lsp_status;
 mod menu_bar;
@@ -462,6 +463,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     }
     if app.edit_bytes.is_some() {
         draw_edit_bytes(app, frame, area);
+    }
+    if app.large_file.is_some() {
+        large_file::draw_large_file(app, frame, area);
     }
     if app.qrcode.is_some() {
         draw_qrcode(app, frame, area);

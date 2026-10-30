@@ -9,6 +9,7 @@ expression: screen
  REA│────────────────────────────────│╰──────────────────────────────────────────╯
      │ Open…                   Ctrl O │                            ││
      │ Open Recent…      Ctrl Shift O │                            ││
+     │ Open in Large File Viewer…     │                            ││
      │ Switch Project…                │                            ││
      │ Open Remote…                   │                            ││
      │ Reconnect Remote               │                            ││
@@ -19,16 +20,15 @@ expression: screen
      │ Save Workspace into File…      │                            ││
      │ Add Folder to Workspace…       │                            ││
      │────────────────────────────────│                            ││
-     │ Save                    Ctrl S │                            ││
-     │ Save As…          Ctrl Shift S │                            ││●──────────────────────────────
-  Ou│ Save All                       │─────────────────────────────────────────────────────────────
-(no o│ Rename…                        │
+     │ Save                    Ctrl S │                            ││●──────────────────────────────
+  Ou│ Save As…          Ctrl Shift S │─────────────────────────────────────────────────────────────
+(no o│ Save All                       │
+     │ Rename…                        │
      │ Revert                         │
      │ Local History…                 │
      │ Label Local History Snapshot…  │
      │ Reopen with Encoding…          │
      │ Save with Encoding…            │
      │────────────────────────────────│
-     │ Close                   Ctrl W │
-─────│ Close All Tabs    Ctrl Shift W │─────────────────────────────────────────────────────────────
+─────│ Close                   Ctrl W │─────────────────────────────────────────────────────────────
  unti╰────────────────────────────────╯                            text  LF  UTF-8   Ln 1:Col 1   
