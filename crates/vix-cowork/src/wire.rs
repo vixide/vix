@@ -17,6 +17,7 @@
 //! | 3–5, 7, 8 | [`Channel::Document`] | `Open`, `Close`, `Update`, `SaveRequest`, `Saved` |
 //! | 6 | [`Channel::Presence`] | `Presence` |
 //! | 14–16 | [`Channel::Workspace`] | `ListFiles`, `FileList`, `OpenRequest` (T696) |
+//! | 17–21 | [`Channel::Terminal`] | `TerminalScreen`, `TerminalOutput`, `TerminalKeys`, `TerminalInputAllowed`, `TerminalClose` (T697) |
 //! | 48–63 | reserved: chat (T756) | none yet; see [`RESERVED_CHAT_TAGS`] |
 //!
 //! **The chat seam (T756).** Session chat will be its own message family
@@ -47,6 +48,21 @@ const MAX_STR: usize = 256;
 /// Most paths one [`Message::FileList`] carries; the host truncates beyond it.
 pub const MAX_LISTED_FILES: usize = 20_000;
 
+/// Largest terminal screen or output chunk in one message (T697), in bytes.
+/// A full screen is a few hundred kilobytes at most at the size caps below.
+pub const MAX_TERMINAL_BYTES: usize = 4 * 1024 * 1024;
+
+/// Largest burst of guest keystrokes in one [`Message::TerminalKeys`], in
+/// bytes (a longer paste is refused by the sender).
+pub const MAX_TERMINAL_KEYS: usize = 4096;
+
+/// Most rows a shared terminal may have; a larger size is refused on decode,
+/// so a hostile host cannot make a guest allocate a huge screen.
+pub const MAX_TERMINAL_ROWS: u16 = 500;
+
+/// Most columns a shared terminal may have (see [`MAX_TERMINAL_ROWS`]).
+pub const MAX_TERMINAL_COLS: u16 = 1000;
+
 /// Tags kept free for session chat (T756, `spec/instant-message`). A message
 /// in this range decodes to [`WireProblem::Reserved`], which a receiver skips.
 pub const RESERVED_CHAT_TAGS: RangeInclusive<u8> = 48..=63;
@@ -65,6 +81,8 @@ pub enum Channel {
     Presence,
     /// The shared file tree (T696).
     Workspace,
+    /// The host's shared terminal (T697).
+    Terminal,
 }
 
 /// Why the other side refused or ended something.
@@ -213,6 +231,41 @@ pub enum Message {
         /// The file, relative to the host's root.
         path: SharedPath,
     },
+    /// Host to guest: the host's terminal is shared (T697), or its whole
+    /// screen is sent again (a resize, or a guest that just joined). The
+    /// guest starts a fresh `rows` x `cols` emulator and feeds it `screen`.
+    TerminalScreen {
+        /// Screen height, 1 to [`MAX_TERMINAL_ROWS`].
+        rows: u16,
+        /// Screen width, 1 to [`MAX_TERMINAL_COLS`].
+        cols: u16,
+        /// Whether the host accepts keystrokes from guests with terminal
+        /// permission. Off until the host allows it.
+        input: bool,
+        /// Escape sequences that draw the whole screen, at most
+        /// [`MAX_TERMINAL_BYTES`].
+        screen: Vec<u8>,
+    },
+    /// Host to guest: what changed on the shared terminal since the last
+    /// screen or output, as escape sequences to feed the guest's emulator.
+    TerminalOutput {
+        /// At most [`MAX_TERMINAL_BYTES`].
+        bytes: Vec<u8>,
+    },
+    /// Guest to host: keystrokes for the shared terminal, already encoded as
+    /// terminal input. The host accepts them only while it allows input and
+    /// the guest has terminal permission.
+    TerminalKeys {
+        /// At most [`MAX_TERMINAL_KEYS`].
+        bytes: Vec<u8>,
+    },
+    /// Host to guest: the host allowed or stopped terminal input.
+    TerminalInputAllowed {
+        /// Whether guests with terminal permission may type.
+        allowed: bool,
+    },
+    /// Host to guest: the terminal is no longer shared.
+    TerminalClose,
 }
 
 impl Message {
@@ -229,6 +282,11 @@ impl Message {
             Self::ListFiles | Self::FileList { .. } | Self::OpenRequest { .. } => {
                 Channel::Workspace
             }
+            Self::TerminalScreen { .. }
+            | Self::TerminalOutput { .. }
+            | Self::TerminalKeys { .. }
+            | Self::TerminalInputAllowed { .. }
+            | Self::TerminalClose => Channel::Terminal,
             Self::Hello { .. }
             | Self::Welcome { .. }
             | Self::PermissionChanged { .. }
@@ -245,6 +303,9 @@ struct Writer(Vec<u8>);
 impl Writer {
     fn u8(&mut self, v: u8) {
         self.0.push(v);
+    }
+    fn u16(&mut self, v: u16) {
+        self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn u64(&mut self, v: u64) {
         self.0.extend_from_slice(&v.to_le_bytes());
@@ -301,6 +362,18 @@ impl<'a> Reader<'a> {
         let raw = self.bytes(crate::path::MAX_PATH_BYTES)?;
         let s = std::str::from_utf8(raw).map_err(|_| WireProblem::BadUtf8)?;
         SharedPath::parse(s)
+    }
+    fn u16(&mut self) -> Result<u16, WireProblem> {
+        let mut a = [0u8; 2];
+        a.copy_from_slice(self.take(2)?);
+        Ok(u16::from_le_bytes(a))
+    }
+    fn flag(&mut self) -> Result<bool, WireProblem> {
+        match self.u8()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            other => Err(WireProblem::UnknownTag(other)),
+        }
     }
     fn u32(&mut self) -> Result<u32, WireProblem> {
         let mut a = [0u8; 4];
@@ -400,9 +473,75 @@ impl Message {
                 w.u8(16);
                 w.str(path.as_str());
             }
+            Self::TerminalScreen { .. }
+            | Self::TerminalOutput { .. }
+            | Self::TerminalKeys { .. }
+            | Self::TerminalInputAllowed { .. }
+            | Self::TerminalClose => self.encode_terminal(&mut w),
         }
         w.0
     }
+
+    /// The [`Channel::Terminal`] messages (T697), tags 17–21.
+    fn encode_terminal(&self, w: &mut Writer) {
+        match self {
+            Self::TerminalScreen {
+                rows,
+                cols,
+                input,
+                screen,
+            } => {
+                w.u8(17);
+                w.u16(*rows);
+                w.u16(*cols);
+                w.u8(u8::from(*input));
+                w.bytes(screen);
+            }
+            Self::TerminalOutput { bytes } => {
+                w.u8(18);
+                w.bytes(bytes);
+            }
+            Self::TerminalKeys { bytes } => {
+                w.u8(19);
+                w.bytes(bytes);
+            }
+            Self::TerminalInputAllowed { allowed } => {
+                w.u8(20);
+                w.u8(u8::from(*allowed));
+            }
+            Self::TerminalClose => w.u8(21),
+            _ => {}
+        }
+    }
+}
+
+/// Decode the body of a [`Channel::Terminal`] message (T697) after its tag.
+fn decode_terminal(tag: u8, r: &mut Reader<'_>) -> Result<Message, WireProblem> {
+    Ok(match tag {
+        17 => {
+            let rows = r.u16()?;
+            let cols = r.u16()?;
+            if !(1..=MAX_TERMINAL_ROWS).contains(&rows) || !(1..=MAX_TERMINAL_COLS).contains(&cols)
+            {
+                return Err(WireProblem::BadTerminalSize);
+            }
+            Message::TerminalScreen {
+                rows,
+                cols,
+                input: r.flag()?,
+                screen: r.bytes(MAX_TERMINAL_BYTES)?.to_vec(),
+            }
+        }
+        18 => Message::TerminalOutput {
+            bytes: r.bytes(MAX_TERMINAL_BYTES)?.to_vec(),
+        },
+        19 => Message::TerminalKeys {
+            bytes: r.bytes(MAX_TERMINAL_KEYS)?.to_vec(),
+        },
+        20 => Message::TerminalInputAllowed { allowed: r.flag()? },
+        21 => Message::TerminalClose,
+        other => return Err(WireProblem::UnknownTag(other)),
+    })
 }
 
 /// Decode one message. Total: any input yields a message or an error.
@@ -486,6 +625,7 @@ pub fn decode(buf: &[u8]) -> Result<Message, CoworkError> {
             Message::FileList { paths }
         }
         16 => Message::OpenRequest { path: r.path()? },
+        17..=21 => decode_terminal(tag, &mut r)?,
         t if RESERVED_CHAT_TAGS.contains(&t) => return Err(WireProblem::Reserved(t).into()),
         other => return Err(WireProblem::UnknownTag(other).into()),
     };
@@ -554,6 +694,20 @@ mod tests {
             Message::OpenRequest {
                 path: p("src/b.rs"),
             },
+            Message::TerminalScreen {
+                rows: 24,
+                cols: 80,
+                input: false,
+                screen: b"\x1b[H$ ls".to_vec(),
+            },
+            Message::TerminalOutput {
+                bytes: b"\x1b[2;1Hdone".to_vec(),
+            },
+            Message::TerminalKeys {
+                bytes: b"ls\r".to_vec(),
+            },
+            Message::TerminalInputAllowed { allowed: true },
+            Message::TerminalClose,
         ]
     }
 
@@ -565,6 +719,49 @@ mod tests {
             Message::SaveRequest { path: p("a") }.channel(),
             Channel::Document
         );
+        assert_eq!(Message::TerminalClose.channel(), Channel::Terminal);
+        assert_eq!(
+            Message::TerminalKeys { bytes: vec![b'a'] }.channel(),
+            Channel::Terminal
+        );
+    }
+
+    /// T697: a terminal size outside the caps, an over-long burst of keys
+    /// and a flag byte other than 0 or 1 are refused on decode.
+    #[test]
+    fn hostile_terminal_messages_are_refused() {
+        for (rows, cols) in [
+            (0, 80),
+            (24, 0),
+            (MAX_TERMINAL_ROWS + 1, 80),
+            (24, MAX_TERMINAL_COLS + 1),
+            (u16::MAX, u16::MAX),
+        ] {
+            let mut w = Writer(Vec::new());
+            w.u8(17);
+            w.u16(rows);
+            w.u16(cols);
+            w.u8(0);
+            w.bytes(b"");
+            assert_eq!(
+                decode(&w.0),
+                Err(WireProblem::BadTerminalSize.into()),
+                "{rows}x{cols}"
+            );
+        }
+        let keys = Message::TerminalKeys {
+            bytes: vec![b'x'; MAX_TERMINAL_KEYS + 1],
+        }
+        .encode();
+        assert_eq!(decode(&keys), Err(WireProblem::FieldTooLong.into()));
+        assert_eq!(decode(&[20, 2]), Err(WireProblem::UnknownTag(2).into()));
+        let mut w = Writer(Vec::new());
+        w.u8(17);
+        w.u16(24);
+        w.u16(80);
+        w.u8(7);
+        w.bytes(b"");
+        assert_eq!(decode(&w.0), Err(WireProblem::UnknownTag(7).into()));
     }
 
     #[test]
@@ -646,11 +843,30 @@ mod tests {
         }
 
         #[test]
-        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..16, pos in 0usize..64, val in any::<u8>()) {
+        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..21, pos in 0usize..64, val in any::<u8>()) {
             let mut bytes = samples()[idx].encode();
             let at = pos % bytes.len();
             bytes[at] = val;
             let _ = decode(&bytes);
+        }
+
+        /// T697: every terminal message round-trips for any in-range size
+        /// and payload.
+        #[test]
+        fn terminal_messages_round_trip(
+            rows in 1u16..=MAX_TERMINAL_ROWS,
+            cols in 1u16..=MAX_TERMINAL_COLS,
+            input in any::<bool>(),
+            bytes in proptest::collection::vec(any::<u8>(), 0..512),
+        ) {
+            for m in [
+                Message::TerminalScreen { rows, cols, input, screen: bytes.clone() },
+                Message::TerminalOutput { bytes: bytes.clone() },
+                Message::TerminalInputAllowed { allowed: input },
+                Message::TerminalKeys { bytes },
+            ] {
+                prop_assert_eq!(decode(&m.encode()).unwrap(), m);
+            }
         }
     }
 }

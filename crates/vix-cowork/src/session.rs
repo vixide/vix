@@ -49,6 +49,17 @@ pub struct Handled {
     /// leaves it, then calls [`HostSession::share`] (or
     /// [`HostSession::reopen_for`] when it is already shared).
     pub open: Vec<(PeerId, SharedPath)>,
+    /// Keystrokes a guest typed into the shared terminal (T697), already
+    /// checked: the terminal is shared, the host allows input, and the guest
+    /// has terminal permission. Write them to the terminal in order.
+    pub terminal_keys: Vec<(PeerId, Vec<u8>)>,
+}
+
+/// The host's shared terminal (T697): shared at all, and whether guests with
+/// terminal permission may type in it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TerminalShare {
+    input: bool,
 }
 
 /// The host's side of one session.
@@ -63,6 +74,8 @@ pub struct HostSession {
     /// Whether guests may list the host's files and ask to open them (T696).
     /// Off until the host turns it on.
     workspace: bool,
+    /// The shared terminal (T697), if the host shares one.
+    terminal: Option<TerminalShare>,
 }
 
 impl HostSession {
@@ -80,7 +93,93 @@ impl HostSession {
             board,
             next_guest: 0,
             workspace: false,
+            terminal: None,
         }
+    }
+
+    // ----- shared terminal (T697) ---------------------------------------------
+
+    /// Share the host's terminal with every guest, or send its whole screen
+    /// again (after a resize). `screen` is the escape-sequence rendering of
+    /// a `rows` x `cols` screen; the session does not interpret it. A new
+    /// share starts **read-only**: guests may not type until
+    /// [`set_terminal_input`](Self::set_terminal_input) allows it, and a
+    /// resend keeps whatever the host chose.
+    #[must_use]
+    pub fn share_terminal(&mut self, rows: u16, cols: u16, screen: &[u8]) -> Vec<Outbound> {
+        let share = *self.terminal.get_or_insert(TerminalShare { input: false });
+        self.to_all(None, &Self::terminal_screen(share, rows, cols, screen))
+    }
+
+    /// Send the shared terminal's whole screen to one guest (it just joined).
+    /// Nothing when the terminal is not shared.
+    #[must_use]
+    pub fn terminal_for(&self, to: PeerId, rows: u16, cols: u16, screen: &[u8]) -> Vec<Outbound> {
+        match self.terminal {
+            Some(share) if self.peers.contains_key(&to) => vec![Outbound {
+                to,
+                msg: Self::terminal_screen(share, rows, cols, screen),
+            }],
+            _ => Vec::new(),
+        }
+    }
+
+    fn terminal_screen(share: TerminalShare, rows: u16, cols: u16, screen: &[u8]) -> Message {
+        Message::TerminalScreen {
+            rows: rows.clamp(1, crate::wire::MAX_TERMINAL_ROWS),
+            cols: cols.clamp(1, crate::wire::MAX_TERMINAL_COLS),
+            input: share.input,
+            screen: screen.to_vec(),
+        }
+    }
+
+    /// What changed on the shared terminal, for every guest. Nothing when
+    /// the terminal is not shared or `bytes` is empty.
+    #[must_use]
+    pub fn terminal_output(&self, bytes: &[u8]) -> Vec<Outbound> {
+        if self.terminal.is_none() || bytes.is_empty() {
+            return Vec::new();
+        }
+        self.to_all(
+            None,
+            &Message::TerminalOutput {
+                bytes: bytes.to_vec(),
+            },
+        )
+    }
+
+    /// Allow or stop keystrokes from guests with terminal permission. Off
+    /// for every new share. Nothing when the terminal is not shared.
+    #[must_use]
+    pub fn set_terminal_input(&mut self, allowed: bool) -> Vec<Outbound> {
+        let Some(share) = self.terminal.as_mut() else {
+            return Vec::new();
+        };
+        share.input = allowed;
+        self.to_all(None, &Message::TerminalInputAllowed { allowed })
+    }
+
+    /// Stop sharing the terminal. Input permission is forgotten with it.
+    #[must_use]
+    pub fn unshare_terminal(&mut self) -> Vec<Outbound> {
+        if self.terminal.take().is_some() {
+            self.to_all(None, &Message::TerminalClose)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Whether the terminal is shared.
+    #[must_use]
+    pub const fn terminal_shared(&self) -> bool {
+        self.terminal.is_some()
+    }
+
+    /// Whether guests with terminal permission may type in the shared
+    /// terminal.
+    #[must_use]
+    pub const fn terminal_input(&self) -> bool {
+        matches!(self.terminal, Some(TerminalShare { input: true }))
     }
 
     /// Let guests browse the file tree and ask for files (T696), or stop.
@@ -445,8 +544,21 @@ impl HostSession {
                     h.open.push((from, path));
                 }
             }
+            Message::TerminalKeys { bytes } => {
+                // Typing needs all three: a shared terminal, the host's
+                // explicit go-ahead, and terminal permission for this guest.
+                // A refusal is not fatal: the guest stays connected.
+                if self.terminal_input() && peer.permission.allows(Action::Terminal) {
+                    if !bytes.is_empty() {
+                        h.terminal_keys.push((from, bytes));
+                    }
+                } else {
+                    h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
+                }
+            }
             // `Leave`, or anything else: a guest sends nothing but updates,
-            // presence, save, list and open requests after the handshake.
+            // presence, save, list, open requests and terminal keys after the
+            // handshake.
             _ => {
                 h.out.extend(self.remove(from));
                 h.disconnect.push(from);
@@ -509,6 +621,22 @@ pub enum GuestEvent {
     Presence,
     /// The session is over.
     Ended,
+    /// The host shared its terminal, or sent its whole screen again (T697):
+    /// start a fresh `rows` x `cols` emulator and feed it `screen`.
+    TerminalScreen {
+        /// Screen height.
+        rows: u16,
+        /// Screen width.
+        cols: u16,
+        /// Escape sequences that draw the whole screen.
+        screen: Vec<u8>,
+    },
+    /// Output on the shared terminal: feed it to the emulator.
+    TerminalOutput(Vec<u8>),
+    /// The host allowed (`true`) or stopped terminal input.
+    TerminalInput(bool),
+    /// The host stopped sharing its terminal.
+    TerminalClosed,
 }
 
 /// A guest's side of one session.
@@ -520,6 +648,8 @@ pub struct GuestSession {
     cap: usize,
     docs: BTreeMap<SharedPath, SharedDoc>,
     board: PresenceBoard,
+    /// The host's shared terminal, if any (T697).
+    terminal: Option<TerminalShare>,
 }
 
 impl GuestSession {
@@ -544,6 +674,42 @@ impl GuestSession {
             cap,
             docs: BTreeMap::new(),
             board: PresenceBoard::new(),
+            terminal: None,
+        })
+    }
+
+    /// Whether the host shares its terminal with this session (T697).
+    #[must_use]
+    pub const fn terminal_shared(&self) -> bool {
+        self.terminal.is_some()
+    }
+
+    /// Whether this guest may type in the shared terminal: the host shares
+    /// it, allows input, and gave this guest terminal permission.
+    #[must_use]
+    pub const fn can_type_in_terminal(&self) -> bool {
+        matches!(self.terminal, Some(TerminalShare { input: true }))
+            && self.permission.allows(Action::Terminal)
+    }
+
+    /// Keystrokes (already encoded as terminal input) for the shared
+    /// terminal. The host checks again; this only saves a round trip.
+    ///
+    /// # Errors
+    ///
+    /// [`CoworkError::PermissionDenied`] when this guest may not type
+    /// ([`can_type_in_terminal`](Self::can_type_in_terminal)), or
+    /// [`CoworkError::Wire`] when `bytes` is over
+    /// [`MAX_TERMINAL_KEYS`](crate::wire::MAX_TERMINAL_KEYS).
+    pub fn terminal_keys(&self, bytes: &[u8]) -> Result<Message, CoworkError> {
+        if !self.can_type_in_terminal() {
+            return Err(CoworkError::PermissionDenied);
+        }
+        if bytes.len() > crate::wire::MAX_TERMINAL_KEYS {
+            return Err(crate::error::WireProblem::FieldTooLong.into());
+        }
+        Ok(Message::TerminalKeys {
+            bytes: bytes.to_vec(),
         })
     }
 
@@ -620,6 +786,32 @@ impl GuestSession {
             }
             Message::Error { code } => vec![GuestEvent::Refused(code)],
             Message::FileList { paths } => vec![GuestEvent::Files(paths)],
+            Message::TerminalScreen {
+                rows,
+                cols,
+                input,
+                screen,
+            } => {
+                self.terminal = Some(TerminalShare { input });
+                vec![GuestEvent::TerminalScreen { rows, cols, screen }]
+            }
+            Message::TerminalOutput { bytes } if self.terminal.is_some() => {
+                vec![GuestEvent::TerminalOutput(bytes)]
+            }
+            Message::TerminalInputAllowed { allowed } => match self.terminal.as_mut() {
+                Some(share) => {
+                    share.input = allowed;
+                    vec![GuestEvent::TerminalInput(allowed)]
+                }
+                None => Vec::new(),
+            },
+            Message::TerminalClose => {
+                if self.terminal.take().is_some() {
+                    vec![GuestEvent::TerminalClosed]
+                } else {
+                    Vec::new()
+                }
+            }
             Message::Leave => vec![GuestEvent::Ended],
             _ => Vec::new(),
         })
@@ -1093,6 +1285,146 @@ mod tests {
             events[0].1,
             GuestEvent::Opened(path("src/a.rs"), "fn main() {}".to_string())
         );
+    }
+
+    fn refused(to: PeerId) -> Vec<Outbound> {
+        HostSession::refuse_to(to, ErrorCode::PermissionDenied)
+    }
+
+    /// A hand-made `TerminalKeys` from `from`, as the host handles it.
+    fn send_keys(host: &mut HostSession, from: PeerId, bytes: &[u8]) -> Handled {
+        host.handle(
+            from,
+            Message::TerminalKeys {
+                bytes: bytes.to_vec(),
+            },
+        )
+        .unwrap()
+    }
+
+    /// T697: nothing about the terminal reaches a guest until the host
+    /// shares it; a share is read-only until the host allows input; typing
+    /// then also needs terminal permission; refusals keep the guest.
+    #[test]
+    fn the_shared_terminal_is_read_only_until_the_host_allows_input() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut term, o) = join(&mut host, "Term", Permission::EditTerminal);
+        deliver(o, &mut [&mut term]);
+        let (mut edit, o) = join(&mut host, "Edit", Permission::Edit);
+        deliver(o, &mut [&mut term, &mut edit]);
+
+        // Not shared: output, input changes and keys go nowhere.
+        assert_eq!(host.terminal_output(b"secret"), Vec::new());
+        assert_eq!(host.set_terminal_input(true), Vec::new());
+        assert!(!host.terminal_input());
+        assert_eq!(host.terminal_for(term.me(), 24, 80, b"x"), Vec::new());
+        assert_eq!(
+            term.terminal_keys(b"ls\r"),
+            Err(CoworkError::PermissionDenied)
+        );
+        let h = send_keys(&mut host, term.me(), b"ls\r");
+        assert_eq!((h.terminal_keys, h.out), (Vec::new(), refused(term.me())));
+        assert!(host.guest(term.me()).is_some(), "a refusal is not fatal");
+
+        // Shared: every guest sees the screen, read-only.
+        let out = host.share_terminal(24, 80, b"$ ");
+        assert_eq!(out.len(), 2);
+        let events = deliver(out, &mut [&mut term, &mut edit]);
+        assert_eq!(
+            events[0].1,
+            GuestEvent::TerminalScreen {
+                rows: 24,
+                cols: 80,
+                screen: b"$ ".to_vec()
+            }
+        );
+        assert!(term.terminal_shared() && !term.can_type_in_terminal());
+        let events = deliver(host.terminal_output(b"ok"), &mut [&mut term]);
+        assert_eq!(events[0].1, GuestEvent::TerminalOutput(b"ok".to_vec()));
+        assert_eq!(host.terminal_output(b""), Vec::new());
+
+        // A hand-crafted keystroke while read-only is refused.
+        let h = send_keys(&mut host, term.me(), b"rm -rf ~\r");
+        assert_eq!(h.terminal_keys, Vec::new());
+        assert_eq!(h.out, refused(term.me()));
+
+        // The host allows input: only the guest with terminal permission types.
+        let out = host.set_terminal_input(true);
+        let events = deliver(out, &mut [&mut term, &mut edit]);
+        assert!(
+            events
+                .iter()
+                .all(|(_, e)| *e == GuestEvent::TerminalInput(true))
+        );
+        assert!(term.can_type_in_terminal());
+        assert!(!edit.can_type_in_terminal());
+        assert_eq!(edit.terminal_keys(b"x"), Err(CoworkError::PermissionDenied));
+        let msg = term.terminal_keys(b"ls\r").unwrap();
+        let h = host.handle(term.me(), msg).unwrap();
+        assert_eq!(h.terminal_keys, vec![(term.me(), b"ls\r".to_vec())]);
+        assert_eq!(h.out, Vec::new());
+        let h = send_keys(&mut host, edit.me(), b"x");
+        assert_eq!((h.terminal_keys, h.out), (Vec::new(), refused(edit.me())));
+        assert!(
+            term.terminal_keys(&[b'x'; crate::wire::MAX_TERMINAL_KEYS + 1])
+                .is_err()
+        );
+
+        // Lowering the guest's permission stops its typing at the host.
+        let _ = host.set_permission(term.me(), Permission::Edit);
+        let h = send_keys(&mut host, term.me(), b"y");
+        assert_eq!(h.terminal_keys, Vec::new());
+        let _ = host.set_permission(term.me(), Permission::EditTerminal);
+
+        // A resize keeps the input choice; a late joiner gets the screen.
+        let out = host.share_terminal(30, 100, b"$ ");
+        assert!(matches!(
+            &out[0].msg,
+            Message::TerminalScreen {
+                rows: 30,
+                cols: 100,
+                input: true,
+                ..
+            }
+        ));
+        let (late, _) = join(&mut host, "Late", Permission::View);
+        let out = host.terminal_for(late.me(), 30, 100, b"$ ");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].to, late.me());
+
+        // Unsharing tells everyone and forgets the input choice.
+        let events = deliver(host.unshare_terminal(), &mut [&mut term, &mut edit]);
+        assert!(events.iter().all(|(_, e)| *e == GuestEvent::TerminalClosed));
+        assert!(!term.terminal_shared() && !term.can_type_in_terminal());
+        assert!(!host.terminal_shared() && !host.terminal_input());
+        assert_eq!(host.unshare_terminal(), Vec::new());
+        let out = host.share_terminal(24, 80, b"");
+        assert!(matches!(
+            &out[0].msg,
+            Message::TerminalScreen { input: false, .. }
+        ));
+    }
+
+    /// T697: output for a terminal the guest never saw shared is dropped.
+    #[test]
+    fn a_guest_ignores_terminal_output_it_was_not_shared() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut g, o) = join(&mut host, "One", Permission::View);
+        deliver(o, &mut [&mut g]);
+        assert_eq!(
+            g.handle(Message::TerminalOutput {
+                bytes: b"x".to_vec()
+            })
+            .unwrap(),
+            Vec::new()
+        );
+        assert_eq!(
+            g.handle(Message::TerminalInputAllowed { allowed: true })
+                .unwrap(),
+            Vec::new()
+        );
+        assert_eq!(g.handle(Message::TerminalClose).unwrap(), Vec::new());
+        assert!(!g.can_type_in_terminal());
     }
 
     /// T692: Undo on either side reverses only that side's own text, and the

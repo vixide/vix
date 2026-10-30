@@ -1,7 +1,8 @@
 # Cowork — real-time collaborative editing
 
 **Status:** implemented behind the opt-in `cowork` Cargo feature (2026-10-29):
-T690–T696 are done, T697 (shared terminal) is not started. The task list
+T690–T696 are done; T697 (shared terminal, read-only by default) landed
+2026-10-30. The task list
 records what each task left out. User guide: `docs/cowork/index.md`. Tasks
 T690–T697 in
 [`tasks.md`](../../tasks.md). Supersedes the "Collaborative editing" entry in
@@ -80,8 +81,9 @@ is not a hosted service and it does not replace git.
 - Chat is out of scope for v1 (use the call you are already on); the wire
   format keeps room for it (see "Chat seam").
 - Menu: **Tools → Cowork** holds Host Session…, New Invite, Share This Buffer,
-  Stop Sharing This Buffer, Share File Tree, Join Session…, Shared Files…,
-  Peers, Follow…, Permissions… and Leave Session (a submenu rather than a new
+  Stop Sharing This Buffer, Share File Tree, Share Terminal, Allow Terminal
+  Input, Join Session…, Shared Files…, Shared Terminal, Peers, Follow…,
+  Permissions… and Leave Session (a submenu rather than a new
   top-level menu, so the menu bar's Alt mnemonics stay put). Each is also a
   `Cowork: …` palette command. All text goes through `t!` in every locale.
   The actions are `cowork.*` and are hidden, like the menu, in a build without
@@ -150,6 +152,52 @@ one by one.
 - **Disk writes stay with the host.** Guests still only ask to save.
 - **Not done:** searching file *contents* across the shared tree.
 
+## Shared terminal (T697)
+
+The host may show its integrated terminal (`tools.terminal`, the one
+`vix-terminal` PTY) to the session. Nothing about it is shared until the
+host acts, and guests may type only after a second, separate act.
+
+- **Screen, not PTY.** The shell and its PTY stay on the host; the PTY is
+  local-only, as the remote-editing authority design (T710) keeps it, and
+  nothing here routes through that authority. Guests get the terminal's *rendered screen*: the
+  host sends `vt100`'s escape-sequence rendering of the whole screen
+  (`TerminalScreen`), then once per tick the difference from the screen the
+  guests last saw (`TerminalOutput`, nothing when idle), and the whole screen
+  again after a resize and to a guest that joins later. A guest replays them
+  into its own `vt100` parser and draws it like the integrated terminal, at
+  the host's size (clipped by a smaller view). Scrollback is not shared.
+- **Opt-in, with a warning.** **Share Terminal** (`cowork.share_terminal`, a
+  host toggle; it needs the terminal open) asks first. The confirmation says
+  how many guests will see it and that everything the terminal shows from
+  then on, including any password, token or key printed in it, is visible to
+  them; `y` shares, `n`/Esc does not. Choosing it again, or closing the
+  terminal, stops sharing (`TerminalClose`).
+- **Read-only by default.** Every new share starts read-only. **Allow
+  Terminal Input** (`cowork.terminal_input`, a host toggle) asks again (the
+  confirmation says a guest can then run any command as the host) and tells
+  guests (`TerminalInputAllowed`). Typing then also needs the guest's
+  `terminal` permission level (`Permission::EditTerminal`, admitted with
+  `terminal` or set with Permissions…). The host session checks all three
+  on every `TerminalKeys` message; a refused one is answered with
+  `PermissionDenied` and the guest stays connected. Accepted keystrokes go to
+  the PTY as they are (`Terminal::send_bytes`).
+- **Guest view.** A guest is told when a terminal is shared but the view is
+  never opened over its work: **Shared Terminal** (`cowork.terminal`) shows
+  it and `Ctrl+]` hides it. While shown it takes every key (and a paste,
+  replayed as keys); keys are encoded as the integrated terminal encodes
+  them and sent only when this guest may type, otherwise the status says the
+  terminal is read-only. The title says which.
+- **Limits.** A screen or difference is at most `MAX_TERMINAL_BYTES` (4 MB;
+  a larger one stops the share), a keystroke burst at most
+  `MAX_TERMINAL_KEYS` (4 KB), and a shared terminal at most
+  `MAX_TERMINAL_ROWS` x `MAX_TERMINAL_COLS` (500 x 1000); a guest refuses a
+  larger size on decode, so a hostile host cannot make it allocate a huge
+  screen.
+- **Not done:** sharing more than one terminal or the OC menu's container
+  shells, scrollback, mouse reporting, and a per-guest input grant (input is
+  allowed for every guest with the `terminal` level at once).
+
 ## Never shared (private paths)
 
 `SharedPath::is_private` is the single list, applied to the host's own
@@ -168,7 +216,7 @@ session gets chat with nothing more to set up or trust. The wire format
 already leaves room for it:
 
 - Every `wire::Message` has a `Channel` (`Control`, `Document`, `Presence`,
-  `Workspace`); T756 adds `Channel::Chat` and its messages.
+  `Workspace`, `Terminal`); T756 adds `Channel::Chat` and its messages.
 - Tags 48–63 are reserved for chat (`wire::RESERVED_CHAT_TAGS`). Today such a
   message decodes to `WireProblem::Reserved`, and the transport's reader
   skips it instead of closing the link (`CoworkError::is_reserved_message`),

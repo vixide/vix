@@ -83,6 +83,8 @@ use search::{draw_palette, draw_prompt, draw_search, draw_workspace_search};
 use status_bar::draw_status_bar;
 pub use tabs::tabs_origin;
 use tabs::{center_split, draw_breadcrumb, draw_tabs};
+#[cfg(feature = "cowork")]
+use terminal::draw_cowork_terminal;
 #[cfg(feature = "terminal")]
 use terminal::draw_terminal;
 use tool_panels::{
@@ -488,6 +490,21 @@ fn draw_capability_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     #[cfg(feature = "terminal")]
     if app.terminal.is_some() {
         draw_terminal(app, frame, area);
+    }
+    // A Cowork guest's view of the host's shared terminal (T697).
+    #[cfg(feature = "cowork")]
+    draw_cowork_terminal(app, frame, area);
+    // The host confirms sharing its terminal while it is open: draw that
+    // confirmation again over it, or it would be hidden.
+    #[cfg(feature = "cowork")]
+    if app.confirm.as_ref().is_some_and(|c| {
+        matches!(
+            c.kind,
+            crate::app::ConfirmKind::CoworkShareTerminal
+                | crate::app::ConfirmKind::CoworkTerminalInput
+        )
+    }) {
+        draw_confirm(app, frame, area);
     }
     #[cfg(feature = "ai")]
     if app.ai_diff_review().is_some() {

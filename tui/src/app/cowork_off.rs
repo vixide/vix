@@ -1,7 +1,8 @@
 //! The `cowork` capability's absent half: no collaboration code is compiled,
 //! so the shared dispatch, event loop and status bar entry points are no-ops.
 
-use super::{App, PromptKind};
+use super::{App, ConfirmKind, PromptKind};
+use vix_input::KeyEvent;
 
 /// No state without the capability.
 #[derive(Default)]
@@ -57,6 +58,22 @@ impl App {
 
     /// No host to ask (no `cowork:` path can reach the palette).
     pub(super) fn cowork_request_open(&mut self, _path: &std::path::Path) {
+        debug_assert!(self.layout.edit_sql.width < u16::MAX);
+    }
+
+    /// No Cowork confirmation can be open; drop it if one somehow is.
+    pub(super) fn cowork_confirm_key(&mut self, _kind: ConfirmKind, _key: KeyEvent) {
+        self.confirm = None;
+    }
+
+    /// No shared terminal to view.
+    pub(super) fn cowork_terminal_viewing(&self) -> bool {
+        let State(()) = &self.cowork;
+        false
+    }
+
+    /// Never called: no shared-terminal view can be open.
+    pub(super) fn cowork_terminal_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.layout.edit_sql.width < u16::MAX);
     }
 }

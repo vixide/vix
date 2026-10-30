@@ -141,6 +141,15 @@ impl Terminal {
         }
     }
 
+    /// Write already-encoded terminal input to the shell (a Cowork guest's
+    /// keystrokes on a shared terminal, T697, which the host has checked).
+    pub fn send_bytes(&mut self, bytes: &[u8]) {
+        if !bytes.is_empty() {
+            let _ = self.writer.write_all(bytes);
+            let _ = self.writer.flush();
+        }
+    }
+
     /// Resize the PTY and parser to `rows`×`cols` if it changed.
     pub fn resize(&mut self, rows: u16, cols: u16) {
         let rows = rows.max(1);

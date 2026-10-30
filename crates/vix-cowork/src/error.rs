@@ -78,6 +78,9 @@ pub enum WireProblem {
     /// T756; see `wire::RESERVED_CHAT_TAGS`). The message is skipped, not
     /// fatal.
     Reserved(u8),
+    /// A shared terminal's size is zero or above the caps (T697,
+    /// `wire::MAX_TERMINAL_ROWS` / `wire::MAX_TERMINAL_COLS`).
+    BadTerminalSize,
 }
 
 impl fmt::Display for PathProblem {
@@ -103,6 +106,7 @@ impl fmt::Display for WireProblem {
             Self::TrailingBytes => f.write_str("trailing bytes"),
             Self::Version(v) => write!(f, "unsupported protocol version {v}"),
             Self::Reserved(t) => write!(f, "reserved message tag {t}"),
+            Self::BadTerminalSize => f.write_str("terminal size out of range"),
         }
     }
 }

@@ -36,7 +36,10 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `cowork.peers` | Peers | Menu |
 | `cowork.permissions` | Permissions… | Menu |
 | `cowork.share` | Share This Buffer | Menu |
+| `cowork.share_terminal` | Share Terminal | Menu |
 | `cowork.share_workspace` | Share File Tree | Menu |
+| `cowork.terminal` | Shared Terminal | Menu |
+| `cowork.terminal_input` | Allow Terminal Input | Menu |
 | `cowork.unshare` | Stop Sharing This Buffer | Menu |
 | `cursor_down` | Cursor Down | Catalog |
 | `cursor_end` | Cursor to End | Catalog |
@@ -742,4 +745,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**735 actions.**
+**738 actions.**

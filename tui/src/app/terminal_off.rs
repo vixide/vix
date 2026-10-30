@@ -29,4 +29,11 @@ impl App {
     pub fn terminal_running(&self) -> bool {
         false
     }
+
+    /// No terminal, so no screen.
+    #[must_use]
+    pub fn terminal_screen_text(&self) -> Option<String> {
+        debug_assert!(self.terminal.is_none());
+        None
+    }
 }

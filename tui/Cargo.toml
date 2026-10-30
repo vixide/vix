@@ -94,8 +94,9 @@ full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "oc", "
 # The network-facing capabilities together.
 net = ["http", "ai", "sql", "im"]
 # Real-time collaboration (T690-T697, spec/cowork). Opt-in and NOT part of
-# `full`: the default build carries no collaboration or listening code.
-cowork = ["dep:vix-cowork", "dep:vix-cowork-net"]
+# `full`: the default build carries no collaboration or listening code. It
+# implies `terminal`: a guest renders and types into a shared terminal (T697).
+cowork = ["dep:vix-cowork", "dep:vix-cowork-net", "terminal"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
