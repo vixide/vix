@@ -324,7 +324,7 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
 fn random_u64() -> u64 {
     let mut buf = [0_u8; 8];
     // A failed OS RNG degrades to a fixed value rather than aborting a send.
-    let _ = getrandom::getrandom(&mut buf);
+    let _ = getrandom::fill(&mut buf);
     u64::from_le_bytes(buf)
 }
 

@@ -50,7 +50,7 @@
   <h2 id="npm">npm (any platform npm supports)</h2>
   <CopyCommand command="npm install -g @vixide/vix" label="Copy the npm install command" />
 
-  <h2 id="cargo">Cargo (any platform with Rust 1.96 or newer)</h2>
+  <h2 id="cargo">Cargo (any platform with Rust 1.97 or newer)</h2>
   <CopyCommand command="cargo install vix-tui" label="Copy the cargo install command" />
 
   <h2 id="download">Direct download</h2>

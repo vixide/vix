@@ -25,7 +25,7 @@ stages:
 # so GitLab CI fails the same way a user on the minimum toolchain would. The
 # floor is the current stable minus two — see spec/rust-msrv-n-minus-2.
 default:
-  image: rust:1.96
+  image: rust:1.97
   # Cache the registry and the build directory per branch. `target/` is large
   # but re-downloading and recompiling ~98 crates every pipeline costs more.
   cache:

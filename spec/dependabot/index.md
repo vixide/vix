@@ -12,11 +12,13 @@ Enable GitHub Dependabot `.github/dependabot.yml` for scheduled update PRs.
 - **Scheduled update PRs**: [`.github/dependabot.yml`](../../.github/dependabot.yml),
   weekly, one entry for the root `cargo` graph (with an `ignore` for
   `evalexpr` past 12.0.0 — AGPL-relicensed, incompatible with the license Vix
-  offers, see the comment beside it in `Cargo.toml` — plus `getrandom`,
-  `ureq`, and `vt100` past the versions that broke `vix-editor-core`,
-  `vix-http-client`, and `vix-terminal` respectively when the first grouped
-  update PR (#6) proposed them; unlike `evalexpr` these aren't a permanent
-  policy, just unmigrated — lift once someone updates those call sites) plus
+  offers, see the comment beside it in `Cargo.toml` — plus `vt100` past
+  0.16, whose API break would touch `vix-terminal` and the Cowork terminal
+  mirror; unlike `evalexpr` that isn't a permanent policy, just unmigrated —
+  lift once someone updates those call sites. `getrandom` and `ureq` carried
+  the same kind of ignore after the first grouped update PR (#6) broke
+  `vix-editor-core` and `vix-http-client`; both have since been migrated
+  (`ureq` 3, `getrandom` 0.4) and their ignores removed) plus
   `github-actions` for the workflow files. GitHub-only: Dependabot reads
   `.github/dependabot.yml`
   from the repository as GitHub sees it, so GitLab's and Codeberg's mirrors do

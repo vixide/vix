@@ -13,7 +13,7 @@
 #[must_use]
 pub fn generate(byte_len: usize) -> String {
     let mut bytes = vec![0u8; byte_len];
-    if getrandom::getrandom(&mut bytes).is_err() {
+    if getrandom::fill(&mut bytes).is_err() {
         bytes.fill(0);
     }
     to_hex(&bytes)

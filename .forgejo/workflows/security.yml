@@ -34,7 +34,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
-  RUST_TOOLCHAIN: "1.96.1"
+  RUST_TOOLCHAIN: "1.97.1"
   # Pinned to a release, and checked against the SHA-256 published beside it,
   # so the supply-chain gate does not itself install an unverified binary.
   # Bump both together, and in step with the other two forges.

@@ -118,7 +118,7 @@ impl fmt::Debug for InviteTable {
 
 /// Fill `buf` with operating-system randomness.
 pub(crate) fn random(buf: &mut [u8]) -> Result<(), NetError> {
-    getrandom::getrandom(buf).map_err(|_| NetError::Crypto)
+    getrandom::fill(buf).map_err(|_| NetError::Crypto)
 }
 
 impl InviteTable {
