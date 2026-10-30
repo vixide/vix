@@ -148,6 +148,12 @@ fn main() -> io::Result<()> {
         Ok(s) => (s, None),
         Err(e) => (Settings::default(), Some(e.to_string())),
     };
+    // T625: pick the clipboard provider (system / OSC 52) from the setting and
+    // the real environment (SSH, tmux) — read here once, never set.
+    vix::clipboard::configure(
+        vix::clipboard::Provider::parse(&settings.clipboard_provider),
+        vix::clipboard::Environment::current(),
+    );
 
     // A `--locale` flag wins over the persisted setting, but is not saved
     // back. Set *before* `--doctor`/`--export-settings`/`--import-settings`

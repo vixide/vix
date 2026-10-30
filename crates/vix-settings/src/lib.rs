@@ -118,6 +118,13 @@ pub struct Settings {
     /// and refuses start/stop/remove/run/build/push/prune and every other
     /// change. Any other value behaves as `"read-only"`, the safer reading.
     pub oc_mode: String,
+    /// How copy/paste reach the clipboard (T625): `"auto"` (default — OSC 52
+    /// over SSH, i.e. when `SSH_TTY`/`SSH_CONNECTION` is set, or when the
+    /// system clipboard errors; the system clipboard otherwise), `"system"`
+    /// (the system clipboard only) or `"osc52"` (always write the OSC 52
+    /// terminal escape, wrapped for tmux under `TMUX`). Under OSC 52, paste
+    /// reads Vix's internal register. Any other value behaves as `"auto"`.
+    pub clipboard_provider: String,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
@@ -757,6 +764,7 @@ impl Default for Settings {
             smart_commit: "ask".to_string(),
             oc_engine: "auto".to_string(),
             oc_mode: "full".to_string(),
+            clipboard_provider: "auto".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
             indent_style: "spaces".to_string(),

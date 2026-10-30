@@ -51,6 +51,10 @@ smart_commit = "ask"
 oc_engine = "auto"
 # "full" (default) or "read-only" (OC lists, inspects and shows logs only).
 oc_mode = "full"
+# How copy/paste reach the clipboard: "auto" (default -- OSC 52 over SSH or
+# when the system clipboard fails, else the system clipboard), "system", or
+# "osc52" (always the terminal's OSC 52 escape; wrapped for tmux).
+clipboard_provider = "auto"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.

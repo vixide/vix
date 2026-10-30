@@ -7241,7 +7241,8 @@ new action.
 
 ### UX, workflow & platform
 
-- [ ] **T625 — OSC 52 clipboard fallback, for SSH and tmux.**
+- [x] **T625 — OSC 52 clipboard fallback, for SSH and tmux.**
+  *Done 2026-10-30: `vix-clipboard` `Provider`/`Environment`/`select_backend`/`encode_osc52`/`configure` (`set` now at `:247`, `get` at `:279`), `clipboard_provider` setting, applied in `tui/src/main.rs` at startup.*
   `vix-clipboard` uses only `arboard` (`set` `:64`, `get` `:86`), so over
   SSH copying silently fails. Helix (`termcode`) and Neovim both have
   OSC 52 providers. Fix: add a `clipboard_provider = "auto" | "system" |

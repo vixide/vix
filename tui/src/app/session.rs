@@ -518,6 +518,12 @@ impl App {
         if old.time_zone != self.settings.time_zone {
             let _ = crate::time_zone_model::set_active(&self.settings.time_zone);
         }
+        if old.clipboard_provider != self.settings.clipboard_provider {
+            crate::clipboard::configure(
+                crate::clipboard::Provider::parse(&self.settings.clipboard_provider),
+                crate::clipboard::Environment::current(),
+            );
+        }
         crate::menu::set_theme_names(crate::theme_model::theme_names(&themes));
         crate::menu::set_action_filter(crate::capability::is_available);
     }
