@@ -96,6 +96,23 @@ bumps `visits` (a script-trust decision isn't a workspace "open") and
 would otherwise require the caller to round-trip every other field on
 that workspace's session just to flip this one.
 
+`Session::set_workspace` (a captured session) carries `scripts_trusted` and
+`remote_trusted` forward from the entry it replaces when the new one leaves
+them unset, so saving a session on exit never forgets a trust decision
+(fixed 2026-10-30, T714: it used to reset `scripts_trusted`).
+
+## Remote workspaces (T713, T714)
+
+A remote workspace's key (`root`) is its canonical `ssh://` name, so its
+session, project state and trust are per host and path and never collide with
+a local folder of the same path. `WorkspaceSession::remote_trusted:
+Option<bool>` is that workspace's trust decision (`None` = not yet asked,
+which an older file loads as); `Session::set_remote_trusted(root, trusted)`
+changes only it. `Session::recent_remotes` lists the remote names opened
+most recently first (at most `MAX_RECENT_REMOTES`, 10, no duplicates;
+`Session::push_recent_remote`) for **File → Open Remote…**. Names never carry
+a password: `ssh://` names hold only user, host, port and path.
+
 ## Roadmap
 
 - Per-workspace "reopen last session" command for the disabled-by-default case.

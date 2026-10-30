@@ -140,13 +140,29 @@ installs an `SshAuthority` over the fake `ssh` and drives the App's open and
 save. Unit tests cover the URL forms, both `stat` flavors' replies and the
 walk filters.
 
+## Host keys and secrets (T714)
+
+Vix passes no host-key option (`StrictHostKeyChecking`,
+`UserKnownHostsFile`, `GlobalKnownHostsFile`) and no authentication option,
+so `ssh_config` and `known_hosts` decide, and every command after the
+interactive first connect of `vix ssh://…` runs with `BatchMode=yes`: an
+unknown or changed host key, or a key that needs a passphrase, fails instead
+of being accepted or asked for under the UI. **File → Open Remote…** connects
+with `BatchMode=yes` too, and its error says to run `ssh host` once (or
+`ssh-add`) or to start with `vix ssh://…`. Vix never writes `known_hosts`.
+Nothing secret is ever on argv: `SshAuthority` builds argv only from the
+target (user, host, port) and its `SshOptions`, never from settings;
+`tui/tests/remote_ui.rs` checks every argv of a session against
+password-like values planted in the settings.
+
 ## Not done (later tasks)
 
-- The App's save does not call `write_atomic_if_unchanged` yet: wiring it to
-  the external-change guard needs a per-tab disk stamp and an overwrite
-  prompt (T713).
-- Connection-lost state, reconnect, status-bar host, the Open Remote dialog
-  (T713); trust prompt for a remote workspace (T714).
+- ~~The App's save does not call `write_atomic_if_unchanged`~~ — T713 wires
+  it for a remote workspace, with a per-tab disk stamp and an overwrite /
+  compare / cancel prompt.
+- ~~Connection-lost state, reconnect, status-bar host, the Open Remote
+  dialog; trust prompt~~ — T713, T714 (see
+  [`spec/remote-editing`](../../../../spec/remote-editing/index.md)).
 - Per-path routing (a local file opened while a remote workspace is
   installed still goes to the remote); remote search with `rg` (T715);
   remote LSP/DAP path mapping and a remote terminal (T716).

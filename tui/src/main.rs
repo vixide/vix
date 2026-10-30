@@ -173,16 +173,23 @@ fn main() -> io::Result<()> {
 
     // `vix ssh://user@host/path` (T712): connect now, while `ssh` can still
     // prompt on the plain terminal, and work on the remote directory.
-    let remote_root = match vix::remote::connect_cli(&mut cli.files) {
-        Ok(root) => root,
+    let remote = match vix::remote::connect_cli(&mut cli.files) {
+        Ok(target) => target,
         Err(message) => {
             eprintln!("{message}");
             std::process::exit(2);
         }
     };
-    let root = remote_root
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let root = remote.as_ref().map_or_else(
+        || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        |t| PathBuf::from(&t.path),
+    );
     let mut app = App::new(root, settings);
+    // The status-bar host, conflict-checked saves and the trust prompt
+    // (T713, T714), before `start` loads scripts or restores the session.
+    if let Some(target) = remote {
+        app.adopt_remote(target);
+    }
     if let Some(e) = settings_load_error {
         app.warn_settings_load_failed(&e);
     }

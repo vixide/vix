@@ -41,7 +41,14 @@ const MAX_WORKSPACES: usize = 50;
 pub struct Session {
     /// One entry per workspace root, most-recently-saved first.
     pub workspaces: Vec<WorkspaceSession>,
+    /// Remote workspaces opened with **File → Open Remote…** or `vix
+    /// ssh://…` (T713), as canonical `ssh://` names, most recent first and
+    /// at most [`MAX_RECENT_REMOTES`]. No secret is ever part of one.
+    pub recent_remotes: Vec<String>,
 }
+
+/// How many remote names [`Session::recent_remotes`] keeps.
+pub const MAX_RECENT_REMOTES: usize = 10;
 
 /// One workspace's restorable editor state.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -135,6 +142,16 @@ pub struct WorkspaceSession {
     /// `None` — the safe "not yet asked" state, not silently trusted.
     #[serde(default)]
     pub scripts_trusted: Option<bool>,
+
+    // ----- remote workspace trust (T714) ------------------------------------
+    /// Whether this *remote* workspace (its `root` is an `ssh://` name, so
+    /// the decision is per host and path) is trusted to run project-defined
+    /// code: tasks, run configurations, language servers, the debugger,
+    /// Prettier from its `node_modules`. `None` = not yet asked, the safe
+    /// default an older `session.toml` loads as; `Some(false)` = declined
+    /// (restricted mode). Unused for a local workspace.
+    #[serde(default)]
+    pub remote_trusted: Option<bool>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -271,8 +288,41 @@ impl Session {
         }
     }
 
+    /// Record a remote workspace's trust decision (T714): `None` for "not
+    /// yet asked", `Some(true)`/`Some(false)` for trusted/declined. Like
+    /// [`Self::set_scripts_trusted`], it creates a minimal entry for a root
+    /// with no saved session yet and leaves everything else alone.
+    pub fn set_remote_trusted(&mut self, root: &str, trusted: Option<bool>) {
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.root == root) {
+            ws.remote_trusted = trusted;
+        } else {
+            self.workspaces.insert(
+                0,
+                WorkspaceSession {
+                    root: root.to_string(),
+                    remote_trusted: trusted,
+                    ..Default::default()
+                },
+            );
+            self.workspaces.truncate(MAX_WORKSPACES);
+        }
+    }
+
+    /// Put `name` (a canonical `ssh://` name) at the front of
+    /// [`Session::recent_remotes`], dropping an older copy and anything past
+    /// [`MAX_RECENT_REMOTES`].
+    pub fn push_recent_remote(&mut self, name: &str) {
+        self.recent_remotes.retain(|r| r != name);
+        self.recent_remotes.insert(0, name.to_string());
+        self.recent_remotes.truncate(MAX_RECENT_REMOTES);
+    }
+
     /// Insert or replace the session for its root, moving it to the front and
     /// capping the total number of retained workspaces.
+    ///
+    /// The trust decisions (`scripts_trusted`, `remote_trusted`) are not part
+    /// of a captured session, so a `ws` that leaves one unset keeps the
+    /// prior entry's answer rather than forgetting it.
     pub fn set_workspace(&mut self, mut ws: WorkspaceSession) {
         // Carry the prior visit count forward, incremented — set_workspace is
         // called once per open/save, so this counts opens for frecency ranking.
@@ -283,6 +333,10 @@ impl Session {
             .find(|w| w.root == ws.root)
             .map_or(0, |w| w.visits);
         ws.visits = prior.saturating_add(1).max(ws.visits);
+        if let Some(old) = self.workspaces.iter().find(|w| w.root == ws.root) {
+            ws.scripts_trusted = ws.scripts_trusted.or(old.scripts_trusted);
+            ws.remote_trusted = ws.remote_trusted.or(old.remote_trusted);
+        }
         self.workspaces.retain(|w| w.root != ws.root);
         self.workspaces.insert(0, ws);
         self.workspaces.truncate(MAX_WORKSPACES);
@@ -323,6 +377,35 @@ mod tests {
             root: root.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn set_workspace_keeps_the_trust_decisions() {
+        let mut s = Session::default();
+        s.set_scripts_trusted("/a", Some(true));
+        s.set_remote_trusted("/a", Some(false));
+        s.set_workspace(ws("/a"));
+        let saved = s.workspace("/a").unwrap();
+        assert_eq!(saved.scripts_trusted, Some(true));
+        assert_eq!(saved.remote_trusted, Some(false));
+    }
+
+    #[test]
+    fn recent_remotes_are_most_recent_first_without_duplicates() {
+        let mut s = Session::default();
+        for i in 0..12 {
+            s.push_recent_remote(&format!("ssh://h{i}/x"));
+        }
+        s.push_recent_remote("ssh://h5/x");
+        assert_eq!(s.recent_remotes.len(), MAX_RECENT_REMOTES);
+        assert_eq!(s.recent_remotes[0], "ssh://h5/x");
+        assert_eq!(
+            s.recent_remotes
+                .iter()
+                .filter(|r| *r == "ssh://h5/x")
+                .count(),
+            1
+        );
     }
 
     #[test]

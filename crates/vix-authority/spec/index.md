@@ -8,8 +8,9 @@ its first piece (T710, T711).
 
 **Status:** Shipped (T710, T711; finished 2026-10-29; T712 2026-10-30).
 `LocalAuthority` is installed by default. `SshAuthority` (the `ssh`
-feature, [`spec/ssh`](ssh/index.md)) is installed only by the experimental
-`vix ssh://…` command line.
+feature, [`spec/ssh`](ssh/index.md)) is installed by the experimental
+`vix ssh://…` command line and by **File → Open Remote…** (T713; the App
+side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
 
 ## API
 

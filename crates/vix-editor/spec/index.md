@@ -268,6 +268,21 @@ channels (`marks`, `spell_marks`, `diagnostic_marks`, `gutter_marks`). Cut, copy
 paste, undo, redo, comment toggle, select-all, and duplicate are applied as
 `editor_core` actions from `App::run_action`.
 
+## Save-conflict check (T713)
+
+`Flags::CHECK_CONFLICTS` (off by default; the App turns it on for a remote
+workspace) makes saves refuse to overwrite a file that changed on disk since
+the buffer last saw it. Each `Tab` carries a `DiskStamp` (`Unknown`,
+`Missing`, or `Seen(FileStat)`), captured through the authority only while
+the flag is on: before the file is read on open (a change in between shows up
+as a spurious, safe conflict rather than a missed one), on reload and Reopen
+with Encoding, and after every save. `save_active` then writes with
+`Authority::write_atomic_if_unchanged`, failing with a `WriteConflict` and
+writing nothing when the length or modification time (whole seconds) moved;
+`save_active_overwriting` skips the check (the user chose to overwrite). Save
+As never checks (it has its own overwrite question). With the flag off no
+stat is taken and saves are exactly as before.
+
 ## `image` feature (T589)
 
 Image tabs depend on the default-on `image` feature (`ratatui-image`). Without it `Tab::image` is `Option<ImageProtocol>` with `ImageProtocol` an uninhabited enum, so `Tab::is_image` is always false and `Editor::open_image` does not exist; the App shows the capability-missing message when asked to open an image path. `is_image_path` is unconditional so such paths are never opened as text.

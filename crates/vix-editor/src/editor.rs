@@ -252,6 +252,35 @@ pub struct Tab {
     /// The encoding and BOM the file was read in, and is saved back in
     /// (T661). UTF-8 for a new buffer.
     pub encoding: vix_encoding::TextEncoding,
+    /// The file's version on disk as this buffer last saw it (T713), for the
+    /// save-conflict check. Only captured while [`Flags::CHECK_CONFLICTS`]
+    /// is on; [`DiskStamp::Unknown`] otherwise.
+    pub disk_stamp: DiskStamp,
+}
+
+/// What a [`Tab`] knows about its file's version on disk (T713): captured
+/// when the file is read and after each save, compared by
+/// `vix_authority::same_version` before the next save.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DiskStamp {
+    /// Not captured (conflict checking is off, or the buffer has no file):
+    /// a save writes without checking.
+    #[default]
+    Unknown,
+    /// The file did not exist.
+    Missing,
+    /// The file's stat when last read or written.
+    Seen(vix_authority::FileStat),
+}
+
+impl DiskStamp {
+    /// The stamp for `path` as the current authority sees it now.
+    #[must_use]
+    pub fn capture(path: &Path) -> Self {
+        vix_authority::current()
+            .metadata(path)
+            .map_or(Self::Missing, Self::Seen)
+    }
 }
 
 impl Tab {
@@ -351,6 +380,11 @@ bitflags::bitflags! {
         const SHOW_WHITESPACE = 1 << 2;
         /// Long lines soft-wrap.
         const SOFT_WRAP = 1 << 3;
+        /// Saves refuse to overwrite a file that changed on disk since the
+        /// buffer last read or wrote it (T713): the tab's [`DiskStamp`] is
+        /// captured on open, reload and save, and a save goes through
+        /// `Authority::write_atomic_if_unchanged`. On for a remote workspace.
+        const CHECK_CONFLICTS = 1 << 4;
     }
 }
 
@@ -569,6 +603,7 @@ impl Editor {
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
+            disk_stamp: DiskStamp::Unknown,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -594,6 +629,7 @@ impl Editor {
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
+            disk_stamp: DiskStamp::Unknown,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -624,6 +660,7 @@ impl Editor {
             fs_access: FsAccess::Writable,
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
+            disk_stamp: DiskStamp::Unknown,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -703,6 +740,9 @@ impl Editor {
         // error; non-UTF-8 text opens lossily and read-only.
         let fs_read_only = auth.is_unwritable(&canon);
         let protected = self.read_only_paths.matches(&canon);
+        // Stat before reading: a change in between then shows up as a
+        // (spurious, safe) conflict rather than a missed one.
+        let disk_stamp = self.stamp(&canon);
         let vix_fileops::TextFile {
             text: content,
             lossy,
@@ -728,6 +768,7 @@ impl Editor {
                 PathAccess::Normal
             },
             encoding,
+            disk_stamp,
         };
 
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
@@ -757,6 +798,7 @@ impl Editor {
     pub fn reload_clean_from_disk_checked(&mut self) -> Reload {
         let mut out = Reload::default();
         let auth = vix_authority::current();
+        let check = self.flags.contains(Flags::CHECK_CONFLICTS);
         for tab in &mut self.tabs {
             if tab.dirty || tab.image.is_some() {
                 continue;
@@ -764,6 +806,9 @@ impl Editor {
             let Some(path) = tab.path.clone() else {
                 continue;
             };
+            if check {
+                tab.disk_stamp = DiskStamp::capture(&path);
+            }
             let current = tab.editor.get_content();
             let limit = if current.len() as u64 > self.max_text_bytes {
                 vix_fileops::HARD_MAX_TEXT_BYTES
@@ -838,6 +883,9 @@ impl Editor {
         // binary.
         let auth = vix_authority::current();
         let meta = auth.metadata(&path)?;
+        if self.flags.contains(Flags::CHECK_CONFLICTS) {
+            tab.disk_stamp = DiskStamp::Seen(meta);
+        }
         let refuse = |why| Err(io::Error::new(io::ErrorKind::InvalidData, why));
         if !meta.is_file() {
             return refuse(vix_fileops::TextReadError::NotRegular);
@@ -869,13 +917,42 @@ impl Editor {
     ///
     /// Returns an error if the buffer has no path, or the write fails.
     pub fn save_active(&mut self, opts: SaveOptions) -> io::Result<PathBuf> {
+        self.save_active_checked(opts, true)
+    }
+
+    /// [`Editor::save_active`] without the save-conflict check (T713): the
+    /// user chose to overwrite a file that changed on disk.
+    ///
+    /// # Errors
+    ///
+    /// As [`Editor::save_active`], except never a `WriteConflict`.
+    pub fn save_active_overwriting(&mut self, opts: SaveOptions) -> io::Result<PathBuf> {
+        self.save_active_checked(opts, false)
+    }
+
+    fn save_active_checked(&mut self, opts: SaveOptions, check: bool) -> io::Result<PathBuf> {
         let idx = self.active;
         let path = self.tabs[idx]
             .path
             .clone()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no path"))?;
-        self.write_to(idx, &path, opts)?;
+        let expected = if check {
+            self.tabs[idx].disk_stamp
+        } else {
+            DiskStamp::Unknown
+        };
+        self.write_to(idx, &path, opts, expected)?;
         Ok(path)
+    }
+
+    /// The stamp to record for `path`: captured only while
+    /// [`Flags::CHECK_CONFLICTS`] is on, so a local workspace pays nothing.
+    fn stamp(&self, path: &Path) -> DiskStamp {
+        if self.flags.contains(Flags::CHECK_CONFLICTS) {
+            DiskStamp::capture(path)
+        } else {
+            DiskStamp::Unknown
+        }
     }
 
     /// Save the active buffer to `path` and adopt it as the buffer's path.
@@ -885,12 +962,22 @@ impl Editor {
     /// Returns an error if the write fails.
     pub fn save_active_as(&mut self, path: PathBuf, opts: SaveOptions) -> io::Result<PathBuf> {
         let idx = self.active;
-        self.write_to(idx, &path, opts)?;
+        // Save As has its own overwrite question; no version check.
+        self.write_to(idx, &path, opts, DiskStamp::Unknown)?;
         self.tabs[idx].path = Some(path.clone());
         Ok(path)
     }
 
-    fn write_to(&mut self, idx: usize, path: &Path, opts: SaveOptions) -> io::Result<()> {
+    /// Write tab `idx` to `path`. With `expected` known (and
+    /// [`Flags::CHECK_CONFLICTS`] on), only if the file is still that
+    /// version: a `WriteConflict` error otherwise, and nothing is written.
+    fn write_to(
+        &mut self,
+        idx: usize,
+        path: &Path,
+        opts: SaveOptions,
+        expected: DiskStamp,
+    ) -> io::Result<()> {
         // A buffer shared by someone else's Cowork session is saved by that
         // host, never by us: its synthetic path must not become a local file.
         if is_remote_path(path) || self.tabs[idx].path.as_deref().is_some_and(is_remote_path) {
@@ -914,9 +1001,18 @@ impl Editor {
         // Atomic, crash-safe save: a temp file is flushed and renamed over the
         // target, so a crash or full disk mid-write can't truncate the user's
         // file, and a concurrent reader never sees a half-written buffer.
-        vix_authority::current().write_atomic(path, &bytes)?;
+        let auth = vix_authority::current();
+        let check = self.flags.contains(Flags::CHECK_CONFLICTS);
+        match expected {
+            DiskStamp::Seen(stat) if check => {
+                auth.write_atomic_if_unchanged(path, &bytes, Some(&stat))?;
+            }
+            DiskStamp::Missing if check => auth.write_atomic_if_unchanged(path, &bytes, None)?,
+            _ => auth.write_atomic(path, &bytes)?,
+        }
         self.tabs[idx].dirty = false;
         self.tabs[idx].preview = false;
+        self.tabs[idx].disk_stamp = self.stamp(path);
         Ok(())
     }
 
@@ -1933,6 +2029,49 @@ mod tests {
         let inner = err.into_inner().expect("the encode error is kept");
         assert!(inner.is::<vix_encoding::Unmappable>());
         assert_eq!(fs::read(&path).unwrap(), b"caf\xe9\n");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// T713: with conflict checking on, a save refuses a file that changed
+    /// on disk since it was read, `save_active_overwriting` writes anyway,
+    /// and the stamp then follows the buffer's own saves.
+    #[test]
+    fn a_save_refuses_a_file_changed_on_disk_when_checking() {
+        let dir = scratch("conflict");
+        let opts = SaveOptions {
+            trim_trailing_whitespace: false,
+            ensure_final_newline: false,
+        };
+        let path = dir.join("a.txt");
+        fs::write(&path, "one\n").unwrap();
+        let mut e = Editor::new(Flags::CHECK_CONFLICTS, "    ".into());
+        e.open(&path, false).unwrap();
+        assert!(matches!(
+            e.active_tab().unwrap().disk_stamp,
+            DiskStamp::Seen(_)
+        ));
+        e.active_tab_mut().unwrap().editor.set_content("mine\n");
+        fs::write(&path, "someone else's\n").unwrap();
+        let err = e.save_active(opts).unwrap_err();
+        assert!(vix_authority::WriteConflict::is(&err));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "someone else's\n");
+        e.save_active_overwriting(opts).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "mine\n");
+        // Our own save moved the stamp along, so the next save is clean.
+        e.active_tab_mut()
+            .unwrap()
+            .editor
+            .set_content("mine again\n");
+        e.save_active(opts).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "mine again\n");
+
+        // Without the flag nothing is captured and nothing is checked.
+        let mut plain = Editor::new(Flags::empty(), "    ".into());
+        plain.open(&path, false).unwrap();
+        assert_eq!(plain.active_tab().unwrap().disk_stamp, DiskStamp::Unknown);
+        fs::write(&path, "changed again, longer\n").unwrap();
+        plain.save_active(opts).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "mine again\n");
         fs::remove_dir_all(&dir).ok();
     }
 

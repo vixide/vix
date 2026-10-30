@@ -58,7 +58,10 @@ impl App {
     pub fn load_scripts(&mut self) {
         let global = Settings::scripts_dir();
         let project = self.root.join(".vix").join("scripts");
-        let project = self.project_scripts_trusted().then_some(project.as_path());
+        // A remote workspace's scripts are never loaded: discovery reads this
+        // machine's files, and remote project code waits for trust (T714).
+        let project = (self.project_scripts_trusted() && self.remote_host().is_none())
+            .then_some(project.as_path());
         let (scripts, errors) =
             vix_script::load_all(&self.script_runtime, global.as_deref(), project);
         self.scripts = scripts;
@@ -133,6 +136,9 @@ impl App {
     /// [`App::maybe_reprompt_script_trust`], which differ only in *when*
     /// they're willing to call this.
     fn queue_script_trust_prompt_if_any(&mut self) {
+        if self.remote_host().is_some() {
+            return;
+        }
         let project = self.root.join(".vix").join("scripts");
         let count = vix_script::discover(None, Some(&project)).len();
         if count > 0 {

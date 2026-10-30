@@ -501,6 +501,10 @@ impl App {
 
     /// Run one lens.
     pub(super) fn run_lens(&mut self, lens: &Lens) {
+        // A test command runs the workspace's code (T714).
+        if self.remote_trust_blocks("lsp.code_lens_run") {
+            return;
+        }
         match &lens.action {
             LensAction::Test { command } => {
                 self.run_command(command);
