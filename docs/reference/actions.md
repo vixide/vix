@@ -281,6 +281,13 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `join_lines` | Join Lines | Catalog |
 | `jump_line` | Jump to Line | Catalog |
 | `jump_to_matching_brace` | Jump to Matching Brace | Catalog |
+| `jupyter.clear_results` | Clear Results | Menu |
+| `jupyter.interrupt` | Interrupt Kernel | Menu |
+| `jupyter.restart` | Restart Kernel | Menu |
+| `jupyter.run` | Run | Menu |
+| `jupyter.run_advance` | Run and Advance | Menu |
+| `jupyter.shutdown` | Shut Down Kernel | Menu |
+| `jupyter.start` | Start Kernel… | Menu |
 | `keybindings.editor` | Keybindings… | Menu |
 | `keybindings.reload` | Reload Keybindings | Menu |
 | `last_split` | Last Split | Catalog |
@@ -754,4 +761,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**747 actions.**
+**754 actions.**

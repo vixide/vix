@@ -101,6 +101,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `command_recents` | list of strings | `[]` | Action ids recently run from the palette, surfaced at the top of the `>` list. Managed by Vix. |
 | `db_connections` | list of tables | `[]` | Saved database connections for the **DB** menu. Passwords are never stored; they are prompted per session. See `crates/vix-db/spec/index.md`. |
 | `[im]` | table | see below | The **IM** menu: `nick` (`""` = OS user name), `notify` (`"mentions"`; or `"all"`, `"off"`), `history` (`"session"`; or `"disk"`), `history_days` (`30`), `blocked` (`[]`), and `[[im.accounts]]` IRC accounts (`name`, `server`, `port` = 6697, `tls` = true, `channels`, `sasl_user`). Passwords come only from `VIX_IM_PASSWORD_<NAME>`. See [IM](../im/index.md). |
+| `[jupyter_kernels]` | table | `{}` | Which Jupyter kernelspec runs each language, as `language = "kernelspec name"` (for example `python = "python3"`). Used by **Run → Jupyter → Run** when no kernel for the language is running yet; empty picks the first installed kernelspec for the language. Only in a build with the `jupyter` feature. See [Jupyter Kernels](../jupyter/index.md). |
 
 Example `config.toml`:
 

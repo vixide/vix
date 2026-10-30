@@ -10,7 +10,8 @@
 //! - The leading `Alt+<letter>` menu-mnemonic branch is a genuinely
 //!   dynamic lookup into the live menu structure (`menu_index_for_alt`),
 //!   not static data a table entry could stand for.
-//! - Six arms are genuinely focus-gated (`Ctrl+Shift+Right`/`Left`,
+//! - Seven arms are genuinely focus-gated (`Ctrl+Shift+Right`/`Left`,
+//!   `Ctrl+Shift+Enter` for Jupyter Run when that capability is built in,
 //!   `Alt+Up`/`Down`, `Alt+n`/`p`) — only consumed while the editor pane
 //!   is focused. `App::focus` is per-request runtime state, not something
 //!   a keymap-keyed lookup table can express without changing behavior

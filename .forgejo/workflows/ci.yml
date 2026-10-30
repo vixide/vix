@@ -97,6 +97,9 @@ jobs:
           cargo test -p vix-tui --no-default-features
           cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
           cargo test -p vix-tui --features cowork --lib cowork
+          cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
+          cargo test -p vix-tui --features jupyter --lib jupyter
+          cargo test -p vix-tui --features jupyter --test jupyter
           cargo hack check -p vix-tui --each-feature --no-dev-deps
 
       # T505 (tasks.md): every example must keep running, not just compiling

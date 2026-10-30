@@ -2532,6 +2532,28 @@ const RUN: &[Item] = &[
     Item::leaf("menu.item.run.watch", "run.watch", ""),
     Item::leaf("menu.item.run.repl", "run.repl", ""),
     Item::leaf("menu.item.run.panel", "run.panel", ""),
+    SEP,
+    Item::sub("menu.item.run.jupyter", RUN_JUPYTER),
+];
+
+/// Jupyter kernels (T734c, `spec/jupyter`), under Run → Jupyter. Compiled in
+/// only with the `jupyter` feature; otherwise the runtime capability filter
+/// hides it.
+const RUN_JUPYTER: &[Item] = &[
+    Item::leaf("menu.item.jupyter.start", "jupyter.start", ""),
+    SEP,
+    Item::leaf("menu.item.jupyter.run", "jupyter.run", "Ctrl+Shift+Enter"),
+    Item::leaf("menu.item.jupyter.run_advance", "jupyter.run_advance", ""),
+    SEP,
+    Item::leaf("menu.item.jupyter.interrupt", "jupyter.interrupt", ""),
+    Item::leaf("menu.item.jupyter.restart", "jupyter.restart", ""),
+    Item::leaf("menu.item.jupyter.shutdown", "jupyter.shutdown", ""),
+    SEP,
+    Item::leaf(
+        "menu.item.jupyter.clear_results",
+        "jupyter.clear_results",
+        "",
+    ),
 ];
 
 fn build_menus() -> Vec<MenuDef> {

@@ -49,6 +49,14 @@ mod info_panels;
 mod insert_tools;
 #[cfg(feature = "jj")]
 mod jj;
+#[cfg(feature = "jupyter")]
+mod jupyter;
+#[cfg(not(feature = "jupyter"))]
+mod jupyter_off;
+#[cfg(feature = "jupyter")]
+use jupyter as jupyter_state;
+#[cfg(not(feature = "jupyter"))]
+use jupyter_off as jupyter_state;
 mod keymap;
 mod large_file;
 mod lsp_dap;
@@ -793,6 +801,9 @@ pub enum ConfirmKind {
     /// `devcontainer` CLI, then open it (T718). [`Confirm::paths`] holds the
     /// `devcontainer.json`.
     DevcontainerUp,
+    /// Run an Org source block in a Jupyter kernel although the workspace
+    /// is not trusted (T734c/d, `spec/jupyter`).
+    JupyterRunBlock,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -2064,6 +2075,9 @@ pub struct App {
     /// Real-time collaboration state (T695); a zero-size stand-in unless the
     /// `cowork` feature is on.
     pub(crate) cowork: cowork_state::State,
+    /// Jupyter kernels (T734c); a zero-size stand-in unless the `jupyter`
+    /// feature is on.
+    pub(crate) jupyter: jupyter_state::State,
     /// HTML character palette overlay, when open.
     pub(crate) html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -2655,6 +2669,7 @@ impl App {
             #[cfg(feature = "http")]
             http_named: std::collections::HashMap::new(),
             cowork: cowork_state::State::default(),
+            jupyter: jupyter_state::State::default(),
             html_panel: None,
             system_info: None,
             lsp_status: None,
@@ -3622,6 +3637,7 @@ impl App {
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
             a if self.run_cowork_action(a) => {}
+            a if self.run_jupyter_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -7903,7 +7919,7 @@ impl App {
     }
 
     fn confirm_key(&mut self, key: KeyEvent) {
-        if self.remote_confirm_key(key) {
+        if self.remote_confirm_key(key) || self.jupyter_confirm_key(key) {
             return;
         }
         if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {

@@ -54,6 +54,9 @@ pub(crate) enum ChoicePurpose {
         /// The recent names, for rows 1 and on.
         names: Vec<String>,
     },
+    /// **Run → Jupyter → Start Kernel…** (T734c): one kernelspec per row.
+    #[cfg(feature = "jupyter")]
+    Jupyter(super::jupyter::Pick),
 }
 
 /// The pick-one overlay and what its rows mean.
@@ -191,6 +194,12 @@ impl App {
             ChoicePurpose::RecentRemote { names } => {
                 if matches!(action, ChoiceAction::Primary) {
                     self.choose_recent_remote(&names, row);
+                }
+            }
+            #[cfg(feature = "jupyter")]
+            ChoicePurpose::Jupyter(pick) => {
+                if matches!(action, ChoiceAction::Primary) {
+                    self.jupyter_picked(pick, row);
                 }
             }
             ChoicePurpose::Peek { path, line } => {

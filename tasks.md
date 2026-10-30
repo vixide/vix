@@ -8813,15 +8813,29 @@ editor by completion, diagnostics and never losing work first.
     using the whole transport is +1.58 MB (stripped release, against one
     that only discovers kernelspecs); `vix` with `--features jupyter` but
     no caller is +68 KB. T734h measures the real cost once T734c uses it.
-  - [ ] **T734c — App wiring.** The opt-in `jupyter` capability feature,
+  - [x] **T734c — App wiring.** The opt-in `jupyter` capability feature,
     with `scripts/check` and CI lint and test runs for it. The Run →
     Jupyter submenu and the `jupyter.*` actions (palette, catalog, i18n
     in every locale). The kernelspec picker, the `jupyter_kernels`
     setting, a status-bar kernel segment, and `Ctrl+Shift+Enter`.
     **Medium.**
-  - [ ] **T734d — Run targets and dock output.** Selection, then `# %%`
+  - [x] **T734d — Run targets and dock output.** Selection, then `# %%`
     cell, then the current line. Output goes to the bottom dock, plus an
     end-of-line result hint. Add Run and Advance. **Small–Medium.**
+  - **T734c and T734d done 2026-10-30** (`feat/t734cd-jupyter-app`):
+    `tui/src/app/jupyter.rs` and `jupyter_off.rs`, `Capability::Jupyter`,
+    Run → Jupyter (7 actions, palette, 15 locales), the picker
+    (`vix-choice-list`), `[jupyter_kernels]`, the status-bar segment, and
+    `Ctrl+Shift+Enter` (host-side and focus-gated, only with the
+    capability). Run targets also include the Org `src` block (before the
+    cell; its output goes to the dock until T734e) via the new pure
+    `vix_jupyter_core::cell`. Remote workspaces are refused. A minimal
+    trust gate landed early: the first run of each Org block in a session
+    asks unless the workspace is trusted (T132); T734f still owns the
+    setting, "always", and project-local kernelspecs. Clear Results clears
+    only the hint (the `#+RESULTS:` half is T734e); images are a dock
+    placeholder (T734g). Tests: `tui/tests/jupyter.rs` (12, an in-process
+    fake kernel; the real-ipykernel one passed against ipykernel 7.4.0).
   - [ ] **T734e — Org babel evaluation.** Run the `src` block at point,
     and `C-c C-c` in a block. Write `#+RESULTS:` (insert or replace)
     following `:results`, `:file` and `:eval`. Map `jupyter-<lang>`

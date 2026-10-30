@@ -739,3 +739,5 @@ KUBECONFIG
 WSLENV
 distroless
 PROGRAMDATA
+Jupytext
+Spyder

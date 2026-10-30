@@ -134,6 +134,14 @@ jobs:
         run: cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
       - name: test the cowork feature
         run: cargo test -p vix-tui --features cowork --lib cowork
+      # The opt-in `jupyter` feature likewise (T734c); the App tests use an
+      # in-process fake kernel, so no Python is needed.
+      - name: clippy with the jupyter feature
+        run: cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
+      - name: test the jupyter feature
+        run: |
+          cargo test -p vix-tui --features jupyter --lib jupyter
+          cargo test -p vix-tui --features jupyter --test jupyter
       - name: check each feature
         run: cargo hack check -p vix-tui --each-feature --no-dev-deps
 

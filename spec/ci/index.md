@@ -205,7 +205,11 @@ runs the same three (the `cargo hack` step is skipped with a note when
 `cargo-hack` isn't installed). The opt-in `cowork` feature is in no default or
 `full` build, so the same job (and `scripts/check`) also runs `cargo clippy
 --features cowork --all-targets -- -D warnings` and `cargo test --features cowork
---lib cowork` (its unit and two-peer loopback integration tests). The checks that read source text or render the
+--lib cowork` (its unit and two-peer loopback integration tests). The opt-in
+`jupyter` feature is handled the same way: `cargo clippy --features jupyter
+--all-targets -- -D warnings`, `cargo test --features jupyter --lib jupyter`
+and `cargo test --features jupyter --test jupyter` (the App against an
+in-process fake kernel; no Python). The checks that read source text or render the
 whole product — `tui/tests/action_catalog.rs` (via `dispatch_scan`), the menu-bar
 insta snapshots, `tui/tests/integration/menu.rs`'s Alt-letter test, and the
 `list_commands --write` / `generate_man` diffs — are **default-feature only**: they

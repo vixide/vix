@@ -28,7 +28,7 @@ pub(super) enum PrettierOutcome {
 impl App {
     /// Whether this workspace's project-local tools are trusted (the
     /// persisted script-trust decision, T132).
-    fn workspace_trusted(&self) -> bool {
+    pub(super) fn workspace_trusted(&self) -> bool {
         // A remote workspace also needs its own trust (T714).
         !self.remote_untrusted()
             && self
