@@ -11498,6 +11498,7 @@ name = "vix-authority"
 version = "2.0.0"
 dependencies = [
  "ignore",
+ "sha2 0.11.1",
  "vix-fileops",
 ]
 

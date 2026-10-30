@@ -22,6 +22,7 @@ libfuzzer-sys = "0.4"
 regex = "1"
 serde_json = "1"
 
+vix-authority = { path = "../crates/vix-authority" }
 vix-conflict-tool = { path = "../crates/vix-conflict-tool" }
 vix-convert-from-json-into-toml-tool = { path = "../crates/vix-convert-from-json-into-toml-tool" }
 vix-convert-from-json-into-yaml-tool = { path = "../crates/vix-convert-from-json-into-yaml-tool" }
@@ -110,6 +111,13 @@ bench = false
 [[bin]]
 name = "im_message"
 path = "fuzz_targets/im_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "agent_frame"
+path = "fuzz_targets/agent_frame.rs"
 test = false
 doc = false
 bench = false

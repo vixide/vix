@@ -6,11 +6,13 @@ It lets a remote machine stand in for the local one. The cross-cutting design is
 [`spec/remote-editing`](../../../spec/remote-editing/index.md); this crate is
 its first piece (T710, T711).
 
-**Status:** Shipped (T710, T711; finished 2026-10-29; T712 and T715 2026-10-30).
+**Status:** Shipped (T710, T711; finished 2026-10-29; T712, T715 and T717 2026-10-30).
 `LocalAuthority` is installed by default. `SshAuthority` (the `ssh`
 feature, [`spec/ssh`](ssh/index.md)) is installed by the experimental
 `vix ssh://…` command line and by **File → Open Remote…** (T713; the App
 side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
+The remote agent (`vix --remote-agent`, T717, [`spec/agent`](agent/index.md))
+speeds it up when a `vix` of the same version is on the remote machine.
 
 ## API
 
@@ -28,6 +30,10 @@ side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
   `FileStat` the caller saw, or it appeared or vanished (`same_version`).
   The default checks with `metadata` first; the SSH authority checks and
   writes in one remote script.
+- `metadata_batch(paths)` (T717) stats many paths, in order. The default
+  calls `metadata` for each; `SshAuthority` answers them in one round trip
+  (the agent's batch, or one shell script per 200 paths) and
+  `AgentAuthority` in one batch. The App's change poll uses it.
 - `is_local()` (T715) says whether the authority's paths are this
   machine's and a read is a cheap local call: `true` for `LocalAuthority`,
   `false` by default (so a new authority counts as remote), for
@@ -70,12 +76,20 @@ side is in [`spec/remote-editing`](../../../spec/remote-editing/index.md)).
   and `/ssh:user@host#port:/path`; `ssh::quote` is the shell quoting; both
   are always built. `SshAuthority` and `SshOptions` need the `ssh` feature
   (which implies `process`). See [`spec/ssh`](ssh/index.md).
+- `agent` (T717, always built): the remote agent's frame codec
+  (`agent::wire`), the agent itself (`agent::serve`, `serve_stdio`, what
+  `vix --remote-agent` runs) and `AgentAuthority`, an authority over a
+  connected agent. `ssh::AgentMode`, `ssh::AgentStatus` and
+  `SshAuthority::{start_agent, agent_status, upload_agent, watch}` need the
+  `ssh` feature. See [`spec/agent`](agent/index.md).
 - `conformance` (T711) is the shared behavioral suite: `conformance::run(&auth,
   scratch)` exercises every trait method under `scratch` (an authority path
   that must not exist yet) and returns the failures. It runs against
   `LocalAuthority` and `FakeAuthority` in the crate's integration test, and
   against `SshAuthority` over a fake `ssh` in `crates/vix-authority/tests/ssh.rs` (and over a real
-  host when `VIX_TEST_SSH_HOST` is set). It includes the conflict check.
+  host when `VIX_TEST_SSH_HOST` is set), and against `AgentAuthority` and
+  the agent-backed `SshAuthority` (T717). It includes the conflict check
+  and `metadata_batch`.
 
 ## What goes through the authority
 
@@ -193,5 +207,6 @@ T712 shipped the SSH authority ([`spec/ssh`](ssh/index.md), with its own
   the settings file) while connected needs a routing authority that sends
   `ssh://` paths to the remote and the rest to `LocalAuthority`. It fits the
   trait as-is.
-- The external-change poll stats every open file each second; over SSH it
-  wants batching (the remote agent, T717).
+- ~~The external-change poll stats every open file each second; over SSH it
+  wants batching (the remote agent, T717).~~ Done (T717): one
+  `metadata_batch` per poll, one round trip with or without the agent.

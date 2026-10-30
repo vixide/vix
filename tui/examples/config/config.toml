@@ -38,6 +38,11 @@ show_explorer = true
 # trash/Recycle Bin, undoable from there) or "hard" (remove outright, no
 # undo). Any other value falls back to "trash".
 explorer_delete = "trash"
+# Remote (SSH) workspaces: use the Vix remote agent when a `vix` of this
+# version is already on the remote machine ("installed", default), also
+# upload this one when it isn't and the platform matches ("upload",
+# SHA-256 checked remotely), or use shell commands only ("off").
+remote_agent = "installed"
 # What Git -> Commit does when nothing is staged but files changed: "ask"
 # (default -- confirm, then `git add -A`), "always", or "never".
 smart_commit = "ask"

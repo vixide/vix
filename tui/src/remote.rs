@@ -20,6 +20,10 @@ use std::path::PathBuf;
 /// ask for a password, passphrase or host-key confirmation the usual way;
 /// every later command reuses it without prompting.
 ///
+/// `remote_agent` is the setting of that name (T717): whether to use, or
+/// upload, the remote agent. The second value returned is what to tell the
+/// user about it (for the Messages drawer), if anything.
+///
 /// `Ok(None)` when `files` names no remote path.
 ///
 /// # Errors
@@ -27,7 +31,8 @@ use std::path::PathBuf;
 /// failed, or the remote path doesn't exist.
 pub fn connect_cli(
     files: &mut Vec<PathBuf>,
-) -> Result<Option<crate::authority::ssh::SshTarget>, String> {
+    remote_agent: &str,
+) -> Result<Option<(crate::authority::ssh::SshTarget, Option<String>)>, String> {
     let [only] = files.as_slice() else {
         return Ok(None);
     };
@@ -38,20 +43,60 @@ pub fn connect_cli(
     let target = crate::authority::ssh::SshTarget::parse(&name)
         .map_err(|e| t!("msg.remote_bad_name", name = name, error = e).to_string())?;
     let mut target = target;
-    let (root, file) = connect(target.clone())?;
+    let (root, file, note) = connect(target.clone(), remote_agent)?;
     *files = file.into_iter().collect();
     target.path = root.to_string_lossy().into_owned();
-    Ok(Some(target))
+    Ok(Some((target, note)))
 }
 
+/// What to tell the user about the remote agent after a connect (T717):
+/// that it is in use (and was uploaded), or why it is not. Nothing when it
+/// was off, or when there simply is no `vix` there and uploading is off
+/// (the usual case, not worth a message on every connect).
 #[cfg(feature = "tasks")]
-fn connect(target: crate::authority::ssh::SshTarget) -> Result<(PathBuf, Option<PathBuf>), String> {
+#[must_use]
+pub fn agent_note(host: &str, status: &crate::authority::ssh::AgentStatus) -> Option<String> {
+    use crate::authority::ssh::AgentStatus;
+    match status {
+        AgentStatus::Running { path, uploaded } => Some(
+            if *uploaded {
+                t!(
+                    "msg.remote_agent_uploaded",
+                    host = host,
+                    path = path.display()
+                )
+            } else {
+                t!(
+                    "msg.remote_agent_running",
+                    host = host,
+                    path = path.display()
+                )
+            }
+            .to_string(),
+        ),
+        AgentStatus::Unavailable(why) => {
+            Some(t!("msg.remote_agent_unavailable", host = host, error = why).to_string())
+        }
+        _ => None,
+    }
+}
+
+/// A connect's workspace root, the file to open, and the agent note.
+type Connected = (PathBuf, Option<PathBuf>, Option<String>);
+
+#[cfg(feature = "tasks")]
+fn connect(
+    target: crate::authority::ssh::SshTarget,
+    remote_agent: &str,
+) -> Result<Connected, String> {
     use crate::authority::Authority as _;
+    use crate::authority::ssh::{AgentMode, SshAuthority, SshOptions};
     let host = target.host.clone();
     let failed =
         |e: std::io::Error| t!("msg.remote_connect_failed", host = host, error = e).to_string();
     let remote_path = PathBuf::from(&target.path);
-    let auth = crate::authority::ssh::SshAuthority::new(target).map_err(failed)?;
+    let options = SshOptions::default().with_agent(AgentMode::from_setting(remote_agent));
+    let auth = SshAuthority::with_options(target, options).map_err(failed)?;
     auth.connect(true).map_err(failed)?;
     let path = auth.canonicalize(&remote_path).map_err(failed)?;
     let (root, file) = if auth.is_dir(&path) {
@@ -62,15 +107,17 @@ fn connect(target: crate::authority::ssh::SshTarget) -> Result<(PathBuf, Option<
             .map_or_else(|| PathBuf::from("/"), std::path::Path::to_path_buf);
         (root, Some(path))
     };
+    let note = agent_note(&host, &auth.agent_status());
     crate::authority::install(std::sync::Arc::new(auth));
-    Ok((root, file))
+    Ok((root, file, note))
 }
 
 /// Without `tasks` Vix starts no process, so it can't run `ssh`.
 #[cfg(not(feature = "tasks"))]
 fn connect(
     _target: crate::authority::ssh::SshTarget,
-) -> Result<(PathBuf, Option<PathBuf>), String> {
+    _remote_agent: &str,
+) -> Result<Connected, String> {
     Err(t!("msg.capability_missing", name = "tasks").to_string())
 }
 
@@ -81,17 +128,21 @@ mod tests {
     #[test]
     fn local_names_are_left_alone() {
         let mut files = vec![PathBuf::from("src/main.rs")];
-        assert_eq!(connect_cli(&mut files), Ok(None));
+        assert_eq!(connect_cli(&mut files, "off"), Ok(None));
         let mut two = vec![PathBuf::from("ssh://h/a"), PathBuf::from("b")];
-        assert_eq!(connect_cli(&mut two), Ok(None), "only a lone remote name");
+        assert_eq!(
+            connect_cli(&mut two, "off"),
+            Ok(None),
+            "only a lone remote name"
+        );
         let mut none = Vec::new();
-        assert_eq!(connect_cli(&mut none), Ok(None));
+        assert_eq!(connect_cli(&mut none, "off"), Ok(None));
     }
 
     #[test]
     fn a_bad_remote_name_is_an_error_before_any_connection() {
         let mut files = vec![PathBuf::from("ssh://-oProxyCommand=x/y")];
-        assert!(connect_cli(&mut files).is_err());
+        assert!(connect_cli(&mut files, "off").is_err());
         assert_eq!(files.len(), 1, "the arguments are untouched");
     }
 }

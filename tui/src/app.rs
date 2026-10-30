@@ -5474,11 +5474,19 @@ impl App {
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
         let mut lost = None;
         let auth = crate::authority::current();
-        for tab in &self.editor.tabs {
-            let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else {
-                continue;
-            };
-            let stat = match auth.metadata(path) {
+        // One batch for every open file: a single round trip under a remote
+        // authority (T717), the same per-file stats locally.
+        let watched: Vec<(&PathBuf, bool)> = self
+            .editor
+            .tabs
+            .iter()
+            .filter(|tab| tab.image.is_none())
+            .filter_map(|tab| tab.path.as_ref().map(|p| (p, tab.dirty)))
+            .collect();
+        let paths: Vec<&std::path::Path> = watched.iter().map(|(p, _)| p.as_path()).collect();
+        let stats = auth.metadata_batch(&paths);
+        for ((path, dirty), stat) in watched.iter().zip(stats) {
+            let stat = match stat {
                 Ok(stat) => stat,
                 Err(e) if e.kind() == std::io::ErrorKind::NotConnected => {
                     lost = Some(e);
@@ -5489,11 +5497,11 @@ impl App {
             let Some(mtime) = stat.modified else {
                 continue;
             };
-            let previous = self.disk_mtimes.insert(path.clone(), mtime);
+            let previous = self.disk_mtimes.insert((*path).clone(), mtime);
             // Only act on a *change* (the first sighting just records the mtime).
             if previous.is_some_and(|p| p != mtime) {
-                if tab.dirty {
-                    dirty_changed.push(path.clone());
+                if *dirty {
+                    dirty_changed.push((*path).clone());
                 } else {
                     reload_clean = true;
                 }

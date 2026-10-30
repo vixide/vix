@@ -4,7 +4,7 @@
 .SH NAME
 vix \- Vix: Simple Terminal Rust IDE
 .SH SYNOPSIS
-\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-\-mcp\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-\-mcp\fR] [\fB\-\-remote\-agent\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Vix: Simple Terminal Rust IDE
 .SH OPTIONS
@@ -35,6 +35,9 @@ Restore a bundle written by `\-\-export\-settings` (or **Vix → Export Settings
 .TP
 \fB\-\-mcp\fR
 Serve the Model Context Protocol over stdin/stdout instead of starting the editor, so an AI agent can read this workspace as Vix sees it: open buffers, symbols, outline, offline diagnostics and SQLite schemas. Read\-only. The workspace is the one directory given as an argument, or the current directory. See `spec/mcp\-server`
+.TP
+\fB\-\-remote\-agent\fR
+Serve Vix\*(Aqs remote\-agent protocol over stdin/stdout instead of starting the editor. A Vix on another machine starts this over SSH to work on this machine\*(Aqs files faster; it is not for interactive use. File\-system operations only; exits when its input ends. See `docs/remote\-editing`
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

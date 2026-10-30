@@ -93,6 +93,16 @@ error output.
 `write_text_in_file_encoding` reads with the guard and encodes with
 `vix_fileops::encode_like`, then writes atomically.
 
+`metadata_batch` (T717) is one script per 200 paths: `for p in …; do` a
+`stat` line (`o…`), `n` for a missing path or `e` for a failed `stat`;
+`done`. So the App's change poll is one `ssh` run, not one per open file.
+
+**With the remote agent** (T717, [`spec/agent`](../agent/index.md)), when
+`SshOptions::agent` is not `Off` and `connect()` found or uploaded a `vix`
+of this exact version, every operation in this table except `command` goes
+to the agent first, and falls back to the script above only when the agent
+is gone or the request is too large for a frame.
+
 ### Processes
 
 `command(spec)` returns a `Command` running `ssh … HOST <envelope>` whose
@@ -171,8 +181,9 @@ password-like values planted in the settings.
 - Per-path routing (a local file opened while a remote workspace is
   installed still goes to the remote); remote search with `rg` (T715);
   remote LSP/DAP path mapping and a remote terminal (T716).
-- Batching: the external-change poll stats each open file over its own round
-  trip (T717's agent).
+- ~~Batching: the external-change poll stats each open file over its own round
+  trip (T717's agent).~~ Done (T717): `metadata_batch`, one script (or one
+  agent batch) per poll.
 - The remote `PATH` is that of a non-interactive `sh` (profile files are not
   read). The git-based walk applies git's ignore rules only (not `.ignore`
   files); the `find` walk outside a work tree applies none.

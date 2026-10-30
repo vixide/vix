@@ -8431,8 +8431,56 @@ so, and the first task of each plan re-checks the facts it depends on.
     exercised end to end (a test can't hide the host's `rg` without
     editing `PATH`); wgrep's apply step still reads each edited file.
 - [ ] **T716 — Remote LSP and tasks/terminal.** **Large.**
-- [ ] **T717 — Remote agent (`vix --remote-agent`).** Framed protocol over
+- [x] **T717 — Remote agent (`vix --remote-agent`).** Framed protocol over
   stdio, batching, file watching, checksum-verified upload. **Large.**
+  - Done 2026-10-30. `vix_authority::agent` (no new crate; spec
+    `crates/vix-authority/spec/agent`): `wire` is a hand-written codec in
+    4-byte-length frames capped at 64 MiB (hello with magic, protocol and
+    Vix version; requests with client ids; replies; watch events), whose
+    decoder bounds every count by the bytes left, caps lists at 4096,
+    refuses nested batches and trailing bytes (property-tested on arbitrary
+    and truncated input); `serve` (what `vix --remote-agent` runs, wired in
+    `tui/src/cli.rs` and `main.rs` before the settings load like `--mcp`)
+    answers stat/read/guarded text read/write/atomic write with conflict
+    check/canonicalize/list/mkdir/rename/remove/move/copy/trash/
+    is-unwritable/walk/which, batches and polling watches with
+    `LocalAuthority`, starts no process and exits on EOF; `AgentAuthority`
+    is an `Authority` over any reader/writer or a spawned command (the T718
+    reuse story). The handshake requires the exact same protocol and Vix
+    version. `SshAuthority` (`SshOptions::agent`, an `AgentMode`) finds a
+    same-version `vix` in `~/.cache/vix/agent/<version>/` or on the remote
+    `PATH` (one round trip, checking `--version --json`), or with `Upload`
+    and a matching `uname -sm` uploads this binary to a temp name in that
+    private (0700, owned, not a link) directory, compares the SHA-256 the
+    remote computes (`sha256sum`/`shasum`/`openssl`) with the local one
+    before `chmod`, runs it once to confirm the version, then renames it;
+    it routes every file operation through the agent and falls back to its
+    shell scripts when the agent is gone or a request exceeds a frame. New
+    `remote_agent` setting: `"installed"` (default, never uploads; the
+    security trade-off is documented in the spec and
+    `docs/remote-editing`), `"upload"`, `"off"`; the Messages drawer says
+    when the agent is used or why not (3 new keys, 15 locales). New
+    `Authority::metadata_batch`; the App's change poll uses it, so it is one
+    round trip for all open files with the agent (one batch) and without it
+    (one shell script per 200 paths). Tests: codec unit/property tests;
+    `crates/vix-authority/tests/agent.rs` (conformance over pipes, a
+    5000-path batch, watches, 8 threads, handshake refusals, hostile
+    agents); `tests/ssh.rs` (checksum mismatch and wrong version install
+    nothing, a verified upload's modes, Installed without vix stays on the
+    shell, the shell batch is one run); `tui/tests/remote_agent.rs` (the
+    real `vix` binary as the agent behind a fake `ssh`: upload, conformance,
+    no `ssh` run per operation, a watch, cache reuse, the App's poll is 0
+    `ssh` runs with the agent and 1 without).
+    NOT done: the App doesn't consume watch events (its poll stays a 1 s
+    timer, now one batch); no `notify` on the remote (polling only);
+    processes, LSP/DAP and remote `rg` still run as their own `ssh`
+    commands (T716 owns LSP/DAP/terminal); the agent serves requests one
+    at a time; files over 64 MiB, compression and resumable uploads go
+    through the shell or not at all; upload only to the same OS and
+    architecture (no download of a matching release build); old cached
+    agents are never cleaned up; no request timeout once connected; not
+    yet run against the real-`sshd` CI job (T719's script runs the shell
+    path only).
 - [ ] **T718 — Other authorities.** Dev containers, `docker exec`/`podman`
   (with OC), Kubernetes, WSL. **Large; later.**
 - [x] **T719 — Optional opt-in CI job against a real local `sshd`.**

@@ -1,6 +1,6 @@
 # Remote editing
 
-**Status:** in progress (proposed 2026-10-28; T710–T714 done). Tasks T710–T719 in
+**Status:** in progress (proposed 2026-10-28; T710–T715, T717 and T719 done). Tasks T710–T719 in
 [`tasks.md`](../../tasks.md). Promotes the "Remote/SSH editing" Ideas-backlog
 entry, which already names Fresh's *authority* design as the model.
 
@@ -46,6 +46,21 @@ remove, watch, spawn, and the terminal. `LocalAuthority` is today's behavior.
 3. **Phase 3, other authorities.** Dev containers, `docker exec`, `podman`
    (links to [`../open-container/index.md`](../open-container/index.md)),
    Kubernetes, WSL.
+
+**Remote agent (T717, done 2026-10-30).** Phase 2's file side:
+`vix --remote-agent` answers a length-prefixed binary protocol on the SSH
+channel (versioned handshake that requires the exact same Vix version,
+request ids, batches, file watches, size limits on every frame), backed by
+`LocalAuthority` on the remote and starting no process. `SshAuthority`
+starts it when the `remote_agent` setting allows (`"installed"` by default:
+use a same-version `vix` already there; `"upload"`: also upload this one,
+same OS and architecture only, SHA-256 checked remotely before it is made
+executable; `"off"`), routes every file operation through it and falls back
+to its shell scripts otherwise. The App's change poll is now one batch per
+second (`Authority::metadata_batch`), one round trip with or without the
+agent. Processes, remote `rg`, LSP and DAP still run as their own `ssh`
+commands. Details:
+[`crates/vix-authority/spec/agent`](../../crates/vix-authority/spec/agent/index.md).
 
 **Search and git (T715, done 2026-10-30).** Under a non-local authority
 (`Authority::is_local` is `false`) the App's project-wide scans run one

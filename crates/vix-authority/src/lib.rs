@@ -15,6 +15,7 @@
 //! `crates/vix-authority/spec/index.md` for the full list.
 //!
 
+pub mod agent;
 pub mod conformance;
 mod fake;
 mod local;
@@ -148,6 +149,15 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// # Errors
     /// The underlying I/O error.
     fn symlink_metadata(&self, path: &Path) -> io::Result<FileStat>;
+
+    /// [`Authority::metadata`] of every path, in order (T717). A remote
+    /// authority answers them all in one round trip (the agent's batch, or
+    /// one shell script) instead of one per path; the default asks one at a
+    /// time. The App's once-a-second check for files changed on disk uses
+    /// it.
+    fn metadata_batch(&self, paths: &[&Path]) -> Vec<io::Result<FileStat>> {
+        paths.iter().map(|p| self.metadata(p)).collect()
+    }
 
     /// Whether `path` exists (following symlinks), like `Path::exists`.
     fn exists(&self, path: &Path) -> bool {
