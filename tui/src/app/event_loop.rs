@@ -106,6 +106,8 @@ impl App {
         self.poll_im();
         // Finish a background remote connect or reconnect (T713).
         self.poll_remote();
+        // The Large File Viewer's search result or pending goto (T733).
+        self.poll_large_file();
     }
 
     /// How long the loop may wait for input before ticking again: short
@@ -129,6 +131,7 @@ impl App {
             || self.db_reconnect_running()
             || self.editor_drag_active()
             || self.im_connected()
+            || self.large_file_busy()
         {
             Duration::from_millis(50)
         } else {

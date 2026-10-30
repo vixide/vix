@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Large File Viewer benchmark (T733). Generates a 1 GiB and a 4 GiB log-like
+# file in a temporary directory, opens each headlessly in the viewer, and
+# prints time to first screen, goto-end latency, time to full index, goto
+# middle, a whole-file search, and peak RSS. The files are deleted afterward.
+#
+# Usage: scripts/bench-large-file [GIB ...]   (default: 1 4)
+#
+# Peak RSS comes from /usr/bin/time (`-l` on macOS, `-v` on Linux). The files
+# are measured right after being written, so they are in the page cache:
+# these are warm-cache numbers. See docs/performance/index.md.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+sizes=("$@")
+[ ${#sizes[@]} -eq 0 ] && sizes=(1 4)
+
+cargo build --release -p vix-large-file --example large_file_bench
+bin=target/release/examples/large_file_bench
+
+dir=$(mktemp -d "${TMPDIR:-/tmp}/vix-large-file-bench.XXXXXX")
+trap 'rm -rf "$dir"' EXIT
+
+case "$(uname -s)" in
+  Darwin) time_flag=-l ;;
+  *) time_flag=-v ;;
+esac
+
+for gib in "${sizes[@]}"; do
+  file="$dir/bench-${gib}gib.log"
+  "$bin" generate "$file" "$gib"
+  /usr/bin/time "$time_flag" "$bin" measure "$file" 2> "$dir/time.txt"
+  grep -Ei 'maximum resident set size|peak memory footprint' "$dir/time.txt" || true
+  rm -f "$file"
+  echo
+done

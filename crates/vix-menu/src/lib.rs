@@ -163,6 +163,7 @@ const FILE: &[Item] = &[
         "file.open_recent",
         "Ctrl Shift O",
     ),
+    Item::leaf("menu.item.file.open_large", "file.open_large", ""),
     Item::leaf("menu.item.file.switch_project", "file.switch_project", ""),
     Item::leaf("menu.item.file.open_remote", "file.open_remote", ""),
     Item::leaf(

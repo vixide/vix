@@ -174,6 +174,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.new_file", "file.new"),
     ("cmd.open_file", "file.open"),
     ("cmd.open_recent", "file.open_recent"),
+    ("cmd.open_large_file", "file.open_large"),
     ("cmd.open_remote", "file.open_remote"),
     ("cmd.reconnect_remote", "file.reconnect_remote"),
     ("cmd.trust_remote", "file.trust_remote"),

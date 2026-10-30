@@ -32,6 +32,8 @@ Highlights:
 - Edit surfaces (Edit → Mode): [Edit SQL](edit-sql/index.md) · [Edit Table](edit-table/index.md) ·
   [Edit Outline](edit-outline/index.md) · [Edit JSON](edit-json/index.md) ·
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
+- [Large File Viewer](large-file-viewer/index.md): view multi-gigabyte files
+  read-only without loading them.
 - Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,
   Lorem ipsum, Date/Time) · [Snippets](snippets/index.md) (with tabstops) ·
   [QR Code](qr-code/index.md) ·

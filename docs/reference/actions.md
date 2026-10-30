@@ -159,6 +159,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `file.local_history_label` | Label Local History Snapshot… | Menu |
 | `file.new` | New | Menu |
 | `file.open` | Open… | Menu |
+| `file.open_large` | Open in Large File Viewer… | Menu |
 | `file.open_path` | Open Path… | Catalog |
 | `file.open_recent` | Open Recent… | Menu |
 | `file.open_remote` | Open Remote… | Menu |
@@ -751,4 +752,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**744 actions.**
+**745 actions.**

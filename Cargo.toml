@@ -126,6 +126,9 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 tokio = { version = "1.53.1", features = ["rt", "net", "time", "sync", "macros"] }
 futures-util = { version = "0.3", default-features = false }
 mimalloc = "0.1"
+# Fast byte search (newline counting and substring search) for the Large
+# File Viewer (T733). Already in the tree through regex/aho-corasick.
+memchr = "2"
 # Property-based ("fuzz") testing of parsers and converters (dev-only).
 proptest = "1"
 # Statistical benchmarking of the hot paths (dev-only). `harness = false` on each
@@ -226,6 +229,7 @@ vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", ver
 vix-keybindings = { path = "crates/vix-keybindings", version = "2.0.0" }
 vix-keyboard-shortcut-panel = { path = "crates/vix-keyboard-shortcut-panel", version = "2.0.0" }
 vix-keymap-model = { path = "crates/vix-keymap-model", version = "2.0.0" }
+vix-large-file = { path = "crates/vix-large-file", version = "2.0.0" }
 vix-left-dock = { path = "crates/vix-left-dock", version = "2.0.0" }
 vix-list-state = { path = "crates/vix-list-state", version = "2.0.0" }
 vix-locale-model = { path = "crates/vix-locale-model", version = "2.0.0" }

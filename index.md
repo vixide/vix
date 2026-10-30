@@ -220,7 +220,11 @@ assistant CLI of your choice on a selection.
 with embedded drivers, a schema browser, autocomplete, a filterable result
 grid, transactions, SSH tunnels and an ER diagram; edit a buffer as a CSV/TSV
 table, a JSON/YAML tree, a hex dump or a folding outline; Markdown preview;
-image viewing on graphics-capable terminals.
+image viewing on graphics-capable terminals; a
+[Large File Viewer](docs/large-file-viewer/index.md) that opens a 4 GiB log
+to its first screen in under a millisecond and indexes it in about half a
+second, in under 5 MiB of memory
+([measured](docs/performance/index.md#large-file-viewer-t733)).
 
 **Org mode.** Headlines, TODO cycling, checkboxes, folding, an agenda, a table
 editor with `TBLFM` formulas, Column View, export to Markdown/HTML, contacts,

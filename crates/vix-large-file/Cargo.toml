@@ -1,0 +1,18 @@
+[package]
+name = "vix-large-file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Large File Viewer: a read-only, chunked view of multi-gigabyte files with a lazy line index."
+
+[dependencies]
+memchr = { workspace = true }
+vix-input = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

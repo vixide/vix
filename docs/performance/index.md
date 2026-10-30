@@ -142,6 +142,40 @@ custom-themes directory (real filesystem I/O) **twice** — once inside
 `apply_saved_theme`, once again immediately after for the View → Theme
 submenu's name list — now scanned once and reused for both.
 
+## Large File Viewer (T733)
+
+The Large File Viewer opens files too big for a buffer without loading them
+(see [`crates/vix-large-file/spec`](../../crates/vix-large-file/spec/index.md)).
+Measured 2026-10-30 with `scripts/bench-large-file`, which generates a 1 GiB
+and a 4 GiB log-like file (~113-byte lines), opens each headlessly in the
+viewer with a 50 × 200 screen, and deletes them afterward.
+
+Machine: Apple M4 Max (16 cores), 128 GiB RAM, internal SSD (APFS), macOS
+27.0.1, `rustc 1.99.1`, `--release`. **Warm cache**: each file is measured
+right after it is written, so it is in the OS page cache; a cold read from
+disk is bounded by the drive instead, and only the full-index and search
+rows (which read the whole file) would change much.
+
+| Measurement | 1 GiB (9.5 M lines) | 4 GiB (38.1 M lines) |
+| ----------- | ------------------- | -------------------- |
+| Time to first screen (open + first 50 lines drawn) | 0.3–0.4 ms | 0.2 ms |
+| Goto end (before the index has started) | 0.1 ms | 0.1 ms |
+| Time to full line index (background) | 119–120 ms | 480–487 ms |
+| Goto a line in the middle (index done) | 0.2 ms | 0.2 ms |
+| Search the whole file for a string on its last line | 83–86 ms | 335–341 ms |
+| Peak RSS of the whole process (`/usr/bin/time -l`) | 4.3 MiB | 3.6–4.6 MiB |
+| Line-index checkpoints kept | 9,298 (73 KiB) | 37,191 (291 KiB) |
+
+Ranges are two runs. The quotable number: **a 4 GiB file opens to its first
+screen in under a millisecond and is fully indexed in about half a second,
+in under 5 MiB of memory** (this machine, warm cache). Memory does not grow
+with the file beyond the checkpoints (8 bytes per 1,024 lines); the index
+and search each read 1 MiB at a time. Process start-up and terminal setup
+are not included: the benchmark times the viewer, not `vix` launching.
+
+Reproduce: `scripts/bench-large-file` (or `scripts/bench-large-file 1` for
+one size). It needs about 4 GiB of free space in `$TMPDIR` at a time.
+
 ## Binary size budget (T514)
 
 CI's `binary-size` job (T008) only tracks a delta against the immediately

@@ -8692,11 +8692,32 @@ editor by completion, diagnostics and never losing work first.
   (`Lsp::restart_language`), Esc closes. Not done: per-server log from the
   panel (Show Server Log stays per active file), stop-without-restart, and
   showing every workspace folder as the root (only the first).
-- [ ] **T733 — Very large files.** Promote the Ideas-backlog item: a
+- [x] **T733 — Very large files.** Promote the Ideas-backlog item: a
   read-only chunked viewer for multi-gigabyte files with an on-demand
   line index, then publish a measured number (open time, memory) in
   `docs/performance` that the README and site can quote. Fresh markets
   exactly this. **Large.**
+  - **Done 2026-10-30** (`feat/t733-large-files`; spec:
+    [`crates/vix-large-file/spec`](crates/vix-large-file/spec/index.md)).
+    New crate `vix-large-file`: positioned chunk reads (`read_at` /
+    `seek_read`, no memory map, no `unsafe`), a sparse line index (every
+    1,024th line) built on a background thread, a streamed cancellable
+    search with progress, goto line / percent / byte, line-selection copy
+    (16 MiB cap), lossy UTF-8, CRLF and long-line horizontal scroll. Opened
+    from **File → Open in Large File Viewer…** (`file.open_large`, palette
+    too), from **v** on the T571 size-limit confirmation, and offered for a
+    file over the 1 GiB buffer ceiling (refused before). Measured with
+    `scripts/bench-large-file` on an M4 Max (warm cache): 4 GiB — first
+    screen 0.2 ms, goto end 0.1 ms, full index ~0.48 s, whole-file search
+    ~0.34 s, peak RSS < 5 MiB; numbers in
+    [`docs/performance`](docs/performance/index.md#large-file-viewer-t733)
+    and quoted in the README. **Not done:** editing large files (out of
+    scope by design); remote files — the viewer is local-only (no ranged
+    read on the `Authority` trait yet, deliberately left while T717 reworks
+    `vix-authority`); regex search, search wrap-around and match counts;
+    following a growing file; mouse scrolling in the viewer; display-width-
+    aware columns for wide characters; cold-cache numbers (the benchmark
+    measures warm-cache only); the vixide.github.io site copy of the number.
 - [ ] **T734 — Jupyter kernel REPL (spike first).** Send a selection or
   an Org `src` block to a Jupyter kernel and show the result inline or in
   the dock (Zed has a kernel REPL). The spike decides whether the
