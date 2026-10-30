@@ -1,7 +1,8 @@
 # Jupyter kernels
 
 Run code from the editor in a [Jupyter](https://jupyter.org/) kernel and see
-what comes back in the bottom dock, without leaving Vix. Any kernel works:
+what comes back in the bottom dock, in an Org file's `#+RESULTS:`, or in an
+image tab, without leaving Vix. Any kernel works:
 IPython (`ipykernel`), IRkernel, `evcxr` for Rust, Deno, and others. Vix
 talks the kernel protocol itself, so it does not need Jupyter Notebook,
 JupyterLab or `jupyter console`, only the kernel.
@@ -63,6 +64,25 @@ variable set from one file or block is there for the next, as in a notebook.
 **Start Kernel…** opens the picker yourself. Each row shows the kernel's
 name, language and the exact command Vix will run.
 
+### Example: a Python file in cells
+
+```python
+import math
+
+# %% Set up
+radius = 2
+
+# %% Area
+math.pi * radius ** 2
+```
+
+Put the cursor on the first line and choose **Run and Advance** three
+times. The first time, Vix starts the Python kernel and sends `import math`
+(the lines above the first marker are a cell of their own), then moves the
+cursor to the `# %% Set up` line. The second time it sends `radius = 2`,
+and the third time the "Area" cell: the dock shows `12.566370614359172`,
+and the same value appears at the end of the cell's last line.
+
 ## Output
 
 Output goes to the bottom dock, under a `[*] <kernel>` line that quotes the
@@ -73,13 +93,79 @@ code's first line:
 - an error as `Name: message` and its traceback, with the colors removed;
 - a value with several forms uses the plain-text form. When a richer form
   such as HTML was dropped, the dock says so;
-- images are not shown yet: the dock shows a placeholder line and the
-  image's text form.
+- an image (`image/png` or `image/jpeg`, such as a Matplotlib figure) opens
+  in an image tab, and the dock says so and shows the image's text form.
+  Without the `image` feature, or in a terminal without graphics, the dock
+  says the image cannot be shown here.
 
 When the kernel finishes, the dock adds `[n] <kernel>: done` (or `failed`,
 or `not run` when an earlier cell failed), where `n` is the execution count.
 The first line of the last output also shows at the end of the line that
 ran. **Clear Results** removes it.
+
+## Org source blocks
+
+In an Org file, put the cursor anywhere in a source block and press
+`C-c C-c`, or choose **Run → Jupyter → Run**. Vix runs the block in the
+kernel for its language and writes the result under it, the way Emacs's
+`ob-jupyter` does:
+
+```org
+#+begin_src python
+total = sum(range(10))
+print("adding")
+total
+#+end_src
+
+#+RESULTS:
+: adding
+: 45
+```
+
+Running the block again replaces the results. The write is one undo step,
+so `Ctrl+Z` takes it back. Long results (10 lines or more) go in a
+`#+begin_example` block, as in Org. **Clear Results** with the cursor in the
+block removes its `#+RESULTS:`. Blocks share their kernel, so `total` is
+there for the next Python block.
+
+The block's language picks the kernel: `python` and `jupyter-python` both
+mean Python. These header arguments on the `#+begin_src` line are honored:
+
+| Header argument | Effect |
+| --------------- | ------ |
+| `:results value` | The default: everything the block shows, in order — printed text, values and errors, as in a notebook cell. |
+| `:results output` | Only printed text (stdout and stderr) and errors. |
+| `:results replace` | The default: new results replace the old ones. |
+| `:results append` | New results go after the old ones. |
+| `:results silent` | Nothing is written to the file; the output goes to the dock and the end-of-line hint. |
+| `:file plot.png` | Save the block's image there, relative to the Org file's folder, and write a link to it. |
+| `:eval no` or `:eval never` | Never run the block. |
+| `:eval query` | Ask before every run. |
+
+Words can be combined, as in `:results output append`. Other header
+arguments (`:session`, `:exports`, `:var`, …) are ignored, and so are
+`#+header:` lines and `header-args` properties.
+
+### Example: a plot
+
+```org
+#+begin_src python :file sine.png
+import matplotlib.pyplot as plt
+import numpy as np
+x = np.linspace(0, 6.3, 100)
+plt.plot(x, np.sin(x))
+plt.show()
+#+end_src
+
+#+RESULTS:
+[[file:sine.png]]
+```
+
+The figure is saved as `sine.png` next to the Org file. Without `:file`, an
+image is saved as `<org-file-name>-images/<hash>.png` (for `notes.org`,
+`notes-images/…`). Vix refuses a `:file` that is an absolute path or climbs
+out of the Org file's folder with `..`; then it writes the image's text form
+instead.
 
 The status bar shows the kernel for the buffer's language: its name, its
 state (`starting`, `idle`, `busy`, `restarting`) and the execution count.
@@ -102,10 +188,21 @@ A kernel runs code as you, with your files and your network. So:
   you choose an action. Opening a file, restoring a session or saving never
   runs anything.
 - **Org blocks ask first.** In a workspace you have not trusted, the first
-  run of each Org source block asks for confirmation (`y` runs it, `n`
-  cancels), showing its language and first lines, like Emacs's
-  `org-confirm-babel-evaluate`. A selection, cell or line you send yourself
-  is never prompted.
+  run of each Org source block in a session asks for confirmation, showing
+  its language and first lines, like Emacs's `org-confirm-babel-evaluate`:
+  `y` runs it, `n` cancels, and `a` runs it and trusts the workspace for
+  Org blocks from now on ("always in this workspace", remembered across
+  sessions). A block in a file outside the workspace always asks, and does
+  not offer `a`. A selection, cell or line you send yourself is never
+  prompted. The `jupyter_confirm_evaluate` setting changes this (below).
+- **Kernels in the project need trust.** A kernelspec inside the workspace
+  (such as one in its `.venv`) could be a program the repository's author
+  chose, so Vix uses it only once you trust the workspace (scripts trust,
+  or `a` above). Then `.venv/share/jupyter/kernels` and
+  `venv/share/jupyter/kernels` are searched too.
+- **Images are checked.** Vix refuses an image over 16 MB, over 16,384
+  pixels on a side, over 16 megapixels, or that is not the type it claims,
+  before decoding it.
 - **Remote workspaces are refused.** A kernel runs on this computer, so Vix
   does not start one while the workspace is on another machine.
 - **A private connection.** Each kernel gets its own `0700` directory and a
@@ -117,6 +214,12 @@ A kernel runs code as you, with your files and your network. So:
 ## Settings
 
 ```toml
+# When an Org block asks before it runs: "untrusted" (the default) asks
+# for a block's first run unless the workspace is trusted, "always" asks
+# every time, "never" never asks. `:eval query` and `:eval never` in a
+# block still win.
+jupyter_confirm_evaluate = "untrusted"
+
 # Which kernelspec runs each language.
 [jupyter_kernels]
 python = "python3"
@@ -125,7 +228,7 @@ rust = "rust"
 
 ## Not yet
 
-Writing results back into an Org buffer as `#+RESULTS:`, showing images,
-and `C-c C-c` in an Org block are coming. Remote kernels, widgets, kernel
-completion and `.ipynb` editing are out of scope for now. The design is in
-[`spec/jupyter`](../../spec/jupyter/index.md).
+Remote kernels, `input()`, widgets, HTML and SVG output, updating a display
+in place, kernel completion, `.ipynb` editing, `#+header:` lines and
+`header-args` properties, and Org's table and raw result formats are out of
+scope for now. The design is in [`spec/jupyter`](../../spec/jupyter/index.md).

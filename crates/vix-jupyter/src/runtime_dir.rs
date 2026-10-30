@@ -124,6 +124,29 @@ impl Drop for RuntimeDir {
     }
 }
 
+/// A private scratch directory for files Vix writes on a kernel's behalf,
+/// such as the images it opens in a tab (T734g): `vix-jupyter-<random>`,
+/// mode `0700` on Unix, never an existing path, removed with everything in
+/// it when dropped.
+#[derive(Debug)]
+pub struct PrivateDir(RuntimeDir);
+
+impl PrivateDir {
+    /// Create one under `base` (such as [`std::env::temp_dir`]).
+    ///
+    /// # Errors
+    /// The I/O error when the directory cannot be created.
+    pub fn create(base: &Path) -> io::Result<Self> {
+        RuntimeDir::create(base).map(Self)
+    }
+
+    /// The directory.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.0.path
+    }
+}
+
 /// Five free loopback TCP ports. They are held together while chosen, so
 /// they are distinct; another process could still take one before the
 /// kernel binds it (the same race `jupyter_client` accepts).
@@ -159,6 +182,21 @@ mod tests {
             assert_eq!(fmode, 0o600);
         }
         let kept = dir.path().to_path_buf();
+        drop(dir);
+        assert!(!kept.exists());
+    }
+
+    #[test]
+    fn private_dir_is_removed_on_drop() {
+        let dir = PrivateDir::create(&std::env::temp_dir()).unwrap();
+        let kept = dir.path().to_path_buf();
+        fs::write(kept.join("a.png"), b"x").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&kept).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o700);
+        }
         drop(dir);
         assert!(!kept.exists());
     }

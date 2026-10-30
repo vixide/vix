@@ -17,11 +17,13 @@ decides what they mean. The feature design and the choice of ZeroMQ are in
 | `wire` | `Signer` (HMAC-SHA256 sign, constant-time verify), `encode`, `decode`, `Limits`, `DecodeError`, the `<IDS\|MSG>` delimiter. |
 | `message` | `Header`, `Message`, `PROTOCOL_VERSION`, the `request` builders (`execute`, `empty`, `shutdown`), and `Content`: typed `kernel_info_reply`, `execute_reply`, `execute_input`, `stream`, `execute_result`, `display_data`, `update_display_data`, `error`, `status`, `interrupt_reply`, `shutdown_reply`. Any other `msg_type` is `Content::Other`. |
 | `connection` | `ConnectionInfo` (the `kernel-*.json` connection file), `Transport` (`tcp`, `ipc`), `Channel`, `endpoint`, `is_local`. |
-| `kernelspec` | `KernelSpec::parse` (`kernel.json`), `argv_for` (`{connection_file}`, `{resource_dir}`), `runs` (language match, `jupyter-python` = `python`), and the search path: `PathEnv`, `data_dirs`, `kernel_dirs`, `user_data_dir`. |
+| `kernelspec` | `KernelSpec::parse` (`kernel.json`), `argv_for` (`{connection_file}`, `{resource_dir}`), `runs` (language match, `jupyter-python` = `python`), the search path: `PathEnv`, `data_dirs`, `kernel_dirs`, `user_data_dir`, and the project-kernelspec rule (T734f): `gate_project_dirs`, `PROJECT_ENVS`. |
 | `output` | `Output` (`Stream`, `Result`, `Display`, `Error`), `MimeBundle::choose`, `Choice`, `Payload`. |
 | `ansi` | `strip_ansi`. |
 | `cell` | `# %%` code cells (T734d): `is_marker` (the language's line-comment prefix, then `%%`) and `cell_at`, the `Cell` around a line (its marker and body range; lines above the first marker are a cell of their own; `None` when the text has no marker). |
-| `org` | `results_block`, `find_results`, `results_edit`, `apply`. |
+| `org` | `results_block`, `find_results`, `results_edit`, `results_append_edit`, `apply`. |
+| `babel` | Org header arguments (T734e): `Header::parse` (`:results` as `Collect` and `Handling`, `:file`, `:eval` as `Eval`), `result_text`, `first_image`. |
+| `image` | Kernel images (T734g): `decode` (base64 `image/png`/`image/jpeg` with size caps), `Image` (`extension`, `file_name`), `ImageError`, `MAX_IMAGE_BYTES`, `MAX_SIDE`, `MAX_PIXELS`. |
 
 ## Wire codec
 
@@ -87,6 +89,14 @@ system directories (`/usr/local/share/jupyter` and `/usr/share/jupyter`, or
 `%PROGRAMDATA%\jupyter`). Duplicates are dropped. `kernel_dirs` appends
 `kernels` to each.
 
+`gate_project_dirs(dirs, root, trusted)` applies the project-kernelspec rule
+(T734f) to a workspace at `root`: untrusted, it drops every directory inside
+`root` (an activated `.venv`, or a `$JUPYTER_PATH` entry in the repository),
+so a cloned repository cannot choose the program a kernel runs; trusted, it
+appends `<root>/.venv/share/jupyter/kernels` and
+`<root>/venv/share/jupyter/kernels` (`PROJECT_ENVS`). Paths compare by
+component as given; the caller canonicalizes them.
+
 ## Outputs
 
 `Output::from_content` turns `stream`, `execute_result`, `display_data`,
@@ -132,9 +142,54 @@ file.
 `results_edit(buffer, end_src, block)` is a line-range replacement: it
 replaces existing results, or inserts a blank line and the block after
 `#+end_src`, or (with `None`) removes the results and the blank lines before
-them, so inserting and then clearing restores the buffer. `apply` performs an
-edit on a string; the App applies the same range through the editor so that
-it is one undo step.
+them, so inserting and then clearing restores the buffer.
+`results_append_edit(buffer, end_src, block)` (`:results append`) inserts the
+block's lines without its `#+RESULTS:` line after the existing results, or
+behaves as `results_edit` when there are none. `apply` performs an edit on a
+string; the App sets the editor's text to the result in one undo step.
+
+## Org header arguments
+
+`Header::parse(begin_line)` reads a `#+begin_src <language> …` line (any
+case; a `"…"` value may hold spaces). It honors only:
+
+- `:results` — `value` (the default) or `output` (`Collect`), and `replace`
+  (the default), `append`, or `silent`/`none` (`Handling`). The last word of
+  each kind wins; format words (`raw`, `drawer`, `table`, …) are ignored.
+- `:file` — the first word: where an image result is saved.
+- `:eval` — `no`/`never` (`Eval::Never`, holding the word), `query`
+  (`Eval::Query`), anything else `Eval::Yes` (`no-export`, `never-export`
+  and `query-export` only concern export).
+
+Header arguments from `#+header:` lines, `#+PROPERTY: header-args` or
+property drawers are not read.
+
+`result_text(outputs, collect)` is the result text in arrival order, ANSI
+removed, one output per line group: with `Value`, every stream, value,
+display and error, as a notebook cell shows them (a deliberate difference
+from Org's own `value`, which is the last expression only: a kernel has no
+separate "return value" channel); with `Output`, only streams and errors.
+An image contributes its `text/plain` form. `first_image(outputs)` is the
+first output whose chosen MIME type is an image: its type and base64 data.
+
+## Images
+
+`decode(mime, base64)` turns kernel image data into checked bytes. A kernel
+is not trusted to send sane images, so it refuses, before any pixel is
+decoded:
+
+- a type other than `image/png` or `image/jpeg` (`Unsupported`);
+- base64 text whose decoded size would pass `MAX_IMAGE_BYTES` (16 MiB), and
+  decoded data over it (`TooLarge`);
+- data that is not base64, or not the claimed type: no PNG signature and
+  `IHDR`, or no JPEG start marker and start-of-frame segment (`Invalid`);
+- a width or height of 0 or over `MAX_SIDE` (16,384), or more than
+  `MAX_PIXELS` (16 Mi pixels, 64 MiB as RGBA) in all (`TooManyPixels`).
+
+The size comes from the PNG `IHDR` chunk or the JPEG `SOFn` segment, so a
+small file claiming a huge image is refused without decoding it.
+`Image::file_name` is the first 16 hex digits of the bytes' SHA-256 plus the
+extension (`png` or `jpg`), so the same image always gets the same name.
 
 ## Testing
 

@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Pure Jupyter kernel protocol core: signed wire codec, typed messages, connection files, kernelspecs, outputs and Org results."
 
 [dependencies]
+base64 = { workspace = true }
 hmac = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

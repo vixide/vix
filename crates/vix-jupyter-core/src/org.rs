@@ -5,8 +5,8 @@
 //! [`MIN_LINES_FOR_BLOCK`] lines or more, and a `[[file:…]]` link for an
 //! image. [`results_edit`] says where that block goes in a buffer: replacing
 //! the existing results of the block, or inserted after `#+end_src` with
-//! a blank line between, as Org writes it. [`apply`] performs an edit on a
-//! string.
+//! a blank line between, as Org writes it; [`results_append_edit`] adds
+//! after them instead. [`apply`] performs an edit on a string.
 
 /// Text with this many lines or more goes in an example block
 /// (`org-babel-min-lines-for-block-output`).
@@ -168,6 +168,25 @@ pub fn results_edit(buffer: &str, end_src: usize, block: Option<&str>) -> Result
     }
 }
 
+/// The edit that adds `block` (from [`results_block`]) after the existing
+/// results of the `src` block ending at line `end_src` (`:results append`):
+/// its lines without the `#+RESULTS:` line go after the old ones. With no
+/// results yet, it is the same as [`results_edit`].
+#[must_use]
+pub fn results_append_edit(buffer: &str, end_src: usize, block: &str) -> ResultsEdit {
+    match find_results(buffer, end_src) {
+        Some((_, end)) => {
+            let body = block.split_once('\n').map_or("", |(_, rest)| rest);
+            ResultsEdit {
+                start: end,
+                end,
+                text: body.to_owned(),
+            }
+        }
+        None => results_edit(buffer, end_src, Some(block)),
+    }
+}
+
 fn line_offset(buffer: &str, line: usize) -> usize {
     if line == 0 {
         return 0;
@@ -271,6 +290,16 @@ mod tests {
         assert_eq!(find_results(buf, 0), None);
         let buf = "#+end_src\n#+results[abc]:\n| 1 | 2 |\n| 3 | 4 |\nx\n";
         assert_eq!(find_results(buf, 0), Some((1, 4)));
+    }
+
+    #[test]
+    fn append_after_existing_results() {
+        let block = results_block(&ResultValue::Text("2".into()));
+        let first = apply(SRC, &results_append_edit(SRC, 3, &block));
+        assert_eq!(first, apply(SRC, &results_edit(SRC, 3, Some(&block))));
+        let again = results_block(&ResultValue::Text("3".into()));
+        let second = apply(&first, &results_append_edit(&first, 3, &again));
+        assert_eq!(second, first.replace(": 2\n", ": 2\n: 3\n"));
     }
 
     #[test]

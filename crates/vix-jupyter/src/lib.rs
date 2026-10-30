@@ -32,3 +32,5 @@ pub use vix_jupyter_core as core;
 
 #[cfg(feature = "process")]
 pub use kernel::{KernelHandle, LaunchError, LaunchOptions};
+#[cfg(feature = "process")]
+pub use runtime_dir::PrivateDir;

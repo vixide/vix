@@ -113,6 +113,14 @@ handle's session.
 `RequestId`, `KernelEvent`, `KernelState` and `DeathReason` are built without
 `process` too, so App code can name them.
 
+## Private scratch directory
+
+`PrivateDir::create(base)` (`process`) makes a `vix-jupyter-<random>`
+directory under `base`, mode `0700` on Unix and never an existing path, and
+removes it with everything in it when dropped; `path()` names it. The App
+writes the images it opens in a tab there (T734g), so a kernel's image
+never lands in a shared, predictable temporary path.
+
 ## Testing
 
 - `crates/vix-jupyter/tests/fake_kernel.rs`: an in-process fake kernel built from the same

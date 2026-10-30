@@ -226,9 +226,11 @@ impl App {
     /// checkbox line, so this never shadows the checkbox case below. On a
     /// list item with a checkbox, toggle it; otherwise recompute the buffer's
     /// statistics cookies and checkbox parents (matching how Org's `C-c C-c`
-    /// "does the right thing" for the common editing cases).
+    /// "does the right thing" for the common editing cases). In a `src`
+    /// block, with the `jupyter` capability built in, it evaluates the block
+    /// instead (T734e).
     fn org_ctrl_c_ctrl_c(&mut self) {
-        if self.org_table_recalc() {
+        if self.jupyter_org_ctrl_c() || self.org_table_recalc() {
             return;
         }
         let on_checkbox = self.editor.active_tab().is_some_and(|t| {

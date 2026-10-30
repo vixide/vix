@@ -4,7 +4,9 @@ Documentation: <https://orgmode.org/manual/Working-with-Source-Code.html>
 
 Tutorial: [An Ode to Org Babel](https://donaldh.wtf/2025/11/an-ode-to-org-babel/)
 
-**Status: minimal version implemented; the rest of this page is unbuilt.**
+**Status: capture is a minimal version; evaluation in a Jupyter kernel is
+built behind the opt-in `jupyter` feature (T734e, see "Evaluation" below);
+the capture select box and the rest of the capture proposal are unbuilt.**
 `org.capture.babel` ships as a built-in `org_capture_templates` entry (key
 `"b"`): a single `%^{Language}` prompt, then a multiline review buffer around
 `#+begin_src <language>` / `#+end_src` (`vix-org-capture`'s generalized
@@ -14,11 +16,32 @@ rest of this page is the original, fuller proposal below, kept as a design
 record for anyone who wants to build that out; none of the "Capture options"
 select box or `PromptKind::OrgCaptureBabel` it describes exists.
 
+## Evaluation (T734e, `jupyter` capability)
+
+In a build with the opt-in `jupyter` feature, Vix evaluates a source block in
+a Jupyter kernel when the user asks: **Run → Jupyter → Run** with the cursor
+in the block, or `C-c C-c` (`org.ctrl_c_ctrl_c`) anywhere in it (fences
+included; it takes precedence over the table and checkbox meanings there).
+Without the feature, `C-c C-c` in a block does what it does elsewhere and
+nothing is ever evaluated. The block's language picks the kernel
+(`jupyter-python` means `python`, as in `ob-jupyter`). When the kernel
+replies, Vix writes a `#+RESULTS:` block after `#+end_src` in Org's format,
+as one undo step, honoring `:results value`/`output`,
+`replace`/`append`/`silent`, `:file` (where an image is saved) and `:eval
+no`/`never`/`query`. **Run → Jupyter → Clear Results** in the block removes
+its results. Nothing runs on open, save, export or `#+CALL`, and the trust
+confirmation follows the `jupyter_confirm_evaluate` setting. The full rules
+are in [`spec/jupyter`](../../../../spec/jupyter/index.md#org-babel-t734e);
+the formatter is `vix-jupyter-core`'s `org` and `babel` modules.
+
+## Capture
+
 [Org Babel](https://orgmode.org/manual/Working-with-Source-Code.html) is Org
 mode's convention for embedding source code in a document as a `#+begin_src` /
 `#+end_src` block, optionally followed by a `#+RESULTS:` block holding the
-last-evaluated output. Vix does not execute code (there is no sandboxed
-evaluator), but it can still help a user **capture** a Babel block in the
+last-evaluated output. Without the `jupyter` capability Vix does not execute
+code (there is no sandboxed evaluator), but it can still help a user
+**capture** a Babel block in the
 right shape — the block header, the language tag, and the header arguments
 that control how results are shown — the same way `org.capture.task` helps
 capture a `* TODO` headline.
@@ -87,7 +110,7 @@ block, formatted as a fixed-width drawer:
   one line).
 - A multi-line result is wrapped in `#+begin_example` / `#+end_example`.
 
-Because Vix does not evaluate code, the capture flow never fabricates a
+The capture flow never evaluates code, so it never fabricates a
 `#+RESULTS:` block on its own — it only inserts one when the user explicitly
 types example output into the capture buffer (see examples below). Whether a
 `#+RESULTS:` block ends up in the file is otherwise entirely up to the

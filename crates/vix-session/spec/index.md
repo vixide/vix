@@ -101,6 +101,18 @@ that workspace's session just to flip this one.
 them unset, so saving a session on exit never forgets a trust decision
 (fixed 2026-10-30, T714: it used to reset `scripts_trusted`).
 
+## Jupyter evaluation trust (T734f)
+
+`WorkspaceSession::jupyter_trusted: Option<bool>` records the answer "always
+in this workspace" to the confirmation before an Org `src` block runs in a
+Jupyter kernel (`spec/jupyter`): `Some(true)` runs this workspace's blocks
+without asking and lets its own kernelspecs (`.venv`) be used; `None` (the
+default, and what an older file loads as) keeps asking.
+`Session::set_jupyter_trusted(root, trusted)` sets it like
+`set_scripts_trusted` (a minimal entry for a new root, nothing else
+touched), and `Session::set_workspace` carries it forward like the other
+trust decisions.
+
 ## Remote workspaces (T713, T714)
 
 A remote workspace's key (`root`) is its canonical `ssh://` name, so its

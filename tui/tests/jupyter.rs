@@ -1,10 +1,12 @@
-//! T734c/T734d: the App's Jupyter wiring against an in-process fake kernel
+//! T734c–T734g: the App's Jupyter wiring against an in-process fake kernel
 //! (the `jupyter` feature). The fake speaks the signed wire protocol over
 //! loopback TCP with ROUTER (shell, control) and PUB (IOPub) sockets from
 //! the same `zeromq` crate as `crates/vix-jupyter/tests/fake_kernel.rs`; the
 //! App attaches to it through an explicit kernelspec in a temporary
 //! directory (`with_jupyter_kernel_dirs` + `with_jupyter_connection`), so no
-//! test edits `PATH` or the environment, and CI needs no Python.
+//! test edits `PATH` or the environment, and CI needs no Python. The
+//! kernelspec directory sits next to the workspace, not inside it: a
+//! kernelspec inside an untrusted workspace is not used (T734f).
 //!
 //! The authority slot is process-wide and the remote test installs a fake
 //! one, so every test here takes [`LOCK`] first.
@@ -29,6 +31,10 @@ use vix_jupyter::core::{ConnectionInfo, Message, Transport};
 use zeromq::{PubSocket, RouterSocket, Socket, SocketRecv, SocketSend, ZmqMessage};
 
 const KEY: &str = "0f1e2d3c-app-fake-kernel";
+/// A valid 2×2 PNG.
+const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=";
+/// A PNG header claiming 100000×10 pixels (a "decompression bomb").
+const BOMB: &str = "iVBORw0KGgoAAAANSUhEUgABhqAAAAAKCAYAAAA3ueYW";
 const WAIT: Duration = Duration::from_secs(10);
 
 /// Serializes the tests (the authority slot is process-wide).
@@ -126,15 +132,30 @@ impl Fake {
                     }),
                 ));
             }
-            "img" => iopub.push(self.publish(
+            "img" | "bomb" => iopub.push(self.publish(
                 req,
                 "display_data",
                 json!({
-                    "data": {"image/png": "iVBORw0KGgo=", "text/plain": "<Image>"},
+                    "data": {
+                        "image/png": if code == "img" { PNG } else { BOMB },
+                        "text/plain": "<Image>",
+                    },
                     "metadata": {},
                     "transient": {},
                 }),
             )),
+            "both" => {
+                iopub.push(self.publish(req, "stream", json!({"name": "stdout", "text": "out\n"})));
+                iopub.push(self.publish(
+                    req,
+                    "execute_result",
+                    json!({
+                        "execution_count": self.count,
+                        "data": {"text/plain": "=both"},
+                        "metadata": {},
+                    }),
+                ));
+            }
             _ => iopub.push(self.publish(
                 req,
                 "execute_result",
@@ -259,10 +280,15 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// A `kernels` directory holding one kernelspec `name` for `language` with
-/// `argv`.
+/// A `kernels` directory next to the workspace `root` (not inside it)
+/// holding one kernelspec `name` for `language` with `argv`.
 fn kernels_dir(root: &Path, name: &str, language: &str, argv: &[&str]) -> PathBuf {
-    let kernels = root.join("kernels");
+    write_kernelspec(&root.with_extension("kernels"), name, language, argv)
+}
+
+/// Write kernelspec `name` under `base/kernels`; return that directory.
+fn write_kernelspec(base: &Path, name: &str, language: &str, argv: &[&str]) -> PathBuf {
+    let kernels = base.join("kernels");
     std::fs::create_dir_all(kernels.join(name)).must();
     std::fs::write(
         kernels.join(name).join("kernel.json"),
@@ -277,13 +303,18 @@ fn kernels_dir(root: &Path, name: &str, language: &str, argv: &[&str]) -> PathBu
 /// to `info`. Its argv names a program that does not exist, so a launch
 /// would fail loudly instead of running anything.
 fn app(root: &Path, info: ConnectionInfo) -> App {
+    app_with(root, info, Settings::default())
+}
+
+/// [`app`] with `settings`.
+fn app_with(root: &Path, info: ConnectionInfo, settings: Settings) -> App {
     let kernels = kernels_dir(
         root,
         "fake",
         "python",
         &["vix-test-no-such-kernel", "-f", "{connection_file}"],
     );
-    let mut app = App::new(root.to_path_buf(), Settings::default())
+    let mut app = App::new(root.to_path_buf(), settings)
         .with_session_path(root.join("session.toml"))
         .with_jupyter_kernel_dirs(vec![kernels])
         .with_jupyter_connection("fake", info);
@@ -670,4 +701,384 @@ fn ctrl_shift_enter_runs_the_line() {
     // The key ran the code; it did not also type a newline.
     assert_eq!(app.editor.active_tab().unwrap().text(), "print('hi')\n");
     shut_down(app, kernel);
+}
+
+// ----- T734e: Org babel -------------------------------------------------------
+
+/// Settings that never ask before an Org block runs.
+fn no_prompts() -> Settings {
+    let mut settings = Settings::default();
+    settings.jupyter_confirm_evaluate = "never".into();
+    settings
+}
+
+fn text(app: &App) -> String {
+    app.editor.active_tab().must().text()
+}
+
+/// Replace the active buffer and put the cursor on `line`.
+fn set_text(app: &mut App, text: &str, line: usize) {
+    let editor = &mut app.editor.active_tab_mut().must().editor;
+    editor.set_content(text);
+    editor.set_cursor_line(line);
+}
+
+#[test]
+fn org_results_insert_replace_append_and_silent() {
+    let _guard = lock();
+    let root = scratch("babel");
+    let (info, log, kernel) = fake_kernel();
+    let mut app = app_with(&root, info, no_prompts());
+    let org = "* Notes\n#+begin_src python\nboth\n#+end_src\n\nAfter.\n";
+    open(&mut app, &root, "notes.org", org, 2);
+
+    // Insert: `:results value` (the default) is everything the cell shows.
+    run_and_wait(&mut app, "jupyter.run");
+    let once =
+        "* Notes\n#+begin_src python\nboth\n#+end_src\n\n#+RESULTS:\n: out\n: =both\n\nAfter.\n";
+    assert_eq!(text(&app), once);
+    assert!(app.editor.active_tab().unwrap().dirty);
+    // No end-of-line hint: the results are in the buffer.
+    assert!(!app.editor.active_tab().unwrap().editor.has_inlay_hints());
+
+    // Replace: running again leaves one results block, and the same
+    // results add no undo step, so one undo takes the first write back.
+    run_and_wait(&mut app, "jupyter.run");
+    assert_eq!(text(&app), once);
+    app.run_action("edit.undo");
+    assert_eq!(text(&app), org);
+
+    // `C-c C-c` runs the block too; `:results output append` adds only the
+    // printed text after the old results.
+    let appending = once.replace(
+        "#+begin_src python",
+        "#+begin_src python :results output append",
+    );
+    set_text(&mut app, &appending, 2);
+    let before = seen(&log).len();
+    run_and_wait(&mut app, "org.ctrl_c_ctrl_c");
+    assert_eq!(seen(&log).len(), before + 1);
+    assert_eq!(
+        text(&app),
+        appending.replace(": =both\n", ": =both\n: out\n")
+    );
+
+    // `:results silent` writes nothing and shows the hint instead.
+    let silent = org.replace("#+begin_src python", "#+begin_src python :results silent");
+    set_text(&mut app, &silent, 2);
+    run_and_wait(&mut app, "jupyter.run");
+    assert_eq!(text(&app), silent);
+    assert!(app.editor.active_tab().unwrap().editor.has_inlay_hints());
+    shut_down(app, kernel);
+}
+
+#[test]
+fn org_eval_never_refuses_and_query_always_asks() {
+    let _guard = lock();
+    let root = scratch("eval");
+    let (info, log, kernel) = fake_kernel();
+    let mut app = app_with(&root, info, no_prompts());
+    let org = "#+begin_src python :eval never\n1\n#+end_src\n";
+    open(&mut app, &root, "e.org", org, 1);
+    app.run_action("jupyter.run");
+    app.run_action("org.ctrl_c_ctrl_c");
+    assert!(!app.jupyter_confirm_open());
+    assert_eq!(app.jupyter_kernels().len(), 0);
+    assert_eq!(seen(&log).len(), 0);
+    assert_eq!(text(&app), org);
+
+    // `:eval query` asks even when the setting says never.
+    set_text(
+        &mut app,
+        "#+begin_src python :eval query\n1\n#+end_src\n",
+        1,
+    );
+    app.run_action("jupyter.run");
+    assert!(app.jupyter_confirm_open());
+    app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    pump(&mut app, "the queried block", |a| {
+        text(a).contains("#+RESULTS:\n: =1\n")
+    });
+    // …and again on the next run.
+    app.run_action("jupyter.run");
+    assert!(app.jupyter_confirm_open());
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(seen(&log), ["1"]);
+    shut_down(app, kernel);
+}
+
+#[test]
+fn clear_results_removes_the_results_block() {
+    let _guard = lock();
+    let root = scratch("clear");
+    let (info, _log, kernel) = fake_kernel();
+    let mut app = app_with(&root, info, no_prompts());
+    let org = "#+begin_src python\nboth\n#+end_src\nTail.\n";
+    open(&mut app, &root, "c.org", org, 1);
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(text(&app).contains("#+RESULTS:"));
+    app.run_action("jupyter.clear_results");
+    assert_eq!(text(&app), org);
+    // Undo brings the results back in one step.
+    app.run_action("edit.undo");
+    assert!(text(&app).contains("#+RESULTS:\n: out\n: =both\n"));
+    shut_down(app, kernel);
+}
+
+// ----- T734f: trust ------------------------------------------------------------
+
+#[test]
+fn always_in_this_workspace_is_remembered() {
+    let _guard = lock();
+    let root = scratch("always");
+    let (info, log, kernel) = fake_kernel();
+    let mut app = app(&root, info);
+    let org = "#+begin_src python\n2\n#+end_src\n";
+    open(&mut app, &root, "a.org", org, 1);
+    app.run_action("jupyter.run");
+    assert!(app.jupyter_confirm_open());
+    app.on_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    pump(&mut app, "the trusted block", |a| text(a).contains(": =2"));
+    let session = vix_session::Session::load_from(&root.join("session.toml"));
+    assert!(
+        session
+            .workspaces
+            .iter()
+            .any(|w| w.jupyter_trusted == Some(true)),
+        "the answer is persisted"
+    );
+    shut_down(app, kernel);
+
+    // A new App for the same workspace runs a different block without asking.
+    let (info, log2, kernel) = fake_kernel();
+    let mut app = app_with(&root, info, Settings::default());
+    open(
+        &mut app,
+        &root,
+        "b.org",
+        "#+begin_src python\n3\n#+end_src\n",
+        1,
+    );
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(!app.jupyter_confirm_open());
+    assert_eq!(seen(&log2), ["3"]);
+
+    // A file outside the workspace still asks, and offers no "always".
+    let outside = root.with_extension("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    open(
+        &mut app,
+        &outside,
+        "o.org",
+        "#+begin_src python\n4\n#+end_src\n",
+        1,
+    );
+    app.run_action("jupyter.run");
+    assert!(app.jupyter_confirm_open());
+    app.on_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    assert!(app.jupyter_confirm_open(), "`a` is not offered here");
+    app.on_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    assert_eq!(seen(&log2), ["3"]);
+    assert_eq!(seen(&log), ["2"]);
+    shut_down(app, kernel);
+}
+
+#[test]
+fn confirm_evaluate_always_asks_every_run() {
+    let _guard = lock();
+    let root = scratch("ask");
+    let (info, log, kernel) = fake_kernel();
+    let mut settings = Settings::default();
+    settings.jupyter_confirm_evaluate = "always".into();
+    let mut app = app_with(&root, info, settings);
+    open(
+        &mut app,
+        &root,
+        "k.org",
+        "#+begin_src python\n5\n#+end_src\n",
+        1,
+    );
+    for _ in 0..2 {
+        app.run_action("jupyter.run");
+        assert!(app.jupyter_confirm_open());
+        app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        let n = seen(&log).len();
+        pump(&mut app, "the confirmed run", |_| seen(&log).len() > n);
+    }
+    // A line sent on purpose never asks.
+    open(&mut app, &root, "k.py", "6\n", 0);
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(!app.jupyter_confirm_open());
+    shut_down(app, kernel);
+}
+
+#[test]
+fn project_kernelspecs_need_a_trusted_workspace() {
+    let _guard = lock();
+    let root = scratch("project");
+    let (info, _log, _kernel) = fake_kernel();
+    // A kernelspec in the workspace's own `.venv`, and one in a directory
+    // inside the workspace passed explicitly.
+    write_kernelspec(
+        &root.join(".venv").join("share").join("jupyter"),
+        "venv",
+        "python",
+        &["vix-test-no-such-kernel"],
+    );
+    let inside = write_kernelspec(&root.join("tools"), "inside", "python", &["x"]);
+    let mut app = app(&root, info);
+    app =
+        app.with_jupyter_kernel_dirs(vec![root.with_extension("kernels").join("kernels"), inside]);
+    app.run_action("jupyter.start");
+    assert_eq!(app.jupyter_picker_rows(), Some(1), "untrusted: only `fake`");
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    // Trust the workspace (T132's decision) and both project specs appear.
+    let key = std::fs::canonicalize(&root)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let mut session = vix_session::Session::load_from(&root.join("session.toml"));
+    session.set_scripts_trusted(&key, Some(true));
+    session.save_to(&root.join("session.toml")).unwrap();
+    app.run_action("jupyter.start");
+    assert_eq!(app.jupyter_picker_rows(), Some(3));
+}
+
+// ----- T734g: images -------------------------------------------------------------
+
+#[test]
+fn an_image_opens_in_a_tab_and_a_bomb_is_refused() {
+    let _guard = lock();
+    let root = scratch("image");
+    let (info, _log, kernel) = fake_kernel();
+    let mut app = app(&root, info);
+    app.picker = Some(ratatui_image::picker::Picker::halfblocks());
+    open(&mut app, &root, "i.py", "bomb\nimg\n", 0);
+    let tabs = app.editor.tabs.len();
+    run_and_wait(&mut app, "jupyter.run");
+    assert_eq!(app.editor.tabs.len(), tabs, "the bomb opened nothing");
+    assert!(dock(&app).contains(&"<Image>".to_owned()));
+
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(1);
+    run_and_wait(&mut app, "jupyter.run");
+    assert_eq!(app.editor.tabs.len(), tabs + 1);
+    assert!(app.editor.active_tab().unwrap().is_image());
+    shut_down(app, kernel);
+}
+
+#[test]
+fn an_org_image_is_saved_for_a_file_link() {
+    let _guard = lock();
+    let root = scratch("orgimage");
+    let (info, _log, kernel) = fake_kernel();
+    let mut app = app_with(&root, info, no_prompts());
+    let tabs_before = app.editor.tabs.len();
+    open(
+        &mut app,
+        &root,
+        "plots.org",
+        "#+begin_src python :file out/plot.png\nimg\n#+end_src\n",
+        1,
+    );
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(text(&app).ends_with("#+RESULTS:\n[[file:out/plot.png]]\n"));
+    let saved = std::fs::read(root.join("out").join("plot.png")).unwrap();
+    assert!(saved.starts_with(b"\x89PNG"));
+    // Saved for the link, not opened in a tab.
+    assert_eq!(app.editor.tabs.len(), tabs_before + 1);
+
+    // Without `:file`: `<org-file-stem>-images/<hash>.png`.
+    set_text(&mut app, "#+begin_src python\nimg\n#+end_src\n", 1);
+    run_and_wait(&mut app, "jupyter.run");
+    let images: Vec<_> = std::fs::read_dir(root.join("plots-images"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(images.len(), 1);
+    assert!(text(&app).contains(&format!("[[file:plots-images/{}]]", images[0])));
+
+    // A `:file` outside the Org file's folder, and an oversized image, are
+    // not written; the results fall back to text.
+    set_text(
+        &mut app,
+        "#+begin_src python :file ../escape.png\nimg\n#+end_src\n",
+        1,
+    );
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(!root.with_extension("png").exists());
+    assert!(!root.parent().unwrap().join("escape.png").exists());
+    assert!(text(&app).contains("#+RESULTS:\n: <Image>\n"));
+    set_text(
+        &mut app,
+        "#+begin_src python :file big.png\nbomb\n#+end_src\n",
+        1,
+    );
+    run_and_wait(&mut app, "jupyter.run");
+    assert!(!root.join("big.png").exists());
+    assert!(text(&app).contains("#+RESULTS:\n: <Image>\n"));
+    shut_down(app, kernel);
+}
+
+/// An Org block's `#+RESULTS:` and a `:file` image against a real
+/// ipykernel, when `VIX_JUPYTER_PYTHON` names a Python that has it.
+#[test]
+fn real_ipykernel_writes_org_results() {
+    let Ok(python) = std::env::var("VIX_JUPYTER_PYTHON") else {
+        return;
+    };
+    let _guard = lock();
+    let root = scratch("ipykernel-org");
+    let kernels = kernels_dir(
+        &root,
+        "py",
+        "python",
+        &[
+            &python,
+            "-m",
+            "ipykernel_launcher",
+            "-f",
+            "{connection_file}",
+        ],
+    );
+    let mut app = App::new(root.clone(), no_prompts())
+        .with_session_path(root.join("session.toml"))
+        .with_jupyter_kernel_dirs(vec![kernels]);
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    let org = format!(
+        "#+begin_src python :results output\nfor i in range(2):\n    print(i * 21)\n#+end_src\n\n\
+         #+begin_src python :file real.png\nimport base64\nfrom IPython.display import Image, display\n\
+         display(Image(data=base64.b64decode(\"{PNG}\")))\n#+end_src\n"
+    );
+    open(&mut app, &root, "real.org", &org, 1);
+    app.run_action("jupyter.run");
+    pump(&mut app, "the printed results", |a| {
+        text(a).contains("#+RESULTS:\n: 0\n: 21\n")
+    });
+    let line = text(&app)
+        .split('\n')
+        .position(|l| l.starts_with("import base64"))
+        .unwrap();
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(line);
+    app.run_action("jupyter.run");
+    pump(&mut app, "the image link", |a| {
+        text(a).contains("[[file:real.png]]")
+    });
+    assert!(
+        std::fs::read(root.join("real.png"))
+            .unwrap()
+            .starts_with(b"\x89PNG")
+    );
+    app.run_action("jupyter.shutdown");
+    pump(&mut app, "ipykernel shutdown", |a| {
+        a.jupyter_kernels().is_empty()
+    });
 }

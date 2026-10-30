@@ -267,6 +267,14 @@ pub struct Settings {
     /// an `[im]` table. Passwords are never stored here: an account's SASL
     /// password comes from the `VIX_IM_PASSWORD_<NAME>` environment variable.
     pub im: ImSettings,
+    /// When running an Org `src` block in a Jupyter kernel asks first
+    /// (T734f, `spec/jupyter`): `"untrusted"` (the default) asks before a
+    /// block's first run in a session unless the workspace is trusted, and
+    /// always for a file outside the workspace; `"always"` asks before every
+    /// block run; `"never"` never asks. A block's own `:eval query` still
+    /// asks and `:eval never` still refuses. Any other value behaves as
+    /// `"untrusted"`. Only read in a build with the `jupyter` capability.
+    pub jupyter_confirm_evaluate: String,
     /// Which Jupyter kernelspec runs each language (T734c, `spec/jupyter`):
     /// a `[jupyter_kernels]` table of language → kernelspec name, such as
     /// `python = "python3"`. **Run → Jupyter → Run** uses it when no kernel
@@ -794,6 +802,7 @@ impl Default for Settings {
             coverage_path: String::new(),
             db_connections: Vec::new(),
             im: ImSettings::default(),
+            jupyter_confirm_evaluate: "untrusted".to_string(),
             jupyter_kernels: std::collections::BTreeMap::new(),
         }
     }
