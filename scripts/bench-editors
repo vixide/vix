@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+"""Startup time and memory of Vix against other terminal editors (T744).
+
+For every editor in EDITORS that is installed (nothing is installed for you;
+missing ones are reported), this opens a fixed file in a pseudo-terminal of a
+fixed size and measures:
+
+* time to first screen: from just before fork until two marker words, one on
+  the file's first line and one on its twentieth, have both been drawn (escape
+  sequences stripped from the editor's output);
+* peak RSS of the editor process (ru_maxrss from wait4, the same number
+  `/usr/bin/time -l` / `-v` prints), after the screen has been up for
+  SETTLE seconds;
+* resident memory of the whole process tree (the editor and any children
+  it started, such as Neovim's embedded server), the largest of samples
+  taken every 0.25 s while the screen is up;
+* idle CPU: CPU time the process tree used in the last two seconds of that
+  wait, with no input, as a percentage of one core.
+
+Each editor runs with its user configuration disabled (`vim -u NONE`,
+`nvim --clean`, `emacs -Q`, `nano -I`, ...) and with HOME and the XDG
+directories pointed at a fresh temporary directory, so no personal config,
+plugin or session is loaded. The harness answers the terminal queries editors
+send at startup (device attributes, cursor position, background color) the
+way a typical terminal emulator would, so no editor waits on a timeout. The
+time of a real terminal emulator drawing the output is not included.
+
+Two files are generated in a temporary directory and deleted afterwards: a
+10,000-line Rust source file and a ~100 MB plain-text log file. The first
+WARMUP runs of every editor/file pair are discarded (first-launch work such
+as a welcome screen or creating state directories, and loading the binary
+into the OS cache), so the published numbers are warm-cache numbers.
+
+Usage:
+    scripts/bench-editors [--runs N] [--big-runs N] [--json PATH] [EDITOR ...]
+
+Vix is taken from target/release/vix (build it first with
+`cargo build --release -p vix-tui`) unless VIX_BIN is set.
+See docs/performance/index.md, "Startup and memory vs other editors (T744)".
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import platform
+import pty
+import re
+import select
+import shutil
+import signal
+import statistics
+import struct
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+from pathlib import Path
+
+ROWS, COLS = 40, 120
+TOP, MID = b"BENCHTOPMARK", b"BENCHMIDMARK"
+SETTLE = 3.0  # seconds the screen stays up before the process is stopped
+IDLE_WINDOW = 2.0  # the last part of SETTLE, used for idle CPU
+TIMEOUT = 60.0
+WARMUP = 2
+REPO = Path(__file__).resolve().parent.parent
+
+
+def vix_bin() -> str:
+    """The Vix binary under test."""
+    return os.environ.get("VIX_BIN", str(REPO / "target" / "release" / "vix"))
+
+
+# name -> (version command, argv builder taking (file path, home dir))
+EDITORS = {
+    "vix": (
+        lambda: [vix_bin(), "--version"],
+        lambda f, h: [vix_bin(), f],
+    ),
+    "vim": (
+        lambda: ["vim", "--version"],
+        lambda f, h: ["vim", "-u", "NONE", "-i", "NONE", "-n", "-N", f],
+    ),
+    "nvim": (
+        lambda: ["nvim", "--version"],
+        lambda f, h: ["nvim", "--clean", "-n", f],
+    ),
+    "hx": (
+        lambda: ["hx", "--version"],
+        lambda f, h: ["hx", "-c", str(Path(h) / "empty-helix.toml"), f],
+    ),
+    "emacs": (
+        lambda: ["emacs", "--version"],
+        # -Q: no init file, site file or splash. Emacs asks before opening a
+        # file over 10 MB; the eval turns that question off (the counterpart
+        # of raising Vix's large_file_mb below).
+        lambda f, h: [
+            "emacs", "-nw", "-Q",
+            "--eval", "(setq large-file-warning-threshold nil)", f,
+        ],
+    ),
+    "micro": (
+        lambda: ["micro", "--version"],
+        lambda f, h: ["micro", "-config-dir", str(Path(h) / "micro"), f],
+    ),
+    "nano": (
+        lambda: ["nano", "--version"],
+        lambda f, h: ["nano", "-I", f],
+    ),
+    "mg": (
+        lambda: None,  # mg has no version flag
+        lambda f, h: ["mg", "-n", f],
+    ),
+    "kak": (
+        lambda: ["kak", "-version"],
+        lambda f, h: ["kak", "-n", f],
+    ),
+}
+
+# Terminal queries and the replies a typical xterm-compatible terminal sends.
+QUERIES = [
+    (re.compile(rb"\x1b\[0?c"), lambda m: b"\x1b[?62;22c"),
+    (re.compile(rb"\x1b\[>0?c"), lambda m: b"\x1b[>1;10;0c"),
+    (re.compile(rb"\x1b\[6n"), lambda m: b"\x1b[1;1R"),
+    (re.compile(rb"\x1b\[5n"), lambda m: b"\x1b[0n"),
+    (re.compile(rb"\x1b\[14t"), lambda m: b"\x1b[4;800;1200t"),
+    (re.compile(rb"\x1b\[16t"), lambda m: b"\x1b[6;20;10t"),
+    (re.compile(rb"\x1b\[18t"), lambda m: b"\x1b[8;40;120t"),
+    (re.compile(rb"\x1bP\$q[^\x1b]*\x1b\\"), lambda m: b"\x1bP0$r\x1b\\"),
+    (re.compile(rb"\x1b\]11;\?(?:\x07|\x1b\\)"),
+     lambda m: b"\x1b]11;rgb:0000/0000/0000\x1b\\"),
+    (re.compile(rb"\x1b\]10;\?(?:\x07|\x1b\\)"),
+     lambda m: b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\"),
+    (re.compile(rb"\x1b\[\?(\d+)\$p"),
+     lambda m: b"\x1b[?" + m.group(1) + b";0$y"),
+]
+QUERY_ANY = re.compile(b"|".join(q.pattern for q, _ in QUERIES))
+ESCAPES = re.compile(
+    rb"\x1b\[[0-?]*[ -/]*[@-~]"          # CSI
+    rb"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC
+    rb"|\x1b[P_^X][^\x1b]*\x1b\\"        # DCS / APC / PM / SOS
+    rb"|\x1b[()*+][0-9A-Za-z]"           # charset designation
+    rb"|\x1b[^\[\]P_^X()*+]"             # any other two-byte escape
+)
+
+
+def make_files(work: Path) -> dict[str, Path]:
+    """Write the two input files; return {label: path}."""
+    src = work / "ten_k_lines.rs"
+    lines = [f"// {TOP.decode()} -- T744 benchmark input, 10,000 lines of Rust"]
+    i = 0
+    while len(lines) < 10_000:
+        lines += [
+            f"/// Doc comment for item {i}.",
+            f"pub fn item_{i}(x: u64, name: &str) -> Option<String> {{",
+            f"    let y = x.wrapping_mul({i + 3}).rotate_left(7);",
+            '    if name.is_empty() { return None; }',
+            f'    Some(format!("{{name}}-{{y}}-{i}"))',
+            "}",
+            "",
+        ]
+        i += 1
+    lines = lines[:10_000]
+    lines[19] = f"// {MID.decode()}"
+    src.write_text("\n".join(lines) + "\n")
+
+    big = work / "hundred_mb.log"
+    head = [TOP.decode()] + [f"header line {n}" for n in range(1, 19)]
+    head.append(MID.decode())
+    with big.open("w") as out:
+        out.write("\n".join(head) + "\n")
+        n = 0
+        size = 100 * 1000 * 1000
+        written = 0
+        while written < size:
+            chunk = "".join(
+                f"2026-10-30T12:00:{(n + k) % 60:02d}Z INFO worker={(n + k) % 16} "
+                f"request id={n + k} path=/api/v1/items/{(n + k) * 7} status=200\n"
+                for k in range(1000)
+            )
+            out.write(chunk)
+            written += len(chunk)
+            n += 1000
+    return {"10k-line .rs": src, "100 MB .log": big}
+
+
+def _processes() -> dict[int, tuple[int, int, float]]:
+    """{pid: (parent pid, resident bytes, CPU seconds)} for every process."""
+    procs: dict[int, tuple[int, int, float]] = {}
+    if sys.platform.startswith("linux"):
+        tick = os.sysconf("SC_CLK_TCK")
+        page = os.sysconf("SC_PAGE_SIZE")
+        for d in Path("/proc").iterdir():
+            if not d.name.isdigit():
+                continue
+            try:
+                stat = (d / "stat").read_text()
+                rss_pages = int((d / "statm").read_text().split()[1])
+            except (OSError, ValueError, IndexError):
+                continue
+            fields = stat[stat.rindex(")") + 2:].split()
+            procs[int(d.name)] = (int(fields[1]), rss_pages * page,
+                                  (int(fields[11]) + int(fields[12])) / tick)
+        return procs
+    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,rss=,time="],
+                         capture_output=True, text=True, check=False).stdout
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        secs = 0.0
+        for p in parts[3].replace("-", ":").split(":"):
+            secs = secs * 60 + float(p)
+        procs[int(parts[0])] = (int(parts[1]), int(parts[2]) * 1024, secs)
+    return procs
+
+
+def tree_sample(root: int) -> tuple[int, float, int]:
+    """Resident bytes and CPU seconds summed over `root` and its descendants,
+    and how many processes that is."""
+    procs = _processes()
+    tree = {root}
+    grew = True
+    while grew:
+        grew = False
+        for pid, (ppid, _, _) in procs.items():
+            if ppid in tree and pid not in tree:
+                tree.add(pid)
+                grew = True
+    live = [procs[p] for p in tree if p in procs]
+    return sum(p[1] for p in live), sum(p[2] for p in live), len(live)
+
+
+def run_once(argv: list[str], env: dict[str, str], cwd: Path) -> dict:
+    """One launch: time to the markers, peak RSS, idle CPU."""
+    t0 = time.perf_counter()
+    pid, fd = pty.fork()
+    if pid == 0:  # child: size the terminal, then become the editor
+        try:
+            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
+            os.chdir(cwd)
+            os.execvpe(argv[0], argv, env)
+        finally:
+            os._exit(127)
+    raw = bytearray()
+    qpos = 0
+    shown = None
+    samples: list[tuple[float, int, float, int]] = []  # (time, rss, cpu, procs)
+    next_sample = 0.0
+    deadline = t0 + TIMEOUT
+    while True:
+        now = time.perf_counter()
+        if shown is None and now > deadline:
+            break
+        if shown is not None:
+            if now >= next_sample or now >= shown + SETTLE:
+                rss, cpu, count = tree_sample(pid)
+                samples.append((time.perf_counter(), rss, cpu, count))
+                next_sample = now + 0.25
+            if now >= shown + SETTLE:
+                break
+        ready, _, _ = select.select([fd], [], [], 0.005)
+        if not ready:
+            continue
+        try:
+            data = os.read(fd, 65536)
+        except OSError:
+            break
+        if not data:
+            break
+        raw += data
+        # Answer any complete terminal query not yet answered.
+        last = qpos
+        for m in QUERY_ANY.finditer(raw, qpos):
+            for pattern, reply in QUERIES:
+                pm = pattern.fullmatch(m.group(0))
+                if pm:
+                    os.write(fd, reply(pm))
+                    break
+            last = m.end()
+        qpos = max(last, len(raw) - 32)
+        if shown is None:
+            text = ESCAPES.sub(b"", raw)
+            if TOP in text and MID in text:
+                shown = time.perf_counter()
+                next_sample = shown
+    # Stop the whole tree (Neovim's UI runs its editor in a child process).
+    pids = set()
+    procs = _processes()
+    stack = [pid]
+    while stack:
+        p = stack.pop()
+        pids.add(p)
+        stack += [c for c, (pp, _, _) in procs.items() if pp == p and c not in pids]
+    for p in pids:
+        try:
+            os.kill(p, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    # Drain so the child is not blocked writing, then reap it.
+    while True:
+        try:
+            r, _, _ = select.select([fd], [], [], 0.05)
+            if not r or not os.read(fd, 65536):
+                break
+        except OSError:
+            break
+    _, _, ru = os.wait4(pid, 0)
+    os.close(fd)
+    rss = ru.ru_maxrss if sys.platform == "darwin" else ru.ru_maxrss * 1024
+    idle = None
+    window = [s for s in samples if s[0] >= samples[-1][0] - IDLE_WINDOW] if samples else []
+    if len(window) >= 2 and window[-1][0] > window[0][0]:
+        idle = 100.0 * (window[-1][2] - window[0][2]) / (window[-1][0] - window[0][0])
+    return {
+        "first_screen_ms": None if shown is None else (shown - t0) * 1000,
+        "peak_rss_mib": rss / (1024 * 1024),
+        "tree_rss_mib": max((s[1] for s in samples), default=0) / (1024 * 1024),
+        "processes": max((s[3] for s in samples), default=0),
+        "idle_cpu_pct": idle,
+    }
+
+
+def version(name: str) -> str:
+    """The first line of an editor's version output."""
+    cmd = EDITORS[name][0]()
+    if cmd is None:
+        path = shutil.which(name) or name
+        return f"{name} ({path}, no version flag)"
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=20,
+                             check=False)
+    except OSError as e:
+        return f"unknown ({e})"
+    text = (out.stdout or out.stderr).strip().splitlines()
+    return text[0].strip() if text else "unknown"
+
+
+def machine() -> dict[str, str]:
+    """CPU, memory and OS of this machine."""
+    info = {"os": f"{platform.system()} {platform.release()}",
+            "arch": platform.machine()}
+    if sys.platform == "darwin":
+        def sysctl(key: str) -> str:
+            return subprocess.run(["sysctl", "-n", key], capture_output=True,
+                                  text=True, check=False).stdout.strip()
+        info["cpu"] = f"{sysctl('machdep.cpu.brand_string')} ({sysctl('hw.ncpu')} cores)"
+        info["ram"] = f"{int(sysctl('hw.memsize')) // 2**30} GiB"
+        info["os"] = "macOS " + subprocess.run(
+            ["sw_vers", "-productVersion"], capture_output=True, text=True,
+            check=False).stdout.strip() + f" (Darwin {platform.release()})"
+    else:
+        try:
+            cpu = [ln for ln in Path("/proc/cpuinfo").read_text().splitlines()
+                   if ln.startswith("model name")]
+            info["cpu"] = f"{cpu[0].split(':', 1)[1].strip()} ({os.cpu_count()} cores)"
+            mem = Path("/proc/meminfo").read_text().split()[1]
+            info["ram"] = f"{int(mem) // 2**20} GiB"
+        except (OSError, IndexError, ValueError):
+            pass
+    return info
+
+
+def editor_env(home: Path) -> dict[str, str]:
+    """A clean environment rooted at a throwaway HOME."""
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_DATA_HOME": str(home / ".local" / "share"),
+        "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "XDG_CACHE_HOME": str(home / ".cache"),
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
+    }
+    if "TMPDIR" in os.environ:
+        env["TMPDIR"] = os.environ["TMPDIR"]
+    return env
+
+
+def prepare_home(name: str, home: Path, work: Path) -> None:
+    """Per-editor setup inside the throwaway HOME."""
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "empty-helix.toml").write_text("")
+    (home / "micro").mkdir(exist_ok=True)
+    if name == "vix":
+        # First launch writes the default config.toml; then raise the
+        # ask-before-opening limit (default 50 MB) so the 100 MB file opens
+        # as text instead of stopping at a question -- the counterpart of
+        # Emacs's large-file-warning-threshold above.
+        run_once(EDITORS["vix"][1](str(work / "ten_k_lines.rs"), str(home)),
+                 editor_env(home), work)
+        for cfg in home.rglob("config.toml"):
+            if "vix" in str(cfg.parent).lower():
+                text = re.sub(r"(?m)^large_file_mb\s*=.*$", "large_file_mb = 1024",
+                              cfg.read_text())
+                cfg.write_text(text)
+
+
+def summarize(values: list[float]) -> dict:
+    """Median, min and max of the values that are present."""
+    vals = [v for v in values if v is not None]
+    if not vals:
+        return {"median": None, "min": None, "max": None, "n": 0}
+    return {"median": statistics.median(vals), "min": min(vals),
+            "max": max(vals), "n": len(vals)}
+
+
+def fmt(s: dict, digits: int = 0) -> str:
+    """'median (min–max)' for a summary."""
+    if not s["n"]:
+        return "did not render"
+    return (f"{s['median']:.{digits}f} "
+            f"({s['min']:.{digits}f}–{s['max']:.{digits}f})")
+
+
+def main() -> int:
+    """Run the benchmark and print a Markdown table."""
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--runs", type=int, default=10,
+                    help="measured runs per editor on the 10k-line file")
+    ap.add_argument("--big-runs", type=int, default=5,
+                    help="measured runs per editor on the 100 MB file")
+    ap.add_argument("--json", help="also write every raw run here")
+    ap.add_argument("editors", nargs="*", help="limit to these editors")
+    args = ap.parse_args()
+
+    names = args.editors or list(EDITORS)
+    installed, missing = [], []
+    for name in names:
+        exe = vix_bin() if name == "vix" else shutil.which(name)
+        (installed if exe and Path(exe).exists() else missing).append(name)
+
+    info = machine()
+    print("Machine:", ", ".join(f"{k}: {v}" for k, v in info.items()))
+    print("Missing (not installed, skipped):", ", ".join(missing) or "none")
+    versions = {n: version(n) for n in installed}
+    for n, v in versions.items():
+        print(f"  {n}: {v}")
+
+    results: dict = {"machine": info, "missing": missing, "versions": versions,
+                     "date": time.strftime("%Y-%m-%d"), "runs": {}}
+    with tempfile.TemporaryDirectory(prefix="vix-bench-editors.") as tmp:
+        work = Path(tmp) / "work"
+        work.mkdir()
+        files = make_files(work)
+        for name in installed:
+            home = Path(tmp) / f"home-{name}"
+            prepare_home(name, home, work)
+            env = editor_env(home)
+            for label, path in files.items():
+                n = args.big_runs if path.suffix == ".log" else args.runs
+                argv = EDITORS[name][1](str(path), str(home))
+                runs = []
+                for i in range(WARMUP + n):
+                    r = run_once(argv, env, work)
+                    if i >= WARMUP:
+                        runs.append(r)
+                    shown = r["first_screen_ms"]
+                    tag = "warm-up" if i < WARMUP else f"run {i + 1 - WARMUP}"
+                    print(f"  {name:6} {label:13} {tag:>8}: "
+                          f"{'no screen' if shown is None else f'{shown:.1f} ms'}, "
+                          f"peak {r['peak_rss_mib']:.1f} MiB, "
+                          f"tree {r['tree_rss_mib']:.1f} MiB "
+                          f"({r['processes']} process(es))", flush=True)
+                results["runs"].setdefault(name, {})[label] = {
+                    "argv": [a.replace(tmp, "$TMP") for a in argv], "runs": runs}
+
+    print()
+    print("| Editor | File | Time to first screen, ms | Peak RSS, MiB "
+          "| Resident, whole process tree, MiB | Idle CPU, % |")
+    print("| ------ | ---- | ------------------------ | ------------- "
+          "| --------------------------------- | ----------- |")
+    for name in installed:
+        for label, data in results["runs"][name].items():
+            runs = data["runs"]
+            t = summarize([r["first_screen_ms"] for r in runs])
+            m = summarize([r["peak_rss_mib"] for r in runs])
+            tr = summarize([r["tree_rss_mib"] for r in runs])
+            c = summarize([r["idle_cpu_pct"] for r in runs])
+            note = ("" if t["n"] == len(runs) else
+                    f" ({len(runs) - t['n']} of {len(runs)} did not render in {TIMEOUT:.0f} s)")
+            print(f"| {name} | {label} | {fmt(t, 1)}{note} | {fmt(m, 1)} "
+                  f"| {fmt(tr, 1)} | {fmt(c, 1)} |")
+    if args.json:
+        Path(args.json).write_text(json.dumps(results, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -303,6 +303,14 @@ and starts no other program.
 editor itself is well tested — every crate has a spec, and CI runs the
 test suite, clippy pedantic and a docs check on every change.
 
+**How fast is it, and how much memory does it use?** On one Apple M4 Max,
+Vix shows a 10,000-line Rust file in about 41 ms using about 34 MiB. That is
+behind nano, Vim and Neovim (10–31 ms, 8–25 MiB), level with micro on time (40 ms, 28 MiB), and ahead
+of Emacs and Helix (185–208 ms, 54–59 MiB). A 100 MB file is Vix's weak
+spot: it opens in about 99 ms but holds 1.1 GiB, the most of the eight
+editors measured; use the Large File Viewer for files that size. See the
+[method, machine and full table](docs/performance/index.md#startup-and-memory-vs-other-editors-t744).
+
 ## Build from source
 
 Needs a Rust toolchain, 1.97 or newer.
