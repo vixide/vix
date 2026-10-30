@@ -49,17 +49,18 @@ impl Terminal {
         rows: u16,
         cols: u16,
     ) -> std::io::Result<Terminal> {
-        Terminal::open_command(shell, &[], cwd, rows, cols)
+        Terminal::open_command(shell, &[] as &[&str], cwd, rows, cols)
     }
 
     /// Spawn `program` with `args` on a new PTY of `rows`×`cols`, rooted at
-    /// `cwd` (the OC menu's `exec -it <container> sh` tab).
+    /// `cwd` (the OC menu's `exec -it <container> sh` tab, and a remote
+    /// workspace's `ssh -t` session, T716).
     ///
     /// # Errors
     /// Returns an error if the PTY cannot be created or the program cannot spawn.
-    pub fn open_command(
-        program: &str,
-        args: &[String],
+    pub fn open_command<S: AsRef<std::ffi::OsStr>>(
+        program: impl AsRef<std::ffi::OsStr>,
+        args: &[S],
         cwd: &std::path::Path,
         rows: u16,
         cols: u16,

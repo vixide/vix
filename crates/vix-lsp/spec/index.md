@@ -215,6 +215,36 @@ is the text the user sees. Rename, code-action and `workspace/applyEdit`
 edits already name their files (`FileEdits`) and are applied by path, so a
 tab switch cannot misroute them.
 
+## Remote workspaces (T710, T716)
+
+Servers start through the workspace authority (`vix_authority::current().command`),
+so in a remote workspace they run on the remote machine, talking over the `ssh`
+channel's stdio. Paths are the authority's own throughout: document, root and
+workspace-folder URIs are `file://` URIs of the remote paths, and every path in a
+reply (definition, references, call hierarchy, symbols, workspace edits,
+diagnostics, code actions) is turned back into an authority path with
+`uri_to_path` and opened or written through the authority. Under a non-local
+authority (`Authority::is_local` is `false`):
+
+- the server is looked up first with `vix_authority::can_run` (`which` on the
+  remote side, or `is_file` for a configured path with a `/`); a missing one
+  fails to spawn (`ServerError::SpawnFailed`) as it would locally, instead of
+  an `ssh` that starts, reports "not found" and is treated as a crash;
+- it starts in the first workspace folder (locally it inherits Vix's own
+  working directory, as before);
+- `initialize` sends `processId: null`: a server may watch the client's
+  process id and exit when it is gone, and this machine's id means nothing on
+  the remote one;
+- diagnostic paths are keyed as reported, not canonicalized: canonicalizing
+  is a round trip per published report and per `diagnostics_for` lookup
+  (every frame), and the server reports the URIs it was sent, which come from
+  tab paths the authority already canonicalized on open.
+
+The App keeps language servers off in an untrusted remote workspace (T714,
+`spec/remote-editing`). Tested in `tui/tests/authority_remote_tools.rs` with a
+Python mock server under a `FakeAuthority` (whose paths exist only inside it)
+and over a fake `ssh`.
+
 ## Restart and server log (T576)
 
 Each server's stderr is captured on a reader thread into a per-language ring buffer of the last 2,000 lines, which survives restarts. `Lsp::server_log(path)` returns it under a `== language (command) ==` heading; **LSP → Show Server Log** opens it in a read-only tab. `Lsp::restart(path)` shuts the server(s) for `path` down, drops the diagnostics they published, resets the crash-respawn budget, spawns fresh ones and returns the files that were open on them; the host forgets their sync state so `didOpen` is replayed with current content on the next tick. **LSP → Restart Server** drives it.

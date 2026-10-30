@@ -1,6 +1,6 @@
 # Remote editing
 
-**Status:** in progress (proposed 2026-10-28; T710–T714 done). Tasks T710–T719 in
+**Status:** in progress (proposed 2026-10-28; T710–T716 and T719 done). Tasks T710–T719 in
 [`tasks.md`](../../tasks.md). Promotes the "Remote/SSH editing" Ideas-backlog
 entry, which already names Fresh's *authority* design as the model.
 
@@ -58,6 +58,31 @@ the repository top level from `--show-cdup` rather than git's own absolute
 `--show-toplevel`, so it stays an authority path. Details:
 [`vix-workspace-search`](../../crates/vix-workspace-search/spec/index.md#remote-search-t715),
 [`vix-git`](../../crates/vix-git/spec/index.md#where-git-runs-t710-t715).
+
+**Language servers, debug adapters, tasks and the terminal (T716, done
+2026-10-30).** Language servers and debug adapters already started through
+`Authority::command` (T710); now they work remotely. Their stdio is the `ssh`
+channel, so phase 1 needs no LSP proxy. Paths are the authority's: document,
+root and workspace-folder URIs are `file://` URIs of the remote paths, and every
+reply path (definitions, references, call hierarchy, symbols, workspace edits,
+diagnostics, code actions; DAP stack frames) is an authority path the App opens
+or writes through the authority. Under a non-local authority a server or adapter
+is looked up on the remote side first (`vix_authority::can_run`), starts in the
+workspace root, gets `processId: null` (a server may exit when the client's pid
+disappears, and this machine's pid means nothing there), and diagnostic paths
+are not canonicalized (a round trip per lookup). Tasks, project commands, test
+lenses, run configurations and **Run Command…** already ran through the
+authority in the workspace (T710); their shell is now the authority's
+(`Authority::shell_is_posix`: `sh -c` on a POSIX remote even from Windows).
+The integrated terminal asks the authority what to put on the local PTY
+(`Authority::terminal`): locally the user's shell, as before; over SSH, `ssh -t`
+over the same shared connection into the remote login shell in the workspace
+directory. Trust (T714) stays: servers, the debugger and tasks wait for it, and
+an untrusted workspace's terminal opens in the remote home directory. Details:
+[`vix-lsp`](../../crates/vix-lsp/spec/index.md#remote-workspaces-t710-t716),
+[`vix-dap`](../../crates/vix-dap/spec/index.md#remote-workspaces-t710-t716),
+[`vix-terminal`](../../crates/vix-terminal/spec/index.md#remote-workspaces-t716),
+[`vix-authority/spec/ssh`](../../crates/vix-authority/spec/ssh/index.md#the-terminal-t716).
 
 Path form: `ssh://user@host[:port]/abs/path` on the command line and in the
 UI; TRAMP-style `/ssh:host:/path` accepted as an alias.
@@ -146,6 +171,10 @@ is the minimal version, for remote workspaces only:
 - Git, search and user-typed commands (**Run Command…**, pipe through a
   command) still run: the user starts each one. Git on the remote side
   applies its own `safe.directory` ownership check.
+- The integrated terminal (T716) opens, but its remote shell starts in the
+  remote home directory rather than the workspace, so no workspace-defined
+  shell hook or `.envrc` runs by itself; the status line says why. Once
+  trusted it starts in the workspace.
 
 ## Safety
 

@@ -170,8 +170,15 @@ impl SshAuthority {
     }
 
     fn ssh(&self, batch: bool) -> Command {
+        self.ssh_with(batch, false)
+    }
+
+    /// The `ssh` command up to the destination; `tty` asks for a remote
+    /// pseudo-terminal (`-t`, the integrated terminal) instead of none
+    /// (`-T`, every other operation).
+    fn ssh_with(&self, batch: bool, tty: bool) -> Command {
         let mut cmd = Command::new(&self.options.program);
-        cmd.arg("-T");
+        cmd.arg(if tty { "-t" } else { "-T" });
         let mut opt = |o: String| {
             cmd.arg("-o").arg(o);
         };
@@ -820,6 +827,27 @@ impl Authority for SshAuthority {
 
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command> {
         Ok(self.script_command(&Self::process_script(spec)?))
+    }
+
+    fn shell_is_posix(&self) -> bool {
+        true
+    }
+
+    /// `ssh -t … HOST <envelope>`, over the same shared connection and with
+    /// the same options as every other operation, whose script changes to
+    /// `cwd` and then replaces itself with the remote user's login shell
+    /// (`$SHELL -l`, else `/bin/sh -l`). `shell` (the local one) is not
+    /// used. A `cwd` that is gone leaves the shell in the remote home, with
+    /// `cd`'s own message.
+    fn terminal(&self, _shell: &str, cwd: Option<&Path>) -> io::Result<ProcessSpec> {
+        let mut sh = Sh::new();
+        if let Some(dir) = cwd {
+            sh = sh.t("cd -P -- ").path(dir).t("\n");
+        }
+        let script = sh.t("exec \"${SHELL:-/bin/sh}\" -l\n").done();
+        let mut cmd = self.ssh_with(self.options.batch_mode, true);
+        cmd.arg(envelope(&script));
+        Ok(ProcessSpec::new(cmd.get_program()).args(cmd.get_args()))
     }
 }
 

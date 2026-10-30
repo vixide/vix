@@ -286,7 +286,7 @@ impl App {
         };
         let area = self.layout.editor;
         match crate::terminal::Terminal::open_command(
-            &program.to_string_lossy(),
+            &program,
             &args,
             &self.root,
             area.height.max(1),

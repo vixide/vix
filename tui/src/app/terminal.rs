@@ -35,8 +35,23 @@ impl App {
                 "/bin/sh".to_string()
             }
         });
-        match crate::terminal::Terminal::open(&shell, &self.root, rows, cols) {
-            Ok(term) => self.terminal = Some(term),
+        // T716: the authority says what runs on the local PTY — the shell
+        // itself here, `ssh -t` into the remote workspace for SSH. An
+        // untrusted remote workspace (T714) gets a shell in the remote home
+        // directory, so nothing the workspace defines (a `cd` hook, an
+        // `.envrc`) runs by itself.
+        let untrusted = self.remote_untrusted();
+        let cwd = (!untrusted).then_some(self.root.as_path());
+        let opened = crate::authority::current()
+            .terminal(&shell, cwd)
+            .and_then(|spec| open_terminal(&spec, rows, cols));
+        match opened {
+            Ok(term) => {
+                self.terminal = Some(term);
+                if untrusted {
+                    self.status = t!("status.remote_terminal_home").to_string();
+                }
+            }
             Err(e) => self
                 .messages
                 .error(t!("msg.command_failed", error = e).to_string()),
@@ -81,4 +96,28 @@ impl App {
     pub fn terminal_screen_text(&self) -> Option<String> {
         self.terminal.as_ref().map(|t| t.lock().screen().contents())
     }
+}
+
+/// Start `spec` (from `Authority::terminal`) on a new local PTY. A spec
+/// without its own working directory (the SSH client's) starts in this
+/// process's directory, else the temp directory: either exists here, which
+/// the remote workspace root need not.
+fn open_terminal(
+    spec: &crate::authority::ProcessSpec,
+    rows: u16,
+    cols: u16,
+) -> std::io::Result<crate::terminal::Terminal> {
+    let args: Vec<&std::ffi::OsStr> = spec
+        .get_args()
+        .iter()
+        .filter_map(|arg| match arg {
+            crate::authority::Arg::Plain(a) | crate::authority::Arg::Raw(a) => Some(a.as_os_str()),
+            _ => None,
+        })
+        .collect();
+    let dir = spec.cwd().map_or_else(
+        || std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()),
+        std::path::Path::to_path_buf,
+    );
+    crate::terminal::Terminal::open_command(spec.program(), &args, &dir, rows, cols)
 }

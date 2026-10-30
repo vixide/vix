@@ -61,7 +61,10 @@ In restricted mode you can browse, edit, search and save, but nothing the
 workspace itself defines runs: no tasks or project commands (**Project**
 menu), run configurations, test lenses, debugger, language servers, project
 scripts (`.vix/scripts`) or project-local Prettier (`node_modules/.bin`).
-Vix has no automatic environment activation to switch off.
+Vix has no automatic environment activation to switch off. The terminal
+still opens, but in your remote home folder rather than the workspace, so
+nothing in the workspace (a shell hook, an `.envrc`) runs until you `cd`
+there yourself.
 
 ## How it works
 
@@ -85,8 +88,20 @@ versions all work, and so does a `fish` or `csh` login shell.
   run one `rg` on the remote machine (or `grep` for a plain-text search when
   `rg` isn't installed there), so a search is one round trip, not one per
   file. The file finder honors `.gitignore`
-  when the folder is a git work tree. Language servers and debug adapters
-  are started there too, but are not yet tested remotely (T716).
+  when the folder is a git work tree.
+- **Language servers and debuggers** run on the remote machine, where the
+  code and toolchain are, once you trust the workspace. Install them there
+  (Vix looks each one up on the remote machine's `PATH`, or at the path you
+  configured); a server that isn't installed there shows as failed in **View
+  → LSP Status…**. Go to definition, references, rename, code actions,
+  diagnostics and the debugger's stops all use the remote paths.
+- **Tasks, project commands, test lenses and run configurations** run on the
+  remote machine in the workspace folder, with its `sh` (also from a Windows
+  machine).
+- **Tools → Terminal** opens a shell on the remote machine, in the workspace
+  folder: Vix runs `ssh -t` over the same shared connection, and the remote
+  side starts your login shell (`$SHELL`). It shows inside Vix like the
+  local terminal; `Ctrl+]` closes it.
 - **Settings, themes, keybindings, snippets, session and undo history** stay
   on your machine. So does the AI command-line provider, which runs where
   you are signed in to it.
@@ -111,7 +126,15 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
   palette), structural replace and the Org agenda still read every file.
 - Moving a file to the trash needs `gio` or `trash-put` on the remote
   machine; without one, use delete (or set `explorer_delete = "hard"`).
-- The integrated terminal opens a local shell.
+- Language servers, debug adapters and tasks see the `PATH` of a
+  non-interactive `sh` on the remote machine, which doesn't read your shell
+  profile: a tool installed under, say, `~/.cargo/bin` may not be found.
+  Configure its full path (for example `command = ["/home/me/.cargo/bin/rust-analyzer"]`)
+  in that case. The terminal is a login shell and has your usual `PATH`.
+- Debug adapters that talk over a TCP port rather than standard input and
+  output aren't supported (locally or remotely).
+- Stopping a task or closing the terminal ends the local `ssh`; a remote
+  program that ignores the closed connection may keep running there.
 
 ## Safety
 

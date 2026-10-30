@@ -2080,12 +2080,26 @@ impl Lsp {
 }
 
 /// Start the server process with all three stdio streams piped.
+///
+/// Built by the workspace authority (T710): a remote workspace runs its
+/// language server where its files are. There (T716) the program is first
+/// looked up on the remote side, so a server that isn't installed there
+/// fails to spawn as it would locally (an `ssh` that starts fine and then
+/// reports "not found" would look like a crash), and the server starts in
+/// the first workspace folder rather than the remote home directory.
 #[cfg(feature = "process")]
-fn start_process(program: &str, args: &[String]) -> Option<Child> {
-    // Built by the workspace authority (T710): a remote workspace runs its
-    // language server where its files are.
-    vix_authority::current()
-        .command(&vix_authority::ProcessSpec::new(program).args(args))
+fn start_process(program: &str, args: &[String], root: Option<&Path>) -> Option<Child> {
+    let auth = vix_authority::current();
+    let mut spec = vix_authority::ProcessSpec::new(program).args(args);
+    if !auth.is_local() {
+        if !vix_authority::can_run(&*auth, program) {
+            return None;
+        }
+        if let Some(root) = root {
+            spec = spec.current_dir(root);
+        }
+    }
+    auth.command(&spec)
         .ok()?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -2096,14 +2110,15 @@ fn start_process(program: &str, args: &[String]) -> Option<Child> {
 
 /// Without the `process` feature no server is ever started.
 #[cfg(not(feature = "process"))]
-fn start_process(_program: &str, _args: &[String]) -> Option<Child> {
+fn start_process(_program: &str, _args: &[String], _root: Option<&Path>) -> Option<Child> {
     None
 }
 
 /// Spawn a server process and its stdout reader thread.
 fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> Option<Server> {
     let (program, args) = config.command.split_first()?;
-    let mut child = start_process(program, args)?;
+    let root = folders.first().map(|(uri, _)| uri_to_path(uri));
+    let mut child = start_process(program, args, root.as_deref())?;
     let stdin = child.stdin.take()?;
     let stdout = child.stdout.take()?;
     if let Some(stderr) = child.stderr.take() {
@@ -2135,7 +2150,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
     let init = message::request(
         INITIALIZE_ID,
         "initialize",
-        &message::initialize_params(Some(std::process::id()), folders),
+        &message::initialize_params(client_process_id(), folders),
     );
     server.write_now(&init);
     Some(server)
@@ -2203,10 +2218,28 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
     });
 }
 
+/// The `processId` sent in `initialize`: this process's id, or `null` when
+/// the server runs under a non-local authority (T716). A server may watch
+/// that id and exit once it is gone; on another machine the same number is
+/// some unrelated process, or none.
+fn client_process_id() -> Option<u32> {
+    vix_authority::current().is_local().then(std::process::id)
+}
+
 /// Canonicalize a path for diagnostic keying, falling back to the path as-is.
+///
+/// Only under a local authority (T716): this runs for every published
+/// diagnostic and every [`Lsp::diagnostics_for`] lookup (each frame), and
+/// over SSH each canonicalization would be a round trip on the UI thread.
+/// A remote server reports the URIs it was given, which are built from tab
+/// paths the authority already canonicalized when it opened them, so the
+/// path as-is keys the same entry.
 fn canonical(path: &Path) -> PathBuf {
-    vix_authority::current()
-        .canonicalize(path)
+    let auth = vix_authority::current();
+    if !auth.is_local() {
+        return path.to_path_buf();
+    }
+    auth.canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf())
 }
 

@@ -127,6 +127,9 @@ struct Session {
 /// The DAP client: at most one active `Session` (private).
 pub struct Dap {
     session: Option<Session>,
+    /// Where the adapter starts under a non-local authority (T716): the
+    /// workspace root, rather than the remote home directory.
+    workdir: Option<std::path::PathBuf>,
 }
 
 impl Default for Dap {
@@ -139,7 +142,18 @@ impl Dap {
     /// A client with no active session.
     #[must_use]
     pub fn new() -> Self {
-        Dap { session: None }
+        Dap {
+            session: None,
+            workdir: None,
+        }
+    }
+
+    /// The directory a debug adapter starts in when the workspace authority
+    /// is not local (T716): the remote workspace root, so a launch without
+    /// its own `cwd` runs there. Under the local authority it is ignored and
+    /// the adapter inherits Vix's own working directory, as before.
+    pub fn set_workdir(&mut self, dir: Option<std::path::PathBuf>) {
+        self.workdir = dir;
     }
 
     /// Whether a debug session is active.
@@ -169,7 +183,7 @@ impl Dap {
         breakpoints: HashMap<String, Vec<usize>>,
     ) -> bool {
         self.stop();
-        let Some(mut child) = spawn_adapter(adapter) else {
+        let Some(mut child) = spawn_adapter(adapter, self.workdir.as_deref()) else {
             return false;
         };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
@@ -610,13 +624,25 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
 }
 
 /// Start the adapter process with piped stdin/stdout.
+///
+/// Built by the workspace authority (T710): a remote workspace runs its
+/// debug adapter where its files are. There (T716) the adapter is first
+/// looked up on the remote side (a missing one fails to start, as locally)
+/// and starts in `workdir`.
 #[cfg(feature = "process")]
-fn spawn_adapter(adapter: &DebugAdapter) -> Option<Child> {
+fn spawn_adapter(adapter: &DebugAdapter, workdir: Option<&std::path::Path>) -> Option<Child> {
     let (prog, args) = adapter.command.split_first()?;
-    // Built by the workspace authority (T710): a remote workspace runs its
-    // debug adapter where its files are.
-    vix_authority::current()
-        .command(&vix_authority::ProcessSpec::new(prog).args(args))
+    let auth = vix_authority::current();
+    let mut spec = vix_authority::ProcessSpec::new(prog).args(args);
+    if !auth.is_local() {
+        if !vix_authority::can_run(&*auth, prog) {
+            return None;
+        }
+        if let Some(dir) = workdir {
+            spec = spec.current_dir(dir);
+        }
+    }
+    auth.command(&spec)
         .ok()?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -627,7 +653,7 @@ fn spawn_adapter(adapter: &DebugAdapter) -> Option<Child> {
 
 /// Without the `process` feature no debug adapter is ever started.
 #[cfg(not(feature = "process"))]
-fn spawn_adapter(_adapter: &DebugAdapter) -> Option<Child> {
+fn spawn_adapter(_adapter: &DebugAdapter, _workdir: Option<&std::path::Path>) -> Option<Child> {
     None
 }
 

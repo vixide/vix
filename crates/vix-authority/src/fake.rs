@@ -343,6 +343,17 @@ impl Authority for FakeAuthority {
         };
         crate::LocalAuthority.command(&spec.clone().with_cwd(cwd))
     }
+
+    /// The local `shell` in `cwd`'s backing directory (the backing root,
+    /// standing in for a home directory, when `cwd` is `None`).
+    fn terminal(&self, shell: &str, cwd: Option<&Path>) -> io::Result<ProcessSpec> {
+        self.record("terminal", cwd.unwrap_or(Path::new("/")));
+        let dir = match cwd {
+            Some(dir) => self.to_backing(dir)?,
+            None => self.backing().to_path_buf(),
+        };
+        Ok(ProcessSpec::new(shell).current_dir(dir))
+    }
 }
 
 #[cfg(test)]
