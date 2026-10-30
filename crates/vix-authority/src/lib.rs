@@ -30,7 +30,7 @@ pub use fake::{Call, FakeAuthority};
 pub use local::LocalAuthority;
 pub use process::{Arg, ProcessSpec};
 pub use types::{DirEntry, FileKind, FileStat, WalkOptions};
-pub use vix_fileops::{HARD_MAX_TEXT_BYTES, MAX_TEXT_BYTES, TextFile, TextReadError};
+pub use vix_fileops::{HARD_MAX_TEXT_BYTES, MAX_TEXT_BYTES, TextFile, TextReadError, TextStream};
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -84,6 +84,26 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
     /// # Errors
     /// An `InvalidData` error wrapping a [`TextReadError`], or the I/O error.
     fn read_text_guarded(&self, path: &Path, max_bytes: u64) -> io::Result<TextFile>;
+
+    /// [`Authority::read_text_guarded`], handing plain UTF-8 text to `sink`
+    /// block by block instead of returning it whole, so opening a large file
+    /// needs no file-sized copy besides the buffer built from it
+    /// (`vix_fileops::stream_text_guarded`, T749). The default reads the
+    /// whole file and returns [`TextStream::Whole`], which every caller
+    /// handles; the local authority streams.
+    ///
+    /// # Errors
+    /// As [`Authority::read_text_guarded`].
+    fn stream_text_guarded(
+        &self,
+        path: &Path,
+        max_bytes: u64,
+        sink: &mut dyn FnMut(&str),
+    ) -> io::Result<TextStream> {
+        let _ = sink;
+        self.read_text_guarded(path, max_bytes)
+            .map(TextStream::Whole)
+    }
 
     /// [`Authority::read_text_guarded`] at the default [`MAX_TEXT_BYTES`],
     /// returning only the text (`vix_fileops::read_to_string_guarded`).

@@ -8926,6 +8926,39 @@ editor by completion, diagnostics and never losing work first.
     file and its ~7.5% idle CPU afterwards; and Vix's ~250 ms startup
     stall in a terminal that does not answer `ESC [ 5 n` (the image
     protocol probe).
+- [x] **T749 — Large-file memory, idle CPU and the startup probe.** The
+  three problems T744 measured: a 100 MB file made Vix ~1.1 GiB resident,
+  it used ~7.5% of a core with no input, and the image-protocol probe
+  stalled startup ~250 ms on a terminal that doesn't answer `ESC [ 5 n`.
+  **Medium.**
+  - **Done 2026-10-30** (branch `perf/big-file-memory-startup`).
+    Diagnosed with `malloc_history -allEvents` and `sample` on a release
+    build with symbols: only ~110 MB was live (the rope); the rest was
+    freed blocks macOS keeps resident from transient full-text copies
+    (2.6 GB allocated in 3 s). Causes: `Editor::max_line_width` copied the
+    buffer every frame (~1.8 GB in 3 s and all of the idle CPU) — now
+    cached on the revision and scanned in place (`Code::max_line_chars`);
+    `get_content` grew by doubling — now one exact allocation; the file
+    read grew a `Vec` by doubling — now sized from the stat, and plain
+    UTF-8 streams into the rope (`vix_fileops::stream_text_guarded`,
+    `Authority::stream_text_guarded`, `Code`/`Editor::from_rope`);
+    persistent undo copied the text on every open (`undo_store::load_with`
+    now only when a store exists); local test lenses copied it for any
+    file (`knows_tests_in` skips extensions with no test syntax). The
+    image probe now runs on first image open (`App::image_probe`), which
+    also fixes `vix photo.png` (it ran after `start` before). Result:
+    126 MiB, 0% idle, 87 ms first screen; no startup queries. Regression
+    tests: `tui/tests/integration/big_buffer.rs` (an idle frame makes no
+    whole-buffer pass, via `editor_core::code::full_text_scans`; opening a
+    20 MB file grows RSS by under 3× its size, measured in a child process
+    — 23 MiB now, 123 MiB with the old copies).
+  - **Not done:** no "huge file" mode that turns features off was needed
+    (memory and idle CPU are now at Vim/Neovim level), so none was added.
+    Editing a 100 MB buffer still re-measures the longest line (~20 ms
+    per edit), and features that read the whole text on change were not
+    audited. Remote authorities don't stream (they return the whole file).
+    Image display in kitty, iTerm2 and WezTerm was not re-checked by hand
+    in those terminals; the probe itself is unchanged, only its timing.
 - [ ] **T745 — 2.0 launch kit.** A "What's new in 2.0" page on the site,
   release notes written for users rather than library authors, and
   announcement drafts for the user to post. Nothing is posted without the
@@ -9270,7 +9303,7 @@ everything in Q except T718. What is open, by run:
   T670 (the musl release build crashes).
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730–T733, T740, T741 and T744 are done. T734 has its spike done
+- **Run R:** T730–T733, T740, T741, T744 and T749 are done. T734 has its spike done
   and T734a–T734h open; T735 waits for T637. T742 and T743 have their files
   (templates and a container image) but no channel is verified or
   published, so neither is done. T745–T748 are open; T746 and T747 need the
@@ -9375,7 +9408,7 @@ CI-discovered rounds to get genuinely right on Windows).
 18. **Run R (improvements and promotion, 2026-10-29):** T670 and the
     Run M daily-driver items (T612, T614, T615, T625–T627, T629) first;
     then T730, T740, T732; T742 → T743 → T744 → T745. T746 and T747 wait
-    for the user's decisions. T730–T733, T740, T741 and T744 are done;
+    for the user's decisions. T730–T733, T740, T741, T744 and T749 are done;
     T670 and the daily-driver items are still open. Next: verify each T742
     channel on a real machine or runner (Nix first, since T743's `nix run`
     needs it) and publish the container image.

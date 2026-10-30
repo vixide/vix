@@ -214,6 +214,14 @@ fn main() -> io::Result<()> {
     if let Some(e) = settings_load_error {
         app.warn_settings_load_failed(&e);
     }
+    // Graphics support is probed the first time an image is shown, not here:
+    // the probe is a round trip of terminal queries every launch would pay
+    // for (T749). Installed before `start`, which may open an image given
+    // on the command line.
+    #[cfg(feature = "image")]
+    {
+        app.image_probe = Some(probe_terminal_graphics);
+    }
     // Scripts, key overrides, the welcome screen, and the initial files /
     // session / stdin buffer / `--diff` — shared with the GUI front end.
     app.start(&cli)?;
@@ -243,17 +251,6 @@ fn main() -> io::Result<()> {
     // support simply won't send motion events.
     let _ = write!(io::stdout(), "\x1b[?1003h");
     let _ = io::stdout().flush();
-    #[cfg(feature = "image")]
-    {
-        // Query the terminal for graphics support so images can be displayed. Use a
-        // short timeout (the default is 2s) so startup never stalls on terminals
-        // that don't answer the capability query.
-        let query = ratatui_image::picker::cap_parser::QueryStdioOptions {
-            timeout: Duration::from_millis(250),
-            ..Default::default()
-        };
-        app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
-    }
     // Draw once before the (comparatively expensive, git-subprocess-based)
     // initial refresh, so the terminal shows real content immediately
     // rather than sitting on whatever was on screen before Vix started for
@@ -270,6 +267,19 @@ fn main() -> io::Result<()> {
     ratatui::restore();
     app.on_exit();
     result
+}
+
+/// Ask the terminal which image protocol it speaks (kitty, iTerm2, Sixel, or
+/// half blocks) and its cell size, for [`App::image_probe`]. The timeout is
+/// short (the library's default is 2 s) so a terminal that never answers
+/// the queries costs at most a quarter second, once.
+#[cfg(feature = "image")]
+fn probe_terminal_graphics() -> Option<ratatui_image::picker::Picker> {
+    let query = ratatui_image::picker::cap_parser::QueryStdioOptions {
+        timeout: Duration::from_millis(250),
+        ..Default::default()
+    };
+    ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok()
 }
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {

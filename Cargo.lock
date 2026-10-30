@@ -6352,6 +6352,7 @@ dependencies = [
  "ratatui",
  "ratatui-core",
  "ratatui-image",
+ "ropey",
  "vix-authority",
  "vix-editor-core",
  "vix-encoding",

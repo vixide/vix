@@ -8,7 +8,7 @@ use crate::utils;
 use anyhow::{Result, anyhow};
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -151,6 +151,10 @@ pub struct Editor {
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
+    /// [`Editor::max_line_width`]'s last answer and the buffer revision it
+    /// was computed for.
+    pub(crate) max_width_cache: Cell<Option<(u64, usize)>>,
+
     /// Independent display/editing toggles (line numbers, whitespace, soft
     /// wrap, auto-pair, rainbow brackets) — see [`Flags`] for what each bit
     /// means.
@@ -230,11 +234,26 @@ impl Editor {
     ) -> Result<Self> {
         let code = Code::new(text, lang, custom_highlights.clone())
             .or_else(|_| Code::new(text, "text", custom_highlights))?;
+        Ok(Self::with_code(code, theme))
+    }
 
+    /// [`Editor::new`] over text already in a rope (built while reading a
+    /// file), so opening it needs no `String` copy of the text (T749).
+    ///
+    /// # Errors
+    /// As [`Editor::new`].
+    pub fn from_rope(lang: &str, text: ropey::Rope, theme: Vec<(&str, &str)>) -> Result<Self> {
+        // A rope clone shares its chunks: the fallback costs no copy.
+        let code = Code::from_rope(text.clone(), lang, None)
+            .or_else(|_| Code::from_rope(text, "text", None))?;
+        Ok(Self::with_code(code, theme))
+    }
+
+    fn with_code(code: Code, theme: Vec<(&str, &str)>) -> Self {
         let theme = Self::build_theme(theme);
         let highlights_cache = RefCell::new(HashMap::new());
 
-        Ok(Self {
+        Self {
             code,
             cursor: 0,
             offset_y: 0,
@@ -257,6 +276,7 @@ impl Editor {
             semantic_tokens: Vec::new(),
             code_lenses: Vec::new(),
             highlights_cache,
+            max_width_cache: Cell::new(None),
             flags: Flags::SHOW_LINE_NUMBERS | Flags::AUTO_PAIR,
             eol_note: None,
             breakpoints: Vec::new(),
@@ -271,7 +291,7 @@ impl Editor {
             carets: Vec::new(),
             goal_col: None,
             remote_carets: Vec::new(),
-        })
+        }
     }
 
     /// Set the style for ordinary text (the foreground of unhighlighted code).
@@ -1146,12 +1166,21 @@ impl Editor {
     /// The longest line's width in characters (used to size a horizontal
     /// scrollbar). A tab counts as one character.
     #[must_use]
+    ///
+    /// Cached on the buffer's [`Editor::revision`]: the host asks on every
+    /// frame (to decide whether a horizontal scrollbar is needed), and the
+    /// scan is O(n) — on a 100 MB file, recomputing it per frame was the
+    /// whole of Vix's idle CPU use (T749).
     pub fn max_line_width(&self) -> usize {
-        self.get_content()
-            .lines()
-            .map(|l| l.chars().count())
-            .max()
-            .unwrap_or(0)
+        let rev = self.code.revision();
+        if let Some((cached_rev, width)) = self.max_width_cache.get()
+            && cached_rev == rev
+        {
+            return width;
+        }
+        let width = self.code.max_line_chars();
+        self.max_width_cache.set(Some((rev, width)));
+        width
     }
 
     /// Return a mutable reference to the underlying code buffer.

@@ -123,6 +123,16 @@ Each has a half that touches no file, for bytes read or written some other way (
 authority): `decode_text(bytes, max_bytes)` applies the `TooLarge`/`Binary` refusals and
 the encoding detection, and `encode_like(existing, text)` returns the bytes
 `write_text_in_file_encoding` would write, given the guarded read of the old file.
+`stream_text_guarded(path, max_bytes, sink)` is the same read for a caller that builds
+its own structure from the text (the editor's rope, T749): plain UTF-8 without a BOM — the
+common case — goes to `sink` in 64 KiB blocks as it is read (a character split across two
+blocks is held back to the next) and the result is `TextStream::Streamed`, so no file-sized
+copy is ever held. Anything else (a BOM, a NUL in the first 8 KiB, invalid UTF-8 anywhere,
+or a character cut off at the end) is read again through `read_text_guarded` and returned
+as `TextStream::Whole(TextFile)`, and the caller discards what the sink received. The
+refusals are the same. `read_text_guarded` itself sizes its buffer from the stat, so the
+read is one allocation instead of a doubling series (~264 MB of allocations for a 100 MB
+file before T749).
 `TextFile` is `#[non_exhaustive]`, so it can gain fields (such as an encoding) without a
 breaking change. `MAX_TEXT_BYTES` (50 MiB) is the default
 limit and `HARD_MAX_TEXT_BYTES` (1 GiB) the ceiling that applies even after the user

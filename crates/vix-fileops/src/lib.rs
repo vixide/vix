@@ -509,12 +509,116 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     if meta.len() > max_bytes {
         return Err(refuse(TextReadError::TooLarge));
     }
-    let mut bytes = Vec::new();
+    // Sized from the stat, so the read is one allocation: `Take` hides the
+    // file's size from `read_to_end`, which otherwise grows the buffer by
+    // doubling (a 100 MB file cost ~264 MB of allocations, T749). One spare
+    // byte lets the read see EOF without growing.
+    let capacity = usize::try_from(meta.len().saturating_add(1)).unwrap_or(0);
+    let mut bytes = Vec::with_capacity(capacity);
     // `take` bounds the read even if the file grows after the stat.
     fs::File::open(path)?
         .take(max_bytes + 1)
         .read_to_end(&mut bytes)?;
     decode_text(bytes, max_bytes)
+}
+
+/// What [`stream_text_guarded`] produced.
+#[derive(Debug)]
+pub enum TextStream {
+    /// The file was UTF-8 without a byte order mark — the common case — and
+    /// its whole text went to the sink, in order, in chunks. Not lossy.
+    Streamed,
+    /// The file needed decoding (a BOM, another encoding, or invalid UTF-8):
+    /// whatever the sink received is to be discarded, and this is the file,
+    /// exactly as [`read_text_guarded`] returns it.
+    Whole(TextFile),
+}
+
+/// [`read_text_guarded`] without holding the whole file in memory: UTF-8
+/// text is handed to `sink` a block at a time as it is read, so a caller
+/// building its own structure (an editor's rope) never needs a second,
+/// file-sized copy. Opening a 100 MB file then peaks at the size of the
+/// buffer it builds instead of that plus 100 MB (T749). The same guards
+/// apply: a non-regular, oversized, or binary file is refused, the binary
+/// check looks at the same first 8 KiB, and any file that is not plain UTF-8
+/// is read again through [`read_text_guarded`] and returned whole.
+///
+/// # Errors
+///
+/// As [`read_text_guarded`].
+pub fn stream_text_guarded(
+    path: &Path,
+    max_bytes: u64,
+    sink: &mut dyn FnMut(&str),
+) -> io::Result<TextStream> {
+    use io::Read as _;
+    const BLOCK: usize = 64 * 1024;
+    let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
+    let meta = fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(refuse(TextReadError::NotRegular));
+    }
+    if meta.len() > max_bytes {
+        return Err(refuse(TextReadError::TooLarge));
+    }
+    let whole = || read_text_guarded(path, max_bytes).map(TextStream::Whole);
+    let mut file = fs::File::open(path)?.take(max_bytes + 1);
+    let mut buf = vec![0u8; BLOCK];
+    // Bytes of a character split across two blocks, kept at the front.
+    let mut carry = 0;
+    let mut total: u64 = 0;
+    let mut first = true;
+    loop {
+        // Fill the block (a read may return less than asked).
+        let mut filled = carry;
+        while filled < buf.len() {
+            match file.read(&mut buf[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        let read = filled - carry;
+        total += read as u64;
+        if total > max_bytes {
+            return Err(refuse(TextReadError::TooLarge));
+        }
+        let block = &buf[..filled];
+        if first {
+            first = false;
+            if vix_encoding::sniff_bom(block).is_some() || block.iter().take(8192).any(|&b| b == 0)
+            {
+                return whole();
+            }
+        }
+        let valid = match std::str::from_utf8(block) {
+            Ok(text) => {
+                sink(text);
+                block.len()
+            }
+            // Invalid UTF-8: decode the whole file the usual way.
+            Err(e) if e.error_len().is_some() => return whole(),
+            // A character cut off by the block's end: keep its bytes.
+            Err(e) => {
+                let valid = e.valid_up_to();
+                if let Ok(text) = std::str::from_utf8(&block[..valid]) {
+                    sink(text);
+                }
+                valid
+            }
+        };
+        carry = filled - valid;
+        if read == 0 {
+            // End of file: a character still cut off is invalid UTF-8.
+            return if carry == 0 {
+                Ok(TextStream::Streamed)
+            } else {
+                whole()
+            };
+        }
+        buf.copy_within(valid..filled, 0);
+    }
 }
 
 /// The decoding half of [`read_text_guarded`], for bytes read some other way
@@ -632,6 +736,76 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// Stream `path`, returning the outcome and the text the sink received.
+    fn stream(path: &Path, max: u64) -> (io::Result<TextStream>, String) {
+        let mut got = String::new();
+        let out = stream_text_guarded(path, max, &mut |s| got.push_str(s));
+        (out, got)
+    }
+
+    /// T749: plain UTF-8 streams in blocks, a character split across a
+    /// block boundary included, and matches what `read_text_guarded` reads.
+    #[test]
+    fn stream_text_guarded_streams_utf8_in_blocks() {
+        let dir = scratch("stream-utf8");
+        let path = dir.join("big.txt");
+        // 64 KiB blocks: an odd-length ASCII prefix puts 2- and 3-byte
+        // characters across every boundary.
+        let text = format!("x{}\n", "é日".repeat(60_000));
+        fs::write(&path, &text).unwrap();
+        let (out, got) = stream(&path, MAX_TEXT_BYTES);
+        assert!(matches!(out, Ok(TextStream::Streamed)), "{out:?}");
+        assert_eq!(got, text);
+        assert_eq!(read_text_guarded(&path, MAX_TEXT_BYTES).unwrap().text, got);
+
+        fs::write(&path, "").unwrap();
+        let (out, got) = stream(&path, MAX_TEXT_BYTES);
+        assert!(matches!(out, Ok(TextStream::Streamed)));
+        assert_eq!(got, "");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Anything that is not plain UTF-8 comes back whole, decoded exactly as
+    /// `read_text_guarded` decodes it; the guards refuse as they do there.
+    #[test]
+    fn stream_text_guarded_falls_back_and_refuses_like_read_text_guarded() {
+        let dir = scratch("stream-whole");
+        let path = dir.join("f.txt");
+        // A BOM; Latin-1 past the first block; a character cut off at EOF.
+        let mut late_latin1 = "a".repeat(100_000).into_bytes();
+        late_latin1.push(0xE9);
+        for bytes in [
+            b"\xEF\xBB\xBFbom".to_vec(),
+            late_latin1,
+            b"cut \xE6\x97".to_vec(),
+        ] {
+            fs::write(&path, &bytes).unwrap();
+            let (out, _) = stream(&path, MAX_TEXT_BYTES);
+            let Ok(TextStream::Whole(file)) = out else {
+                panic!("{out:?}");
+            };
+            let want = read_text_guarded(&path, MAX_TEXT_BYTES).unwrap();
+            assert_eq!(
+                (file.text, file.lossy, file.encoding),
+                (want.text, want.lossy, want.encoding)
+            );
+        }
+        let refused =
+            |out: io::Result<TextStream>| out.err().and_then(|e| TextReadError::from_io(&e));
+        fs::write(&path, b"bin\0ary").unwrap();
+        assert_eq!(
+            refused(stream(&path, MAX_TEXT_BYTES).0),
+            Some(TextReadError::Binary)
+        );
+        fs::write(&path, "0123456789").unwrap();
+        assert_eq!(refused(stream(&path, 5).0), Some(TextReadError::TooLarge));
+        assert_eq!(
+            refused(stream(&dir, MAX_TEXT_BYTES).0),
+            Some(TextReadError::NotRegular)
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

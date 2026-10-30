@@ -4,7 +4,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Authority, DirEntry, FileKind, FileStat, ProcessSpec, TextFile, WalkOptions};
+use crate::{
+    Authority, DirEntry, FileKind, FileStat, ProcessSpec, TextFile, TextStream, WalkOptions,
+};
 
 /// The machine Vix runs on. Every method is the `std::fs` or `vix-fileops`
 /// call the App made directly before T710, so the guards those helpers carry
@@ -36,6 +38,15 @@ impl Authority for LocalAuthority {
 
     fn read_text_guarded(&self, path: &Path, max_bytes: u64) -> io::Result<TextFile> {
         vix_fileops::read_text_guarded(path, max_bytes)
+    }
+
+    fn stream_text_guarded(
+        &self,
+        path: &Path,
+        max_bytes: u64,
+        sink: &mut dyn FnMut(&str),
+    ) -> io::Result<TextStream> {
+        vix_fileops::stream_text_guarded(path, max_bytes, sink)
     }
 
     fn read_to_string_guarded(&self, path: &Path) -> io::Result<String> {

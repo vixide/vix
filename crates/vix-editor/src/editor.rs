@@ -163,21 +163,46 @@ fn apply_theme(ed: &mut CodeEditor) {
     reason = "invariant established earlier in this function"
 )]
 fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> CodeEditor {
+    let lang = lang_for_path(path, text);
+    // An empty syntax theme keeps the editor monochrome (no token colors), as the
+    // theme spec requires. `CodeEditor::new` falls back to plain "text" on an
+    // unknown grammar.
+    let ed = CodeEditor::new(&lang, text, Vec::new())
+        .or_else(|_| CodeEditor::new("text", text, Vec::new()))
+        .expect("code editor init for plain text never fails");
+    configure_editor(ed, flags, indent)
+}
+
+/// [`make_editor`] over text already in a rope, as a file open builds it
+/// while reading (T749): the text is never copied into a `String`.
+#[expect(
+    clippy::expect_used,
+    reason = "the plain-text grammar always initializes, as in make_editor"
+)]
+fn make_editor_from_rope(path: &Path, text: ropey::Rope, flags: Flags, indent: &str) -> CodeEditor {
+    // Only the first line matters to language detection (a shebang).
+    let first_line = text.lines().next().map(String::from).unwrap_or_default();
+    let lang = lang_for_path(Some(path), &first_line);
+    let ed = CodeEditor::from_rope(&lang, text, Vec::new())
+        .expect("code editor init for plain text never fails");
+    configure_editor(ed, flags, indent)
+}
+
+/// The language of a buffer named by `path` whose text starts with `text`.
+fn lang_for_path(path: Option<&Path>, text: &str) -> String {
     let name = path
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let lang = if name.is_empty() {
+    if name.is_empty() {
         "text".to_string()
     } else {
         get_lang_for(&name, text)
-    };
-    // An empty syntax theme keeps the editor monochrome (no token colors), as the
-    // theme spec requires. `CodeEditor::new` falls back to plain "text" on an
-    // unknown grammar.
-    let mut ed = CodeEditor::new(&lang, text, Vec::new())
-        .or_else(|_| CodeEditor::new("text", text, Vec::new()))
-        .expect("code editor init for plain text never fails");
+    }
+}
+
+/// Apply the editor-wide display flags, indent, and theme to a new buffer.
+fn configure_editor(mut ed: CodeEditor, flags: Flags, indent: &str) -> CodeEditor {
     ed.show_line_numbers(flags.contains(Flags::LINE_NUMBERS));
     ed.show_whitespace(flags.contains(Flags::SHOW_WHITESPACE));
     ed.set_soft_wrap(flags.contains(Flags::SOFT_WRAP));
@@ -743,13 +768,22 @@ impl Editor {
         // Stat before reading: a change in between then shows up as a
         // (spurious, safe) conflict rather than a missed one.
         let disk_stamp = self.stamp(&canon);
-        let vix_fileops::TextFile {
-            text: content,
-            lossy,
-            encoding,
-            ..
-        } = auth.read_text_guarded(&canon, max_bytes)?;
-        let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
+        // Plain UTF-8 streams straight into the buffer's rope, so no
+        // file-sized `String` is held on the way (T749).
+        let mut rope = ropey::RopeBuilder::new();
+        let (editor, lossy, encoding) =
+            match auth.stream_text_guarded(&canon, max_bytes, &mut |chunk| rope.append(chunk))? {
+                vix_fileops::TextStream::Streamed => (
+                    make_editor_from_rope(&canon, rope.finish(), self.flags, &self.indent),
+                    false,
+                    vix_encoding::TextEncoding::UTF8,
+                ),
+                vix_fileops::TextStream::Whole(file) => (
+                    make_editor(Some(&canon), &file.text, self.flags, &self.indent),
+                    file.lossy,
+                    file.encoding,
+                ),
+            };
         let tab = Tab {
             editor,
             path: Some(canon),

@@ -182,14 +182,17 @@ How long Vix takes to show a file, and how much memory it holds, next to the
 other terminal editors installed on the same machine, measured the same way.
 Every editor that was measured is listed, including the ones that beat Vix.
 
-Measured 2026-10-30 with `scripts/bench-editors` (commit `282b529f` plus this
-script). Machine: Apple M4 Max (16 cores), 128 GiB RAM, internal SSD (APFS),
-macOS 27.0.1 (Darwin 27.0.0). Vix built with `cargo build --release -p
-vix-tui` (`rustc 1.99.1`, the shipped `[profile.release]`, default features).
+Measured 2026-10-30 with `scripts/bench-editors`, re-run the same day after
+the large-buffer fixes of T749 (branch `perf/big-file-memory-startup` on
+`806dd040`); the first run, on commit `282b529f`, is kept below for
+comparison. Machine: Apple M4 Max (16 cores), 128 GiB RAM, internal SSD
+(APFS), macOS 27.0.1 (Darwin 27.0.0). Vix built with `cargo build --release
+-p vix-tui` (`rustc 1.99.1`, the shipped `[profile.release]`, default
+features).
 
 | Editor | Version | Command (config disabled) |
 | ------ | ------- | ------------------------- |
-| Vix | 2.0.0 (unreleased, `main`) | `vix FILE` with a fresh `HOME`; `large_file_mb = 1024` so the 100 MB file opens as text |
+| Vix | 2.0.0 (unreleased) | `vix FILE` with a fresh `HOME`; `large_file_mb = 1024` so the 100 MB file opens as text |
 | Vim | 9.2 | `vim -u NONE -i NONE -n -N FILE` |
 | Neovim | 0.12.6 | `nvim --clean -n FILE` |
 | Helix | 25.07.1 | `hx -c EMPTY.toml FILE` |
@@ -197,9 +200,10 @@ vix-tui` (`rustc 1.99.1`, the shipped `[profile.release]`, default features).
 | micro | 2.0.15 | `micro -config-dir EMPTY_DIR FILE` |
 | GNU nano | 9.3 | `nano -I FILE` |
 | mg | macOS `/usr/bin/mg` (no version flag) | `mg -n FILE` |
+| Kakoune | 2026.05.21 | `kak -n FILE` |
 
-Not installed, so not measured: Kakoune. Zed is installed but is a GUI
-editor, so it is out of scope for a terminal comparison.
+Zed is installed but is a GUI editor, so it is out of scope for a terminal
+comparison. (Kakoune was not installed for the first run.)
 
 Each cell is the **median (min–max)** of 10 runs on the 10,000-line file
 and 5 runs on the 100 MB file, after 2 discarded warm-up runs per editor and
@@ -209,48 +213,91 @@ file.
 
 | Editor | Time to first screen, ms | Memory, MiB | Idle CPU, % |
 | ------ | ------------------------ | ----------- | ----------- |
-| nano | 10.1 (9.3–65.9) | 8.3 (8.3–8.4) | 0 |
-| Vim | 21.1 (16.8–48.0) | 12.4 (12.3–12.4) | 0 |
-| Neovim | 31.2 (29.4–46.3) | 25.0 (25.0–25.2) ¹ | 0 |
-| micro | 40.1 (37.8–116.5) | 28.2 (27.4–28.5) | 0 |
-| **Vix** | **40.6 (39.0–52.9)** | **33.9 (33.3–34.5)** | 0 |
-| mg | 43.5 (10.6–152.1) | 2.5 (2.4–2.5) | 0 |
-| Emacs | 185.0 (180.3–195.2) | 53.6 (53.5–53.8) | 0 |
-| Helix | 207.7 (192.4–327.4) | 59.3 (53.7–64.2) ² | 0 |
+| Kakoune | 7.8 (7.3–43.7) | 4.2 (4.2–4.3) | 0 |
+| mg | 10.6 (10.4–56.7) | 2.5 (2.5–2.5) | 0 |
+| nano | 10.7 (9.6–11.2) | 8.3 (8.3–8.4) | 0 |
+| Vim | 16.5 (14.1–28.0) | 12.3 (12.3–12.4) | 0 |
+| Neovim | 31.9 (30.8–34.1) | 25.0 (24.9–25.1) ¹ | 0 |
+| **Vix** | **39.7 (38.5–53.9)** | **33.0 (32.8–34.2)** | 0 |
+| micro | 45.8 (36.4–86.6) | 28.3 (27.7–28.7) | 0 |
+| Emacs | 188.7 (171.0–201.0) | 53.6 (53.5–53.7) | 0 |
+| Helix | 197.1 (193.3–794.6) | 58.0 (53.3–64.8) ² | 0 |
 
 **100 MB plain-text log file (~1.1 M lines)**
 
 | Editor | Time to first screen, ms | Memory, MiB | Idle CPU, % |
 | ------ | ------------------------ | ----------- | ----------- |
-| Vim | 64.6 (62.8–66.7) | 116.8 (116.8–117.0) | 0 |
-| **Vix** | **99.4 (98.1–110.0)** | **1100.9 (1100.8–1102.8)** | **7.5 (7.0–8.8)** |
-| Neovim | 103.2 (99.9–109.9) | 129.8 (129.8–129.8) ¹ | 0 |
-| micro | 155.1 (142.5–505.4) | 351.5 (344.5–355.8) | 100.7 (93.6–101.4) |
-| Emacs | 307.0 (302.6–308.7) | 148.7 (148.7–148.8) | 0 |
-| nano | 490.9 (264.9–883.9) | 159.2 (159.1–159.2) | 0 |
-| Helix | 554.9 (550.9–555.8) | 520.5 (509.8–526.1) | 0 |
-| mg | 1329.1 (1309.5–1545.9) | 136.6 (136.6–136.6) | 0 |
+| Vim | 62.8 (61.4–64.2) | 116.7 (116.6–116.8) | 0 |
+| Kakoune | 78.5 (76.5–86.7) | 129.8 (129.8–129.9) ³ | 0 |
+| **Vix** | **87.0 (71.0–93.8)** | **125.5 (125.3–125.5)** | 0 |
+| Neovim | 120.6 (104.0–157.8) | 129.7 (129.7–130.1) ¹ | 0 |
+| micro | 269.6 (240.6–285.8) | 359.6 (347.4–374.8) | 67.1 (58.7–68.9) |
+| nano | 275.3 (258.2–284.6) | 159.1 (159.1–159.2) | 0 |
+| Emacs | 364.9 (307.3–445.8) | 148.7 (148.7–148.9) | 0 |
+| Helix | 554.2 (551.5–568.4) | 524.7 (433.8–526.4) | 0 |
+| mg | 1264.0 (1246.5–1704.0) | 136.6 (136.6–136.6) | 0 |
 
 ¹ Neovim runs as two processes (the terminal UI and an embedded editor
 server); the figure is both together. The UI process alone peaks at 10.6
 MiB. ² Helix sometimes had a second process alive while it was sampled;
-the figure includes it (Helix's own peak RSS is 53.8 MiB).
+the figure includes it (Helix's own peak RSS is 53.7 MiB). ³ Kakoune's
+peak RSS from `wait4` is 225.0 MiB: it holds more while loading the file
+than once its first screen is up, when it is sampled. Vix's peak RSS and
+sampled figure agree (125.5 MiB). Idle CPU of "0" means a median of 0.0;
+single samples of 0.5% (one 10 ms scheduler tick in 2 s) occur for Vix and
+Kakoune.
+
+**Before and after T749 (Vix, 100 MB file, same method and machine):**
+
+| | Time to first screen, ms | Memory, MiB | Idle CPU, % |
+| - | ------------------------ | ----------- | ----------- |
+| Before (`282b529f`) | 99.4 (98.1–110.0) | 1100.9 (1100.8–1102.8) | 7.5 (7.0–8.8) |
+| After (T749) | 87.0 (71.0–93.8) | 125.5 (125.3–125.5) | 0 |
 
 What the numbers say, without spin:
 
 - **Startup.** On a 10,000-line source file Vix shows its first screen in
-  about 41 ms: tied with micro, about 10–20 ms behind Vim and Neovim, about
-  30 ms behind nano, and about 4–5× faster than Emacs (185 ms) and Helix
-  (208 ms) with their configurations disabled.
-- **Memory on ordinary files.** Vix holds about 34 MiB with that file open:
-  more than nano, Vim, Neovim and micro (8–28 MiB), less than Emacs and
-  Helix (54–59 MiB).
-- **Memory on a 100 MB file is Vix's weak spot.** It shows the first screen
-  quickly (99 ms, second only to Vim), but holds **1.1 GiB**, about 11× the
-  file's size and the most of any editor measured (Vim 117 MiB, Helix 521 MiB). It
-  also keeps using about 7.5% of a core afterwards with no input. For files
-  this size, use the [Large File Viewer](#large-file-viewer-t733), which
-  stays under 5 MiB; the text buffer's memory use is a known gap.
+  about 40 ms: behind Kakoune, mg, nano, Vim and Neovim (8–32 ms), level
+  with micro, and about 5× faster than Emacs (189 ms) and Helix (197 ms)
+  with their configurations disabled.
+- **Memory on ordinary files.** Vix holds about 33 MiB with that file open:
+  more than Kakoune, mg, nano, Vim, Neovim and micro (2.5–28 MiB), less
+  than Emacs and Helix (54–58 MiB).
+- **Memory on a 100 MB file.** Vix now holds **126 MiB**, about 1.25× the
+  file: second to Vim (117 MiB), level with Kakoune and Neovim (130 MiB),
+  and well under Helix (525 MiB) and micro (360 MiB). Before T749 it held
+  1.1 GiB, the most of any editor measured. It shows the first screen in
+  87 ms (third, after Vim and Kakoune) and uses no CPU afterwards with no
+  input. For files beyond a buffer's reach, the
+  [Large File Viewer](#large-file-viewer-t733) stays under 5 MiB.
+
+**What T749 changed.** Measured with macOS's `malloc_history` (allocation
+stacks of a release build with debug symbols) and `sample`:
+
+- Only ~110 MB of the 1.1 GiB was live: the rope holding the text. The rest
+  was freed memory the macOS allocator keeps resident, left by transient
+  full copies of the text, each built by doubling a `String` (4, 8, … 128
+  MB — ~256 MB allocated per copy). About 2.6 GB was allocated in the first
+  three seconds.
+- **Every frame** copied the whole buffer to find the longest line (for the
+  horizontal scrollbar): ~1.8 GB of allocations in three seconds, and the
+  whole of the 7.5% idle CPU (draws happen every 500 ms with no input). Now
+  cached on the buffer's revision and scanned in place.
+- **Opening** read the file into a doubling `Vec` (~264 MB allocated), then
+  built the rope from it; now plain UTF-8 streams into the rope in 64 KiB
+  blocks, so no second file-sized copy exists.
+- **Persistent undo** copied the text on every open to hash it, even with
+  no saved history; now only when one exists.
+- **Code lenses** copied the text and split it into lines to look for tests
+  in files with no test syntax (a `.log`); now skipped for those.
+- **Startup** no longer asks the terminal about image support (a kitty
+  graphics query, `ESC [ c`, `ESC [ 16t`, `ESC [ 5 n`); it asks the first
+  time an image is opened. In a pseudo-terminal that answers no query at
+  all, Vix now shows a small file in ~10 ms instead of stalling ~250 ms.
+
+Not covered: the cost of *editing* a 100 MB buffer. After an edit the
+longest line is measured again (~20 ms on that file), and features that
+read the whole text when it changes were not audited for it.
 
 ### Method
 
@@ -266,10 +313,11 @@ What the numbers say, without spin:
 - The harness answers the queries editors send at startup (device
   attributes, status report, cursor position, cell size, background color,
   mode queries) as a typical xterm-compatible terminal does. This matters:
-  Vix probes the terminal for image support at startup and, in a terminal
-  that does not answer the status-report query (`ESC [ 5 n`), waits about
-  250 ms for it — an earlier version of the harness that did not answer it
-  measured Vix at ~297 ms and Neovim at ~170 ms.
+  before T749 Vix probed the terminal for image support at startup and, in
+  a terminal that does not answer the status-report query (`ESC [ 5 n`),
+  waited about 250 ms for it — an earlier version of the harness that did
+  not answer it measured Vix at ~297 ms and Neovim at ~170 ms. Vix now
+  sends no query at startup (unless `theme = "auto"`).
 - **Memory** is the resident memory of the editor's whole process tree,
   sampled every 0.25 s for 3 s after the first screen; the cell is the
   largest sample. For single-process editors it matches the process's peak

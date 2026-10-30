@@ -274,6 +274,17 @@ pub fn test_at_point(
     }
 }
 
+/// Whether [`tests_in_file`] and [`test_at_point`] know a test syntax for
+/// files with this extension — so a caller can skip reading a buffer's text
+/// (on a 100 MB log, a 100 MB copy) when they would find nothing (T749).
+#[must_use]
+pub fn knows_tests_in(file_extension: &str) -> bool {
+    matches!(
+        file_extension,
+        "rs" | "py" | "go" | "js" | "jsx" | "ts" | "tsx" | "rb" | "ex" | "exs"
+    )
+}
+
 /// Every test defined in `lines`, in file order, for local "Run test" code
 /// lenses (T726): `(line, match)` where `line` (0-based) is the line naming
 /// the test (Rust: the `fn` line after `#[test]`; elsewhere the definition
@@ -493,5 +504,22 @@ mod tests {
         let lines = split("#[test]\nfn foo() {}\n\n");
         let m = test_at_point("rs", "src/lib.rs", &lines, 2, TestFrameworkHint::Unknown).unwrap();
         assert_eq!(m.name, "foo");
+    }
+
+    #[test]
+    fn knows_tests_in_matches_the_extensions_tests_in_file_reads() {
+        let rust = ["#[test]", "fn it_works() {}"];
+        for ext in [
+            "rs", "py", "go", "js", "jsx", "ts", "tsx", "rb", "ex", "exs",
+        ] {
+            assert!(knows_tests_in(ext), "{ext}");
+        }
+        for ext in ["", "log", "txt", "md"] {
+            assert!(!knows_tests_in(ext), "{ext}");
+            assert_eq!(
+                tests_in_file(ext, "a", &rust, TestFrameworkHint::Unknown),
+                vec![]
+            );
+        }
     }
 }

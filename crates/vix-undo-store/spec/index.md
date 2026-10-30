@@ -8,6 +8,11 @@ file content it corresponds to. On open, the history is restored **only** when
 the stored content hash matches the file's current content, so undo is never
 replayed onto text it doesn't match.
 
+`load_with(file, content)` is `load` with the text supplied by a closure that
+runs only when a saved history exists to compare it with (T749): the App
+opens every file through it, so a file never edited with persistent undo on
+costs no copy of its text on open (100 MB for a 100 MB file).
+
 ## Sub-specs
 
 - [persistent-undo](persistent-undo/index.md)
