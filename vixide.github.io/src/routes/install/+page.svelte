@@ -25,9 +25,9 @@
 
   <h2 id="linux">Linux packages (apt, dnf, pacman)</h2>
   <p>
-    Every release carries native packages of <code>vix-tui</code> and the
-    desktop GUIs for x86_64 and aarch64. Download the one for your
-    distribution from the
+    Since 1.8.0, every release carries native
+    packages of <code>vix-tui</code> and the desktop GUIs for x86_64 and
+    aarch64. Download the one for your distribution from the
     <a href="https://github.com/vixide/vix/releases/latest">latest release</a>,
     then install it:
   </p>
@@ -36,8 +36,9 @@
   <CopyCommand command="sudo pacman -U ./vix-tui-*-x86_64.pkg.tar.zst" label="Copy the Arch Linux install command" />
   <p>
     They need glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+,
-    RHEL/Rocky 10). There is no apt or dnf repository yet, so updating means
-    installing the next release's package.
+    RHEL/Rocky 10); on older distributions, and on Alpine, use
+    <code>cargo install vix-tui</code>. There is no apt or dnf repository
+    yet, so updating means installing the next release's package.
   </p>
 
   <h2 id="windows">Windows (PowerShell)</h2>
@@ -57,6 +58,17 @@
     Prebuilt archives — <code>.tar.xz</code> for macOS and Linux,
     <code>.msi</code> and <code>.zip</code> for Windows — are attached to every
     <a href="https://github.com/vixide/vix/releases">GitHub Release</a>.
+    From 2.0, Windows on ARM gets its own <code>.zip</code> and
+    <code>.msi</code> as well; the desktop GUIs stay x86_64-only on Windows.
+  </p>
+
+  <h2 id="not-yet">Not yet published</h2>
+  <p>
+    winget, Scoop, the AUR, <code>cargo binstall</code>, a Nix flake, mise and
+    a container image on ghcr.io are templates in the repository that have not
+    been verified or published yet, so none of them works today. See
+    <a href={`${docs}getting-started/index.html`}>Getting Started</a> for
+    their status.
   </p>
 
   <h2 id="minimal">Minimal build</h2>
@@ -94,6 +106,13 @@ cargo build --release --features syntax-all  # with every Tree-sitter grammar`}<
     The default build compiles a lean set of Tree-sitter grammars (Rust,
     Markdown, JSON, TOML), since each is a sizeable compiled C parser.
   </p>
+  <p>
+    Cowork, real-time co-editing coming in 2.0, is not in the default build
+    or the prebuilt releases, and everyone in a session needs a build with
+    it. Until 2.0 is published, build it from a checkout with
+    <code>cargo build --release --features cowork</code>; after that:
+  </p>
+  <CopyCommand command="cargo install vix-tui --features cowork" label="Copy the install-with-Cowork command" />
 
   <h2 id="first-run">First run</h2>
   <pre><code

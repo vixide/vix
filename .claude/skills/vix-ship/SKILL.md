@@ -16,11 +16,11 @@ published from there.
 
 ## In `vix`: one feature branch per change
 
-1. `git checkout -b <short-kebab-name>` off `main`.
+1. `git checkout -b <short-kebab-name>` off `main` — in your own git worktree when other agents share the checkout (merge big branches in a separate worktree too, never by switching the shared checkout's branch).
 2. Implement (see `vix-spec-change`), and confirm `scripts/check` is green
    **before** committing — don't commit red and fix in a follow-up.
 3. Commit with a trailer:
-   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+   `Co-Authored-By: <the model you are, e.g. Claude Opus 5.5> <noreply@anthropic.com>`; the git author and committer stay human (`AI_STATEMENT.md`).
    - **Commits are GPG/SSH-signed** (`commit.gpgsign=true`). The *first*
      commit in a session can hang for up to ~2 minutes waiting on the SSH
      key's passphrase prompt — if `git commit` seems to hang, that's why;
@@ -57,11 +57,11 @@ published from there.
 Changes to the site are ordinary commits under `vix/vixide.github.io/` —
 same branch, same `--no-ff` merge to `main`, same `vix-spec-change` process
 as any other part of `vix`. Its own rule (`vixide.github.io/AGENTS.md`):
-`npm run build` must prerender cleanly before publishing. If the local Node
+`pnpm run check` and `pnpm run build` must pass before publishing. If the local Node
 is too old for a build-tool dependency (has happened: `rolldown` needing
 `node:util`'s `styleText`, added in Node 20+), don't block on it — confirm
 the failure is pre-existing (reproduces on `main` before your change, e.g.
-via `git stash`) and that CI's pinned Node version
+in a separate worktree — never a bare `git stash`, whose stack every worktree shares) and that CI's pinned Node version
 (`vixide.github.io/.github/workflows/deploy.yml`, `actions/setup-node`) is
 new enough.
 

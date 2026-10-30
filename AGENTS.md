@@ -114,7 +114,7 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 ## Non-negotiable conventions
 
 - **Internationalize all user-facing text.** Never hard-code a display string;
-  add a key to the right `locales/*.yml` file and render it with `t!`. Data modules store i18n
+  add a key to the right `crates/vix-i18n/locales/*.yml` file and render it with `t!`. Data modules store i18n
   _keys_; the host translates. See [`docs/internationalization/`](docs/internationalization/).
 - **One action, one implementation.** Menu items, palette commands, and
   shortcuts all dispatch through `App::run_action` using string action ids
@@ -140,7 +140,7 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 | ------------------------------------ | ------------------------------------------------------------ |
 | Add/route a command                  | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering                     | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
-| Add/translate UI text                | `locales/*.yml` (+ `t!` at the call site)                  |
+| Add/translate UI text                | `crates/vix-i18n/locales/*.yml` (+ `t!` at the call site)                  |
 | Add a setting                        | `crates/vix-settings/`                                       |
 | Change the editor widget             | `crates/vix-editor-core/` (engine reused; widget is Vix's)  |
 | Change soft-wrap / bracket rendering | `crates/vix-editor-core/src/wrap.rs`, `.../brackets.rs`     |
@@ -156,6 +156,11 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 | Change clipboard access              | `crates/vix-clipboard/` (opt-in platform pasteboard)       |
 | Change terminal input (paste, modifiers) | `tui/src/main.rs` (terminal modes) + `App::on_paste` / `App::on_key` |
 | Change Org tables / column view      | `crates/vix-org-table/`, `crates/vix-org/src/columns.rs`, `crates/vix-column-view/` |
+| Change file access / process spawning / remote editing | `crates/vix-authority/` (the `Authority` trait: local, SSH, fake, remote agent) + `tui/src/remote.rs`, `tui/src/app/remote_session.rs` |
+| Gate a capability at build time      | `tui/Cargo.toml` `[features]` + `tui/src/capability.rs` (see `spec/cargo-features/index.md`) |
+| Change `vix --mcp`                   | `crates/vix-mcp-server/` (protocol) + `tui/src/mcp.rs`      |
+| Change Cowork / IM                   | `crates/vix-cowork*/`, `crates/vix-im*/` + `tui/src/app/cowork.rs`, `tui/src/app/im*.rs` |
+| Change the Large File Viewer         | `crates/vix-large-file/` + `tui/src/app/large_file.rs`      |
 | Add a benchmark or fuzz target       | `tui/benches/`, `fuzz/fuzz_targets/` (see `spec/test/index.md`) |
 
 See [`agents/share/crate-map.md`](agents/share/crate-map.md) for the full map.
@@ -200,12 +205,16 @@ guideline's sense.
    ([`spec/worldwide/index.md`](spec/worldwide/index.md)).
 4. Document every new public item (`deny(missing_docs)`).
 5. Add/extend tests (`tui/tests/integration/main.rs` or a module's unit tests).
-6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean
-   (or run `scripts/check`, the local CI-parity gate), and `scripts/check-docs`
-   clean if you touched documentation.
+6. Run the **whole** `scripts/check` gate (the local CI-parity gate; it ends
+   with `OK: … all passed`) before every commit you intend to land — not a
+   hand-picked subset: `cargo doc`, the generated-reference diff and
+   `scripts/check-docs` catch what clippy and the tests don't.
 7. Note user-visible changes in [`CHANGELOG.md`](CHANGELOG.md).
 8. Spelling: prose/docs are checked with CSpell (`cspell.json`); add project terms
    to the external dictionary `project-words.txt`.
+9. Land it on its own branch, merged `--no-ff`, from your own git worktree
+   (several agents share this checkout); commits are SSH-signed and carry a
+   `Co-Authored-By:` trailer. Details: [`agents/workflow.md`](agents/workflow.md#landing-a-change).
 
 ## Topic guides
 

@@ -1,6 +1,6 @@
 # Remote editing
 
-**Status:** in progress (proposed 2026-10-28; T710–T717 and T719 done). Tasks T710–T719 in
+**Status:** in progress (proposed 2026-10-28; T710–T717 and T719 done; T718, other authorities such as dev containers and `docker exec`, is open). User guide: [`docs/remote-editing`](../../docs/remote-editing/index.md). Tasks T710–T719 in
 [`tasks.md`](../../tasks.md). Promotes the "Remote/SSH editing" Ideas-backlog
 entry, which already names Fresh's *authority* design as the model.
 

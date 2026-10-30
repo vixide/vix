@@ -14,7 +14,7 @@ make them match — edit the spec when intent changes, edit the code when it
 drifted.
 
 Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (package `vix-tui`,
-`tui/src/`, building the `vix` command) over 112 `vix-*` member crates under `crates/`. Each member crate
+`tui/src/`, building the `vix` command) over 140 `vix-*` member crates under `crates/`. Each member crate
 owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and

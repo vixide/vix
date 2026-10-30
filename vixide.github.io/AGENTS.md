@@ -75,6 +75,16 @@ editor — see [index.md](index.md) for scope.
   paraphrases it, not the other way round; when `vix`'s feature list changes,
   update `src/routes/features/+page.svelte` and the home page's card grid to
   match. Verify every claim against the repo; don't invent numbers.
+- Until a version is released, its features (the `[Unreleased]` section
+  of the `vix` repo's `CHANGELOG.md`) go under "New in 2.0" on
+  `/features/` (and the home page's short "Coming in 2.0" list) and are
+  labelled as not released yet; install channels that exist only as
+  templates (`packaging/index.md`: winget, Scoop, AUR, `cargo binstall`,
+  Nix, mise, the ghcr.io image) are never shown as working install
+  commands. Quote performance numbers only from the repo's
+  `docs/performance/index.md`, with its machine and conditions, and no
+  comparisons with other editors. Link to mdBook pages only if they are
+  in the repo's `docs/SUMMARY.md` (a page missing from it isn't built).
 - Package manager is **pnpm** (see `packageManager` in `package.json`), not
   npm — `pnpm install`, `pnpm run build`, `pnpm run check`; the deploy
   workflow (`.github/workflows/deploy.yml`) uses `pnpm/action-setup` and

@@ -1,11 +1,11 @@
 {
   "$schema": "https://llmstxt.org/llms.json",
   "name": "Vix",
-  "summary": "A keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell over 112 focused vix-* member crates in a Cargo workspace (edition 2024).",
-  "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors.",
+  "summary": "Vix is a keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell (package vix-tui in tui/, building the vix command) over 140 focused vix-* member crates in a Cargo workspace (edition 2024), with desktop GUIs in gui/.",
+  "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors — read it first. The workspace version is 2.0.0 (unreleased; the latest published release is 1.8.0).",
   "repository": "https://github.com/vixide/vix",
-  "version": "1.6.0",
-  "license": "Apache-2.0 OR MIT",
+  "version": "2.0.0",
+  "license": "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only",
   "sections": [
     {
       "title": "Start here",
@@ -24,6 +24,11 @@
           "title": "docs/index.md",
           "url": "docs/index.md",
           "notes": "the full documentation map"
+        },
+        {
+          "title": "docs/getting-started/index.md",
+          "url": "docs/getting-started/index.md",
+          "notes": "install, first run, the published install channels"
         },
         {
           "title": "spec/index/index.md",
@@ -55,18 +60,70 @@
           "url": "docs/keymaps/index.md",
           "notes": "Apple, VSCode, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime Text"
         },
-        { "title": "Menus", "url": "docs/menus/index.md" },
-        { "title": "Themes", "url": "docs/themes/index.md" },
-        { "title": "Internationalization", "url": "docs/internationalization/index.md" },
+        {
+          "title": "Menus",
+          "url": "docs/menus/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Themes",
+          "url": "docs/themes/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Internationalization",
+          "url": "docs/internationalization/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Generated action reference",
+          "url": "docs/reference/actions.md",
+          "notes": "every action id, its title and menu path, generated from the real catalog"
+        },
         {
           "title": "Language Server Protocol",
           "url": "docs/language-server-protocol/index.md",
-          "notes": "diagnostics, hover, go-to-definition, completion"
+          "notes": "diagnostics, hover, go-to-definition, completion, progress"
         },
         {
           "title": "Debugger",
           "url": "docs/debugger/index.md",
           "notes": "Debug Adapter Protocol — breakpoints, stepping, call stack, variables, watches"
+        },
+        {
+          "title": "IDE parity features",
+          "url": "docs/ide-parity/index.md",
+          "notes": "Local History, Search Everywhere, Refactor… and Organize Imports, run configurations, peek definition, CodeLens, postfix completion"
+        },
+        {
+          "title": "Remote editing",
+          "url": "docs/remote-editing/index.md",
+          "notes": "open a folder over SSH (experimental) — search, git, language servers, terminal, remote agent"
+        },
+        {
+          "title": "Cowork",
+          "url": "docs/cowork/index.md",
+          "notes": "real-time co-editing, opt-in cowork build feature (not in the default build)"
+        },
+        {
+          "title": "IM",
+          "url": "docs/im/index.md",
+          "notes": "code-aware chat, threads anchored to lines, IRCv3"
+        },
+        {
+          "title": "MCP server",
+          "url": "docs/mcp-server/index.md",
+          "notes": "vix --mcp serves Vix's view of a workspace to an AI agent over the Model Context Protocol"
+        },
+        {
+          "title": "Large File Viewer",
+          "url": "docs/large-file-viewer/index.md",
+          "notes": "read-only viewer for multi-gigabyte files"
+        },
+        {
+          "title": "OC (containers)",
+          "url": "docs/oc/index.md",
+          "notes": "Docker, Podman and nerdctl"
         },
         {
           "title": "Database Workbench",
@@ -81,12 +138,17 @@
         {
           "title": "Git Panel",
           "url": "docs/git-panel/index.md",
-          "notes": "status, diff, blame, stage/unstage/revert per hunk"
+          "notes": "status, diff, blame, stage/unstage/ revert per hunk"
         },
         {
           "title": "Scripting",
           "url": "docs/scripting/index.md",
           "notes": "Rhai .rhai scripts — new palette commands, key bindings, buffer transforms, no rebuild"
+        },
+        {
+          "title": "Performance",
+          "url": "docs/performance/index.md",
+          "notes": "measured numbers, with the machine and method stated"
         }
       ]
     },
@@ -98,10 +160,56 @@
           "url": "spec/ci/index.md",
           "notes": "GitHub, GitLab, and Codeberg pipelines; the local parity gate (scripts/check)"
         },
-        { "title": "Navigation", "url": "spec/navigation/index.md" },
-        { "title": "Tools menu", "url": "spec/tools/index.md" },
-        { "title": "Comparisons", "url": "spec/comparisons/index.md" },
-        { "title": "Test strategy", "url": "spec/test/index.md" },
+        {
+          "title": "Capability Cargo features",
+          "url": "spec/cargo-features/index.md",
+          "notes": "which capabilities a build can leave out, and the opt-in cowork feature"
+        },
+        {
+          "title": "Remote editing",
+          "url": "spec/remote-editing/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Cowork",
+          "url": "spec/cowork/index.md",
+          "notes": ""
+        },
+        {
+          "title": "IM",
+          "url": "spec/instant-message/index.md",
+          "notes": ""
+        },
+        {
+          "title": "MCP server",
+          "url": "spec/mcp-server/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Jupyter",
+          "url": "spec/jupyter/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Navigation",
+          "url": "spec/navigation/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Tools menu",
+          "url": "spec/tools/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Comparisons",
+          "url": "spec/comparisons/index.md",
+          "notes": ""
+        },
+        {
+          "title": "Test strategy",
+          "url": "spec/test/index.md",
+          "notes": ""
+        },
         {
           "title": "agents/share/crate-map.md",
           "url": "agents/share/crate-map.md",
@@ -128,6 +236,11 @@
           "notes": "shared terminology"
         },
         {
+          "title": "AI_STATEMENT.md",
+          "url": "AI_STATEMENT.md",
+          "notes": "how AI agents contribute to Vix"
+        },
+        {
           "title": "CHANGELOG.md",
           "url": "CHANGELOG.md",
           "notes": "notable changes, newest release first"
@@ -140,17 +253,22 @@
         {
           "title": "tasks.md",
           "url": "tasks.md",
-          "notes": "the open improvement backlog"
+          "notes": "the improvement backlog and plan"
         },
         {
           "title": "plan.md",
           "url": "plan.md",
-          "notes": "the open improvement backlog"
+          "notes": "the improvement backlog and plan"
+        },
+        {
+          "title": "packaging/index.md",
+          "url": "packaging/index.md",
+          "notes": "install-channel templates (winget, Scoop, AUR, Nix, container image) — not yet published or verified"
         },
         {
           "title": "LICENSE",
           "url": "LICENSE",
-          "notes": "Apache-2.0 or MIT, at your option"
+          "notes": "Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only or GPL-3.0-only, at your option"
         }
       ]
     }

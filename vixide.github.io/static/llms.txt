@@ -1,14 +1,16 @@
 # Vix
 
 > Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
-> IDE") built on ratatui: a thin App shell over 106 focused `vix-*` member
-> crates in a Cargo workspace (edition 2024).
+> IDE") built on ratatui: a thin App shell (package `vix-tui` in `tui/`,
+> building the `vix` command) over 140 focused `vix-*` member crates in a
+> Cargo workspace (edition 2024), with desktop GUIs in `gui/`.
 
 Development is specification-driven: each crate owns a spec at
 `crates/<crate>/spec/index.md`; cross-cutting and app-level specs live under
 `spec/`. When behavior and spec disagree, decide which is correct and make
 them match. [AGENTS.md](https://github.com/vixide/vix/blob/main/AGENTS.md) is the canonical entry point for both
-human and AI contributors — read it first.
+human and AI contributors — read it first. The workspace version is 2.0.0
+(unreleased; the latest published release is 1.8.0).
 
 ## Start here
 
@@ -17,6 +19,8 @@ human and AI contributors — read it first.
 - [index.md](https://github.com/vixide/vix/blob/main/index.md): user-facing overview — features, install & run,
   configuration, license
 - [docs/index.md](https://github.com/vixide/vix/blob/main/docs/index.md): the full documentation map
+- [docs/getting-started/index.md](https://github.com/vixide/vix/blob/main/docs/getting-started/index.md): install,
+  first run, the published install channels
 - [spec/index/index.md](https://github.com/vixide/vix/blob/main/spec/index/index.md): specification overview — goals,
   dependency crates, build/run
 
@@ -33,10 +37,25 @@ human and AI contributors — read it first.
   IntelliJ, Eclipse, Sublime Text
 - [Menus](https://github.com/vixide/vix/blob/main/docs/menus/index.md), [Themes](https://github.com/vixide/vix/blob/main/docs/themes/index.md),
   [Internationalization](https://github.com/vixide/vix/blob/main/docs/internationalization/index.md)
+- [Generated action reference](https://github.com/vixide/vix/blob/main/docs/reference/actions.md): every action id,
+  its title and menu path, generated from the real catalog
 - [Language Server Protocol](https://github.com/vixide/vix/blob/main/docs/language-server-protocol/index.md):
-  diagnostics, hover, go-to-definition, completion
+  diagnostics, hover, go-to-definition, completion, progress
 - [Debugger](https://github.com/vixide/vix/blob/main/docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
   stepping, call stack, variables, watches
+- [IDE parity features](https://github.com/vixide/vix/blob/main/docs/ide-parity/index.md): Local History, Search
+  Everywhere, Refactor… and Organize Imports, run configurations, peek
+  definition, CodeLens, postfix completion
+- [Remote editing](https://github.com/vixide/vix/blob/main/docs/remote-editing/index.md): open a folder over SSH
+  (experimental) — search, git, language servers, terminal, remote agent
+- [Cowork](https://github.com/vixide/vix/blob/main/docs/cowork/index.md): real-time co-editing, opt-in `cowork`
+  build feature (not in the default build)
+- [IM](https://github.com/vixide/vix/blob/main/docs/im/index.md): code-aware chat, threads anchored to lines, IRCv3
+- [MCP server](https://github.com/vixide/vix/blob/main/docs/mcp-server/index.md): `vix --mcp` serves Vix's view of a
+  workspace to an AI agent over the Model Context Protocol
+- [Large File Viewer](https://github.com/vixide/vix/blob/main/docs/large-file-viewer/index.md): read-only viewer for
+  multi-gigabyte files
+- [OC (containers)](https://github.com/vixide/vix/blob/main/docs/oc/index.md): Docker, Podman and nerdctl
 - [Database Workbench](https://github.com/vixide/vix/blob/main/docs/db/index.md): SQLite/PostgreSQL/MySQL —
   connections, schema tree, query editor, transactions, history, export
 - [Org mode](https://github.com/vixide/vix/blob/main/docs/org/index.md): headlines, TODO cycling, table editor,
@@ -45,11 +64,19 @@ human and AI contributors — read it first.
   revert per hunk
 - [Scripting](https://github.com/vixide/vix/blob/main/docs/scripting/index.md): Rhai `.rhai` scripts — new palette
   commands, key bindings, buffer transforms, no rebuild
+- [Performance](https://github.com/vixide/vix/blob/main/docs/performance/index.md): measured numbers, with the
+  machine and method stated
 
 ## Specification (source of truth)
 
 - [CI/CD](https://github.com/vixide/vix/blob/main/spec/ci/index.md): GitHub, GitLab, and Codeberg pipelines; the local
   parity gate (`scripts/check`)
+- [Capability Cargo features](https://github.com/vixide/vix/blob/main/spec/cargo-features/index.md): which
+  capabilities a build can leave out, and the opt-in `cowork` feature
+- [Remote editing](https://github.com/vixide/vix/blob/main/spec/remote-editing/index.md),
+  [Cowork](https://github.com/vixide/vix/blob/main/spec/cowork/index.md), [IM](https://github.com/vixide/vix/blob/main/spec/instant-message/index.md),
+  [MCP server](https://github.com/vixide/vix/blob/main/spec/mcp-server/index.md), [Jupyter](https://github.com/vixide/vix/blob/main/spec/jupyter/index.md)
+  (spike done, not implemented)
 - [Navigation](https://github.com/vixide/vix/blob/main/spec/navigation/index.md), [Tools menu](https://github.com/vixide/vix/blob/main/spec/tools/index.md),
   [Comparisons](https://github.com/vixide/vix/blob/main/spec/comparisons/index.md), [Test strategy](https://github.com/vixide/vix/blob/main/spec/test/index.md)
 - [agents/share/crate-map.md](https://github.com/vixide/vix/blob/main/agents/share/crate-map.md): every crate, module,
@@ -60,9 +87,13 @@ human and AI contributors — read it first.
 - [agents/conventions.md](https://github.com/vixide/vix/blob/main/agents/conventions.md): coding style and patterns
 - [agents/workflow.md](https://github.com/vixide/vix/blob/main/agents/workflow.md): the spec-driven workflow in detail
 - [agents/share/glossary.md](https://github.com/vixide/vix/blob/main/agents/share/glossary.md): shared terminology
+- [AI_STATEMENT.md](https://github.com/vixide/vix/blob/main/AI_STATEMENT.md): how AI agents contribute to Vix
 - [CHANGELOG.md](https://github.com/vixide/vix/blob/main/CHANGELOG.md): notable changes, newest release first
 
 ## Optional
 
-- [tasks.md](https://github.com/vixide/vix/blob/main/tasks.md) / [plan.md](https://github.com/vixide/vix/blob/main/plan.md): the open improvement backlog
-- [LICENSE](https://github.com/vixide/vix/blob/main/LICENSE): Apache-2.0 or MIT, at your option
+- [tasks.md](https://github.com/vixide/vix/blob/main/tasks.md) / [plan.md](https://github.com/vixide/vix/blob/main/plan.md): the improvement backlog and plan
+- [packaging/index.md](https://github.com/vixide/vix/blob/main/packaging/index.md): install-channel templates (winget,
+  Scoop, AUR, Nix, container image) — not yet published or verified
+- [LICENSE](https://github.com/vixide/vix/blob/main/LICENSE): Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only or
+  GPL-3.0-only, at your option

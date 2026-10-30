@@ -20,12 +20,12 @@ most.
 ## The menu bar
 
 Left to right: **Vix · File · Edit · View · Go · Run · AI · DB · JJ · Git ·
-Org · Project · Tools · Help**. Open the bar with `F10`, or jump straight to a
+IM · Org · Project · OC · Tools · Help**. Open the bar with `F10`, or jump straight to a
 menu with its Alt mnemonic (`Alt+F` File, `Alt+E` Edit, `Alt+I` View, `Alt+N`
 Go, `Alt+R` Run, `Alt+A` AI, `Alt+D` DB, `Alt+G` Git, `Alt+O` Org, `Alt+T`
-Tools, `Alt+H` Help — **JJ** and **Project** have no mnemonic of their own,
-since `Alt+J`/`Alt+P` are already taken elsewhere; reach them via `F10` plus
-the arrow keys, or a click). Arrows navigate, Enter runs the highlighted item,
+Tools, `Alt+H` Help — **JJ**, **IM**, **Project** and **OC** have no mnemonic
+of their own, since those letters are already taken; reach them via `F10`
+plus the arrow keys, or a click). With `ai = "off"` the AI menu is hidden. Arrows navigate, Enter runs the highlighted item,
 Esc closes. Typing a letter jumps to the next item starting with it
 (type-ahead), and `▸` marks a submenu (Right/click opens it, Left/Esc backs
 out). `F1` opens a searchable keyboard-shortcut browser if someone just wants
@@ -129,7 +129,25 @@ specifics you're not sure of:
   commands, discovered npm/Make/Rake/etc. tasks, test-at-point, integrated
   terminal, debugger (DAP).
 - **LSP** — diagnostics, hover, completion, go-to, configured via
-  `lsp_servers` (empty by default; point it at any language server binary).
+  `lsp_servers` (empty by default; point it at any language server binary);
+  progress in the status bar and **View → LSP Status…**.
+- **IDE-parity features** — Local History (File menu), Search Everywhere
+  (Go menu), Refactor… and Organize Imports (Tools → LSP), run configurations
+  (`.vix/run.toml`), Peek Definition, CodeLens, postfix completion
+  (`docs/ide-parity`).
+- **Large files** — **File → Open in Large File Viewer…** opens a
+  multi-gigabyte file read-only without loading it (`docs/large-file-viewer`).
+- **Remote editing** (experimental) — `vix ssh://host/path` or **File → Open
+  Remote…**; search, Git, LSP, tasks and the terminal run on the remote host
+  (`docs/remote-editing`).
+- **IM menu** — code-aware chat: a local Notes conversation, IRCv3 channels,
+  threads anchored to lines (`docs/im`). **Cowork** (Tools → Cowork,
+  real-time co-editing) exists only in builds with `--features cowork`.
+- **OC menu** — containers, images, volumes, networks and Compose on Docker,
+  Podman or nerdctl (`docs/oc`).
+- **AI** — the AI menu and chat panel run `ai_command` or an HTTP provider;
+  `ai = "off"` hides all of it. `vix --mcp` serves a read-only view of a
+  workspace to AI agents (`docs/mcp-server`).
 
 If a checkout is available, `docs/` has one directory per topic above (and
 many more — `docs/for-emacs-users/`, `docs/for-vim-users/`, etc., for

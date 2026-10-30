@@ -1,14 +1,16 @@
 # Vix
 
 > Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
-> IDE") built on ratatui: a thin App shell over 112 focused `vix-*` member
-> crates in a Cargo workspace (edition 2024).
+> IDE") built on ratatui: a thin App shell (package `vix-tui` in `tui/`,
+> building the `vix` command) over 140 focused `vix-*` member crates in a
+> Cargo workspace (edition 2024), with desktop GUIs in `gui/`.
 
 Development is specification-driven: each crate owns a spec at
 `crates/<crate>/spec/index.md`; cross-cutting and app-level specs live under
 `spec/`. When behavior and spec disagree, decide which is correct and make
 them match. [AGENTS.md](AGENTS.md) is the canonical entry point for both
-human and AI contributors — read it first.
+human and AI contributors — read it first. The workspace version is 2.0.0
+(unreleased; the latest published release is 1.8.0).
 
 ## Start here
 
@@ -17,6 +19,8 @@ human and AI contributors — read it first.
 - [index.md](index.md): user-facing overview — features, install & run,
   configuration, license
 - [docs/index.md](docs/index.md): the full documentation map
+- [docs/getting-started/index.md](docs/getting-started/index.md): install,
+  first run, the published install channels
 - [spec/index/index.md](spec/index/index.md): specification overview — goals,
   dependency crates, build/run
 
@@ -33,10 +37,25 @@ human and AI contributors — read it first.
   IntelliJ, Eclipse, Sublime Text
 - [Menus](docs/menus/index.md), [Themes](docs/themes/index.md),
   [Internationalization](docs/internationalization/index.md)
+- [Generated action reference](docs/reference/actions.md): every action id,
+  its title and menu path, generated from the real catalog
 - [Language Server Protocol](docs/language-server-protocol/index.md):
-  diagnostics, hover, go-to-definition, completion
+  diagnostics, hover, go-to-definition, completion, progress
 - [Debugger](docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
   stepping, call stack, variables, watches
+- [IDE parity features](docs/ide-parity/index.md): Local History, Search
+  Everywhere, Refactor… and Organize Imports, run configurations, peek
+  definition, CodeLens, postfix completion
+- [Remote editing](docs/remote-editing/index.md): open a folder over SSH
+  (experimental) — search, git, language servers, terminal, remote agent
+- [Cowork](docs/cowork/index.md): real-time co-editing, opt-in `cowork`
+  build feature (not in the default build)
+- [IM](docs/im/index.md): code-aware chat, threads anchored to lines, IRCv3
+- [MCP server](docs/mcp-server/index.md): `vix --mcp` serves Vix's view of a
+  workspace to an AI agent over the Model Context Protocol
+- [Large File Viewer](docs/large-file-viewer/index.md): read-only viewer for
+  multi-gigabyte files
+- [OC (containers)](docs/oc/index.md): Docker, Podman and nerdctl
 - [Database Workbench](docs/db/index.md): SQLite/PostgreSQL/MySQL —
   connections, schema tree, query editor, transactions, history, export
 - [Org mode](docs/org/index.md): headlines, TODO cycling, table editor,
@@ -45,11 +64,19 @@ human and AI contributors — read it first.
   revert per hunk
 - [Scripting](docs/scripting/index.md): Rhai `.rhai` scripts — new palette
   commands, key bindings, buffer transforms, no rebuild
+- [Performance](docs/performance/index.md): measured numbers, with the
+  machine and method stated
 
 ## Specification (source of truth)
 
 - [CI/CD](spec/ci/index.md): GitHub, GitLab, and Codeberg pipelines; the local
   parity gate (`scripts/check`)
+- [Capability Cargo features](spec/cargo-features/index.md): which
+  capabilities a build can leave out, and the opt-in `cowork` feature
+- [Remote editing](spec/remote-editing/index.md),
+  [Cowork](spec/cowork/index.md), [IM](spec/instant-message/index.md),
+  [MCP server](spec/mcp-server/index.md), [Jupyter](spec/jupyter/index.md)
+  (spike done, not implemented)
 - [Navigation](spec/navigation/index.md), [Tools menu](spec/tools/index.md),
   [Comparisons](spec/comparisons/index.md), [Test strategy](spec/test/index.md)
 - [agents/share/crate-map.md](agents/share/crate-map.md): every crate, module,
@@ -60,9 +87,13 @@ human and AI contributors — read it first.
 - [agents/conventions.md](agents/conventions.md): coding style and patterns
 - [agents/workflow.md](agents/workflow.md): the spec-driven workflow in detail
 - [agents/share/glossary.md](agents/share/glossary.md): shared terminology
+- [AI_STATEMENT.md](AI_STATEMENT.md): how AI agents contribute to Vix
 - [CHANGELOG.md](CHANGELOG.md): notable changes, newest release first
 
 ## Optional
 
-- [tasks.md](tasks.md) / [plan.md](plan.md): the open improvement backlog
-- [LICENSE](LICENSE): Apache-2.0 or MIT, at your option
+- [tasks.md](tasks.md) / [plan.md](plan.md): the improvement backlog and plan
+- [packaging/index.md](packaging/index.md): install-channel templates (winget,
+  Scoop, AUR, Nix, container image) — not yet published or verified
+- [LICENSE](LICENSE): Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only or
+  GPL-3.0-only, at your option
