@@ -8357,8 +8357,19 @@ so, and the first task of each plan re-checks the facts it depends on.
   stdio, batching, file watching, checksum-verified upload. **Large.**
 - [ ] **T718 — Other authorities.** Dev containers, `docker exec`/`podman`
   (with OC), Kubernetes, WSL. **Large; later.**
-- [ ] **T719 — Optional opt-in CI job against a real local `sshd`.**
+- [x] **T719 — Optional opt-in CI job against a real local `sshd`.**
   **Small.**
+  - **Done 2026-10-30** (`feat/t719-sshd-ci`): `scripts/test-ssh-local`
+    starts a throwaway non-root `sshd` on `127.0.0.1:22022` with generated
+    ed25519 host and client keys, its own `ssh_config`/`known_hosts`
+    (`StrictHostKeyChecking yes`, no agent) reached via an `ssh` wrapper on
+    `PATH` that adds `-F`, and runs only `a_real_host_conforms`; nothing
+    touches `~/.ssh`. New GitHub-only `.github/workflows/ssh.yml` runs the
+    script on `ubuntu-latest` (path-filtered to `crates/vix-authority/**`, the
+    script and the workflow, plus `workflow_dispatch`). The script passed
+    locally on macOS (Apple `sshd`, Homebrew OpenSSH 10.6 client). **The
+    workflow is unverified until it first runs on GitHub.** Not mirrored to
+    GitLab/Codeberg (like `chaos.yml`/`mutants.yml`).
 
 ### IDE parity (spec: [`spec/ide-parity`](spec/ide-parity/index.md))
 

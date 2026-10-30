@@ -1,0 +1,150 @@
+#!/bin/sh
+# Run the SSH authority's conformance suite against a real, throwaway sshd on
+# this machine (T719; crates/vix-authority/spec/ssh/index.md, "Testing").
+#
+#     scripts/test-ssh-local
+#
+# Needs the OpenSSH client and server (`sshd`; on Debian/Ubuntu
+# `sudo apt-get install openssh-server`, on macOS it ships at /usr/sbin/sshd).
+# The `ssh` CI workflow (.github/workflows/ssh.yml) runs exactly this script.
+#
+# What it does, all inside one private temporary directory that it removes on
+# exit -- it never reads or writes ~/.ssh, ~/.ssh/config, ~/.ssh/known_hosts,
+# the SSH agent or the system sshd:
+#
+# 1. Generates a throwaway ed25519 host key and a throwaway ed25519 client key
+#    (no passphrase), and authorizes the client key in its own authorized_keys.
+# 2. Starts `sshd` as YOU (not root) on 127.0.0.1, port $VIX_TEST_SSH_PORT
+#    (default 22022), with its own config: public-key only, that one
+#    authorized_keys file, no PAM. A non-root sshd can only log in its own
+#    user, so it can't be used to reach anyone else's account.
+# 3. Writes a client config naming the host `vix-test-sshd` with that port,
+#    key and a known_hosts holding exactly the generated host key, with
+#    StrictHostKeyChecking=yes -- host-key checking stays on.
+# 4. Puts a one-line `ssh` wrapper first on PATH that adds `-F <that config>`,
+#    because Vix runs the `ssh` on PATH and doesn't override ssh_config.
+# 5. Runs only `a_real_host_conforms` with VIX_TEST_SSH_HOST=vix-test-sshd.
+#
+# The connection-sharing sockets go where Vix always puts them
+# ($XDG_RUNTIME_DIR/vix-ssh or /tmp/vix-ssh-<uid>); the test closes its
+# connection. Set VIX_TEST_SSH_KEEP=1 to keep the temporary directory (and
+# the sshd log) for debugging.
+set -eu
+
+port=${VIX_TEST_SSH_PORT:-22022}
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+real_ssh=$(command -v ssh) || {
+	echo "test-ssh-local: no ssh client on PATH" >&2
+	exit 1
+}
+# sshd re-executes itself, so it must be started by absolute path.
+sshd=$(command -v sshd 2>/dev/null || true)
+for candidate in /usr/sbin/sshd /usr/local/sbin/sshd /opt/homebrew/sbin/sshd; do
+	[ -n "$sshd" ] && break
+	[ -x "$candidate" ] && sshd=$candidate
+done
+case $sshd in
+/*) ;;
+*)
+	echo "test-ssh-local: no sshd found (install openssh-server)" >&2
+	exit 1
+	;;
+esac
+
+umask 077
+dir=$(mktemp -d "${TMPDIR:-/tmp}/vix-sshd.XXXXXX")
+dir=$(cd "$dir" && pwd -P)
+sshd_pid=
+# shellcheck disable=SC2329 # invoked by the EXIT trap
+cleanup() {
+	if [ -n "$sshd_pid" ]; then
+		kill "$sshd_pid" 2>/dev/null || true
+		wait "$sshd_pid" 2>/dev/null || true
+	fi
+	if [ "${VIX_TEST_SSH_KEEP:-0}" = 1 ]; then
+		echo "test-ssh-local: kept $dir"
+	else
+		rm -rf "$dir"
+	fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+ssh-keygen -q -t ed25519 -N '' -C vix-test-host -f "$dir/host_ed25519"
+ssh-keygen -q -t ed25519 -N '' -C vix-test-client -f "$dir/id_ed25519"
+cp "$dir/id_ed25519.pub" "$dir/authorized_keys"
+
+# StrictModes off: the key files are private (umask 077) but live under a
+# temp directory whose parents the check would also inspect; OpenSSH's own
+# regression tests run a non-root sshd the same way.
+cat >"$dir/sshd_config" <<EOF
+ListenAddress 127.0.0.1
+Port $port
+HostKey $dir/host_ed25519
+PidFile $dir/sshd.pid
+AuthorizedKeysFile $dir/authorized_keys
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+StrictModes no
+PermitRootLogin no
+AllowUsers $(id -un)
+AllowTcpForwarding no
+X11Forwarding no
+PermitTunnel no
+LogLevel VERBOSE
+EOF
+
+cat >"$dir/ssh_config" <<EOF
+Host vix-test-sshd
+	HostName 127.0.0.1
+	Port $port
+	User $(id -un)
+	HostKeyAlias vix-test-sshd
+	UserKnownHostsFile $dir/known_hosts
+	GlobalKnownHostsFile /dev/null
+	StrictHostKeyChecking yes
+	UpdateHostKeys no
+	CheckHostIP no
+	IdentityFile $dir/id_ed25519
+	IdentitiesOnly yes
+	IdentityAgent none
+	PasswordAuthentication no
+	KbdInteractiveAuthentication no
+EOF
+printf 'vix-test-sshd %s\n' "$(cut -d' ' -f1,2 "$dir/host_ed25519.pub")" >"$dir/known_hosts"
+
+mkdir "$dir/bin"
+printf '#!/bin/sh\nexec %s -F %s "$@"\n' "$real_ssh" "$dir/ssh_config" >"$dir/bin/ssh"
+chmod 700 "$dir/bin/ssh"
+
+"$sshd" -t -f "$dir/sshd_config"
+"$sshd" -D -e -f "$dir/sshd_config" 2>"$dir/sshd.log" &
+sshd_pid=$!
+
+# Wait for sshd to accept a login (and prove the client side works).
+tries=0
+until "$dir/bin/ssh" -o BatchMode=yes -o ConnectTimeout=2 vix-test-sshd true 2>"$dir/probe.log"; do
+	tries=$((tries + 1))
+	if [ "$tries" -ge 20 ] || ! kill -0 "$sshd_pid" 2>/dev/null; then
+		echo "test-ssh-local: could not log in to the test sshd on 127.0.0.1:$port" >&2
+		cat "$dir/probe.log" "$dir/sshd.log" >&2
+		exit 1
+	fi
+	sleep 0.5
+done
+echo "test-ssh-local: sshd up on 127.0.0.1:$port"
+
+cd "$root"
+status=0
+PATH="$dir/bin:$PATH" VIX_TEST_SSH_HOST=vix-test-sshd \
+	cargo test -p vix-authority --features ssh --test ssh -- --exact a_real_host_conforms --nocapture ||
+	status=$?
+if [ "$status" -ne 0 ]; then
+	echo "test-ssh-local: sshd log:" >&2
+	cat "$dir/sshd.log" >&2
+fi
+exit "$status"

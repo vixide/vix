@@ -55,3 +55,27 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
 - The connection's control socket lives in a private directory
   (`$XDG_RUNTIME_DIR/vix-ssh`, or `/tmp/vix-ssh-<uid>`), which Vix refuses to
   use if anyone else can reach it.
+
+## Testing against a real host
+
+Vix's own tests drive the SSH support through a stand-in for `ssh`. To run
+the shared file-system conformance suite against a real OpenSSH server on
+your machine:
+
+```sh
+scripts/test-ssh-local
+```
+
+It needs `sshd` (on Debian or Ubuntu, `sudo apt-get install openssh-server`;
+macOS ships it). The script starts a temporary `sshd` as you, not as root, on
+`127.0.0.1:22022` (set `VIX_TEST_SSH_PORT` to change it), with freshly
+generated keys and its own client configuration, so host-key checking stays
+on and your `~/.ssh`, your SSH agent and any system `sshd` are left alone.
+Everything lives in one temporary directory that is removed afterwards
+(`VIX_TEST_SSH_KEEP=1` keeps it, with the server's log). The same script runs
+in GitHub Actions whenever the SSH code changes.
+
+To test against another machine instead, set `VIX_TEST_SSH_HOST` to a host
+your `ssh` can reach without a prompt (`user@host` or `ssh://host:port`) and
+run `cargo test -p vix-authority --features ssh --test ssh a_real_host_conforms`.
+The suite creates and removes a scratch folder under `/tmp` there.

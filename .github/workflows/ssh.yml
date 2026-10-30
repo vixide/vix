@@ -1,0 +1,58 @@
+# The SSH authority against a real sshd (T719, tasks.md): `scripts/test-ssh-local`
+# starts a throwaway, non-root sshd on 127.0.0.1 with generated keys and its own
+# client config (host-key checking on), then runs the `a_real_host_conforms`
+# conformance test over it. The per-push gate (ci.yml) covers the same
+# authority against a fake `ssh`; this job proves it against OpenSSH itself.
+#
+# Opt-in: it runs only when the SSH authority, the script or this file changes,
+# or on demand, so it never slows an unrelated push or PR. GitHub only; see
+# spec/ci/index.md.
+
+name: SSH authority (real sshd)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/vix-authority/**"
+      - "scripts/test-ssh-local"
+      - ".github/workflows/ssh.yml"
+  pull_request:
+    paths:
+      - "crates/vix-authority/**"
+      - "scripts/test-ssh-local"
+      - ".github/workflows/ssh.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ssh-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sshd:
+    name: conformance over a local sshd
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install openssh-server
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-client openssh-server
+          # Harmless for the non-root sshd the script starts; some OpenSSH
+          # builds check for the privilege-separation directory regardless.
+          sudo mkdir -p -m 0755 /run/sshd
+      - name: build the test
+        run: cargo test -p vix-authority --features ssh --test ssh --no-run
+      - name: run the conformance suite over sshd
+        run: scripts/test-ssh-local
