@@ -8974,11 +8974,46 @@ free-floating chat does not; never pop up on your own.
   clears the conversation and deletes its file. History is not written
   for a conversation's earlier session-only messages when the setting
   changes mid-run (it is read at startup).
-- [ ] **T756 — Session chat over Cowork (after T694 lands on `main`).** A
+- [x] **T756 — Session chat over Cowork (after T694 lands on `main`).** A
   chat message type inside `vix-cowork-net`'s encrypted frames; a
   `Session` conversation appears when a session starts and is dropped
   when it ends; peers shown by verified identity; host mute/remove.
   **Medium.**
+  *Done 2026-10-30 (`feat/t756-t759-cowork-im`):* no chat existed on the
+  wire yet (T697 had only reserved tags 48–63), so T756 builds on that
+  seam: `Channel::Chat` with `Chat(ChatLine)` (tag 48: sender, UTC time,
+  body, and a `ChatKind` of text, action, location or snippet, paths as
+  `SharedPath`s, body and code capped at `MAX_CHAT_BYTES` = 16 KB) and
+  `ChatMuted` (tag 49); 50–63 stay reserved and skipped. The host relays a
+  guest's line to the others (never echoed), stamping the connection's peer
+  id; any permission level may chat. `HostSession::{chat, set_muted,
+  is_muted, kick}`, `GuestSession::{chat, is_muted}`, `check_chat`,
+  `Handled::chat`, `GuestEvent::{Chat, Muted, PeerJoined, PeerLeft}` (joins
+  after one's own only). App (`tui/src/app/cowork.rs`): the `Session`
+  conversation (`cowork/session`) is added on hosting or joining and removed
+  on leaving, losing the link or being removed; never written to history,
+  never opens the panel. Authors are `name #N` (host-confirmed name plus
+  host-given number, so nobody can pass as another or as you). Text, `/me`,
+  Share Selection and Share Location go to the session; a guest's Enter on a
+  reference opens the shared-in buffer or asks the host for the file.
+  **Mute in Chat…** (`cowork.mute`) and **Remove Guest…** (`cowork.remove`),
+  host prompts by number, menu + palette + 15 locales; joins, leaves and
+  mutes are system lines. `cowork_off.rs` stand-ins keep `im.rs` free of
+  `cfg`. Tests: codec round trips (unit + proptest), hostile chat messages
+  refused on decode (over-long body/code, 4 GB length, bad path, bad UTF-8,
+  unknown kind, bad flag), session tests for stamping, mute and remove, a
+  loopback proxy test proving a chat line crosses the wire encrypted, and
+  two-App loopback tests (`session_chat_goes_both_ways_and_ends_with_the_session`,
+  `the_host_mutes_and_removes_a_guest`).
+  **Not done:** private messages between two participants; chat history
+  beyond the session (by design: it is dropped with the session); no rate
+  limit on chat lines beyond the caps; a line's time is the sender's clock;
+  mentions use the IM nick, not the Cowork display name; anchored threads
+  (T753) are still shared through Git, not over the session; a guest's
+  reference to a host file that is not shared in is only *requested* (the
+  host must have shared its file tree) and opens at the top, not the line;
+  the Peers dialog does not mark muted guests (the IM roster does); muting
+  is per session and forgotten when the guest leaves.
 - [ ] **T757 — Docs, site and demo.** A user guide, a VHS demo of
   sharing a selection and opening its reference, and a features-page
   entry. **Small.**
@@ -8986,9 +9021,36 @@ free-floating chat does not; never pop up on your own.
   `matrix-sdk` in-process (pre-1.0, heavy, but real Olm/Megolm E2EE)
   and talking to a local Pantalaimon or iamb out of process; behind its
   own Cargo feature either way. **Large.**
-- [ ] **T759 — Follow, presence and session notes (after T693/T695).**
+- [x] **T759 — Follow, presence and session notes (after T693/T695).**
   Show who is in which file in the panel, follow a peer, and one shared
   Markdown notes buffer per session. **Medium.**
+  *Done 2026-10-30 with T756:* presence and follow already existed (T693:
+  remote carets, status-bar names, **Follow…**), so T759 adds only the IM
+  side and the notes. **Roster:** while the session conversation is
+  selected the IM dock lists every participant above the messages
+  (`App::cowork_roster`), with the shared file their cursor is in (or the
+  notes) and `you`/`host`/`muted`/`following` as words, from the existing
+  `PresenceBoard`. **Follow:** `/follow N` in the panel (new
+  `vix_im::Command::Follow`) does what **Follow…** does; `/follow` alone
+  stops. **Session notes:** `HostSession::new` creates one empty Markdown
+  document at `SharedPath::session_notes()` (`.vix/cowork/notes.md`, a
+  private path so no real file can be shared or opened in its place),
+  synced through the existing shared-buffer CRDT path (edits, per-user
+  undo, presence, follow all unchanged). **Tools → Cowork → Session Notes**
+  (`cowork.notes`) opens it in a `cowork:` tab on host or guest; it never
+  opens on its own; edit guests and the host write it, view guests read it;
+  `shared()` does not list it, `unshare` keeps it, a save request for it is
+  refused, Save does nothing locally (status says to copy it), closing its
+  tab keeps it in the session, and leaving leaves an unsaved copy. Tests:
+  session test of the notes rules, a path test, and the two-App loopback
+  test `roster_follow_and_session_notes`.
+  **Not done:** the notes are not saved anywhere when the session ends
+  (only the left-behind unsaved buffer); view-only guests cannot write the
+  notes (they follow the permission model, not "edited by everyone" as the
+  IM spec first put it); the roster is text rows, not a selectable list
+  (no Enter-to-follow; use `/follow N`); a participant's name is still not
+  drawn beside its caret; the roster shows your own file only for a shared
+  buffer that is the active tab.
 
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
 T759 wait for Cowork on `main`; T758 last.

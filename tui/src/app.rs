@@ -192,6 +192,10 @@ pub enum PromptKind {
     CoworkConsent,
     /// Cowork (T693): which participant to follow (empty stops).
     CoworkFollow,
+    /// Cowork (T756): which guest to mute or unmute in the session chat.
+    CoworkMute,
+    /// Cowork (T756): which guest to remove from the session.
+    CoworkRemove,
     /// Pipe the selection (or buffer) through a shell command, replacing it
     /// with the output (T659).
     PipeSelection,
@@ -13116,7 +13120,9 @@ impl App {
             | PromptKind::CoworkJoin
             | PromptKind::CoworkPermission
             | PromptKind::CoworkConsent
-            | PromptKind::CoworkFollow => self.accept_cowork_prompt(prompt.kind, &prompt.input),
+            | PromptKind::CoworkFollow
+            | PromptKind::CoworkMute
+            | PromptKind::CoworkRemove => self.accept_cowork_prompt(prompt.kind, &prompt.input),
             PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
             PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),

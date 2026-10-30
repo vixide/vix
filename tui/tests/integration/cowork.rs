@@ -445,3 +445,212 @@ fn a_shared_terminal_is_read_only_until_the_host_allows_input() {
     });
     assert!(!guest.cowork_terminal_can_type());
 }
+
+fn session() -> vix_im::ConversationId {
+    vix_im::ConversationId::new("cowork/session")
+}
+
+/// Open the IM panel on the session conversation and type `line` + Enter.
+fn say(app: &mut App, line: &str) {
+    if !app.im.open || app.focus != Focus::Im {
+        app.run_action("im.panel");
+    }
+    app.im.panel.select(&mut app.im.inbox, &session());
+    type_str(app, line);
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+fn last_line(app: &App) -> Option<vix_im::Message> {
+    app.im
+        .inbox
+        .get(&session())
+        .and_then(|c| c.messages.last().cloned())
+}
+
+fn heard(app: &App, body: &str) -> bool {
+    app.im
+        .inbox
+        .get(&session())
+        .is_some_and(|c| c.messages.iter().any(|m| m.body == body))
+}
+
+fn system_lines(app: &App) -> usize {
+    app.im.inbox.get(&session()).map_or(0, |c| {
+        c.messages
+            .iter()
+            .filter(|m| m.kind == vix_im::MessageKind::System)
+            .count()
+    })
+}
+
+/// Pump both apps for a short while without waiting on anything.
+fn idle(host: &mut App, guest: &mut App) {
+    for _ in 0..30 {
+        host.poll_cowork();
+        guest.poll_cowork();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// T756: a session has a chat with nothing to set up. It appears on both
+/// sides without opening anything, lines go both ways inside the encrypted
+/// link with the host-verified identity as author, and it is dropped when
+/// the session ends.
+#[test]
+fn session_chat_goes_both_ways_and_ends_with_the_session() {
+    let (mut host, mut guest, _file) = connected("chat", "view");
+    for app in [&host, &guest] {
+        let c = app
+            .im
+            .inbox
+            .get(&session())
+            .expect("a session conversation");
+        assert_eq!(c.kind, vix_im::ConversationKind::Session);
+        assert!(!app.im.open, "the panel never opens on its own");
+    }
+
+    say(&mut host, "look at a.txt:1");
+    let mine = last_line(&host).unwrap();
+    assert!(mine.author.ends_with(" #1"), "{}", mine.author);
+    assert_eq!(host.im.inbox.get(&session()).unwrap().unread, 0);
+    pump(&mut host, &mut guest, |_, g| heard(g, "look at a.txt:1"));
+    let got = last_line(&guest).unwrap();
+    assert_eq!(
+        got.author, mine.author,
+        "shown as the host's verified identity"
+    );
+    assert_eq!(guest.im.inbox.get(&session()).unwrap().unread, 1);
+    assert!(!guest.im.open, "a line does not open the guest's panel");
+    assert_eq!(guest.focus, Focus::Editor);
+
+    // A view-only guest may still talk; `/me` is an action.
+    say(&mut guest, "/me waves");
+    pump(&mut host, &mut guest, |h, _| heard(h, "waves"));
+    let got = last_line(&host).unwrap();
+    assert!(got.author.ends_with(" #2"), "{}", got.author);
+    assert_eq!(got.kind, vix_im::MessageKind::Action);
+
+    // Share Location from the guest's shared-in tab names the host's path.
+    guest.focus = Focus::Editor;
+    guest.run_action("im.share_location");
+    pump(&mut host, &mut guest, |h, _| {
+        last_line(h).is_some_and(
+            |m| matches!(&m.kind, vix_im::MessageKind::Location { path, .. } if path == "a.txt"),
+        )
+    });
+
+    let before = system_lines(&host);
+    guest.run_action("cowork.leave");
+    assert!(
+        guest.im.inbox.get(&session()).is_none(),
+        "dropped on leaving"
+    );
+    pump(&mut host, &mut guest, |h, _| system_lines(h) > before);
+    host.run_action("cowork.leave");
+    assert!(host.im.inbox.get(&session()).is_none());
+}
+
+/// T756: the host mutes a guest (its lines go nowhere until unmuted) and
+/// removes one (it is told, and its session ends).
+#[test]
+fn the_host_mutes_and_removes_a_guest() {
+    let (mut host, mut guest, _file) = connected("mute", "edit");
+    let quiet = system_lines(&guest);
+    host.run_action("cowork.mute");
+    assert!(host.prompt.as_ref().unwrap().kind == PromptKind::CoworkMute);
+    host.prompt.as_mut().unwrap().input = "2".to_string();
+    enter(&mut host);
+    pump(&mut host, &mut guest, |_, g| system_lines(g) > quiet);
+    say(&mut guest, "can anyone hear me");
+    idle(&mut host, &mut guest);
+    assert!(
+        !heard(&host, "can anyone hear me"),
+        "a muted guest is not relayed"
+    );
+    assert!(!heard(&guest, "can anyone hear me"), "nor shown as sent");
+
+    host.run_action("cowork.mute");
+    host.prompt.as_mut().unwrap().input = "2".to_string();
+    enter(&mut host);
+    pump(&mut host, &mut guest, |_, g| system_lines(g) > quiet + 1);
+    say(&mut guest, "back again");
+    pump(&mut host, &mut guest, |h, _| heard(h, "back again"));
+
+    host.run_action("cowork.remove");
+    assert!(host.prompt.as_ref().unwrap().kind == PromptKind::CoworkRemove);
+    host.prompt.as_mut().unwrap().input = "2".to_string();
+    enter(&mut host);
+    pump(&mut host, &mut guest, |_, g| !g.cowork_active());
+    assert!(guest.im.inbox.get(&session()).is_none());
+    assert_eq!(host.cowork_roster().len(), 1, "only the host is left");
+    assert!(
+        guest.editor.tabs.iter().all(|t| !t.is_remote()),
+        "the removed guest keeps local copies only"
+    );
+}
+
+/// T759: the panel lists who is in which file; `/follow` follows a peer;
+/// the session notes are one shared Markdown buffer that is never opened on
+/// anyone's behalf, and edits to it flow both ways.
+#[test]
+fn roster_follow_and_session_notes() {
+    let (mut host, mut guest, _file) = connected("notes", "edit");
+    // Who is where: the guest's cursor is in a.txt.
+    guest.on_key(keycode(KeyCode::Right));
+    pump(&mut host, &mut guest, |h, _| {
+        h.cowork_roster()
+            .iter()
+            .any(|r| r.contains("#2") && r.ends_with("a.txt"))
+    });
+    assert_eq!(host.cowork_roster().len(), 2);
+
+    // The host opens and writes the notes; the guest's view is untouched.
+    host.run_action("cowork.notes");
+    let path = host.editor.active_tab().unwrap().path.clone().unwrap();
+    assert!(path.to_str().unwrap().ends_with("notes.md"));
+    type_str(&mut host, "# Plan");
+    idle(&mut host, &mut guest);
+    assert!(
+        guest
+            .editor
+            .tabs
+            .iter()
+            .all(|t| !t.text().contains("# Plan")),
+        "the notes never open on their own"
+    );
+
+    // The guest opens them (once), then follows the host into them.
+    let before = guest.editor.tabs.len();
+    guest.run_action("cowork.notes");
+    assert_eq!(guest.editor.tabs.len(), before + 1);
+    assert_eq!(tab_text(&guest), "# Plan");
+    guest.run_action("cowork.notes");
+    assert_eq!(guest.editor.tabs.len(), before + 1, "opened once");
+    let a_txt = guest
+        .editor
+        .tabs
+        .iter()
+        .position(|t| t.is_remote() && !t.text().contains("# Plan"))
+        .unwrap();
+    guest.editor.active = a_txt;
+    say(&mut guest, "/follow 1");
+    host.on_key(keycode(KeyCode::Left));
+    pump(&mut host, &mut guest, |_, g| {
+        g.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some_and(|p| p.to_str().unwrap().ends_with("notes.md"))
+    });
+
+    // An edit guest writes the notes; the host sees it. Save writes nothing.
+    guest.focus = Focus::Editor;
+    guest.on_key(keycode(KeyCode::End));
+    type_str(&mut guest, "!");
+    pump(&mut host, &mut guest, |h, _| tab_text(h) == "# Plan!");
+    guest.run_action("file.save");
+    host.run_action("file.save");
+    assert!(
+        !host.root.join(".vix").exists(),
+        "the notes never touch disk"
+    );
+}

@@ -59,7 +59,7 @@ sharing live in `vix-cowork`. The design is in
 ## Reserved messages
 
 A decoded payload in a reserved tag range (`vix_cowork::wire::
-RESERVED_CHAT_TAGS`, kept for session chat, T756) is skipped by
+RESERVED_CHAT_TAGS`, 50–63, kept for later session-chat messages) is skipped by
 `LinkReader::recv` and the link stays open, so a newer peer's chat cannot end
 an older peer's session. Any other undecodable payload still ends the link.
 
@@ -82,5 +82,5 @@ a complete host and guest session including a multi-frame snapshot; decline;
 an unapproved guest receiving nothing; wrong secret, revoked, spent and
 expired invites; a pinned-key mismatch; garbage and fake-preamble
 connections; a recording proxy proving neither names, file names nor
-document text appear on the wire; and a reserved (chat) message being skipped
+document text, nor a session-chat line (T756), appear on the wire; and a reserved (chat) message being skipped
 while the session carries on.

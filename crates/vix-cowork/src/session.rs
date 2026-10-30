@@ -12,8 +12,8 @@ use crate::error::CoworkError;
 use crate::path::SharedPath;
 use crate::peer::{Action, Peer, PeerId, Permission};
 use crate::presence::PresenceBoard;
-use crate::wire::{ErrorCode, Message, Presence};
-use std::collections::BTreeMap;
+use crate::wire::{ChatKind, ChatLine, ErrorCode, MAX_CHAT_BYTES, Message, Presence};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A message and who it is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +53,28 @@ pub struct Handled {
     /// checked: the terminal is shared, the host allows input, and the guest
     /// has terminal permission. Write them to the terminal in order.
     pub terminal_keys: Vec<(PeerId, Vec<u8>)>,
+    /// Chat lines a guest sent (T756), stamped with its verified peer id and
+    /// already relayed to the other guests; show them to the host.
+    pub chat: Vec<ChatLine>,
+}
+
+/// Check a chat line against the wire caps before sending it (T756), so an
+/// over-long message is refused here rather than by the receiver's decoder,
+/// which would end the connection.
+///
+/// # Errors
+///
+/// [`CoworkError::Wire`] (`FieldTooLong`) for a body or code over
+/// [`MAX_CHAT_BYTES`] or a language over the name limit.
+pub fn check_chat(line: &ChatLine) -> Result<(), CoworkError> {
+    let too_long = line.body.len() > MAX_CHAT_BYTES
+        || matches!(&line.kind, ChatKind::Snippet { code, language, .. }
+            if code.len() > MAX_CHAT_BYTES || language.len() > crate::wire::MAX_NAME_BYTES);
+    if too_long {
+        Err(crate::error::WireProblem::FieldTooLong.into())
+    } else {
+        Ok(())
+    }
 }
 
 /// The host's shared terminal (T697): shared at all, and whether guests with
@@ -76,25 +98,90 @@ pub struct HostSession {
     workspace: bool,
     /// The shared terminal (T697), if the host shares one.
     terminal: Option<TerminalShare>,
+    /// Guests the host muted in the session chat (T756).
+    muted: BTreeSet<PeerId>,
 }
 
 impl HostSession {
-    /// Start a session with nothing shared and no guests.
+    /// Start a session with no file shared and no guests. The session's
+    /// Markdown notes (T759, [`SharedPath::session_notes`]) exist from the
+    /// start, empty, and reach every guest that joins; they are not a file,
+    /// so [`shared`](Self::shared) does not list them.
     #[must_use]
     pub fn new(host_name: &str, cap: usize) -> Self {
         let mut board = PresenceBoard::new();
         let host_name = crate::peer::sanitize_name(host_name);
         board.join(PeerId::HOST, &host_name);
+        let mut docs = BTreeMap::new();
+        if let Ok(notes) = SharedDoc::host(PeerId::HOST, "", cap) {
+            docs.insert(SharedPath::session_notes(), notes);
+        }
         Self {
             host_name,
             cap,
             peers: BTreeMap::new(),
-            docs: BTreeMap::new(),
+            docs,
             board,
             next_guest: 0,
             workspace: false,
             terminal: None,
+            muted: BTreeSet::new(),
         }
+    }
+
+    // ----- session chat (T756) ------------------------------------------------
+
+    /// The host says something in the session chat: `line` goes to every
+    /// guest with `from` stamped as the host.
+    ///
+    /// # Errors
+    ///
+    /// [`check_chat`]'s, for a line over the caps.
+    pub fn chat(&self, line: ChatLine) -> Result<Vec<Outbound>, CoworkError> {
+        let line = ChatLine {
+            from: PeerId::HOST,
+            ..line
+        };
+        check_chat(&line)?;
+        Ok(self.to_all(None, &Message::Chat(line)))
+    }
+
+    /// Mute (`true`) or unmute a guest in the session chat, and tell it. A
+    /// muted guest's lines are refused and never relayed; it still edits and
+    /// follows as its permission allows. Nothing for an unknown guest.
+    #[must_use]
+    pub fn set_muted(&mut self, id: PeerId, muted: bool) -> Vec<Outbound> {
+        if !self.peers.contains_key(&id) {
+            return Vec::new();
+        }
+        if muted {
+            self.muted.insert(id);
+        } else {
+            self.muted.remove(&id);
+        }
+        vec![Outbound {
+            to: id,
+            msg: Message::ChatMuted { muted },
+        }]
+    }
+
+    /// Whether a guest is muted in the session chat.
+    #[must_use]
+    pub fn is_muted(&self, id: PeerId) -> bool {
+        self.muted.contains(&id)
+    }
+
+    /// Remove a guest from the session (T756): it is told
+    /// [`ErrorCode::Removed`], everyone else hears it left. The caller then
+    /// closes its connection. Nothing for an unknown guest.
+    #[must_use]
+    pub fn kick(&mut self, id: PeerId) -> Vec<Outbound> {
+        if !self.peers.contains_key(&id) {
+            return Vec::new();
+        }
+        let mut out = vec![Self::refuse(id, ErrorCode::Removed)];
+        out.extend(self.remove(id));
+        out
     }
 
     // ----- shared terminal (T697) ---------------------------------------------
@@ -310,9 +397,10 @@ impl HostSession {
         self.docs.get(path)
     }
 
-    /// Paths currently shared.
+    /// Files currently shared (the session notes are not a file and are
+    /// not listed; see [`SharedPath::session_notes`]).
     pub fn shared(&self) -> impl Iterator<Item = &SharedPath> {
-        self.docs.keys()
+        self.docs.keys().filter(|p| !p.is_session_notes())
     }
 
     fn to_all(&self, except: Option<PeerId>, msg: &Message) -> Vec<Outbound> {
@@ -346,8 +434,11 @@ impl HostSession {
         Ok(self.to_all(None, &open))
     }
 
-    /// Stop sharing a buffer.
+    /// Stop sharing a buffer. The session notes stay for the whole session.
     pub fn unshare(&mut self, path: &SharedPath) -> Vec<Outbound> {
+        if path.is_session_notes() {
+            return Vec::new();
+        }
         if self.docs.remove(path).is_some() {
             self.to_all(None, &Message::Close { path: path.clone() })
         } else {
@@ -415,6 +506,7 @@ impl HostSession {
         if self.peers.remove(&id).is_none() {
             return Vec::new();
         }
+        self.muted.remove(&id);
         self.board.leave(id);
         self.to_all(None, &Message::PeerLeft { peer: id })
     }
@@ -521,6 +613,10 @@ impl HostSession {
                         .extend(self.to_all(Some(from), &Message::Presence(stamped)));
                 }
             }
+            Message::SaveRequest { path } if path.is_session_notes() => {
+                // The notes are not a file: there is nothing to write.
+                h.out.push(Self::refuse(from, ErrorCode::BadPath));
+            }
             Message::SaveRequest { path } => {
                 if peer.permission.allows(Action::Save) && self.docs.contains_key(&path) {
                     h.save.push((from, path));
@@ -556,15 +652,30 @@ impl HostSession {
                     h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
                 }
             }
+            Message::Chat(line) => self.on_chat(from, line, &mut h),
             // `Leave`, or anything else: a guest sends nothing but updates,
-            // presence, save, list, open requests and terminal keys after the
-            // handshake.
+            // presence, save, list, open requests, terminal keys and chat
+            // after the handshake.
             _ => {
                 h.out.extend(self.remove(from));
                 h.disconnect.push(from);
             }
         }
         Ok(h)
+    }
+
+    /// A guest's chat line: refused while it is muted; otherwise stamped
+    /// with the connection's peer id (whatever `from` it claimed), relayed to
+    /// every other guest and handed to the host.
+    fn on_chat(&self, from: PeerId, line: ChatLine, h: &mut Handled) {
+        if self.muted.contains(&from) {
+            h.out.push(Self::refuse(from, ErrorCode::PermissionDenied));
+            return;
+        }
+        let stamped = ChatLine { from, ..line };
+        h.out
+            .extend(self.to_all(Some(from), &Message::Chat(stamped.clone())));
+        h.chat.push(stamped);
     }
 
     fn on_update(&mut self, peer: &Peer, path: &SharedPath, bytes: &[u8], h: &mut Handled) {
@@ -637,6 +748,15 @@ pub enum GuestEvent {
     TerminalInput(bool),
     /// The host stopped sharing its terminal.
     TerminalClosed,
+    /// A session-chat line (T756), `from` stamped by the host.
+    Chat(ChatLine),
+    /// The host muted (`true`) or unmuted this guest in the chat (T756).
+    Muted(bool),
+    /// Someone joined after this guest did (T756): the id the host gave
+    /// them and the name the host confirmed.
+    PeerJoined(PeerId, String),
+    /// Someone left (T756), with the name they had.
+    PeerLeft(PeerId, String),
 }
 
 /// A guest's side of one session.
@@ -650,6 +770,11 @@ pub struct GuestSession {
     board: PresenceBoard,
     /// The host's shared terminal, if any (T697).
     terminal: Option<TerminalShare>,
+    /// Whether the host muted this guest in the chat (T756).
+    muted: bool,
+    /// Whether this guest's own join came through: the roster sent before it
+    /// is not news, the joins after it are.
+    joined: bool,
 }
 
 impl GuestSession {
@@ -675,7 +800,34 @@ impl GuestSession {
             docs: BTreeMap::new(),
             board: PresenceBoard::new(),
             terminal: None,
+            muted: false,
+            joined: false,
         })
+    }
+
+    /// Whether the host muted this guest in the session chat (T756).
+    #[must_use]
+    pub const fn is_muted(&self) -> bool {
+        self.muted
+    }
+
+    /// Say something in the session chat (T756): the message to send. The
+    /// host stamps who said it.
+    ///
+    /// # Errors
+    ///
+    /// [`CoworkError::PermissionDenied`] while muted, or [`check_chat`]'s for
+    /// a line over the caps.
+    pub fn chat(&self, line: ChatLine) -> Result<Message, CoworkError> {
+        if self.muted {
+            return Err(CoworkError::PermissionDenied);
+        }
+        let line = ChatLine {
+            from: self.me,
+            ..line
+        };
+        check_chat(&line)?;
+        Ok(Message::Chat(line))
     }
 
     /// Whether the host shares its terminal with this session (T697).
@@ -773,11 +925,27 @@ impl GuestSession {
             }
             Message::PeerJoined { peer, name } => {
                 self.board.join(peer, &name);
-                vec![GuestEvent::Presence]
+                let news = self.joined && peer != self.me;
+                self.joined |= peer == self.me;
+                let shown = self.board.name(peer).unwrap_or_default().to_string();
+                if news {
+                    vec![GuestEvent::Presence, GuestEvent::PeerJoined(peer, shown)]
+                } else {
+                    vec![GuestEvent::Presence]
+                }
             }
             Message::PeerLeft { peer } => {
+                let name = self.board.name(peer).map(str::to_string);
                 self.board.leave(peer);
-                vec![GuestEvent::Presence]
+                match name {
+                    Some(name) => vec![GuestEvent::Presence, GuestEvent::PeerLeft(peer, name)],
+                    None => vec![GuestEvent::Presence],
+                }
+            }
+            Message::Chat(line) => vec![GuestEvent::Chat(line)],
+            Message::ChatMuted { muted } => {
+                self.muted = muted;
+                vec![GuestEvent::Muted(muted)]
             }
             Message::Saved { path } => vec![GuestEvent::Saved(path)],
             Message::PermissionChanged { permission } => {
@@ -963,12 +1131,14 @@ mod tests {
         let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
         let (mut g, out) = join(&mut host, "Ada", Permission::View);
         let events = deliver(out, &mut [&mut g]);
+        // Only the session notes (T759), which are not a file.
         assert!(
             !events
                 .iter()
-                .any(|(_, e)| matches!(e, GuestEvent::Opened(..)))
+                .any(|(_, e)| matches!(e, GuestEvent::Opened(p, _) if !p.is_session_notes()))
         );
         assert!(g.doc(&path("a.txt")).is_none());
+        assert_eq!(host.shared().count(), 0);
         // Sharing afterwards reaches the guest.
         let out = host.share(&path("a.txt"), "hello").unwrap();
         let events = deliver(out, &mut [&mut g]);
@@ -1460,5 +1630,215 @@ mod tests {
         assert_eq!(host.doc(&p).unwrap().text(), g.doc(&p).unwrap().text());
         assert_eq!(host.doc(&p).unwrap().text().len(), 2);
         assert!(host.undo(&path("nope")).is_err());
+    }
+
+    fn line(body: &str) -> ChatLine {
+        ChatLine {
+            from: PeerId(99),
+            time_utc: 7,
+            body: body.to_string(),
+            kind: ChatKind::Text,
+        }
+    }
+
+    /// T756: a guest's line reaches the host and every other guest, stamped
+    /// with the sender's real id whatever it claimed; the host's own line
+    /// reaches every guest as the host.
+    #[test]
+    fn chat_is_relayed_with_the_verified_sender() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut g1, o1) = join(&mut host, "One", Permission::View);
+        let (mut g2, o2) = join(&mut host, "Two", Permission::View);
+        deliver(o1, &mut [&mut g1, &mut g2]);
+        deliver(o2, &mut [&mut g1, &mut g2]);
+
+        let Message::Chat(mut forged) = g1.chat(line("hi")).unwrap() else {
+            panic!("not a chat message");
+        };
+        assert_eq!(forged.from, g1.me(), "the guest fills in its own id");
+        forged.from = PeerId::HOST;
+        let h = host.handle(g1.me(), Message::Chat(forged)).unwrap();
+        assert_eq!(h.chat.len(), 1);
+        assert_eq!(h.chat[0].from, g1.me(), "stamped by the host");
+        let events = deliver(h.out, &mut [&mut g1, &mut g2]);
+        assert_eq!(events.len(), 1, "not echoed to the sender");
+        assert!(matches!(&events[0], (to, GuestEvent::Chat(l))
+            if *to == g2.me() && l.from == g1.me() && l.body == "hi"));
+
+        let out = host.chat(line("welcome")).unwrap();
+        let events = deliver(out, &mut [&mut g1, &mut g2]);
+        assert_eq!(events.len(), 2);
+        assert!(
+            events
+                .iter()
+                .all(|(_, e)| matches!(e, GuestEvent::Chat(l) if l.from == PeerId::HOST))
+        );
+    }
+
+    /// T756: a muted guest is told, cannot send, and a line it crafts anyway
+    /// is refused and never relayed; unmuting restores it.
+    #[test]
+    fn a_muted_guest_is_not_heard() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut g1, o1) = join(&mut host, "One", Permission::Edit);
+        let (mut g2, o2) = join(&mut host, "Two", Permission::View);
+        deliver(o1, &mut [&mut g1, &mut g2]);
+        deliver(o2, &mut [&mut g1, &mut g2]);
+
+        let events = deliver(host.set_muted(g1.me(), true), &mut [&mut g1, &mut g2]);
+        assert_eq!(events, vec![(g1.me(), GuestEvent::Muted(true))]);
+        assert!(g1.is_muted() && host.is_muted(g1.me()));
+        assert_eq!(g1.chat(line("x")), Err(CoworkError::PermissionDenied));
+
+        let h = host.handle(g1.me(), Message::Chat(line("sneaky"))).unwrap();
+        assert_eq!(h.chat, Vec::new());
+        assert_eq!(
+            h.out,
+            vec![HostSession::refuse(g1.me(), ErrorCode::PermissionDenied)]
+        );
+        assert!(h.disconnect.is_empty(), "muted, not removed");
+
+        deliver(host.set_muted(g1.me(), false), &mut [&mut g1]);
+        assert!(!g1.is_muted());
+        let msg = g1.chat(line("back")).unwrap();
+        assert_eq!(host.handle(g1.me(), msg).unwrap().chat.len(), 1);
+        assert_eq!(host.set_muted(PeerId(77), true), Vec::new());
+    }
+
+    /// T756: the host removes a guest: it is told why, the others hear it
+    /// left (by name), and the session no longer accepts its messages.
+    #[test]
+    fn the_host_can_remove_a_guest() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut g1, o1) = join(&mut host, "One", Permission::Edit);
+        let (mut g2, o2) = join(&mut host, "Two", Permission::View);
+        deliver(o1, &mut [&mut g1, &mut g2]);
+        let events = deliver(o2, &mut [&mut g1, &mut g2]);
+        assert!(
+            events.contains(&(g1.me(), GuestEvent::PeerJoined(g2.me(), "Two".into()))),
+            "a join after mine is news"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|(to, e)| *to == g2.me() && matches!(e, GuestEvent::PeerJoined(..))),
+            "the roster sent on joining is not"
+        );
+        let _ = host.set_muted(g1.me(), true);
+        let out = host.kick(g1.me());
+        let events = deliver(out, &mut [&mut g1, &mut g2]);
+        assert!(events.contains(&(g1.me(), GuestEvent::Refused(ErrorCode::Removed))));
+        assert!(events.contains(&(g2.me(), GuestEvent::PeerLeft(g1.me(), "One".into()))));
+        assert!(host.guest(g1.me()).is_none() && !host.is_muted(g1.me()));
+        assert_eq!(
+            host.handle(g1.me(), Message::Chat(line("hi"))),
+            Err(CoworkError::PermissionDenied)
+        );
+        assert_eq!(host.kick(g1.me()), Vec::new());
+    }
+
+    /// T756: an over-long line is refused before it is sent, on both sides.
+    #[test]
+    fn an_over_long_chat_line_is_refused_before_sending() {
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        let (mut g, o) = join(&mut host, "One", Permission::View);
+        deliver(o, &mut [&mut g]);
+        let long = line(&"x".repeat(MAX_CHAT_BYTES + 1));
+        assert!(g.chat(long.clone()).is_err());
+        assert!(host.chat(long).is_err());
+        let snippet = ChatLine {
+            kind: ChatKind::Snippet {
+                language: "l".repeat(crate::wire::MAX_NAME_BYTES + 1),
+                path: path("a"),
+                start_line: 1,
+                end_line: 1,
+                code: String::new(),
+            },
+            ..line("a:1")
+        };
+        assert!(check_chat(&snippet).is_err());
+        assert!(check_chat(&line(&"x".repeat(MAX_CHAT_BYTES))).is_ok());
+    }
+
+    /// T759: the session notes exist from the start, reach a late joiner,
+    /// take an edit guest's text, refuse a view guest's, and are never saved,
+    /// unshared or listed as a file.
+    #[test]
+    fn the_session_notes_are_shared_by_everyone_with_edit() {
+        let notes = SharedPath::session_notes();
+        let mut host = HostSession::new("Host", DEFAULT_CAP_BYTES);
+        assert_eq!(host.doc(&notes).unwrap().text(), "");
+        let out = host
+            .local_edit(
+                &notes, 0, 0, "# Plan
+",
+            )
+            .unwrap();
+        assert!(out.is_empty(), "no guests yet");
+
+        let (mut editor, o1) = join(&mut host, "One", Permission::Edit);
+        let (mut viewer, o2) = join(&mut host, "Two", Permission::View);
+        let events = deliver(o1, &mut [&mut editor, &mut viewer]);
+        assert!(
+            events.contains(&(
+                editor.me(),
+                GuestEvent::Opened(
+                    notes.clone(),
+                    "# Plan
+"
+                    .into()
+                )
+            ))
+        );
+        deliver(o2, &mut [&mut editor, &mut viewer]);
+
+        let msg = editor.edit(&notes, 7, 0, "- ship").unwrap().unwrap();
+        let h = host.handle(editor.me(), msg).unwrap();
+        deliver(h.out, &mut [&mut editor, &mut viewer]);
+        assert_eq!(
+            host.doc(&notes).unwrap().text(),
+            "# Plan
+- ship"
+        );
+        assert_eq!(
+            viewer.doc(&notes).unwrap().text(),
+            "# Plan
+- ship"
+        );
+        assert_eq!(
+            viewer.edit(&notes, 0, 0, "x"),
+            Err(CoworkError::PermissionDenied)
+        );
+
+        let h = host
+            .handle(
+                editor.me(),
+                Message::SaveRequest {
+                    path: notes.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(h.save, Vec::new());
+        assert_eq!(
+            h.out,
+            vec![HostSession::refuse(editor.me(), ErrorCode::BadPath)]
+        );
+        assert_eq!(host.unshare(&notes), Vec::new());
+        assert!(host.doc(&notes).is_some());
+        assert!(
+            host.share(&notes, "x").is_err(),
+            "a file can't take its place"
+        );
+        assert_eq!(host.shared().count(), 0);
+        host.set_workspace_shared(true);
+        let h = host
+            .handle(
+                editor.me(),
+                Message::OpenRequest {
+                    path: notes.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(h.open, Vec::new());
     }
 }

@@ -727,3 +727,7 @@ riscv
 unwatch
 Unwatch
 VIXAGENT
+unmute
+unmutes
+unmuted
+unmuting

@@ -18,15 +18,16 @@
 //! | 6 | [`Channel::Presence`] | `Presence` |
 //! | 14–16 | [`Channel::Workspace`] | `ListFiles`, `FileList`, `OpenRequest` (T696) |
 //! | 17–21 | [`Channel::Terminal`] | `TerminalScreen`, `TerminalOutput`, `TerminalKeys`, `TerminalInputAllowed`, `TerminalClose` (T697) |
-//! | 48–63 | reserved: chat (T756) | none yet; see [`RESERVED_CHAT_TAGS`] |
+//! | 48, 49 | [`Channel::Chat`] | `Chat`, `ChatMuted` (T756) |
+//! | 50–63 | reserved: later chat messages | see [`RESERVED_CHAT_TAGS`] |
 //!
-//! **The chat seam (T756).** Session chat will be its own message family
-//! inside the same encrypted frames, in the reserved tag range, with a new
-//! `Channel::Chat`. Until then [`decode`] reports a tag in that range as
+//! **Session chat (T756).** Chat is its own message family inside the same
+//! encrypted frames, in the tag range 48–63 that T697 kept free for it. The
+//! tags this build does not use yet (50–63) still decode to
 //! [`WireProblem::Reserved`], which [`CoworkError::is_reserved_message`]
-//! recognizes, so a receiver skips the message and keeps the connection
-//! instead of treating it as a protocol violation. A peer that speaks chat
-//! can therefore talk to one that does not.
+//! recognizes, so a receiver skips such a message and keeps the connection
+//! instead of treating it as a protocol violation: a later build can add a
+//! chat message and still share a session with this one.
 
 use std::ops::RangeInclusive;
 
@@ -43,7 +44,8 @@ pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 /// Longest string field (names), in bytes.
-const MAX_STR: usize = 256;
+pub const MAX_NAME_BYTES: usize = 256;
+const MAX_STR: usize = MAX_NAME_BYTES;
 
 /// Most paths one [`Message::FileList`] carries; the host truncates beyond it.
 pub const MAX_LISTED_FILES: usize = 20_000;
@@ -63,9 +65,14 @@ pub const MAX_TERMINAL_ROWS: u16 = 500;
 /// Most columns a shared terminal may have (see [`MAX_TERMINAL_ROWS`]).
 pub const MAX_TERMINAL_COLS: u16 = 1000;
 
-/// Tags kept free for session chat (T756, `spec/instant-message`). A message
-/// in this range decodes to [`WireProblem::Reserved`], which a receiver skips.
-pub const RESERVED_CHAT_TAGS: RangeInclusive<u8> = 48..=63;
+/// Tags kept free for later session-chat messages (`spec/instant-message`).
+/// T756 uses 48 and 49 from the original 48–63 range; a message in the rest
+/// decodes to [`WireProblem::Reserved`], which a receiver skips.
+pub const RESERVED_CHAT_TAGS: RangeInclusive<u8> = 50..=63;
+
+/// Longest chat message body, or a snippet's code, in bytes (T756). Chat is
+/// for people, so this is generous for a message and small for the link.
+pub const MAX_CHAT_BYTES: usize = 16 * 1024;
 
 /// Which family a [`Message`] belongs to. Lets the session layer route a
 /// message family as a whole (for example, chat later) without matching on
@@ -83,6 +90,58 @@ pub enum Channel {
     Workspace,
     /// The host's shared terminal (T697).
     Terminal,
+    /// Session chat (T756).
+    Chat,
+}
+
+/// What a chat line carries besides its body (T756). Mirrors the code-aware
+/// kinds of `vix-im`'s messages; system lines are never sent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ChatKind {
+    /// Ordinary text.
+    Text,
+    /// An action, from `/me`.
+    Action,
+    /// A cursor position in a file relative to the host's root.
+    Location {
+        /// The file.
+        path: SharedPath,
+        /// The line, 1-based.
+        line: u32,
+        /// The column, 1-based.
+        column: u32,
+    },
+    /// Shared code: lines of a file relative to the host's root.
+    Snippet {
+        /// The language id for highlighting, possibly empty.
+        language: String,
+        /// The file.
+        path: SharedPath,
+        /// The first line, 1-based.
+        start_line: u32,
+        /// The last line, 1-based.
+        end_line: u32,
+        /// The code, at most [`MAX_CHAT_BYTES`].
+        code: String,
+    },
+}
+
+/// One session-chat message (T756).
+///
+/// On the way to the host the `from` field is ignored: the host stamps the
+/// connection's verified peer id before relaying, as it does for presence,
+/// so nobody can speak as someone else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatLine {
+    /// Who said it.
+    pub from: PeerId,
+    /// When the sender sent it, in milliseconds since the Unix epoch, UTC.
+    pub time_utc: i64,
+    /// The text, at most [`MAX_CHAT_BYTES`]. The receiver sanitizes it.
+    pub body: String,
+    /// What else it carries.
+    pub kind: ChatKind,
 }
 
 /// Why the other side refused or ended something.
@@ -266,6 +325,15 @@ pub enum Message {
     },
     /// Host to guest: the terminal is no longer shared.
     TerminalClose,
+    /// Either direction: a session-chat message (T756). The host relays a
+    /// guest's line to everyone else with `from` stamped.
+    Chat(ChatLine),
+    /// Host to guest: the host muted (`true`) or unmuted this guest in the
+    /// session chat (T756).
+    ChatMuted {
+        /// Whether the guest is muted now.
+        muted: bool,
+    },
 }
 
 impl Message {
@@ -287,6 +355,7 @@ impl Message {
             | Self::TerminalKeys { .. }
             | Self::TerminalInputAllowed { .. }
             | Self::TerminalClose => Channel::Terminal,
+            Self::Chat(_) | Self::ChatMuted { .. } => Channel::Chat,
             Self::Hello { .. }
             | Self::Welcome { .. }
             | Self::PermissionChanged { .. }
@@ -320,6 +389,9 @@ impl Writer {
         self.bytes(s.as_bytes());
     }
     fn u32(&mut self, v: u32) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+    fn i64(&mut self, v: i64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
 }
@@ -382,6 +454,17 @@ impl<'a> Reader<'a> {
     }
     fn blob(&mut self) -> Result<Vec<u8>, WireProblem> {
         Ok(self.bytes(MAX_MESSAGE_BYTES)?.to_vec())
+    }
+    fn i64(&mut self) -> Result<i64, WireProblem> {
+        let mut a = [0u8; 8];
+        a.copy_from_slice(self.take(8)?);
+        Ok(i64::from_le_bytes(a))
+    }
+    /// A string of at most `max` bytes (chat bodies and code).
+    fn text(&mut self, max: usize) -> Result<String, WireProblem> {
+        std::str::from_utf8(self.bytes(max)?)
+            .map(str::to_owned)
+            .map_err(|_| WireProblem::BadUtf8)
     }
 }
 
@@ -478,6 +561,11 @@ impl Message {
             | Self::TerminalKeys { .. }
             | Self::TerminalInputAllowed { .. }
             | Self::TerminalClose => self.encode_terminal(&mut w),
+            Self::Chat(line) => encode_chat(line, &mut w),
+            Self::ChatMuted { muted } => {
+                w.u8(49);
+                w.u8(u8::from(*muted));
+            }
         }
         w.0
     }
@@ -513,6 +601,70 @@ impl Message {
             _ => {}
         }
     }
+}
+
+/// A [`Message::Chat`] (T756), tag 48: sender, time, body, then the kind.
+fn encode_chat(line: &ChatLine, w: &mut Writer) {
+    w.u8(48);
+    w.u64(line.from.0);
+    w.i64(line.time_utc);
+    w.str(&line.body);
+    match &line.kind {
+        ChatKind::Text => w.u8(0),
+        ChatKind::Action => w.u8(1),
+        ChatKind::Location { path, line, column } => {
+            w.u8(2);
+            w.str(path.as_str());
+            w.u32(*line);
+            w.u32(*column);
+        }
+        ChatKind::Snippet {
+            language,
+            path,
+            start_line,
+            end_line,
+            code,
+        } => {
+            w.u8(3);
+            w.str(language);
+            w.str(path.as_str());
+            w.u32(*start_line);
+            w.u32(*end_line);
+            w.str(code);
+        }
+    }
+}
+
+/// Decode a [`Message::Chat`] after its tag. A body or code over
+/// [`MAX_CHAT_BYTES`], a language over the name limit, a hostile path and an
+/// unknown kind are refused.
+fn decode_chat(r: &mut Reader<'_>) -> Result<Message, CoworkError> {
+    let from = PeerId(r.u64()?);
+    let time_utc = r.i64()?;
+    let body = r.text(MAX_CHAT_BYTES)?;
+    let kind = match r.u8()? {
+        0 => ChatKind::Text,
+        1 => ChatKind::Action,
+        2 => ChatKind::Location {
+            path: r.path()?,
+            line: r.u32()?,
+            column: r.u32()?,
+        },
+        3 => ChatKind::Snippet {
+            language: r.str()?,
+            path: r.path()?,
+            start_line: r.u32()?,
+            end_line: r.u32()?,
+            code: r.text(MAX_CHAT_BYTES)?,
+        },
+        other => return Err(WireProblem::UnknownTag(other).into()),
+    };
+    Ok(Message::Chat(ChatLine {
+        from,
+        time_utc,
+        body,
+        kind,
+    }))
 }
 
 /// Decode the body of a [`Channel::Terminal`] message (T697) after its tag.
@@ -626,6 +778,8 @@ pub fn decode(buf: &[u8]) -> Result<Message, CoworkError> {
         }
         16 => Message::OpenRequest { path: r.path()? },
         17..=21 => decode_terminal(tag, &mut r)?,
+        48 => decode_chat(&mut r)?,
+        49 => Message::ChatMuted { muted: r.flag()? },
         t if RESERVED_CHAT_TAGS.contains(&t) => return Err(WireProblem::Reserved(t).into()),
         other => return Err(WireProblem::UnknownTag(other).into()),
     };
@@ -708,7 +862,109 @@ mod tests {
             },
             Message::TerminalInputAllowed { allowed: true },
             Message::TerminalClose,
+            Message::Chat(ChatLine {
+                from: PeerId(2),
+                time_utc: 1_761_800_000_000,
+                body: "see src/a.rs:3".into(),
+                kind: ChatKind::Text,
+            }),
+            Message::Chat(ChatLine {
+                from: PeerId::HOST,
+                time_utc: -1,
+                body: "waves".into(),
+                kind: ChatKind::Action,
+            }),
+            Message::Chat(ChatLine {
+                from: PeerId(3),
+                time_utc: 0,
+                body: "src/a.rs:3:7".into(),
+                kind: ChatKind::Location {
+                    path: p("src/a.rs"),
+                    line: 3,
+                    column: 7,
+                },
+            }),
+            Message::Chat(ChatLine {
+                from: PeerId(3),
+                time_utc: 5,
+                body: "src/a.rs:1-2".into(),
+                kind: ChatKind::Snippet {
+                    language: "rust".into(),
+                    path: p("src/a.rs"),
+                    start_line: 1,
+                    end_line: 2,
+                    code: "fn main() {\n}".into(),
+                },
+            }),
+            Message::ChatMuted { muted: true },
         ]
+    }
+
+    fn chat(body: String, kind: ChatKind) -> Message {
+        Message::Chat(ChatLine {
+            from: PeerId(2),
+            time_utc: 0,
+            body,
+            kind,
+        })
+    }
+
+    /// T756: a body or code over the cap, a hostile path, an unknown kind
+    /// and a mute flag other than 0 or 1 are refused on decode.
+    #[test]
+    fn hostile_chat_messages_are_refused() {
+        let long = "x".repeat(MAX_CHAT_BYTES + 1);
+        assert_eq!(
+            decode(&chat(long.clone(), ChatKind::Text).encode()),
+            Err(WireProblem::FieldTooLong.into())
+        );
+        let snippet = ChatKind::Snippet {
+            language: String::new(),
+            path: p("a"),
+            start_line: 1,
+            end_line: 1,
+            code: long,
+        };
+        assert_eq!(
+            decode(&chat(String::new(), snippet).encode()),
+            Err(WireProblem::FieldTooLong.into())
+        );
+        // A body that claims 4 GB is refused before anything is allocated.
+        let mut w = Writer(Vec::new());
+        w.u8(48);
+        w.u64(2);
+        w.i64(0);
+        w.u32(u32::MAX);
+        assert_eq!(decode(&w.0), Err(WireProblem::FieldTooLong.into()));
+        // A location outside the root.
+        let mut w = Writer(Vec::new());
+        w.u8(48);
+        w.u64(2);
+        w.i64(0);
+        w.str("");
+        w.u8(2);
+        w.str("../secret");
+        w.u32(1);
+        w.u32(1);
+        assert!(matches!(decode(&w.0), Err(CoworkError::BadPath(_))));
+        // Invalid UTF-8 in the body, an unknown kind, a bad mute flag.
+        let mut w = Writer(Vec::new());
+        w.u8(48);
+        w.u64(2);
+        w.i64(0);
+        w.bytes(&[0xff, 0xfe]);
+        w.u8(0);
+        assert_eq!(decode(&w.0), Err(WireProblem::BadUtf8.into()));
+        let mut w = Writer(Vec::new());
+        w.u8(48);
+        w.u64(2);
+        w.i64(0);
+        w.str("hi");
+        w.u8(9);
+        assert_eq!(decode(&w.0), Err(WireProblem::UnknownTag(9).into()));
+        assert_eq!(decode(&[49, 2]), Err(WireProblem::UnknownTag(2).into()));
+        assert_eq!(chat("hi".into(), ChatKind::Text).channel(), Channel::Chat);
+        assert_eq!(Message::ChatMuted { muted: false }.channel(), Channel::Chat);
     }
 
     #[test]
@@ -773,6 +1029,9 @@ mod tests {
         }
         assert!(!decode(&[200]).unwrap_err().is_reserved_message());
         assert!(!decode(&[]).unwrap_err().is_reserved_message());
+        // T756 took 48 and 49 for chat: they are real messages now.
+        assert!(!decode(&[48]).unwrap_err().is_reserved_message());
+        assert_eq!(decode(&[49, 0]), Ok(Message::ChatMuted { muted: false }));
     }
 
     #[test]
@@ -843,8 +1102,9 @@ mod tests {
         }
 
         #[test]
-        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..21, pos in 0usize..64, val in any::<u8>()) {
-            let mut bytes = samples()[idx].encode();
+        fn decode_never_panics_on_mutated_valid_messages(idx in 0usize..64, pos in 0usize..64, val in any::<u8>()) {
+            let all = samples();
+            let mut bytes = all[idx % all.len()].encode();
             let at = pos % bytes.len();
             bytes[at] = val;
             let _ = decode(&bytes);
@@ -867,6 +1127,35 @@ mod tests {
             ] {
                 prop_assert_eq!(decode(&m.encode()).unwrap(), m);
             }
+        }
+
+        /// T756: every chat line round-trips for any text, time and range
+        /// within the caps.
+        #[test]
+        fn chat_messages_round_trip(
+            from in any::<u64>(),
+            time_utc in any::<i64>(),
+            body in ".{0,200}",
+            code in "(.|\n){0,200}",
+            language in "[a-z]{0,12}",
+            line in any::<u32>(),
+            column in any::<u32>(),
+            kind in 0u8..4,
+        ) {
+            let kind = match kind {
+                0 => ChatKind::Text,
+                1 => ChatKind::Action,
+                2 => ChatKind::Location { path: p("src/lib.rs"), line, column },
+                _ => ChatKind::Snippet {
+                    language,
+                    path: p("src/lib.rs"),
+                    start_line: line,
+                    end_line: column,
+                    code,
+                },
+            };
+            let m = Message::Chat(ChatLine { from: PeerId(from), time_utc, body, kind });
+            prop_assert_eq!(decode(&m.encode()).unwrap(), m);
         }
     }
 }

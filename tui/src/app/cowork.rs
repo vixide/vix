@@ -22,12 +22,14 @@ use std::time::Duration;
 use vix_cowork::presence::{Follow, PresenceBoard, Rgb};
 use vix_cowork::wire::Message;
 use vix_cowork::{
-    BufferEdit, DEFAULT_CAP_BYTES, ErrorCode, GuestEvent, GuestSession, HostSession, Outbound,
-    PeerId, Permission, SharedPath,
+    BufferEdit, ChatKind, ChatLine, DEFAULT_CAP_BYTES, ErrorCode, GuestEvent, GuestSession,
+    HostSession, Outbound, PeerId, Permission, SharedPath,
 };
 use vix_cowork_net::{Invite, Joined, Knock, Link, LinkEvent, Listener, NetError};
 use vix_editor_core::remote::{RemoteCaret, Splice};
+use vix_im::{ConversationId, ConversationKind, MessageKind};
 
+use super::im::SESSION;
 use super::{App, Confirm, ConfirmKind, KeyCode, KeyEvent, Prompt, PromptKind};
 use crate::editor::REMOTE_PATH_PREFIX;
 
@@ -140,6 +142,142 @@ fn splices(edits: &[BufferEdit]) -> Vec<Splice> {
         .collect()
 }
 
+/// An IM message as a session-chat line (T756). A location or snippet whose
+/// path is not a clean root-relative path goes as plain text (its body
+/// already names the place); system lines are never sent.
+fn to_chat_line(message: vix_im::Message) -> Option<ChatLine> {
+    let place = |p: &str| SharedPath::parse(p).ok();
+    let kind = match message.kind {
+        MessageKind::Text => ChatKind::Text,
+        MessageKind::Action => ChatKind::Action,
+        MessageKind::Location { path, line, column } => match place(&path) {
+            Some(path) => ChatKind::Location { path, line, column },
+            None => ChatKind::Text,
+        },
+        MessageKind::Snippet {
+            language,
+            path,
+            start_line,
+            end_line,
+            code,
+        } => match place(&path) {
+            Some(path) => ChatKind::Snippet {
+                language,
+                path,
+                start_line,
+                end_line,
+                code,
+            },
+            None => ChatKind::Text,
+        },
+        _ => return None,
+    };
+    Some(ChatLine {
+        from: PeerId::HOST,
+        time_utc: message.time_utc,
+        body: message.body,
+        kind,
+    })
+}
+
+/// A session-chat line as an IM message by `author`. The inbox sanitizes it
+/// when it is stored.
+fn from_chat_line(line: ChatLine, author: String) -> vix_im::Message {
+    let kind = match line.kind {
+        ChatKind::Action => MessageKind::Action,
+        ChatKind::Location { path, line, column } => MessageKind::Location {
+            path: path.as_str().to_string(),
+            line,
+            column,
+        },
+        ChatKind::Snippet {
+            language,
+            path,
+            start_line,
+            end_line,
+            code,
+        } => MessageKind::Snippet {
+            language,
+            path: path.as_str().to_string(),
+            start_line,
+            end_line,
+            code,
+        },
+        _ => MessageKind::Text,
+    };
+    vix_im::Message {
+        author,
+        time_utc: line.time_utc,
+        body: line.body,
+        kind,
+    }
+}
+
+/// One participant of the Cowork session, as the IM panel lists them above
+/// the session conversation (T759).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RosterEntry {
+    /// The verified identity: the name the host confirmed and the number it
+    /// gave (`ana #2`).
+    pub(crate) who: String,
+    /// What else is true of them, in this order.
+    pub(crate) tags: Vec<RosterTag>,
+    /// Where their cursor is.
+    pub(crate) place: RosterPlace,
+}
+
+/// A fact about a roster participant, written out as a word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RosterTag {
+    /// This is you.
+    You,
+    /// This is the host.
+    Host,
+    /// The host muted this guest in the chat.
+    Muted,
+    /// Your view follows this participant.
+    Following,
+}
+
+/// Where a roster participant's cursor is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RosterPlace {
+    /// Not in any shared buffer that we know of.
+    Nowhere,
+    /// In the session notes (T759).
+    Notes,
+    /// In this shared file, relative to the host's root.
+    File(String),
+}
+
+/// One roster row in reading order, every state written out as text:
+/// `ana #2 (you) (muted) -- src/a.rs`.
+fn roster_row(entry: &RosterEntry) -> String {
+    let mut row = entry.who.clone();
+    for tag in &entry.tags {
+        let word = match tag {
+            RosterTag::You => t!("ui.cowork_roster_you"),
+            RosterTag::Host => t!("ui.cowork_roster_host"),
+            RosterTag::Muted => t!("ui.cowork_roster_muted"),
+            RosterTag::Following => t!("ui.cowork_roster_following"),
+        };
+        row.push_str(" (");
+        row.push_str(&word);
+        row.push(')');
+    }
+    row.push_str(" -- ");
+    match &entry.place {
+        RosterPlace::Notes => row.push_str(&t!("ui.cowork_roster_notes")),
+        RosterPlace::File(file) => row.push_str(file),
+        RosterPlace::Nowhere => row.push_str(&t!("ui.cowork_roster_nowhere")),
+    }
+    row
+}
+
+fn session_id() -> ConversationId {
+    ConversationId::new(SESSION)
+}
+
 fn level_name(p: Permission) -> &'static str {
     match p {
         Permission::View => "view",
@@ -181,6 +319,9 @@ impl App {
             "cowork.share_terminal" => self.cowork_toggle_terminal_share(),
             "cowork.terminal_input" => self.cowork_toggle_terminal_input(),
             "cowork.terminal" => self.cowork_toggle_terminal_view(),
+            "cowork.notes" => self.cowork_open_notes(),
+            "cowork.mute" => self.cowork_begin_host_prompt(PromptKind::CoworkMute),
+            "cowork.remove" => self.cowork_begin_host_prompt(PromptKind::CoworkRemove),
             _ => return false,
         }
         true
@@ -232,6 +373,7 @@ impl App {
             links: BTreeMap::new(),
             advertise,
         });
+        self.cowork_chat_open();
         self.cowork_invite();
     }
 
@@ -432,6 +574,8 @@ impl App {
                 tab.editor.stop_edit_log();
                 tab.editor.set_remote_carets(Vec::new());
             }
+            // The session notes become an ordinary unsaved buffer.
+            self.cowork_release_guest_tabs();
         } else if let Some(guest) = self.cowork.guest.take() {
             let _ = guest.link.send(&Message::Leave);
             guest.link.close();
@@ -444,6 +588,7 @@ impl App {
         self.cowork.last_cursor.clear();
         self.cowork.follow.stop();
         self.cowork_forget_terminal();
+        self.cowork_chat_close();
         self.status = t!("status.cowork_left").to_string();
     }
 
@@ -470,6 +615,8 @@ impl App {
             PromptKind::CoworkPermission => self.cowork_set_permission(input),
             PromptKind::CoworkConsent => self.cowork_answer_consent(input),
             PromptKind::CoworkFollow => self.cowork_set_follow(input),
+            PromptKind::CoworkMute => self.cowork_toggle_mute(input),
+            PromptKind::CoworkRemove => self.cowork_remove(input),
             _ => {}
         }
     }
@@ -500,6 +647,8 @@ impl App {
                 }
                 self.cowork_send(&out);
                 self.cowork_terminal_for(peer.id);
+                let who = self.cowork_author(peer.id);
+                self.cowork_chat_system(&t!("msg.im_joined", nick = who));
                 self.status = t!("status.cowork_peer_joined", name = peer.name).to_string();
             }
             Err(e) => {
@@ -526,6 +675,10 @@ impl App {
     }
 
     fn cowork_host_tab(&self, rel: &SharedPath) -> Option<usize> {
+        if rel.is_session_notes() {
+            // The notes are not a file: the host's tab is a `cowork:` one.
+            return self.cowork_guest_tab(rel);
+        }
         let abs = rel.under(&self.root);
         self.editor
             .tabs
@@ -564,7 +717,11 @@ impl App {
             return String::new();
         };
         let (rel, board, me) = if let Some(h) = self.cowork.host.as_ref() {
-            (self.cowork_active_rel(), h.session.board(), PeerId::HOST)
+            (
+                self.cowork_active_host_rel(),
+                h.session.board(),
+                PeerId::HOST,
+            )
         } else if let Some(g) = self.cowork.guest.as_ref() {
             let rel = tab
                 .path
@@ -599,6 +756,10 @@ impl App {
             .and_then(|p| p.to_str())
             .and_then(|p| p.strip_prefix(REMOTE_PATH_PREFIX))
             .and_then(|p| SharedPath::parse(p).ok());
+        if rel.as_ref().is_some_and(SharedPath::is_session_notes) {
+            self.status = t!("status.cowork_notes_not_saved").to_string();
+            return true;
+        }
         let Some(guest) = self.cowork.guest.as_ref() else {
             return true;
         };
@@ -634,7 +795,7 @@ impl App {
         // The document must hold every keystroke before it can revert one.
         self.cowork_pump_local();
         let i = self.editor.active;
-        let reverted = if let Some(rel) = self.cowork_active_rel()
+        let reverted = if let Some(rel) = self.cowork_active_host_rel()
             && let Some(host) = self.cowork.host.as_mut()
         {
             let r = if undo {
@@ -692,6 +853,25 @@ impl App {
     /// The shared path of the active tab when it is a shared-in (guest) buffer.
     fn cowork_active_remote_rel(&self) -> Option<SharedPath> {
         remote_rel(self.editor.active_tab()?)
+    }
+
+    /// The host's view of the active tab: a shared project file, or the
+    /// session notes (T759), whose tab is a `cowork:` one on the host too.
+    fn cowork_active_host_rel(&self) -> Option<SharedPath> {
+        self.cowork_active_rel().or_else(|| {
+            self.cowork_active_remote_rel()
+                .filter(SharedPath::is_session_notes)
+        })
+    }
+
+    /// What the host pumps: every shared file, then the session notes.
+    fn cowork_host_paths(&self) -> Vec<SharedPath> {
+        let Some(h) = self.cowork.host.as_ref() else {
+            return Vec::new();
+        };
+        let mut paths: Vec<SharedPath> = h.session.shared().cloned().collect();
+        paths.push(SharedPath::session_notes());
+        paths
     }
 
     // ----- follow mode (T693) ---------------------------------------------------
@@ -1232,6 +1412,316 @@ impl App {
             .map(|m| m.screen().contents())
     }
 
+    // ----- session chat (T756) ------------------------------------------------
+    //
+    // The session's conversation lives in the IM inbox from the moment a
+    // session starts until it ends, and is never written to disk. Lines ride
+    // the session's encrypted link; the host stamps who said each one, so an
+    // author is always the verified identity: the name the host confirmed at
+    // consent and the number it gave (`ana #2`). Like all of IM, nothing here
+    // opens or focuses anything: a line raises the unread count.
+
+    /// A session started: its conversation appears (the panel stays as is).
+    fn cowork_chat_open(&mut self) {
+        let title = t!("ui.im_session").to_string();
+        self.im_ensure_conversation(session_id(), ConversationKind::Session, &title, None);
+    }
+
+    /// The session ended: its conversation is dropped.
+    fn cowork_chat_close(&mut self) {
+        self.im.inbox.remove(&session_id());
+        self.im.panel.clamp(&self.im.inbox);
+    }
+
+    /// The verified identity of a participant: confirmed name and number.
+    fn cowork_author(&self, id: PeerId) -> String {
+        let name = self
+            .cowork_board_and_me()
+            .and_then(|(board, _)| board.name(id))
+            .unwrap_or("?");
+        format!("{name} #{}", id.0)
+    }
+
+    /// A system line (joins, leaves, mutes) in the session conversation.
+    fn cowork_chat_system(&mut self, text: &str) {
+        let line = vix_im::Message::system(super::im::now_ms(), text);
+        self.im_deliver(&session_id(), line);
+    }
+
+    /// A line someone else said, from the host's relay (or a guest, on the
+    /// host): into the session conversation, counted unread.
+    fn cowork_chat_receive(&mut self, line: ChatLine) {
+        let author = self.cowork_author(line.from);
+        self.im_deliver(&session_id(), from_chat_line(line, author));
+    }
+
+    /// Say `message` (its author is filled in here) in the session chat, and
+    /// show it in the conversation as read. A muted guest is told so.
+    pub(super) fn cowork_chat_send(&mut self, message: vix_im::Message) {
+        let Some(line) = to_chat_line(message.clone()) else {
+            return;
+        };
+        let sent = if let Some(h) = self.cowork.host.as_ref() {
+            h.session
+                .chat(line)
+                .map(|out| (PeerId::HOST, Some(out), None))
+        } else if let Some(g) = self.cowork.guest.as_ref() {
+            g.session
+                .chat(line)
+                .map(|msg| (g.session.me(), None, Some(msg)))
+        } else {
+            self.status = t!("status.cowork_inactive").to_string();
+            return;
+        };
+        let me = match sent {
+            Ok((me, out, msg)) => {
+                if let Some(out) = out {
+                    self.cowork_send(&out);
+                }
+                if let Some(msg) = msg
+                    && let Some(g) = self.cowork.guest.as_ref()
+                    && g.link.send(&msg).is_err()
+                {
+                    self.cowork_guest_lost();
+                    return;
+                }
+                me
+            }
+            Err(vix_cowork::CoworkError::PermissionDenied) => {
+                self.status = t!("status.cowork_chat_muted").to_string();
+                return;
+            }
+            Err(e) => {
+                self.cowork_error(e);
+                return;
+            }
+        };
+        let own = vix_im::Message {
+            author: self.cowork_author(me),
+            ..message
+        };
+        let id = session_id();
+        let _ = self.im.inbox.push(&id, own);
+        self.im.inbox.mark_read(&id);
+    }
+
+    // ----- presence, follow and notes in the IM panel (T759) -------------------
+
+    /// Everyone in the session, in id order, with where their cursor is:
+    /// the IM panel's session roster, one row each (see `roster_row`).
+    /// Empty without a session.
+    #[must_use]
+    pub fn cowork_roster(&self) -> Vec<String> {
+        self.cowork_roster_entries()
+            .iter()
+            // Names are free of control characters already; this also drops
+            // the bidi overrides a guest could put in its name.
+            .map(|e| vix_im::sanitize(&roster_row(e)))
+            .collect()
+    }
+
+    fn cowork_roster_entries(&self) -> Vec<RosterEntry> {
+        let Some((board, me)) = self.cowork_board_and_me() else {
+            return Vec::new();
+        };
+        let mine = if self.cowork.host.is_some() {
+            self.cowork_active_host_rel()
+        } else {
+            self.cowork_active_remote_rel()
+        };
+        let host = self.cowork.host.as_ref();
+        let self_muted = self
+            .cowork
+            .guest
+            .as_ref()
+            .is_some_and(|g| g.session.is_muted());
+        board
+            .peers()
+            .map(|(id, name)| {
+                let at = if id == me {
+                    mine.clone()
+                } else {
+                    board.location(id).map(|p| p.path.clone())
+                };
+                let muted =
+                    host.is_some_and(|h| h.session.is_muted(id)) || (id == me && self_muted);
+                let tags = [
+                    (id == me, RosterTag::You),
+                    (id == PeerId::HOST, RosterTag::Host),
+                    (muted, RosterTag::Muted),
+                    (
+                        self.cowork.follow.target() == Some(id),
+                        RosterTag::Following,
+                    ),
+                ]
+                .into_iter()
+                .filter_map(|(on, tag)| on.then_some(tag))
+                .collect();
+                let place = match at {
+                    Some(p) if p.is_session_notes() => RosterPlace::Notes,
+                    Some(p) => RosterPlace::File(p.as_str().to_string()),
+                    None => RosterPlace::Nowhere,
+                };
+                RosterEntry {
+                    who: format!("{name} #{}", id.0),
+                    tags,
+                    place,
+                }
+            })
+            .collect()
+    }
+
+    /// `/follow N` in the IM panel: follow participant `N`, or with no
+    /// number stop following (the same as **Follow…**).
+    pub(super) fn cowork_follow_from_chat(&mut self, who: Option<&str>) {
+        if self.cowork_board_and_me().is_none() {
+            self.status = t!("status.cowork_inactive").to_string();
+            return;
+        }
+        self.cowork_set_follow(who.unwrap_or_default());
+    }
+
+    /// A guest pressed Enter on a code reference in the session chat: the
+    /// path names a file under the *host's* root, so open the shared-in
+    /// buffer there, or ask the host to share it (T696 rules apply). `false`
+    /// leaves the reference to the ordinary, local-root resolver.
+    pub(super) fn cowork_open_ref(&mut self, reference: &vix_im::CodeRef) -> bool {
+        if self.cowork.guest.is_none() || self.im.selected_id() != Some(session_id()) {
+            return false;
+        }
+        let raw = reference
+            .path
+            .strip_prefix(REMOTE_PATH_PREFIX)
+            .unwrap_or(&reference.path);
+        let Ok(rel) = SharedPath::parse(raw) else {
+            return false;
+        };
+        if let Some(i) = self.cowork_guest_tab(&rel) {
+            let (line, column) = (
+                reference.line as usize,
+                reference.column.map(|c| c as usize),
+            );
+            self.with_jump(|s| {
+                s.editor.active = i;
+                let area = s.editor_view();
+                s.editor.goto(line, column, area);
+                s.focus = super::Focus::Editor;
+            });
+        } else {
+            let remote = PathBuf::from(format!("{REMOTE_PATH_PREFIX}{}", rel.as_str()));
+            self.cowork_request_open(&remote);
+        }
+        true
+    }
+
+    /// **Session Notes** (T759): open the session's shared Markdown notes,
+    /// or switch to them. Never opened on its own; a view-only guest reads
+    /// them, an edit guest and the host write them. They are not a file:
+    /// Save does nothing, and when the session ends they stay behind as an
+    /// unsaved buffer.
+    fn cowork_open_notes(&mut self) {
+        let notes = SharedPath::session_notes();
+        if let Some(i) = self.cowork_guest_tab(&notes) {
+            self.editor.active = i;
+            self.focus = super::Focus::Editor;
+            return;
+        }
+        let found = if let Some(h) = self.cowork.host.as_ref() {
+            h.session.doc(&notes).map(|d| (d.text(), false))
+        } else if let Some(g) = self.cowork.guest.as_ref() {
+            let read_only = !g.session.permission().allows(vix_cowork::Action::Edit);
+            g.session.doc(&notes).map(|d| (d.text(), read_only))
+        } else {
+            None
+        };
+        let Some((text, read_only)) = found else {
+            self.status = t!("status.cowork_inactive").to_string();
+            return;
+        };
+        self.editor.new_tab_with_content_as(&text, Some("notes.md"));
+        let i = self.editor.active;
+        if let Some(tab) = self.editor.tabs.get_mut(i) {
+            tab.path = Some(PathBuf::from(format!(
+                "{REMOTE_PATH_PREFIX}{}",
+                notes.as_str()
+            )));
+            tab.dirty = false;
+            tab.read_only = read_only;
+            tab.editor.start_edit_log();
+        }
+        self.cowork.last_cursor.remove(&notes);
+        self.focus = super::Focus::Editor;
+    }
+
+    // ----- host moderation (T756) ---------------------------------------------
+
+    /// **Mute in Chat…** and **Remove Guest…** ask which guest (by number).
+    fn cowork_begin_host_prompt(&mut self, kind: PromptKind) {
+        if self.cowork.host.is_none() {
+            self.status = t!("status.cowork_not_hosting").to_string();
+            return;
+        }
+        let label = if kind == PromptKind::CoworkMute {
+            t!("prompt.cowork_mute")
+        } else {
+            t!("prompt.cowork_remove")
+        };
+        self.prompt = Some(Prompt::new(kind, label.to_string()));
+    }
+
+    /// The guest a prompt answer names, with its confirmed name.
+    fn cowork_named_guest(&self, input: &str) -> Option<(PeerId, String)> {
+        let id = PeerId(input.trim().parse::<u64>().ok()?);
+        let name = self.cowork.host.as_ref()?.session.guest(id)?.name.clone();
+        Some((id, name))
+    }
+
+    /// Mute the named guest in the chat, or unmute it if it is muted.
+    fn cowork_toggle_mute(&mut self, input: &str) {
+        let Some((id, _)) = self.cowork_named_guest(input) else {
+            self.status = t!("status.cowork_no_guest").to_string();
+            return;
+        };
+        let Some(host) = self.cowork.host.as_mut() else {
+            return;
+        };
+        let muted = !host.session.is_muted(id);
+        let out = host.session.set_muted(id, muted);
+        self.cowork_send(&out);
+        let who = self.cowork_author(id);
+        let text = if muted {
+            t!("status.cowork_muted", name = who)
+        } else {
+            t!("status.cowork_unmuted", name = who)
+        };
+        self.cowork_chat_system(&text);
+        self.status = text.to_string();
+    }
+
+    /// Remove the named guest from the session and close its connection.
+    fn cowork_remove(&mut self, input: &str) {
+        let Some((id, name)) = self.cowork_named_guest(input) else {
+            self.status = t!("status.cowork_no_guest").to_string();
+            return;
+        };
+        let who = self.cowork_author(id);
+        let Some(host) = self.cowork.host.as_mut() else {
+            return;
+        };
+        let out = host.session.kick(id);
+        self.cowork_send(&out);
+        if let Some(h) = self.cowork.host.as_mut()
+            && let Some(link) = h.links.remove(&id)
+        {
+            link.close();
+        }
+        if self.cowork.follow.target() == Some(id) {
+            self.cowork.follow.on_peer_left(id);
+        }
+        self.cowork_chat_system(&t!("msg.im_left", nick = who));
+        self.status = t!("status.cowork_removed_peer", name = name).to_string();
+    }
+
     // ----- the per-tick pump --------------------------------------------------
 
     /// Drive the session: finish a join, offer new guests for consent, feed
@@ -1271,6 +1761,7 @@ impl App {
                         session,
                         link: joined.link,
                     });
+                    self.cowork_chat_open();
                 }
                 Err(e) => self.cowork_error(e),
             },
@@ -1310,17 +1801,14 @@ impl App {
     }
 
     fn cowork_pump_local(&mut self) {
-        // Host: every shared buffer.
-        let shared: Vec<SharedPath> = self
-            .cowork
-            .host
-            .as_ref()
-            .map(|h| h.session.shared().cloned().collect())
-            .unwrap_or_default();
-        for rel in shared {
+        // Host: every shared buffer, and the session notes when open.
+        for rel in self.cowork_host_paths() {
             let Some(i) = self.cowork_host_tab(&rel) else {
-                // The tab was closed: stop sharing it.
-                self.cowork_unshare_path(&rel);
+                // The tab was closed: stop sharing it. The notes stay; their
+                // text lives in the session until the tab is opened again.
+                if !rel.is_session_notes() {
+                    self.cowork_unshare_path(&rel);
+                }
                 continue;
             };
             let log = self
@@ -1349,6 +1837,9 @@ impl App {
             }
         }
         // Guest: every shared-in buffer.
+        if self.cowork.guest.is_none() {
+            return;
+        }
         let tabs: Vec<(usize, SharedPath)> = self
             .editor
             .tabs
@@ -1398,6 +1889,7 @@ impl App {
         }
         self.cowork_release_guest_tabs();
         self.cowork_forget_terminal();
+        self.cowork_chat_close();
         self.status = t!("status.cowork_left").to_string();
     }
 
@@ -1427,17 +1919,28 @@ impl App {
             return;
         };
         let name = host.session.guest(peer).map(|g| g.name.clone());
+        let who = host
+            .session
+            .board()
+            .name(peer)
+            .map(|n| format!("{n} #{}", peer.0));
         let out = host.session.remove(peer);
         if let Some(link) = host.links.remove(&peer) {
             link.close();
         }
         self.cowork_send(&out);
+        if let Some(who) = who {
+            self.cowork_chat_system(&t!("msg.im_left", nick = who));
+        }
         if let Some(name) = name {
             self.status = t!("status.cowork_peer_left", name = name).to_string();
         }
     }
 
     fn cowork_host_message(&mut self, peer: PeerId, msg: Message) {
+        // Its name, while the session still knows it: a guest that leaves
+        // (or is dropped for misbehaving) is gone after `handle`.
+        let who = self.cowork_author(peer);
         let handled = self
             .cowork
             .host
@@ -1482,11 +1985,17 @@ impl App {
                 term.send_bytes(&keys);
             }
         }
+        for line in handled.chat {
+            self.cowork_chat_receive(line);
+        }
         for gone in handled.disconnect {
             if let Some(h) = self.cowork.host.as_mut()
                 && let Some(link) = h.links.remove(&gone)
             {
                 link.close();
+            }
+            if gone == peer {
+                self.cowork_chat_system(&t!("msg.im_left", nick = who.as_str()));
             }
         }
     }
@@ -1538,6 +2047,9 @@ impl App {
                 GuestEvent::Refused(ErrorCode::TooLarge) => {
                     self.status = t!("status.cowork_too_large").to_string();
                 }
+                GuestEvent::Refused(ErrorCode::Removed) => {
+                    self.status = t!("status.cowork_you_were_removed").to_string();
+                }
                 GuestEvent::Refused(_) => self.status = t!("status.cowork_refused").to_string(),
                 GuestEvent::Files(paths) => {
                     if paths.is_empty() {
@@ -1567,12 +2079,35 @@ impl App {
                     self.cowork_forget_terminal();
                     self.status = t!("status.cowork_terminal_closed").to_string();
                 }
+                GuestEvent::Chat(line) => self.cowork_chat_receive(line),
+                GuestEvent::Muted(muted) => {
+                    let text = if muted {
+                        t!("status.cowork_chat_muted")
+                    } else {
+                        t!("status.cowork_chat_unmuted")
+                    };
+                    self.cowork_chat_system(&text);
+                    self.status = text.to_string();
+                }
+                GuestEvent::PeerJoined(peer, name) => {
+                    let who = format!("{name} #{}", peer.0);
+                    self.cowork_chat_system(&t!("msg.im_joined", nick = who));
+                }
+                GuestEvent::PeerLeft(peer, name) => {
+                    let who = format!("{name} #{}", peer.0);
+                    self.cowork_chat_system(&t!("msg.im_left", nick = who));
+                }
                 _ => {}
             }
         }
     }
 
     fn cowork_open_remote(&mut self, rel: &SharedPath, text: &str) {
+        if rel.is_session_notes() && self.cowork_guest_tab(rel).is_none() {
+            // The notes wait in the session until Session Notes opens them:
+            // nothing opens over the guest's work on its own.
+            return;
+        }
         let read_only = self
             .cowork
             .guest
@@ -1620,13 +2155,7 @@ impl App {
             _ => Rgb(0x1e, 0x1e, 0x1e),
         };
         let managed: Vec<(usize, SharedPath)> = if self.cowork.host.is_some() {
-            let shared: Vec<SharedPath> = self
-                .cowork
-                .host
-                .as_ref()
-                .map(|h| h.session.shared().cloned().collect())
-                .unwrap_or_default();
-            shared
+            self.cowork_host_paths()
                 .into_iter()
                 .filter_map(|r| Some((self.cowork_host_tab(&r)?, r)))
                 .collect()

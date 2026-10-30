@@ -76,4 +76,28 @@ impl App {
     pub(super) fn cowork_terminal_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.layout.edit_sql.width < u16::MAX);
     }
+
+    /// Never reached: the session conversation exists only in a session,
+    /// which this build cannot open. Says so if it is.
+    pub(super) fn cowork_chat_send(&mut self, _message: vix_im::Message) {
+        self.status = t!("msg.capability_missing", name = "cowork").to_string();
+    }
+
+    /// `/follow` needs a Cowork session, which this build cannot open.
+    pub(super) fn cowork_follow_from_chat(&mut self, _who: Option<&str>) {
+        self.status = t!("msg.capability_missing", name = "cowork").to_string();
+    }
+
+    /// No shared-in files: every reference opens locally.
+    pub(super) fn cowork_open_ref(&mut self, _reference: &vix_im::CodeRef) -> bool {
+        debug_assert!(self.layout.edit_sql.width < u16::MAX);
+        false
+    }
+
+    /// Nobody to list.
+    #[must_use]
+    pub fn cowork_roster(&self) -> Vec<String> {
+        let State(()) = &self.cowork;
+        Vec::new()
+    }
 }

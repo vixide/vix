@@ -1,12 +1,12 @@
 # IM — instant messaging for people editing together
 
 **Status:** specified 2026-10-29; implementation tracked as T750–T759 in
-[`tasks.md`](../../tasks.md). T750–T755 are implemented: the core crates,
-the IRC client, the IM menu, panel and App wiring (`im` Cargo feature),
-anchored threads in the editor, status-bar unread and mention indicators
-with the notify policy, and disk history. Not yet: session chat over Cowork
-(T756), Matrix (T758), and presence and session notes (T759); threads are
-shared through Git only until Cowork carries them. User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
+[`tasks.md`](../../tasks.md). T750–T756 and T759 are implemented: the core
+crates, the IRC client, the IM menu, panel and App wiring (`im` Cargo
+feature), anchored threads in the editor, status-bar unread and mention
+indicators with the notify policy, disk history, session chat over Cowork,
+and the session roster, `/follow` and shared session notes. Not yet: Matrix
+(T758); threads are shared through Git only, not over Cowork. User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
 (real-time co-editing, whose v1 explicitly leaves chat out) and
 [Worldwide](../worldwide/index.md).
 
@@ -116,7 +116,8 @@ Floobits. T750 re-checks anything the code leans on.*
 - Like the rest of IM nothing opens on its own: a thread that arrives
   through Git shows only as a gutter mark.
 - **Presence.** `Available`, `Away`, `Busy` (do not disturb), and, in a
-  Cowork session, the file each peer is in (from Cowork presence).
+  Cowork session, the file each peer is in (from Cowork presence), listed
+  above the session conversation (T759).
 - **Mention.** `@nick` in a message. Mentions of you raise a notification
   unless you are Busy.
 - **Unread.** Per-conversation count and a first-unread marker; the status
@@ -150,7 +151,8 @@ Top level, between **Git** and **Org**. Every item has an action id, a
 opens it); `Tab`/`Shift+Tab` cycle conversations; `Up` in an empty input
 edits nothing — it moves into the message list; `Esc` returns focus to the
 editor. Slash commands in the input: `/me`, `/join`, `/part`, `/msg`,
-`/nick`, `/topic`, `/status`, `/clear`. Unknown slash commands are an
+`/nick`, `/topic`, `/status`, `/follow` (T759: follow a Cowork
+participant by number; alone, stop), `/clear`. Unknown slash commands are an
 error, never sent as text.
 
 ## Settings
@@ -194,9 +196,17 @@ Vix owns.
   (`rustls` with `webpki-roots`) that exchanges events with the App over
   channels. It depends only on its own event types, not on `vix-im`; the
   App converts.
-- **Session transport** — once Cowork's link (`vix-cowork-net`) is on
-  `main`, session chat is a separate message type inside the same
-  encrypted frames, so a Cowork session has chat with nothing to set up.
+- **Session transport (T756)** — session chat is a separate message family
+  (`Channel::Chat`: `Chat`, `ChatMuted`) inside the Cowork link's encrypted
+  frames, so a Cowork session has chat with nothing to set up. The host
+  relays and stamps every line; the App side lives in
+  `tui/src/app/cowork.rs` (feature `cowork`), which adds the `Session`
+  conversation (`cowork/session`) when a session starts and removes it when
+  it ends, converts lines to `vix-im` messages (authors as verified
+  identities, `name #N`), draws the roster rows the panel shows above the
+  conversation, and owns **Session Notes**, **Mute in Chat…** and **Remove
+  Guest…**. Without the feature, `cowork_off.rs` stand-ins keep `im.rs` free
+  of `cfg`. The full rules are in [Cowork](../cowork/index.md), "Session chat".
 - **App shell** — `tui/src/app/im.rs` (every build) owns the inbox, the
   actions, the panel's keys, sharing, notifications and history;
   `tui/src/app/im_threads.rs` (every build) owns anchored threads: loading
@@ -235,8 +245,11 @@ Vix owns.
   the conversation.
 - **Identity.** IRC nicks are not authenticated; the panel marks a nick
   as `(unverified)` unless the server confirms a SASL account via
-  `account-tag`. Session peers show the identity the Cowork handshake
-  verified, not a name they chose; the host can mute or remove a peer.
+  `account-tag`. Session peers show the identity the Cowork session
+  verified: the name the host confirmed at consent and the number the host
+  gave (`ana #2`), stamped by the host on every relayed line, so a peer can
+  neither pick another's number nor pass as you. The host can mute (lines
+  refused, not relayed) or remove a peer.
 - **Blocking** hides a nick's messages and mentions locally.
 - **No logging** of message bodies or credentials in Vix's own logs.
 
