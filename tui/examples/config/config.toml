@@ -41,6 +41,9 @@ explorer_delete = "trash"
 # What Git -> Commit does when nothing is staged but files changed: "ask"
 # (default -- confirm, then `git add -A`), "always", or "never".
 smart_commit = "ask"
+# Which lines show their language-server diagnostic as dimmed end-of-line
+# text: "off", "cursor-line" (default -- the cursor's line only), or "all".
+inline_diagnostics = "cursor-line"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.

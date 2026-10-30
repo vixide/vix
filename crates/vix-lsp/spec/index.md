@@ -54,7 +54,7 @@ a keybinding, or an automatic trigger), not just present unused in
 
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
-| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
+| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
 | Progress | automatic | A `$/progress` update (T123d — e.g. an initial index build) shows as a one-line status message (`"Indexing: 3/10 crates (30%)"`); an `"end"` report produces no message of its own, since the status line is ambient/best-effort already. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
 | Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
@@ -73,6 +73,37 @@ a keybinding, or an automatic trigger), not just present unused in
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
 | Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
 | Semantic Tokens | automatic, re-requested on content change (T123a) | `textDocument/semanticTokens/full`, decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
+
+
+## Inline diagnostics (T614)
+
+Diagnostics are readable where they are, not only in the Problems panel:
+
+- **Inline.** The `inline_diagnostics` setting picks which lines show their
+  diagnostic as dimmed end-of-line virtual text (the editor widget's
+  `VirtualTextLayer::Diagnostics` layer), colored by severity like the underline:
+
+  | Value | Lines that show their diagnostic |
+  | ----- | -------------------------------- |
+  | `"off"` | none |
+  | `"cursor-line"` (default) | the cursor's line only |
+  | `"all"` | every line that has one |
+
+  Any other value behaves as `"cursor-line"`. A line shows one message: its most
+  severe diagnostic (the first published, on a tie), first line only, truncated
+  at the view's edge. A diagnostic belongs to the line its range starts on, the
+  same line `goto` jumps to.
+- **Status line.** When the cursor arrives on a line that has a diagnostic, the
+  status line shows `Error: message` (or Warning / Info / Hint), whatever the
+  setting. **Go → Next/Previous Issue** always shows the message of the
+  diagnostic it lands on, even when the cursor was already on that line. When
+  the cursor leaves the line, the message is cleared, unless something else has
+  replaced it.
+
+The selection rules are pure and unit-tested in `vix_lsp::inline`
+(`InlineMode`, `inline_entries`, `diagnostic_on_line`); the host maps them to
+the editor in `App::refresh_inline_diagnostics` and `App::show_cursor_diagnostic`
+(`tui/src/app/inline_diagnostics.rs`).
 
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 

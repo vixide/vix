@@ -1199,3 +1199,168 @@ fn mock_server_formatting_replies_name_their_document_and_go_stale() {
         "edits for an old version are dropped"
     );
 }
+
+/// A mock server for T614 that publishes an error on line 0 and a warning on
+/// line 2 of every opened document.
+const MOCK_SERVER_TWO_DIAGNOSTICS: &str = r"
+import sys, json
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def at(line):
+    return {'start':{'line':line,'character':0},'end':{'line':line,'character':1}}
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+    elif method == 'textDocument/didOpen':
+        uri = msg['params']['textDocument']['uri']
+        send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
+            'uri': uri,
+            'diagnostics': [
+                {'range':at(0),'severity':1,'message':'first error'},
+                {'range':at(2),'severity':2,'message':'second warning\nmore detail'}]}})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+";
+
+/// The lines of the active tab's inline-diagnostic virtual text.
+fn inline_diagnostic_lines(app: &App) -> Vec<(usize, String)> {
+    use vix::editor_core::virtual_text::VirtualTextLayer;
+    app.editor
+        .active_tab()
+        .map(|t| {
+            t.editor
+                .eol_texts(VirtualTextLayer::Diagnostics)
+                .iter()
+                .map(|e| (e.line, e.text.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// T614: the three `inline_diagnostics` modes, the cursor's diagnostic in the
+/// status line, goto landing on (and showing) the next diagnostic, and the
+/// inline text on screen.
+#[test]
+fn inline_diagnostics_follow_the_setting_the_cursor_and_goto() {
+    use ratatui::{Terminal, backend::TestBackend};
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-inline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_TWO_DIAGNOSTICS).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\nx\nlet y\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    });
+    assert_eq!(settings.inline_diagnostics, "cursor-line", "the default");
+    let mut app = App::new(root.clone(), settings);
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && app.lsp.diagnostics_for(&file).len() < 2 {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        app.lsp.diagnostics_for(&file).len(),
+        2,
+        "the mock published"
+    );
+    app.poll_lsp();
+
+    // cursor-line: only the cursor's line (0), and the status line shows it.
+    assert_eq!(
+        inline_diagnostic_lines(&app),
+        vec![(0, "first error".into())]
+    );
+    assert!(app.status.contains("first error"), "status: {}", app.status);
+
+    // Goto lands on line 2's diagnostic and shows its (first-line) message.
+    app.run_action("nav.next_issue");
+    assert_eq!(app.editor.cursor_line(), 2, "goto lands on the diagnostic");
+    assert!(
+        app.status.contains("second warning"),
+        "status: {}",
+        app.status
+    );
+    assert!(!app.status.contains("more detail"), "first line only");
+    app.poll_lsp();
+    assert_eq!(
+        inline_diagnostic_lines(&app),
+        vec![(2, "second warning".into())]
+    );
+
+    // On screen: dimmed text after `let y`.
+    let mut term = Terminal::new(TestBackend::new(100, 20)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        screen.contains("let y  second warning"),
+        "inline text drawn"
+    );
+
+    // Leaving the line clears the status message it showed.
+    app.run_action("nav.prev_issue");
+    assert_eq!(app.editor.cursor_line(), 0);
+    let area = app.layout.editor;
+    app.editor.goto(2, None, area); // 1-based: line index 1, no diagnostic
+    app.poll_lsp();
+    assert!(app.status.is_empty(), "status: {}", app.status);
+
+    // all: every line with a diagnostic; off: none.
+    app.settings.inline_diagnostics = "all".into();
+    app.poll_lsp();
+    assert_eq!(
+        inline_diagnostic_lines(&app),
+        vec![(0, "first error".into()), (2, "second warning".into())]
+    );
+    app.settings.inline_diagnostics = "off".into();
+    app.poll_lsp();
+    assert_eq!(inline_diagnostic_lines(&app), Vec::new());
+
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}

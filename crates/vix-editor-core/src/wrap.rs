@@ -169,6 +169,16 @@ impl Editor {
         if caret.is_none() && vr.start == vr.end && self.cursor == vr.start {
             caret = Some(0);
         }
+        // End-of-line virtual text (T614) after the line's last visual row.
+        if vr.end == line_start + line_len {
+            self.draw_eol_texts(
+                buf,
+                vr.line,
+                usize::from(text_x0) + usize::from(vx),
+                right,
+                draw_y,
+            );
+        }
         if let (Some(cvx), Some(cursor_style)) = (caret, self.cursor_style) {
             let cx = text_x0 + cvx;
             if cx < right && draw_y < area.bottom() {

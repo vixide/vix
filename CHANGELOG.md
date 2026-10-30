@@ -20,6 +20,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Inline diagnostics** (T614): a language server's diagnostic now shows as dimmed, severity-colored text at the end of its line, truncated at the window edge. The new `inline_diagnostics` setting picks the lines: `"cursor-line"` (default), `"all"` or `"off"`. When the cursor reaches a line with a diagnostic, the status bar shows it (`Error: …`), and **Go → Next/Previous Issue** always shows the message it lands on. For library users, `vix_editor_core::virtual_text` adds end-of-line virtual text that several producers can share.
 - **Windows on ARM release** (T658): `vix` now ships an `aarch64-pc-windows-msvc` `.zip` and `.msi`, built natively on GitHub's Windows ARM runner. The desktop GUIs stay x86_64-only on Windows.
 - **Shebang language detection** (T658): a file with no extension, like `deploy` starting `#!/usr/bin/env bash`, now gets its syntax highlighting and comment prefix from the `#!` line (shell, Python, JavaScript, TypeScript).
 - **View → Fold / Unfold** (T658): `editor.fold` folds the innermost range around the cursor, and `editor.unfold` opens it, without toggling (also in the command palette). Repeat Fold to fold outward a level at a time.
@@ -33,6 +34,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Fixed
 
+- **Go → Next/Previous Issue lands on the diagnostic** (T614): it used to put the cursor one line above it, so Next Issue could get stuck.
 - **Blame with unsaved edits** (T657): Blame Line and inline blame now blame the buffer as shown (`git blame --contents -`), so after inserting or deleting lines they no longer report another line's commit.
 - **The single-color themes are all one color**: they no longer highlight code in another theme's blue, orange and green, draw a blue cursor, or show gutter marks, spell-check underlines, diagnostics or the terminal pane in other colors. Each now draws the whole screen in its own color on black, with a reverse-video cursor. See "Single-color themes" in `crates/vix-theme/spec/index.md`.
 - **Keybinding reference tables** (T659): a key containing `|` (the Emacs Org `C-c |` binding) no longer breaks its row in `docs/reference/keybindings-emacs.md`.

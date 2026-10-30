@@ -192,3 +192,30 @@ Move Line Up/Down treats a collapsed fold as one block: the moved block is the c
 ## Drag past the edge (T581)
 
 A left-drag keeps extending the selection when the pointer leaves the text area: a pointer at or past the top or bottom edge scrolls one line and extends to the edge row; one left of the text clamps to the first column. The app keeps routing the drag to the editor wherever the pointer is, and calls `Editor::autoscroll_tick` from the main loop (polling every 50 ms while a drag is active), because terminals report drag only on motion.
+
+## End-of-line virtual text (T614)
+
+The widget can draw **virtual text** after a line's content: text that is shown
+but is not in the buffer, so it is never edited, saved, selected or copied. It is
+the shared primitive behind inline diagnostics (T614), and the one inline values
+(T617) and color swatches (T620) build on.
+
+- A host sets one list of `EolText { line, text, color }` per
+  `VirtualTextLayer` with `Editor::set_eol_texts(layer, texts)`; an empty list
+  (or `clear_eol_texts(layer)`) removes the layer. Layers are independent, so
+  one producer never clobbers another's text. `VirtualTextLayer` is
+  `#[non_exhaustive]`: a new producer adds a variant.
+- Each text is drawn two columns after the line's last glyph (after any inline
+  hints, the inline-blame note, or a folded line's `...`), **dimmed**, in its
+  `color` when one is given. Several texts on one line are drawn in layer order,
+  two columns apart. Only the text's first line is drawn.
+- Text that does not fit is **truncated at the view's right edge**, by display
+  width, ending in `…`. Nothing is drawn when not even the gap fits.
+- Without soft wrap the text follows the line even when the view is
+  horizontally scrolled. With soft wrap it is drawn on the line's last visual
+  row.
+
+Implemented in `crates/vix-editor-core/src/virtual_text.rs` (`VirtualTextLayer`, `EolText`,
+`Editor::set_eol_texts` / `clear_eol_texts` / `eol_texts`, `draw_eol_texts`), called from
+`draw_eol_note` in `crates/vix-editor-core/src/render.rs` and the soft-wrap
+`render_visual_row` in `crates/vix-editor-core/src/wrap.rs`.

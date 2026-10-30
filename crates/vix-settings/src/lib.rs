@@ -95,6 +95,11 @@ pub struct Settings {
     /// `"always"` (stage everything without asking) or `"never"` (refuse).
     /// Any other value behaves as `"ask"`.
     pub smart_commit: String,
+    /// Which lines show their LSP diagnostic as dimmed end-of-line text
+    /// (T614): `"off"`, `"cursor-line"` (default — the cursor's line only) or
+    /// `"all"`. Any other value behaves as `"cursor-line"`. The status line
+    /// shows the cursor's diagnostic whatever this is set to.
+    pub inline_diagnostics: String,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
@@ -577,6 +582,7 @@ impl Default for Settings {
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
             smart_commit: "ask".to_string(),
+            inline_diagnostics: "cursor-line".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
             indent_style: "spaces".to_string(),

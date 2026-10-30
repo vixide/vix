@@ -29,6 +29,7 @@ pub mod render;
 pub mod selection;
 /// Language detection and indentation, comment, color, and text helpers.
 pub mod utils;
+pub mod virtual_text;
 
 // Vix-owned modules, held to crate-wide `clippy::pedantic`: the soft-wrap layout
 // + renderer, bracket matching, and line ops.
