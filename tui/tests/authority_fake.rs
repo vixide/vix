@@ -12,6 +12,7 @@ use ratatui::{Terminal, backend::TestBackend};
 use vix::app::App;
 use vix::settings::Settings;
 use vix_authority::{Authority, FakeAuthority};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 fn screen(app: &mut App) -> String {
     let mut term = Terminal::new(TestBackend::new(100, 30)).unwrap();
@@ -72,6 +73,28 @@ fn explorer_open_and_save_go_through_an_installed_fake_authority() {
             .any(|c| c.op == "write_atomic" && c.path == main)
     );
     assert!(fake.exists(Path::new("/proj/src/main.rs")));
+
+    // IM anchored threads (T712 step 1): a comment's thread file is a
+    // workspace file, so it is written into the fake, not the local disk.
+    fake.clear_calls();
+    app.editor.goto(1, Some(1), area);
+    app.run_action("im.comment_line");
+    assert!(app.prompt.is_some(), "a prompt asks for the comment");
+    for c in "remote thread".chars() {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let threads = backing.join("proj/.vix/im/threads");
+    let written: Vec<_> = std::fs::read_dir(&threads)
+        .map(|d| d.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default();
+    assert_eq!(written.len(), 1, "one thread file in the fake: {written:?}");
+    assert!(!Path::new("/proj/.vix").exists());
+    assert!(
+        fake.calls()
+            .iter()
+            .any(|c| c.op == "write_atomic" && c.path.starts_with(root.join(".vix/im/threads")))
+    );
 
     vix_authority::install(previous);
     let _ = std::fs::remove_dir_all(&scratch);

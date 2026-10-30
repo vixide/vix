@@ -8315,9 +8315,38 @@ so, and the first task of each plan re-checks the facts it depends on.
     against both authorities in `crates/vix-authority/tests/conformance.rs`;
     `tui/tests/authority_fake.rs` drives the App's explorer, open and save
     with the fake installed. NOT done: an SSH run of the suite (T712).
-- [ ] **T712 — Shell-based SSH authority.** ControlMaster, `ssh_config`
+- [x] **T712 — Shell-based SSH authority.** ControlMaster, `ssh_config`
   honored, read/write/stat/list/rename/remove, atomic writes, mtime+size
   conflict check; `ssh://user@host/path` and `/ssh:host:/path`. **Large.**
+  - Done 2026-10-30. `vix_authority::ssh`: `SshTarget` parses both forms
+    (user, host incl. bracketed IPv6, port, `%`-decoded or literal path,
+    `~` for the home); `quote` single-quotes every word as bytes and sends
+    each script as octal digits behind a fixed decoder, so `fish`/`csh`
+    login shells can't misread it (property-tested, and run under every
+    installed shell); `SshAuthority` (`ssh` feature, on with root `tasks`)
+    runs the system `ssh -T` with `BatchMode`, `ControlMaster=auto` and a
+    `ControlPath` in a private 0700 directory it verifies, never a secret
+    on argv, and one POSIX `sh` script per operation (GNU and BSD `stat`
+    probed once; atomic save via exclusive temp + `chmod` + `mv` in the
+    same directory, through links; `git ls-files` or `find` walk).
+    `Authority::write_atomic_if_unchanged` + `WriteConflict` is the
+    mtime+size conflict check, in `conformance::run`, which passes against
+    the SSH authority over a fake `ssh` named by path, and against a real
+    host only when `VIX_TEST_SSH_HOST` is set. T710 leftovers: IM code
+    references and thread files routed; `no_tty_prompts` env moved into the
+    `ProcessSpec`; `vix-git` uses bare `git` remotely; the AI `cli` provider
+    pinned to `LocalAuthority`. Experimental `vix ssh://…` CLI open
+    (connects before the TUI so `ssh` can prompt).
+    NOT done: the App's save doesn't use the conflict check yet (needs a
+    per-tab disk stamp and an overwrite prompt, T713); no Open Remote
+    dialog, status-bar host, connection-lost state or reconnect (T713); no
+    trust prompt (T714); no per-path routing (a local file opened while
+    remote goes to the remote); no batching (the external-change poll is
+    one round trip per open file, T717); remote LSP/DAP untested and the
+    terminal stays local (T716); remote `trash` needs `gio`/`trash-put`;
+    the remote `PATH` is a non-interactive `sh`'s; a remote process may
+    outlive a killed local `ssh`; modification times are whole seconds; no real-sshd CI
+    job (T719).
 - [ ] **T713 — Remote Open dialog, status, connection-lost state.**
   **Medium.**
 - [ ] **T714 — Trust and safety.** Untrusted-until-trusted remote

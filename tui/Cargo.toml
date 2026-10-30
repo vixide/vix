@@ -85,7 +85,7 @@ lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
 # funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
-tasks = ["vix-format-tool/process", "vix-authority/process"]
+tasks = ["vix-format-tool/process", "vix-authority/process", "vix-authority/ssh"]
 hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
@@ -481,6 +481,10 @@ path = "tests/action_catalog.rs"
 [[test]]
 name = "authority_fake"
 path = "tests/authority_fake.rs"
+
+[[test]]
+name = "authority_ssh"
+path = "tests/authority_ssh.rs"
 
 [[test]]
 name = "ai_provider_smoke"

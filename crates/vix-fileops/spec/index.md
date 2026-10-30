@@ -119,6 +119,10 @@ for byte, T661). A BOM is sniffed before the NUL-byte check, so UTF-16 opens as 
 "UTF-16" file whose decoded text still has NULs is refused as `Binary`.
 `write_text_in_file_encoding(path, text)` writes text back in the encoding the file already
 has (replace across files uses it), refusing a file that only decodes lossily.
+Each has a half that touches no file, for bytes read or written some other way (T712's SSH
+authority): `decode_text(bytes, max_bytes)` applies the `TooLarge`/`Binary` refusals and
+the encoding detection, and `encode_like(existing, text)` returns the bytes
+`write_text_in_file_encoding` would write, given the guarded read of the old file.
 `TextFile` is `#[non_exhaustive]`, so it can gain fields (such as an encoding) without a
 breaking change. `MAX_TEXT_BYTES` (50 MiB) is the default
 limit and `HARD_MAX_TEXT_BYTES` (1 GiB) the ceiling that applies even after the user

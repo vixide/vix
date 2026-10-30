@@ -1,6 +1,6 @@
 # Remote editing
 
-**Status:** proposed (2026-10-28). Planning only. Tasks T710–T719 in
+**Status:** in progress (proposed 2026-10-28; T710–T712 done). Tasks T710–T719 in
 [`tasks.md`](../../tasks.md). Promotes the "Remote/SSH editing" Ideas-backlog
 entry, which already names Fresh's *authority* design as the model.
 
@@ -62,6 +62,12 @@ Done 2026-10-29 (T710, T711): the `vix-authority` crate owns the slot, and its
 spec lists every routed area and every local-only exception with its reason.
 (The 428/38 count above included test code; outside tests it was 146 call
 sites in 37 files.)
+
+Done 2026-10-30 (T712): phase 1's `SshAuthority`
+([`crates/vix-authority/spec/ssh`](../../crates/vix-authority/spec/ssh/index.md)),
+with an experimental `vix ssh://user@host/path` command line. It is tested
+against a fake `ssh` script named by path, rather than one on `PATH`, since
+changing the environment in-process is `unsafe` under edition 2024.
 
 ## Safety
 

@@ -672,7 +672,11 @@ impl App {
             .ok()
             .map(Path::to_path_buf)
             .or_else(|| {
-                let (file, root) = (path.canonicalize().ok()?, self.root.canonicalize().ok()?);
+                let auth = crate::authority::current();
+                let (file, root) = (
+                    auth.canonicalize(path).ok()?,
+                    auth.canonicalize(&self.root).ok()?,
+                );
                 file.strip_prefix(root).ok().map(Path::to_path_buf)
             });
         relative

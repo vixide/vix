@@ -548,8 +548,18 @@ impl GitError {
 /// The `git` command for `args` in `dir`, built by the workspace authority
 /// (T710) so a remote workspace runs git where its files are.
 fn git_command(dir: &Path, args: &[&str]) -> std::io::Result<Command> {
-    vix_authority::current().command(
-        &vix_authority::ProcessSpec::new(git_program())
+    let auth = vix_authority::current();
+    // The cached path is this machine's `git`. Any other authority runs the
+    // bare name, which its own side resolves on its `PATH` (T712): a remote
+    // POSIX `exec` never searches the working directory, so the Windows
+    // planting risk `git_program` closes doesn't arise there.
+    let program = if auth.name() == "local" {
+        git_program().clone()
+    } else {
+        OsString::from("git")
+    };
+    auth.command(
+        &vix_authority::ProcessSpec::new(program)
             .current_dir(dir)
             // T651: every path Vix hands git is a literal file name, never a
             // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.

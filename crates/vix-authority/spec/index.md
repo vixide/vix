@@ -1,14 +1,15 @@
 # Authority
 
-The authority slot: one trait that owns Vix's workspace file access and process spawning, with a local implementation and a temp-dir-backed fake.
+The authority slot: one trait that owns Vix's workspace file access and process spawning, with local and SSH implementations and a temp-dir-backed fake.
 
 It lets a remote machine stand in for the local one. The cross-cutting design is
 [`spec/remote-editing`](../../../spec/remote-editing/index.md); this crate is
 its first piece (T710, T711).
 
-**Status:** Shipped (T710, T711; finished 2026-10-29). `LocalAuthority` is
-the only production implementation and is installed by default; nothing
-installs another one yet. No user-visible change.
+**Status:** Shipped (T710, T711; finished 2026-10-29; T712 2026-10-30).
+`LocalAuthority` is installed by default. `SshAuthority` (the `ssh`
+feature, [`spec/ssh`](ssh/index.md)) is installed only by the experimental
+`vix ssh://…` command line.
 
 ## API
 
@@ -20,7 +21,12 @@ installs another one yet. No user-visible change.
   `symlink_metadata`, `exists`/`is_dir`/`is_file`, `canonicalize`,
   `read_dir`, `create_dir_all`, `rename`, `remove_file`, `remove_path`,
   `move_path`, `copy_recursive`, `trash`, `is_unwritable`, `walk_files`,
-  `which`, and `command`.
+  `which`, and `command`; and `write_atomic_if_unchanged` (T712), an atomic
+  write that refuses with a `WriteConflict` (`WriteConflict::is`) when the
+  file's length or modification time (whole seconds) no longer matches the
+  `FileStat` the caller saw, or it appeared or vanished (`same_version`).
+  The default checks with `metadata` first; the SSH authority checks and
+  writes in one remote script.
 - `current()` returns the installed authority (the local one while the slot
   is empty); `install(authority)` replaces it and returns the previous one.
   The slot is process-wide, like Fresh's single authority: one Vix process
@@ -52,11 +58,16 @@ installs another one yet. No user-visible change.
   (`calls()` returns `Call { op, path }` values, `clear_calls()`). The trash
   is the sibling `<backing>.trash`; `backing()`, `trash_dir()`,
   `to_backing()` and `to_virtual()` expose the mapping to tests.
+- `ssh` (T712): `SshTarget`/`TargetError` parse `ssh://user@host:port/path`
+  and `/ssh:user@host#port:/path`; `ssh::quote` is the shell quoting; both
+  are always built. `SshAuthority` and `SshOptions` need the `ssh` feature
+  (which implies `process`). See [`spec/ssh`](ssh/index.md).
 - `conformance` (T711) is the shared behavioral suite: `conformance::run(&auth,
   scratch)` exercises every trait method under `scratch` (an authority path
   that must not exist yet) and returns the failures. It runs against
-  `LocalAuthority` and `FakeAuthority` in the crate's integration test; T712's SSH
-  authority runs the same function.
+  `LocalAuthority` and `FakeAuthority` in the crate's integration test, and
+  against `SshAuthority` over a fake `ssh` in `crates/vix-authority/tests/ssh.rs` (and over a real
+  host when `VIX_TEST_SSH_HOST` is set). It includes the conflict check.
 
 ## What goes through the authority
 
@@ -75,6 +86,7 @@ workspace.
 | Workspaces | the `.vix-workspace` file load/save and its folder containment check (`vix-workspace`), switching projects, adding a folder |
 | Tasks | project-type detection, discovered-task manifests, `tasks.toml` and `.vix/run.toml` (`vix-tasks`), `.vix/project.toml`, `.editorconfig` |
 | Org | `id:` link following, archive to `<file>_archive`, capture into project files, the agenda over the file index (and `org_agenda_files`), agenda TODO cycling; every Org-roam node, daily note, rename and backlink read (all under the workspace root) |
+| IM | a message's code reference (`im_inside_root`: exists, is a file, canonical path inside the root), the share-path and thread-path root-relative fallbacks, and the anchored review threads under `<root>/.vix/im/threads/*.json` (list, read, atomic write, id-collision probe) — they are committed workspace files |
 | HTTP client | `.vix/http-env.json` and the active-environment file (`vix-http-client` `env`), `{{$dotenv}}` and `< file` request bodies (`rest`). The request itself is sent from this machine. |
 | Other | Cowork's path confinement, coverage-report path matching (`vix-coverage`), LSP diagnostic path keying (`vix-lsp`), jj/git repo probes for **init**, the OC build/compose file lookup, Prettier's project-local `node_modules/.bin` lookup |
 | Processes | the task/workspace-search/shell-filter shell (`spawn_shell`, `run_shell_filter`), direct argv runs (`spawn_argv`: git/jj/oc commands, program resolved with `Authority::which`), every `vix-git` runner (`git_command`), `vix-git-graph`, LSP servers, DAP adapters, the Prettier formatter (and its working-directory check) |
@@ -102,8 +114,8 @@ machine running the UI even when the workspace is remote.
   remote workspace will want the per-path routing below).
 - **State Vix keeps about the session**: session save/restore storage
   (`vix-session`), the undo store and Local History (`vix-undo-store`), IM
-  logs, drafts and attachments (`tui/src/app/im.rs`; its code-reference
-  resolver also stays local for now, see *Not done*), the DB workbench's
+  logs, drafts and attachments (`tui/src/app/im.rs`; these are the user's
+  chat history, not workspace files), the DB workbench's
   query history and saved queries.
 - **Temp files and credentials**: `write_private_temp` and the files AI and
   git hand to a local CLI (`ai.rs` removes its prompt temp file), the
@@ -142,14 +154,15 @@ probes in the App were routed too (they are filesystem calls that the
 
 ### Not done (T710 follow-ups)
 
-- `tui/src/app/im.rs` resolves a message's code reference with
-  `Path::is_file`/`canonicalize` locally; left alone while T753 reworks IM.
-- The AI `cli` provider runs through the routed shell but writes its prompt
-  to a *local* temp file. Under a remote authority that file must be sent
-  along (or the provider pinned local) — decide in T712.
-- `vix-git`'s cached `git` path and `no_tty_prompts` (environment and a
-  local process group) are applied to the authority's `Command` as before;
-  over SSH they must reach the remote side (T712).
+- ~~`tui/src/app/im.rs` resolves a message's code reference locally~~ —
+  routed 2026-10-30 (T712 step 1), together with the anchored-thread files.
+- ~~The AI `cli` provider's local prompt temp file~~ — T712 pins the
+  provider to `LocalAuthority` (it is the user's own, locally signed-in
+  tool).
+- ~~`vix-git`'s cached `git` path and `no_tty_prompts`~~ — T712: the cached
+  path is used only locally; `no_tty_prompts` puts its environment in the
+  `ProcessSpec` (so it reaches a remote side) and only the process group on
+  the local `Command`.
 
 ## Testing
 
@@ -159,22 +172,18 @@ tests check path mapping, escape refusal (relative, `..` above `/`, a symlink
 out), call recording and the trash directory; `the_slot_*` checks the default.
 `tui/tests/authority_fake.rs` (its own test binary, because the slot is
 process-wide) installs a `FakeAuthority` and drives the App's explorer
-listing, open and save against `/proj`, a path that exists only inside it.
+listing, open and save against `/proj`, a path that exists only inside it,
+and starts an IM review thread whose file lands in the fake's
+`/proj/.vix/im/threads`.
 
-## Next (T712)
+## Next
 
-An `SshAuthority` implementing the trait with `ssh` + ControlMaster: file ops
-via `cat`/`stat`/`find`/`mv`, `command` returning an `ssh host -- …` command
-with the spec's arguments shell-quoted, and the conformance suite run against
-a fake `ssh` on `PATH`. Open questions it inherits from this slice:
+T712 shipped the SSH authority ([`spec/ssh`](ssh/index.md), with its own
+*Not done* list). Still open from this slice:
 
 - Per-path routing. The slot is one authority; opening a local file (say,
   the settings file) while connected needs a routing authority that sends
   `ssh://` paths to the remote and the rest to `LocalAuthority`. It fits the
   trait as-is.
-- `vix-git` caches the `git` path from the local `PATH` (`git_program`); a
-  remote authority must resolve it remotely (`Authority::which`).
-- `no_tty_prompts` sets environment and a process group on the *local*
-  `Command`; over SSH those must reach the remote side.
 - The external-change poll stats every open file each second; over SSH it
   wants batching (the remote agent, T717).
