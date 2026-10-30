@@ -8463,13 +8463,31 @@ editor by completion, diagnostics and never losing work first.
 
 ### Distribution and promotion
 
-- [ ] **T740 — Social cards.** Open Graph and Twitter meta tags on every
+- [x] **T740 — Social cards.** Open Graph and Twitter meta tags on every
   site page, a 1200×630 PNG card rendered from a real screenshot, and the
   same image as the GitHub repository's social preview. **Small.**
-- [ ] **T741 — Theme gallery.** One real screenshot per bundled theme
+  Done 2026-10-30: `+layout.svelte` renders `og:*` and `twitter:*` tags
+  (title, description, canonical URL, `summary_large_image`, image with
+  type/size/alt) on every page from each route's `{ title, description }`;
+  the card is `docs/demos/social-card.png` (copied to the site's
+  `static/assets/social-card.png`), the Dark theme's real screenshot under
+  a title band, made by `scripts/render-theme-gallery.py`. **Not done:**
+  uploading the card as the GitHub repository's social preview — a manual
+  step in the repository settings.
+- [x] **T741 — Theme gallery.** One real screenshot per bundled theme
   (rendered by a VHS tape over the demo workspace), shown as a gallery
   on the site's features page. Micro's colorscheme carousel is the
-  model. **Small–Medium.**
+  model. **Small–Medium.** Done 2026-10-30: all 21 themes in
+  `docs/demos/themes/*.png` (about 32 KB each), shown on `/features/#themes`
+  in Lily's headless `Carousel` with previous/next and a button per theme.
+  **Not done as written:** they are not rendered by a VHS tape — VHS,
+  ttyd and agg are not installed here — but by the new
+  `scripts/render-theme-gallery.py`, which runs the real `vix` release
+  binary in a pseudo-terminal (pexpect) on a copy of the demo workspace
+  with `theme` set in a throwaway `config.toml`, feeds every byte to the
+  pyte terminal emulator, and paints the screen to PNG with Pillow in
+  JetBrains Mono Nerd Font. The captures are real but the font rendering
+  is the script's, not a terminal's. Not wired into CI.
 - [ ] **T742 — More install channels.** winget, Scoop, a Nix flake
   (`nix run github:vixide/vix`), AUR, `cargo binstall` metadata and mise,
   each verified on a real machine or CI runner before it is listed.
