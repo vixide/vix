@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
 use crate::app::App;
 use crate::theme::{self, icon};
+use vix_terminal::Selection;
 
 /// Map a `vt100` color to a ratatui color.
 fn vt_color(c: vt100::Color) -> Color {
@@ -36,9 +37,16 @@ fn draw_frame(frame: &mut Frame, area: Rect, title: &str) -> Rect {
     inner
 }
 
-/// Draw a `vt100` screen into `inner` (cells clipped to it) and, when
-/// `cursor` is set and the shell shows one, place the real cursor there.
-fn draw_screen(frame: &mut Frame, inner: Rect, screen: &vt100::Screen, cursor: bool) {
+/// Draw a `vt100` screen into `inner` (cells clipped to it), the cells of
+/// `selection` reversed, and, when `cursor` is set and the shell shows one,
+/// place the real cursor there.
+fn draw_screen(
+    frame: &mut Frame,
+    inner: Rect,
+    screen: &vt100::Screen,
+    cursor: bool,
+    selection: Option<Selection>,
+) {
     let (rows, cols) = screen.size();
     let mut lines: Vec<Line> = Vec::with_capacity(rows as usize);
     for row in 0..rows.min(inner.height) {
@@ -50,7 +58,7 @@ fn draw_screen(frame: &mut Frame, inner: Rect, screen: &vt100::Screen, cursor: b
                     let text = if contents.is_empty() {
                         " ".to_string()
                     } else {
-                        contents
+                        contents.to_string()
                     };
                     let mut s = Style::default()
                         .fg(vt_color(cell.fgcolor()))
@@ -68,7 +76,9 @@ fn draw_screen(frame: &mut Frame, inner: Rect, screen: &vt100::Screen, cursor: b
                 }
                 None => (" ".to_string(), Style::default()),
             };
-            if screen.cell(row, col).is_some_and(vt100::Cell::inverse) {
+            let inverse = screen.cell(row, col).is_some_and(vt100::Cell::inverse);
+            // A selected cell flips its reverse video so it shows either way.
+            if inverse != selection.is_some_and(|s| s.contains(row, col)) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
             spans.push(Span::styled(text, style));
@@ -86,20 +96,62 @@ fn draw_screen(frame: &mut Frame, inner: Rect, screen: &vt100::Screen, cursor: b
     }
 }
 
+/// The shown integrated terminals (T631): the active one's screen, with a
+/// tab strip on top when more than one is open (the Cowork-shared one
+/// marked) and the title saying how far back the view is scrolled.
 pub(super) fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.terminal.is_none() {
+    if !app.terminals.is_visible() {
         return;
     }
-    let inner = draw_frame(frame, area, &t!("ui.terminal"));
-    // Match the PTY grid to the visible area so the shell wraps correctly.
-    if let Some(term) = app.terminal.as_mut() {
-        term.resize(inner.height, inner.width);
+    let offset = app
+        .terminals
+        .active()
+        .map_or(0, crate::terminal::Terminal::scroll_offset);
+    let mut title = t!("ui.terminal").to_string();
+    if offset > 0 {
+        title = format!("{title} · {}", t!("ui.terminal_scrolled", n = offset));
     }
-    let Some(term) = app.terminal.as_ref() else {
+    let mut inner = draw_frame(frame, area, &title);
+    if app.terminals.len() > 1 && inner.height > 1 {
+        let strip = Rect { height: 1, ..inner };
+        draw_tab_strip(app, frame, strip);
+        inner.y += 1;
+        inner.height -= 1;
+    }
+    app.layout.terminal = inner;
+    // Match the PTY grid to the visible area so the shell wraps correctly.
+    let Some(term) = app.terminals.active_mut() else {
         return;
     };
+    term.resize(inner.height, inner.width);
+    let selection = term.selection();
     let parser = term.lock();
-    draw_screen(frame, inner, parser.screen(), true);
+    // The caret only on the live screen, not while reading the scrollback.
+    draw_screen(frame, inner, parser.screen(), offset == 0, selection);
+}
+
+/// One row of terminal tabs, `1`, `2`, …, the active one highlighted and
+/// the one shared with a Cowork session marked.
+fn draw_tab_strip(app: &App, frame: &mut Frame, strip: Rect) {
+    let shared = app.cowork_shared_terminal();
+    let active = app.terminals.active_index();
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, (id, _)) in app.terminals.iter().enumerate() {
+        let mut label = format!(" {} ", i + 1);
+        if shared == Some(id) {
+            label = format!(" {} ({}) ", i + 1, t!("ui.terminal_shared_tab"));
+        }
+        let style = if i == active {
+            theme::title(true).add_modifier(Modifier::REVERSED)
+        } else {
+            theme::base()
+        };
+        spans.push(Span::styled(label, style));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).style(theme::base()),
+        strip,
+    );
 }
 
 /// A Cowork guest's view of the host's shared terminal (T697). The host's
@@ -116,5 +168,5 @@ pub(super) fn draw_cowork_terminal(app: &App, frame: &mut Frame, area: Rect) {
         t!("ui.cowork_terminal_read_only")
     };
     let inner = draw_frame(frame, area, &title);
-    draw_screen(frame, inner, screen, can_type);
+    draw_screen(frame, inner, screen, can_type, None);
 }

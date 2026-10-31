@@ -1372,6 +1372,16 @@ const TOOLS_ABOUT: &[Item] = &[
     Item::leaf("menu.item.tools.about.system", "tools.system_info", ""),
 ];
 
+/// Tools → Terminal (T631): several integrated terminals as tabs.
+const TOOLS_TERMINAL: &[Item] = &[
+    Item::leaf("menu.item.terminal.toggle", "tools.terminal", ""),
+    Item::leaf("menu.item.terminal.new", "terminal.new", ""),
+    Item::leaf("menu.item.terminal.next", "terminal.next", ""),
+    Item::leaf("menu.item.terminal.prev", "terminal.prev", ""),
+    Item::leaf("menu.item.terminal.copy", "terminal.copy", ""),
+    Item::leaf("menu.item.terminal.close", "terminal.close", ""),
+];
+
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::leaf("menu.item.tools.palette_resume", "palette.resume", ""),
@@ -1380,7 +1390,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.tasks", "tools.tasks", ""),
     Item::leaf("menu.item.tools.test", "tools.test", ""),
     Item::leaf("menu.item.tools.test_panel", "tools.test_panel", ""),
-    Item::leaf("menu.item.tools.terminal", "tools.terminal", ""),
+    Item::sub("menu.item.tools.terminal", TOOLS_TERMINAL),
     Item::sub("menu.item.tools.compare", TOOLS_COMPARE),
     SEP,
     Item::sub("menu.item.tools.about", TOOLS_ABOUT),

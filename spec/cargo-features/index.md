@@ -25,7 +25,7 @@ unflagged: it has no payoff and the heaviest coupling.
 | `sql` | `db.*`, `tools.edit_sql` | `vix-db`, `vix-edit-sql` |
 | `image` | (none; image tabs) | `image`, `ratatui-image` (43 exclusive crates; forwards to `vix-editor/image`) |
 | `script` | `script.*`, `script:*` | `vix-script` (rhai; `tui/src/app/scripts.rs`, with `scripts_off.rs` no-op stand-ins) |
-| `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
+| `terminal` | `tools.terminal`, `terminal.*` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
 | `http` | `tools.http_*` (e.g. `tools.http_send`, `tools.http_copy_curl`), `tools.hl7_send` | `vix-http-client` (`http_off.rs` stand-ins) and `vix-hl7/net` (the MLLP socket sender; the HL7 parser and View stay in every build) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
 | `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `tui/src/app/git.rs`, with `git_off.rs` stand-ins |

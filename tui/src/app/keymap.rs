@@ -67,7 +67,6 @@ impl App {
             regex_tester,
             code_actions,
             // `try_panel_key`.
-            terminal,
             db,
             edit_table,
             column_view,
@@ -145,6 +144,8 @@ impl App {
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
             // A Cowork guest's view of a shared terminal (T697).
             || self.cowork_terminal_viewing()
+            // The shown integrated terminal (T631), first in `try_panel_key`.
+            || self.terminal_visible()
     }
 
     fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
@@ -350,9 +351,12 @@ impl App {
         if self.try_cowork_terminal_key(key) {
             return true;
         }
-        // The integrated terminal captures all keys (forwarded to the shell)
-        // except its close chord, handled inside the key handler.
-        panel!(terminal, terminal_key);
+        // The shown integrated terminal captures all keys (forwarded to the
+        // shell) except its own chords, handled inside the key handler.
+        if self.terminal_visible() {
+            self.terminal_key(key);
+            return true;
+        }
         panel!(db, db_key);
         panel!(edit_table, edit_table_key);
         panel!(column_view, column_view_key);

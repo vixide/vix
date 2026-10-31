@@ -7374,7 +7374,7 @@ new action.
   `preview_from_lines` over an open buffer's rope, skipped under a non-local
   authority); `PickerMemory` for the palette and workspace search;
   `palette.resume` (Tools menu and palette); `QueryHistory` on `Up`/`Down`.
-- [ ] **T631 — Terminal scrollback and multiple terminals.**
+- [x] **T631 — Terminal scrollback and multiple terminals.**
   `vix-terminal`'s spec § Limitations says "Scrollback beyond the
   visible grid is not shown" and "mouse reporting is not forwarded", and
   `App.terminal: Option<Terminal>` (`tui/src/app.rs:1858`) allows only one.
@@ -7382,6 +7382,30 @@ new action.
   `vt100::Parser::new(rows, cols, scrollback)` for a Shift+PgUp scroll
   mode. Add select and copy via `vix-clipboard`, and forward the mouse
   when the child requests it. **Medium–large.**
+  - **Done 2026-10-31** (`feat/t631-terminals`): `App::terminals` is a
+    `vix_terminal::Tabs<Terminal>` (stable ids, one active, shown/hidden),
+    drawn as a numbered tab strip in the existing terminal overlay rather
+    than the bottom dock (the dock is a line buffer with its own focus and
+    clicks; a terminal there would need a second key-capture path). Tools →
+    Terminal is a submenu: `tools.terminal` (show/hide, opening a first
+    one), `terminal.new`/`next`/`prev`/`copy`/`close`; in the terminal
+    `Ctrl+]` hides, `Ctrl+PgUp/PgDn` switch, `Shift+PgUp/PgDn/Home/End`
+    scroll. Scrollback via `vt100::Parser::new(rows, cols, scrollback)`
+    with the new `terminal_scrollback` setting (default 2000, clamped to
+    50 000); `vt100` moved 0.15 → 0.16, because 0.15 panics when scrolled
+    back further than the screen height. Mouse: drag selects and copies on
+    release (open buffer's fallback-aware copy, else `vix-clipboard`), the
+    wheel scrolls; when the child requests the mouse, `encode_mouse`
+    forwards it (SGR/UTF-8/legacy; Shift selects instead). Remote (T716):
+    every tab opens through the authority. Cowork (T697): the shared tab is
+    the one active when the host confirmed, pinned by id; guest keys go only
+    to it, closing it ends the share, and only its live screen is sent.
+    Tests: pure tab-set, scrolling/cap, selection and mouse-encoding unit
+    tests in `vix-terminal`; real-shell integration tests (Unix) for two
+    tabs each getting their own keys, switching/hiding/closing, scrollback
+    paging, the cap and the wheel; and a Cowork test that the shared tab
+    stays pinned. Left out: naming tabs (0.16 dropped the window title) and
+    clicking a tab to switch.
 - [x] **T632 — Problem matchers and next-error over task output.** The
   bottom dock only makes `path:line` clickable
   (`crates/vix-bottom-dock/spec/index.md:94`). Task output never reaches
@@ -9430,11 +9454,12 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T617–T624, T631–T633, T635, T636 and T644 are open;
-  T612–T616, T625–T630, T634, T637 and T638 are done (2026-10-31). T610
-  is partly done (the `*-tool` converters and `vix-db`'s `Session` still
-  return `Result<_, String>`); T608 is half done (the DAP mock-adapter
-  tests exist; the `vix-editor` unit-test half remains).
+- **Run M:** T611, T617–T621, T623, T624, T633, T635, T636 and T644 are
+  open; T612–T616, T622, T625–T632, T634, T637 and T638 are done
+  (2026-10-31). T610 is partly done (the `*-tool` converters and
+  `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
+  done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half
+  remains).
 - **Run O:** T663, T664, T665, T666, T667 and T671 are open (T659–T662 and
   T668 are done), plus the late findings T669 (apt/dnf repositories) and
   T670 (the musl release build crashes).

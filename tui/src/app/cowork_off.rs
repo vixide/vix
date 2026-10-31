@@ -72,6 +72,14 @@ impl App {
         false
     }
 
+    /// No terminal tab is shared. (Only the terminal renderer asks.)
+    #[cfg(feature = "terminal")]
+    #[must_use]
+    pub(crate) fn cowork_shared_terminal(&self) -> Option<u64> {
+        let State(()) = &self.cowork;
+        None
+    }
+
     /// Never called: no shared-terminal view can be open.
     pub(super) fn cowork_terminal_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.layout.edit_sql.width < u16::MAX);

@@ -438,12 +438,55 @@ fn a_shared_terminal_is_read_only_until_the_host_allows_input() {
     assert!(guest.cowork_terminal_text().is_some());
 
     // Closing the host's terminal ends the share for everyone.
-    host.run_action("tools.terminal");
+    host.run_action("terminal.close");
     assert!(!host.terminal_running());
     pump(&mut host, &mut guest, |_, g| {
         g.cowork_terminal_text().is_none()
     });
     assert!(!guest.cowork_terminal_can_type());
+}
+
+/// T631: with several terminals the shared one is the tab active when the
+/// host confirmed sharing. Switching tabs on the host never changes what
+/// guests see, closing another tab leaves the share alone, and closing the
+/// shared tab ends it.
+#[cfg(unix)]
+#[test]
+fn the_shared_terminal_stays_the_tab_that_was_shared() {
+    let (mut host, mut guest, _file) = connected("term-tabs", "terminal");
+    host.run_action("tools.terminal");
+    host.run_action("cowork.share_terminal");
+    host.on_key(key('y'));
+    pump(&mut host, &mut guest, |_, g| {
+        g.cowork_terminal_text().is_some()
+    });
+
+    // A second tab on the host: what is typed there never reaches guests.
+    host.run_action("terminal.new");
+    assert_eq!(host.terminal_active(), 1);
+    type_str(&mut host, "expr 333000 + 333");
+    host.on_key(keycode(KeyCode::Enter));
+    until_screens(&mut host, &mut guest, |h, _| h.contains("333333"));
+    settle(&mut host, &mut guest);
+    let seen = guest.cowork_terminal_text().unwrap_or_default();
+    assert!(!seen.contains("333333"), "{seen}");
+
+    // Back on the shared tab, its output streams as before.
+    host.run_action("terminal.prev");
+    type_str(&mut host, "expr 444000 + 444");
+    host.on_key(keycode(KeyCode::Enter));
+    until_screens(&mut host, &mut guest, |_, g| g.contains("444444"));
+
+    // Closing the other tab leaves the share; closing the shared one ends it.
+    host.run_action("terminal.next");
+    host.run_action("terminal.close");
+    settle(&mut host, &mut guest);
+    assert!(guest.cowork_terminal_text().is_some(), "still shared");
+    host.run_action("terminal.close");
+    assert!(!host.terminal_running());
+    pump(&mut host, &mut guest, |_, g| {
+        g.cowork_terminal_text().is_none()
+    });
 }
 
 fn session() -> vix_im::ConversationId {

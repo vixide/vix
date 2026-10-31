@@ -113,7 +113,9 @@ symbolic link that points outside it, or at a private file, is refused.
 The host can show its integrated terminal (**Tools → Terminal**) to everyone
 in the session, for example to watch a build or a test run together. The
 terminal and its shell stay on the host's computer; guests see what it
-shows.
+shows. With several terminals open, the one shared is the tab you were on
+when you confirmed; switching tabs afterwards doesn't change what guests see,
+and the shared tab is marked. Scrolling back in it is not shared.
 
 1. Open the terminal, then choose **Tools → Cowork → Share Terminal**. Vix
    asks first, and warns that guests will see **everything** the terminal
@@ -125,7 +127,8 @@ shows.
    Cowork → Allow Terminal Input** and press `y`. Only guests you gave the
    `terminal` level can then type, and anything they type runs in your
    shell, as you. Choose **Allow Terminal Input** again to make it read-only.
-4. Choose **Share Terminal** again, or close the terminal, to stop sharing.
+4. Choose **Share Terminal** again, or close the shared terminal (**Tools →
+   Terminal → Close Terminal** on its tab), to stop sharing.
    A new share always starts read-only.
 
 The guest sees the host's terminal at the host's size; a smaller window shows

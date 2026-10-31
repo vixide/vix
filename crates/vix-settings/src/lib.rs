@@ -142,6 +142,11 @@ pub struct Settings {
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
     pub scrollback: usize,
+    /// Lines of scrollback each integrated terminal keeps (T631; default
+    /// 2000, at most 50000 whatever is set; 0 turns it off). Read when a
+    /// terminal opens. A cell is about 36 bytes, so 2000 lines of 120
+    /// columns is roughly 9 MB per terminal.
+    pub terminal_scrollback: usize,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -866,6 +871,7 @@ impl Default for Settings {
             inline_diagnostics: "cursor-line".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
+            terminal_scrollback: 2000,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             wrap_column: 80,

@@ -54,6 +54,8 @@ mod terminal_protocol;
     feature = "lang-rust"
 ))]
 mod textobjects;
+#[cfg(all(unix, feature = "terminal"))]
+mod terminals;
 mod themes;
 mod tutor;
 mod undo_tree;
