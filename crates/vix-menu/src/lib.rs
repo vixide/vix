@@ -186,6 +186,11 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
     Item::leaf("menu.item.file.save_all", "file.save_all", ""),
     Item::leaf("menu.item.file.rename", "file.rename", ""),
+    Item::leaf(
+        "menu.item.file.edit_directory",
+        "explorer.edit_directory",
+        "",
+    ),
     Item::leaf("menu.item.file.revert", "file.revert", ""),
     Item::leaf("menu.item.file.local_history", "file.local_history", ""),
     Item::leaf(

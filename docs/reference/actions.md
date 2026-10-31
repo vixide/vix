@@ -157,6 +157,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `end` | End | Catalog |
 | `end_of_line` | End of Line | Catalog |
 | `escape` | Escape | Catalog |
+| `explorer.edit_directory` | Edit Directory… | Menu |
 | `explorer.filter_exclude` | Explorer: Exclude Regex Filter | Palette |
 | `explorer.filter_include` | Explorer: Include Regex Filter | Palette |
 | `file.close` | Close | Menu |
@@ -782,4 +783,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**775 actions.**
+**776 actions.**

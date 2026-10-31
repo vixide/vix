@@ -73,6 +73,7 @@ OC · Tools · Help**. IM and OC have no Alt mnemonic.
 | Save As… | `Ctrl+Shift+S` | Save under a different name; asks before overwriting an existing file and refuses a dangling symlink |
 | Save All | | Save every dirty file-backed tab; stops at the first failure |
 | Rename…  | | Rename the active file on disk (bare name keeps the directory) |
+| Edit Directory… | | `explorer.edit_directory`: edit a directory as text; saving applies its renames, creates and deletes after a confirm step (T636, `crates/vix-fileops/spec/index.md`) |
 | Revert   | | Reload the file from disk, discarding unsaved edits (undoable) |
 | *— separator —* | | |
 | Close    | `Ctrl+W`       | Close the active buffer     |

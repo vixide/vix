@@ -21,6 +21,7 @@ mod coverage;
 mod cowork;
 #[cfg(feature = "sql")]
 mod db;
+mod dir_edit;
 mod editing;
 #[cfg(feature = "http")]
 mod fhir;

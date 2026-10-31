@@ -18,6 +18,7 @@ mod db;
 #[cfg(not(feature = "sql"))]
 mod db_off;
 mod diff_tool;
+mod dir_edit;
 mod event_loop;
 mod fhir;
 #[cfg(feature = "http")]
@@ -2037,6 +2038,12 @@ pub struct App {
     /// `wgrep_confirm` will write, so applying it can re-baseline those
     /// exact lines afterward without re-reading anything back off disk.
     wgrep_pending_edits: Vec<(PathBuf, usize, String)>,
+    /// The open T636 directory listing (`explorer.edit_directory`): which
+    /// directory and the entries its buffer was rendered from. `None` when
+    /// no listing is open.
+    dir_edit: Option<dir_edit::DirEditSession>,
+    /// A diffed directory listing awaiting confirmation, when open.
+    pub(crate) dir_edit_confirm: Option<dir_edit::DirEditConfirm>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
     pub(crate) unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
@@ -2768,6 +2775,8 @@ impl App {
             wgrep_baseline: None,
             wgrep_confirm: None,
             wgrep_pending_edits: Vec::new(),
+            dir_edit: None,
+            dir_edit_confirm: None,
             unsaved: None,
             spell_suggest: None,
             context_menu: None,
@@ -3778,6 +3787,7 @@ impl App {
             "search.workspace" => self.open_workspace_search(false),
             "search.workspace_replace" => self.open_workspace_search(true),
             "search.edit_results" => self.open_wgrep_results(),
+            "explorer.edit_directory" => self.open_dir_edit(),
             "edit.structural_replace" => self.open_structural_pattern_prompt(false),
             "edit.structural_replace_workspace" => self.open_structural_pattern_prompt(true),
             "search.workspace_dock" => {
@@ -4272,6 +4282,10 @@ impl App {
             self.prepare_wgrep_confirm();
             return;
         }
+        if self.active_tab_is_dir_edit() {
+            self.prepare_dir_edit_confirm();
+            return;
+        }
         if self.editor.active_tab().is_some_and(Tab::is_image) {
             self.status = t!("status.image_readonly").into();
             return;
@@ -4342,7 +4356,7 @@ impl App {
     /// `file.save_all` (T654): save every dirty, file-backed tab.
     ///
     /// Untitled and scratch buffers (no path), the editable search-results
-    /// buffer, images, read-only tabs and files this user can't write are
+    /// buffer and directory listing, images, read-only tabs and files this user can't write are
     /// skipped and counted, since none can be saved in place. Saving stops
     /// at the first failure, leaving that tab active so the error is next
     /// to its cause; otherwise the original tab is re-activated. Format on
@@ -4379,11 +4393,15 @@ impl App {
     /// write.
     fn savable_dirty_tabs(&self) -> (Vec<usize>, usize) {
         let wgrep = Path::new(Self::WGREP_RESULTS_PATH);
+        let dir_edit = Path::new(Self::DIR_EDIT_PATH);
         let mut targets = Vec::new();
         let mut skipped = 0usize;
         for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
             // A Cowork guest's shared-in tab is saved by its host (Save asks).
-            let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
+            let savable = t
+                .path
+                .as_deref()
+                .is_some_and(|p| p != wgrep && p != dir_edit)
                 && !t.is_image()
                 && !t.is_remote()
                 && !t.read_only
