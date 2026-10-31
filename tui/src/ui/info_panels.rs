@@ -327,6 +327,14 @@ pub(super) fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), inner);
+    // Links render as `text (url)`; make the URL clickable (T628).
+    if app.terminal_caps.hyperlinks {
+        let urls =
+            super::hyperlink::urls_in(panel.lines[panel.scroll..end].iter().map(String::as_str));
+        if !urls.is_empty() {
+            app.layout.hyperlink_regions.push((inner, urls));
+        }
+    }
     if panel.lines.len() > view_h {
         let sb = Rect {
             x: rect.x + rect.width - 1,

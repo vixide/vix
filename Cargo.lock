@@ -6978,6 +6978,7 @@ dependencies = [
 name = "vix-theme"
 version = "2.0.0"
 dependencies = [
+ "ratatui",
  "vix-theme-model",
 ]
 

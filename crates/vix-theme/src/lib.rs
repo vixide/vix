@@ -2,8 +2,13 @@
 //!
 //! The JSON theme model and its ratatui styles live in the `vix-theme-model`
 //! crate; this module re-exports them as `crate::*` and keeps the icon set
-//! (which is not part of the theme model).
+//! (which is not part of the theme model), and the color-depth fallback
+//! ([`color_depth`]: detect how many colors the terminal shows, and
+//! downsample RGB to 256 or 16 colors, T628).
 
+pub mod color_depth;
+
+pub use color_depth::{ColorDepth, TermEnv, downsample};
 pub use vix_theme_model::{
     CustomTheme, Region, base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg,
     region_fg, region_modifiers, region_title, selected, set_custom, syntax_color, syntax_theme,

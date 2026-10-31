@@ -88,7 +88,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_menu_tooltips` | bool | `true` | Show hover tooltips on menu names and items. |
 | `format_on_save` | bool  | `false`  | On save, run the language server's formatter when the file has one. |
 | `prettier_languages` | list of strings | `[]` | Languages formatted with your own Prettier by **Format Document** and format-on-save: any of `javascript`, `typescript`, `json`, `css`, `html`, `markdown`, `yaml`, `graphql`, `handlebars`. See [Format with Prettier](../prettier/index.md). |
-| `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
+| `auto_save`     | string | `"off"`  | Save dirty file-backed buffers on their own: `"off"`, `"interval"` (the active buffer every few seconds) or `"focus_lost"` (every buffer Save All could write, when the terminal window loses focus). An old `true`/`false` still loads as `"interval"`/`"off"`. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
 | `hot_exit` | bool | `true` | Back up unsaved buffers while idle and on quit, and offer them back (with a diff) when the file is next opened. A clean save deletes the backup. See [Hot exit](../undo-store/index.md#hot-exit). |
 | `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |

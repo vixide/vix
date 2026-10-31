@@ -21,6 +21,16 @@ reads `COLORFGBG`, and if that is missing too it uses `theme_dark`. It asks once
 startup, so changing your terminal's appearance mid-session takes effect on the next
 launch. Nothing is asked unless `theme` is `"auto"`.
 
+## Terminals without truecolor
+
+Themes are written in RGB. On a terminal that can't show RGB, Vix converts every color
+to the nearest one the terminal has: the xterm 256-color palette, or the 16 ANSI colors.
+It decides from `COLORTERM`, `TERM` and `TERM_PROGRAM` (for example `COLORTERM=truecolor`
+keeps RGB, macOS Terminal.app gets 256 colors, the Linux console 16) without asking the
+terminal anything. `vix --doctor` shows the depth it chose. If a truecolor terminal is
+detected wrongly, set `COLORTERM=truecolor`. See
+[`crates/vix-theme/spec/index.md`](../../crates/vix-theme/spec/index.md#color-depth).
+
 ## Custom themes
 
 Themes are JSON files in the themes directory:

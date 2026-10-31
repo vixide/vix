@@ -5,6 +5,19 @@ Render Markdown to formatted plain-text lines for a read-only preview pane.
 Also, this crate inserts small Markdown templates at the cursor
 (`App::insert_markdown`).
 
+## Preview: links (T628)
+
+A link renders as `text (url)`. In a terminal that supports OSC 8
+hyperlinks, the host makes each visible `http://`, `https://` or `file://`
+URL clickable: the preview records its text area and the URLs on its
+visible lines, and the end-of-frame pass (`tui/src/ui/hyperlink.rs`) wraps
+each cell of the URL in an OSC 8 escape, with its width forced to one cell.
+A URL the pane edge cuts short still links to the full URL. Only URLs of
+printable ASCII are linked, so document text cannot inject an escape
+sequence. Hyperlinks are on unless `TERM` is `dumb`, `linux`, `vt*` or
+`cons*` (`vix::term_caps`); an `App` built without a terminal (tests, GUIs)
+has them off.
+
 ## Preview: scroll-sync and table of contents (T206)
 
 `Panel::open` scroll-syncs the preview to wherever the cursor was in the

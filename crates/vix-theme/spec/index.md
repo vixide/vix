@@ -1,6 +1,6 @@
 # Themes
 
-Nerd Font icons, plus a re-export of the `vix_theme_model` theme model.
+Nerd Font icons, color-depth fallback, plus a re-export of the `vix_theme_model` theme model.
 Vix's colors and font attributes come from a **theme**: a JSON file describing
 per-region colors. There is always exactly one active theme. The model and the
 ratatui styles derived from it live in the `theme_model` crate; the host
@@ -86,6 +86,44 @@ new name (`single_color::current_name`).
 
 `tui/tests/integration/themes.rs` pins the theme files, and the
 `single_color` module's unit tests pin the repaint rule.
+
+## Color depth
+
+Themes are written in RGB, but not every terminal shows RGB (T628). At
+startup the terminal front end decides the terminal's color depth from
+`COLORTERM`, `TERM` and `TERM_PROGRAM` — read from the environment, never
+changed, and with no terminal query (T749 removed startup queries for
+speed). `color_depth::detect` is pure: it takes the three values as a
+`TermEnv`, in this order of precedence:
+
+1. `COLORTERM=truecolor` or `24bit`: truecolor.
+2. `TERM_PROGRAM=Apple_Terminal`: 256 colors (Terminal.app does not show
+   RGB escapes).
+3. A known truecolor `TERM_PROGRAM` (`iTerm.app`, `WezTerm`, `vscode`,
+   `ghostty`, `Hyper`, `zed`) or `TERM` (`xterm-kitty`, `xterm-ghostty`,
+   `wezterm`, `alacritty`, `foot`, `contour`), or a `TERM` naming
+   `truecolor`, `24bit` or `direct`: truecolor.
+4. A `TERM` naming `256color`: 256 colors.
+5. `TERM` of `dumb`, `linux`, `ansi`, `vt*` or `cons*`: 16 colors.
+6. Any other `TERM`: 256 colors. No `TERM` at all (a Windows console):
+   truecolor.
+
+Below truecolor, every finished frame passes through
+`color_depth::downsample_buffer` as the very last pass (after the
+single-color repaint), which applies the pure `downsample(Color, depth)` to
+each cell's foreground, background and underline color:
+
+- **256 colors**: an RGB color becomes the nearest xterm palette entry from
+  the 6×6×6 cube or the 24-step gray ramp (`Color::Indexed`); the first 16
+  entries are never chosen, since users redefine them.
+- **16 colors**: an RGB or indexed color becomes the nearest of the 16 named
+  ANSI colors (by their xterm values).
+- Named colors and `Reset` never change, at any depth.
+
+`vix --doctor` (and Help → Run Diagnostics) reports the chosen depth and the
+three variables it came from. The `color_depth` module's unit tests pin the
+detection and the mapping; `tui/tests/integration/terminal_protocol.rs`
+checks that a 16-color terminal gets no RGB at all.
 
 ## As implemented in Vix
 

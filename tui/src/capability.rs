@@ -189,11 +189,14 @@ pub fn enabled_names() -> Vec<&'static str> {
 /// Every `--doctor` check for this build: the standard set from `vix-doctor`,
 /// minus the probes that start a program (`git`, each LSP server) when that
 /// capability is compiled out (a locked-down build never spawns them, not even
-/// to look), plus the capabilities row.
+/// to look), plus the capabilities row and the terminal color-depth row (T628).
 #[must_use]
 pub fn doctor_checks(settings: &crate::settings::Settings) -> Vec<vix_doctor::Check> {
     let mut checks = vix_doctor::run(settings);
     checks.push(doctor_check());
+    // The color depth frames are downsampled to (T628).
+    let env = crate::term_caps::ProcessTermEnv::read();
+    checks.push(crate::term_caps::doctor_check(&env.as_env()));
     checks
 }
 
