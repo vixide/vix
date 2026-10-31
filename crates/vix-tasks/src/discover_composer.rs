@@ -24,6 +24,7 @@ pub fn discover_composer_scripts(composer_json: &str) -> Vec<NamedTask> {
             name: format!("composer:{name}"),
             command: format!("composer run-script {name}"),
             source: TaskSource::Discovered,
+            matcher: None,
         })
         .collect()
 }

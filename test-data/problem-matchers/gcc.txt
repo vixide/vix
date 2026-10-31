@@ -1,0 +1,16 @@
+gcc -Wall -c main.c
+main.c: In function 'main':
+main.c:5:12: warning: unused variable 'count' [-Wunused-variable]
+    5 |        int count;
+      |            ^~~~~
+main.c:7:5: error: implicit declaration of function 'prinf'; did you mean 'printf'? [-Wimplicit-function-declaration]
+    7 |     prinf("hi\n");
+      |     ^~~~~
+      |     printf
+main.c:3:5: note: declared here
+include/util.h:2:10: fatal error: missing.h: No such file or directory
+    2 | #include "missing.h"
+      |          ^~~~~~~~~~~
+compilation terminated.
+src/old.c:14: warning: no column here
+In file included from main.c:1:

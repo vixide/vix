@@ -250,13 +250,14 @@ The **Editor** submenu:
 ## Go menu
 
 Workspace and symbol navigation (distinct from **Edit → Go**'s in-file cursor
-jumps). Actions are `nav.*` / `lsp.*` / `git.*`.
+jumps). Actions are `nav.*` / `lsp.*` / `git.*` / `go.*`.
 
 | Item                    | Action                                                |
 | ----------------------- | ----------------------------------------------------- |
 | Symbol…                 | Go to a symbol (the `@` palette)                      |
 | Declaration / Implementations / References | LSP navigation for the symbol at the cursor |
 | Next / Previous Issue   | Jump between diagnostics                              |
+| Next / Previous Error   | Step through problems matched in the last task's output, wrapping (`go.next_error` / `go.prev_error`, T632; `crates/vix-tasks/spec/index.md`) |
 | Next / Previous Change  | Jump between git hunks                                |
 | Recent Locations        | Position history back / forward                      |
 | Jump                    | Leap-style jump to a line by label                   |

@@ -447,6 +447,8 @@ const GO: &[Item] = &[
     SEP,
     Item::leaf("menu.go.next_issue", "nav.next_issue", ""),
     Item::leaf("menu.go.prev_issue", "nav.prev_issue", ""),
+    Item::leaf("menu.go.next_error", "go.next_error", ""),
+    Item::leaf("menu.go.prev_error", "go.prev_error", ""),
     SEP,
     Item::leaf("menu.go.next_change", "git.diff_next", ""),
     Item::leaf("menu.go.prev_change", "git.diff_prev", ""),

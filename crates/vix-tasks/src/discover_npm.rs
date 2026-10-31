@@ -41,6 +41,7 @@ pub fn discover_npm_scripts(package_json: &str, manager: PackageManager) -> Vec<
                 name: format!("{prefix}:{name}"),
                 command: format!("{run} {name}"),
                 source: TaskSource::Discovered,
+                matcher: None,
             })
         })
         .collect()

@@ -230,6 +230,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.worktree_add` | Add… | Menu |
 | `git.worktree_list` | List… | Menu |
 | `git.worktree_remove` | Remove… | Menu |
+| `go.next_error` | Next Error | Menu |
+| `go.prev_error` | Previous Error | Menu |
 | `half_page_down` | Half Page Down | Catalog |
 | `half_page_up` | Half Page Up | Catalog |
 | `help.doctor` | Run Diagnostics | Menu |
@@ -769,4 +771,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**762 actions.**
+**764 actions.**

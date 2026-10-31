@@ -93,7 +93,10 @@ Key behaviors:
   the bottom *resumes following*.
 - **`path:line` jump.** Clicking a line that looks like a `path:line` (or
   `path:line:col`) location opens that file in the editor and jumps to the
-  position, recording it in the jump history.
+  position, recording it in the jump history. The problem matchers' patterns
+  are tried first (`vix_tasks::matcher::locate`, T632), so a rustc `  --> f:l:c`
+  arrow, a Python `File "f", line N` frame or a tsc `f(l,c)` line also jump,
+  resolved against the last command's working directory.
 
 With the bottom dock focused:
 

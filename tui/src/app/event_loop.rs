@@ -75,6 +75,8 @@ impl App {
         // Drain any streamed output from a running command into the bottom dock,
         // and any finished dashboard metrics into the dashboard panel.
         self.poll_command();
+        // Problems matched in task output, inline on the active buffer (T632).
+        self.refresh_task_problem_texts();
         self.poll_editor_drag();
         self.poll_ai_replace();
         self.poll_dashboard();

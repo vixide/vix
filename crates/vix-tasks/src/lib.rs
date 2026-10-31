@@ -115,6 +115,10 @@ pub mod run_config;
 /// Command run history: push-with-dedup policies.
 pub mod history;
 
+/// Problem matchers (T632): compiler/linter/test problems found in command
+/// output, path resolution, and next/previous-error navigation.
+pub mod matcher;
+
 /// Test-at-point: locating the nearest enclosing/preceding test definition
 /// and its run command, per language.
 pub mod test_at_point;
@@ -126,6 +130,11 @@ pub struct Task {
     pub name: String,
     /// Shell command line executed via the Run Command pipeline.
     pub command: String,
+    /// The problem matcher for this task's output (`matcher = "…"`): a
+    /// built-in name, `auto`, `none`, or a custom regular expression; see
+    /// [`matcher::MatcherSpec::parse`]. `None` means `auto`.
+    #[serde(default)]
+    pub matcher: Option<String>,
 }
 
 /// The `tasks.toml` schema: a list of `[[task]]` tables.
@@ -202,7 +211,8 @@ mod tests {
             tasks[0],
             Task {
                 name: "build".into(),
-                command: "cargo build".into()
+                command: "cargo build".into(),
+                matcher: None,
             }
         );
         assert_eq!(tasks[1].name, "test");

@@ -299,7 +299,9 @@ the shared primitive behind inline diagnostics (T614), and the one inline values
   `VirtualTextLayer` with `Editor::set_eol_texts(layer, texts)`; an empty list
   (or `clear_eol_texts(layer)`) removes the layer. Layers are independent, so
   one producer never clobbers another's text. `VirtualTextLayer` is
-  `#[non_exhaustive]`: a new producer adds a variant.
+  `#[non_exhaustive]`: a new producer adds a variant. The layers today are
+  `Diagnostics` (LSP, T614) and `TaskProblems` (problems matched in task
+  output, T632; `crates/vix-tasks/spec/index.md`).
 - Each text is drawn two columns after the line's last glyph (after any inline
   hints, the inline-blame note, or a folded line's `...`), **dimmed**, in its
   `color` when one is given. Several texts on one line are drawn in layer order,

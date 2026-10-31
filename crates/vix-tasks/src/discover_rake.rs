@@ -114,6 +114,7 @@ fn record_task(
         name: format!("rake:{qualified}"),
         command: format!("{bundler}rake {qualified}"),
         source: TaskSource::Discovered,
+        matcher: None,
     });
 }
 

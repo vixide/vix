@@ -23,9 +23,9 @@ expression: screen
                │> Go to Symbol in Workspace                                         │───────────────
   Output ─────│> LSP: Go to Implementation                                         │───────────────
 (no output yet)│> LSP: Go to Type Definition                                        │
+               │> Go: Next Error                                                    │
                │> Toggle Bottom Status                                              │
                │> Toggle Overwrite Mode                                             │
-               │                                                                    │
                │prefixes:  (none) files   > commands   # buffers   : line   @ symbol│
                ╰────────────────────────────────────────────────────────────────────╯
 

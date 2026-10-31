@@ -7367,7 +7367,7 @@ new action.
   `vt100::Parser::new(rows, cols, scrollback)` for a Shift+PgUp scroll
   mode. Add select and copy via `vix-clipboard`, and forward the mouse
   when the child requests it. **Medium–large.**
-- [ ] **T632 — Problem matchers and next-error over task output.** The
+- [x] **T632 — Problem matchers and next-error over task output.** The
   bottom dock only makes `path:line` clickable
   (`crates/vix-bottom-dock/spec/index.md:94`). Task output never reaches
   Problems or the gutter. VS Code `problemMatcher`, Emacs `next-error`,
@@ -7376,7 +7376,15 @@ new action.
   go, plus an optional `matcher = "…"` in `tasks.toml`. Feed the results
   into the Problems panel as a "task" source, and add
   `go.next_error`/`go.prev_error`. Tests: a fixture per tool, a multi-line
-  rustc block, and wrap-around. **Medium.**
+  rustc block, and wrap-around. **Medium.** Done: `vix_tasks::matcher`
+  (rustc/cargo incl. panics, gcc/clang, tsc, eslint stylish/compact/unix,
+  Python tracebacks + pytest, go; `auto`/`none`/custom regex via
+  `matcher = "…"`) scans every `run_command_in` run; Go → Next/Previous
+  Error wrap; the Problems panel (`lsp.diagnostics`) lists them as a task
+  source; inline via a new `VirtualTextLayer::TaskProblems`; dock clicks use
+  `matcher::locate` first. Fixtures in `test-data/problem-matchers/`. Not
+  done: gutter marks (inline text instead), and Repeat Last Task / run
+  configurations always use `auto`.
 - [ ] **T633 — Interactive rebase editor.**
   `docs/git-panel/index.md:177` lists it under Roadmap. Fix:
   - A `git.rebase_interactive` action (prompt for the base) that sets

@@ -307,6 +307,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_hover", "lsp.hover"),
     ("cmd.lsp_complete", "lsp.complete"),
     ("cmd.lsp_diagnostics", "lsp.diagnostics"),
+    ("cmd.go_next_error", "go.next_error"),
+    ("cmd.go_prev_error", "go.prev_error"),
     ("cmd.lsp_implementation", "nav.goto_implementation"),
     ("cmd.lsp_type_definition", "nav.goto_type_definition"),
     ("cmd.lsp_references", "lsp.references"),

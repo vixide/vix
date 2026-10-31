@@ -88,6 +88,7 @@ mod scripts_off;
 mod semantic_tokens;
 mod session;
 mod structural_replace;
+mod task_problems;
 #[cfg(feature = "terminal")]
 mod terminal;
 #[cfg(not(feature = "terminal"))]
@@ -2047,6 +2048,14 @@ pub struct App {
     pub(crate) im_dialog: Option<im::ImDialog>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub(crate) task_chooser: Option<TaskChooser>,
+    /// The problem matcher the next `run_command_in` uses (a `tasks.toml`
+    /// task's `matcher`), else `auto` (T632).
+    pending_matcher: Option<crate::tasks::matcher::MatcherSpec>,
+    /// The problem scan of the command now running (T632).
+    task_scan: Option<task_problems::TaskScan>,
+    /// The last scanned run's problems, walked by Go → Next/Previous Error
+    /// (T632).
+    pub(crate) task_problems: crate::tasks::matcher::ProblemList,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
     pub(crate) macro_chooser: Option<MacroChooser>,
     /// The File → Reopen / Save with Encoding chooser (T661).
@@ -2754,6 +2763,9 @@ impl App {
             im: im::ImState::new(&settings),
             im_dialog: None,
             task_chooser: None,
+            pending_matcher: None,
+            task_scan: None,
+            task_problems: crate::tasks::matcher::ProblemList::default(),
             macro_chooser: None,
             encoding_chooser: None,
             http_env_chooser: None,
@@ -5865,6 +5877,7 @@ impl App {
         };
         if let Some(task) = c.tasks.get(c.selected) {
             let command = task.command.clone();
+            self.set_next_matcher(&task.name, task.matcher.as_deref());
             self.run_command(&command);
             self.ensure_project_session_loaded();
             crate::tasks::history::push_history(
@@ -9455,6 +9468,17 @@ impl App {
         let Some(line) = self.bottom_dock.visible(inner_h).get(idx).cloned() else {
             return;
         };
+        // The problem matchers' patterns first (a rustc ` --> ` arrow, a
+        // Python frame, ...), resolved against the last run's cwd (T632).
+        if let Some((path, line_no, col)) = self.dock_line_location(&line) {
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                let area = s.editor_view();
+                s.editor.goto(line_no, col, area);
+                s.focus = Focus::Editor;
+            });
+            return;
+        }
         let (path, target) = palette::parse_path_target(line.trim());
         let (Some((line_no, col)), false) = (target, path.is_empty()) else {
             return;
@@ -12153,6 +12177,8 @@ impl App {
             "nav.goto_declaration" => self.goto_declaration(),
             "nav.next_issue" => self.goto_diagnostic(true),
             "nav.prev_issue" => self.goto_diagnostic(false),
+            "go.next_error" => self.goto_task_problem(true),
+            "go.prev_error" => self.goto_task_problem(false),
             "nav.line_next" => self.editor.cursor_line_down(area),
             "nav.line_prev" => self.editor.cursor_line_up(area),
             "nav.goto_paragraph" => {
@@ -13806,6 +13832,9 @@ impl App {
         reason = "stdout was configured as piped when the child was spawned"
     )]
     fn run_command_in(&mut self, dir: &Path, cmd: &str) {
+        // Taken first, so a matcher set for a run that never starts cannot
+        // leak into the next one (T632).
+        let matcher = self.pending_matcher.take();
         let cmd = cmd.trim();
         if cmd.is_empty() {
             return;
@@ -13835,6 +13864,9 @@ impl App {
             (child, stdout)
         });
         self.attach_command(cmd, spawned);
+        if self.running_command.is_some() {
+            self.begin_task_scan(dir, matcher);
+        }
     }
 
     /// Run `program` with `args` in the workspace root, **without a shell**
@@ -13944,12 +13976,17 @@ impl App {
                     if is_auth_failure_line(&l) {
                         self.status = t!("status.vcs_auth_needed").to_string();
                     }
+                    self.scan_task_line(&l);
                     self.bottom_dock.push(l);
                 }
                 CmdMsg::Done(code) => {
                     let code = code.unwrap_or(-1);
                     self.bottom_dock.push(format!("[exit {code}]"));
-                    self.status = t!("status.command_done", code = code).to_string();
+                    self.status = match self.finish_task_scan() {
+                        0 => t!("status.command_done", code = code),
+                        n => t!("status.command_done_problems", code = code, n = n),
+                    }
+                    .to_string();
                     let label = self
                         .running_command
                         .as_ref()

@@ -46,6 +46,7 @@ mod save;
 #[cfg(feature = "script")]
 mod scripting;
 mod structural_replace;
+mod task_problems;
 mod terminal_protocol;
 mod themes;
 mod tutor;

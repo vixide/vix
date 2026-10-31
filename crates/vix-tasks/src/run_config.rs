@@ -411,6 +411,7 @@ mod tests {
         let tasks = [Task {
             name: "lint".into(),
             command: "make lint".into(),
+            matcher: None,
         }];
         let p = plan(&c, &tasks, "ab").unwrap();
         assert_eq!(p.shell_command(Shell::Cmd), "make lint && A && B");
