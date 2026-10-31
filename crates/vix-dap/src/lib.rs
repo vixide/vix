@@ -24,8 +24,11 @@ use vix_lsp_core::frame;
 
 pub use vix_settings::DebugAdapter;
 
+pub mod view;
+
 /// One stack frame from a `stackTrace` response.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Frame {
     /// Adapter frame id (used to request scopes).
     pub id: i64,
@@ -37,17 +40,249 @@ pub struct Frame {
     pub line: usize,
 }
 
+impl Frame {
+    /// A frame `id` named `name` at 1-based `line` of `path`.
+    #[must_use]
+    pub fn new(id: i64, name: impl Into<String>, path: Option<String>, line: usize) -> Self {
+        Frame {
+            id,
+            name: name.into(),
+            path,
+            line,
+        }
+    }
+}
+
 /// One variable from a `variables` response.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Variable {
     /// Variable name.
     pub name: String,
     /// Rendered value.
     pub value: String,
+    /// The reference its children are fetched with (`variables`); 0 when it
+    /// has none (a leaf).
+    pub variables_reference: i64,
+}
+
+impl Variable {
+    /// A leaf variable `name` = `value`.
+    #[must_use]
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Variable {
+            name: name.into(),
+            value: value.into(),
+            variables_reference: 0,
+        }
+    }
+
+    /// The same variable, with children under `reference`.
+    #[must_use]
+    pub fn with_reference(mut self, reference: i64) -> Self {
+        self.variables_reference = reference;
+        self
+    }
+}
+
+/// One scope of a frame from a `scopes` response (T617).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Scope {
+    /// Display name (`Locals`, `Globals`, …).
+    pub name: String,
+    /// The reference its variables are fetched with.
+    pub variables_reference: i64,
+    /// Whether the adapter says fetching it is expensive (never auto-expanded).
+    pub expensive: bool,
+}
+
+impl Scope {
+    /// A scope `name` whose variables are under `reference`.
+    #[must_use]
+    pub fn new(name: impl Into<String>, reference: i64) -> Self {
+        Scope {
+            name: name.into(),
+            variables_reference: reference,
+            expensive: false,
+        }
+    }
+
+    /// The same scope, marked expensive.
+    #[must_use]
+    pub fn expensive(mut self) -> Self {
+        self.expensive = true;
+        self
+    }
+}
+
+/// The scope that is expanded automatically when a frame's scopes arrive:
+/// the first one that is not `expensive` and has variables (T617). The client
+/// fetches its variables unasked, and [`view::DebugView`] shows it expanded,
+/// so both use this one rule.
+#[must_use]
+pub fn auto_expand_scope(scopes: &[Scope]) -> Option<usize> {
+    scopes
+        .iter()
+        .position(|s| !s.expensive && s.variables_reference != 0)
+}
+
+/// One thread from a `threads` response (T617).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Thread {
+    /// Adapter thread id.
+    pub id: i64,
+    /// Display name.
+    pub name: String,
+}
+
+impl Thread {
+    /// A thread `id` named `name`.
+    #[must_use]
+    pub fn new(id: i64, name: impl Into<String>) -> Self {
+        Thread {
+            id,
+            name: name.into(),
+        }
+    }
+}
+
+/// A line breakpoint with its optional condition, hit condition and log
+/// message (T617), as sent in `setBreakpoints`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SourceBreakpoint {
+    /// 1-based line.
+    pub line: usize,
+    /// Expression; the adapter stops only when it is true.
+    pub condition: Option<String>,
+    /// Hit-count condition (`3`, `>= 5`, …; the syntax is the adapter's).
+    pub hit_condition: Option<String>,
+    /// Log message: a logpoint prints this instead of stopping.
+    pub log_message: Option<String>,
+}
+
+impl SourceBreakpoint {
+    /// A plain breakpoint on 1-based `line`.
+    #[must_use]
+    pub fn new(line: usize) -> Self {
+        SourceBreakpoint {
+            line,
+            ..Self::default()
+        }
+    }
+
+    /// Whether it has no condition, hit condition or log message.
+    #[must_use]
+    pub fn is_plain(&self) -> bool {
+        self.condition.is_none() && self.hit_condition.is_none() && self.log_message.is_none()
+    }
+
+    /// The `SourceBreakpoint` JSON object for `setBreakpoints`.
+    fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("line".to_string(), json!(self.line));
+        for (key, value) in [
+            ("condition", &self.condition),
+            ("hitCondition", &self.hit_condition),
+            ("logMessage", &self.log_message),
+        ] {
+            if let Some(v) = value {
+                map.insert(key.to_string(), Value::String(v.clone()));
+            }
+        }
+        Value::Object(map)
+    }
+}
+
+/// One exception filter an adapter advertises in `initialize`
+/// (`exceptionBreakpointFilters`, T617).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ExceptionFilter {
+    /// Filter id sent in `setExceptionBreakpoints`.
+    pub filter: String,
+    /// The adapter's display label.
+    pub label: String,
+    /// Whether it is on until the user chooses.
+    pub default: bool,
+}
+
+impl ExceptionFilter {
+    /// A filter `filter` labelled `label`, on by default when `default`.
+    #[must_use]
+    pub fn new(filter: impl Into<String>, label: impl Into<String>, default: bool) -> Self {
+        ExceptionFilter {
+            filter: filter.into(),
+            label: label.into(),
+            default,
+        }
+    }
+}
+
+/// What an adapter said it supports in its `initialize` response (T617).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Capabilities {
+    /// Exception filters, in the adapter's order.
+    pub exception_filters: Vec<ExceptionFilter>,
+    /// `supportsSetVariable`.
+    pub supports_set_variable: bool,
+}
+
+impl Capabilities {
+    /// Parse an `initialize` response body.
+    #[must_use]
+    pub fn from_json(body: &Value) -> Self {
+        let exception_filters = body
+            .get("exceptionBreakpointFilters")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|f| {
+                        let filter = f.get("filter").and_then(Value::as_str)?;
+                        let label = f.get("label").and_then(Value::as_str).unwrap_or(filter);
+                        let default = f.get("default").and_then(Value::as_bool).unwrap_or(false);
+                        Some(ExceptionFilter::new(filter, label, default))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Capabilities {
+            exception_filters,
+            supports_set_variable: body
+                .get("supportsSetVariable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+
+    /// The ids of the filters the adapter marks `default`.
+    #[must_use]
+    pub fn default_filters(&self) -> Vec<String> {
+        self.exception_filters
+            .iter()
+            .filter(|f| f.default)
+            .map(|f| f.filter.clone())
+            .collect()
+    }
+}
+
+/// How a session begins once the adapter is initialized (T617).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StartMode {
+    /// Send `launch` with the adapter's `launch` table and the program.
+    #[default]
+    Launch,
+    /// Send `attach` with the adapter's `attach` table.
+    Attach,
 }
 
 /// Things the host reacts to while debugging.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum DapEvent {
     /// The adapter is initialized and the session is running.
     Running,
@@ -60,10 +295,37 @@ pub enum DapEvent {
     },
     /// Console / program output (category, text).
     Output(String),
-    /// A `stackTrace` response with the frames.
+    /// The adapter's `initialize` capabilities (T617).
+    Capabilities(Capabilities),
+    /// A `threads` response (T617).
+    Threads(Vec<Thread>),
+    /// A `stackTrace` response with the frames (of the selected thread).
     Stack(Vec<Frame>),
-    /// A `variables` response for the requested frame's first scope.
-    Variables(Vec<Variable>),
+    /// A `scopes` response for `frame_id` (T617).
+    Scopes {
+        /// The frame the scopes belong to.
+        frame_id: i64,
+        /// Its scopes, in the adapter's order.
+        scopes: Vec<Scope>,
+    },
+    /// A `variables` response: the children of `reference` (a scope or a
+    /// structured variable).
+    Variables {
+        /// The `variablesReference` that was expanded.
+        reference: i64,
+        /// Its children.
+        variables: Vec<Variable>,
+    },
+    /// A `setVariable` succeeded: `name` in container `reference` is now
+    /// `value` (T617).
+    VariableSet {
+        /// The container's `variablesReference`.
+        reference: i64,
+        /// The variable's name.
+        name: String,
+        /// Its new rendered value.
+        value: String,
+    },
     /// A one-off `evaluate` result (for the REPL / watch), with its expression.
     Evaluated {
         /// The expression evaluated.
@@ -89,12 +351,23 @@ enum Incoming {
 
 /// What a pending request was, so its response can be interpreted.
 enum Pending {
-    /// `stackTrace` (for the stopped thread).
+    /// `initialize`: its body carries the capabilities.
+    Initialize,
+    /// `threads`.
+    Threads,
+    /// `stackTrace` (for the selected thread).
     StackTrace,
-    /// `scopes` for a frame (carries the frame id to follow up with `variables`).
-    Scopes,
-    /// `variables` for a scope.
-    Variables,
+    /// `scopes` for a frame (carries the frame id).
+    Scopes(i64),
+    /// `variables` for a reference.
+    Variables(i64),
+    /// `setVariable` of `name` in container `reference`.
+    SetVariable {
+        /// The container's reference.
+        reference: i64,
+        /// The variable's name.
+        name: String,
+    },
     /// `evaluate` (REPL/watch), carrying the source expression.
     Evaluate(String),
     /// Any other request whose response needs no special handling on
@@ -112,16 +385,22 @@ struct Session {
     rx: Receiver<Incoming>,
     seq: i64,
     pending: HashMap<i64, Pending>,
-    /// `launch` arguments to send once the adapter emits `initialized`.
-    launch_args: Value,
-    /// Breakpoints to set on `initialized`: path → 1-based lines.
-    breakpoints: HashMap<String, Vec<usize>>,
+    /// The request (`launch` or `attach`) and its arguments, sent once the
+    /// adapter emits `initialized`.
+    start_request: (&'static str, Value),
+    /// Breakpoints to set on `initialized`: path → breakpoints.
+    breakpoints: HashMap<String, Vec<SourceBreakpoint>>,
     /// Whether we have sent the launch (after the `initialized` event).
     configured: bool,
-    /// The most recent stopped thread id.
+    /// The selected thread: the most recent stopped one unless the user
+    /// picked another.
     thread_id: Option<i64>,
+    /// The selected frame (scopes and `evaluate` use it).
+    frame_id: Option<i64>,
     /// Whether the program is currently stopped (vs. running).
     stopped: bool,
+    /// What the adapter said it supports.
+    capabilities: Capabilities,
 }
 
 /// The DAP client: at most one active `Session` (private).
@@ -130,6 +409,9 @@ pub struct Dap {
     /// Where the adapter starts under a non-local authority (T716): the
     /// workspace root, rather than the remote home directory.
     workdir: Option<std::path::PathBuf>,
+    /// The exception filters the user chose (T617); `None` until they
+    /// choose, meaning the adapter's defaults. Kept across sessions.
+    exception_choice: Option<Vec<String>>,
 }
 
 impl Default for Dap {
@@ -145,6 +427,7 @@ impl Dap {
         Dap {
             session: None,
             workdir: None,
+            exception_choice: None,
         }
     }
 
@@ -174,13 +457,15 @@ impl Dap {
         self.session.is_some()
     }
 
-    /// Launch `adapter` to debug `program_path` with `breakpoints` (path → lines).
-    /// Returns whether the adapter spawned.
+    /// Start `adapter` to debug `program_path` with `breakpoints` (path →
+    /// breakpoints), sending `launch` or `attach` per `mode` once it is
+    /// initialized. Returns whether the adapter spawned.
     pub fn start(
         &mut self,
         adapter: &DebugAdapter,
         program_path: &str,
-        breakpoints: HashMap<String, Vec<usize>>,
+        breakpoints: HashMap<String, Vec<SourceBreakpoint>>,
+        mode: StartMode,
     ) -> bool {
         self.stop();
         let Some(mut child) = spawn_adapter(adapter, self.workdir.as_deref()) else {
@@ -195,18 +480,23 @@ impl Dap {
         spawn_reader(stdout, tx);
         let (wtx, wrx) = channel::<Vec<u8>>();
         spawn_writer(stdin, wrx);
-        let launch_args = build_launch_args(adapter, program_path);
+        let start_request = match mode {
+            StartMode::Launch => ("launch", build_launch_args(adapter, program_path)),
+            StartMode::Attach => ("attach", build_attach_args(adapter, program_path)),
+        };
         let mut session = Session {
             child,
             writer: wtx,
             rx,
             seq: 1,
             pending: HashMap::new(),
-            launch_args,
+            start_request,
             breakpoints,
             configured: false,
             thread_id: None,
+            frame_id: None,
             stopped: false,
+            capabilities: Capabilities::default(),
         };
         // The handshake begins with `initialize`; `launch` follows the
         // `initialized` event (see `poll`).
@@ -218,11 +508,7 @@ impl Dap {
             "pathFormat": "path",
             "supportsRunInTerminalRequest": false,
         });
-        session.request(
-            "initialize",
-            &init,
-            Pending::Other("initialize".to_string()),
-        );
+        session.request("initialize", &init, Pending::Initialize);
         self.session = Some(session);
         true
     }
@@ -278,21 +564,121 @@ impl Dap {
         }
     }
 
-    /// Update the breakpoints for `path` (1-based `lines`) on the running adapter.
-    pub fn set_breakpoints(&mut self, path: &str, lines: &[usize]) {
+    /// Update the breakpoints for `path` on the running adapter.
+    pub fn set_breakpoints(&mut self, path: &str, breakpoints: &[SourceBreakpoint]) {
         if let Some(s) = self.session.as_mut() {
-            s.breakpoints.insert(path.to_string(), lines.to_vec());
+            s.breakpoints.insert(path.to_string(), breakpoints.to_vec());
             if s.configured {
-                s.send_breakpoints(path, lines);
+                s.send_breakpoints(path, breakpoints);
             }
         }
     }
 
-    /// Evaluate `expr` in the top frame (REPL / watch); the result arrives as a
-    /// [`DapEvent::Evaluated`].
+    /// The active session's capabilities, if a session is active.
+    #[must_use]
+    pub fn capabilities(&self) -> Option<&Capabilities> {
+        self.session.as_ref().map(|s| &s.capabilities)
+    }
+
+    /// The exception filters in effect (T617): the user's choice, else the
+    /// active adapter's defaults (empty with no session and no choice).
+    #[must_use]
+    pub fn exception_filters(&self) -> Vec<String> {
+        match (&self.exception_choice, self.session.as_ref()) {
+            (Some(choice), _) => choice.clone(),
+            (None, Some(s)) => s.capabilities.default_filters(),
+            (None, None) => Vec::new(),
+        }
+    }
+
+    /// Choose the exception filters (T617); sent at once to a configured
+    /// session whose adapter advertised filters, and kept for later sessions.
+    pub fn set_exception_filters(&mut self, filters: &[String]) {
+        self.exception_choice = Some(filters.to_vec());
+        if let Some(s) = self.session.as_mut()
+            && s.configured
+        {
+            s.send_exception_filters(filters);
+        }
+    }
+
+    /// The selected thread id.
+    #[must_use]
+    pub fn thread_id(&self) -> Option<i64> {
+        self.session.as_ref().and_then(|s| s.thread_id)
+    }
+
+    /// The selected frame id.
+    #[must_use]
+    pub fn frame_id(&self) -> Option<i64> {
+        self.session.as_ref().and_then(|s| s.frame_id)
+    }
+
+    /// Select thread `id` (T617): step commands act on it and its stack is
+    /// fetched (a [`DapEvent::Stack`] follows, then its top frame's scopes).
+    pub fn select_thread(&mut self, id: i64) {
+        if let Some(s) = self.session.as_mut() {
+            s.thread_id = Some(id);
+            s.frame_id = None;
+            s.request(
+                "stackTrace",
+                &json!({ "threadId": id, "levels": 50 }),
+                Pending::StackTrace,
+            );
+        }
+    }
+
+    /// Select frame `id` (T617): `evaluate` runs in it and its scopes are
+    /// fetched (a [`DapEvent::Scopes`] follows, then the first scope's
+    /// variables).
+    pub fn select_frame(&mut self, id: i64) {
+        if let Some(s) = self.session.as_mut() {
+            s.frame_id = Some(id);
+            s.request("scopes", &json!({ "frameId": id }), Pending::Scopes(id));
+        }
+    }
+
+    /// Fetch the children of `reference` (lazy tree expansion, T617); they
+    /// arrive as [`DapEvent::Variables`].
+    pub fn variables(&mut self, reference: i64) {
+        if reference == 0 {
+            return;
+        }
+        if let Some(s) = self.session.as_mut() {
+            s.request_variables(reference);
+        }
+    }
+
+    /// Set `name` in container `reference` to `value` (`setVariable`, T617).
+    /// Returns `false`, sending nothing, when there is no session or the
+    /// adapter does not report `supportsSetVariable`; the result arrives as
+    /// [`DapEvent::VariableSet`] (or `RequestFailed`).
+    pub fn set_variable(&mut self, reference: i64, name: &str, value: &str) -> bool {
+        let Some(s) = self.session.as_mut() else {
+            return false;
+        };
+        if !s.capabilities.supports_set_variable {
+            return false;
+        }
+        s.request(
+            "setVariable",
+            &json!({ "variablesReference": reference, "name": name, "value": value }),
+            Pending::SetVariable {
+                reference,
+                name: name.to_string(),
+            },
+        );
+        true
+    }
+
+    /// Evaluate `expr` in the selected frame (REPL / watch); the result
+    /// arrives as a [`DapEvent::Evaluated`].
     pub fn evaluate(&mut self, expr: &str) {
         if let Some(s) = self.session.as_mut() {
-            let args = json!({ "expression": expr, "context": "repl" });
+            let mut args = json!({ "expression": expr, "context": "repl" });
+            if let Some(frame) = s.frame_id {
+                args["frameId"] = json!(frame);
+            }
             s.request("evaluate", &args, Pending::Evaluate(expr.to_string()));
         }
     }
@@ -338,8 +724,9 @@ impl Dap {
         let body = msg.get("body").cloned().unwrap_or(Value::Null);
         match event {
             "initialized" => {
+                let filters = self.exception_filters();
                 if let Some(s) = self.session.as_mut() {
-                    s.configure();
+                    s.configure(&filters);
                 }
                 events.push(DapEvent::Running);
             }
@@ -352,7 +739,9 @@ impl Dap {
                 let tid = body.get("threadId").and_then(Value::as_i64).unwrap_or(0);
                 if let Some(s) = self.session.as_mut() {
                     s.thread_id = Some(tid);
+                    s.frame_id = None;
                     s.stopped = true;
+                    s.request("threads", &json!({}), Pending::Threads);
                     s.request(
                         "stackTrace",
                         &json!({ "threadId": tid, "levels": 50 }),
@@ -399,24 +788,51 @@ impl Dap {
             return;
         }
         match kind {
+            Pending::Initialize => {
+                s.capabilities = Capabilities::from_json(&body);
+                events.push(DapEvent::Capabilities(s.capabilities.clone()));
+            }
+            Pending::Threads => events.push(DapEvent::Threads(parse_threads(&body))),
             Pending::StackTrace => {
                 let frames = parse_frames(&body);
                 // Follow up: request scopes for the top frame.
                 if let Some(top) = frames.first() {
-                    s.request("scopes", &json!({ "frameId": top.id }), Pending::Scopes);
+                    s.frame_id = Some(top.id);
+                    s.request(
+                        "scopes",
+                        &json!({ "frameId": top.id }),
+                        Pending::Scopes(top.id),
+                    );
                 }
                 events.push(DapEvent::Stack(frames));
             }
-            Pending::Scopes => {
-                if let Some(reference) = first_scope_reference(&body) {
-                    s.request(
-                        "variables",
-                        &json!({ "variablesReference": reference }),
-                        Pending::Variables,
-                    );
+            Pending::Scopes(frame_id) => {
+                let scopes = parse_scopes(&body);
+                // A reply for a frame the user has since moved off is stale.
+                if s.frame_id != Some(frame_id) {
+                    return;
                 }
+                if let Some(i) = auto_expand_scope(&scopes) {
+                    s.request_variables(scopes[i].variables_reference);
+                }
+                events.push(DapEvent::Scopes { frame_id, scopes });
             }
-            Pending::Variables => events.push(DapEvent::Variables(parse_variables(&body))),
+            Pending::Variables(reference) => events.push(DapEvent::Variables {
+                reference,
+                variables: parse_variables(&body),
+            }),
+            Pending::SetVariable { reference, name } => {
+                let value = body
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                events.push(DapEvent::VariableSet {
+                    reference,
+                    name,
+                    value,
+                });
+            }
             Pending::Evaluate(expr) => {
                 let result = if success {
                     body.get("result")
@@ -449,20 +865,31 @@ impl Session {
         let _ = self.writer.send(frame::encode(&msg));
     }
 
-    /// After the `initialized` event: set breakpoints, mark configured, send the
-    /// launch request and `configurationDone`.
-    fn configure(&mut self) {
-        let paths: Vec<(String, Vec<usize>)> = self
+    /// Request the children of `reference`.
+    fn request_variables(&mut self, reference: i64) {
+        self.request(
+            "variables",
+            &json!({ "variablesReference": reference }),
+            Pending::Variables(reference),
+        );
+    }
+
+    /// After the `initialized` event: set breakpoints and exception
+    /// `filters`, mark configured, send the launch (or attach) request and
+    /// `configurationDone`.
+    fn configure(&mut self, filters: &[String]) {
+        let paths: Vec<(String, Vec<SourceBreakpoint>)> = self
             .breakpoints
             .iter()
             .map(|(p, l)| (p.clone(), l.clone()))
             .collect();
-        for (path, lines) in paths {
-            self.send_breakpoints(&path, &lines);
+        for (path, bps) in paths {
+            self.send_breakpoints(&path, &bps);
         }
+        self.send_exception_filters(filters);
         self.configured = true;
-        let launch = self.launch_args.clone();
-        self.request("launch", &launch, Pending::Other("launch".to_string()));
+        let (command, args) = self.start_request.clone();
+        self.request(command, &args, Pending::Other(command.to_string()));
         self.request(
             "configurationDone",
             &json!({}),
@@ -470,9 +897,33 @@ impl Session {
         );
     }
 
-    /// Send a `setBreakpoints` request for `path` with 1-based `lines`.
-    fn send_breakpoints(&mut self, path: &str, lines: &[usize]) {
-        let bps: Vec<Value> = lines.iter().map(|l| json!({ "line": l })).collect();
+    /// Send `setExceptionBreakpoints` with `filters` — only to an adapter that
+    /// advertised exception filters (others may reject the request). Ids the
+    /// adapter does not offer are dropped.
+    fn send_exception_filters(&mut self, filters: &[String]) {
+        if self.capabilities.exception_filters.is_empty() {
+            return;
+        }
+        let offered: Vec<&String> = filters
+            .iter()
+            .filter(|f| {
+                self.capabilities
+                    .exception_filters
+                    .iter()
+                    .any(|e| &e.filter == *f)
+            })
+            .collect();
+        let args = json!({ "filters": offered });
+        self.request(
+            "setExceptionBreakpoints",
+            &args,
+            Pending::Other("setExceptionBreakpoints".to_string()),
+        );
+    }
+
+    /// Send a `setBreakpoints` request for `path`.
+    fn send_breakpoints(&mut self, path: &str, breakpoints: &[SourceBreakpoint]) {
+        let bps: Vec<Value> = breakpoints.iter().map(SourceBreakpoint::to_json).collect();
         let name = std::path::Path::new(path)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned());
@@ -506,6 +957,75 @@ fn build_launch_args(adapter: &DebugAdapter, program_path: &str) -> Value {
     Value::Object(map)
 }
 
+/// Build the `attach` arguments from the adapter's `attach` map, with
+/// `{program}` expanded (T617). Nothing else is added: what to attach by is
+/// the adapter's business. A value that reads as a JSON number, boolean,
+/// object or array is sent as one (`processId = "4242"` sends `4242`), since
+/// adapters attach by numeric ids and ports; anything else is a string.
+fn build_attach_args(adapter: &DebugAdapter, program_path: &str) -> Value {
+    Value::Object(
+        adapter
+            .attach
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    typed_value(&v.replace("{program}", program_path)),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// `text` as the JSON number, boolean, object or array it spells, else as a
+/// string.
+fn typed_value(text: &str) -> Value {
+    match serde_json::from_str::<Value>(text.trim()) {
+        Ok(v @ (Value::Number(_) | Value::Bool(_) | Value::Object(_) | Value::Array(_))) => v,
+        _ => Value::String(text.to_string()),
+    }
+}
+
+/// Parse a `threads` body into [`Thread`]s.
+fn parse_threads(body: &Value) -> Vec<Thread> {
+    body.get("threads")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|t| {
+                    Thread::new(
+                        t.get("id").and_then(Value::as_i64).unwrap_or(0),
+                        t.get("name").and_then(Value::as_str).unwrap_or(""),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse a `scopes` body into [`Scope`]s.
+fn parse_scopes(body: &Value) -> Vec<Scope> {
+    body.get("scopes")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|s| Scope {
+                    name: s
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    variables_reference: s
+                        .get("variablesReference")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0),
+                    expensive: s.get("expensive").and_then(Value::as_bool).unwrap_or(false),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Parse a `stackTrace` body into [`Frame`]s.
 fn parse_frames(body: &Value) -> Vec<Frame> {
     body.get("stackFrames")
@@ -532,16 +1052,6 @@ fn parse_frames(body: &Value) -> Vec<Frame> {
         .unwrap_or_default()
 }
 
-/// The `variablesReference` of the first scope in a `scopes` body.
-fn first_scope_reference(body: &Value) -> Option<i64> {
-    body.get("scopes")
-        .and_then(Value::as_array)
-        .and_then(|a| a.first())
-        .and_then(|s| s.get("variablesReference"))
-        .and_then(Value::as_i64)
-        .filter(|r| *r != 0)
-}
-
 /// Parse a `variables` body into [`Variable`]s.
 fn parse_variables(body: &Value) -> Vec<Variable> {
     body.get("variables")
@@ -559,6 +1069,10 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_string(),
+                    variables_reference: v
+                        .get("variablesReference")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0),
                 })
                 .collect()
         })
@@ -572,9 +1086,12 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
 fn failed_request_text(kind: &Pending, message: Option<&str>) -> String {
     let command = match kind {
         Pending::Other(command) => command.as_str(),
+        Pending::Initialize => "initialize",
+        Pending::Threads => "threads",
         Pending::StackTrace => "stackTrace",
-        Pending::Scopes => "scopes",
-        Pending::Variables => "variables",
+        Pending::Scopes(_) => "scopes",
+        Pending::Variables(_) => "variables",
+        Pending::SetVariable { .. } => "setVariable",
         // `handle_response` never calls this for `Evaluate` (it reports its
         // own failure inline instead) -- kept here only so the match stays
         // exhaustive if that ever changes.
@@ -688,23 +1205,118 @@ mod tests {
             failed_request_text(&Pending::StackTrace, None),
             "stackTrace"
         );
-        assert_eq!(failed_request_text(&Pending::Scopes, None), "scopes");
-        assert_eq!(failed_request_text(&Pending::Variables, None), "variables");
+        assert_eq!(failed_request_text(&Pending::Scopes(1), None), "scopes");
+        assert_eq!(
+            failed_request_text(&Pending::Variables(1), None),
+            "variables"
+        );
     }
 
     #[test]
     fn launch_args_expand_program() {
-        let adapter = DebugAdapter {
-            adapter_id: "x".into(),
-            extensions: vec!["rs".into()],
-            command: vec!["dbg".into()],
-            launch: [("cwd".to_string(), "{program}.dir".to_string())]
-                .into_iter()
-                .collect(),
-        };
+        let mut adapter = DebugAdapter::new("x", vec!["rs".into()], vec!["dbg".into()]);
+        adapter.launch = [("cwd".to_string(), "{program}.dir".to_string())]
+            .into_iter()
+            .collect();
         let args = build_launch_args(&adapter, "/tmp/a.out");
         assert_eq!(args["program"], json!("/tmp/a.out"));
         assert_eq!(args["cwd"], json!("/tmp/a.out.dir"));
+    }
+
+    #[test]
+    fn attach_args_are_the_attach_table_alone() {
+        let mut adapter = DebugAdapter::new("x", vec![], vec!["dbg".into()]);
+        adapter.launch.insert("cwd".into(), "/w".into());
+        adapter.attach.insert("processId".into(), "42".into());
+        adapter.attach.insert("name".into(), "{program}".into());
+        adapter
+            .attach
+            .insert("connect".into(), r#"{"port": 5678}"#.into());
+        adapter.attach.insert("justMyCode".into(), "false".into());
+        adapter.attach.insert("label".into(), "null".into());
+        let args = build_attach_args(&adapter, "/a.py");
+        assert_eq!(
+            args,
+            json!({
+                "processId": 42,
+                "name": "/a.py",
+                "connect": { "port": 5678 },
+                "justMyCode": false,
+                "label": "null",
+            })
+        );
+    }
+
+    #[test]
+    fn source_breakpoint_json_carries_only_the_set_fields() {
+        assert_eq!(SourceBreakpoint::new(3).to_json(), json!({ "line": 3 }));
+        assert!(SourceBreakpoint::new(3).is_plain());
+        let bp = SourceBreakpoint {
+            line: 4,
+            condition: Some("x > 1".into()),
+            hit_condition: Some(">= 2".into()),
+            log_message: Some("x={x}".into()),
+        };
+        assert!(!bp.is_plain());
+        assert_eq!(
+            bp.to_json(),
+            json!({ "line": 4, "condition": "x > 1", "hitCondition": ">= 2", "logMessage": "x={x}" })
+        );
+    }
+
+    #[test]
+    fn capabilities_parse_filters_and_flags() {
+        let caps = Capabilities::from_json(&json!({
+            "supportsSetVariable": true,
+            "exceptionBreakpointFilters": [
+                { "filter": "raised", "label": "Raised", "default": false },
+                { "filter": "uncaught", "label": "Uncaught", "default": true },
+                { "label": "no id: dropped" },
+                { "filter": "bare" },
+            ],
+        }));
+        assert!(caps.supports_set_variable);
+        let ids: Vec<&str> = caps
+            .exception_filters
+            .iter()
+            .map(|f| f.filter.as_str())
+            .collect();
+        assert_eq!(ids, ["raised", "uncaught", "bare"]);
+        assert_eq!(
+            caps.exception_filters[2].label, "bare",
+            "label falls back to the id"
+        );
+        assert_eq!(caps.default_filters(), ["uncaught"]);
+        assert_eq!(
+            Capabilities::from_json(&Value::Null),
+            Capabilities::default()
+        );
+    }
+
+    #[test]
+    fn auto_expand_skips_expensive_and_empty_scopes() {
+        let scopes = [
+            Scope::new("Registers", 1).expensive(),
+            Scope::new("Empty", 0),
+            Scope::new("Locals", 3),
+        ];
+        assert_eq!(auto_expand_scope(&scopes), Some(2));
+        assert_eq!(auto_expand_scope(&scopes[..2]), None);
+        let parsed = parse_scopes(&json!({ "scopes": [
+            { "name": "Locals", "variablesReference": 5 },
+            { "name": "Globals", "variablesReference": 6, "expensive": true },
+        ]}));
+        assert_eq!(
+            parsed,
+            vec![
+                Scope::new("Locals", 5),
+                Scope::new("Globals", 6).expensive()
+            ]
+        );
+        assert_eq!(
+            parse_threads(&json!({ "threads": [{ "id": 1, "name": "main" }] })),
+            vec![Thread::new(1, "main")]
+        );
     }
 
     #[test]
@@ -720,22 +1332,16 @@ mod tests {
         assert_eq!(frames[0].path.as_deref(), Some("/x.rs"));
         assert_eq!(frames[0].line, 12);
 
-        let vars = parse_variables(&json!({ "variables": [{ "name": "n", "value": "42" }] }));
+        let vars = parse_variables(&json!({ "variables": [
+            { "name": "n", "value": "42" },
+            { "name": "p", "value": "Point", "variablesReference": 9 },
+        ] }));
         assert_eq!(
             vars,
-            vec![Variable {
-                name: "n".into(),
-                value: "42".into()
-            }]
-        );
-
-        assert_eq!(
-            first_scope_reference(&json!({ "scopes": [{ "variablesReference": 3 }] })),
-            Some(3)
-        );
-        assert_eq!(
-            first_scope_reference(&json!({ "scopes": [{ "variablesReference": 0 }] })),
-            None
+            vec![
+                Variable::new("n", "42"),
+                Variable::new("p", "Point").with_reference(9)
+            ]
         );
     }
 }

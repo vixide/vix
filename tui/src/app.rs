@@ -63,6 +63,7 @@ mod jupyter_off;
 use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
 use jupyter_off as jupyter_state;
+mod debug_panel;
 mod keymap;
 mod large_file;
 mod lsp_dap;
@@ -188,6 +189,8 @@ pub enum Focus {
     BottomDock,
     /// The IM dock panel (T752).
     Im,
+    /// The Debug panel (T617).
+    Debug,
 }
 
 /// Which kind of single-line prompt is open.
@@ -324,6 +327,14 @@ pub enum PromptKind {
     DebugRepl,
     /// Enter an expression to add as a debugger watch.
     DebugWatch,
+    /// Run → Edit Breakpoint… step 1 (T617): the breakpoint's condition.
+    DebugBreakpointCondition,
+    /// Run → Edit Breakpoint… step 2 (T617): its hit condition.
+    DebugBreakpointHit,
+    /// Run → Edit Breakpoint… step 3 (T617): its log message.
+    DebugBreakpointLog,
+    /// A new value for the Debug panel's highlighted variable (T617).
+    DebugSetVariable,
     /// Answer one step of an in-progress Org-capture wizard: a `%^{}` field
     /// prompt, or (once every field is answered) the tag prompt.
     OrgCaptureField,
@@ -1684,6 +1695,8 @@ pub struct Layout {
     pub ai_panel: Rect,
     /// Row-list rectangle of the test-results panel, for click-to-jump.
     pub test_panel: Rect,
+    /// Row-list rectangle of the Debug panel (T617), for paging and clicks.
+    pub debug_panel: Rect,
     /// Row-list rectangle of the open contact browser, for click hit-testing.
     pub contacts: Rect,
     /// Row-list rectangle of the open vCard view, for click hit-testing.
@@ -2289,16 +2302,18 @@ pub struct App {
     diag_status: inline_diagnostics::DiagStatus,
     /// Debug Adapter Protocol client (one active session).
     pub(crate) dap: crate::dap::Dap,
-    /// Breakpoints per file: absolute path → set of 1-based lines.
-    breakpoints: std::collections::HashMap<PathBuf, std::collections::BTreeSet<usize>>,
+    /// Breakpoints per file: absolute path → 1-based line → breakpoint
+    /// (with its condition, hit condition and log message, T617).
+    breakpoints: std::collections::HashMap<
+        PathBuf,
+        std::collections::BTreeMap<usize, crate::dap::SourceBreakpoint>,
+    >,
     /// Where the debugger is currently stopped: `(path, 1-based line)`.
     dap_stopped: Option<(PathBuf, usize)>,
-    /// Latest call stack from the debugger.
-    pub(crate) dap_stack: Vec<crate::dap::Frame>,
-    /// Latest variables (top frame, first scope) from the debugger.
-    pub(crate) dap_variables: Vec<crate::dap::Variable>,
-    /// Watch expressions and their last results: `(expr, result)`.
-    pub(crate) dap_watches: Vec<(String, String)>,
+    /// The Debug panel: threads, stack, variable tree, watches (T617).
+    pub(crate) dap_view: crate::dap::view::DebugView,
+    /// The debugger prompts in progress (Edit Breakpoint, set variable).
+    dap_edit: debug_panel::DebugEdit,
     /// Buffered output of the running test command, parsed on completion.
     test_buffer: Vec<String>,
     /// Parsed results of the last test run.
@@ -2879,9 +2894,8 @@ impl App {
             dap: crate::dap::Dap::new(),
             breakpoints: std::collections::HashMap::new(),
             dap_stopped: None,
-            dap_stack: Vec::new(),
-            dap_variables: Vec::new(),
-            dap_watches: Vec::new(),
+            dap_view: crate::dap::view::DebugView::new(),
+            dap_edit: debug_panel::DebugEdit::default(),
             visible: Visible::initial(&settings),
             flags: if settings.typing.spellcheck {
                 AppFlags::SPELLCHECK
@@ -5789,54 +5803,7 @@ impl App {
             return;
         }
         for event in self.dap.poll() {
-            match event {
-                crate::dap::DapEvent::Running => {
-                    self.status = t!("status.debug_running").to_string();
-                }
-                crate::dap::DapEvent::Stopped { reason, .. } => {
-                    self.status = t!("status.debug_stopped_at", reason = reason).to_string();
-                }
-                crate::dap::DapEvent::Output(text) => self.bottom_dock.push(text),
-                crate::dap::DapEvent::Stack(frames) => {
-                    if let Some(top) = frames.first()
-                        && let Some(p) = top.path.clone()
-                    {
-                        self.dap_stopped = Some((PathBuf::from(&p), top.line));
-                        self.jump_to_debug_location(&p, top.line);
-                    }
-                    self.dap_stack = frames;
-                    self.refresh_debug_markers();
-                }
-                crate::dap::DapEvent::Variables(vars) => self.dap_variables = vars,
-                crate::dap::DapEvent::Evaluated { expr, result } => {
-                    // Update a matching watch, else echo to the debug console.
-                    if let Some(w) = self.dap_watches.iter_mut().find(|(e, _)| *e == expr) {
-                        w.1 = result;
-                    } else {
-                        self.bottom_dock.push(format!("{expr} = {result}"));
-                    }
-                }
-                crate::dap::DapEvent::Terminated => {
-                    self.dap_stopped = None;
-                    self.dap_stack.clear();
-                    self.dap_variables.clear();
-                    self.refresh_debug_markers();
-                    self.status = t!("status.debug_terminated").to_string();
-                }
-                crate::dap::DapEvent::RequestFailed(message) => {
-                    // T536 (Run H): mirrors the identical LSP handling above
-                    // (`LspEvent::RequestFailed`) — a rejected breakpoint or
-                    // an invalid step used to just silently "do nothing".
-                    self.status = t!("status.dap_request_failed", message = message).to_string();
-                }
-            }
-        }
-        // Re-evaluate watches whenever we are stopped.
-        if self.dap.is_stopped() {
-            let exprs: Vec<String> = self.dap_watches.iter().map(|(e, _)| e.clone()).collect();
-            for e in exprs {
-                self.dap.evaluate(&e);
-            }
+            self.apply_dap_event(event);
         }
     }
 
@@ -13623,7 +13590,12 @@ impl App {
             | PromptKind::GotoByte => {
                 self.accept_roam_prompt(prompt.kind, prompt.input.trim());
             }
-            PromptKind::DebugRepl | PromptKind::DebugWatch => {
+            PromptKind::DebugRepl
+            | PromptKind::DebugWatch
+            | PromptKind::DebugBreakpointCondition
+            | PromptKind::DebugBreakpointHit
+            | PromptKind::DebugBreakpointLog
+            | PromptKind::DebugSetVariable => {
                 self.accept_debug_prompt(prompt.kind, prompt.input.trim());
             }
         }

@@ -7193,7 +7193,7 @@ new action.
   engine now binds `if`/`af`/`ic`/`ac`/`ia`/`aa` (operator and Visual) and
   `]f`/`[f`/`]m`/`[m`/`]c`/`[c`/`]a`/`[a`, with counts. Gate: a
   `syntax-all` run of the per-language tests on all three forges.
-- [ ] **T617 — Debugger depth.** `vix-dap` sends only `setBreakpoints`,
+- [x] **T617 — Debugger depth.** `vix-dap` sends only `setBreakpoints`,
   `launch`, `stackTrace`, `scopes`, `variables`, `evaluate`, and the step
   and continue requests. It has no condition, `hitCondition`, or
   `logMessage`, and no `setExceptionBreakpoints`, `attach`, `threads`, or
@@ -7208,6 +7208,19 @@ new action.
   - Optionally, inline values using T614's virtual text.
 
   Needs T608 first. **Medium–large.**
+  *Done 2026-10-31:* `SourceBreakpoint` (condition / hitCondition /
+  logMessage) set by Run → Edit Breakpoint…'s three prompts;
+  `setExceptionBreakpoints` from the `initialize` capabilities, toggled in a
+  checklist on the shared choice-list overlay; Run → Attach with a
+  `debug_adapters.attach` table (JSON-looking values sent typed); `threads`;
+  the pure `vix_dap::view::DebugView` tree with lazy `variables` to any
+  depth, thread and frame selection, and `setVariable` (`e`) in a focusable
+  panel (`Focus::Debug`, Run → Focus Debug Panel); `evaluate` in the
+  selected frame; inline values on the stopped line via T614's virtual
+  text (`VirtualTextLayer::DebugValues`). Mock-adapter tests in
+  `crates/vix-dap/tests/mock_adapter.rs` and
+  `tui/tests/integration/debugger.rs`. Not done: function/data
+  breakpoints, breakpoint persistence, keeping tree expansion across steps.
 - [ ] **T618 — Inline ghost-text completion.** A grep for
   `inlineCompletion` or `ghost` finds nothing. Neovim 0.12 supports
   `textDocument/inlineCompletion`, and Zed has Edit Predictions. Fix:
@@ -9454,8 +9467,8 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T617–T621, T623, T624, T633, T635, T636 and T644 are
-  open; T612–T616, T622, T625–T632, T634, T637 and T638 are done
+- **Run M:** T611, T618–T621, T623, T624, T633, T635, T636 and T644 are
+  open; T612–T617, T622, T625–T632, T634, T637 and T638 are done
   (2026-10-31). T610 is partly done (the `*-tool` converters and
   `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
   done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half

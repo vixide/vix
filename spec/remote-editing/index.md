@@ -233,7 +233,7 @@ is the minimal version, for remote workspaces only:
   The answer is persisted per host and path in the local session file.
   **File → Trust Remote Workspace…** (`file.trust_remote`) asks again.
 - Until trusted: the `project.*` task and command actions (not the cache or
-  run-configuration *edit* actions), `run.start` (the debugger),
+  run-configuration *edit* actions), `run.start` and `run.attach` (the debugger),
   `lsp.code_lens_run` and every test lens, `lsp.restart` and `script.run` are
   refused with a status message (one check in `App::run_action`); language
   servers are off (`Lsp` is rebuilt with `enabled = false`, and rebuilt again

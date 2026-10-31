@@ -58,22 +58,18 @@ pub(super) fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::dap::view::{RowKind, Section};
+    let focused = app.focus == Focus::Debug;
     let block = Block::default()
         .style(theme::region_base(theme::Region::RightDock))
         .borders(Borders::TOP | Borders::LEFT)
         .border_type(BorderType::Rounded)
-        .border_style(theme::region_title(theme::Region::RightDock, false))
+        .border_style(theme::region_title(theme::Region::RightDock, focused))
         .title(format!(" {} {} ", icon::CODE, t!("ui.debug")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    app.layout.debug_panel = inner;
 
-    let mut lines: Vec<Line> = Vec::new();
-    let header = |lines: &mut Vec<Line>, text: String| {
-        lines.push(Line::from(Span::styled(
-            text,
-            theme::title(true).add_modifier(Modifier::BOLD),
-        )));
-    };
     if !app.dap.is_active() {
         let hint = Paragraph::new(t!("ui.debug_idle").to_string())
             .style(theme::dim())
@@ -81,43 +77,72 @@ pub(super) fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         frame.render_widget(hint, inner);
         return;
     }
-    header(&mut lines, t!("ui.debug_call_stack").to_string());
-    if app.dap_stack.is_empty() {
-        lines.push(Line::from(Span::styled("  —", theme::dim())));
+    let rows = app.dap_view.rows();
+    let height = inner.height as usize;
+    // Keep the highlight in view.
+    let view = &mut app.dap_view;
+    if view.selected < view.scroll {
+        view.scroll = view.selected;
+    } else if height > 0 && view.selected >= view.scroll + height {
+        view.scroll = view.selected + 1 - height;
     }
-    for f in &app.dap_stack {
-        let loc = f
-            .path
-            .as_deref()
-            .and_then(|p| p.rsplit('/').next())
-            .map_or(String::new(), |n| format!("  {n}:{}", f.line));
-        lines.push(Line::from(vec![
-            Span::raw(format!("  {}", f.name)),
-            Span::styled(loc, theme::dim()),
-        ]));
-    }
-    lines.push(Line::from(""));
-    header(&mut lines, t!("ui.debug_variables").to_string());
-    if app.dap_variables.is_empty() {
-        lines.push(Line::from(Span::styled("  —", theme::dim())));
-    }
-    for v in &app.dap_variables {
-        lines.push(Line::from(vec![
-            Span::raw(format!("  {} = ", v.name)),
-            Span::styled(v.value.clone(), theme::dim()),
-        ]));
-    }
-    if !app.dap_watches.is_empty() {
-        lines.push(Line::from(""));
-        header(&mut lines, t!("ui.debug_watch").to_string());
-        for (expr, result) in &app.dap_watches {
-            lines.push(Line::from(vec![
-                Span::raw(format!("  {expr} = ")),
-                Span::styled(result.clone(), theme::dim()),
-            ]));
+    view.scroll = view.scroll.min(rows.len().saturating_sub(1));
+    let (scroll, selected) = (view.scroll, view.selected);
+    let lines: Vec<Line> = rows
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(height)
+        .map(|(i, row)| {
+            let line = match &row.kind {
+                RowKind::Header(section) => Line::from(Span::styled(
+                    match section {
+                        Section::Threads => t!("ui.debug_threads"),
+                        Section::Stack => t!("ui.debug_call_stack"),
+                        Section::Variables => t!("ui.debug_variables"),
+                        _ => t!("ui.debug_watch"),
+                    }
+                    .to_string(),
+                    theme::title(true).add_modifier(Modifier::BOLD),
+                )),
+                RowKind::Empty(_) => Line::from(Span::styled("  —", theme::dim())),
+                _ => debug_row_line(row),
+            };
+            if focused && i == selected {
+                line.style(theme::selected())
+            } else {
+                line
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// One thread, frame, variable or watch row: a marker for the current
+/// thread/frame or an expander, the name, and its value or location dimmed.
+fn debug_row_line(row: &crate::dap::view::Row) -> Line<'static> {
+    use crate::dap::view::RowKind;
+    let indent = "  ".repeat(row.depth + 1);
+    let marker = if row.current {
+        "\u{25b6} "
+    } else if row.expanded {
+        "\u{25be} "
+    } else if row.expandable {
+        "\u{25b8} "
+    } else {
+        "  "
+    };
+    let detail = match row.kind {
+        RowKind::Node(_) | RowKind::Watch(_) if !row.detail.is_empty() => {
+            format!(" = {}", row.detail)
         }
-    }
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+        _ if !row.detail.is_empty() => format!("  {}", row.detail),
+        _ => String::new(),
+    };
+    Line::from(vec![
+        Span::raw(format!("{indent}{marker}{}", row.label)),
+        Span::styled(detail, theme::dim()),
+    ])
 }
 
 pub(super) fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {

@@ -21,6 +21,8 @@ mod coverage;
 mod cowork;
 #[cfg(feature = "sql")]
 mod db;
+#[cfg(feature = "dap")]
+mod debugger;
 mod editing;
 #[cfg(feature = "http")]
 mod fhir;

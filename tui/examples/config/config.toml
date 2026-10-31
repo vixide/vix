@@ -228,6 +228,9 @@ command = ["rust-analyzer"]
 adapter_id = "debugpy"
 extensions = ["py"]
 command = ["python3", "-m", "debugpy.adapter"]
+# Optional: what Run → Attach sends (T617), e.g. to attach by process id:
+# [debug_adapters.attach]
+# processId = "4242"
 
 # Saved database connections for the DB menu. Passwords are never stored
 # here; they are prompted for per session (or resolved through

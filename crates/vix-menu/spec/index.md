@@ -280,11 +280,15 @@ Actions are `run.*`.
 | Item              | Action                                                       |
 | ----------------- | ------------------------------------------------------------ |
 | Start / Stop      | Launch or terminate the session for the active file          |
+| Attach            | Start the adapter and send `attach` with its `debug_adapters.attach` table (T617) |
 | Toggle Breakpoint | Add/remove a breakpoint on the cursor's line                 |
+| Edit Breakpoint…  | Set the cursor line's breakpoint condition, hit condition and log message (T617) |
+| Exception Breakpoints… | Toggle the adapter's exception filters (T617)           |
 | Continue / Step Over / Step Into / Step Out / Pause | Execution control       |
 | Add Watch…        | Evaluate an expression each time execution stops             |
 | Evaluate…         | A one-off expression (REPL) into the bottom dock             |
-| Toggle Debug Panel | The call stack / variables / watches side panel             |
+| Toggle Debug Panel | The threads / call stack / variables / watches side panel   |
+| Focus Debug Panel | Show the panel and give it the keyboard: select threads and frames, expand variables lazily, `e` sets a value (T617) |
 | Jupyter ▸         | Start Kernel…, Run (`Ctrl+Shift+Enter`), Run and Advance, Interrupt / Restart / Shut Down Kernel, Clear Results (`jupyter.*`, the opt-in `jupyter` feature; see [`spec/jupyter`](../../../spec/jupyter/index.md)) |
 
 ## Tools menu

@@ -445,6 +445,7 @@ libyaml
 linewise
 lockfiles
 logpoint
+logpoints
 malloc
 mangen
 mastodonshare

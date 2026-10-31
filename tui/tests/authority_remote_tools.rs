@@ -195,16 +195,15 @@ fn settings(tools: &Path) -> Settings {
             command: vec!["vix-t716-no-such-server".into()],
         },
     ];
-    settings.debug_adapters = vec![DebugAdapter {
-        adapter_id: "mock".into(),
-        extensions: vec!["t716".into()],
-        command: vec![
+    settings.debug_adapters = vec![DebugAdapter::new(
+        "mock",
+        vec!["t716".into()],
+        vec![
             "python3".into(),
             dap.display().to_string(),
             tools.join("dap.log").display().to_string(),
         ],
-        launch: std::collections::BTreeMap::new(),
-    }];
+    )];
     settings
 }
 

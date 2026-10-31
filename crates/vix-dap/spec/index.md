@@ -15,43 +15,114 @@ command = ["python", "-m", "debugpy.adapter"]
 # Extra launch arguments (values may use {program} for the file path):
 [debug_adapters.launch]
 console = "internalConsole"
+# Arguments for Run → Attach (T617), sent as the DAP `attach` request:
+[debug_adapters.attach]
+processId = "4242"
 ```
 
 `extensions` matches the active file to an adapter; `command` launches it;
 `launch` is merged into the DAP `launch` request (with `{program}` expanded to the
-file path; `program` defaults to the active file).
+file path; `program` defaults to the active file). `attach` (optional, T617) is
+the argument table of the `attach` request **Run → Attach** sends instead of
+`launch`; `{program}` expands there too, and nothing else is added, so the table
+names whatever the adapter attaches by (`processId`, `port`, `connect`, …).
+TOML values are strings; for `attach` a value that reads as a JSON number,
+boolean, object or array is sent as that JSON (`processId = "4242"` sends the
+number `4242`, `connect = '{"port": 5678}'` an object), since adapters attach by
+numeric ids and ports. `launch` values stay strings.
 
 ## Commands (Run menu / `run.*`)
 
 - **Start** / **Stop** — launch or terminate the session for the active file.
+- **Attach** (`run.attach`, T617) — start the active file's adapter and send
+  `attach` with its `debug_adapters.attach` table instead of `launch`.
 - **Toggle Breakpoint** — add/remove a breakpoint on the cursor's line (shown as
   `●` in the gutter). Breakpoints update live on a running session.
+- **Edit Breakpoint…** (`run.edit_breakpoint`, T617) — three prompts in a row,
+  each seeded with the current value, set the cursor line's breakpoint
+  **condition** (an expression; stop only when true), **hit condition** (e.g.
+  `3` or `>= 5`, adapter-defined) and **log message** (a logpoint: print
+  instead of stopping; `{expr}` interpolation is the adapter's). An empty answer
+  clears that field; Esc at any prompt abandons the edit. The cursor line gains
+  a breakpoint if it had none. They map to `SourceBreakpoint.condition`,
+  `hitCondition` and `logMessage` in `setBreakpoints`.
+- **Exception Breakpoints…** (`run.exception_filters`, T617) — a checklist of
+  the exception filters the adapter advertised in its `initialize` response
+  (`exceptionBreakpointFilters`); Enter toggles the highlighted one, Esc
+  closes. Until the user chooses, the filters the adapter marks `default` are
+  on. The choice is sent as `setExceptionBreakpoints` (during configuration and
+  again on every change) and is kept for later sessions of this run of Vix.
+  Without an active session, or when the adapter offers no filters, it reports
+  that in the status line.
 - **Continue**, **Step Over**, **Step Into**, **Step Out**, **Pause**.
 - **Add Watch…** — evaluate an expression each time execution stops.
 - **Evaluate…** — a one-off expression (REPL); the result prints to the bottom
   dock.
-- **Toggle Debug Panel** — the side panel showing the call stack, variables, and
-  watches.
+- **Toggle Debug Panel** — the side panel showing threads, the call stack,
+  variables, and watches.
+- **Focus Debug Panel** (`run.focus_panel`, T617) — show the panel and give it
+  the keyboard (see below).
+
+## Debug panel (T617)
+
+The panel is a tree in four sections: **Threads** (from the `threads`
+request), **Call Stack** (the selected thread's frames), **Variables** (the
+selected frame's scopes, each expandable) and **Watch**. While it has focus:
+
+| Key | Does |
+| --- | --- |
+| Up / Down, PgUp / PgDn, Home / End | Move the highlight (section headings are skipped) |
+| Enter | On a thread: select it (fetch its stack). On a frame: select it (fetch its scopes, jump the editor there). On a scope or variable: expand / collapse |
+| Right / Left | Expand / collapse (Left on a child moves to its parent) |
+| `e` | Set the highlighted variable's value (`setVariable`) via a prompt seeded with its value — only when the adapter reports `supportsSetVariable` |
+| Esc | Give the keyboard back to the editor |
+
+Other chords fall through to the keymap, as for the IM panel. A variable whose
+`variablesReference` is non-zero is expandable; its children are fetched with
+`variables` the first time it is expanded (lazy, to any depth) and kept while
+the program stays stopped. The first non-`expensive` scope is expanded
+automatically. A new stop resets the tree.
+
+## Inline values (T617)
+
+While the program is stopped, the stopped line shows the values of the
+auto-expanded scope's variables whose names occur on that line (as whole
+identifiers), as end-of-line virtual text (`x = 1  y = "a"`) in its own
+`VirtualTextLayer::DebugValues` layer (T614's primitive). It clears when
+execution continues or the session ends.
 
 ## Behavior
 
-- The handshake is `initialize` → (on the `initialized` event) `setBreakpoints` +
-  `launch` + `configurationDone`.
-- On a `stopped` event Vix fetches the stack trace, then the top frame's scopes
-  and variables, jumps the editor to the stop location (marked `▶` in the gutter),
-  and updates the Debug panel and any watches.
+- The handshake is `initialize` → (on the `initialized` event) `setBreakpoints`
+  + `setExceptionBreakpoints` (when the adapter advertised filters) + `launch`
+  (or `attach`) + `configurationDone`. The `initialize` response's
+  capabilities that Vix uses (exception filters, `supportsSetVariable`) are
+  kept for the session.
+- On a `stopped` event Vix fetches `threads` and the stopped thread's stack
+  trace, then the top frame's scopes and the first scope's variables, jumps the
+  editor to the stop location (marked `▶` in the gutter), and updates the Debug
+  panel and any watches. Selecting another thread or frame in the panel
+  repeats the stack or scopes step for it.
+- `evaluate` (watches and the REPL) runs in the selected frame (`frameId`).
+- A breakpoint field the adapter does not support is still sent; adapters
+  ignore unknown fields, and a rejection surfaces as `RequestFailed`.
 - `output` events stream to the bottom dock; `terminated`/`exited` end the session.
 - One session is active at a time.
 
 ## As implemented in Vix
 
 The `dap` module is the protocol client (`Dap`/`Session`/`DebugAdapter`,
-`DapEvent`), reusing `lsp_core::frame` for `Content-Length` framing. The host owns
-breakpoints, `start_debugger`/`stop_debugger`/`toggle_breakpoint`, stepping
-actions, `poll_dap` (drains events each loop), gutter markers
-(`Editor::set_breakpoints`/`set_debug_line`), and the Debug panel
-(`ui::draw_debug_panel`). The fast event-loop cadence engages while
-`dap_busy()`.
+`DapEvent`, `SourceBreakpoint`, `Capabilities`, `StartMode`), reusing
+`lsp_core::frame` for `Content-Length` framing. `vix_dap::view::DebugView` is
+the panel's pure tree model (threads, frames, lazily loaded variable nodes,
+the highlight, and the inline-values text), tested without a TTY. The host owns
+breakpoints (`tui/src/app/lsp_dap.rs`: `start_debugger`/`stop_debugger`/
+`toggle_breakpoint`, the Edit Breakpoint prompts, the exception-filter
+checklist on the shared choice-list overlay), stepping actions, `poll_dap`
+(drains events each loop), the panel's keys (`tui/src/app/debug_panel.rs`),
+gutter markers (`Editor::set_breakpoints`/`set_debug_line`), and the Debug
+panel drawing (`ui::draw_debug_panel`). The fast event-loop cadence engages
+while `dap_busy()`.
 
 ## Remote workspaces (T710, T716)
 
@@ -70,7 +141,10 @@ supported anywhere yet; remotely it would also need a forwarded port.
 ## Limitations
 
 - A single debug session at a time.
-- Variable trees are shown one level deep (the top frame's first scope).
+- The variable tree is rebuilt on every stop, so expansion is not kept across
+  steps.
+- Breakpoints are line breakpoints only (no function, data or instruction
+  breakpoints) and are not persisted across runs of Vix.
 
 ## Cargo features
 
@@ -79,7 +153,7 @@ supported anywhere yet; remotely it would also need a forwarded port.
 
 ## Testing
 
-`crates/vix-dap/tests/mock_adapter.rs` drives the client against a scripted Python mock adapter (skipped without `python3`): the initialize → launch → stopped → stackTrace → scopes → variables handshake and its request order, evaluate success/failure, a rejected request surfacing as `RequestFailed`, and `terminated` ending the session. `tui/tests/authority_remote_tools.rs` (T716)
+`crates/vix-dap/tests/mock_adapter.rs` drives the client against a scripted Python mock adapter (skipped without `python3`): the initialize → launch → stopped → threads → stackTrace → scopes → variables handshake and its request order, evaluate success/failure, a rejected request surfacing as `RequestFailed`, and `terminated` ending the session. T617 extends it: breakpoint condition / hitCondition / logMessage on the wire, `setExceptionBreakpoints` with the adapter's default filters and then a changed choice, `attach` with the `attach` table instead of `launch`, thread and frame selection, lazy `variables` for a nested reference, and `setVariable`. `view.rs` unit-tests the tree model, and `tui/tests/integration/debugger.rs` drives Edit Breakpoint, the exception checklist and the panel keys through the real `App` against the same kind of mock. `tui/tests/authority_remote_tools.rs` (T716)
 runs a mock adapter over a fake `ssh` from **Run → Start**: it starts in the
 remote workspace, is launched with the remote program path, and its stop moves
 the editor there.

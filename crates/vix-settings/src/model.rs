@@ -139,6 +139,7 @@ impl Connection {
 
 /// A configured debug adapter (parallels `LspServer` in `vix-settings`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DebugAdapter {
     /// Adapter id sent in `initialize` (e.g. `"codelldb"`, `"debugpy"`).
     pub adapter_id: String,
@@ -150,6 +151,31 @@ pub struct DebugAdapter {
     /// e.g. `program`, `cwd`, `args`. `{program}` is replaced with the file path.
     #[serde(default)]
     pub launch: std::collections::BTreeMap<String, String>,
+    /// Arguments of the `attach` request that **Run → Attach** sends instead
+    /// of `launch` (T617), e.g. `processId` or `port`. `{program}` is replaced
+    /// with the file path; nothing else is added. A value that reads as a JSON
+    /// number, boolean, object or array is sent as that JSON.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub attach: std::collections::BTreeMap<String, String>,
+}
+
+impl DebugAdapter {
+    /// An adapter `adapter_id` for files with `extensions`, started by
+    /// `command`, with empty `launch` and `attach` tables.
+    #[must_use]
+    pub fn new(
+        adapter_id: impl Into<String>,
+        extensions: Vec<String>,
+        command: Vec<String>,
+    ) -> Self {
+        DebugAdapter {
+            adapter_id: adapter_id.into(),
+            extensions,
+            command,
+            launch: std::collections::BTreeMap::new(),
+            attach: std::collections::BTreeMap::new(),
+        }
+    }
 }
 
 /// How the expanded template is wrapped when inserted.

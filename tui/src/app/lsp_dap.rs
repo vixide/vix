@@ -27,15 +27,19 @@ impl App {
     /// Dispatch a `run.*` debugger action. Returns `true` if `action` was handled.
     pub(super) fn run_dap_action(&mut self, action: &str) -> bool {
         match action {
-            "run.start" => self.start_debugger(),
+            "run.start" => self.start_debugger(crate::dap::StartMode::Launch),
+            "run.attach" => self.start_debugger(crate::dap::StartMode::Attach),
             "run.stop" => self.stop_debugger(),
             "run.toggle_breakpoint" => self.toggle_breakpoint(),
-            "run.continue" => self.dap.continue_(),
-            "run.step_over" => self.dap.step_over(),
-            "run.step_into" => self.dap.step_into(),
-            "run.step_out" => self.dap.step_out(),
+            "run.edit_breakpoint" => self.begin_edit_breakpoint(),
+            "run.exception_filters" => self.open_exception_filters(),
+            "run.continue" => self.resume_debugger(crate::dap::Dap::continue_),
+            "run.step_over" => self.resume_debugger(crate::dap::Dap::step_over),
+            "run.step_into" => self.resume_debugger(crate::dap::Dap::step_into),
+            "run.step_out" => self.resume_debugger(crate::dap::Dap::step_out),
             "run.pause" => self.dap.pause(),
             "run.panel" => self.visible.toggle(crate::app::Visible::DEBUG_PANEL),
+            "run.focus_panel" => self.focus_debug_panel(),
             "run.repl" => {
                 self.prompt = Some(Prompt::new(
                     PromptKind::DebugRepl,
@@ -254,18 +258,28 @@ impl App {
             return;
         };
         let set = self.breakpoints.entry(path.clone()).or_default();
-        if !set.remove(&line) {
-            set.insert(line);
+        if set.remove(&line).is_none() {
+            set.insert(line, crate::dap::SourceBreakpoint::new(line));
         }
-        let lines: Vec<usize> = set.iter().copied().collect();
-        if self.dap.is_active() {
-            self.dap.set_breakpoints(&path.to_string_lossy(), &lines);
-        }
+        self.push_breakpoints(&path);
         self.refresh_debug_markers();
     }
 
-    /// Start debugging the active file with its configured adapter.
-    pub(super) fn start_debugger(&mut self) {
+    /// Send `path`'s breakpoints to the running adapter, if any.
+    pub(super) fn push_breakpoints(&mut self, path: &Path) {
+        if self.dap.is_active() {
+            let bps: Vec<crate::dap::SourceBreakpoint> = self
+                .breakpoints
+                .get(path)
+                .map(|m| m.values().cloned().collect())
+                .unwrap_or_default();
+            self.dap.set_breakpoints(&path.to_string_lossy(), &bps);
+        }
+    }
+
+    /// Start debugging the active file with its configured adapter, sending
+    /// `launch` or (Run → Attach, T617) `attach`.
+    pub(super) fn start_debugger(&mut self, mode: crate::dap::StartMode) {
         let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
             self.status = t!("status.debug_no_file").to_string();
             return;
@@ -274,13 +288,13 @@ impl App {
             self.status = t!("status.debug_no_adapter").to_string();
             return;
         };
-        let bps: std::collections::HashMap<String, Vec<usize>> = self
+        let bps: std::collections::HashMap<String, Vec<crate::dap::SourceBreakpoint>> = self
             .breakpoints
             .iter()
             .map(|(p, l)| {
                 (
                     p.to_string_lossy().into_owned(),
-                    l.iter().copied().collect(),
+                    l.values().cloned().collect(),
                 )
             })
             .collect();
@@ -288,7 +302,8 @@ impl App {
         // home (T716); a local one keeps Vix's own working directory.
         let remote = !crate::authority::current().is_local();
         self.dap.set_workdir(remote.then(|| self.root.clone()));
-        if self.dap.start(&adapter, &path.to_string_lossy(), bps) {
+        if self.dap.start(&adapter, &path.to_string_lossy(), bps, mode) {
+            self.dap_view.clear();
             self.visible.set(crate::app::Visible::DEBUG_PANEL, true);
             self.status = t!("status.debug_started").to_string();
         } else {
@@ -300,8 +315,10 @@ impl App {
     pub(super) fn stop_debugger(&mut self) {
         self.dap.stop();
         self.dap_stopped = None;
-        self.dap_stack.clear();
-        self.dap_variables.clear();
+        self.dap_view.clear();
+        if self.focus == Focus::Debug {
+            self.focus = Focus::Editor;
+        }
         self.refresh_debug_markers();
         self.status = t!("status.debug_stopped").to_string();
     }
@@ -316,14 +333,26 @@ impl App {
         let lines: Vec<usize> = self
             .breakpoints
             .get(&path)
-            .map(|s| s.iter().map(|l| l.saturating_sub(1)).collect())
+            .map(|s| s.keys().map(|l| l.saturating_sub(1)).collect())
             .unwrap_or_default();
         let debug_line = stopped
             .filter(|(p, _)| *p == path)
             .map(|(_, l)| l.saturating_sub(1));
+        let inline = self.debug_inline_values(&path);
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_breakpoints(lines);
             t.editor.set_debug_line(debug_line);
+            if !inline.is_empty()
+                || !t
+                    .editor
+                    .eol_texts(crate::editor_core::virtual_text::VirtualTextLayer::DebugValues)
+                    .is_empty()
+            {
+                t.editor.set_eol_texts(
+                    crate::editor_core::virtual_text::VirtualTextLayer::DebugValues,
+                    inline,
+                );
+            }
         }
     }
 
@@ -334,8 +363,19 @@ impl App {
             .active_tab()
             .and_then(|t| t.path.as_ref())
             .and_then(|p| self.breakpoints.get(p))
-            .map(|s| s.iter().copied().collect())
+            .map(|s| s.keys().copied().collect())
             .unwrap_or_default()
+    }
+
+    /// The active file's breakpoint on 1-based `line`, with its condition,
+    /// hit condition and log message (T617). For tests/tools.
+    #[must_use]
+    pub fn active_breakpoint(&self, line: usize) -> Option<crate::dap::SourceBreakpoint> {
+        self.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .and_then(|p| self.breakpoints.get(p))
+            .and_then(|s| s.get(&line).cloned())
     }
 
     /// Open `path` and move the cursor to `line` (1-based) for a debug stop.
@@ -988,16 +1028,20 @@ impl App {
         self.workspace_search = Some(ps);
     }
 
-    /// Handle a completed debugger prompt (REPL evaluate or add-watch). Grouped
-    /// out of [`App::accept_prompt`] to keep it within the line limit.
+    /// Handle a completed debugger prompt (REPL evaluate, add-watch, the
+    /// Edit Breakpoint steps, set variable). Grouped out of
+    /// [`App::accept_prompt`] to keep it within the line limit.
     pub(super) fn accept_debug_prompt(&mut self, kind: PromptKind, expr: &str) {
-        if expr.is_empty() {
-            return;
-        }
         match kind {
-            PromptKind::DebugRepl => self.dap.evaluate(expr),
-            PromptKind::DebugWatch => {
-                self.dap_watches.push((expr.to_string(), String::new()));
+            PromptKind::DebugBreakpointCondition
+            | PromptKind::DebugBreakpointHit
+            | PromptKind::DebugBreakpointLog => self.accept_breakpoint_prompt(kind, expr),
+            PromptKind::DebugSetVariable => self.accept_set_variable(expr),
+            PromptKind::DebugRepl if !expr.is_empty() => self.dap.evaluate(expr),
+            PromptKind::DebugWatch if !expr.is_empty() => {
+                self.dap_view
+                    .watches
+                    .push((expr.to_string(), String::new()));
                 self.dap.evaluate(expr);
                 self.visible.set(crate::app::Visible::DEBUG_PANEL, true);
             }

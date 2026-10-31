@@ -510,6 +510,10 @@ impl App {
         if self.focus == Focus::Im && self.im_key(key) {
             return;
         }
+        // The Debug panel likewise (T617).
+        if self.focus == Focus::Debug && self.debug_panel_key(key) {
+            return;
+        }
         // Org table context-sensitive keys (Tab/S-Tab/RET field & row nav,
         // Meta-/Shift-arrow structural edits) take priority over every
         // keymap's own bindings for the same keys — including `Alt`+arrow and
@@ -587,7 +591,7 @@ impl App {
             Focus::Messages => self.messages_key(key),
             Focus::BottomDock => self.bottomdock_key(key),
             // Chords the keymap did not take; the panel ignores them.
-            Focus::Im => {}
+            Focus::Im | Focus::Debug => {}
         }
     }
 

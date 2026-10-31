@@ -268,8 +268,9 @@ pub struct Settings {
     /// for `ai_provider = "cli"`; optional for `"ollama"` (a local server
     /// needs no key by default).
     pub ai_api_key_command: String,
-    /// Configured debug adapters (DAP), matched to files by extension. Empty by
-    /// default — add the adapters you have installed.
+    /// Configured debug adapters (DAP), matched to files by extension, each
+    /// with optional `launch` and `attach` argument tables. Empty by default —
+    /// add the adapters you have installed.
     pub debug_adapters: Vec<DebugAdapter>,
     /// Command run by **Tools → Run Tests**, whose output is parsed into a
     /// pass/fail tree (e.g. `cargo test`, `pytest -v`, `npm test`).
@@ -1248,6 +1249,9 @@ command = ["codelldb", "--port", "0"]
 [debug_adapters.launch]
 program = "{program}"
 
+[debug_adapters.attach]
+processId = "4242"
+
 [[org_capture_templates]]
 key = "j"
 description = "Journal"
@@ -1262,6 +1266,7 @@ clock_in = true
         let first: Settings = toml::from_str(src).unwrap();
         assert_eq!(first.db_connections[0].host, "db.example.com");
         assert_eq!(first.debug_adapters[0].launch["program"], "{program}");
+        assert_eq!(first.debug_adapters[0].attach["processId"], "4242");
         assert_eq!(
             first.org_capture_templates[0].entry_type,
             EntryType::CheckItem
@@ -1274,6 +1279,10 @@ clock_in = true
         assert_eq!(
             second.debug_adapters[0].command,
             first.debug_adapters[0].command
+        );
+        assert_eq!(
+            second.debug_adapters[0].attach,
+            first.debug_adapters[0].attach
         );
     }
 

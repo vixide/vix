@@ -26,6 +26,8 @@ pub enum VirtualTextLayer {
     Diagnostics,
     /// Problems a task's problem matcher found in its output (T632).
     TaskProblems,
+    /// The debugger's variable values on the stopped line (T617).
+    DebugValues,
 }
 
 /// One piece of end-of-line virtual text.
