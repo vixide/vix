@@ -156,8 +156,12 @@ one by one.
 
 ## Shared terminal (T697)
 
-The host may show its integrated terminal (`tools.terminal`, the one
-`vix-terminal` PTY) to the session. Nothing about it is shared until the
+The host may show one of its integrated terminals (`tools.terminal`, a
+`vix-terminal` PTY) to the session: with several open (T631), the tab that
+was active when the host confirmed sharing, pinned by its id. Switching tabs
+on the host never changes what guests see, guests' keystrokes go only to that
+tab, closing another tab leaves the share alone, and closing the shared tab
+ends it; the host's tab strip marks it. Nothing about it is shared until the
 host acts, and guests may type only after a second, separate act.
 
 - **Screen, not PTY.** The shell and its PTY stay on the host; the PTY is
@@ -196,9 +200,12 @@ host acts, and guests may type only after a second, separate act.
   `MAX_TERMINAL_ROWS` x `MAX_TERMINAL_COLS` (500 x 1000); a guest refuses a
   larger size on decode, so a hostile host cannot make it allocate a huge
   screen.
-- **Not done:** sharing more than one terminal or the OC menu's container
-  shells, scrollback, mouse reporting, and a per-guest input grant (input is
-  allowed for every guest with the `terminal` level at once).
+- **Live screen only.** The host's scrollback (T631) is not shared: what is
+  sent is always the live screen, so the host scrolling back never reaches
+  guests.
+- **Not done:** sharing more than one terminal at once, the guests' own
+  scrollback, mouse reporting, and a per-guest input grant (input is allowed
+  for every guest with the `terminal` level at once).
 
 ## Never shared (private paths)
 

@@ -127,6 +127,7 @@ impl Capability {
             ("script.", Capability::Script),
             ("script:", Capability::Script),
             ("tools.terminal", Capability::Terminal),
+            ("terminal.", Capability::Terminal),
             ("tools.http_", Capability::Http),
             // The HL7 MLLP sender is a network client: it rides `http`.
             ("tools.hl7_send", Capability::Http),
@@ -227,6 +228,10 @@ mod tests {
         );
         assert_eq!(
             Capability::for_action("tools.terminal"),
+            Some(Capability::Terminal)
+        );
+        assert_eq!(
+            Capability::for_action("terminal.new"),
             Some(Capability::Terminal)
         );
         assert_eq!(Capability::for_action("git.push"), Some(Capability::Git));

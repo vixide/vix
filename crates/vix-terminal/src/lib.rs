@@ -6,13 +6,38 @@
 //! screen grid the UI renders. Key events are encoded to terminal byte sequences
 //! by [`encode_key`] and written back to the PTY.
 //!
-//! Only key encoding is unit-tested here; the live PTY is exercised manually.
+//! The parser keeps a bounded scrollback (at most [`MAX_SCROLLBACK`] lines),
+//! which [`Terminal::scroll_by`] pages through; a [`Selection`] copies text
+//! out of the visible view; [`encode_mouse`] forwards the mouse when the child
+//! asked for it; and [`Tabs`] holds several terminals at once (T631).
+//!
+//! The pure parts (key and mouse encoding, scrolling a bare parser, selection
+//! text, the tab set) are unit-tested here without a PTY.
 
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
+
+mod tabs;
+pub use tabs::Tabs;
+
+/// Default scrollback, in lines, of a new terminal (the `terminal_scrollback`
+/// setting's default).
+pub const DEFAULT_SCROLLBACK: usize = 2000;
+
+/// The most scrollback lines a terminal keeps, whatever the setting says. A
+/// `vt100` cell is about 36 bytes, so a full 200-column scrollback at this cap
+/// is roughly 360 MB; the default is a twenty-fifth of that.
+pub const MAX_SCROLLBACK: usize = 50_000;
+
+/// The scrollback a terminal keeps for a configured `lines`: at most
+/// [`MAX_SCROLLBACK`] (0 turns scrollback off).
+#[must_use]
+pub fn clamp_scrollback(lines: usize) -> usize {
+    lines.min(MAX_SCROLLBACK)
+}
 
 /// A running integrated terminal: the PTY master, the child shell, and the shared
 /// `vt100` parser holding the screen state.
@@ -24,6 +49,7 @@ pub struct Terminal {
     alive: Arc<AtomicBool>,
     rows: u16,
     cols: u16,
+    selection: Option<Selection>,
 }
 
 impl Drop for Terminal {
@@ -39,7 +65,8 @@ impl Drop for Terminal {
 }
 
 impl Terminal {
-    /// Spawn `shell` on a new PTY of `rows`×`cols`, rooted at `cwd`.
+    /// Spawn `shell` on a new PTY of `rows`×`cols`, rooted at `cwd`, keeping
+    /// up to `scrollback` lines (clamped by [`clamp_scrollback`]).
     ///
     /// # Errors
     /// Returns an error if the PTY cannot be created or the shell cannot spawn.
@@ -48,13 +75,15 @@ impl Terminal {
         cwd: &std::path::Path,
         rows: u16,
         cols: u16,
+        scrollback: usize,
     ) -> std::io::Result<Terminal> {
-        Terminal::open_command(shell, &[] as &[&str], cwd, rows, cols)
+        Terminal::open_command(shell, &[] as &[&str], cwd, rows, cols, scrollback)
     }
 
     /// Spawn `program` with `args` on a new PTY of `rows`×`cols`, rooted at
     /// `cwd` (the OC menu's `exec -it <container> sh` tab, and a remote
-    /// workspace's `ssh -t` session, T716).
+    /// workspace's `ssh -t` session, T716), keeping up to `scrollback` lines
+    /// (clamped by [`clamp_scrollback`]).
     ///
     /// # Errors
     /// Returns an error if the PTY cannot be created or the program cannot spawn.
@@ -64,6 +93,7 @@ impl Terminal {
         cwd: &std::path::Path,
         rows: u16,
         cols: u16,
+        scrollback: usize,
     ) -> std::io::Result<Terminal> {
         let rows = rows.max(1);
         let cols = cols.max(1);
@@ -84,7 +114,11 @@ impl Terminal {
         let mut reader = pair.master.try_clone_reader().map_err(|e| to_io(&e))?;
         let writer = pair.master.take_writer().map_err(|e| to_io(&e))?;
 
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 0)));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            rows,
+            cols,
+            clamp_scrollback(scrollback),
+        )));
         let alive = Arc::new(AtomicBool::new(true));
         let reader_parser = Arc::clone(&parser);
         let reader_alive = Arc::clone(&alive);
@@ -111,6 +145,7 @@ impl Terminal {
             alive,
             rows,
             cols,
+            selection: None,
         })
     }
 
@@ -151,6 +186,92 @@ impl Terminal {
         }
     }
 
+    /// How many lines the view is scrolled back from the live screen (0 when
+    /// following the shell).
+    #[must_use]
+    pub fn scroll_offset(&self) -> usize {
+        self.lock().screen().scrollback()
+    }
+
+    /// Scroll the view `delta` lines back into the scrollback (negative:
+    /// toward the live screen), clamped to what is kept. Clears the selection,
+    /// which is in view coordinates. Returns the new offset.
+    pub fn scroll_by(&mut self, delta: isize) -> usize {
+        self.selection = None;
+        scroll_parser(&mut self.lock(), delta)
+    }
+
+    /// Back to the live screen (typing does this first).
+    pub fn scroll_to_bottom(&mut self) {
+        if self.scroll_offset() > 0 {
+            self.selection = None;
+            self.lock().screen_mut().set_scrollback(0);
+        }
+    }
+
+    /// The live screen, whatever the view is scrolled to: what a Cowork share
+    /// sends (T697), so scrolling back on the host never reaches guests.
+    #[must_use]
+    pub fn live_screen(&self) -> vt100::Screen {
+        let mut screen = self.lock().screen().clone();
+        screen.set_scrollback(0);
+        screen
+    }
+
+    /// The current mouse selection, in view coordinates.
+    #[must_use]
+    pub fn selection(&self) -> Option<Selection> {
+        self.selection
+    }
+
+    /// Start, extend or clear the mouse selection.
+    pub fn set_selection(&mut self, selection: Option<Selection>) {
+        self.selection = selection;
+    }
+
+    /// The selected text, or the whole visible view without a selection.
+    #[must_use]
+    pub fn copy_text(&self) -> String {
+        let parser = self.lock();
+        match self.selection {
+            Some(sel) if !sel.is_empty() => sel.text(parser.screen()),
+            _ => parser.screen().contents(),
+        }
+    }
+
+    /// Whether the child asked for mouse reports (so clicks, drags and the
+    /// wheel go to it rather than selecting or scrolling here).
+    #[must_use]
+    pub fn wants_mouse(&self) -> bool {
+        self.lock().screen().mouse_protocol_mode() != vt100::MouseProtocolMode::None
+    }
+
+    /// Forward a mouse event at cell (`col`, `row`) of the screen, encoded the
+    /// way the child asked; returns `false` when it asked for nothing (or not
+    /// for this kind of event).
+    pub fn send_mouse(
+        &mut self,
+        kind: MouseEventKind,
+        col: u16,
+        row: u16,
+        modifiers: KeyModifiers,
+    ) -> bool {
+        let bytes = {
+            let parser = self.lock();
+            let screen = parser.screen();
+            encode_mouse(
+                screen.mouse_protocol_mode(),
+                screen.mouse_protocol_encoding(),
+                kind,
+                col,
+                row,
+                modifiers,
+            )
+        };
+        self.send_bytes(&bytes);
+        !bytes.is_empty()
+    }
+
     /// Resize the PTY and parser to `rows`×`cols` if it changed.
     pub fn resize(&mut self, rows: u16, cols: u16) {
         let rows = rows.max(1);
@@ -160,6 +281,7 @@ impl Terminal {
         }
         self.rows = rows;
         self.cols = cols;
+        self.selection = None;
         let size = portable_pty::PtySize {
             rows,
             cols,
@@ -168,9 +290,134 @@ impl Terminal {
         };
         let _ = self.master.resize(size);
         if let Ok(mut p) = self.parser.lock() {
-            p.set_size(rows, cols);
+            p.screen_mut().set_size(rows, cols);
         }
     }
+}
+
+/// Scroll `parser`'s view `delta` lines back (negative: forward), clamped to
+/// its scrollback; returns the new offset. The pure half of
+/// [`Terminal::scroll_by`].
+pub fn scroll_parser(parser: &mut vt100::Parser, delta: isize) -> usize {
+    let now = parser.screen().scrollback();
+    parser
+        .screen_mut()
+        .set_scrollback(now.saturating_add_signed(delta));
+    parser.screen().scrollback()
+}
+
+/// A mouse selection over a terminal's visible view: where the drag started
+/// and where it is now, as (row, col) cells. Either may come first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Selection {
+    /// Where the drag started (row, col).
+    pub anchor: (u16, u16),
+    /// Where the pointer is now (row, col).
+    pub head: (u16, u16),
+}
+
+impl Selection {
+    /// A selection that starts and ends at `cell` (row, col).
+    #[must_use]
+    pub fn at(cell: (u16, u16)) -> Selection {
+        Selection {
+            anchor: cell,
+            head: cell,
+        }
+    }
+
+    /// The two ends in reading order: (start, end), end inclusive.
+    #[must_use]
+    pub fn ordered(&self) -> ((u16, u16), (u16, u16)) {
+        if self.anchor <= self.head {
+            (self.anchor, self.head)
+        } else {
+            (self.head, self.anchor)
+        }
+    }
+
+    /// Whether nothing was dragged over (a plain click).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.anchor == self.head
+    }
+
+    /// Whether cell (`row`, `col`) is selected (in reading order, like a
+    /// terminal: whole rows between the two ends).
+    #[must_use]
+    pub fn contains(&self, row: u16, col: u16) -> bool {
+        let (start, end) = self.ordered();
+        (row, col) >= start && (row, col) <= end
+    }
+
+    /// The selected text of `screen`'s visible view, end cell included.
+    #[must_use]
+    pub fn text(&self, screen: &vt100::Screen) -> String {
+        let ((r0, c0), (r1, c1)) = self.ordered();
+        screen.contents_between(r0, c0, r1, c1.saturating_add(1))
+    }
+}
+
+/// Encode a mouse event at screen cell (`col`, `row`) for a child that set
+/// `mode` and `encoding` (xterm's protocol: the legacy bytes, UTF-8, or SGR).
+/// Empty when the mode does not report this kind of event.
+#[must_use]
+pub fn encode_mouse(
+    mode: vt100::MouseProtocolMode,
+    encoding: vt100::MouseProtocolEncoding,
+    kind: MouseEventKind,
+    col: u16,
+    row: u16,
+    modifiers: KeyModifiers,
+) -> Vec<u8> {
+    use vt100::MouseProtocolMode as Mode;
+    let button = |b: MouseButton| match b {
+        MouseButton::Left => 0u32,
+        MouseButton::Middle => 1,
+        MouseButton::Right => 2,
+    };
+    // (button code, whether it is a release)
+    let (mut code, release) = match (mode, kind) {
+        (Mode::None, _) => return Vec::new(),
+        (_, MouseEventKind::Down(b)) => (button(b), false),
+        (_, MouseEventKind::ScrollUp) => (64, false),
+        (_, MouseEventKind::ScrollDown) => (65, false),
+        (Mode::Press, _) => return Vec::new(),
+        (_, MouseEventKind::Up(b)) => (button(b), true),
+        (Mode::ButtonMotion | Mode::AnyMotion, MouseEventKind::Drag(b)) => (button(b) + 32, false),
+        (Mode::AnyMotion, MouseEventKind::Moved) => (3 + 32, false),
+        _ => return Vec::new(),
+    };
+    if modifiers.contains(KeyModifiers::SHIFT) {
+        code += 4;
+    }
+    if modifiers.contains(KeyModifiers::ALT) {
+        code += 8;
+    }
+    if modifiers.contains(KeyModifiers::CONTROL) {
+        code += 16;
+    }
+    let (x, y) = (u32::from(col) + 1, u32::from(row) + 1);
+    if encoding == vt100::MouseProtocolEncoding::Sgr {
+        let end = if release { 'm' } else { 'M' };
+        return format!("\x1b[<{code};{x};{y}{end}").into_bytes();
+    }
+    // The legacy encodings report any release as button 3.
+    if release {
+        code |= 3;
+    }
+    let mut out = b"\x1b[M".to_vec();
+    for v in [code, x, y] {
+        let v = v + 32;
+        if encoding == vt100::MouseProtocolEncoding::Utf8 {
+            let c = char::from_u32(v.min(2047)).unwrap_or(' ');
+            let mut buf = [0u8; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        } else {
+            out.push(u8::try_from(v).unwrap_or(u8::MAX));
+        }
+    }
+    out
 }
 
 /// Map a `portable_pty` error into an [`std::io::Error`].
@@ -243,6 +490,7 @@ fn function_key(n: u8) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vt100::{MouseProtocolEncoding as Enc, MouseProtocolMode as Mode};
 
     fn k(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
         KeyEvent::new(code, mods)
@@ -287,12 +535,148 @@ mod tests {
         );
     }
 
+    /// A 5-row parser keeping `cap` scrollback lines, fed `lines` numbered
+    /// lines.
+    fn fed(cap: usize, lines: usize) -> vt100::Parser {
+        let mut p = vt100::Parser::new(5, 20, cap);
+        for i in 1..=lines {
+            p.process(format!("line {i}\r\n").as_bytes());
+        }
+        p
+    }
+
+    #[test]
+    fn scrolling_pages_through_the_captured_scrollback() {
+        let mut p = fed(100, 30);
+        // The live screen shows the last lines.
+        assert!(p.screen().contents().contains("line 30"));
+        assert_eq!(p.screen().scrollback(), 0);
+        assert_eq!(scroll_parser(&mut p, 4), 4);
+        assert!(p.screen().contents().contains("line 26"));
+        assert!(!p.screen().contents().contains("line 30"));
+        assert_eq!(scroll_parser(&mut p, -1), 3);
+        // Forward past the live screen stops at 0.
+        assert_eq!(scroll_parser(&mut p, -100), 0);
+        assert!(p.screen().contents().contains("line 30"));
+    }
+
+    #[test]
+    fn scrollback_is_capped_at_the_configured_lines() {
+        // 30 lines through a 5-row screen push 26 rows off the top (the
+        // trailing newline leaves the last row empty); only 10 are kept.
+        let mut p = fed(10, 30);
+        assert_eq!(scroll_parser(&mut p, isize::MAX), 10);
+        let top = p.screen().contents();
+        assert!(top.contains("line 17"), "{top}");
+        assert!(!top.contains("line 16"), "{top}");
+        // No scrollback at all: the view never moves.
+        let mut none = fed(0, 30);
+        assert_eq!(scroll_parser(&mut none, 5), 0);
+    }
+
+    #[test]
+    fn the_setting_is_clamped() {
+        assert_eq!(clamp_scrollback(0), 0);
+        assert_eq!(clamp_scrollback(1234), 1234);
+        assert_eq!(clamp_scrollback(usize::MAX), MAX_SCROLLBACK);
+        const { assert!(DEFAULT_SCROLLBACK <= MAX_SCROLLBACK) };
+    }
+
+    #[test]
+    fn a_selection_copies_in_reading_order() {
+        let mut p = vt100::Parser::new(3, 10, 0);
+        p.process(b"hello\r\nworld");
+        let sel = Selection {
+            anchor: (1, 2),
+            head: (0, 1),
+        };
+        assert_eq!(sel.ordered(), ((0, 1), (1, 2)));
+        assert_eq!(sel.text(p.screen()), "ello\nwor");
+        assert!(sel.contains(0, 9));
+        assert!(sel.contains(1, 0));
+        assert!(!sel.contains(1, 3));
+        assert!(Selection::at((2, 2)).is_empty());
+        let one_row = Selection {
+            anchor: (0, 0),
+            head: (0, 3),
+        };
+        assert_eq!(one_row.text(p.screen()), "hell");
+    }
+
+    #[test]
+    fn the_mouse_is_forwarded_only_when_asked() {
+        const NOTHING: Vec<u8> = Vec::new();
+        let down = MouseEventKind::Down(MouseButton::Left);
+        let none = KeyModifiers::NONE;
+        assert_eq!(
+            encode_mouse(Mode::None, Enc::Default, down, 0, 0, none),
+            NOTHING
+        );
+        // Legacy bytes: ESC [ M, then 32 + button, 32 + x + 1, 32 + y + 1.
+        assert_eq!(
+            encode_mouse(Mode::PressRelease, Enc::Default, down, 4, 2, none),
+            vec![0x1b, b'[', b'M', 32, 37, 35]
+        );
+        // A release is button 3 in the legacy encoding.
+        let up = MouseEventKind::Up(MouseButton::Left);
+        assert_eq!(
+            encode_mouse(Mode::PressRelease, Enc::Default, up, 0, 0, none),
+            vec![0x1b, b'[', b'M', 35, 33, 33]
+        );
+        // X10 mode reports presses only.
+        assert_eq!(
+            encode_mouse(Mode::Press, Enc::Default, up, 0, 0, none),
+            NOTHING
+        );
+        // SGR: the button, 1-based coordinates, M for press and m for release.
+        assert_eq!(
+            encode_mouse(Mode::PressRelease, Enc::Sgr, up, 9, 19, none),
+            b"\x1b[<0;10;20m"
+        );
+        assert_eq!(
+            encode_mouse(
+                Mode::PressRelease,
+                Enc::Sgr,
+                MouseEventKind::ScrollUp,
+                0,
+                0,
+                KeyModifiers::CONTROL
+            ),
+            b"\x1b[<80;1;1M"
+        );
+        // Motion only in the motion modes.
+        let drag = MouseEventKind::Drag(MouseButton::Left);
+        assert_eq!(
+            encode_mouse(Mode::PressRelease, Enc::Sgr, drag, 0, 0, none),
+            NOTHING
+        );
+        assert_eq!(
+            encode_mouse(Mode::ButtonMotion, Enc::Sgr, drag, 0, 0, none),
+            b"\x1b[<32;1;1M"
+        );
+        assert_eq!(
+            encode_mouse(
+                Mode::ButtonMotion,
+                Enc::Sgr,
+                MouseEventKind::Moved,
+                0,
+                0,
+                none
+            ),
+            NOTHING
+        );
+        // UTF-8 encodes a far column as a multi-byte character.
+        let far = encode_mouse(Mode::PressRelease, Enc::Utf8, down, 300, 0, none);
+        assert_eq!(&far[..4], &[0x1b, b'[', b'M', 32]);
+        assert_eq!(std::str::from_utf8(&far[4..]).unwrap(), "\u{14d}!");
+    }
+
     #[test]
     #[cfg(unix)]
     fn dropping_the_terminal_kills_the_shell_and_reader() {
         use std::time::{Duration, Instant};
         let term =
-            Terminal::open("/bin/sh", std::path::Path::new("/"), 24, 80).expect("spawn a shell");
+            Terminal::open("/bin/sh", std::path::Path::new("/"), 24, 80, 0).expect("spawn a shell");
         // Observe the reader thread's liveness flag past the drop.
         let alive = Arc::clone(&term.alive);
         assert!(alive.load(Ordering::SeqCst), "reader should start alive");

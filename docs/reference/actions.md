@@ -610,6 +610,11 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `suspend` | Suspend | Catalog |
 | `tab.next` | Next Tab | Menu |
 | `tab.prev` | Previous Tab | Menu |
+| `terminal.close` | Close Terminal | Menu |
+| `terminal.copy` | Copy Terminal Text | Menu |
+| `terminal.new` | New Terminal | Menu |
+| `terminal.next` | Next Terminal | Menu |
+| `terminal.prev` | Previous Terminal | Menu |
 | `toggle_diff_gutter` | Toggle Diff Gutter | Catalog |
 | `toggle_help` | Toggle Help | Catalog |
 | `toggle_highlight_search` | Toggle Search Highlights | Menu |
@@ -695,7 +700,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.snippets` | Snippets… | Menu |
 | `tools.system_info` | System… | Menu |
 | `tools.tasks` | Tasks… | Menu |
-| `tools.terminal` | Terminal | Menu |
+| `tools.terminal` | Show/Hide Terminal | Menu |
 | `tools.test` | Run Tests | Menu |
 | `tools.test_panel` | Toggle Test Panel | Menu |
 | `tools.text_info` | Text… | Menu |
@@ -769,4 +774,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**762 actions.**
+**767 actions.**

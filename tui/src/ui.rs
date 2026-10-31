@@ -509,9 +509,7 @@ fn draw_capability_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_ai_panel(app, frame, area);
     }
     #[cfg(feature = "terminal")]
-    if app.terminal.is_some() {
-        draw_terminal(app, frame, area);
-    }
+    draw_terminal(app, frame, area);
     // A Cowork guest's view of the host's shared terminal (T697).
     #[cfg(feature = "cowork")]
     draw_cowork_terminal(app, frame, area);

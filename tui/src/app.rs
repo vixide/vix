@@ -113,7 +113,7 @@ use include_dir::{Dir, include_dir};
 use ratatui::layout::Rect;
 #[cfg(feature = "image")]
 use ratatui_image::picker::Picker as ImagePicker;
-#[cfg(test)]
+#[cfg(any(test, feature = "terminal"))]
 use vix_input::KeyModifiers;
 
 /// Stand-in for the terminal-graphics picker in a build without the `image`
@@ -1630,6 +1630,9 @@ pub struct Layout {
     pub large_file: Rect,
     /// Body rectangle of the open SQL statement editor.
     pub edit_sql: Rect,
+    /// Screen rectangle of the shown integrated terminal (T631): mouse
+    /// selection, wheel scrolling and forwarded mouse reports map into it.
+    pub terminal: Rect,
     /// Schema-tree body of the open DB workbench, for paging/scroll sizing.
     pub db_tree: Rect,
     /// Query-editor body of the open DB workbench.
@@ -2204,8 +2207,9 @@ pub struct App {
     pub(crate) qrcode: Option<String>,
     /// AI chat panel overlay (conversation with the configured assistant), when open.
     pub(crate) ai_panel: Option<crate::ai_panel::Panel>,
-    /// Integrated terminal overlay (a PTY shell), when open.
-    pub(crate) terminal: Option<crate::terminal::Terminal>,
+    /// Integrated terminals (PTY shells, T631): tabs, the active one, and
+    /// whether the overlay is shown. Hidden terminals keep running.
+    pub(crate) terminals: crate::terminal::Tabs<crate::terminal::Terminal>,
     /// AI diff-review overlay (accept/reject an Annotate/Improve transform), when open.
     ai_diff: Option<AiDiffState>,
     /// Receiver for the dashboard's background metric computations.
@@ -2950,7 +2954,7 @@ impl App {
             compare: None,
             ai_replace: None,
             ai_panel: None,
-            terminal: None,
+            terminals: crate::terminal::Tabs::default(),
             ai_diff: None,
             theme_preview: None,
             hbar_active: None,
@@ -9001,6 +9005,9 @@ impl App {
                     return true;
                 }
             };
+        }
+        if self.terminal_visible() && self.terminal_mouse(mouse) {
+            return true;
         }
         panel!(help, help_mouse);
         panel!(keybinding_editor, keybinding_editor_mouse);

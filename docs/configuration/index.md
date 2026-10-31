@@ -35,6 +35,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_bottom_dock` | bool | `false` | Show the bottom dock (log/output/data panel).                        |
 | `bottom_dock_height` | int | `9`   | Height (rows) of the bottom dock; drag its top edge to resize.       |
 | `scrollback`    | int    | `1000`   | Maximum lines kept in the bottom dock; the oldest are dropped past this. |
+| `terminal_scrollback` | int | `2000` | Lines of scrollback each integrated terminal keeps (`Shift+PgUp` scrolls back). At most `50000`; `0` keeps none. Applies to terminals opened afterwards. See [Integrated Terminal](../terminal/index.md#scrollback). |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `show_welcome_dialog` | bool | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves once the dialog has been shown, so it appears on the first run only; set it back to `true` to see it again. |
 | `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |

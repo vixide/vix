@@ -321,7 +321,8 @@ fn terminal_listing(app: &mut App, want: &str) -> String {
     loop {
         let screen = app.terminal_screen_text().unwrap_or_default();
         if screen.contains(want) || screen.contains("T716-716") {
-            app.run_action("tools.terminal");
+            // Close (not just hide) it, so the next listing opens afresh.
+            app.run_action("terminal.close");
             return screen;
         }
         assert!(Instant::now() < deadline, "terminal timed out:\n{screen}");

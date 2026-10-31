@@ -75,6 +75,7 @@ field is absent.
 | `show_bottom_dock` | boolean | `true` | Show the bottom dock (log/output/data panel). All three docks (left explorer, right messages, bottom) are shown by default. |
 | `bottom_dock_height` | integer | `9` | Height in rows of the bottom dock; drag its top edge to resize. |
 | `scrollback` | integer | `1000` | Maximum lines retained in the bottom dock (scrollback); the oldest are dropped past this. |
+| `terminal_scrollback` | integer | `2000` | Lines of scrollback each integrated terminal keeps (Shift+PgUp scrolls back; T631). At most `50000` whatever is set; `0` turns it off. Read when a terminal opens. A cell is about 36 bytes, so 2000 lines of 120 columns is roughly 9 MB per terminal. See [`vix-terminal`](../../vix-terminal/spec/index.md#scrollback-t631). |
 | `preview_tabs` | boolean | `true` | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `trim_trailing_whitespace` | boolean | `true` | On save, strip trailing spaces and tabs from every line. |
 | `ensure_final_newline` | boolean | `true` | On save, append a final newline if the file does not end with one. |

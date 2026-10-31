@@ -47,6 +47,8 @@ mod save;
 mod scripting;
 mod structural_replace;
 mod terminal_protocol;
+#[cfg(all(unix, feature = "terminal"))]
+mod terminals;
 mod themes;
 mod tutor;
 mod undo_tree;

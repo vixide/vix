@@ -291,17 +291,19 @@ impl App {
                 return;
             }
         };
-        let area = self.layout.editor;
+        let (rows, cols) = self.terminal_start_size();
         match crate::terminal::Terminal::open_command(
             &program,
             &args,
             &self.root,
-            area.height.max(1),
-            area.width.max(1),
+            rows,
+            cols,
+            self.settings.terminal_scrollback,
         ) {
             Ok(term) => {
                 self.oc = None;
-                self.terminal = Some(term);
+                // A new tab beside any shells already open (T631).
+                self.terminals.push(term);
             }
             Err(e) => self
                 .messages

@@ -83,11 +83,28 @@ pub use vix_tasks as tasks;
 #[cfg(feature = "terminal")]
 pub use vix_terminal as terminal;
 /// Stand-in for the integrated terminal in a build without the `terminal`
-/// feature; `Terminal` is uninhabited, so `App::terminal` is always `None`.
+/// feature; `Terminal` is uninhabited, so `App::terminals` is always empty.
 #[cfg(not(feature = "terminal"))]
 pub mod terminal {
     /// The (absent) integrated terminal; uninhabited.
     pub enum Terminal {}
+
+    /// The (always empty) set of terminal tabs.
+    pub struct Tabs<T>(core::marker::PhantomData<T>);
+
+    impl<T> Default for Tabs<T> {
+        fn default() -> Self {
+            Tabs(core::marker::PhantomData)
+        }
+    }
+
+    impl<T> Tabs<T> {
+        /// Always empty.
+        #[must_use]
+        pub fn is_empty(&self) -> bool {
+            true
+        }
+    }
 }
 pub use vix_test_runner as test_runner;
 pub use vix_textops as textops;

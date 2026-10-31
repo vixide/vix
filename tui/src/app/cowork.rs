@@ -80,6 +80,10 @@ pub(crate) struct State {
     /// Host (T697): the shared terminal's screen as guests last saw it, so
     /// each tick sends only what changed since.
     term_sent: Option<vt100::Screen>,
+    /// Host (T631): which terminal tab is shared — the one active when the
+    /// host confirmed sharing. Switching tabs never changes it; closing it
+    /// ends the share.
+    term_id: Option<u64>,
     /// Guest (T697): this guest's copy of the host's shared terminal.
     term_mirror: Option<vt100::Parser>,
     /// Guest (T697): whether the shared-terminal overlay is open (it then
@@ -102,6 +106,7 @@ impl Default for State {
             listed_at: None,
             asked: std::collections::BTreeSet::new(),
             term_sent: None,
+            term_id: None,
             term_mirror: None,
             term_view: false,
         }
@@ -1137,10 +1142,11 @@ impl App {
             let out = host.session.unshare_terminal();
             self.cowork_send(&out);
             self.cowork.term_sent = None;
+            self.cowork.term_id = None;
             self.status = t!("status.cowork_terminal_unshared").to_string();
             return;
         }
-        if self.terminal.is_none() {
+        if self.terminals.is_empty() {
             self.status = t!("status.cowork_terminal_none").to_string();
             return;
         }
@@ -1204,7 +1210,12 @@ impl App {
     }
 
     fn cowork_share_terminal_now(&mut self) {
-        let Some(screen) = self.terminal.as_ref().map(|t| t.lock().screen().clone()) else {
+        // The active tab is the one shared (T631), pinned by id.
+        let Some((id, screen)) = self.terminals.active_id().zip(
+            self.terminals
+                .active()
+                .map(crate::terminal::Terminal::live_screen),
+        ) else {
             self.status = t!("status.cowork_terminal_none").to_string();
             return;
         };
@@ -1216,6 +1227,7 @@ impl App {
         let out = host.session.share_terminal(rows, cols, &bytes);
         self.cowork_send(&out);
         self.cowork.term_sent = Some(screen);
+        self.cowork.term_id = Some(id);
         self.status = t!("status.cowork_terminal_shared").to_string();
     }
 
@@ -1246,7 +1258,13 @@ impl App {
         {
             return;
         }
-        let Some(screen) = self.terminal.as_ref().map(|t| t.lock().screen().clone()) else {
+        // The shared tab's live screen: the host scrolling back is not sent.
+        let Some(screen) = self
+            .cowork
+            .term_id
+            .and_then(|id| self.terminals.get(id))
+            .map(crate::terminal::Terminal::live_screen)
+        else {
             self.cowork_stop_terminal_share();
             return;
         };
@@ -1288,6 +1306,7 @@ impl App {
             .unwrap_or_default();
         self.cowork_send(&out);
         self.cowork.term_sent = None;
+        self.cowork.term_id = None;
         self.status = t!("status.cowork_terminal_unshared").to_string();
     }
 
@@ -1339,6 +1358,18 @@ impl App {
         self.cowork.term_mirror = None;
         self.cowork.term_view = false;
         self.cowork.term_sent = None;
+        self.cowork.term_id = None;
+    }
+
+    /// Host (T631): the id of the terminal tab shared with the session, if
+    /// one is (the renderer marks its tab).
+    #[must_use]
+    pub(crate) fn cowork_shared_terminal(&self) -> Option<u64> {
+        self.cowork
+            .host
+            .as_ref()
+            .filter(|h| h.session.terminal_shared())
+            .and(self.cowork.term_id)
     }
 
     /// Whether the guest's shared-terminal overlay is open (it takes keys).
@@ -1981,7 +2012,12 @@ impl App {
         }
         // Checked by the session: shared, input allowed, terminal permission.
         for (_, keys) in handled.terminal_keys {
-            if let Some(term) = self.terminal.as_mut() {
+            // Only ever the shared tab, whichever one the host is looking at.
+            if let Some(term) = self
+                .cowork
+                .term_id
+                .and_then(|id| self.terminals.get_mut(id))
+            {
                 term.send_bytes(&keys);
             }
         }
