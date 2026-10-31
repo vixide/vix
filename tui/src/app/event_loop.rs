@@ -92,12 +92,16 @@ impl App {
         self.poll_dap();
         // Install any completed background reparse (large-file async highlighting).
         self.poll_parse();
-        // Reload files changed on disk by another process (throttled internally).
-        self.poll_file_changes();
-        // Periodically save the active buffer when auto-save is on.
-        self.poll_auto_save();
-        // Back up unsaved buffers; show a pending recovery offer (T629).
-        self.poll_hot_exit();
+        // While the undo tree previews a state (T638), that text is not the
+        // user's: don't reload under it, save it, or back it up.
+        if !self.undo_tree_previewing() {
+            // Reload files changed on disk by another process (throttled internally).
+            self.poll_file_changes();
+            // Periodically save the active buffer when auto-save is on.
+            self.poll_auto_save();
+            // Back up unsaved buffers; show a pending recovery offer (T629).
+            self.poll_hot_exit();
+        }
         // Drain a finished HTTP response into a new tab.
         self.poll_http();
         // Drain a finished HL7 send's reply into a read-only tab.

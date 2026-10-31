@@ -94,6 +94,7 @@ mod terminal;
 mod terminal_off;
 mod trust;
 mod tutor;
+mod undo_tree;
 
 use std::collections::VecDeque;
 use std::ops::ControlFlow;
@@ -1640,6 +1641,8 @@ pub struct Layout {
     pub x11_panel: Rect,
     /// Row-list rectangle of the open theme editor, for click-to-select.
     pub theme_editor: Rect,
+    /// The undo tree panel's row area (T638), for mouse hit-testing.
+    pub undo_tree: Rect,
     /// Row-list rectangle of the media-type picker, for click-to-select.
     pub media_type_panel: Rect,
     /// Row-list rectangle of the Todo Tree, for click-to-select.
@@ -2135,6 +2138,8 @@ pub struct App {
     /// The theme editor's committed baseline, to revert to if the editor is
     /// closed (`Esc`) without saving. `None` when the editor is closed.
     theme_editor_baseline: Option<String>,
+    /// Undo tree overlay (T638) and what `Esc` restores, when open.
+    pub(crate) undo_tree: Option<undo_tree::UndoTreeState>,
     /// Media-type (MIME) picker overlay, when open.
     pub(crate) media_type_panel: Option<crate::media_type::Panel>,
     /// Todo Tree overlay (comment tags grouped by tag or file), when open.
@@ -2789,6 +2794,7 @@ impl App {
             x11_panel: None,
             theme_editor: None,
             theme_editor_baseline: None,
+            undo_tree: None,
             media_type_panel: None,
             todo_tree: None,
             hl7_panel: None,
@@ -3504,14 +3510,8 @@ impl App {
                     t.dirty = true;
                 }
             }
-            "edit.undo_branch" => {
-                let switched = self.editor.switch_undo_branch();
-                self.status = if switched {
-                    t!("status.undo_branch_switched").to_string()
-                } else {
-                    t!("status.undo_branch_none").to_string()
-                };
-            }
+            "edit.undo_branch" => self.switch_undo_branch(),
+            "edit.undo_tree" => self.open_undo_tree(),
             "edit.cut" => {
                 let killed = self
                     .editor
@@ -9013,6 +9013,7 @@ impl App {
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
         panel!(theme_editor, theme_editor_mouse);
+        panel!(undo_tree, undo_tree_mouse);
         panel!(media_type_panel, media_type_mouse);
         panel!(todo_tree, todo_tree_mouse);
         panel!(hl7_panel, hl7_mouse);
@@ -14075,6 +14076,8 @@ impl App {
     /// real terminal session.
     pub fn on_exit(&mut self) {
         // Unsaved text outlives the process (T629).
+        // A previewed undo state is not the user's text (T638).
+        self.cancel_undo_tree();
         self.flush_hot_exit();
         self.lsp.shutdown();
         if let Err(e) = self.save_session() {

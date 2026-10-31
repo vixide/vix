@@ -38,6 +38,7 @@ mod tabs;
 #[cfg(feature = "terminal")]
 mod terminal;
 mod tool_panels;
+mod undo_tree;
 
 #[cfg(feature = "ai")]
 use ai::{draw_ai_diff, draw_ai_panel};
@@ -94,6 +95,7 @@ use tool_panels::{
     draw_calculator, draw_color_converter, draw_dialog, draw_pomodoro, draw_regex_tester,
     draw_unit_converter, draw_welcome,
 };
+use undo_tree::draw_undo_tree;
 
 use crate::app::{App, AppFlags, Focus};
 use crate::menu::MenuDef;
@@ -485,6 +487,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     draw_capability_overlays(app, frame, area);
     if app.theme_editor.is_some() {
         draw_theme_editor(app, frame, area);
+    }
+    if app.undo_tree.is_some() {
+        draw_undo_tree(app, frame, area);
     }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);

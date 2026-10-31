@@ -263,6 +263,31 @@ selections, drawn as a colored cell and a tinted range. While the log is on
 edits leave its history's offsets stale; the App routes undo through the
 collaboration layer's per-participant stack instead.
 
+## Undo tree inspection (T638)
+
+`History` (`history.rs`) is a tree, and hosts can now read and walk it, not
+just cycle branches with `switch_branch`:
+
+- `History::nodes()` returns one `UndoNode` per live state, in creation
+  order: `seq` (the state's stable id, its arena index; the root is `0`),
+  `parent`, `children` (in creation order) and `timestamp` (Unix seconds
+  when the state was recorded; `0` when unknown — a history persisted before
+  T638 deserializes with no times). `History::current()` is the current
+  state's `seq`; `History::path_to(seq)` is the root-to-`seq` path.
+- `Editor::goto_undo_state(seq)` moves the buffer to any live state: it
+  undoes up to the common ancestor, then redoes down the target's branch
+  (pointing each node's active redo branch along the way), so the text and
+  the history's current state always move together. It returns `false` and
+  changes nothing for an unknown `seq`, or while the edit log is on
+  (`is_edit_logging`, a shared Cowork buffer) — the same reason Undo and
+  Redo do nothing there.
+- `History` is `Clone`, so a host that previews states can snapshot it and
+  put it back (`Code::set_history`) after returning to the starting state,
+  leaving every branch's active-redo pointer as it was.
+
+The timestamp is a `serde(default)` field, so undo files written by
+`vix-undo-store` before T638 still load.
+
 ## End-of-line virtual text (T614)
 
 The widget can draw **virtual text** after a line's content: text that is shown

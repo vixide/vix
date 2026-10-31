@@ -100,6 +100,7 @@
 - [Org](org/index.md)
 - [Outline Panel](outline-panel/index.md)
 - [Persistent Undo](undo-store/index.md)
+- [Undo Tree](undo-tree/index.md)
 - [Remote Editing](remote-editing/index.md)
 - [QR Code](qr-code/index.md)
 - [Roam](roam/index.md)

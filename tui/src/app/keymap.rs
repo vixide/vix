@@ -85,6 +85,7 @@ impl App {
             ascii_panel,
             x11_panel,
             theme_editor,
+            undo_tree,
             media_type_panel,
             todo_tree,
             hl7_panel,
@@ -349,6 +350,7 @@ impl App {
         panel!(ascii_panel, ascii_key);
         panel!(x11_panel, x11_key);
         panel!(theme_editor, theme_editor_key);
+        panel!(undo_tree, undo_tree_key);
         panel!(media_type_panel, media_type_key);
         panel!(todo_tree, todo_tree_key);
         panel!(hl7_panel, hl7_key);

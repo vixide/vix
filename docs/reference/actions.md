@@ -141,6 +141,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.transpose_words` | Words | Menu |
 | `edit.undo` | Undo | Menu |
 | `edit.undo_branch` | Switch Undo Branch | Menu |
+| `edit.undo_tree` | Undo Tree… | Menu |
 | `edit.wrap` | Wrap | Menu |
 | `editor.fold` | Fold | Menu |
 | `editor.fold_all` | Fold All | Menu |
@@ -768,4 +769,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**761 actions.**
+**762 actions.**

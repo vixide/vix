@@ -49,4 +49,5 @@ mod structural_replace;
 mod terminal_protocol;
 mod themes;
 mod tutor;
+mod undo_tree;
 mod workspace;

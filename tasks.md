@@ -7436,7 +7436,7 @@ new action.
     a `plugins` feature), trust pinned to a SHA-256 of the plugin's files and
     a new plugin starting disabled; the symlink boundary is the plugin's own
     directory. Spec: `crates/vix-script/spec/index.md`, "Plugins".
-- [ ] **T638 — Undo tree visualizer.** `edit.undo_branch` only cycles
+- [x] **T638 — Undo tree visualizer.** `edit.undo_branch` only cycles
   branches (`crates/vix-editor-core/src/code.rs:1010`), and the tree in
   `history.rs:20` is never drawn. undotree and Emacs vundo both draw it.
   Fix: add `History::nodes()` (parent, children, timestamp, seq), plus a

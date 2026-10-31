@@ -198,6 +198,7 @@ vix-snippets = { workspace = true }
 vix-theme = { workspace = true }
 # Persistent undo: save a buffer's undo tree to disk and restore it on reopen.
 vix-undo-store = { workspace = true }
+vix-undo-tree-panel = { workspace = true }
 # Display one parsed vCard as a table of labelled fields, plus panel state.
 vix-vcard-panel = { workspace = true }
 # A workspace: a named set of project folders plus the files to reopen.

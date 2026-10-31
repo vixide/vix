@@ -4,7 +4,7 @@ use crate::code::EditBatch;
 
 /// One state in the edit tree: the batch that produced it from its parent, plus
 /// the tree links. The root (index 0) has no batch and no parent.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct Node {
     /// The edit leading from the parent to this node (`None` for the root).
     batch: Option<EditBatch>,
@@ -14,6 +14,31 @@ struct Node {
     children: Vec<usize>,
     /// Which child `redo` advances into (the most recently visited/created).
     active_child: Option<usize>,
+    /// When the state was recorded, in Unix seconds (`0` when unknown: a
+    /// history persisted before T638 has no times).
+    #[serde(default)]
+    at: u64,
+}
+
+/// The current time in Unix seconds (`0` if the clock is before 1970).
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// A read-only view of one state in the undo tree, from [`History::nodes`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct UndoNode {
+    /// The state's stable id (its creation order); the root is `0`.
+    pub seq: usize,
+    /// The parent state's `seq` (`None` for the root).
+    pub parent: Option<usize>,
+    /// The child states' `seq`s, in creation order.
+    pub children: Vec<usize>,
+    /// When the state was recorded, in Unix seconds (`0` when unknown).
+    pub timestamp: u64,
 }
 
 /// A **tree** of undo states (an "undo tree", like Vim's undotree / Emacs
@@ -24,7 +49,7 @@ struct Node {
 /// `undo`/`redo` behave exactly like a linear history in the common case: `redo`
 /// follows the most-recently-active branch, so immediately after a fresh edit
 /// there is nothing to redo (the new edit is the active branch's tip).
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct History {
     /// Arena of nodes; slots are tombstoned (`None`) when pruned. `nodes[0]` is
     /// the root (the buffer's initial state).
@@ -46,6 +71,7 @@ impl History {
             parent: None,
             children: Vec::new(),
             active_child: None,
+            at: now_secs(),
         };
         Self {
             nodes: vec![Some(root)],
@@ -63,6 +89,7 @@ impl History {
             parent: Some(self.current),
             children: Vec::new(),
             active_child: None,
+            at: now_secs(),
         }));
         if let Some(cur) = self.nodes[self.current].as_mut() {
             cur.children.push(new);
@@ -108,6 +135,59 @@ impl History {
         let pos = node.children.iter().position(|&c| c == active).unwrap_or(0);
         let next = node.children[(pos + 1) % node.children.len()];
         node.active_child = Some(next);
+        true
+    }
+
+    /// Every live state, in creation (`seq`) order. Pruned states are left
+    /// out, so `seq`s can have gaps.
+    #[must_use]
+    pub fn nodes(&self) -> Vec<UndoNode> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(seq, n)| {
+                n.as_ref().map(|n| UndoNode {
+                    seq,
+                    parent: n.parent,
+                    children: n.children.clone(),
+                    timestamp: n.at,
+                })
+            })
+            .collect()
+    }
+
+    /// The current state's `seq`.
+    #[must_use]
+    pub const fn current(&self) -> usize {
+        self.current
+    }
+
+    /// The states from the root down to `seq` (both included), or `None` when
+    /// `seq` is not a live state.
+    #[must_use]
+    pub fn path_to(&self, seq: usize) -> Option<Vec<usize>> {
+        let mut path = Vec::new();
+        let mut cur = Some(seq);
+        while let Some(i) = cur {
+            let node = self.nodes.get(i)?.as_ref()?;
+            path.push(i);
+            cur = node.parent;
+        }
+        path.reverse();
+        Some(path)
+    }
+
+    /// Make `child` the branch `redo` follows from the current state. Returns
+    /// `false` (and changes nothing) when `child` is not a child of the
+    /// current state.
+    pub fn select_redo_branch(&mut self, child: usize) -> bool {
+        let Some(node) = self.nodes[self.current].as_mut() else {
+            return false;
+        };
+        if !node.children.contains(&child) {
+            return false;
+        }
+        node.active_child = Some(child);
         true
     }
 
@@ -209,6 +289,48 @@ mod tests {
             Some("a".into()),
             "the old branch survived"
         );
+    }
+
+    #[test]
+    fn nodes_report_the_tree_shape() {
+        let mut h = History::new(100);
+        h.push(batch("a")); // 1
+        h.push(batch("b")); // 2
+        h.undo();
+        h.push(batch("c")); // 3, a sibling of 2
+        let nodes = h.nodes();
+        assert_eq!(nodes.len(), 4);
+        assert_eq!(nodes[0].parent, None);
+        assert_eq!(nodes[1].children, vec![2, 3]);
+        assert_eq!(nodes[3].parent, Some(1));
+        assert!(nodes.iter().all(|n| n.timestamp > 0), "times are recorded");
+        assert_eq!(h.current(), 3);
+        assert_eq!(h.path_to(2), Some(vec![0, 1, 2]));
+        assert_eq!(h.path_to(9), None);
+    }
+
+    #[test]
+    fn select_redo_branch_only_accepts_a_child() {
+        let mut h = History::new(100);
+        h.push(batch("a")); // 1
+        h.undo();
+        h.push(batch("b")); // 2
+        h.undo();
+        assert!(!h.select_redo_branch(5));
+        assert!(h.select_redo_branch(1));
+        assert_eq!(h.redo().map(|b| first_text(&b)), Some("a".into()));
+    }
+
+    #[test]
+    fn a_history_without_times_still_loads() {
+        let mut h = History::new(100);
+        h.push(batch("a"));
+        let mut json: serde_json::Value = serde_json::to_value(&h).unwrap();
+        for n in json["nodes"].as_array_mut().unwrap() {
+            n.as_object_mut().unwrap().remove("at");
+        }
+        let back: History = serde_json::from_value(json).unwrap();
+        assert!(back.nodes().iter().all(|n| n.timestamp == 0));
     }
 
     #[test]

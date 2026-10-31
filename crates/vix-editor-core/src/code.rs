@@ -1192,6 +1192,12 @@ impl Code {
         self.history.switch_branch()
     }
 
+    /// Make `child` the undo-tree branch the next `redo` follows from the
+    /// current state; `false` when it is not a child of the current state.
+    pub fn select_redo_branch(&mut self, child: usize) -> bool {
+        self.history.select_redo_branch(child)
+    }
+
     /// The undo-tree history, for persisting it (see `crate::undo_store`).
     #[must_use]
     pub fn history(&self) -> &History {
