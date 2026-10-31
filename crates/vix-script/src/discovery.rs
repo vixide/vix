@@ -14,11 +14,28 @@ use std::path::{Path, PathBuf};
 /// and bindings it registers are namespaced by this) and the path to the
 /// copy that wins after project-vs-global shadowing (see [`discover`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiscoveredScript {
     /// The script's identity: its file name without the `.rhai` extension.
     pub stem: String,
     /// Path to the file to actually load.
     pub path: PathBuf,
+    /// Where the script's translations live (§ Translations, T735): a
+    /// plugin's `<name>/locales/` directory, `None` for a loose global or
+    /// project script. Data only — never searched for scripts.
+    pub locales_dir: Option<PathBuf>,
+}
+
+impl DiscoveredScript {
+    /// A script with no translations directory.
+    #[must_use]
+    pub fn new(stem: impl Into<String>, path: impl Into<PathBuf>) -> Self {
+        Self {
+            stem: stem.into(),
+            path: path.into(),
+            locales_dir: None,
+        }
+    }
 }
 
 /// List `.rhai` scripts under `global_dir` and `project_dir` (each optional,
@@ -41,7 +58,7 @@ pub fn discover(global_dir: Option<&Path>, project_dir: Option<&Path>) -> Vec<Di
     }
     by_stem
         .into_iter()
-        .map(|(stem, path)| DiscoveredScript { stem, path })
+        .map(|(stem, path)| DiscoveredScript::new(stem, path))
         .collect()
 }
 

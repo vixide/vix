@@ -90,6 +90,60 @@ fn plugin_chooser_enables_and_disables_a_plugin() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T735: an enabled plugin's `locales/` strings reach the palette label and
+/// the handler through `tr`. The plugin ships only English, which every
+/// locale falls back to — so this never depends on (or sets) the
+/// process-global UI locale other tests share.
+#[test]
+fn plugin_translations_reach_the_label_and_the_handler() {
+    use vix_script::plugins::{LockEntry, Lockfile};
+    let dir = unique_dir("plugin-i18n");
+    let scripts = dir.join("config/scripts");
+    let lock_path = dir.join("config/plugins.lock");
+    fs::create_dir_all(scripts.join("trplug/locales")).unwrap();
+    fs::write(
+        scripts.join("trplug/up.rhai"),
+        r#"
+        register_command("up", tr("cmd.up"), "on_up");
+        fn on_up() { set_buffer_text(tr("text.done", #{ n: 2 })); }
+        "#,
+    )
+    .unwrap();
+    fs::write(
+        scripts.join("trplug/locales/en.toml"),
+        "[cmd]\nup = \"Translated Up\"\n[text]\ndone = \"done %{n}\"\n",
+    )
+    .unwrap();
+    Lockfile {
+        plugins: vec![LockEntry {
+            name: "trplug".into(),
+            url: "file:///nowhere/trplug.git".into(),
+            rev: None,
+            commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            trusted: None,
+        }],
+    }
+    .save(&lock_path)
+    .unwrap();
+    let paths = vix_script::plugins::PluginPaths {
+        scripts_dir: scripts.clone(),
+        lock_path: lock_path.clone(),
+    };
+    vix_script::plugins::enable(&paths, "trplug").unwrap();
+
+    let mut app = app_at(&dir).with_plugin_paths(&scripts, &lock_path);
+    app.load_scripts();
+    app.run_action("script.run");
+    let chooser = app.script_chooser.as_ref().expect("plugin command loaded");
+    assert_eq!(chooser.commands[0].0, "trplug/up");
+    assert_eq!(chooser.commands[0].1.label, "Translated Up");
+    app.on_key(keycode(KeyCode::Esc));
+
+    app.run_action("script:trplug/up:up");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "done 2");
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn plugins_menu_item_lives_in_the_vix_menu() {
     let vix = vix::menu::menus()

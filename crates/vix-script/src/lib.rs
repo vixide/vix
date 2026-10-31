@@ -13,10 +13,12 @@
 //! script's `bind_key` requests into the real keymap (`crates/
 //! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.
 
+mod catalog;
 mod discovery;
 mod engine;
 pub mod plugins;
 
+pub use catalog::{Catalog, FALLBACK_LOCALE, MAX_FILE_BYTES};
 pub use discovery::{DiscoveredScript, discover};
 pub use engine::{
     Command, HostMessage, HostState, InvokeOutcome, KeyBinding, LoadError, LoadedScript,
@@ -26,6 +28,10 @@ pub use engine::{
 /// to [`Runtime::invoke`] (e.g. a `prompt` answer) never needs its own direct
 /// dependency on `rhai` just for this one type.
 pub use rhai::Dynamic;
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Discover `.rhai` scripts under `global_dir` and `project_dir` (§ Script
 /// discovery — both optional, both non-recursive, project shadows global by
@@ -45,7 +51,9 @@ pub fn load_all(
 /// Load each already-discovered script through `runtime` — [`load_all`]'s
 /// second half, for a host that adds scripts from another source first
 /// (enabled plugins, [`plugins::discover_enabled`]). Same skip-and-report
-/// rule as [`load_all`].
+/// rule as [`load_all`]. A script with a [`DiscoveredScript::locales_dir`]
+/// loads with that directory's [`Catalog`] (read once per directory; a bad
+/// translation file is one more [`LoadError`], under the plugin's name).
 #[must_use]
 pub fn load_discovered(
     runtime: &Runtime,
@@ -53,9 +61,25 @@ pub fn load_discovered(
 ) -> (Vec<LoadedScript>, Vec<LoadError>) {
     let mut loaded = Vec::new();
     let mut errors = Vec::new();
+    // One catalog per translations directory, read once and shared by every
+    // script of that plugin (T735).
+    let mut catalogs: HashMap<PathBuf, Arc<Catalog>> = HashMap::new();
     for found in scripts {
+        let catalog = match &found.locales_dir {
+            Some(dir) => Arc::clone(catalogs.entry(dir.clone()).or_insert_with(|| {
+                let (catalog, problems) = Catalog::load_dir(dir);
+                // Reported under the plugin's name (the stem before `/`).
+                let owner = found.stem.split('/').next().unwrap_or(&found.stem);
+                errors.extend(problems.into_iter().map(|p| LoadError {
+                    stem: owner.to_string(),
+                    message: format!("{}/{p}", plugins::LOCALES_DIR),
+                }));
+                Arc::new(catalog)
+            })),
+            None => Arc::default(),
+        };
         match std::fs::read_to_string(&found.path) {
-            Ok(source) => match runtime.load(&found.stem, &source) {
+            Ok(source) => match runtime.load_with_catalog(&found.stem, &source, catalog) {
                 Ok(script) => loaded.push(script),
                 Err(e) => errors.push(e),
             },

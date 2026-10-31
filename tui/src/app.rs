@@ -10061,6 +10061,7 @@ impl App {
         };
         rust_i18n::set_locale(loc.code);
         self.settings.locale = loc.code.to_string();
+        self.relocalize_scripts();
         self.status = t!("status.locale", language = loc.code).to_string();
     }
 

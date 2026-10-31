@@ -14,6 +14,11 @@ impl App {
         debug_assert!(self.script_chooser.is_none());
     }
 
+    /// No scripts to translate again.
+    pub(super) fn relocalize_scripts(&mut self) {
+        debug_assert!(self.script_chooser.is_none());
+    }
+
     /// No trust prompt: there are no project scripts to trust.
     pub fn maybe_prompt_script_trust(&mut self) {
         debug_assert!(self.script_trust.is_none());
