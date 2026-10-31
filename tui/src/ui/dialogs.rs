@@ -63,13 +63,15 @@ pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     right_align(app, frame, inner);
 }
 
-/// The "trust this workspace's scripts?" prompt (T132).
+/// The "trust this workspace?" prompt (T132): its scripts, and its project
+/// settings file (T627).
 pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.script_trust.as_ref() else {
         return;
     };
     let width = (area.width * 3 / 5).clamp(40, 64).min(area.width);
-    let height = 6u16.min(area.height);
+    // Two more rows when the message also mentions the settings file.
+    let height = if p.count > 0 && p.settings { 8u16 } else { 6 }.min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -82,7 +84,14 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} ", t!("ui.script_trust_title")));
+        .title(format!(
+            " {} ",
+            if p.count > 0 {
+                t!("ui.script_trust_title")
+            } else {
+                t!("ui.workspace_trust_title")
+            }
+        ));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
@@ -90,7 +99,16 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let message = t!("ui.script_trust_message", count = p.count).to_string();
+    // T627: the same prompt covers `.vix/settings.toml`.
+    let message = match (p.count > 0, p.settings) {
+        (true, true) => format!(
+            "{} {}",
+            t!("ui.script_trust_message", count = p.count),
+            t!("ui.workspace_trust_settings_also")
+        ),
+        (true, false) => t!("ui.script_trust_message", count = p.count).to_string(),
+        (false, _) => t!("ui.workspace_trust_settings_message").to_string(),
+    };
     frame.render_widget(Paragraph::new(message).wrap(Wrap { trim: true }), chunks[0]);
     let hint = Line::from(Span::styled(
         t!("ui.script_trust_hint").to_string(),

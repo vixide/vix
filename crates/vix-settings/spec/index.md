@@ -218,6 +218,81 @@ take effect immediately too. The editor display flags copied into each tab at
 startup (line numbers, soft wrap, whitespace) are not re-applied by a reload;
 their View-menu toggles still work.
 
+## Project and language settings (T627)
+
+Settings come in four layers, each overriding the one before it:
+
+1. **built-in** — `Settings::default()`;
+2. **user** — the config file above;
+3. **project** — `<root>/.vix/settings.toml` (`vix_settings::project_settings_path`),
+   in the same format as the user file, holding only the keys the project
+   wants to change;
+4. **language** — a `languages` table of partial settings keyed by Vix's
+   language id (the one syntax highlighting uses: `rust`, `python`,
+   `markdown`, `shell`, `text`, …), resolved per buffer.
+
+```toml
+# <root>/.vix/settings.toml
+tab_width = 2
+format_on_save = true
+
+[languages.python]
+tab_width = 4
+
+[languages.markdown]
+soft_wrap = true
+trim_trailing_whitespace = false
+```
+
+**Merging.** The project file is deep-merged onto the user settings
+(`vix_settings::merge_layer`): a table merges key by key, recursively
+(`[im]`, `[languages.rust]`), and any other value — a string, a number, an
+array — replaces the user's value whole. The merged table must still
+deserialize as `Settings`; when it doesn't (a wrong type, say), the project
+file is ignored and the error is reported.
+
+**Trust.** A project file changes what Vix runs (`ai_command`,
+`test_command`, `lsp_servers`, …), so it is read only when the workspace is
+trusted: the same persisted T132 decision (`WorkspaceSession::
+scripts_trusted`) that loads `.vix/scripts/`. The trust prompt is asked
+once for a workspace that has project scripts **or** a project settings
+file, in every build (it no longer needs the `script` capability); trusting
+applies the file at once. An untrusted or undecided workspace ignores the
+file. A remote (SSH) workspace never reads one, since the file is on the
+remote machine and T714's remote trust covers only project commands.
+
+**Unknown keys.** `vix_settings::unknown_keys` lists the project file's
+dotted keys that `Settings` doesn't define (a typo, or a key from a newer
+Vix) — top-level keys, and keys inside a known non-empty table such as
+`[im]`; each is reported as a warning (`msg.project_settings_unknown_key`)
+and otherwise ignored. `vix_settings::language_key_problems` lists keys in
+a `languages` table that are not per-language settings; each is reported
+(`msg.settings_language_key_ignored`) and ignored.
+
+**Per-language keys** (`vix_settings::LANGUAGE_KEYS`) are the ones that
+describe a buffer: `indent_style`, `tab_width`, `wrap_column`,
+`trim_trailing_whitespace`, `ensure_final_newline`, `format_on_save`,
+`soft_wrap`, `show_whitespace`, `line_numbers`, `relative_line_numbers`,
+`auto_pair` and `rainbow_brackets`. `Settings::for_language(lang)` returns
+the settings with that language's table applied (borrowed unchanged when
+there is none); the host uses it when a buffer opens (indent, display
+flags), when it is saved (trim/final newline, format on save and its tab
+size) and for **Edit → Wrap**. A buffer's `.editorconfig` still overrides
+indent and the on-save rules, as before. `languages` tables in the user file
+work the same way, and the project's `[languages.x]` merges key by key onto
+the user's.
+
+**Saving.** In-app changes are still written to the user file, never the
+project file, and the project's values are never copied into the user
+file: `vix_settings::unmerge(user, merged, effective)` starts from the user
+settings as loaded and takes from the live settings only the top-level keys
+that changed since the project file was merged.
+
+**Live reload.** Saving `<root>/.vix/settings.toml` re-reads both files, as
+saving the user file does (T626), and so do **Vix → Reload Settings** and
+switching workspaces. A load error in the project file keeps the user
+settings and reports it.
+
 ## As implemented in Vix
 
 `crates/vix-settings/src/lib.rs` defines the `Settings` struct (every field, its doc comment,

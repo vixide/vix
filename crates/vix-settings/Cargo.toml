@@ -11,10 +11,8 @@ description = "User settings, persisted with `confy`."
 confy = { workspace = true }
 etcetera = { workspace = true }
 serde = { workspace = true }
-vix-fileops = { workspace = true }
-
-[dev-dependencies]
 toml = { workspace = true }
+vix-fileops = { workspace = true }
 
 [lints]
 workspace = true
