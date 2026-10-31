@@ -7321,7 +7321,7 @@ new action.
   diff (`vix-diff-view`), and never auto-apply. Give untitled buffers
   stable session ids. Tests: round trip, a stale backup shown as a diff,
   and a clean save deleting the backup. **Medium.**
-- [ ] **T630 — Picker preview pane and resume-last-picker.** The palette's
+- [x] **T630 — Picker preview pane and resume-last-picker.** The palette's
   only preview is `:` line-goto. `tui/src/ui/choosers.rs` and
   `tui/src/ui/search.rs` draw one-line rows, and nothing resumes or remembers
   queries. Telescope, snacks.picker, and Helix all have this. Fix:
@@ -7331,7 +7331,12 @@ new action.
   - Store the last `(mode, query, selection)` per picker.
   - Add `palette.resume` and Up/Down query history.
 
-  **Medium.**
+  **Medium.** Done: `draw_preview` in `tui/src/ui/search.rs` (palette Files,
+  `@`, `@@`, and workspace search, at 100+ columns); bounded preview data in
+  `vix-palette` (`preview_from_bytes` over one `read_limited` of 256 KiB,
+  `preview_from_lines` over an open buffer's rope, skipped under a non-local
+  authority); `PickerMemory` for the palette and workspace search;
+  `palette.resume` (Tools menu and palette); `QueryHistory` on `Up`/`Down`.
 - [ ] **T631 — Terminal scrollback and multiple terminals.**
   `vix-terminal`'s spec § Limitations says "Scrollback beyond the
   visible grid is not shown" and "mouse reporting is not forwarded", and

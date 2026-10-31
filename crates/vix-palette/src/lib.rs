@@ -18,8 +18,17 @@ vix_i18n::surface!();
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
+mod history;
+mod preview;
+
+pub use history::{HISTORY_CAP, QueryHistory};
+pub use preview::{
+    MIN_PREVIEW_WIDTH, PREVIEW_BYTES, PREVIEW_RADIUS, Preview, preview_from_bytes,
+    preview_from_lines,
+};
+
 /// Which palette sub-mode is active, chosen by the input's leading prefix.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     /// Fuzzy file finder (no prefix).
     Files,
@@ -48,6 +57,20 @@ impl Mode {
             Some(':') => Mode::GotoLine,
             Some('@') => Mode::Symbols,
             _ => Mode::Files,
+        }
+    }
+
+    /// The input prefix that selects this mode (`""` for the file finder),
+    /// the inverse of [`Mode::from_input`].
+    #[must_use]
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Mode::Files => "",
+            Mode::Commands => ">",
+            Mode::Buffers => "#",
+            Mode::GotoLine => ":",
+            Mode::Symbols => "@",
+            Mode::WorkspaceSymbols => "@@",
         }
     }
 
@@ -165,6 +188,40 @@ impl Palette {
     }
 }
 
+/// How a palette was left, for **Resume Last Picker** (`palette.resume`,
+/// T630): its mode, the query without the prefix, the highlighted row, and
+/// whether it was Search Everywhere.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaletteMemory {
+    /// The mode it was in.
+    pub mode: Mode,
+    /// The query, without the mode prefix.
+    pub query: String,
+    /// The highlighted row.
+    pub selected: usize,
+    /// Whether it was opened as Search Everywhere.
+    pub everywhere: bool,
+}
+
+impl PaletteMemory {
+    /// Remember `palette` as it is now.
+    #[must_use]
+    pub fn of(palette: &Palette, everywhere: bool) -> Self {
+        PaletteMemory {
+            mode: palette.mode(),
+            query: palette.query().to_string(),
+            selected: palette.selected,
+            everywhere,
+        }
+    }
+
+    /// The full input (prefix and query) that restores the mode and query.
+    #[must_use]
+    pub fn input(&self) -> String {
+        format!("{}{}", self.mode.prefix(), self.query)
+    }
+}
+
 /// Commands offered in `>` mode: `(label_key, action)`, where `label_key` is an
 /// i18n key (translated at render time) and `action` is the same identifier the
 /// menu bar dispatches. Hand-curated from the menu tree — the host
@@ -275,6 +332,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_signature_help", "lsp.signature_help"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
     ("cmd.search_everywhere", "nav.search_everywhere"),
+    ("cmd.palette_resume", "palette.resume"),
     ("cmd.goto_workspace_symbol", "nav.goto_workspace_symbol"),
     ("cmd.recent_locations", "nav.recent_locations"),
     ("cmd.bookmark_toggle", "bookmark.toggle"),
@@ -613,6 +671,29 @@ fn windows_drive_prefix_len(input: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mode_prefix_round_trips_through_from_input() {
+        for mode in [
+            Mode::Files,
+            Mode::Commands,
+            Mode::Buffers,
+            Mode::GotoLine,
+            Mode::Symbols,
+            Mode::WorkspaceSymbols,
+        ] {
+            assert_eq!(Mode::from_input(&format!("{}abc", mode.prefix())), mode);
+        }
+        let mut p = Palette::new();
+        p.input = "@@foo".into();
+        p.selected = 3;
+        let m = PaletteMemory::of(&p, false);
+        assert_eq!(
+            (m.mode, m.query.as_str(), m.selected),
+            (Mode::WorkspaceSymbols, "foo", 3)
+        );
+        assert_eq!(m.input(), "@@foo");
+    }
 
     /// The pre-optimization implementation, kept verbatim as the reference the
     /// current one must agree with (see `fuzzy_score_matches_the_reference`).
