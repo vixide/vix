@@ -25,9 +25,12 @@ impl App {
     /// user's config directory. Every in-app settings write goes through here so
     /// a run pointed at another config file never touches the user's.
     pub(super) fn store_settings(&self) -> Result<(), confy::ConfyError> {
+        // With a project layer in effect, only the user's own settings and
+        // in-app changes reach the user file, never the project's (T627).
+        let settings = self.user_settings();
         match &self.settings_path {
-            Some(path) => self.settings.save_to(path),
-            None => self.settings.save(),
+            Some(path) => settings.save_to(path),
+            None => settings.save(),
         }
     }
 
@@ -78,7 +81,6 @@ impl App {
     }
 
     /// [`App::store_session`], but surface a failure as a warning message.
-    #[cfg(any(feature = "script", feature = "jupyter"))]
     pub(super) fn store_session_or_warn(&mut self, session: &crate::session::Session) {
         if let Err(e) = self.store_session(session) {
             self.messages.push(
@@ -415,6 +417,14 @@ impl App {
     /// [`App::switch_workspace`] without saving the old session first (the
     /// remote open saves it before the authority changes, T713).
     pub(super) fn reroot_workspace(&mut self, new_root: &Path, folders: &[PathBuf]) {
+        // Drop the old workspace's project settings layer before the root
+        // changes; the new workspace's is merged once it has (T627).
+        if self.project_settings.is_some() {
+            let user = self.user_settings().into_owned();
+            self.project_settings = None;
+            let old = self.settings.clone();
+            self.apply_settings(&old, user);
+        }
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();
@@ -424,6 +434,7 @@ impl App {
             folders.to_vec()
         };
         self.explorer = Explorer::new(new_root.to_path_buf());
+        self.load_project_settings();
         self.lsp = crate::lsp::Lsp::new(
             self.lsp_allowed(),
             self.settings.lsp_servers.clone(),
@@ -474,7 +485,8 @@ impl App {
     }
 
     /// `vix.reload_settings`, and the hook `App::save` runs after writing the
-    /// settings file (T626): re-read it and apply it live. A load failure (a
+    /// settings file (T626) or the project settings file (T627): re-read the
+    /// user file, merge the project file over it again, and apply it live. A load failure (a
     /// TOML syntax error, say) keeps the current settings and posts an error
     /// message instead of falling back to defaults.
     pub(super) fn reload_settings_from_disk(&mut self) {
@@ -483,7 +495,9 @@ impl App {
             return;
         };
         match Settings::try_load_from(&path) {
-            Ok(new) => {
+            Ok(user) => {
+                // T627: the project file (when trusted) layers over it again.
+                let new = self.layer_project_settings(user);
                 let old = std::mem::take(&mut self.settings);
                 self.apply_settings(&old, new);
                 self.status = t!("status.settings_reloaded").to_string();

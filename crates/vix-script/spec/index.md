@@ -81,6 +81,9 @@ Only an explicit `y` trusts; `n`/`Esc` decline; Enter and every other key
 are ignored. Because the prompt opens at startup or on reload, keys arriving
 within 250 ms of it opening (`SCRIPT_TRUST_KEY_GUARD`) are dropped as well
 (T655), so a key typed ahead of the prompt can never answer it.
+The same prompt and decision also gate a workspace's `.vix/settings.toml`
+(T627, `crates/vix-settings/spec`), so the prompt lives in
+`tui/src/app/trust.rs` and exists in every build, `script` capability or not.
 This crate's own `discover`/`load_all` know nothing about trust at all —
 gating which directories get passed in is host wiring (`App::load_scripts`),
 the same "resolving real paths is the host's job" split this section

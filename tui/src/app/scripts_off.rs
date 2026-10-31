@@ -19,14 +19,11 @@ impl App {
         debug_assert!(self.script_chooser.is_none());
     }
 
-    /// No trust prompt: there are no project scripts to trust.
-    pub fn maybe_prompt_script_trust(&mut self) {
-        debug_assert!(self.script_trust.is_none());
-    }
-
-    /// The trust prompt can't be open, so it never takes a key.
-    pub(super) fn script_trust_key(&mut self, _key: KeyEvent) {
-        debug_assert!(self.script_trust.is_none());
+    /// No project scripts are ever counted: the trust prompt (`trust.rs`)
+    /// still asks for a project settings file (T627).
+    pub(super) fn project_script_count(&self) -> usize {
+        debug_assert!(self.script_chooser.is_none());
+        0
     }
 
     /// The script chooser can't be open, so it never takes a key.

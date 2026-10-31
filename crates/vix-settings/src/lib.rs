@@ -16,7 +16,12 @@
 
 use serde::{Deserialize, Serialize};
 
+mod layers;
 mod model;
+pub use layers::{
+    LANGUAGE_KEYS, LayerError, deep_merge, language_key_problems, merge_layer,
+    project_settings_path, read_layer, unknown_keys, unmerge,
+};
 pub use model::{
     CaptureTemplate, Connection, DebugAdapter, EntryType, Kind, default_capture_templates,
 };
@@ -298,6 +303,11 @@ pub struct Settings {
     /// (the default) picks the first installed kernelspec for the language.
     /// Only read in a build with the `jupyter` capability.
     pub jupyter_kernels: std::collections::BTreeMap<String, String>,
+    /// Per-language overrides (T627): a `[languages.<id>]` table of partial
+    /// settings for each of Vix's language ids (`rust`, `python`, `markdown`,
+    /// …), applied over everything else for a buffer in that language by
+    /// `Settings::for_language`. Only the keys in `LANGUAGE_KEYS` take effect.
+    pub languages: std::collections::BTreeMap<String, toml::Table>,
 }
 
 /// The `[im]` table: IM preferences and IRC accounts (T752).
@@ -843,6 +853,7 @@ impl Default for Settings {
             im: ImSettings::default(),
             jupyter_confirm_evaluate: "untrusted".to_string(),
             jupyter_kernels: std::collections::BTreeMap::new(),
+            languages: std::collections::BTreeMap::new(),
         }
     }
 }
