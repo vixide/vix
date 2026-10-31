@@ -36,6 +36,8 @@ mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
 #[cfg(feature = "git")]
+mod git_rebase;
+#[cfg(feature = "git")]
 mod git_stash_worktree;
 mod hl7;
 mod hot_exit;
@@ -250,6 +252,13 @@ pub enum PromptKind {
     GitOpenAtRevision,
     /// Enter a path for a new linked worktree (`git worktree add`, T634).
     GitWorktreeAdd,
+    /// Enter the base for an interactive rebase (`git rebase -i`, T633).
+    GitRebaseBase,
+    /// Enter a new message for the highlighted commit in the interactive
+    /// rebase overlay (its `reword`, T633).
+    GitRebaseReword,
+    /// Enter the branch (or revision) to cherry-pick a commit from (T633).
+    GitCherryPickFrom,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
     WorkspaceSymbol,
     /// Enter a free-text instruction for the AI to apply to the selection
@@ -2056,6 +2065,9 @@ pub struct App {
     pub(crate) stash_chooser: Option<StashChooser>,
     /// The worktree chooser (T634: **Git → Worktree**), when open.
     pub(crate) worktree_chooser: Option<WorktreeChooser>,
+    /// The interactive rebase todo overlay (T633: **Git → Rebase →
+    /// Interactive Rebase…**), when open.
+    pub(crate) git_rebase: Option<crate::git::RebaseTodo>,
     /// The OC container panel (T702-T704), when open.
     pub(crate) oc: Option<crate::oci_panel::Panel>,
     /// The IM menu's state: inbox, dock panel, connections (T752).
@@ -2777,6 +2789,7 @@ impl App {
             git_graph: None,
             stash_chooser: None,
             worktree_chooser: None,
+            git_rebase: None,
             oc: None,
             im: im::ImState::new(&settings),
             im_dialog: None,
@@ -9078,6 +9091,7 @@ impl App {
         panel!(git_graph, git_graph_mouse);
         panel!(stash_chooser, stash_chooser_mouse);
         panel!(worktree_chooser, worktree_chooser_mouse);
+        panel!(git_rebase, git_rebase_mouse);
         panel!(oc, oc_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
@@ -13530,6 +13544,12 @@ impl App {
             PromptKind::GitOpenAtRevision => self.git_open_at_revision(prompt.input.trim()),
             #[cfg(feature = "git")]
             PromptKind::GitWorktreeAdd => self.git_worktree_add(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitRebaseBase => self.git_rebase_begin(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitRebaseReword => self.git_rebase_reword(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitCherryPickFrom => self.git_cherry_pick_from(prompt.input.trim()),
             #[cfg(not(feature = "git"))]
             PromptKind::GitCommit
             | PromptKind::GitNewBranch
@@ -13538,7 +13558,10 @@ impl App {
             | PromptKind::GitDeleteBranch
             | PromptKind::GitGrep
             | PromptKind::GitOpenAtRevision
-            | PromptKind::GitWorktreeAdd => {}
+            | PromptKind::GitWorktreeAdd
+            | PromptKind::GitRebaseBase
+            | PromptKind::GitRebaseReword
+            | PromptKind::GitCherryPickFrom => {}
             PromptKind::WorkspaceSymbol => {
                 if let Some(path) = self.active_path()
                     && self.lsp.handles(&path)

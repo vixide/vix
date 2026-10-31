@@ -253,6 +253,7 @@ Jujutsu (`jj`) — a Git-compatible VCS. Mirrors the Git menu's purpose using
 | Stash / Stash Pop | Stash the working tree / restore the latest stash     |
 | Stash List…    | Choose a stash to show, apply, pop, or drop              |
 | Worktree ▸     | Submenu of worktree commands (below)                     |
+| Rebase ▸       | Submenu of interactive rebase and cherry-pick commands (below) |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |
@@ -276,6 +277,15 @@ The **Worktree** submenu:
 | Add…    | Prompt for a folder and add a worktree there on a new branch   |
 | List…   | Choose a worktree and switch the workspace to it               |
 | Remove… | Choose a linked worktree and remove it, after a confirmation   |
+
+The **Rebase** submenu:
+
+| Item                | Action                                                         |
+| ------------------- | -------------------------------------------------------------- |
+| Interactive Rebase… | Prompt for a base, then reorder, reword, edit, squash, fix up, or drop the commits after it |
+| Continue Rebase     | Continue a rebase stopped at an `edit` or a conflict           |
+| Abort Rebase        | Abandon a stopped rebase                                       |
+| Cherry-Pick…        | Prompt for a branch, then apply one of its commits             |
 
 ## IM menu
 

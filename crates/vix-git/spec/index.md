@@ -27,6 +27,10 @@ caller outside this crate is the Rhai plugin installer
 content at a revision. See [git-history](git-history/index.md).
 - **Stash and worktrees** (T634): [`parse_stash_list`]/
 [`parse_worktree_list`] and their runners; see the section below.
+- **Interactive rebase and cherry-pick** (T633): [`parse_todo`]/
+[`serialize_todo`]/[`check_todo`]/[`plan`] and the [`RebaseTodo`] overlay
+state (pure), with runners to start, continue and abort a rebase and to
+cherry-pick a commit; see the section below.
 
 ## Stash list and worktrees (T634)
 
@@ -71,6 +75,78 @@ choosers in `tui/src/app/git_stash_worktree.rs` and
 Tests: the parsers' unit tests, `crates/vix-git/tests/stash_worktree.rs`
 (the runners against a temporary repository), and
 `tui/tests/integration/git.rs` (the choosers end to end).
+
+## Interactive rebase and cherry-pick (T633)
+
+| Action                   | Menu                                  | Behavior |
+| ------------------------ | ------------------------------------- | -------- |
+| `git.rebase_interactive` | Git → Rebase → Interactive Rebase…    | Prompt for a base (a branch, tag, or commit such as `HEAD~3`), then open the todo overlay over the commits after it, oldest first; `Enter` runs `git rebase -i` with the edited list |
+| `git.rebase_continue`    | Git → Rebase → Continue Rebase        | `git rebase --continue` after an `edit` stop or a resolved conflict |
+| `git.rebase_abort`       | Git → Rebase → Abort Rebase           | `git rebase --abort`: the branch goes back where it was |
+| `git.cherry_pick`        | Git → Rebase → Cherry-Pick…           | Prompt for a branch (or any revision), then list its commits that `HEAD` lacks in the Browse Log panel; `c` cherry-picks the highlighted one, `Enter` shows its diff |
+
+The todo overlay's keys:
+
+| Key              | Effect                                                         |
+| ---------------- | -------------------------------------------------------------- |
+| `↑` / `↓`        | Move the highlight                                             |
+| `Alt+↑` / `Alt+↓` | Move the highlighted commit one row earlier / later           |
+| `p`              | `pick`: keep the commit                                        |
+| `r`              | `reword`: prompt for a new message (one line, replacing the whole message; prefilled with the subject); an empty answer keeps the commit's own message |
+| `e`              | `edit`: stop after the commit so it can be amended             |
+| `s`              | `squash`: meld into the commit above, keeping both messages    |
+| `f`              | `fixup`: meld into the commit above, dropping this message     |
+| `d`              | `drop`: leave the commit out (shown dimmed)                    |
+| `Enter`          | Run the rebase                                                 |
+| `Esc`            | Close without rebasing                                         |
+
+- **No editor ever opens.** [`rebase_interactive`] runs `git rebase -i
+  <base>` with `GIT_SEQUENCE_EDITOR` set to `printf '%s' "$VIX_REBASE_TODO"
+  >`, which writes the prepared list over git's own, and `GIT_EDITOR=true`,
+  which accepts the combined message git proposes for a `squash`. The list
+  travels in the `VIX_REBASE_TODO` environment variable rather than a
+  temporary file, so a remote host gets it too. This is the same trick as
+  **Branch → Edit Description…**'s throwaway `GIT_EDITOR`. Every variable
+  is set on the spawned git process alone (through `ProcessSpec::env`),
+  never on Vix's own environment, which `unsafe_code = "forbid"` rules out
+  anyway.
+- **A typed reword message is never parsed by a shell.** [`plan`] turns a
+  `reword` that has a message into `pick <sha>` followed by
+  `exec git commit --amend --allow-empty -m "$VIX_REWORD_<n>"`, the message
+  in that environment variable. A `reword` without a message stays a
+  `reword`, which `GIT_EDITOR=true` leaves unchanged.
+- **The list is Vix's, not git's.** [`rebase_commits`] resolves the base
+  (`rev-parse --verify <base>^{commit}`, after refusing an empty or
+  option-shaped one) and lists `<base>..HEAD` oldest first without merges,
+  each a `pick`; that list replaces whatever git would have written, so
+  `rebase.autoSquash` or `rebase.updateRefs` don't apply here.
+- **Checked before git runs.** [`check_todo`] refuses a list whose first
+  kept commit is a `squash` or `fixup` (git would stop with "cannot squash
+  without a previous commit"); the overlay stays open with a status message.
+- **Pure todo format.** [`parse_todo`] reads git's format: long or one-letter
+  command words, `#` comments and blank lines skipped, and any other command
+  (`exec`, `break`, `label`, `update-ref`, `fixup -C`, …) kept verbatim as
+  [`TodoItem::Other`]; [`serialize_todo`] writes it back, so the two round-trip.
+- **Stops.** An `edit`, or a conflict, leaves the rebase stopped
+  ([`rebase_in_progress`]: git's `rebase-merge` or `rebase-apply` directory
+  exists). The status bar says to use **Continue Rebase** or **Abort
+  Rebase**; while one is stopped **Interactive Rebase…** won't start another.
+  [`rebase_continue`] also runs with `GIT_EDITOR=true`.
+- **Cherry-pick.** [`cherry_pick_candidates`] lists `HEAD..<rev>` (at most
+  200), shown in the Browse Log panel with [`LogScope::Pick`];
+  [`cherry_pick`] runs `git cherry-pick --end-of-options <sha>`. A conflict
+  is git's error, shown in the message drawer.
+- **Signing.** Rebasing, continuing and cherry-picking all write commits, so
+  each first makes the same terminal-pinentry check as a commit (T570, below).
+- After every run the git state and unmodified open buffers are refreshed.
+
+Code: `crates/vix-git/src/rebase.rs`; the overlay and actions in
+`tui/src/app/git_rebase.rs`, drawn by `draw_git_rebase` in
+`tui/src/ui/choosers.rs`. Tests: the unit tests in `rebase.rs` (the todo
+round trip, the plan, reordering), `crates/vix-git/tests/rebase.rs` (squash,
+reorder/fixup/reword/drop, edit with continue and abort, and cherry-pick
+against a temporary repository), and `tui/tests/integration/git.rs` (the
+overlay and the cherry-pick list end to end).
 
 ## Sub-specs
 

@@ -7424,7 +7424,7 @@ new action.
   `matcher::locate` first. Fixtures in `test-data/problem-matchers/`. Not
   done: gutter marks (inline text instead), and Repeat Last Task / run
   configurations always use `auto`.
-- [ ] **T633 — Interactive rebase editor.**
+- [x] **T633 — Interactive rebase editor.**
   `docs/git-panel/index.md:177` lists it under Roadmap. Fix:
   - A `git.rebase_interactive` action (prompt for the base) that sets
     `GIT_SEQUENCE_EDITOR` to a throwaway script, the same trick as
@@ -7435,6 +7435,15 @@ new action.
 
   Tests: a pure todo parse/serialize round trip, and squashing two commits
   in a temp repo. **Medium.**
+
+  **Done 2026-10-31.** `vix-git`'s new `rebase` module holds the pure todo
+  format (`parse_todo`/`serialize_todo`/`check_todo`/`plan`, `RebaseTodo`)
+  and the runners. The list (and any typed reword message, via an `exec git
+  commit --amend -m "$VIX_REWORD_<n>"` line) travels in environment
+  variables set on the git process only, so no temp file is needed. Reword
+  takes a one-line message. Cherry-pick prompts for a branch and lists its
+  commits `HEAD` lacks (`LogScope::Pick`) rather than reusing plain Browse
+  Log, whose commits are all ancestors of `HEAD` and so can't be picked.
 - [x] **T634 — Git stash list and worktrees.** `tui/src/app/git.rs:110-111`
   has only `stash_push` and `stash_pop`, and there is no worktree support.
   Magit, Neogit, and VS Code all have both. Add `git.stash_list`, a
@@ -9454,8 +9463,8 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T617–T621, T623, T624, T633, T635, T636 and T644 are
-  open; T612–T616, T622, T625–T632, T634, T637 and T638 are done
+- **Run M:** T611, T617–T621, T623, T624, T635, T636 and T644 are
+  open; T612–T616, T622, T625–T634, T637 and T638 are done
   (2026-10-31). T610 is partly done (the `*-tool` converters and
   `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
   done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half

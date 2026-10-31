@@ -109,6 +109,7 @@ impl App {
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
             other if self.run_git_stash_worktree_action(other) => {}
+            other if self.run_git_rebase_action(other) => {}
             "git.amend" => {
                 if !self.commit_signing_blocked() {
                     self.git_op(crate::git::commit_amend, "status.git_amended");
@@ -837,7 +838,7 @@ impl App {
     /// Whether signing this commit would run a terminal pinentry, which draws
     /// over Vix's screen and steals its keystrokes (T570). Warns instead of
     /// committing, so nothing is half-done.
-    fn commit_signing_blocked(&mut self) -> bool {
+    pub(super) fn commit_signing_blocked(&mut self) -> bool {
         if !crate::git::commit_signing_needs_tty(&self.root) {
             return false;
         }
@@ -1001,6 +1002,14 @@ impl App {
                 }
             }
             KeyCode::Enter => self.open_selected_commit_diff(),
+            KeyCode::Char('c')
+                if self
+                    .git_log
+                    .as_ref()
+                    .is_some_and(|p| matches!(p.scope, crate::git::LogScope::Pick(_))) =>
+            {
+                self.cherry_pick_selected_commit();
+            }
             KeyCode::Esc => self.git_log = None,
             _ => {}
         }
@@ -1019,7 +1028,7 @@ impl App {
         let abbrev = panel.selected_abbrev().unwrap_or(&sha).to_string();
         let rel_path = match &panel.scope {
             crate::git::LogScope::File(p) => Some(p.clone()),
-            crate::git::LogScope::Repo => None,
+            _ => None,
         };
         let Some(patch) = crate::git::show_commit(&self.root, &sha, rel_path.as_deref()) else {
             self.messages

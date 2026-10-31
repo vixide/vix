@@ -60,6 +60,8 @@ The **Git** menu gathers the git actions:
 - **Pull** / **Push** / **Fetch** — sync with the remote.
 - **Stash List…** and **Worktree ▸** — manage stashes and worktrees (see
   below).
+- **Rebase ▸** — interactive rebase, continue/abort, and cherry-pick (see
+  below).
 
 Every Git menu item is also available from the command palette (for example,
 "Git: Changes").
@@ -222,12 +224,47 @@ main worktree, or the one you have open, from here.
 
 In a remote workspace, stash and worktree commands run on the remote host.
 
+## Interactive rebase
+
+**Git → Rebase → Interactive Rebase…** rewrites recent history. It asks for
+a base: a branch, a tag, or a commit such as `HEAD~3`. Then it lists every
+commit after that base, oldest first, each marked `pick`:
+
+| Key               | Action                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| `↑` / `↓`         | Move the selection                                           |
+| `Alt+↑` / `Alt+↓` | Move the selected commit earlier / later                     |
+| `p`               | **pick**: keep the commit as it is                           |
+| `r`               | **reword**: type a new message for it (one line; it replaces the whole message) |
+| `e`               | **edit**: stop after this commit so you can change it        |
+| `s`               | **squash**: meld into the commit above, keeping both messages |
+| `f`               | **fixup**: meld into the commit above, dropping this message |
+| `d`               | **drop**: leave the commit out                               |
+| `Enter`           | Run the rebase                                               |
+| `Esc`             | Close without changing anything                              |
+
+No editor opens: Vix hands git the list you made. The first commit can't be
+a squash or fixup, because there is nothing above it to meld into. The tree
+must be clean, as for any `git rebase`.
+
+The rebase **stops** at an `edit`, or when a commit doesn't apply cleanly.
+Change the files, stage them (or resolve the conflict), then choose
+**Git → Rebase → Continue Rebase**. **Abort Rebase** gives up and puts the
+branch back where it was.
+
+## Cherry-pick
+
+**Git → Rebase → Cherry-Pick…** asks for a branch (or any revision), then
+lists that branch's commits that the current branch doesn't have, in the
+Browse Log panel. `Enter` shows a commit's diff; `c` applies it on top of
+the current branch (`git cherry-pick`). If it conflicts, git's message
+appears in the message drawer; resolve the conflict and commit as usual.
+
 ## Roadmap
 
 The core Git features are in place. Remaining ideas:
 
 - Inline blame in the soft-wrap view (currently the non-wrapped view only).
-- Interactive rebase / cherry-pick helpers.
 
 ---
 

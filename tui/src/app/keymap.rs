@@ -122,6 +122,7 @@ impl App {
             git_graph,
             stash_chooser,
             worktree_chooser,
+            git_rebase,
             oc,
             im_dialog,
             task_chooser,
@@ -429,6 +430,8 @@ impl App {
             return true;
         }
         panel!(prompt, prompt_key);
+        // After `prompt` too: `r` opens a reword prompt over the rebase overlay.
+        panel!(git_rebase, git_rebase_key);
         // Must come after `prompt`: rebinding opens a `Prompt` while
         // `keybinding_editor` stays `Some` underneath it, and `Prompt` has
         // to win the key or the rebind prompt would be unreachable.

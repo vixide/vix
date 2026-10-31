@@ -103,6 +103,16 @@ impl App {
         debug_assert!(self.stash_chooser.is_none());
     }
 
+    /// The interactive rebase overlay can't be open.
+    pub(super) fn git_rebase_key(&mut self, _key: KeyEvent) {
+        debug_assert!(self.git_rebase.is_none());
+    }
+
+    /// The interactive rebase overlay can't be open.
+    pub(super) fn git_rebase_mouse(&mut self, _mouse: MouseEvent) {
+        debug_assert!(self.git_rebase.is_none());
+    }
+
     /// The worktree chooser can't be open.
     pub(super) fn worktree_chooser_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.worktree_chooser.is_none());

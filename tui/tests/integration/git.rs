@@ -1128,3 +1128,150 @@ fn git_worktree_add_list_switch_and_remove() {
     assert_eq!(app.root.canonicalize().unwrap(), two);
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
+
+/// The subjects of `dir`'s commits, newest first (T633).
+fn t633_subjects(dir: &Path) -> Vec<String> {
+    let out = std::process::Command::new("git")
+        .current_dir(dir)
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .args(["log", "--format=%s"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+/// T633: Git → Rebase → Interactive Rebase… lists the commits after the
+/// base; `s` squashes, Alt+↑ reorders, `r` rewords through a prompt, and
+/// Enter runs the rebase. A leading squash is refused before git runs.
+#[test]
+fn git_interactive_rebase_squashes_reorders_and_rewords() {
+    let dir = t634_repo("t633rebase");
+    for (file, subject) in [
+        ("one.txt", "one"),
+        ("two.txt", "two"),
+        ("three.txt", "three"),
+    ] {
+        fs::write(dir.join(file), subject).unwrap();
+        t634_git(&dir, &["add", file]);
+        t634_git(&dir, &["commit", "-q", "-m", subject]);
+    }
+    let mut app = app_at(&dir);
+    app.refresh_git();
+
+    app.run_action("git.rebase_interactive");
+    type_str(&mut app, "HEAD~3");
+    app.on_key(keycode(KeyCode::Enter));
+    let todo = app.git_rebase.as_ref().expect("the todo overlay opens");
+    let subjects: Vec<&str> = todo.commits.iter().map(|c| c.subject.as_str()).collect();
+    assert_eq!(subjects, ["one", "two", "three"]);
+
+    // A squash on the first row has nothing to meld into: refused.
+    app.on_key(key('s'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.git_rebase.is_some(), "the overlay stays open");
+    assert_eq!(t633_subjects(&dir).len(), 4, "git never ran");
+    app.on_key(key('p'));
+
+    // three, one, two: move `three` up twice, reword it, squash `two`.
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(alt(KeyCode::Up));
+    app.on_key(alt(KeyCode::Up));
+    app.on_key(key('r'));
+    assert!(app.prompt.is_some(), "r prompts for the new message");
+    for _ in 0.."three".len() {
+        app.on_key(keycode(KeyCode::Backspace));
+    }
+    type_str(&mut app, "third");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    let todo = app.git_rebase.as_ref().unwrap();
+    assert_eq!(todo.commits[0].message.as_deref(), Some("third"));
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(key('s'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.git_rebase.is_none());
+    assert_eq!(t633_subjects(&dir), ["one", "third", "init"]);
+    assert!(
+        dir.join("two.txt").is_file(),
+        "the squash kept two's change"
+    );
+
+    // Nothing stopped, so Continue and Abort just say so.
+    app.run_action("git.rebase_continue");
+    app.run_action("git.rebase_abort");
+    assert_eq!(t633_subjects(&dir), ["one", "third", "init"]);
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// T633: `edit` stops the rebase; Continue finishes it, and Abort undoes
+/// another; Git → Rebase → Cherry-Pick… opens Browse Log, where `c` picks.
+#[test]
+fn git_rebase_edit_continue_abort_and_cherry_pick() {
+    let dir = t634_repo("t633edit");
+    for (file, subject) in [("one.txt", "one"), ("two.txt", "two")] {
+        fs::write(dir.join(file), subject).unwrap();
+        t634_git(&dir, &["add", file]);
+        t634_git(&dir, &["commit", "-q", "-m", subject]);
+    }
+    let mut app = app_at(&dir);
+    app.refresh_git();
+
+    app.run_action("git.rebase_interactive");
+    type_str(&mut app, "HEAD~2");
+    app.on_key(keycode(KeyCode::Enter));
+    app.on_key(key('e'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(vix::git::rebase_in_progress(&dir), "edit stops the rebase");
+    // A second rebase can't start while one is stopped.
+    app.run_action("git.rebase_interactive");
+    assert!(app.prompt.is_none());
+    app.run_action("git.rebase_continue");
+    assert!(!vix::git::rebase_in_progress(&dir));
+    assert_eq!(t633_subjects(&dir), ["two", "one", "init"]);
+
+    app.run_action("git.rebase_interactive");
+    type_str(&mut app, "HEAD~1");
+    app.on_key(keycode(KeyCode::Enter));
+    app.on_key(key('e'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(vix::git::rebase_in_progress(&dir));
+    app.run_action("git.rebase_abort");
+    assert!(!vix::git::rebase_in_progress(&dir));
+
+    // Cherry-pick `one` onto a side branch made before it.
+    let main = vix::git::branch(&dir).unwrap();
+    t634_git(&dir, &["switch", "-q", "-c", "side", "HEAD~2"]);
+    app.refresh_git();
+    app.run_action("git.cherry_pick");
+    type_str(&mut app, &main);
+    app.on_key(keycode(KeyCode::Enter));
+    let log = app.git_log.as_ref().expect("the commit list opens");
+    let offered: Vec<&str> = log.entries.iter().map(|e| e.subject.as_str()).collect();
+    assert_eq!(offered, ["two", "one"], "only what `side` lacks");
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(key('c'));
+    assert!(app.git_log.is_none());
+    assert_eq!(t633_subjects(&dir), ["one", "init"]);
+    assert!(dir.join("one.txt").is_file());
+
+    // Nothing left to offer from `side` itself.
+    app.run_action("git.cherry_pick");
+    type_str(&mut app, "side");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.git_log.is_none());
+    // In a plain Browse Log, `c` does nothing.
+    app.run_action("git.browse_log");
+    app.on_key(key('c'));
+    assert!(app.git_log.is_some());
+    assert_eq!(t633_subjects(&dir), ["one", "init"]);
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
