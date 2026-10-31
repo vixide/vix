@@ -184,16 +184,15 @@ impl Parser<'_> {
                 return i;
             }
             i = match c {
-                '\\' => match self.at(i + 1) {
-                    Some(e @ ('$' | '}' | '\\')) => {
+                '\\' => {
+                    if let Some(e @ ('$' | '}' | '\\')) = self.at(i + 1) {
                         self.push(e);
                         i + 2
-                    }
-                    _ => {
+                    } else {
                         self.push('\\');
                         i + 1
                     }
-                },
+                }
                 '$' => self.dollar(i, depth).unwrap_or_else(|| {
                     self.push('$');
                     i + 1
@@ -407,7 +406,7 @@ mod tests {
         assert_eq!(parse("a\\}b\\\\c\\n").text, "a}b\\c\\n");
         let p = parse("x ${1:open");
         assert_eq!(p.text, "x ${1:open");
-        assert!(p.stops.is_empty());
+        assert_eq!(p.stops, [] as [Stop; 0]);
         // The documented `${1:{}}` idiom: placeholder `{`, then a literal `}`.
         assert_eq!(parse("${1:{}}").text, "{}");
     }
