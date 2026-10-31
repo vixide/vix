@@ -81,6 +81,7 @@ mod roam;
 mod scripts;
 #[cfg(not(feature = "script"))]
 mod scripts_off;
+mod semantic_tokens;
 mod session;
 mod structural_replace;
 #[cfg(feature = "terminal")]
@@ -2213,6 +2214,11 @@ pub struct App {
     /// A debounced auto-completion request (T612): when to send it, and the
     /// trigger character that scheduled it (`None` for a word character).
     pub(crate) completion_due: Option<(std::time::Instant, Option<char>)>,
+    /// When a debounced semantic-tokens request is due (T615).
+    pub(crate) semantic_due: Option<std::time::Instant>,
+    /// What the last semantic-tokens request was for (T615), so tokens are
+    /// requested once per change or scrolled-to window, not every tick.
+    pub(crate) semantic_requested: Option<semantic_tokens::SemanticKey>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Color Converter dialog (Tools → Color Converter…), when open.
@@ -2771,6 +2777,8 @@ impl App {
             hover: None,
             completion: None,
             completion_due: None,
+            semantic_due: None,
+            semantic_requested: None,
             dialog: None,
             color_converter: None,
             unit_converter: None,
@@ -7496,6 +7504,8 @@ impl App {
         self.lsp_sync_active();
         // T612: a debounced auto-completion request whose delay has passed.
         self.poll_completion_due();
+        // T615: semantic tokens for a change or a newly scrolled-to window.
+        self.poll_semantic_tokens();
         for event in self.lsp.poll() {
             match event {
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {

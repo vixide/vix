@@ -32,7 +32,7 @@ impl Encoding {
     }
 
     /// The number of code units one char occupies in this encoding.
-    fn units(self, ch: char) -> u32 {
+    pub(crate) fn units(self, ch: char) -> u32 {
         match self {
             Encoding::Utf8 => u32::try_from(ch.len_utf8()).unwrap_or(u32::MAX),
             Encoding::Utf16 => u32::try_from(ch.len_utf16()).unwrap_or(u32::MAX),

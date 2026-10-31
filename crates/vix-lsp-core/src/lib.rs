@@ -16,6 +16,7 @@
 pub mod frame;
 pub mod message;
 pub mod position;
+pub mod sync;
 
 pub use position::Encoding;
 

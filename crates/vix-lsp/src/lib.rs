@@ -28,7 +28,8 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
-use vix_lsp_core::{Diagnostic, Encoding, frame, message};
+use vix_lsp_core::sync::{self, SyncKind};
+use vix_lsp_core::{Diagnostic, Encoding, Range, frame, message};
 use vix_settings::LspServer as ServerConfig;
 
 /// The reserved JSON-RPC id of the `initialize` request.
@@ -62,7 +63,12 @@ enum Pending {
     IncomingCalls,
     PrepareRename,
     WorkspaceDiagnostics,
+    /// `semanticTokens/full`: the reply is the base for later deltas.
     SemanticTokens,
+    /// `semanticTokens/full/delta` (T615): edits against the stored base.
+    SemanticTokensDelta,
+    /// `semanticTokens/range` (T615): the viewport only, never a delta base.
+    SemanticTokensRange,
 }
 
 /// The document an edit-returning request (formatting, linked editing) was
@@ -377,6 +383,16 @@ struct Server {
     targets: HashMap<i64, Target>,
     /// Open documents, `uri` → last sent version.
     docs: HashMap<String, i64>,
+    /// Open documents, `uri` → the text this server last received (T615),
+    /// what an incremental `didChange` is diffed against.
+    texts: HashMap<String, String>,
+    /// How this server wants changes delivered, read at `initialize` (T615).
+    sync: SyncKind,
+    /// Which `semanticTokens` requests beyond `full` it offers (T615).
+    semantic_support: message::SemanticTokensSupport,
+    /// Per document, the last `semanticTokens/full`(`/delta`) result id and
+    /// its encoded data (T615), the base a `full/delta` reply edits.
+    semantic_results: HashMap<String, (String, Vec<u32>)>,
     /// Position encoding negotiated at `initialize` (default UTF-16).
     encoding: Encoding,
     /// This server's semantic-token type legend, negotiated at `initialize`
@@ -771,6 +787,8 @@ impl Lsp {
                 continue; // already open
             }
             server.docs.insert(uri.clone(), 1);
+            server.texts.insert(uri.clone(), text.to_string());
+            server.semantic_results.remove(&uri);
             server.send(message::notification(
                 "textDocument/didOpen",
                 &message::did_open_params(&uri, &lang, 1, text),
@@ -778,8 +796,16 @@ impl Lsp {
         }
     }
 
-    /// Notify every server handling `path` that its buffer changed
-    /// (full-document sync; T123b: fans out to all of them).
+    /// Notify every server handling `path` that its buffer is now `text`
+    /// (T123b: fans out to all of them). Nothing is sent when the text equals
+    /// what the server last received.
+    ///
+    /// A server that negotiated incremental sync (T615) is sent one ranged
+    /// change: the text it last received diffed against `text`
+    /// ([`vix_lsp_core::sync::diff`]), in its own position encoding. Any
+    /// other server, and every server still starting up (its encoding and
+    /// sync kind are not known until `initialize` answers), gets the full
+    /// text.
     pub fn did_change(&mut self, path: &Path, text: &str) {
         if !self.enabled {
             return;
@@ -789,15 +815,25 @@ impl Lsp {
             let Some(server) = self.servers.get_mut(&config.language_id) else {
                 continue;
             };
-            let Some(version) = server.docs.get_mut(&uri) else {
+            let Some(&version) = server.docs.get(&uri) else {
                 continue;
             };
-            *version += 1;
-            let v = *version;
-            server.send(message::notification(
-                "textDocument/didChange",
-                &message::did_change_full_params(&uri, v, text),
-            ));
+            let previous = server.texts.get(&uri).map(String::as_str);
+            if previous == Some(text) {
+                continue;
+            }
+            let v = version + 1;
+            let params = match previous {
+                Some(old) if server.ready && server.sync == SyncKind::Incremental => {
+                    let changes: Vec<_> =
+                        sync::diff(old, text, server.encoding).into_iter().collect();
+                    message::did_change_incremental_params(&uri, v, &changes)
+                }
+                _ => message::did_change_full_params(&uri, v, text),
+            };
+            server.docs.insert(uri.clone(), v);
+            server.texts.insert(uri.clone(), text.to_string());
+            server.send(message::notification("textDocument/didChange", &params));
         }
     }
 
@@ -811,6 +847,8 @@ impl Lsp {
             if let Some(server) = self.servers.get_mut(&config.language_id)
                 && server.docs.remove(&uri).is_some()
             {
+                server.texts.remove(&uri);
+                server.semantic_results.remove(&uri);
                 server.send(message::notification(
                     "textDocument/didClose",
                     &message::did_close_params(&uri),
@@ -1277,7 +1315,7 @@ impl Lsp {
         }
     }
 
-    /// Request `textDocument/semanticTokens/full` for `path` (T123a) — a
+    /// Request semantic tokens for `path` (T123a) — a
     /// second, LSP-driven highlight layer over Tree-sitter's purely
     /// syntactic one, for distinctions Tree-sitter structurally cannot make
     /// (mutable vs. immutable binding, trait-default vs. inherent method,
@@ -1289,22 +1327,75 @@ impl Lsp {
     /// replaces the editor's semantic-token layer as it arrives — the last
     /// one to respond wins, same documented last-write-wins simplification
     /// as every other single-buffer LSP feature (`spec/index.md`).
-    pub fn request_semantic_tokens(&mut self, path: &Path) {
+    ///
+    /// Which request each server gets (T615): `semanticTokens/range` for
+    /// `visible` when the server offers ranges and the host passed the
+    /// visible range; else `semanticTokens/full/delta` when it offers deltas
+    /// and an earlier full result is stored for the document; else
+    /// `semanticTokens/full`. A reply for a document version the server no
+    /// longer has is dropped rather than applied to newer text.
+    pub fn request_semantic_tokens(&mut self, path: &Path, visible: Option<Range>) {
         let uri = path_to_uri(path);
         for config in self.configs_for(path) {
             let Some(server) = self.servers.get_mut(&config.language_id) else {
                 continue;
             };
-            if server.semantic_tokens_legend.is_empty() || !server.docs.contains_key(&uri) {
+            if server.semantic_tokens_legend.is_empty() {
                 continue;
             }
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            let (method, kind, params) = match (visible, server.semantic_results.get(&uri)) {
+                (Some(range), _) if server.semantic_support.range => (
+                    "textDocument/semanticTokens/range",
+                    Pending::SemanticTokensRange,
+                    message::semantic_tokens_range_params(&uri, range),
+                ),
+                (_, Some((result_id, _))) if server.semantic_support.delta => (
+                    "textDocument/semanticTokens/full/delta",
+                    Pending::SemanticTokensDelta,
+                    message::semantic_tokens_delta_params(&uri, result_id),
+                ),
+                _ => (
+                    "textDocument/semanticTokens/full",
+                    Pending::SemanticTokens,
+                    message::text_document_params(&uri),
+                ),
+            };
             let id = server.alloc_id();
-            server.pending.insert(id, Pending::SemanticTokens);
-            server.send(message::request(
+            server.pending.insert(id, kind);
+            server.targets.insert(
                 id,
-                "textDocument/semanticTokens/full",
-                &message::text_document_params(&uri),
-            ));
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            server.send(message::request(id, method, &params));
+        }
+    }
+
+    /// Whether semantic tokens can be asked for `path` yet (T615): `None`
+    /// while no server handling it has (finished starting and) offered them;
+    /// otherwise whether one of them answers `semanticTokens/range`, so the
+    /// host re-requests tokens when the view scrolls.
+    #[must_use]
+    pub fn semantic_tokens_ranged(&self, path: &Path) -> Option<bool> {
+        let uri = path_to_uri(path);
+        let offering: Vec<&Server> = self
+            .configs_for(path)
+            .iter()
+            .filter_map(|c| self.servers.get(&c.language_id))
+            .filter(|s| {
+                s.ready && !s.semantic_tokens_legend.is_empty() && s.docs.contains_key(&uri)
+            })
+            .collect();
+        if offering.is_empty() {
+            None
+        } else {
+            Some(offering.iter().any(|s| s.semantic_support.range))
         }
     }
 
@@ -1654,6 +1745,8 @@ impl Lsp {
                 kind,
                 Pending::WorkspaceDiagnostics
                     | Pending::SemanticTokens
+                    | Pending::SemanticTokensDelta
+                    | Pending::SemanticTokensRange
                     | Pending::CodeLensAuto
                     | Pending::CodeLensResolve
             ) {
@@ -1697,10 +1790,19 @@ impl Lsp {
         }
         // T123a: needs the legend captured above (per-server state,
         // unavailable to the self-less `response_to_events`).
-        if matches!(kind, Pending::SemanticTokens) {
-            let tokens = message::parse_semantic_tokens(result, &semantic_tokens_legend);
-            if !tokens.is_empty() {
-                events.push(LspEvent::SemanticTokens(tokens));
+        if matches!(
+            kind,
+            Pending::SemanticTokens | Pending::SemanticTokensDelta | Pending::SemanticTokensRange
+        ) {
+            let Some((target, current)) = target else {
+                return;
+            };
+            let data = self.semantic_tokens_data(lang, kind, &target.uri, result);
+            if let Some(data) = data.filter(|_| current) {
+                let tokens = message::decode_semantic_tokens(&data, &semantic_tokens_legend);
+                if !tokens.is_empty() {
+                    events.push(LspEvent::SemanticTokens(tokens));
+                }
             }
             return;
         }
@@ -1728,6 +1830,51 @@ impl Lsp {
             return;
         }
         Self::response_to_events(kind, result, events);
+    }
+
+    /// The encoded token data a semantic-tokens reply stands for (T615),
+    /// keeping a full or delta result as the base for the next delta. A
+    /// delta that cannot be applied (no base, or an edit out of range) drops
+    /// the base, so the next request is a full one.
+    fn semantic_tokens_data(
+        &mut self,
+        lang: &str,
+        kind: Pending,
+        uri: &str,
+        result: &Value,
+    ) -> Option<Vec<u32>> {
+        let server = self.servers.get_mut(lang)?;
+        let reply = message::parse_semantic_tokens_reply(result);
+        let (result_id, data) = match reply {
+            Some(message::SemanticTokensReply::Data { result_id, data }) => (result_id, data),
+            Some(message::SemanticTokensReply::Edits { result_id, edits })
+                if matches!(kind, Pending::SemanticTokensDelta) =>
+            {
+                let applied = server
+                    .semantic_results
+                    .get(uri)
+                    .and_then(|(_, base)| message::apply_semantic_tokens_edits(base, &edits));
+                let Some(data) = applied else {
+                    server.semantic_results.remove(uri);
+                    return None;
+                };
+                (result_id, data)
+            }
+            _ => return None,
+        };
+        if !matches!(kind, Pending::SemanticTokensRange) && server.semantic_support.delta {
+            match result_id {
+                Some(id) => {
+                    server
+                        .semantic_results
+                        .insert(uri.to_string(), (id, data.clone()));
+                }
+                None => {
+                    server.semantic_results.remove(uri);
+                }
+            }
+        }
+        Some(data)
     }
 
     /// Turn a current background-lens or lens-resolve reply into its event.
@@ -1938,6 +2085,8 @@ impl Lsp {
         if let Some(result) = msg.get("result") {
             server.encoding = message::parse_position_encoding(result);
             server.semantic_tokens_legend = message::parse_semantic_tokens_legend(result);
+            server.semantic_support = message::parse_semantic_tokens_support(result);
+            server.sync = SyncKind::from_initialize(result);
             server.completion_triggers = message::parse_completion_trigger_characters(result);
             server.workspace_folders_change_support =
                 message::parse_workspace_folders_change_support(result);
@@ -2171,6 +2320,10 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         pending: HashMap::new(),
         targets: HashMap::new(),
         docs: HashMap::new(),
+        texts: HashMap::new(),
+        sync: SyncKind::Full,
+        semantic_support: message::SemanticTokensSupport::default(),
+        semantic_results: HashMap::new(),
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),
         completion_triggers: Vec::new(),

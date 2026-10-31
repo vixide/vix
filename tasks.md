@@ -7144,7 +7144,7 @@ new action.
   and T620 (color swatches). Tests: a render snapshot, truncation at
   width, the three modes, and goto showing the message. **Small–medium.**
   *Done:* `inline_diagnostics` setting, `vix_lsp::inline` selection rules, the generic `vix_editor_core::virtual_text` layer (both renderers), status-line follow, and a goto off-by-one fix.
-- [ ] **T615 — Incremental `didChange` and ranged semantic tokens.**
+- [x] **T615 — Incremental `didChange` and ranged semantic tokens.**
   `message.rs:157-163` always sends the full text, and `lsp_dap.rs:378`
   sends the whole buffer on every revision. The `vix-lsp` spec (line 75)
   re-requests `semanticTokens/full` on every change. Neovim 0.12 added
@@ -7155,6 +7155,16 @@ new action.
   or `full/delta`, when offered, and debounce. Tests: a mock server that
   applies the deltas ends up with exactly the buffer text, including
   multi-byte and astral chars. **Medium.**
+  Done 2026-10-30: new `vix_lsp_core::sync` (`SyncKind`, `diff`, `apply`;
+  property-tested in all three encodings, CRLF and astral chars included).
+  The change is diffed against the text each server last received rather
+  than taken from the edit log (single consumer, local edits only), so
+  typing, carets, undo/redo, remote Cowork edits and reloads all sync
+  correctly; full sync stays for `change: 1` and servers still starting.
+  Semantic tokens use `range` for a view-aligned window when offered, else
+  `full/delta`, else `full`; stale-version replies are dropped; 150 ms
+  debounce in `tui/src/app/semantic_tokens.rs`. End-to-end tests in
+  `tui/tests/lsp_smoke.rs` against a Python mock that applies the changes.
 - [ ] **T616 — Tree-sitter textobjects and function/class motions.**
   `crates/vix-editor-core/langs/*/` ship only `highlights.scm` (and Rust
   `tests.scm`). `vix-modal`'s `text_object.rs` covers words and

@@ -374,14 +374,16 @@ impl App {
             self.lsp.did_open(&path, &text);
             self.lsp.request_folding_range(&path); // fetch foldable ranges once on open
             self.request_inlay_hints(&path);
+            // A (re)opened document gets its semantic tokens afresh.
+            self.semantic_requested = None;
         } else {
+            // Incremental for a server that negotiated it (T615).
             self.lsp.did_change(&path, &text);
         }
-        // T123a: re-requested after every change, not just on open -- a
-        // token's classification (e.g. "unused") can change as the user
-        // types. `Lsp::request_semantic_tokens` itself no-ops for a server
-        // that never advertised support.
-        self.lsp.request_semantic_tokens(&path);
+        // Semantic tokens (T123a) are re-requested after every change, not
+        // just on open -- a token's classification (e.g. "unused") can
+        // change as the user types -- but debounced, by
+        // `poll_semantic_tokens` (T615).
         self.lsp_synced.insert(path, rev);
     }
 
@@ -398,7 +400,7 @@ impl App {
     pub fn lsp_busy(&self) -> bool {
         // A pending debounced auto-completion (T612) needs the fast tick to
         // fire on time.
-        self.lsp.busy() || self.completion_due.is_some()
+        self.lsp.busy() || self.completion_due.is_some() || self.semantic_due.is_some()
     }
 
     /// Rebuild the active editor's diagnostic underline marks from the latest
