@@ -62,6 +62,7 @@ pub fn discover_just_recipes(justfile: &str) -> Vec<NamedTask> {
             name: format!("just:{name}"),
             command: format!("just {name}"),
             source: TaskSource::Discovered,
+            matcher: None,
         })
         .collect()
 }

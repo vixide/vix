@@ -24,6 +24,7 @@ pub fn discover_taskfile_tasks(taskfile_yml: &str) -> Vec<NamedTask> {
             name: format!("task:{name}"),
             command: format!("task {name}"),
             source: TaskSource::Discovered,
+            matcher: None,
         })
         .collect()
 }

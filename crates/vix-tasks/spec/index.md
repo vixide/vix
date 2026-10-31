@@ -187,6 +187,107 @@ language server put no lens of its own (see `spec/ide-parity`).
 file extension, so the host skips copying a buffer's text for a file in which
 they would find nothing — a 100 MB log, say (T749).
 
+## Problem matchers and next-error (T632)
+
+Every command that runs through `App::run_command_in` — a task, a lifecycle
+slot, Repeat Last Task, test-at-point, a run configuration, **Tools → Test**
+and a manual **Run Command** — has its output scanned for *problems* (compiler
+errors, lint findings, failing tests) as it streams into the bottom dock, the
+way VS Code's `problemMatcher`, Emacs's `compilation-mode` and Vim's quickfix
+list do. Version-control and container commands, which run without a shell
+(`run_argv`), are not scanned.
+
+`vix_tasks::matcher` is pure: it reads output lines and returns `Problem`s
+(`file` as printed, 1-based `line`, optional 1-based `column`, `Severity`
+error/warning/info, a one-line `message`, and the `source` matcher). It never
+touches the filesystem.
+
+### Built-in matchers
+
+| Name (aliases)        | Recognizes |
+| --------------------- | ---------- |
+| `rustc` (`cargo`)     | An `error[E…]: msg` / `warning: msg` header followed, possibly lines later, by its ` --> file:line:col` arrow (multi-line); `note:`/`help:` blocks and arrows without a pending header are ignored. A `thread '…' panicked at file:line:col:` line, its message taken from the next line (and the older `panicked at 'msg', file:line:col` form). |
+| `gcc` (`clang`)       | `file:line:col: error: msg`, `fatal error:` and `warning:` (column optional). Also catches mypy's `file:line: error: msg`. Notes are ignored. |
+| `tsc`                 | `file(line,col): error TS1234: msg` and the pretty `file:line:col - error TS1234: msg`. |
+| `eslint`              | The default *stylish* format (a file-name line, then indented `line:col  error  msg  rule` rows — multi-line), plus the `compact` and `unix` formats. |
+| `python` (`pytest`)   | A traceback: each `File "f", line N` frame, ended by the unindented `SomeError: msg` line, gives one problem at the innermost frame (multi-line); pseudo-files like `<string>` are skipped. pytest's long-format `path.py:N: SomeError` lines and `path.py:N: SomeWarning: msg` warnings (a frame line `path.py:N: in test_x` is not a problem). |
+| `go`                  | `file.go:line[:col]: msg`, with the leading indentation of `go test` failure lines allowed. Stack-trace lines (`/x/y.go:12 +0x1d`) are not problems. |
+
+Before matching, ANSI color escapes are stripped and a line is cut to its first
+4,096 bytes. The same `(file, line, column, message)` is kept only once (cargo
+prints a warning for every target it builds), and a run keeps at most
+`MAX_PROBLEMS` (5,000) problems.
+
+### Choosing a matcher
+
+A `[[task]]` in `tasks.toml` may name one with `matcher`:
+
+```toml
+[[task]]
+name = "lint"
+command = "npx eslint src"
+matcher = "eslint"
+```
+
+`MatcherSpec::parse` accepts:
+
+- missing, empty or `"auto"` — every built-in matcher at once (the default, and
+  what every command other than a `tasks.toml` task with a `matcher` uses);
+- `"none"` or `"off"` — no matching;
+- a built-in name or alias from the table above — only that matcher;
+- anything else — a custom regular expression with the named groups `file` and
+  `line` (both required), and optionally `column`, `severity` (text starting
+  `err`/`fatal` is an error, `warn` a warning, anything else info; absent means
+  error) and `message` (absent means the whole line). An invalid expression, or
+  one missing a required group, is reported in the notification panel and the
+  run falls back to `auto`.
+
+### Paths
+
+A problem's `file` is resolved by `matcher::resolve_path(cwd, file)` against the
+**working directory of the run that printed it** (the workspace root, or a
+subproject's directory for `project.subproject.*`): an absolute path is kept, a
+relative one is joined to the cwd, and `.`/`..` are folded lexically. The host
+falls back to the workspace root when the cwd-relative path is not a file
+(cargo prints workspace-root-relative paths from a member's directory).
+
+Matching never reads a file. A matched file is read only when the user acts —
+**Go → Next/Previous Error**, `Enter` in the Problems panel, or a click in the
+bottom dock — and only if it exists; the inline text below is drawn only on a
+buffer that is already open. A path pointing outside the workspace (a
+dependency's source, a Python standard-library frame) is listed like any other,
+but nothing is opened until the user picks it.
+
+### Results
+
+`matcher::ProblemList` holds the last run's problems, the cwd they resolve
+against, and a navigation cursor. A new scanned run clears it when it starts;
+when the run ends the status line reports the count.
+
+- **Go → Next Error** (`go.next_error`) and **Go → Previous Error**
+  (`go.prev_error`) step through the list in output order across files, like
+  Emacs's `next-error`, **wrapping around** at either end: the first press of
+  Next visits the first problem, of Previous the last. Each opens the file at
+  the problem's line and column (recorded in the jump history) and shows
+  `Problem i of n` with the message in the status line; a file that does not
+  exist is reported instead of opened. With no problems they report
+  `status.no_task_problems`. Both belong to the `tasks` capability.
+- **The Problems panel** (`lsp.diagnostics`) lists them after the language
+  servers' diagnostics as a task source: `rel:line: [severity] message
+  (matcher)`; `Enter` jumps.
+- **Inline**: on the active buffer, problems for its file are drawn as
+  end-of-line virtual text on their own layer (`VirtualTextLayer::TaskProblems`,
+  after the LSP `Diagnostics` layer), colored by severity, following the same
+  `inline_diagnostics` setting (`off`, `cursor-line`, `all`).
+- **The bottom dock** click jumps through `matcher::locate(line)` first — every
+  built-in single-line pattern plus the rustc arrow and the Python `File "…",
+  line N` frame — resolved against the last run's cwd, and falls back to the
+  plain `path:line[:col]` parse. `locate` is the one `path:line` parser later
+  terminal work (T666) can reuse.
+
+Repeat Last Task re-runs the command string with `auto`, since only the command
+is remembered.
+
 ## As implemented in Vix
 
 `vix-tasks` is pure logic — detection, resolution, discovery, merging, and

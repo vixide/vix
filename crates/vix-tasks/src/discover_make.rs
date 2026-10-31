@@ -59,6 +59,7 @@ pub fn discover_make_targets(makefile: &str) -> Vec<NamedTask> {
             name: format!("make:{name}"),
             command: format!("make {name}"),
             source: TaskSource::Discovered,
+            matcher: None,
         })
         .collect()
 }

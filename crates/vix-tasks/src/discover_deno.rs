@@ -25,6 +25,7 @@ pub fn discover_deno_tasks(deno_json: &str) -> Vec<NamedTask> {
             name: format!("deno:{name}"),
             command: format!("deno task {name}"),
             source: TaskSource::Discovered,
+            matcher: None,
         })
         .collect()
 }

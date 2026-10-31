@@ -967,15 +967,19 @@ impl App {
                 groups.push((parent, related));
             }
         }
-        if groups.is_empty() {
+        // Problems matched in the last task's output, after the servers'
+        // diagnostics, as their own source (T632).
+        let task_hits = self.task_problem_hits();
+        if groups.is_empty() && task_hits.is_empty() {
             self.status = t!("status.no_diagnostics").to_string();
             return;
         }
         groups.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-        let count = groups.len();
+        let count = groups.len() + task_hits.len();
         let hits: Vec<Hit> = groups
             .into_iter()
             .flat_map(|(parent, related)| std::iter::once(parent).chain(related))
+            .chain(task_hits)
             .collect();
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);

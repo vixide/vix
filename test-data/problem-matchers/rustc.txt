@@ -1,0 +1,33 @@
+   Compiling demo v0.1.0 (/work/demo)
+warning: unused variable: `x`
+ --> src/lib.rs:2:9
+  |
+2 |     let x = 5;
+  |         ^ help: if this is intentional, prefix it with an underscore: `_x`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+error[E0308]: mismatched types
+  --> src/main.rs:4:18
+   |
+4  |     let n: u32 = "four";
+   |            ---   ^^^^^^ expected `u32`, found `&str`
+   |            |
+   |            expected due to this
+   |
+note: function defined here
+  --> src/util.rs:10:4
+   |
+10 | fn helper(n: u32) {}
+   |    ^^^^^^
+
+error: cannot find value `missing` in this scope
+   --> src/deep/mod.rs:120:5
+    |
+120 |     missing
+    |     ^^^^^^^ not found in this scope
+
+warning: `demo` (lib) generated 1 warning
+error: could not compile `demo` (bin "demo") due to 2 previous errors; 1 warning emitted
+warning: unused variable: `x`
+ --> src/lib.rs:2:9

@@ -757,3 +757,5 @@ modifiés
 relocalize
 # T628 (terminal protocol: TERM values)
 wezterm
+# T632 (problem matchers)
+mypy

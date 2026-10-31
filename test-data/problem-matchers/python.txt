@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "app/main.py", line 22, in <module>
+    run()
+  File "app/main.py", line 18, in run
+    compute(0)
+  File "app/calc.py", line 5, in compute
+    return 10 / n
+           ~~~^~~
+ZeroDivisionError: division by zero

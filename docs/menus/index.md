@@ -144,7 +144,9 @@ and strings).
 
 Workspace and symbol navigation (distinct from **Edit → Go**'s in-file jumps):
 **Symbol…** (`@` palette), **Declaration / Implementations / References** (LSP),
-**Next / Previous Issue** (diagnostics), **Next / Previous Change** (git hunks),
+**Next / Previous Issue** (diagnostics), **Next / Previous Error** (problems in
+the last task's output; see [Tasks](../tasks/index.md#problems-in-task-output)),
+**Next / Previous Change** (git hunks),
 **Recent Locations** (position history), **Jump** (leap-style), **Matching Tag**,
 and **Go to Percent / Byte**.
 

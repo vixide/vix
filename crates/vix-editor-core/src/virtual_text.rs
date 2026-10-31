@@ -24,6 +24,8 @@ const GAP: usize = 2;
 pub enum VirtualTextLayer {
     /// LSP diagnostics for the line (T614).
     Diagnostics,
+    /// Problems a task's problem matcher found in its output (T632).
+    TaskProblems,
 }
 
 /// One piece of end-of-line virtual text.

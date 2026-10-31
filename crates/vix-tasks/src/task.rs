@@ -28,6 +28,9 @@ pub struct NamedTask {
     pub command: String,
     /// Which tier this task came from.
     pub source: TaskSource,
+    /// The `tasks.toml` `matcher` for a user-configured task (see
+    /// [`crate::matcher::MatcherSpec::parse`]); `None` means `auto`.
+    pub matcher: Option<String>,
 }
 
 impl From<&crate::Task> for NamedTask {
@@ -36,6 +39,7 @@ impl From<&crate::Task> for NamedTask {
             name: task.name.clone(),
             command: task.command.clone(),
             source: TaskSource::UserConfigured,
+            matcher: task.matcher.clone(),
         }
     }
 }
@@ -83,6 +87,7 @@ mod tests {
             name: name.into(),
             command: format!("cmd-for-{name}"),
             source,
+            matcher: None,
         }
     }
 
@@ -102,6 +107,7 @@ mod tests {
             name: "build".into(),
             command: "user build".into(),
             source: TaskSource::UserConfigured,
+            matcher: None,
         }];
         let disc = vec![task("build", TaskSource::Discovered)];
         let merged = merge_tasks(&pt, &user, &disc);
@@ -116,6 +122,7 @@ mod tests {
             name: "build".into(),
             command: "type build".into(),
             source: TaskSource::ProjectType,
+            matcher: None,
         }];
         let disc = vec![task("build", TaskSource::Discovered)];
         let merged = merge_tasks(&pt, &[], &disc);
@@ -128,6 +135,7 @@ mod tests {
         let tasks = vec![crate::Task {
             name: "build".into(),
             command: "cargo build".into(),
+            matcher: Some("rustc".into()),
         }];
         let named = from_vix_tasks(&tasks);
         assert_eq!(named.len(), 1);
