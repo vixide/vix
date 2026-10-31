@@ -7,8 +7,10 @@
 //! replayed onto text it doesn't match.
 //!
 //! The [`local_history`] module adds timestamped whole-file snapshots on save
-//! (Local History), with labels, diffs and range revert.
+//! (Local History), with labels, diffs and range revert, and the
+//! [`hot_exit`] module keeps backups of unsaved buffers for crash recovery.
 
+pub mod hot_exit;
 pub mod local_history;
 
 use std::path::{Path, PathBuf};

@@ -15,6 +15,8 @@ costs no copy of its text on open (100 MB for a 100 MB file).
 
 ## Sub-specs
 
+- [hot-exit](hot-exit/index.md): back up unsaved buffers while idle and on
+  quit, and offer them back with a diff after a crash (T629)
 - [persistent-undo](persistent-undo/index.md)
 - [redo](redo/index.md)
 - [undo](undo/index.md)

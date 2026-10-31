@@ -64,6 +64,8 @@ impl App {
         {
             self.open_compare_files(old, new);
         }
+        // Untitled buffers a crash or forced quit left behind (T629).
+        self.offer_untitled_recovery();
         Ok(())
     }
 
@@ -94,6 +96,8 @@ impl App {
         self.poll_file_changes();
         // Periodically save the active buffer when auto-save is on.
         self.poll_auto_save();
+        // Back up unsaved buffers; show a pending recovery offer (T629).
+        self.poll_hot_exit();
         // Drain a finished HTTP response into a new tab.
         self.poll_http();
         // Drain a finished HL7 send's reply into a read-only tab.

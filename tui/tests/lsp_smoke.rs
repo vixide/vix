@@ -879,7 +879,7 @@ fn typing_an_open_paren_auto_triggers_signature_help_in_a_live_app() {
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     });
 
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&file);
 
@@ -934,7 +934,7 @@ fn typing_a_trigger_character_auto_opens_the_completion_popup() {
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     });
 
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&file);
 
@@ -1084,7 +1084,7 @@ fn formatting_app(tag: &str, tweak: impl FnOnce(&mut Settings)) -> Option<(App, 
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     });
     tweak(&mut settings);
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&root.join("b.rs"));
     app.open_initial(&root.join("a.rs"));
@@ -1360,7 +1360,7 @@ fn code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app() {
             log.to_string_lossy().into_owned(),
         ],
     });
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&file);
 
@@ -1442,7 +1442,7 @@ fn lsp_status_panel_and_status_bar_progress_in_a_live_app() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     });
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&file);
 
@@ -1581,7 +1581,7 @@ fn inline_diagnostics_follow_the_setting_the_cursor_and_goto() {
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     });
     assert_eq!(settings.inline_diagnostics, "cursor-line", "the default");
-    let mut app = App::new(root.clone(), settings);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
     app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
     app.open_initial(&file);
     let deadline = Instant::now() + Duration::from_secs(15);
