@@ -7,8 +7,8 @@
 //!
 //! Carets keep their **add order**: the primary is the newest caret, and
 //! `carets` holds the older ones oldest first. Moves and edits never reorder
-//! them, so [`Editor::remove_last_caret`] always drops the caret added last
-//! and [`Editor::skip_occurrence`] always moves the newest match.
+//! them, so [`Editor::remove_last_caret`](crate::editor::Editor::remove_last_caret) always drops the caret added last
+//! and [`Editor::skip_occurrence`](crate::editor::Editor::skip_occurrence) always moves the newest match.
 //!
 //! Edits run directly on the rope in one undo transaction, processing carets in
 //! ascending position order with a running offset so each edit stays valid.
