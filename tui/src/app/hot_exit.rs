@@ -133,7 +133,7 @@ impl App {
     }
 
     /// The idle half of hot exit, run every tick: back up changed buffers
-    /// (at most every [`PASS_INTERVAL`]) and show the next recovery offer.
+    /// (at most every 2 seconds) and show the next recovery offer.
     pub fn poll_hot_exit(&mut self) {
         self.show_next_recovery();
         if !self.settings.startup.hot_exit {
