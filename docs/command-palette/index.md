@@ -56,6 +56,23 @@ Type `>` to search and run editor commands. Palette commands share the same
 action identifiers as the menu items, so a command behaves identically however
 it is invoked.
 
+## Preview, history, and resume
+
+On a screen at least 100 columns wide, the file finder, `@`, `@@`, and
+**Find In Workspace** show a preview of the highlighted result beside the
+list: a few dozen numbered lines of the file around the result, its line
+highlighted. The preview reads at most 256 KiB of a file (an open buffer is
+previewed from its own unsaved text), and is skipped in a remote (SSH)
+workspace.
+
+With the input empty, **Up** recalls the queries you accepted earlier, newest
+first, and **Down** walks back toward the newest. Typing ends the recall, and
+**Up**/**Down** move the highlight again.
+
+**Tools → Resume Last Picker** (command **Resume Last Picker**) reopens the
+palette or the workspace search you closed last, in the same mode, with the
+same query and the same row highlighted.
+
 ## Examples
 
 - `README` — open the file matching `README`.

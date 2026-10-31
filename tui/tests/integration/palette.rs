@@ -288,3 +288,203 @@ fn vscode_keymap_quick_open_command_palette_and_goto_line() {
     app.on_key(ctrl('g'));
     assert!(app.palette.is_some(), "Ctrl+G opens Go to Line");
 }
+
+/// Render the whole app into a `width`×`height` test terminal.
+fn render(app: &mut App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(width, height)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    term.backend().buffer().clone()
+}
+
+/// The screen row (y) whose text contains `needle`, plus that row's text.
+fn row_with(buf: &ratatui::buffer::Buffer, needle: &str) -> Option<(u16, String)> {
+    (0..buf.area.height).find_map(|y| {
+        let text: String = (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().to_string())
+            .collect();
+        text.contains(needle).then_some((y, text))
+    })
+}
+
+/// A 200-line file whose lines read `L1`..`L200`.
+fn numbered_file(dir: &Path, name: &str) -> PathBuf {
+    let file = dir.join(name);
+    let body: String = (1..=200).map(|i| format!("L{i}\n")).collect();
+    fs::write(&file, body).unwrap();
+    file
+}
+
+/// T630: on a wide screen the file finder shows a numbered window of the
+/// highlighted file centered on its target line, that line highlighted.
+#[test]
+fn palette_preview_shows_a_window_with_the_target_line_highlighted() {
+    let dir = unique_dir("t630-preview");
+    numbered_file(&dir, "p.txt");
+    let mut app = app_at(&dir);
+    app.run_action("tools.palette");
+    for c in "p.txt:100".chars() {
+        app.on_key(key(c));
+    }
+    let (title, preview) = app.palette_preview().expect("a preview");
+    assert!(title.ends_with("p.txt"), "{title}");
+    assert_eq!(preview.target, 100);
+    let i = preview.target_index().expect("target in the window");
+    assert_eq!(preview.lines[i], "L100");
+    assert_eq!(preview.lines.len(), 2 * vix::palette::PREVIEW_RADIUS + 1);
+
+    let buf = render(&mut app, 160, 50);
+    let (target_y, target_row) = row_with(&buf, " L100 ").expect("target line drawn");
+    assert!(target_row.contains("100 L100"), "numbered: {target_row}");
+    let (other_y, _) = row_with(&buf, " L99 ").expect("neighbor drawn");
+    // A column, not a byte offset: the row holds multi-byte border glyphs.
+    let col = target_row[..target_row.find("L100").unwrap()]
+        .chars()
+        .count();
+    let x = u16::try_from(col).unwrap();
+    assert_ne!(
+        buf[(x, target_y)].style(),
+        buf[(x, other_y)].style(),
+        "the target line is highlighted, its neighbor is not"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T630: below 100 columns the preview pane is hidden.
+#[test]
+fn palette_preview_is_hidden_on_a_narrow_screen() {
+    let dir = unique_dir("t630-narrow");
+    numbered_file(&dir, "p.txt");
+    let mut app = app_at(&dir);
+    app.run_action("tools.palette");
+    for c in "p.txt:100".chars() {
+        app.on_key(key(c));
+    }
+    let buf = render(&mut app, 90, 40);
+    assert!(row_with(&buf, "p.txt").is_some(), "the list is drawn");
+    assert!(row_with(&buf, " L100").is_none(), "no preview pane");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T630: `@` previews the active buffer around the symbol, and workspace
+/// search previews the highlighted hit.
+#[test]
+fn symbol_and_workspace_search_previews_follow_the_selection() {
+    let dir = unique_dir("t630-sym");
+    let file = dir.join("s.rs");
+    let mut body: String = (1..=30).map(|i| format!("// c{i}\n")).collect();
+    body.push_str("fn alpha() {}\n");
+    fs::write(&file, &body).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    app.run_action("nav.goto_symbol");
+    let (_, preview) = app.palette_preview().expect("symbol preview");
+    assert_eq!(preview.target, 31);
+    assert_eq!(
+        preview.lines[preview.target_index().unwrap()],
+        "fn alpha() {}"
+    );
+    app.on_key(esc());
+
+    app.run_action("search.workspace");
+    for c in "alpha".chars() {
+        app.on_key(key(c));
+    }
+    let buf = render(&mut app, 160, 50);
+    assert!(
+        row_with(&buf, "31 fn alpha() {}").is_some(),
+        "the hit's line is previewed with its number"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T630: `palette.resume` reopens the palette in its last mode, with its
+/// query and selection.
+#[test]
+fn resume_restores_the_palette_mode_query_and_selection() {
+    let dir = unique_dir("t630-resume");
+    let mut app = app_at(&dir);
+    app.run_action("palette.resume");
+    assert!(app.palette.is_none(), "nothing to resume yet");
+
+    app.run_action("tools.palette");
+    for c in ">line".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(esc());
+    assert!(app.palette.is_none());
+
+    app.run_action("palette.resume");
+    let p = app.palette.as_ref().expect("palette reopened");
+    assert_eq!(p.input, ">line");
+    assert_eq!(p.mode(), vix::palette::Mode::Commands);
+    assert_eq!(p.selected, 2);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T630: `palette.resume` after the workspace-search panel closed reopens
+/// that panel, re-run, with its query and selection.
+#[test]
+fn resume_restores_the_workspace_search_panel() {
+    let dir = unique_dir("t630-resume-ws");
+    fs::write(dir.join("a.txt"), "needle one\nneedle two\nneedle three\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("search.workspace");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(esc());
+    assert!(app.workspace_search.is_none());
+
+    app.run_action("palette.resume");
+    let ps = app.workspace_search.as_ref().expect("panel reopened");
+    assert_eq!(ps.query, "needle");
+    assert_eq!(ps.hits.len(), 3);
+    assert_eq!(ps.selected, 1);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T630: `Up`/`Down` on an empty palette input walk the accepted-query
+/// history; once the input is edited they move the selection again.
+#[test]
+fn palette_up_down_recall_query_history() {
+    let dir = unique_dir("t630-history");
+    let file = dir.join("h.txt");
+    let body: String = (1..=20).map(|i| format!("L{i}\n")).collect();
+    fs::write(&file, body).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    for query in [":5", ":9"] {
+        app.run_action("tools.palette");
+        for c in query.chars() {
+            app.on_key(key(c));
+        }
+        app.on_key(keycode(KeyCode::Enter));
+    }
+
+    app.run_action("tools.palette");
+    let input = |app: &App| app.palette.as_ref().unwrap().input.clone();
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(input(&app), ":9");
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(input(&app), ":5");
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(input(&app), ":5", "stays at the oldest");
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(input(&app), ":9");
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(input(&app), "", "past the newest is an empty input");
+
+    // Typed input: Up/Down move the selection, the input stays.
+    app.on_key(key('>'));
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(input(&app), ">");
+    assert_eq!(app.palette.as_ref().unwrap().selected, 1);
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(input(&app), ">");
+    assert_eq!(app.palette.as_ref().unwrap().selected, 0);
+    fs::remove_dir_all(&dir).ok();
+}

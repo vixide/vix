@@ -494,6 +494,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `outdent_selection` | Outdent Selection | Catalog |
 | `page_down` | Page Down | Catalog |
 | `page_up` | Page Up | Catalog |
+| `palette.resume` | Resume Last Picker | Menu |
 | `paragraph_next` | Next Paragraph | Catalog |
 | `paragraph_previous` | Previous Paragraph | Catalog |
 | `paste` | Paste | Catalog |
@@ -763,4 +764,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**756 actions.**
+**757 actions.**

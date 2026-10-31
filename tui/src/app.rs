@@ -2433,6 +2433,13 @@ pub struct App {
     /// project index (a Cowork guest browsing the host's shared files,
     /// T696). Cleared whenever the palette closes.
     palette_files_override: Option<Vec<PathBuf>>,
+    /// The palette's accepted-query history, recalled with `Up`/`Down` (T630).
+    pub(crate) palette_history: palette::QueryHistory,
+    /// How each picker was last left, for `palette.resume` (T630).
+    pub(crate) picker_memory: command_palette::PickerMemory,
+    /// The last picker preview built, keyed by its source and line, so a
+    /// redraw of the same highlight reads nothing (T630).
+    picker_preview_cache: Option<command_palette::PreviewCache>,
     /// In-memory cache of resolved/edited lifecycle commands for the current
     /// workspace root (`project.*`/`project.subproject.*` actions) — the
     /// highest-precedence layer in `crate::tasks::lifecycle::
@@ -2865,6 +2872,9 @@ impl App {
             palette_origin: None,
             palette_file_scope: None,
             palette_files_override: None,
+            palette_history: palette::QueryHistory::new(),
+            picker_memory: command_palette::PickerMemory::default(),
+            picker_preview_cache: None,
             project_command_cache: crate::tasks::lifecycle::LifecycleCommands::default(),
             project_history: ProjectHistory::default(),
             project_last_command: None,
@@ -3206,6 +3216,7 @@ impl App {
             a if self.run_terminal_action(a) => {}
             "tools.diff" => self.open_compare_prompt(),
             "tools.palette" => self.open_palette(),
+            "palette.resume" => self.resume_picker(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
             "view.split_vertical" => self.editor.set_split(SplitDir::Vertical),
@@ -12547,6 +12558,7 @@ impl App {
     }
 
     fn open_workspace_search(&mut self, replacing: bool) {
+        self.picker_preview_cache = None;
         self.build_file_index();
         self.workspace_search = Some(WorkspaceSearch::new(replacing));
         self.run_workspace_search();
@@ -13004,7 +13016,10 @@ impl App {
 
     fn ps_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc => self.workspace_search = None,
+            KeyCode::Esc => {
+                self.remember_workspace_search();
+                self.workspace_search = None;
+            }
             KeyCode::Up => {
                 if let Some(p) = self.workspace_search.as_mut() {
                     p.up();
@@ -13114,6 +13129,7 @@ impl App {
             .and_then(|p| p.selected_hit())
             .map(|h| (h.path.clone(), h.line, h.col));
         if let Some((path, line, col)) = target {
+            self.remember_workspace_search();
             self.workspace_search = None;
             self.with_jump(|s| {
                 s.open_path(&path, false);

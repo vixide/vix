@@ -1300,6 +1300,7 @@ const TOOLS_ABOUT: &[Item] = &[
 
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
+    Item::leaf("menu.item.tools.palette_resume", "palette.resume", ""),
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     Item::leaf("menu.item.tools.tasks", "tools.tasks", ""),

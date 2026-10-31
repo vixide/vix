@@ -11,7 +11,71 @@ use crate::search::{Field, Flags as SearchFlags, Scope};
 use crate::theme::{self, icon};
 use crate::workspace_search::Flags as WorkspaceFlags;
 
-pub(super) fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
+/// Split a picker's result area into the list and, on a screen at least
+/// `MIN_PREVIEW_WIDTH` columns wide, a preview pane to its right (T630).
+fn split_for_preview(screen: Rect, results: Rect) -> (Rect, Option<Rect>) {
+    if screen.width < crate::palette::MIN_PREVIEW_WIDTH {
+        return (results, None);
+    }
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .split(results);
+    (cols[0], Some(cols[1]))
+}
+
+/// The shared picker preview pane (T630): a numbered window of the file
+/// around the result's line, that line highlighted. `None` draws an empty
+/// pane with a "no preview" note (binary file, remote workspace, …).
+pub(super) fn draw_preview(
+    frame: &mut Frame,
+    area: Rect,
+    preview: Option<&(String, crate::palette::Preview)>,
+) {
+    let title = preview.map_or_else(String::new, |(t, _)| format!(" {t} "));
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::LEFT)
+        .border_style(theme::dim())
+        .title(Span::styled(title, theme::dim()));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some((_, p)) = preview else {
+        let note = Line::from(Span::styled(t!("ui.preview_none"), theme::dim()));
+        frame.render_widget(Paragraph::new(note), inner);
+        return;
+    };
+    let mut lines = Vec::new();
+    let mut height = usize::from(inner.height);
+    if p.beyond {
+        lines.push(Line::from(Span::styled(
+            t!("ui.preview_beyond", line = p.target),
+            theme::dim(),
+        )));
+        height = height.saturating_sub(1);
+    }
+    let (first, rows) = p.visible(height);
+    let last = first + rows.len().saturating_sub(1);
+    let gutter = last.to_string().len();
+    for (i, text) in rows.iter().enumerate() {
+        let n = first + i;
+        let number = Span::styled(format!("{n:>gutter$} "), theme::dim());
+        let line = if n == p.target && !p.beyond {
+            Line::from(vec![number, Span::raw(text.clone())]).style(theme::selected())
+        } else {
+            Line::from(vec![number, Span::raw(text.clone())])
+        };
+        lines.push(line);
+    }
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+pub(super) fn draw_palette(app: &mut App, frame: &mut Frame, area: Rect) {
+    let preview = if area.width >= crate::palette::MIN_PREVIEW_WIDTH && app.palette_has_preview() {
+        Some(app.palette_preview())
+    } else {
+        None
+    };
     let Some(p) = app.palette.as_ref() else {
         return;
     };
@@ -57,13 +121,25 @@ pub(super) fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
     if !p.entries.is_empty() {
         state.select(Some(p.selected));
     }
-    frame.render_stateful_widget(list, rows[1], &mut state);
+    let (list_area, preview_area) = match preview {
+        Some(_) => split_for_preview(area, rows[1]),
+        None => (rows[1], None),
+    };
+    frame.render_stateful_widget(list, list_area, &mut state);
+    if let Some(pane) = preview_area {
+        draw_preview(frame, pane, preview.flatten().as_ref());
+    }
 
     let hint = Line::from(Span::styled(t!("ui.palette_prefixes"), theme::dim()));
     frame.render_widget(Paragraph::new(hint), rows[2]);
 }
 
-pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
+pub(super) fn draw_workspace_search(app: &mut App, frame: &mut Frame, area: Rect) {
+    let preview = if area.width >= crate::palette::MIN_PREVIEW_WIDTH {
+        app.workspace_search_preview()
+    } else {
+        None
+    };
     let Some(ps) = app.workspace_search.as_ref() else {
         return;
     };
@@ -145,7 +221,11 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     if !ps.hits.is_empty() {
         state.select(Some(ps.selected));
     }
-    frame.render_stateful_widget(list, rows[1], &mut state);
+    let (list_area, preview_area) = split_for_preview(area, rows[1]);
+    frame.render_stateful_widget(list, list_area, &mut state);
+    if let Some(pane) = preview_area {
+        draw_preview(frame, pane, preview.as_ref());
+    }
 
     let hint = if replacing {
         t!("ui.ps_hint_replace")
