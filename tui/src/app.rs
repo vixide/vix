@@ -35,6 +35,7 @@ mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
 mod hl7;
+mod hot_exit;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(not(feature = "http"))]
@@ -806,6 +807,9 @@ pub enum ConfirmKind {
     /// Run an Org source block in a Jupyter kernel although the workspace
     /// is not trusted (T734c/d, `spec/jupyter`).
     JupyterRunBlock,
+    /// Offer back a hot-exit backup of unsaved text (T629): recover, show
+    /// the diff, discard, or decide later.
+    RecoverBackup,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -2088,6 +2092,8 @@ pub struct App {
     /// Where Local History keeps snapshots; `None` uses the user's config
     /// directory (tests point it at a temporary directory).
     pub local_history_root: Option<PathBuf>,
+    /// Hot-exit backups and the recovery offers still to show (T629).
+    pub(crate) hot_exit: hot_exit::HotExitState,
     /// The last FHIR response body, held in memory only (never written to
     /// disk) so the Bundle viewer can open on it.
     fhir_last: Option<String>,
@@ -2706,6 +2712,7 @@ impl App {
             peek_pending: false,
             palette_everywhere: false,
             local_history_root: None,
+            hot_exit: hot_exit::HotExitState::default(),
             fhir_last: None,
             #[cfg(feature = "http")]
             fhir_rx: None,
@@ -4293,6 +4300,8 @@ impl App {
                 }
                 // Anchored IM threads that moved with the text (T753).
                 self.im_threads_saved(&p);
+                // The text is on disk: its hot-exit backup is obsolete (T629).
+                self.drop_active_backup(None);
                 self.refresh_git();
                 true
             }
@@ -7938,6 +7947,10 @@ impl App {
 
     /// Discard unsaved changes and continue the close/quit being guarded.
     fn unsaved_discard(&mut self) {
+        // Discarding is a decision: no backup should offer the text back.
+        if self.unsaved.is_some() {
+            self.drop_active_backup(None);
+        }
         match self.unsaved.as_ref().map(|u| u.mode) {
             Some(UnsavedMode::CloseTab) => {
                 self.unsaved = None;
@@ -7981,7 +7994,10 @@ impl App {
     }
 
     fn confirm_key(&mut self, key: KeyEvent) {
-        if self.remote_confirm_key(key) || self.jupyter_confirm_key(key) {
+        if self.remote_confirm_key(key)
+            || self.jupyter_confirm_key(key)
+            || self.hot_exit_confirm_key(key)
+        {
             return;
         }
         if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {
@@ -8231,6 +8247,10 @@ impl App {
                     // Restore the persisted undo tree for a freshly opened file.
                     if opened_new && self.settings.editor_behavior.persistent_undo {
                         self.restore_persistent_undo(path);
+                    }
+                    // Offer back unsaved text a crash left behind (T629).
+                    if opened_new && let Some(p) = self.active_path() {
+                        self.check_backup_on_open(&p);
                     }
                 }
                 self.apply_editorconfig_indent(path);
@@ -13471,9 +13491,13 @@ impl App {
     /// Write the active buffer to `path` and adopt it as the buffer's path.
     fn save_active_as_now(&mut self, path: PathBuf) {
         let opts = self.save_options();
+        let prior = self.editor.active_tab().and_then(|t| t.path.clone());
         match self.editor.save_active_as(path, opts) {
             Ok(p) => {
                 self.status = t!("status.saved", path = p.display()).to_string();
+                // Saved under its new name: drop the backup kept under the
+                // old one, or under its untitled session id (T629).
+                self.drop_active_backup(prior);
                 self.explorer.rebuild();
             }
             Err(e) => self
@@ -13897,6 +13921,8 @@ impl App {
     /// `App` state directly (tests, an embedder) without going through a
     /// real terminal session.
     pub fn on_exit(&mut self) {
+        // Unsaved text outlives the process (T629).
+        self.flush_hot_exit();
         self.lsp.shutdown();
         if let Err(e) = self.save_session() {
             // This used to be `let _ = self.save_session();`, silently

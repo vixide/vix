@@ -90,6 +90,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `prettier_languages` | list of strings | `[]` | Languages formatted with your own Prettier by **Format Document** and format-on-save: any of `javascript`, `typescript`, `json`, `css`, `html`, `markdown`, `yaml`, `graphql`, `handlebars`. See [Format with Prettier](../prettier/index.md). |
 | `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
+| `hot_exit` | bool | `true` | Back up unsaved buffers while idle and on quit, and offer them back (with a diff) when the file is next opened. A clean save deletes the backup. See [Hot exit](../undo-store/index.md#hot-exit). |
 | `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |
 | `read_only_paths` | list of strings | Cargo registry/git, `~/.rustup`, `/nix/store`, Homebrew Cellar, `node_modules`, `site-packages` | Path globs that open read-only (`~/` is home, `**` spans directories). **View → Editor → Read-Only** unlocks a tab. |
 | `ephemeral_paths` | list of strings | `["**/.git/**"]` | Path globs the session never records, such as `COMMIT_EDITMSG`. |

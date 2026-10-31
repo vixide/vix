@@ -97,6 +97,9 @@ rainbow_brackets = false
 # Persist each file's undo tree across sessions (restored on reopen when
 # the file content still matches).
 persistent_undo = true
+# Hot exit: back up unsaved buffers while idle and on quit, and offer them
+# back (with a diff) after a crash. A clean save deletes the backup.
+hot_exit = true
 # Show a code-overview minimap column at the right of the editor.
 show_minimap = false
 # Show hover tooltips (help text) on the menu bar's menus and items.

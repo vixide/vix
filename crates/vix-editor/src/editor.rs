@@ -281,6 +281,23 @@ pub struct Tab {
     /// save-conflict check. Only captured while [`Flags::CHECK_CONFLICTS`]
     /// is on; [`DiskStamp::Unknown`] otherwise.
     pub disk_stamp: DiskStamp,
+    /// Hot-exit bookkeeping (T629): the untitled buffer's session id and
+    /// what was last backed up, so an idle pass skips an unchanged buffer.
+    pub backup: BackupMark,
+}
+
+/// What hot exit (T629) knows about a [`Tab`]'s backup.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BackupMark {
+    /// An untitled buffer's stable session id, given on its first backup
+    /// (or kept from the backup it was recovered from).
+    pub session_id: Option<String>,
+    /// The edit revision whose text the backup holds; `None` when there is
+    /// no backup of this buffer's current edits.
+    pub revision: Option<u64>,
+    /// When the backup was last written.
+    pub written_at: Option<std::time::Instant>,
 }
 
 /// What a [`Tab`] knows about its file's version on disk (T713): captured
@@ -629,6 +646,7 @@ impl Editor {
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
             disk_stamp: DiskStamp::Unknown,
+            backup: BackupMark::default(),
         });
         self.active = self.tabs.len() - 1;
     }
@@ -655,6 +673,7 @@ impl Editor {
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
             disk_stamp: DiskStamp::Unknown,
+            backup: BackupMark::default(),
         });
         self.active = self.tabs.len() - 1;
     }
@@ -686,6 +705,7 @@ impl Editor {
             path_access: PathAccess::Normal,
             encoding: vix_encoding::TextEncoding::UTF8,
             disk_stamp: DiskStamp::Unknown,
+            backup: BackupMark::default(),
         });
         self.active = self.tabs.len() - 1;
     }
@@ -803,6 +823,7 @@ impl Editor {
             },
             encoding,
             disk_stamp,
+            backup: BackupMark::default(),
         };
 
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {

@@ -77,3 +77,27 @@ A second store, [Local History](../ide-parity/index.md), keeps timestamped
 snapshots on every save, with labels, diff and restore. It is controlled by the
 `local_history_keep` setting (default 50, `0` = off) and is separate from
 `persistent_undo`.
+
+## Hot exit
+
+The same crate keeps **hot-exit backups** of unsaved buffers (T629), so a
+crash, a closed terminal or a forced quit never loses typed text. While Vix is
+idle (every couple of seconds, writing only buffers that changed since their
+last backup) and again on quit, each unsaved buffer is copied to
+`<config>/backup/`. Untitled buffers are kept too, under a session id.
+
+When you next open a file that has a backup, Vix asks whether to recover it:
+
+| Key | Does |
+| --- | --- |
+| `r` | Put the unsaved text back into the buffer. It stays unsaved until you save. |
+| `d` | Show the file on disk against the backup, then ask again. |
+| `x` | Delete the backup. |
+| `n` / `Esc` | Decide later: the backup is offered again next time. |
+
+Untitled buffers are offered together when Vix starts in the same workspace.
+A backup is never applied without asking, and saving the buffer deletes it.
+Buffers in a remote workspace are backed up on this machine, keyed by their
+remote name. Turn the feature off with `hot_exit = false`.
+
+Full behavior: `crates/vix-undo-store/spec/hot-exit/index.md`.

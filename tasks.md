@@ -7289,8 +7289,18 @@ new action.
   - Use OSC 8 hyperlinks in markdown preview and notifications.
 
   **Small–medium.**
-- [ ] **T629 — Hot exit: recover unsaved buffers after a crash or
-  quit.** Sessions store files, scroll positions, and splits only, and
+- [x] **T629 — Hot exit: recover unsaved buffers after a crash or
+  quit.** Done 2026-10-30: new `vix_undo_store::hot_exit` store
+  (`<config>/backup/`, path-hash names and content-hash guard like the
+  undo store; untitled buffers as `untitled-<workspace>-<session id>`),
+  host `tui/src/app/hot_exit.rs` (idle pass every 2 s writing only buffers
+  whose revision changed, >4 MiB at most once a minute; flush in
+  `on_exit`; `r`/`d`/`x`/`n` recovery prompt with the `vix-diff-view`
+  overlay; untitled offer at start). Remote-workspace files are keyed by
+  their `ssh://` name and backed up locally. Save, Save As and the
+  close/quit Discard delete the backup. `hot_exit` setting (default on).
+  Spec `crates/vix-undo-store/spec/hot-exit/index.md`; 9 integration
+  tests in `tui/tests/integration/hot_exit.rs`. Original task: Sessions store files, scroll positions, and splits only, and
   `auto_save` writes to the real file. VS Code (`files.hotExit`), Zed,
   Vim swap files, and Emacs auto-save all recover unsaved work. Fix: on
   idle and on quit, write dirty buffers to

@@ -28,6 +28,7 @@ mod find;
 #[cfg(feature = "git")]
 mod git;
 mod hl7;
+mod hot_exit;
 mod ide_parity;
 mod im;
 mod keybindings;

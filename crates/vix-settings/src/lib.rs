@@ -691,6 +691,10 @@ pub struct StartupSettings {
     /// settings as soon as the dialog has been shown once, so it appears on the
     /// first run only; set it back to `true` to see it again.
     pub show_welcome_dialog: bool,
+    /// Hot exit (T629): back up each unsaved buffer to `<config>/backup/`
+    /// while idle and on quit, and offer the backup (with a diff) when the
+    /// file is next opened. A clean save deletes the backup.
+    pub hot_exit: bool,
 }
 
 impl Default for StartupSettings {
@@ -698,6 +702,7 @@ impl Default for StartupSettings {
         StartupSettings {
             restore_session: true,
             show_welcome_dialog: true,
+            hot_exit: true,
         }
     }
 }

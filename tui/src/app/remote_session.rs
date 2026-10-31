@@ -535,6 +535,13 @@ impl App {
 
     /// The session key of a remote workspace (its `ssh://` name), or `None`
     /// for a local one.
+    /// `path`'s `ssh://` (or container) name in the open remote workspace,
+    /// so a remote file's state is never confused with a local file of the
+    /// same path (T629 keys hot-exit backups by it).
+    pub(super) fn remote_identity(&self, path: &Path) -> Option<String> {
+        self.remote.session.as_ref().map(|s| s.name_of(path))
+    }
+
     pub(super) fn remote_session_key(&self) -> Option<String> {
         self.remote.session.as_ref().map(|s| s.name_of(&self.root))
     }
