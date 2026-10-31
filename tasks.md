@@ -8899,10 +8899,25 @@ editor by completion, diagnostics and never losing work first.
     per block (only the first is linked), `update_display_data` in place,
     stdin (`input()`), remote kernels, widgets, HTML/SVG rendering, kernel
     completion, `.ipynb` editing, and one kernel per file.
-- [ ] **T735 — Translations in Rhai scripts.** Let a script ship its own
+- [x] **T735 — Translations in Rhai scripts.** Let a script ship its own
   strings per locale through the same catalog `t!` reads, so script
   commands appear in the user's language (Fresh plugins can). After
-  T637. **Small–Medium.**
+  T637. **Small–Medium.** Done 2026-10-30: a plugin ships
+  `locales/<code>.toml` string tables (nested tables → dotted keys) and its
+  scripts call the new Rhai functions `tr(key)`, `tr(key, #{ name: v })`
+  (`%{name}` placeholders, `t!`'s syntax) and `locale()`; the host sets the
+  runtime's locale from `rust_i18n::locale()` before every load and reloads
+  scripts when the language changes. New `vix_script::Catalog`
+  (`crates/vix-script/src/catalog.rs`). `locales/` is data only (discovery
+  never reads it as code), covered by the trust digest, and a broken file is
+  reported under the plugin's name and skipped. Tests:
+  `crates/vix-script/tests/translations.rs`, the catalog unit tests, and
+  `plugin_translations_reach_the_label_and_the_handler`. **Not done as
+  written:** the strings go through a per-plugin catalog with the *same
+  lookup* as `t!` (active locale → tag truncation → `en`), not into the
+  host's own table — merging them would let a plugin override Vix's
+  strings, or another plugin's. Loose global/project scripts get no
+  catalog (`tr` returns the key); translations are a plugin feature.
 
 ### Distribution and promotion
 
@@ -9365,9 +9380,9 @@ everything in Q except T718. What is open, by run:
   T670 (the musl release build crashes).
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730–T734, T740, T741, T744 and T749 are done (T734's `jupyter`
-  feature is still opt-in; whether it joins `full` is the user's call);
-  T735 waits for T637. T742 and T743 have their files
+- **Run R:** T730–T735, T740, T741, T744 and T749 are done (T734's `jupyter`
+  feature is still opt-in; whether it joins `full` is the user's call).
+  T742 and T743 have their files
   (templates and a container image) but no channel is verified or
   published, so neither is done. T745–T748 are open; T746 and T747 need the
   user's decisions.

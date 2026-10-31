@@ -4,9 +4,12 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use rhai::module_resolvers::DummyModuleResolver;
 use rhai::{AST, Dynamic, Engine, Scope};
+
+use crate::catalog::Catalog;
 
 /// One command a script registered via `register_command` at load time.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,7 +19,9 @@ pub struct Command {
     /// `script:<stem>:<id>`, tasks.md T103).
     pub id: String,
     /// Palette label, shown **verbatim**: script-authored text is not routed
-    /// through `t!`/`locales/`, the same as a saved macro's name.
+    /// through the host's `t!`/`locales/`, the same as a saved macro's name.
+    /// A script that ships translations (§ Translations, T735) passes
+    /// `tr("key")` here, so the label is already in the user's language.
     pub label: String,
     /// The script's `fn` name this command calls with no arguments when run.
     pub handler: String,
@@ -50,6 +55,8 @@ pub struct LoadedScript {
     /// Key bindings requested at load time, in registration order.
     pub bindings: Vec<KeyBinding>,
     ast: AST,
+    /// The translations `tr` reads while this script's handlers run.
+    catalog: Arc<Catalog>,
 }
 
 /// A script that failed to load — parsing, or the top-level
@@ -258,6 +265,39 @@ fn register_prompt_and_message_fns(engine: &mut Engine, host: &Rc<RefCell<HostSt
     });
 }
 
+/// What `tr`/`locale` read: the host's active locale and the catalog of the
+/// script currently loading or running.
+#[derive(Default)]
+struct I18nState {
+    locale: String,
+    catalog: Arc<Catalog>,
+}
+
+/// Register `tr` and `locale` (§ Translations, T735) — both only read
+/// `i18n`; neither touches the buffer or the registry.
+fn register_i18n_fns(engine: &mut Engine, i18n: &Rc<RefCell<I18nState>>) {
+    {
+        let i = Rc::clone(i18n);
+        engine.register_fn("tr", move |key: &str| {
+            let s = i.borrow();
+            s.catalog.translate(&s.locale, key, &[])
+        });
+    }
+    {
+        let i = Rc::clone(i18n);
+        engine.register_fn("tr", move |key: &str, args: rhai::Map| {
+            let args: Vec<(String, String)> = args
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            let s = i.borrow();
+            s.catalog.translate(&s.locale, key, &args)
+        });
+    }
+    let i = Rc::clone(i18n);
+    engine.register_fn("locale", move || i.borrow().locale.clone());
+}
+
 /// Register `now` (§ API v1, "Clock") — the one function here that reads
 /// neither `HostState` nor the registry: the system's local date, as
 /// `YYYY-MM-DD`. Added in T105 once a sample script (a timestamp
@@ -276,6 +316,7 @@ pub struct Runtime {
     engine: Engine,
     registry: Rc<RefCell<Registry>>,
     host: Rc<RefCell<HostState>>,
+    i18n: Rc<RefCell<I18nState>>,
 }
 
 impl Default for Runtime {
@@ -294,6 +335,10 @@ impl Runtime {
     pub fn new() -> Self {
         let registry = Rc::new(RefCell::new(Registry::default()));
         let host = Rc::new(RefCell::new(HostState::default()));
+        let i18n = Rc::new(RefCell::new(I18nState {
+            locale: crate::catalog::FALLBACK_LOCALE.to_string(),
+            catalog: Arc::default(),
+        }));
         let mut engine = Engine::new();
 
         engine.set_max_operations(10_000_000);
@@ -316,12 +361,28 @@ impl Runtime {
         register_buffer_fns(&mut engine, &host);
         register_prompt_and_message_fns(&mut engine, &host);
         register_clock_fn(&mut engine);
+        register_i18n_fns(&mut engine, &i18n);
 
         Self {
             engine,
             registry,
             host,
+            i18n,
         }
+    }
+
+    /// Set the locale `tr` translates into — the host passes its own active
+    /// locale (`rust_i18n::locale()`) before loading scripts, so a label a
+    /// script builds with `tr` at load time is in the user's language.
+    /// Defaults to `en`. Takes effect for the next load or invoke.
+    pub fn set_locale(&self, locale: &str) {
+        self.i18n.borrow_mut().locale = locale.to_string();
+    }
+
+    /// The locale [`Runtime::set_locale`] last set (`en` by default).
+    #[must_use]
+    pub fn locale(&self) -> String {
+        self.i18n.borrow().locale.clone()
     }
 
     /// Compile `source` and run its top level (§ Execution model — "the top
@@ -335,7 +396,24 @@ impl Runtime {
     /// Returns `Err` if `source` fails to parse, or its top-level statements
     /// raise a Rhai error (including an invalid `bind_key` token).
     pub fn load(&self, stem: &str, source: &str) -> Result<LoadedScript, LoadError> {
+        self.load_with_catalog(stem, source, Arc::default())
+    }
+
+    /// [`Runtime::load`] with the script's own translations (§ Translations,
+    /// T735): `tr` reads `catalog` while the top level runs and, kept on the
+    /// returned [`LoadedScript`], whenever one of its handlers runs.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Runtime::load`].
+    pub fn load_with_catalog(
+        &self,
+        stem: &str,
+        source: &str,
+        catalog: Arc<Catalog>,
+    ) -> Result<LoadedScript, LoadError> {
         *self.registry.borrow_mut() = Registry::default();
+        self.i18n.borrow_mut().catalog = Arc::clone(&catalog);
         let ast = self.engine.compile(source).map_err(|e| LoadError {
             stem: stem.to_string(),
             message: e.to_string(),
@@ -350,6 +428,7 @@ impl Runtime {
             commands: std::mem::take(&mut registry.commands),
             bindings: std::mem::take(&mut registry.bindings),
             ast,
+            catalog,
         })
     }
 
@@ -366,6 +445,7 @@ impl Runtime {
         state: HostState,
     ) -> InvokeOutcome {
         *self.host.borrow_mut() = state;
+        self.i18n.borrow_mut().catalog = Arc::clone(&script.catalog);
         let mut scope = Scope::new();
         let result = self
             .engine

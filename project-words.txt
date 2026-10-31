@@ -749,3 +749,9 @@ numpy
 matplotlib
 Matplotlib
 pyplot
+
+# T735 (script translations: French examples, method name)
+Majuscules
+mots
+modifiés
+relocalize

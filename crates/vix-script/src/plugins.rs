@@ -20,6 +20,10 @@ use crate::DiscoveredScript;
 /// File name of the lock, next to `config.toml`.
 pub const LOCK_FILE_NAME: &str = "plugins.lock";
 
+/// The subdirectory of a plugin holding its translations (§ Translations,
+/// T735): `<name>/locales/<code>.toml`. Data, never loaded as code.
+pub const LOCALES_DIR: &str = "locales";
+
 /// Longest plugin name accepted (§ Plugins, "Commands").
 const MAX_NAME_LEN: usize = 64;
 
@@ -499,10 +503,15 @@ pub fn discover_enabled(paths: &PluginPaths) -> Result<Vec<DiscoveredScript>, Pl
             continue;
         }
         let mut by_stem: BTreeMap<String, PathBuf> = BTreeMap::new();
-        crate::discovery::collect_into(&paths.plugin_dir(&entry.name), &mut by_stem);
+        let dir = paths.plugin_dir(&entry.name);
+        crate::discovery::collect_into(&dir, &mut by_stem);
+        // T735: the plugin's translations, shared by all its scripts. A
+        // subdirectory, so `collect_into` above never reads it as code.
+        let locales_dir = dir.join(LOCALES_DIR);
         found.extend(by_stem.into_iter().map(|(stem, path)| DiscoveredScript {
             stem: format!("{}/{stem}", entry.name),
             path,
+            locales_dir: Some(locales_dir.clone()),
         }));
     }
     Ok(found)

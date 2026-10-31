@@ -14,6 +14,11 @@ impl App {
         debug_assert!(self.script_chooser.is_none());
     }
 
+    /// No scripts to translate again.
+    pub(super) fn relocalize_scripts(&mut self) {
+        debug_assert!(self.script_chooser.is_none());
+    }
+
     /// No project scripts are ever counted: the trust prompt (`trust.rs`)
     /// still asks for a project settings file (T627).
     pub(super) fn project_script_count(&self) -> usize {

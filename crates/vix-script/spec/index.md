@@ -160,8 +160,9 @@ fn on_uppercase() {
 - `register_command(id, label, handler)` — `id` is this script's own
   identifier for the command (unique within the script, not globally);
   `label` is the palette entry text, shown **verbatim** — script-authored
-  text is not routed through `t!`/`locales/`, the same as a saved
-  macro's name or a file name isn't; `handler` names a `fn` in the same
+  text is not routed through the host's `t!`/`locales/`, the same as a saved
+  macro's name or a file name isn't (a plugin translates its own labels by
+  passing `tr("key")` here, § Translations); `handler` names a `fn` in the same
   script, called with no arguments when the command runs.
 - The palette entry itself is namespaced `script:<script-stem>:<id>` — as
   implemented (T103), `App::run_action` dispatches any `script:`-prefixed
@@ -277,6 +278,60 @@ fn on_rename_answer(answer) {
   get it in v1, same "cut line, not an oversight" reasoning as everything
   in § "What's deliberately not in v1".
 
+### Translations (T735)
+
+A plugin ships its own strings per locale, so its commands appear in the
+user's language (Fresh's plugins can):
+
+```rhai
+register_command("upper", tr("cmd.upper"), "on_upper");
+fn on_upper() { message(tr("msg.done", #{ count: 3 })); }
+```
+
+- `tr(key) -> String` — the script's string for `key` in the active locale.
+- `tr(key, args) -> String` — the same, then each `%{name}` replaced by
+  `args.name` (a Rhai map; values rendered with `to_string`) — the host's
+  own `t!` placeholder syntax. A placeholder with no argument stays as
+  written.
+- `locale() -> String` — the active locale code (`en` until the host sets
+  one).
+
+**Where the strings live**: `<plugin>/locales/<code>.toml`, one file per
+locale, shared by every script of that plugin. String values only; nested
+tables flatten into dotted keys (`[cmd] upper = "…"` is `cmd.upper`), the
+key shape of the host's own `locales/*.yml`. A file stem must be a locale
+code (1–35 ASCII letters, digits, `-`, `_`, starting with a letter). Only
+regular files directly in `locales/` are read; symlinks and
+subdirectories are skipped, the same rule as discovery. A file over 1 MiB,
+one that doesn't parse, or one with a non-string value is skipped whole and
+reported as a load error under the plugin's name (`locales/<file>: …`) —
+the plugin's scripts still load, with whatever other locales parsed. Loose
+global and project scripts have no catalog: their `tr` returns the key.
+
+**Same lookup as `t!`**: the active locale, then each tag truncation
+(`pt-BR` → `pt`), then `en`. A key no table has returns the key itself
+(not `t!`'s `<locale>.<key>` placeholder), so an untranslated string is
+still readable. The catalog is the plugin's own, not the host's table
+`t!` reads: merging script keys into that global table would let a plugin
+override Vix's own strings, and one plugin another's. Each `LoadedScript`
+keeps an `Arc<Catalog>`; `Runtime::invoke` and `Runtime::load_with_catalog`
+point `tr` at it before running, so one plugin never reads another's
+strings.
+
+**Locale**: the host calls `Runtime::set_locale(rust_i18n::locale())` before
+each load (`App::load_scripts`), and changing the UI language (View →
+Locale, or a settings file that changes `locale`) reloads the loaded
+scripts (`App::relocalize_scripts`) so labels built by `tr` at load time
+follow it.
+
+**No new capability.** `tr` and `locale` read only strings the host loaded
+from the plugin's own directory before the script ran; a script cannot name
+a file, so the sandbox (§ Execution model) is unchanged. The catalog files
+are data: discovery is non-recursive, so `locales/` is never searched for
+`.rhai`, and nothing in it is compiled. They are inside `<name>/`, so they
+are covered by the plugin's trust digest (§ Plugins, "Trust") — editing a
+translation after enabling disables the plugin like editing code.
+
 ## Error handling
 
 Two moments, two different failure shapes, neither ever reaches the host as
@@ -342,6 +397,7 @@ digits, `.`, `_` and `-`, at most 64 characters, not starting with `.` or
     loose.rhai                 # a global script, as before
     <name>/                    # one installed plugin (a git checkout, detached HEAD)
       *.rhai                   # its scripts: top level only, non-recursive
+      locales/<code>.toml      # its translations (T735): data, never code
       ...                      # anything else is ignored by discovery
 ```
 
@@ -350,9 +406,9 @@ A plugin's scripts load with stem `<name>/<file stem>` (`vix-case/upper.rhai`
 can never collide with a global or project script (those stems have no
 `/`). Only regular files at the plugin's top level load; a subdirectory, a
 symlink, or a non-`.rhai` file does not — the same rule as the global
-directory. Later work that adds plugin data (T735, script translations)
-keeps it in subdirectories of `<name>/`, which discovery never reads as
-code.
+directory. Plugin data lives in subdirectories of `<name>/`, which
+discovery never reads as code: today that is `locales/` (T735, § API v1
+"Translations").
 
 ### `plugins.lock`
 
@@ -416,7 +472,7 @@ work.
 `crates/vix-script/src/plugins.rs`: `PluginPaths`, `Lockfile`/`LockEntry`
 (`parse`, `to_toml`, `load`, `save`), `parse_spec`, `name_from_url`,
 `digest`, `state`, `enable`, `disable`, `remove`, `check_symlinks`,
-`discover_enabled`, and (feature `plugins`) `install`/`update`. Host wiring:
+`discover_enabled` (which sets each script's `locales_dir`, T735), and (feature `plugins`) `install`/`update`. Host wiring:
 `tui/src/cli.rs` (`--plugin`), `tui/src/plugin_cli.rs` (argument dispatch
 and the translated report, `run_cli`), `tui/src/main.rs`
 (`handle_plugin_command`), `tui/src/app/scripts.rs` (`App::load_scripts`,
@@ -470,6 +526,9 @@ needs to answer to unblock T102:
   `Settings::scripts_dir()` or know about `App::root` itself; resolving
   *which* directories those are is T103's job (host wiring), kept out of
   this crate so it stays host-agnostic.
+- `catalog.rs` — `Catalog` (T735): a script's translations, `load_dir`,
+  `insert_toml`, `lookup` (the fallback chain) and `translate` (with
+  `%{name}` placeholders); tested in `crates/vix-script/tests/translations.rs`.
 - `lib.rs` — the public surface: re-exports plus `load_all(runtime,
   global_dir, project_dir) -> (Vec<LoadedScript>, Vec<LoadError>)`, which
   combines `discover` + reading each file + `Runtime::load`, skipping a

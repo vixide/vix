@@ -63,6 +63,8 @@ impl App {
         let project = (self.project_scripts_trusted() && self.remote_host().is_none())
             .then_some(project.as_path());
         let mut found = vix_script::discover(global.as_deref(), project);
+        // T735: `tr` translates into the UI language, at load and at run.
+        self.script_runtime.set_locale(&rust_i18n::locale());
         // Enabled plugins (T637): stems `<plugin>/<file>`, so never shadowed.
         if let Some(paths) = &paths {
             match vix_script::plugins::discover_enabled(paths) {
@@ -225,6 +227,15 @@ impl App {
             ),
         }
         self.open_plugin_chooser();
+    }
+
+    /// The UI language changed (T735): load the scripts again so every label
+    /// and string a script builds with `tr` follows it. Nothing to do when
+    /// no script is loaded — the next load reads the new locale anyway.
+    pub(super) fn relocalize_scripts(&mut self) {
+        if !self.scripts.is_empty() {
+            self.load_scripts();
+        }
     }
 
     /// `script.reload` (Tools → Scripts → Reload): re-run discovery,

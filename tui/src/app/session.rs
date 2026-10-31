@@ -528,6 +528,7 @@ impl App {
             && let Some(loc) = crate::locale_model::by_code(&self.settings.locale)
         {
             rust_i18n::set_locale(loc.code);
+            self.relocalize_scripts();
         }
         if old.time_zone != self.settings.time_zone {
             let _ = crate::time_zone_model::set_active(&self.settings.time_zone);

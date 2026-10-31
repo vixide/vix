@@ -64,6 +64,53 @@ Plugin scripts run in exactly the same sandbox as every other script (see
 § What scripts can't do) — installing a plugin grants nothing extra. Their
 commands appear in the palette as `script:<plugin>/<file>:<command>`.
 
+### Translating a plugin
+
+A plugin can ship its own strings in each language, so its commands appear
+in the language Vix is using (**View → Locale**). Put one TOML file per
+locale in a `locales/` folder inside the plugin:
+
+```text
+vix-case/
+  upper.rhai
+  locales/
+    en.toml
+    fr.toml
+```
+
+```toml
+# locales/fr.toml
+[cmd]
+upper = "Majuscules"
+
+[msg]
+done = "%{count} mots modifiés"
+```
+
+Nested tables become dotted keys (`cmd.upper`). In the scripts, `tr(key)`
+returns the string for the current language, and `tr(key, #{ name: value })`
+also fills each `%{name}` placeholder:
+
+```rhai
+register_command("upper", tr("cmd.upper"), "on_upper");
+
+fn on_upper() {
+    message(tr("msg.done", #{ count: 3 }));
+}
+```
+
+`tr` looks in the current language first, then the language without its
+region (`pt-BR` → `pt`), then English, and returns the key itself when no
+file has it. `locale()` returns the current language code. Changing the
+language reloads your scripts, so their labels follow it.
+
+The `locales/` folder is only read as text: a `.rhai` file inside it is
+never run. The translations are part of what you trust when you enable the
+plugin, so editing them disables the plugin until you enable it again. A
+translation file that doesn't parse, or isn't a string table, is reported in
+the message drawer and skipped; the plugin still loads. Scripts outside a
+plugin have no translations, so `tr` returns the key.
+
 ## Writing a script
 
 A script's top level runs once, at load time, and should do nothing but
@@ -155,6 +202,12 @@ form.
 
 - `now() -> String` — today's local date, `YYYY-MM-DD`. That's the only
   time-related function — no time-of-day, no time zone.
+
+### Translations
+
+- `tr(key) -> String`, `tr(key, args) -> String` — the plugin's string for
+  `key` in the current language (§ Translating a plugin).
+- `locale() -> String` — the current language code, such as `en` or `fr`.
 
 ## What scripts can't do
 
