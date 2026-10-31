@@ -23,6 +23,7 @@ use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
 
 use super::App;
 use crate::editor_core::actions::InsertText;
+use crate::editor_core::textobject::{TextObjectDir, TextObjectKind};
 
 impl App {
     /// The modal engine's own key handling, tried before `vim_normal_key`'s
@@ -84,7 +85,11 @@ impl App {
         // runs regardless of whether an operator is pending underneath it
         // (`dgg`, `df.`, …) — [`Self::apply_modal_motion_fallible`], which
         // this eventually reaches, is what actually checks that.
-        if self.modal_pending == ModalPending::G || self.modal_pending_find.is_some() {
+        if matches!(
+            self.modal_pending,
+            ModalPending::G | ModalPending::BracketNext | ModalPending::BracketPrev
+        ) || self.modal_pending_find.is_some()
+        {
             self.modal_resolve_pending(key);
             return true;
         }
@@ -278,6 +283,10 @@ impl App {
             '"' => quote('"'),
             '\'' => quote('\''),
             '`' => quote('`'),
+            // Tree-sitter textobjects (T616): function, class, parameter.
+            'f' | 'c' | 'a' => {
+                self.textobject_at_cursor(Self::textobject_kind(obj)?, ia == 'i', count)
+            }
             _ => None,
         }
     }
@@ -360,6 +369,10 @@ impl App {
             KeyCode::Char('g') => {
                 self.modal_pending = ModalPending::G;
             }
+            // `]f`/`[f` and friends (T616): same "count survives to the
+            // second key" rule as `gg`.
+            KeyCode::Char(']') => self.modal_pending = ModalPending::BracketNext,
+            KeyCode::Char('[') => self.modal_pending = ModalPending::BracketPrev,
             KeyCode::Char('G') => {
                 let line = if self.modal_count.is_empty() && self.modal_operator_count == 1 {
                     None
@@ -629,6 +642,23 @@ impl App {
                 self.modal_goto_line(Some(count));
                 return;
             }
+        } else if matches!(
+            self.modal_pending,
+            ModalPending::BracketNext | ModalPending::BracketPrev
+        ) {
+            let dir = if self.modal_pending == ModalPending::BracketNext {
+                TextObjectDir::Next
+            } else {
+                TextObjectDir::Previous
+            };
+            self.modal_pending = ModalPending::None;
+            if let KeyCode::Char(c) = key.code
+                && unmodified
+                && let Some(kind) = Self::textobject_kind(c)
+            {
+                self.modal_textobject_motion(kind, dir, count);
+                return;
+            }
         } else if let Some(find_key) = self.modal_pending_find.take()
             && unmodified
             && let KeyCode::Char(target) = key.code
@@ -665,14 +695,23 @@ impl App {
     /// becomes a third thing `d`/`c`/`y` can act on.
     fn modal_visual_key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Esc {
+            self.modal_pending_text_object = None;
             self.modal_mode = vix_modal::Mode::Normal;
             if let Some(tab) = self.editor.active_tab_mut() {
                 tab.editor.clear_selection();
             }
             return true;
         }
+        if let Some(ia) = self.modal_pending_text_object.take() {
+            self.modal_visual_text_object(ia, key.code);
+            return true;
+        }
         if Self::ctrl(&key) || Self::alt(&key) {
             return false;
+        }
+        if let KeyCode::Char(c @ ('i' | 'a')) = key.code {
+            self.modal_pending_text_object = Some(c);
+            return true;
         }
         let step = match key.code {
             KeyCode::Char('h') | KeyCode::Left => Some(KeyCode::Left),
@@ -694,6 +733,58 @@ impl App {
             self.snap_visual_selection_to_whole_lines();
         }
         true
+    }
+
+    /// The textobject kind a modal object letter names (T616): `f`
+    /// function (`m` too after `]`/`[`, Vim's own method motions), `c`
+    /// class, `a` parameter (argument).
+    fn textobject_kind(c: char) -> Option<TextObjectKind> {
+        match c {
+            'f' | 'm' => Some(TextObjectKind::Function),
+            'c' => Some(TextObjectKind::Class),
+            'a' => Some(TextObjectKind::Parameter),
+            _ => None,
+        }
+    }
+
+    /// `]f`/`[f`/`]c`/`[c`/`]a`/`[a` (T616): jump to the `count`-th next or
+    /// previous textobject start — or, with an operator pending, apply it
+    /// up to there (an exclusive motion, like `w`).
+    fn modal_textobject_motion(&mut self, kind: TextObjectKind, dir: TextObjectDir, count: usize) {
+        match self.textobject_jump_target(kind, dir, count) {
+            Ok((target, _)) => self.apply_modal_motion_fallible(Exclusive, |_, _| Some(target)),
+            Err(miss) => {
+                self.modal_reset_counts();
+                self.modal_pending_operator = None;
+                self.report_textobject_miss(miss);
+            }
+        }
+    }
+
+    /// Visual mode `i`/`a` + an object (T616): select it — for the
+    /// Tree-sitter objects, growing to the next enclosing one when the
+    /// selection already covers this one, so `vafaf` selects the outer
+    /// function.
+    fn modal_visual_text_object(&mut self, ia: char, code: KeyCode) {
+        let range = match code {
+            KeyCode::Char(c) if Self::textobject_kind(c).is_some() && c != 'm' => {
+                let Some(kind) = Self::textobject_kind(c) else {
+                    return;
+                };
+                match self.textobject_selection(kind, ia == 'i', 1) {
+                    Ok(r) => Some(r),
+                    Err(miss) => {
+                        self.report_textobject_miss(miss);
+                        None
+                    }
+                }
+            }
+            _ => self.modal_text_object_range(ia, code, 1),
+        };
+        if let Some((start, end)) = range {
+            self.modal_mode = vix_modal::Mode::Visual;
+            self.select_remembering(start, end);
+        }
     }
 
     /// Re-snap the active tab's selection to whole lines, keeping the

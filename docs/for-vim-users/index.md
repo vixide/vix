@@ -78,7 +78,10 @@ Honesty is the best advocacy:
 - **The full Vi language.** Vix's Normal mode ships a real modal-editing
   engine now (`vix-modal`, on by default): counts (`3w`, `2d3w`), operators
   composing with any motion (`dw`, `de`, `d}`, `dgg`, `df.`), text objects
-  (`diw`, `daw`, `di(`/`di{`/`di[`/`di<`, `da"`/`da'`/`` da` ``), named
+  (`diw`, `daw`, `di(`/`di{`/`di[`/`di<`, `da"`/`da'`/`` da` ``), the
+  Tree-sitter objects nvim-treesitter-textobjects users know (`daf`/`cif`
+  for a function, `ac`/`ic` for a class, `aa`/`ia` for a parameter, plus
+  `]f`/`[f`, `]c`/`[c`, `]a`/`[a` motions), named
   registers (`"ayy`, `"ap`) alongside the unnamed one, Visual/Visual Line
   selection, and `.` dot-repeat for `d{motion}`, a text object, or `p`/`P`.
   It is still a practical subset, not the full language: no Visual Block, no

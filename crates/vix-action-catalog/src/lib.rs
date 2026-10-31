@@ -747,6 +747,7 @@ pub mod dispatch_scan {
         ("tui/src/app.rs", "contacts_action"),
         ("tui/src/app.rs", "go_action"),
         ("tui/src/app/remote_session.rs", "run_remote_action"),
+        ("tui/src/app/textobjects.rs", "run_textobject_action"),
         ("tui/src/app/insert_tools.rs", "run_tools_action"),
         ("tui/src/app/keymap.rs", "run_vim_action"),
         ("tui/src/app/git.rs", "run_git_action"),

@@ -129,6 +129,10 @@ jobs:
         run: cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
       - name: test with no default features
         run: cargo test -p vix-tui --no-default-features
+      # Every grammar's textobjects query (T616), which the default grammar
+      # set would skip.
+      - name: test textobjects with every grammar
+        run: cargo test -p vix-editor-core --features syntax-all --lib textobject
       # The opt-in `cowork` feature is in no default build: lint and test it here.
       - name: clippy with the cowork feature
         run: cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings

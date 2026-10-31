@@ -47,6 +47,12 @@ mod save;
 mod scripting;
 mod structural_replace;
 mod terminal_protocol;
+#[cfg(any(
+    feature = "syntax-common",
+    feature = "syntax-all",
+    feature = "lang-rust"
+))]
+mod textobjects;
 mod themes;
 mod tutor;
 mod undo_tree;

@@ -33,6 +33,9 @@ fi
 echo "==> feature combinations (T587)"
 cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
 cargo test -p vix-tui --no-default-features
+# Every grammar's textobjects query (T616): compile them all and run the
+# per-language fixtures, which the default grammar set would skip.
+cargo test -p vix-editor-core --features syntax-all --lib textobject
 # The opt-in `cowork` feature is in no default build: lint and test it here.
 cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
 cargo test -p vix-tui --features cowork --lib cowork

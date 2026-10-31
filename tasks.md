@@ -7165,7 +7165,7 @@ new action.
   `full/delta`, else `full`; stale-version replies are dropped; 150 ms
   debounce in `tui/src/app/semantic_tokens.rs`. End-to-end tests in
   `tui/tests/lsp_smoke.rs` against a Python mock that applies the changes.
-- [ ] **T616 — Tree-sitter textobjects and function/class motions.**
+- [x] **T616 — Tree-sitter textobjects and function/class motions.**
   `crates/vix-editor-core/langs/*/` ship only `highlights.scm` (and Rust
   `tests.scm`). `vix-modal`'s `text_object.rs` covers words and
   delimiters only, and offline structural select can only expand. Helix
@@ -7179,6 +7179,20 @@ new action.
   before T112–T115, which bind it as `if`/`af`/`]f`. Tests: a
   per-language fixture, next/prev wrap, expand-then-shrink round trip.
   **Medium.**
+  Done 2026-10-31 (`crates/vix-editor-core/spec/textobjects/index.md`).
+  `textobjects.scm` ships for the 16 languages with a grammar compiled
+  into Vix that have structure to select (Kotlin, Lua and Zig have no
+  grammar, `text`/`markdown-inline` nothing to select). One deviation:
+  Helix's queries are MPL-2.0, not MIT, so nothing is copied — every query
+  is written for Vix against the grammar's `node-types.json`, keeping only
+  the shared capture-name convention. `Code::enclosing_textobjects`/
+  `textobject_range`/`next_textobject` query a byte window of the existing
+  tree (never parse). Ten actions (Edit → Select, Go → Function / Class,
+  palette); the offline shrink is a stack on `App` that
+  `lsp.shrink_selection` pops. T112–T115 had already landed, so the modal
+  engine now binds `if`/`af`/`ic`/`ac`/`ia`/`aa` (operator and Visual) and
+  `]f`/`[f`/`]m`/`[m`/`]c`/`[c`/`]a`/`[a`, with counts. Gate: a
+  `syntax-all` run of the per-language tests on all three forges.
 - [ ] **T617 — Debugger depth.** `vix-dap` sends only `setBreakpoints`,
   `launch`, `stackTrace`, `scopes`, `variables`, `evaluate`, and the step
   and continue requests. It has no condition, `hitCondition`, or
@@ -9407,8 +9421,8 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T616–T624, T631–T633, T635, T636 and T644 are open;
-  T612–T615, T625–T630, T634, T637 and T638 are done (2026-10-31). T610
+- **Run M:** T611, T617–T624, T631–T633, T635, T636 and T644 are open;
+  T612–T616, T625–T630, T634, T637 and T638 are done (2026-10-31). T610
   is partly done (the `*-tool` converters and `vix-db`'s `Session` still
   return `Result<_, String>`); T608 is half done (the DAP mock-adapter
   tests exist; the `vix-editor` unit-test half remains).

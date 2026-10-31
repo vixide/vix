@@ -174,6 +174,9 @@ The **Edit → Select** submenu changes what is selected.
 | Select Line | `edit.select_line` | |
 | Select Paragraph | `edit.select_paragraph` | |
 | Select Section | `edit.select_section` | |
+| Function (Inside) / (Around) | `edit.select_function_inside` / `edit.select_function_around` | |
+| Class (Inside) / (Around) | `edit.select_class_inside` / `edit.select_class_around` | |
+| Parameter (Inside) / (Around) | `edit.select_parameter_inside` / `edit.select_parameter_around` | |
 | Select All | `edit.select_all` | `Ctrl+A` |
 
 - **Select More / Select Less** grow or shrink the active end of the selection by
@@ -184,6 +187,13 @@ The **Edit → Select** submenu changes what is selected.
 - **Select Paragraph** and **Select Section** select the whole paragraph or
   section under the cursor (same blank-line / blank-run delimiters as the Go
   commands).
+- **Function / Class / Parameter (Inside / Around)** select a Tree-sitter
+  textobject (T616): the function, class-like type or parameter around the
+  cursor, either its interior or the whole of it. Repeating grows to the
+  next enclosing one, and **Shrink Selection** (no language server) steps
+  back. **Go → Function / Class → Next / Previous** (`nav.next_function`,
+  `nav.prev_function`, `nav.next_class`, `nav.prev_class`) jump between
+  their starts. See `crates/vix-editor-core/spec/textobjects/index.md`.
 - **Select All** selects the entire buffer.
 
 The mouse also selects: click-and-drag extends a selection, and `Ctrl+C` copies

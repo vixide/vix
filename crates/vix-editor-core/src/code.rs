@@ -19,7 +19,7 @@ use unicode_width::UnicodeWidthStr;
 
 #[derive(RustEmbed)]
 #[folder = "langs/"]
-struct LangAssets;
+pub(crate) struct LangAssets;
 
 thread_local! {
     /// Compiled Tree-sitter highlight queries, keyed by `(language, source hash)`.
@@ -41,7 +41,7 @@ thread_local! {
 ///
 /// Keyed by the query *source* as well as the language, so a custom-highlight
 /// override never collides with the bundled query.
-fn compiled_query(lang: &str, language: &Language, source: &str) -> Result<Rc<Query>> {
+pub(crate) fn compiled_query(lang: &str, language: &Language, source: &str) -> Result<Rc<Query>> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     source.hash(&mut hasher);
@@ -417,7 +417,7 @@ impl Code {
         Ok(code)
     }
 
-    fn get_language(lang: &str) -> Option<Language> {
+    pub(crate) fn get_language(lang: &str) -> Option<Language> {
         match lang {
             #[cfg(feature = "lang-rust")]
             "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
@@ -1295,6 +1295,17 @@ impl Code {
     #[must_use]
     pub fn lang(&self) -> &str {
         &self.lang
+    }
+
+    /// The current parse tree, if one is installed (`None` without a grammar,
+    /// or while a large buffer's first background parse is still running).
+    pub(crate) fn syntax_tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
+    }
+
+    /// The rope backing the buffer.
+    pub(crate) fn rope(&self) -> &Rope {
+        &self.content
     }
 
     /// `"CRLF"` if the first line ends with `\r\n`, else `"LF"`.
