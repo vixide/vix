@@ -557,6 +557,16 @@ const EDIT_SELECT: &[Item] = &[
         "edit.column_select_down",
         "Alt Shift ↓",
     ),
+    Item::leaf(
+        "menu.item.edit.split_selection_into_lines",
+        "edit.split_selection_into_lines",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_regex_in_selection",
+        "edit.select_regex_in_selection",
+        "",
+    ),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
 

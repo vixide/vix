@@ -623,6 +623,11 @@ impl App {
     /// If the word just before the cursor is a snippet prefix, replace it with the
     /// snippet body and arm a tabstop session. Returns `true` if it expanded.
     pub(super) fn expand_snippet_prefix(&mut self) -> bool {
+        // Snippets are single-caret (T622): with extra carets Tab is just
+        // the plain Tab key.
+        if self.multi_caret_active() {
+            return false;
+        }
         // `expr.if` / `items.for`: postfix templates win over a prefix snippet.
         if self.expand_postfix() {
             return true;

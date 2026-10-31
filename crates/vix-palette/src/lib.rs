@@ -253,6 +253,14 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.select_all_occurrences", "edit.select_all_occurrences"),
     ("cmd.column_select_down", "edit.column_select_down"),
     ("cmd.column_select_up", "edit.column_select_up"),
+    (
+        "cmd.split_selection_into_lines",
+        "edit.split_selection_into_lines",
+    ),
+    (
+        "cmd.select_regex_in_selection",
+        "edit.select_regex_in_selection",
+    ),
     ("cmd.duplicate_line", "edit.duplicate_line"),
     ("cmd.join_lines", "edit.join_lines"),
     ("cmd.sort_lines", "edit.sort_lines"),

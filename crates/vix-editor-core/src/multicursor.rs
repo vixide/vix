@@ -5,8 +5,15 @@
 //! are applied at every caret at once, and `Ctrl+D` grows the set by selecting
 //! the next occurrence of the current selection/word.
 //!
+//! Carets keep their **add order**: the primary is the newest caret, and
+//! `carets` holds the older ones oldest first. Moves and edits never reorder
+//! them, so [`Editor::remove_last_caret`] always drops the caret added last
+//! and [`Editor::skip_occurrence`] always moves the newest match.
+//!
 //! Edits run directly on the rope in one undo transaction, processing carets in
-//! ascending order with a running offset so each edit stays valid.
+//! ascending position order with a running offset so each edit stays valid.
+
+use std::ops::Range;
 
 use crate::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
 use crate::editor::Editor;
@@ -30,6 +37,15 @@ fn shifted(pos: usize, shift: isize) -> usize {
         .expect("caret offset stays within the buffer after a prior edit's shift")
 }
 
+/// A character count as a signed shift.
+#[expect(
+    clippy::expect_used,
+    reason = "a buffer length is bounded well below isize::MAX"
+)]
+fn signed(n: usize) -> isize {
+    isize::try_from(n).expect("a buffer length fits in isize")
+}
+
 /// An extra caret beyond the primary cursor.
 #[derive(Clone, Copy, Debug)]
 pub struct Caret {
@@ -39,8 +55,9 @@ pub struct Caret {
     pub anchor: Option<usize>,
 }
 
-/// Which arrow movement to apply to every caret.
-#[derive(Clone, Copy)]
+/// Which movement to apply to every caret.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CaretMove {
     /// Move every caret one character to the left.
     Left,
@@ -50,6 +67,29 @@ pub enum CaretMove {
     Up,
     /// Move every caret one line down.
     Down,
+    /// Move every caret to the start of the previous word.
+    WordLeft,
+    /// Move every caret to the end of the next word.
+    WordRight,
+    /// Move every caret to column 0 of its line.
+    LineStart,
+    /// Move every caret to the end of its line.
+    LineEnd,
+    /// Move every caret to the first non-blank character of its line.
+    TextStart,
+    /// Smart Home per caret: to the first non-blank character, or to column 0
+    /// when already there (a blank line counts as column 0).
+    Home,
+    /// Move every caret to the start of the buffer (they merge into one).
+    BufferStart,
+    /// Move every caret to the end of the buffer (they merge into one).
+    BufferEnd,
+}
+
+/// The start of a caret's replaced range: its selection's start, or its
+/// position when it has no selection.
+fn range_start((pos, anchor): (usize, Option<usize>)) -> usize {
+    anchor.map_or(pos, |a| a.min(pos))
 }
 
 impl Editor {
@@ -57,6 +97,12 @@ impl Editor {
     #[must_use]
     pub fn has_multi_carets(&self) -> bool {
         !self.carets.is_empty()
+    }
+
+    /// How many carets are active, the primary included (always at least 1).
+    #[must_use]
+    pub fn caret_count(&self) -> usize {
+        self.carets.len() + 1
     }
 
     /// Drop all extra carets, keeping just the primary cursor.
@@ -87,134 +133,192 @@ impl Editor {
         out
     }
 
-    /// All carets (primary first) as `(pos, anchor)` pairs.
-    fn gather(&self) -> Vec<(usize, Option<usize>)> {
-        let primary_anchor = self
-            .selection
+    /// The selected text of every caret that has a selection, in buffer
+    /// order. Multi-caret copy joins these with newlines.
+    #[must_use]
+    pub fn caret_selection_texts(&self) -> Vec<String> {
+        let mut ranges = self.caret_selections();
+        ranges.sort_unstable();
+        ranges
+            .into_iter()
+            .map(|(s, e)| self.get_content_slice(s, e))
+            .collect()
+    }
+
+    /// The primary caret's selection anchor, when it has a non-empty selection.
+    fn primary_anchor(&self) -> Option<usize> {
+        self.selection
             .filter(|s| !s.is_empty())
-            .map(|s| if s.end == self.cursor { s.start } else { s.end });
-        let mut v = vec![(self.cursor, primary_anchor)];
+            .map(|s| if s.end == self.cursor { s.start } else { s.end })
+    }
+
+    /// All carets (primary first, then the extras in add order) as
+    /// `(pos, anchor)` pairs.
+    fn gather(&self) -> Vec<(usize, Option<usize>)> {
+        let mut v = vec![(self.cursor, self.primary_anchor())];
         v.extend(self.carets.iter().map(|c| (c.pos, c.anchor)));
         v
     }
 
-    /// Install carets from `(pos, anchor)` pairs: de-duplicate, sort by position,
-    /// make the lowest the primary cursor, and keep the rest as extras.
-    fn scatter(&mut self, mut carets: Vec<(usize, Option<usize>)>) {
-        carets.sort_by_key(|&(p, _)| p);
-        carets.dedup_by_key(|&mut (p, _)| p);
-        let mut iter = carets.into_iter();
-        let (pos, anchor) = iter.next().unwrap_or((self.cursor, None));
+    /// Install carets from `(pos, anchor)` pairs, keeping their order: the
+    /// first becomes the primary cursor and the rest the extras. A caret on
+    /// the same position as an earlier one is merged into it.
+    fn scatter(&mut self, carets: Vec<(usize, Option<usize>)>) {
+        let len = self.code_ref().len_chars();
+        let mut seen = std::collections::HashSet::new();
+        let mut kept = carets
+            .into_iter()
+            .map(|(p, a)| (p.min(len), a.map(|a| a.min(len))))
+            .filter(|&(p, _)| seen.insert(p));
+        let (pos, anchor) = kept.next().unwrap_or((self.cursor.min(len), None));
         self.cursor = pos;
+        self.goal_col = None;
         self.selection = anchor
             .filter(|&a| a != pos)
             .map(|a| Selection::from_anchor_and_cursor(a, pos));
-        self.carets = iter.map(|(pos, anchor)| Caret { pos, anchor }).collect();
+        self.carets = kept.map(|(pos, anchor)| Caret { pos, anchor }).collect();
         self.reset_highlight_cache();
     }
 
     /// Insert `text` at every caret (replacing each selection), as one undo step.
-    /// Carets are processed in ascending order with a running offset `shift`, so
-    /// each edit's coordinates stay valid in the live buffer.
-    ///
-    /// # Panics
-    /// Never in practice: the running shift only ever reflects `text`'s
-    /// length and prior carets' removed spans, both bounded by the buffer
-    /// this same call is editing, so the `isize` conversion cannot overflow.
-    #[expect(
-        clippy::expect_used,
-        reason = "the value is bounded well below the target type"
-    )]
     pub fn multi_insert(&mut self, text: &str) {
-        let added = text.chars().count();
-        let mut carets = self.gather();
+        let texts = vec![text; self.caret_count()];
+        self.multi_replace(&texts);
+    }
+
+    /// Replace every caret's selection (or insert at a bare caret) with its own
+    /// text — `texts[0]` for the primary, then one per extra caret in add
+    /// order — as one undo step. Carets are processed in ascending order with a
+    /// running offset `shift`, so each edit's coordinates stay valid in the
+    /// live buffer.
+    fn multi_replace(&mut self, texts: &[&str]) {
+        let carets = self.gather();
         // By the start of each caret's replaced range, so an enclosing selection
         // is applied before a caret inside it.
-        carets.sort_by_key(|&(p, a)| a.map_or(p, |a| a.min(p)));
+        let mut order: Vec<usize> = (0..carets.len()).collect();
+        order.sort_by_key(|&i| range_start(carets[i]));
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         code.tx();
         code.set_state_before(primary.0, primary.1);
         let mut shift: isize = 0;
-        let mut result: Vec<(usize, Option<usize>)> = Vec::with_capacity(carets.len());
+        let mut result: Vec<Option<(usize, Option<usize>)>> = vec![None; carets.len()];
         // End of the span the previous caret already replaced, in the original
         // text. A caret that starts inside it overlaps that edit: its text is
         // already gone, so it is merged into the earlier caret rather than
         // applied at a shifted offset that no longer exists (T575).
         let mut prev_end = 0;
         let len = code.len_chars();
-        for (pos, anchor) in carets {
+        for i in order {
+            let (pos, anchor) = carets[i];
             let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
-            let (rstart, rend, base) = match anchor.filter(|&a| a != pos) {
-                Some(a) => (a.min(pos), a.max(pos), a.min(pos)),
-                None => (pos, pos, pos),
+            let (rstart, rend) = match anchor.filter(|&a| a != pos) {
+                Some(a) => (a.min(pos), a.max(pos)),
+                None => (pos, pos),
             };
             if rstart < prev_end {
                 continue;
             }
             prev_end = rend;
-            let at = shifted(base, shift);
+            let text = texts.get(i).copied().unwrap_or("");
+            let added = text.chars().count();
+            let at = shifted(rstart, shift);
             if rend > rstart {
-                let rs = shifted(rstart, shift);
-                let re = shifted(rend, shift);
-                code.remove(rs, re);
+                code.remove(at, shifted(rend, shift));
             }
             code.insert(at, text);
-            let added_i = isize::try_from(added).expect("an inserted length fits in isize");
-            let removed_i = isize::try_from(rend - rstart).expect("a removed length fits in isize");
-            shift += added_i - removed_i;
-            result.push((at + added, None));
+            shift += signed(added) - signed(rend - rstart);
+            result[i] = Some((at + added, None));
+        }
+        let result: Vec<_> = result.into_iter().flatten().collect();
+        if let Some(&(p, _)) = result.first() {
+            code.set_state_after(p, None);
         }
         code.commit();
         self.scatter(result);
     }
 
     /// Delete at every caret (each selection, else one char), as one undo step.
-    ///
-    /// # Panics
-    /// Never in practice: same bound as [`Self::multi_insert`] — the running
-    /// shift only ever reflects removed spans within the buffer this same
-    /// call is editing, so the `isize` conversion cannot overflow.
-    #[expect(
-        clippy::expect_used,
-        reason = "the value is bounded well below the target type"
-    )]
     pub fn multi_delete(&mut self, forward: bool) {
         let len = self.code_ref().len_chars();
-        let mut carets = self.gather();
-        carets.sort_by_key(|&(p, _)| p);
+        let carets = self.gather();
+        let mut order: Vec<usize> = (0..carets.len()).collect();
+        order.sort_by_key(|&i| range_start(carets[i]));
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         code.tx();
         code.set_state_before(primary.0, primary.1);
         let mut shift: isize = 0;
-        let mut result: Vec<(usize, Option<usize>)> = Vec::with_capacity(carets.len());
-        for (pos, anchor) in carets {
-            if let Some(a) = anchor.filter(|&a| a != pos) {
-                let (s, e) = (a.min(pos), a.max(pos));
-                let rs = shifted(s, shift);
-                let re = shifted(e, shift);
-                code.remove(rs, re);
-                shift -= isize::try_from(e - s).expect("a removed length fits in isize");
-                result.push((rs, None));
-            } else if forward {
-                let p = shifted(pos, shift);
-                if pos < len {
-                    code.remove(p, p + 1);
-                    shift -= 1;
-                }
-                result.push((p, None));
-            } else if pos > 0 {
-                let p = shifted(pos, shift);
-                code.remove(p - 1, p);
-                shift -= 1;
-                result.push((p - 1, None));
-            } else {
-                result.push((shifted(pos, shift), None));
+        let mut result: Vec<Option<(usize, Option<usize>)>> = vec![None; carets.len()];
+        // Like `multi_replace`: a caret whose span starts inside text an earlier
+        // caret already removed is merged into that caret.
+        let mut prev_end = 0;
+        for i in order {
+            let (pos, anchor) = carets[i];
+            let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
+            let (s, e) = match anchor.filter(|&a| a != pos) {
+                Some(a) => (a.min(pos), a.max(pos)),
+                None if forward => (pos, (pos + 1).min(len)),
+                None => (pos.saturating_sub(1), pos),
+            };
+            if s < prev_end {
+                continue;
             }
+            prev_end = e;
+            let rs = shifted(s, shift);
+            if e > s {
+                code.remove(rs, shifted(e, shift));
+                shift -= signed(e - s);
+            }
+            result[i] = Some((rs, None));
+        }
+        let result: Vec<_> = result.into_iter().flatten().collect();
+        if let Some(&(p, _)) = result.first() {
+            code.set_state_after(p, None);
         }
         code.commit();
         self.scatter(result);
+    }
+
+    /// Paste `text` at every caret, as one undo step. When `text` has exactly
+    /// one line per caret (ignoring one trailing newline), the lines are
+    /// distributed one per caret in buffer order — so copying N selections and
+    /// pasting into N carets puts each back in its place. Otherwise every
+    /// caret gets the whole text.
+    pub fn multi_paste(&mut self, text: &str) {
+        let n = self.caret_count();
+        let body = text
+            .strip_suffix('\n')
+            .map_or(text, |t| t.strip_suffix('\r').unwrap_or(t));
+        let lines: Vec<&str> = body
+            .split('\n')
+            .map(|l| l.strip_suffix('\r').unwrap_or(l))
+            .collect();
+        if n > 1 && lines.len() == n {
+            let carets = self.gather();
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by_key(|&i| range_start(carets[i]));
+            let mut texts = vec![""; n];
+            for (line, i) in lines.into_iter().zip(order) {
+                texts[i] = line;
+            }
+            self.multi_replace(&texts);
+        } else {
+            self.multi_insert(text);
+        }
+    }
+
+    /// Cut every caret's selection: copy them (joined with newlines, in buffer
+    /// order) and remove them, as one undo step. Carets without a selection
+    /// stay put. No-op when no caret has a selection.
+    pub fn multi_cut(&mut self) {
+        let texts = self.caret_selection_texts();
+        if texts.is_empty() {
+            return;
+        }
+        self.copy_to_clipboard(&texts.join("\n"));
+        let empty = vec![""; self.caret_count()];
+        self.multi_replace(&empty);
     }
 
     /// Move every caret in `dir` (extending its selection when `shift`).
@@ -222,44 +326,100 @@ impl Editor {
         let carets = self.gather();
         let mut result: Vec<(usize, Option<usize>)> = Vec::with_capacity(carets.len());
         for (pos, anchor) in carets {
-            // Drive the single-cursor move logic for this caret.
+            result.push(self.move_one(dir, shift, pos, anchor));
+        }
+        self.scatter(result);
+    }
+
+    /// One caret's position and anchor after moving it in `dir`.
+    fn move_one(
+        &mut self,
+        dir: CaretMove,
+        shift: bool,
+        pos: usize,
+        anchor: Option<usize>,
+    ) -> (usize, Option<usize>) {
+        if matches!(
+            dir,
+            CaretMove::Left | CaretMove::Right | CaretMove::Up | CaretMove::Down
+        ) {
+            // Drive the single-cursor arrow logic for this caret.
             self.cursor = pos;
             self.selection = anchor.map(|a| Selection::from_anchor_and_cursor(a, pos));
             match dir {
                 CaretMove::Left => self.apply(MoveLeft { shift }),
                 CaretMove::Right => self.apply(MoveRight { shift }),
                 CaretMove::Up => self.apply(MoveUp { shift }),
-                CaretMove::Down => self.apply(MoveDown { shift }),
+                _ => self.apply(MoveDown { shift }),
             }
-            let new_anchor = self
-                .selection
-                .filter(|s| !s.is_empty())
-                .map(|s| if s.end == self.cursor { s.start } else { s.end });
-            result.push((self.cursor, new_anchor));
+            return (self.cursor, self.primary_anchor());
         }
-        self.scatter(result);
+        let target = self.motion_target(dir, pos);
+        if shift {
+            let a = anchor.unwrap_or(pos);
+            (target, (a != target).then_some(a))
+        } else {
+            (target, None)
+        }
+    }
+
+    /// Where a non-arrow [`CaretMove`] takes a caret at `pos`.
+    fn motion_target(&self, dir: CaretMove, pos: usize) -> usize {
+        match dir {
+            CaretMove::WordLeft => self.prev_word(pos),
+            CaretMove::WordRight => self.next_word(pos),
+            CaretMove::LineStart => self.line_start(pos),
+            CaretMove::LineEnd => self.line_end(pos),
+            CaretMove::TextStart => self.line_first_text(pos),
+            CaretMove::Home => {
+                let start = self.line_start(pos);
+                let len = self.line_end(pos) - start;
+                let first = self.line_first_text(pos) - start;
+                let indent = if first >= len { 0 } else { first };
+                if pos - start == indent {
+                    start
+                } else {
+                    start + indent
+                }
+            }
+            CaretMove::BufferStart => 0,
+            CaretMove::BufferEnd => self.code_ref().len_chars(),
+            CaretMove::Left | CaretMove::Right | CaretMove::Up | CaretMove::Down => pos,
+        }
+    }
+
+    /// Route a single-caret motion through [`Self::multi_move`] when extra
+    /// carets exist. Returns whether it did (so the caller skips its own
+    /// primary-only move).
+    pub(crate) fn multi_motion(&mut self, dir: CaretMove, shift: bool) -> bool {
+        if self.has_multi_carets() {
+            self.multi_move(dir, shift);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Give the primary caret a selection to search for: keep a non-empty
+    /// selection, else select the word at the cursor. Returns the selected
+    /// range, or `None` when there is no word there.
+    fn ensure_word_selection(&mut self) -> Option<(usize, usize)> {
+        if self.selection.is_none_or(|s| s.is_empty()) {
+            let (s, e, _) = self.word_at(self.cursor)?;
+            self.selection = Some(Selection::new(s, e));
+            self.cursor = e;
+        }
+        let sel = self.selection?;
+        (sel.end > sel.start).then_some((sel.start, sel.end))
     }
 
     /// `Ctrl+D`: select the next occurrence of the current selection (or the word
     /// at the cursor) and add it as a new caret, which becomes primary.
     pub fn add_next_occurrence(&mut self) {
-        // Ensure the primary has a selection to search for.
-        if self.selection.is_none_or(|s| s.is_empty()) {
-            if let Some((s, e, _)) = self.word_at(self.cursor) {
-                self.selection = Some(Selection::new(s, e));
-                self.cursor = e;
-            } else {
-                return;
-            }
-        }
-        let Some(sel) = self.selection else {
+        let Some((s, e)) = self.ensure_word_selection() else {
             return;
         };
-        let (s, e) = (sel.start, sel.end);
         let needle: Vec<char> = self.get_content_slice(s, e).chars().collect();
-        if needle.is_empty() {
-            return;
-        }
         let hay: Vec<char> = self.get_content().chars().collect();
         // Furthest caret end, to search after.
         let from = self
@@ -277,16 +437,68 @@ impl Editor {
                 return;
             }
             // Demote the current primary to an extra caret; promote the match.
-            let cur_anchor = self
-                .selection
-                .map(|s| if s.end == self.cursor { s.start } else { s.end });
             self.carets.push(Caret {
                 pos: self.cursor,
-                anchor: cur_anchor,
+                anchor: self.primary_anchor(),
             });
             self.cursor = end;
             self.selection = Some(Selection::new(start, end));
         }
+    }
+
+    /// Skip the newest match: move the primary caret's selection to the next
+    /// occurrence of its text (`forward`) or the previous one, wrapping around
+    /// the buffer and passing over ranges another caret already holds. With
+    /// no selection it first selects the word at the cursor. No-op when there
+    /// is no other free occurrence.
+    pub fn skip_occurrence(&mut self, forward: bool) {
+        let Some((s, e)) = self.ensure_word_selection() else {
+            return;
+        };
+        let needle: Vec<char> = self.get_content_slice(s, e).chars().collect();
+        let hay: Vec<char> = self.get_content().chars().collect();
+        let n = needle.len();
+        let taken = self.caret_selections();
+        let starts: Vec<usize> = occurrences(&hay, &needle)
+            .into_iter()
+            .filter(|&st| !taken.contains(&(st, st + n)))
+            .collect();
+        let pick = if forward {
+            starts
+                .iter()
+                .copied()
+                .find(|&st| st >= e)
+                .or_else(|| starts.iter().copied().find(|&st| st < s))
+        } else {
+            starts
+                .iter()
+                .rev()
+                .copied()
+                .find(|&st| st + n <= s)
+                .or_else(|| starts.iter().rev().copied().find(|&st| st > s))
+        };
+        if let Some(start) = pick {
+            self.cursor = start + n;
+            self.goal_col = None;
+            self.selection = Some(Selection::new(start, start + n));
+        }
+    }
+
+    /// Remove the caret added last (the primary), promoting the previous one
+    /// to primary. Returns `false`, changing nothing, when there is only one
+    /// caret.
+    pub fn remove_last_caret(&mut self) -> bool {
+        let Some(last) = self.carets.pop() else {
+            return false;
+        };
+        self.cursor = last.pos;
+        self.goal_col = None;
+        self.selection = last
+            .anchor
+            .filter(|&a| a != last.pos)
+            .map(|a| Selection::from_anchor_and_cursor(a, last.pos));
+        self.reset_highlight_cache();
+        true
     }
 
     /// Select every occurrence of the current selection (or the word at the
@@ -294,29 +506,15 @@ impl Editor {
     /// caret per match, the last of which becomes primary. No-op when there is
     /// only a single match.
     pub fn add_all_occurrences(&mut self) {
-        if self.selection.is_none_or(|s| s.is_empty()) {
-            if let Some((s, e, _)) = self.word_at(self.cursor) {
-                self.selection = Some(Selection::new(s, e));
-                self.cursor = e;
-            } else {
-                return;
-            }
-        }
-        let Some(sel) = self.selection else {
+        let Some((s, e)) = self.ensure_word_selection() else {
             return;
         };
-        let needle: Vec<char> = self.get_content_slice(sel.start, sel.end).chars().collect();
-        if needle.is_empty() {
-            return;
-        }
+        let needle: Vec<char> = self.get_content_slice(s, e).chars().collect();
         let hay: Vec<char> = self.get_content().chars().collect();
-        let mut matches: Vec<(usize, usize)> = Vec::new();
-        let mut from = 0;
-        while let Some(start) = find_from(&hay, &needle, from) {
-            let end = start + needle.len();
-            matches.push((start, end));
-            from = end;
-        }
+        let matches: Vec<(usize, usize)> = occurrences(&hay, &needle)
+            .into_iter()
+            .map(|st| (st, st + needle.len()))
+            .collect();
         if matches.len() <= 1 {
             return;
         }
@@ -332,56 +530,152 @@ impl Editor {
         self.selection = Some(Selection::new(last_start, last_end));
     }
 
-    /// Alt+click: add an extra caret at character offset `pos`.
+    /// Split every caret's selection into one selection per line it covers
+    /// (Helix `Alt-s`, Kakoune `Alt-s`): each piece runs from the selection's
+    /// start (or the line's start) to the selection's end (or the line's end,
+    /// without its newline). Empty pieces — a blank line, or the column-0 end
+    /// of a selection that stops just after a newline — are dropped. Carets
+    /// without a selection stay as they are. The last piece in the buffer
+    /// becomes primary. Returns `false`, changing nothing, when no caret has a
+    /// selection.
+    pub fn split_selection_into_lines(&mut self) -> bool {
+        let carets = self.gather();
+        if !carets.iter().any(|&(p, a)| a.is_some_and(|a| a != p)) {
+            return false;
+        }
+        let code = self.code_ref();
+        let mut out = Vec::new();
+        for (p, a) in carets {
+            let Some(a) = a.filter(|&a| a != p) else {
+                out.push((p, None));
+                continue;
+            };
+            let (s, e) = (a.min(p), a.max(p));
+            let before = out.len();
+            for line in code.char_to_line(s)..=code.char_to_line(e) {
+                let ls = code.line_to_char(line);
+                let le = ls + code.line_len(line);
+                let (ps, pe) = (s.max(ls), e.min(le));
+                if pe > ps {
+                    out.push((pe, Some(ps)));
+                }
+            }
+            if out.len() == before {
+                out.push((p, Some(a)));
+            }
+        }
+        self.install_in_buffer_order(out);
+        true
+    }
+
+    /// Replace the carets with one selection per match of `find` inside the
+    /// current selections (Kakoune/Helix `s`). `find` gets each selection's
+    /// text and returns the matches' **byte** ranges in it; empty matches and
+    /// ranges off a char boundary are ignored. When no caret has a selection
+    /// the whole buffer is searched. The last match becomes primary. Returns
+    /// how many carets were installed; `0` (no match) changes nothing.
+    pub fn select_matches_in_selection(
+        &mut self,
+        mut find: impl FnMut(&str) -> Vec<Range<usize>>,
+    ) -> usize {
+        let mut ranges = self.caret_selections();
+        if ranges.is_empty() {
+            ranges.push((0, self.code_ref().len_chars()));
+        }
+        let mut out = Vec::new();
+        for (s, e) in ranges {
+            let text = self.get_content_slice(s, e);
+            for m in find(&text) {
+                if m.end <= m.start
+                    || m.end > text.len()
+                    || !text.is_char_boundary(m.start)
+                    || !text.is_char_boundary(m.end)
+                {
+                    continue;
+                }
+                let cs = s + text[..m.start].chars().count();
+                let ce = cs + text[m.start..m.end].chars().count();
+                out.push((ce, Some(cs)));
+            }
+        }
+        if out.is_empty() {
+            return 0;
+        }
+        self.install_in_buffer_order(out);
+        self.caret_count()
+    }
+
+    /// Install carets sorted by position, the last in the buffer as primary.
+    fn install_in_buffer_order(&mut self, mut carets: Vec<(usize, Option<usize>)>) {
+        carets.sort_by_key(|&(p, a)| (p, a));
+        carets.dedup_by_key(|&mut (p, _)| p);
+        if let Some(last) = carets.pop() {
+            carets.insert(0, last);
+        }
+        self.scatter(carets);
+    }
+
+    /// Alt+click: add a caret at character offset `pos`. It becomes the
+    /// primary (the newest caret); the old primary joins the extras. No-op
+    /// when a caret is already there.
     pub fn add_caret_at(&mut self, pos: usize) {
         let pos = pos.min(self.code_ref().len_chars());
         if pos != self.cursor && !self.carets.iter().any(|c| c.pos == pos) {
-            self.carets.push(Caret { pos, anchor: None });
+            self.push_primary(pos, None);
         }
     }
 
-    /// Add a caret on the line above the main cursor, at the same column (clamped
-    /// to that line's length). No-op on the first line.
+    /// Make a new caret at `pos` (with `anchor`) the primary, demoting the
+    /// current primary to the newest extra caret.
+    fn push_primary(&mut self, pos: usize, anchor: Option<usize>) {
+        self.carets.push(Caret {
+            pos: self.cursor,
+            anchor: self.primary_anchor(),
+        });
+        self.cursor = pos;
+        self.goal_col = None;
+        self.selection = anchor
+            .filter(|&a| a != pos)
+            .map(|a| Selection::from_anchor_and_cursor(a, pos));
+    }
+
+    /// Add a caret on the line above the newest caret, at the same column
+    /// (clamped to that line's length); it becomes primary, so repeating keeps
+    /// going up. No-op on the first line.
     pub fn add_caret_above(&mut self) {
         self.add_caret_vertical(false);
     }
 
-    /// Add a caret on the line below the main cursor, at the same column (clamped
-    /// to that line's length). No-op on the last line.
+    /// Add a caret on the line below the newest caret, at the same column
+    /// (clamped to that line's length); it becomes primary, so repeating keeps
+    /// going down. No-op on the last line.
     pub fn add_caret_below(&mut self) {
         self.add_caret_vertical(true);
     }
 
     /// Extend a column (rectangular) selection by one line: add a caret on the
     /// line past the current block frontier, spanning the same columns as the
-    /// primary caret's selection (or a bare caret when there is no selection).
-    /// Columns clamp to each line's length. No-op at the buffer's top/bottom.
-    /// The resulting carets edit together via [`Editor::multi_insert`] etc.
+    /// block's first caret (its selection, or a bare caret when there is
+    /// none). Columns clamp to each line's length. The new caret becomes
+    /// primary. No-op at the buffer's top/bottom. The resulting carets edit
+    /// together via [`Editor::multi_insert`] etc.
     pub fn column_select(&mut self, down: bool) {
-        let code = self.code_ref();
-        let cur_line = code.char_to_line(self.cursor);
-        let cur_col = self.cursor - code.line_to_char(cur_line);
-        // The anchor column comes from the primary selection's far end (same line
-        // for a clean rectangle); a bare cursor has anchor_col == cur_col.
-        let anchor_col = match self.selection {
-            Some(s) if !s.is_empty() => {
-                let a = if s.end == self.cursor { s.start } else { s.end };
-                a - code.line_to_char(code.char_to_line(a))
-            }
-            _ => cur_col,
-        };
-        // Frontier = furthest caret line in the direction of travel.
-        let mut lines: Vec<usize> = self
+        // The block's columns come from its oldest caret, so a clamped short
+        // line in the middle doesn't narrow the lines after it.
+        let (origin, origin_anchor) = self
             .carets
-            .iter()
-            .map(|c| code.char_to_line(c.pos))
-            .collect();
-        lines.push(cur_line);
-        let frontier = if down {
-            lines.into_iter().max().unwrap_or(cur_line)
-        } else {
-            lines.into_iter().min().unwrap_or(cur_line)
-        };
+            .first()
+            .map_or((self.cursor, self.primary_anchor()), |c| (c.pos, c.anchor));
+        let code = self.code_ref();
+        let col_of = |p: usize| p - code.line_to_char(code.char_to_line(p));
+        let cur_col = col_of(origin);
+        let anchor_col = origin_anchor.map_or(cur_col, col_of);
+        // Frontier = furthest caret line in the direction of travel.
+        let lines = self
+            .caret_positions()
+            .into_iter()
+            .map(|p| code.char_to_line(p));
+        let frontier = if down { lines.max() } else { lines.min() }.unwrap_or(0);
         if (down && frontier + 1 >= code.len_lines()) || (!down && frontier == 0) {
             return;
         }
@@ -391,7 +685,7 @@ impl Editor {
         let pos = base + cur_col.min(llen);
         let anchor = (anchor_col != cur_col).then_some(base + anchor_col.min(llen));
         if pos != self.cursor && !self.carets.iter().any(|c| c.pos == pos) {
-            self.carets.push(Caret { pos, anchor });
+            self.push_primary(pos, anchor);
         }
     }
 
@@ -420,6 +714,17 @@ fn find_from(hay: &[char], needle: &[char], from: usize) -> Option<usize> {
         return None;
     }
     (from..=hay.len() - needle.len()).find(|&i| hay[i..i + needle.len()] == *needle)
+}
+
+/// Every non-overlapping occurrence of `needle` in `hay`, as start indices.
+fn occurrences(hay: &[char], needle: &[char]) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(start) = find_from(hay, needle, from) {
+        out.push(start);
+        from = start + needle.len();
+    }
+    out
 }
 
 #[cfg(test)]
@@ -580,5 +885,250 @@ mod caret_tests {
         let mut e = ed("abc\ndef", 1);
         e.add_caret_above();
         assert!(!e.has_multi_carets(), "no caret added above the first line");
+    }
+
+    // ----- T622: multi-cursor depth -----------------------------------------
+
+    use super::CaretMove;
+
+    fn sorted_positions(e: &Editor) -> Vec<usize> {
+        let mut v = e.caret_positions();
+        v.sort_unstable();
+        v
+    }
+
+    /// Two bare carets: the primary at `a`, an extra at `b`.
+    fn two(text: &str, a: usize, b: usize) -> Editor {
+        let mut e = ed(text, b);
+        e.add_caret_at(a);
+        e
+    }
+
+    #[test]
+    fn word_motions_move_every_caret() {
+        let mut e = two("foo bar\nbaz qux", 0, 8);
+        e.multi_move(CaretMove::WordRight, false);
+        assert_eq!(sorted_positions(&e), vec![3, 11]);
+        e.multi_move(CaretMove::WordLeft, false);
+        assert_eq!(sorted_positions(&e), vec![0, 8]);
+        // The named catalog actions route through the same per-caret move.
+        e.word_right();
+        assert_eq!(sorted_positions(&e), vec![3, 11]);
+    }
+
+    #[test]
+    fn line_start_and_end_move_every_caret() {
+        let mut e = two("  ab\n  cd", 3, 8);
+        e.multi_move(CaretMove::LineEnd, false);
+        assert_eq!(sorted_positions(&e), vec![4, 9]);
+        e.multi_move(CaretMove::LineStart, false);
+        assert_eq!(sorted_positions(&e), vec![0, 5]);
+        e.end_of_line();
+        assert_eq!(sorted_positions(&e), vec![4, 9]);
+        e.start_of_line();
+        assert_eq!(sorted_positions(&e), vec![0, 5]);
+    }
+
+    #[test]
+    fn home_toggles_per_caret_between_indent_and_column_zero() {
+        let mut e = two("  ab\n  cd", 4, 9);
+        e.multi_move(CaretMove::Home, false);
+        assert_eq!(sorted_positions(&e), vec![2, 7], "first non-blank");
+        e.multi_move(CaretMove::Home, false);
+        assert_eq!(sorted_positions(&e), vec![0, 5], "then column 0");
+        e.multi_move(CaretMove::TextStart, false);
+        assert_eq!(sorted_positions(&e), vec![2, 7]);
+    }
+
+    #[test]
+    fn buffer_start_and_end_merge_the_carets() {
+        let mut e = two("ab\ncd", 1, 4);
+        e.multi_move(CaretMove::BufferEnd, false);
+        assert_eq!(e.caret_positions(), vec![5]);
+        assert!(!e.has_multi_carets(), "carets on one spot merge");
+        let mut e = two("ab\ncd", 1, 4);
+        e.cursor_start();
+        assert_eq!(e.caret_positions(), vec![0]);
+    }
+
+    #[test]
+    fn shifted_motions_extend_each_carets_selection() {
+        let mut e = two("foo bar\nbaz qux", 0, 8);
+        e.multi_move(CaretMove::WordRight, true);
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(0, 3), (8, 11)]);
+        e.select_to_end_of_line();
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(0, 7), (8, 15)]);
+    }
+
+    #[test]
+    fn split_selection_into_lines_makes_one_selection_per_line() {
+        let mut e = ed("ab\ncd\nef\n", 0);
+        e.set_selection_range(1, 9); // "b\ncd\nef\n"
+        assert!(e.split_selection_into_lines());
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(1, 2), (3, 5), (6, 8)], "no empty last piece");
+        assert_eq!(e.get_cursor(), 8, "the last piece is primary");
+        e.multi_insert("X");
+        assert_eq!(e.get_content(), "aX\nX\nX\n");
+    }
+
+    #[test]
+    fn split_selection_into_lines_needs_a_selection() {
+        let mut e = ed("ab\ncd", 1);
+        assert!(!e.split_selection_into_lines());
+        assert_eq!(e.caret_positions(), vec![1]);
+    }
+
+    #[test]
+    fn select_matches_in_selection_selects_each_match() {
+        // Byte ranges, as a regex reports them: "é" is two bytes.
+        let finder = |t: &str| t.match_indices("ab").map(|(i, m)| i..i + m.len()).collect();
+        let mut e = ed("ab é ab ab", 0);
+        e.set_selection_range(0, 7); // "ab é ab"
+        assert_eq!(e.select_matches_in_selection(finder), 2);
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(
+            sels,
+            vec![(0, 2), (5, 7)],
+            "char offsets, inside the selection only"
+        );
+    }
+
+    #[test]
+    fn select_matches_without_a_selection_searches_the_buffer() {
+        let finder = |t: &str| t.match_indices('x').map(|(i, _)| i..i + 1).collect();
+        let mut e = ed("x y x", 2);
+        assert_eq!(e.select_matches_in_selection(finder), 2);
+        let none = |_: &str| Vec::new();
+        assert_eq!(e.select_matches_in_selection(none), 0);
+        assert_eq!(e.caret_count(), 2, "no match leaves the carets alone");
+    }
+
+    #[test]
+    fn skip_occurrence_moves_the_newest_match_on() {
+        let mut e = ed("foo foo foo foo", 1);
+        e.add_next_occurrence(); // carets on #1 (selected) and #2 (primary)
+        e.skip_occurrence(true); // #2 skipped in favor of #3
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(0, 3), (8, 11)]);
+        e.skip_occurrence(false); // back: #2 is free again, so it is picked
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(0, 3), (4, 7)]);
+    }
+
+    #[test]
+    fn skip_occurrence_wraps_and_passes_over_held_matches() {
+        let mut e = ed("ab ab ab", 7);
+        e.skip_occurrence(true); // selects the last "ab", then wraps to the first
+        assert_eq!(e.caret_selections(), vec![(0, 2)]);
+        e.skip_occurrence(false); // back wraps to the last
+        assert_eq!(e.caret_selections(), vec![(6, 8)]);
+    }
+
+    #[test]
+    fn remove_last_caret_drops_the_newest_one() {
+        let mut e = ed("foo foo foo", 1);
+        e.add_next_occurrence();
+        e.add_next_occurrence();
+        assert_eq!(e.caret_count(), 3);
+        assert!(e.remove_last_caret());
+        let mut sels = e.caret_selections();
+        sels.sort_unstable();
+        assert_eq!(sels, vec![(0, 3), (4, 7)], "the third match went");
+        assert!(e.remove_last_caret());
+        assert!(!e.remove_last_caret(), "one caret is left");
+        assert_eq!(e.caret_selections(), vec![(0, 3)]);
+    }
+
+    #[test]
+    fn remove_last_caret_keeps_add_order_across_edits() {
+        let mut e = ed("ab\ncd\nef", 0);
+        e.add_caret_below();
+        e.add_caret_below(); // the newest is on line 2
+        e.multi_insert("X");
+        assert!(e.remove_last_caret());
+        assert_eq!(sorted_positions(&e), vec![1, 5], "line 2's caret went");
+    }
+
+    #[test]
+    fn add_caret_below_repeats_downward() {
+        let mut e = ed("ab\ncd\nef", 1);
+        e.add_caret_below();
+        e.add_caret_below();
+        assert_eq!(sorted_positions(&e), vec![1, 4, 7]);
+    }
+
+    #[test]
+    fn paste_distributes_one_line_per_caret() {
+        let mut e = ed("a\nb\nc", 1);
+        e.add_caret_below();
+        e.add_caret_below();
+        e.paste_text("1\n2\n3\n");
+        assert_eq!(e.get_content(), "a1\nb2\nc3");
+    }
+
+    #[test]
+    fn paste_puts_the_whole_text_at_each_caret_when_counts_differ() {
+        let mut e = two("a\nb", 1, 3);
+        e.paste_text("xy");
+        assert_eq!(e.get_content(), "axy\nbxy");
+    }
+
+    #[test]
+    fn copy_texts_come_in_buffer_order() {
+        let mut e = ed("foo bar foo", 9);
+        e.add_all_occurrences();
+        assert_eq!(e.caret_selection_texts(), vec!["foo", "foo"]);
+        e.multi_cut();
+        assert_eq!(e.get_content(), " bar ");
+    }
+
+    #[test]
+    fn undo_reverts_a_multi_caret_edit_in_one_step() {
+        let mut e = two("ab\ncd", 1, 4);
+        e.multi_insert("X");
+        e.multi_insert("Y");
+        assert_eq!(e.get_content(), "aXYb\ncXYd");
+        e.undo();
+        assert_eq!(e.get_content(), "aXb\ncXd", "one undo per multi-caret edit");
+        assert!(!e.has_multi_carets(), "undo collapses to the primary caret");
+        e.undo();
+        assert_eq!(e.get_content(), "ab\ncd");
+        e.redo();
+        assert_eq!(e.get_content(), "aXb\ncXd");
+    }
+
+    #[test]
+    fn remote_edits_keep_extra_carets_on_their_characters() {
+        use crate::code::Splice;
+        let mut e = two("ab\ncd", 1, 4);
+        e.apply_remote_edits(&[Splice {
+            offset: 0,
+            delete: 0,
+            insert: ">>".to_string(),
+        }]);
+        assert_eq!(sorted_positions(&e), vec![3, 6]);
+        e.multi_insert("X");
+        assert_eq!(e.get_content(), ">>aXb\ncXd");
+    }
+
+    #[test]
+    fn a_multi_caret_edit_is_logged_so_a_peer_can_replay_it() {
+        let mut e = two("ab\ncd", 1, 4);
+        e.start_edit_log();
+        e.multi_insert("X");
+        let mut mirror: Vec<char> = "ab\ncd".chars().collect();
+        for s in e.take_edit_log() {
+            mirror.splice(s.offset..s.offset + s.delete, s.insert.chars());
+        }
+        assert_eq!(mirror.into_iter().collect::<String>(), e.get_content());
     }
 }

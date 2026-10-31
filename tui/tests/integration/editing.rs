@@ -4547,3 +4547,83 @@ fn saving_an_unmappable_character_is_refused() {
     assert!(app.editor.active_tab().unwrap().dirty);
     fs::remove_dir_all(&dir).ok();
 }
+
+// ---- T622: multi-cursor depth through the App.
+
+#[test]
+fn select_regex_in_selection_prompts_and_selects_each_match() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "let a1 = b22 + c3;", 0);
+    app.run_action("edit.select_regex_in_selection");
+    assert!(
+        app.prompt
+            .as_ref()
+            .is_some_and(|p| p.kind == PromptKind::SelectRegexInSelection),
+        "the pattern prompt opens"
+    );
+    type_str(&mut app, "[0-9]+");
+    app.on_key(keycode(KeyCode::Enter));
+    let mut sels = app.editor.active_tab().unwrap().editor.caret_selections();
+    sels.sort_unstable();
+    assert_eq!(
+        sels,
+        vec![(5, 6), (10, 12), (16, 17)],
+        "one caret per number"
+    );
+    app.on_key(key('N'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "let aN = bN + cN;");
+}
+
+#[test]
+fn select_regex_in_selection_with_a_bad_pattern_changes_nothing() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "abc", 1);
+    app.run_action("edit.select_regex_in_selection");
+    type_str(&mut app, "(");
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.active_tab().unwrap().editor.caret_count(), 1);
+}
+
+#[test]
+fn split_selection_into_lines_then_type_edits_each_line() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "one\ntwo\nthree", 0);
+    app.run_action("edit.select_all");
+    app.run_action("edit.split_selection_into_lines");
+    app.on_key(keycode(KeyCode::End));
+    app.on_key(key(';'));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "one;\ntwo;\nthree;",
+        "End and typing apply at every line's caret"
+    );
+    app.on_key(keycode(KeyCode::Home));
+    app.on_key(key('-'));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "-one;\n-two;\n-three;"
+    );
+}
+
+#[test]
+fn multi_caret_edit_undoes_in_one_step() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "aa\nbb\ncc", 0);
+    app.run_action("spawn_multi_cursor_down");
+    app.run_action("spawn_multi_cursor_down");
+    app.on_key(key('X'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Xaa\nXbb\nXcc");
+    app.run_action("edit.undo");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "aa\nbb\ncc");
+    assert_eq!(app.editor.active_tab().unwrap().editor.caret_count(), 1);
+}
+
+#[test]
+fn bracketed_paste_distributes_lines_across_carets() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "a\nb\nc", 1);
+    app.run_action("spawn_multi_cursor_down");
+    app.run_action("spawn_multi_cursor_down");
+    app.on_paste("1\n2\n3");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "a1\nb2\nc3");
+}

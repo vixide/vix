@@ -969,68 +969,121 @@ fn catalog_scroll_down() {
     assert!(app.editor.active_tab().is_some());
 }
 
+// ---- Multi-cursor catalog actions (T622): assert what each one really does.
+
+/// The active editor's caret selections, sorted.
+fn selections(app: &App) -> Vec<(usize, usize)> {
+    let mut v = app.editor.active_tab().unwrap().editor.caret_selections();
+    v.sort_unstable();
+    v
+}
+
+/// The active editor's caret positions, sorted.
+fn positions(app: &App) -> Vec<usize> {
+    let mut v = app.editor.active_tab().unwrap().editor.caret_positions();
+    v.sort_unstable();
+    v
+}
+
 #[test]
 fn catalog_spawn_multi_cursor() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "foo bar foo", 1);
     app.run_action("spawn_multi_cursor");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(
+        selections(&app),
+        vec![(0, 3), (8, 11)],
+        "the next match joins"
+    );
 }
 
 #[test]
 fn catalog_spawn_multi_cursor_up() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "abc\ndef\nghi", 9);
     app.run_action("spawn_multi_cursor_up");
-    assert!(app.editor.active_tab().is_some());
+    app.run_action("spawn_multi_cursor_up");
+    assert_eq!(
+        positions(&app),
+        vec![1, 5, 9],
+        "one caret per line, same column"
+    );
 }
 
 #[test]
 fn catalog_spawn_multi_cursor_down() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "abc\ndef\nghi", 1);
     app.run_action("spawn_multi_cursor_down");
-    assert!(app.editor.active_tab().is_some());
+    app.run_action("spawn_multi_cursor_down");
+    assert_eq!(
+        positions(&app),
+        vec![1, 5, 9],
+        "one caret per line, same column"
+    );
 }
 
 #[test]
 fn catalog_spawn_multi_cursor_select() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "alpha\nbeta\ngamma", 0);
+    app.run_action("select_all");
     app.run_action("spawn_multi_cursor_select");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(
+        selections(&app),
+        vec![(0, 5), (6, 10), (11, 16)],
+        "a selection per selected line"
+    );
 }
 
 #[test]
 fn catalog_remove_multi_cursor() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "foo foo foo", 1);
+    app.run_action("spawn_multi_cursor");
+    app.run_action("spawn_multi_cursor");
     app.run_action("remove_multi_cursor");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(
+        selections(&app),
+        vec![(0, 3), (4, 7)],
+        "only the newest caret goes"
+    );
 }
 
 #[test]
 fn catalog_remove_all_multi_cursors() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "foo foo foo", 1);
+    app.run_action("spawn_multi_cursor");
+    app.run_action("spawn_multi_cursor");
     app.run_action("remove_all_multi_cursors");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(app.editor.active_tab().unwrap().editor.caret_count(), 1);
 }
 
 #[test]
 fn catalog_skip_multi_cursor() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "foo x foo y foo", 1);
+    app.run_action("spawn_multi_cursor");
     app.run_action("skip_multi_cursor");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(
+        selections(&app),
+        vec![(0, 3), (12, 15)],
+        "the second match is skipped for the third"
+    );
 }
 
 #[test]
 fn catalog_skip_multi_cursor_back() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    buffer_with(&mut app, "foo x foo y foo", 13);
+    app.run_action("spawn_multi_cursor"); // the last match, then wraps to the first
     app.run_action("skip_multi_cursor_back");
-    assert!(app.editor.active_tab().is_some());
+    assert_eq!(
+        selections(&app),
+        vec![(6, 9), (12, 15)],
+        "the newest match moves back to the free middle one"
+    );
 }
 
 #[test]
