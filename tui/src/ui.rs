@@ -55,8 +55,9 @@ use choosers::{
 #[cfg(feature = "script")]
 use choosers::{draw_plugin_chooser, draw_script_chooser};
 use dialogs::{
-    draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
-    draw_structural_replace, draw_unsaved, draw_wgrep_confirm,
+    draw_confirm, draw_dir_edit_confirm, draw_paste_conflict, draw_query_replace,
+    draw_replace_confirm, draw_script_trust, draw_structural_replace, draw_unsaved,
+    draw_wgrep_confirm,
 };
 use docks::{draw_debug_panel, draw_messages, draw_outline_dock, draw_test_panel};
 use edit_surfaces::{
@@ -566,9 +567,9 @@ fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     // Which-key popup for a pending key prefix (drawn under other modals).
     draw_which_key(app, frame, area);
-    if app.wgrep_confirm.is_some() {
-        draw_wgrep_confirm(app, frame, area);
-    }
+    // Each draws only when its confirm is open.
+    draw_wgrep_confirm(app, frame, area);
+    draw_dir_edit_confirm(app, frame, area);
     if app.git_log.is_some() {
         draw_git_log(app, frame, area);
     }

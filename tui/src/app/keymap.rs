@@ -110,6 +110,7 @@ impl App {
             structural_replace,
             replace_confirm,
             wgrep_confirm,
+            dir_edit_confirm,
             workspace_search,
             confirm,
             script_trust,
@@ -401,6 +402,7 @@ impl App {
         panel!(structural_replace, sr_key);
         panel!(replace_confirm, replace_confirm_key);
         panel!(wgrep_confirm, wgrep_confirm_key);
+        panel!(dir_edit_confirm, dir_edit_confirm_key);
         panel!(workspace_search, ps_key);
         panel!(confirm, confirm_key);
         panel!(script_trust, script_trust_key);

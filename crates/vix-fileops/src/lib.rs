@@ -1,6 +1,8 @@
 //! Filesystem helpers for the explorer's copy / cut / paste / delete, plus a
 //! crash-safe atomic writer used across the app for saving files.
 
+pub mod dir_edit;
+
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

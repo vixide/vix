@@ -51,6 +51,7 @@ Project · OC · Tools · Help**.
 | Save As…          | `Ctrl+Shift+S` | Save under a different name (asks before overwriting) |
 | Save All          |                | Save every tab with unsaved edits       |
 | Rename…           |                | Rename the active file on disk          |
+| Edit Directory…   |                | Edit a directory as text: rename, create and delete entries, then save |
 | Close             | `Ctrl+W`       | Close the active buffer                 |
 | Close All Tabs    |                | Close every buffer (leaves one empty)   |
 | Reopen Closed Tab | `Ctrl+Shift+T` | Reopen the most recently closed file    |

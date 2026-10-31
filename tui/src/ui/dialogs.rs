@@ -177,15 +177,6 @@ pub(super) fn draw_wgrep_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(wc) = app.wgrep_confirm.as_ref() else {
         return;
     };
-    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
-    let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
     let title = format!(
         " {} {} ",
         icon::SEARCH,
@@ -195,12 +186,53 @@ pub(super) fn draw_wgrep_confirm(app: &App, frame: &mut Frame, area: Rect) {
             files = wc.plan.len()
         )
     );
+    let hint = t!("ui.wgrep_confirm_hint").to_string();
+    draw_preview_confirm(frame, area, &title, &wc.lines, wc.scroll, &hint);
+}
+
+/// The T636 directory-listing confirm step: one row per rename, create and
+/// delete, in the same layout as the other preview-and-confirm steps.
+pub(super) fn draw_dir_edit_confirm(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.dir_edit_confirm.as_ref() else {
+        return;
+    };
+    let title = format!(
+        " {} ",
+        t!(
+            "ui.dir_edit_confirm_title",
+            count = c.count,
+            path = c.dir_label
+        )
+    );
+    let hint = t!("ui.dir_edit_confirm_hint").to_string();
+    draw_preview_confirm(frame, area, &title, &c.lines, c.scroll, &hint);
+}
+
+/// A centered preview-and-confirm box: `title`, the scrollable preview
+/// `lines` from `scroll`, and a dim `hint` row.
+fn draw_preview_confirm(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    lines: &[String],
+    scroll: usize,
+    hint: &str,
+) {
+    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(title);
+        .title(title.to_string());
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
@@ -209,19 +241,15 @@ pub(super) fn draw_wgrep_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
     let view_h = chunks[0].height as usize;
-    let start = wc.scroll.min(wc.lines.len().saturating_sub(1));
-    let lines: Vec<Line> = wc
-        .lines
+    let start = scroll.min(lines.len().saturating_sub(1));
+    let rows: Vec<Line> = lines
         .iter()
         .skip(start)
         .take(view_h)
         .map(|l| Line::from(Span::raw(l.clone())))
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
-    let hint = Line::from(Span::styled(
-        t!("ui.wgrep_confirm_hint").to_string(),
-        theme::dim(),
-    ));
+    frame.render_widget(Paragraph::new(rows), chunks[0]);
+    let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 

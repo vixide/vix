@@ -369,6 +369,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.outline", "nav.outline"),
     ("cmd.explorer_filter_include", "explorer.filter_include"),
     ("cmd.explorer_filter_exclude", "explorer.filter_exclude"),
+    ("cmd.explorer_edit_directory", "explorer.edit_directory"),
     ("cmd.toggle_left_dock", "view.left_dock"),
     ("cmd.toggle_right_dock", "view.right_dock"),
     ("cmd.toggle_bottom_dock", "view.bottom_dock"),

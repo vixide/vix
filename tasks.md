@@ -7456,7 +7456,7 @@ new action.
   trust model first, since agents can write files. Tests: a mock agent
   binary under `tui/examples/`, a denied permission writes nothing, and edits
   land as a pending diff. **Large.**
-- [ ] **T636 — Oil/wdired-style directory editing.** The explorer has
+- [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a
   hidden id, reusing T211's synthetic-path editable buffer (intercepted
@@ -7464,6 +7464,13 @@ new action.
   means a directory), and deletes. Confirm through `ReplaceConfirm` and
   apply via `vix-fileops`, respecting `explorer_delete`. Tests: a pure
   diff that includes a cycle where two names are swapped. **Medium.**
+  - **Done 2026-10-31** on `feat/t636-edit-directory`: pure `render`/`diff`/
+    `schedule` in a new `vix_fileops::dir_edit` module (no new crate); host
+    `tui/src/app/dir_edit.rs` with the synthetic `*directory*` buffer, its own
+    confirm field (`dir_edit_confirm`, the `ReplaceConfirm` layout), and
+    **File → Edit Directory…**. A cycle moves one source to a temporary
+    `.vix-dir-edit-<pid>-<n>` name. Spec: `crates/vix-fileops/spec/index.md`,
+    "Edit Directory (T636)".
 - [x] **T637 — Rhai plugin installer.** `vix-script` has load paths but
   no install, update, or registry. micro has `-plugin install/update/
   remove/list`. Fix: add `vix --plugin install <git-url>[@rev]`, plus
@@ -9454,8 +9461,8 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T617–T621, T623, T624, T633, T635, T636 and T644 are
-  open; T612–T616, T622, T625–T632, T634, T637 and T638 are done
+- **Run M:** T611, T617–T621, T623, T624, T633, T635 and T644 are
+  open; T612–T616, T622, T625–T632, T634 and T636–T638 are done
   (2026-10-31). T610 is partly done (the `*-tool` converters and
   `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
   done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half

@@ -39,6 +39,63 @@ on a typo. The confirmation prompt's wording differs by mode (`confirm.delete`
 vs. `confirm.delete_hard`) so it always says which will happen. Open buffers
 under a deleted path are closed either way (`App::close_buffers_under`).
 
+## Edit Directory (T636)
+
+`explorer.edit_directory` (**File → Edit Directory…**, palette
+`cmd.explorer_edit_directory`) opens one directory as an Oil/wdired-style
+editable buffer. It lists the explorer's highlighted directory (or a
+highlighted file's parent) when the explorer has focus, else the active
+file's directory, else the workspace root; run again on the listing, it
+re-reads the same directory.
+
+Each entry is one line, `/<id> <name>`, directories first and then by name,
+a directory's name ending in `/`. The id is the entry's 1-based position,
+zero-padded to at least three digits; it is visible because Vix's editor has
+no concealed text, and it is what lets a line keep its identity when its name
+changes. Every entry is listed, hidden ones included, except a name that is
+not valid Unicode (so it can't be acted on under a mangled spelling).
+
+The buffer carries the synthetic path `*directory*`, the same pattern as
+T211's editable search results: `App::save` recognizes it and diffs the text
+instead of writing a file, and Save All skips it. The diff
+(`vix_fileops::dir_edit::diff`) reads each non-blank line:
+
+| Line | Meaning |
+| ---- | ------- |
+| a known id, same name | unchanged (the trailing `/` is optional: an entry can't change type) |
+| a known id, new name | rename |
+| no id | create: an empty file, or a directory when the name ends in `/` |
+| an id that no longer appears | delete |
+
+It refuses, with a status-line reason and no confirm step, a repeated id
+(copying isn't supported), an unknown id, a name that isn't one entry (empty,
+`.`, `..`, or containing `/` or NUL, and `\` on Windows), and two lines that
+would end with the same name. A create may reuse a name that a rename or
+delete frees.
+
+`vix_fileops::dir_edit::schedule` orders the plan so no step clobbers an
+entry a later one still needs: deletes, then renames, then creates. A rename
+runs once its target is free; when every remaining rename waits on another
+(a cycle, such as two names swapped), one source is first renamed to a
+temporary `.vix-dir-edit-<pid>-<n>` name no entry uses, which breaks the
+cycle; a chain (`a → b`, `b → c`) needs no temporary.
+
+The confirm step previews one row per rename, create and delete (worded as
+trash or permanent delete per `explorer_delete`); `y`/Enter applies, `n`/Esc
+cancels. The host runs the steps through the authority (local: this crate's
+`trash_path`, `remove_path`, `fs::rename`, `create_dir_all`), deletes honoring
+`explorer_delete`. Nothing is overwritten: a rename or create whose target
+exists fails (except a rename that only changes case on a case-insensitive
+filesystem), and the first failure stops the rest and is reported to
+Messages. Open buffers follow renames (`relocate_buffers`) and close for
+deletes (`close_buffers_under`), the explorer tree is rebuilt, and the
+listing is re-read so saving again does nothing.
+
+Code: `crates/vix-fileops/src/dir_edit.rs` (`render`, `diff`, `schedule`,
+unit tests including a swap cycle); host `tui/src/app/dir_edit.rs`; dialog
+`tui/src/ui/dialogs.rs` (`draw_dir_edit_confirm`); integration tests
+`tui/tests/integration/dir_edit.rs`.
+
 Built-in file explorer.
 
 Toggle Sidebar: Use Ctrl+B to show/hide the file explorer sidebar. When a nested file is active, toggling on expands the tree and reveals the file.
