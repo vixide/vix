@@ -7266,7 +7266,7 @@ new action.
   add a `vix.reload_settings` action. Tests: save a changed config and the
   theme or keymap switches; bad TOML keeps the old settings. **Small.**
   Done: `App::save` reloads the settings file via `reload_settings_from_disk` → `apply_settings`; `vix.reload_settings` in the Vix menu; tests in `tui/tests/integration/save.rs`.
-- [ ] **T627 — Per-project and per-language settings.**
+- [x] **T627 — Per-project and per-language settings.**
   `Settings::try_load` (`crates/vix-settings/src/lib.rs:637`) reads only
   user config. `.vix/` holds only tasks, project, and scripts, and there
   is no per-language map (`.editorconfig` covers indentation only). Helix
@@ -7277,6 +7277,7 @@ new action.
   Precedence is built-in < user < project < language. Update the spec.
   Tests: precedence, an untrusted workspace ignores the project file, and
   unknown keys are reported. Do this after T626. **Medium.**
+  Done: `vix_settings::{merge_layer, unmerge, unknown_keys, language_key_problems, LANGUAGE_KEYS}` and `Settings::{languages, for_language}` (`crates/vix-settings/src/layers.rs`); host side in `tui/src/app/project_settings.rs` (loaded in `App::start`, on trust, on workspace switch and on reload; saving `.vix/settings.toml` reloads). The T132 trust prompt moved to `tui/src/app/trust.rs` so it exists in every build and also asks for a settings file. Never read for a remote workspace. Per-language keys apply on open (indent, display flags), on save (trim/final newline, format on save) and to Edit → Wrap; `.editorconfig` still wins. Tests in `tui/tests/integration/project_settings.rs` and the crate's unit tests. Not done: the user file's unknown top-level keys are not reported (only the project file's), and a buffer already open when settings reload keeps its indent/display until reopened.
 - [ ] **T628 — Terminal protocol polish.** `tui/src/main.rs:209-225` enables
   only mouse capture, bracketed paste, and keyboard disambiguation. Vix
   has no synchronized output, no focus events, and no color-depth
