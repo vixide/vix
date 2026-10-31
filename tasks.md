@@ -9407,11 +9407,11 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611–T638 and T644 are open; T610 is partly done (the
-  `*-tool` converters and `vix-db`'s `Session` still return
-  `Result<_, String>`); T608 is half done (the DAP mock-adapter tests
-  exist; the `vix-editor` unit-test half remains). The daily-driver items T612, T614, T615, T625–T627 and T629 come
-  first.
+- **Run M:** T611, T616–T624, T631–T633, T635, T636 and T644 are open;
+  T612–T615, T625–T630, T634, T637 and T638 are done (2026-10-31). T610
+  is partly done (the `*-tool` converters and `vix-db`'s `Session` still
+  return `Result<_, String>`); T608 is half done (the DAP mock-adapter
+  tests exist; the `vix-editor` unit-test half remains).
 - **Run O:** T663, T664, T665, T666, T667 and T671 are open (T659–T662 and
   T668 are done), plus the late findings T669 (apt/dnf repositories) and
   T670 (the musl release build crashes).
