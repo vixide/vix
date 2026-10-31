@@ -1519,6 +1519,21 @@ const TOOLS_LSP: &[Item] = &[
     SEP,
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
     Item::leaf("menu.item.lsp.call_hierarchy", "lsp.call_hierarchy", ""),
+    Item::leaf(
+        "menu.item.lsp.call_hierarchy_outgoing",
+        "lsp.call_hierarchy_outgoing",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.lsp.type_hierarchy_supertypes",
+        "lsp.type_hierarchy_supertypes",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.lsp.type_hierarchy_subtypes",
+        "lsp.type_hierarchy_subtypes",
+        "",
+    ),
     Item::leaf("menu.item.lsp.rename", "lsp.rename", "F2"),
     Item::leaf("menu.item.lsp.linked_edit", "lsp.linked_edit", ""),
     SEP,

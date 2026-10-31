@@ -18,7 +18,10 @@ In Workspace…**.
   `status` summary line, and `static_results` (true when the hit list is
   fixed input — e.g. go-to-definition candidates — rather than something
   typing re-runs; also gates T211's editable-results buffer off, since a
-  symbol/reference list's `display` isn't in the `rel:line: text` shape).
+  symbol/reference list's `display` isn't in the `rel:line: text` shape),
+  and an optional `title`: a fixed list that names itself (a call or type
+  hierarchy, T620 — `crates/vix-lsp/spec`) sets it, and the panel is drawn
+  under that title instead of the default one.
 - `WorkspaceSearch::pattern()` compiles `query` into an effective regex
   (case-insensitive prefix unless `case_sensitive`; the literal query
   regex-escaped unless `regex`); `path_filter()` compiles `include_path`/

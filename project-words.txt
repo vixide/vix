@@ -759,3 +759,5 @@ relocalize
 wezterm
 # T632 (problem matchers)
 mypy
+# T620 (call hierarchy)
+callees

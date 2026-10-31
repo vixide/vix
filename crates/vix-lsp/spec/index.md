@@ -55,7 +55,7 @@ a keybinding, or an automatic trigger), not just present unused in
 
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
-| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
+| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). A server that offers `diagnosticProvider` is also asked per document (`textDocument/diagnostic`, T619, § Pull diagnostics), so a pull-only server (such as Roslyn) underlines too. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
 | Progress | automatic | `$/progress` work-done reports (T123d, T732) are tracked per server and token: `begin` adds a task, `report` updates its message/percentage, `end` removes it. While any task is in flight the status bar shows the newest one (`Lsp::progress_line`, e.g. `"rust: Indexing: 3/10 crates (30%) +1"`) and clears it on `end`; `LspEvent::Progress` is still emitted for `begin`/`report`. |
 | LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
@@ -73,7 +73,8 @@ a keybinding, or an automatic trigger), not just present unused in
 | Folding Ranges | automatic, on open | Feeds the editor's own code-folding. |
 | Selection Range | expand/shrink selection | Walks the server's `parent` chain of enclosing ranges around the cursor. |
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
-| Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
+| Call Hierarchy | `lsp.call_hierarchy` (callers), `lsp.call_hierarchy_outgoing` (callees) | `prepareCallHierarchy` + `callHierarchy/incomingCalls` / `outgoingCalls` (T620, § Call and type hierarchy). `Alt+D` in the result list flips the direction. |
+| Type Hierarchy | `lsp.type_hierarchy_supertypes`, `lsp.type_hierarchy_subtypes` | `prepareTypeHierarchy` + `typeHierarchy/supertypes` / `subtypes` (T620). `Alt+D` in the result list flips the direction. |
 | Semantic Tokens | automatic, re-requested on content change and on scrolling (T123a, T615) | `textDocument/semanticTokens/range` for the lines around the view when the server offers it, else `full/delta` or `full` (§ Semantic token requests), decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
 
 ## Completion (T612)
@@ -140,6 +141,88 @@ none) is inserted verbatim, `$` and all.
 T123b); trigger characters are the union across every server handling the
 file.
 
+
+## Pull diagnostics (T619)
+
+Push (`textDocument/publishDiagnostics`) is not the only way a server reports
+problems: LSP 3.17 servers that offer `capabilities.diagnosticProvider` can
+wait to be asked, and some (Roslyn, for one) *only* answer when asked. Vix
+asks each such server per document with `textDocument/diagnostic`:
+
+| When | What is sent |
+| ---- | ------------ |
+| The server's `initialize` reply offers `diagnosticProvider` | a pull for every document already open on it (the `didOpen`s queued during startup) |
+| `didOpen` on a ready server that offers it | a pull for that document |
+| `didChange` | a pull 250 ms after the last change to that document (`PULL_DEBOUNCE`), so a burst of keystrokes sends one request; `Lsp::poll` sends it once due, and `Lsp::busy` stays true meanwhile so the event loop ticks fast enough |
+| The server sends `workspace/diagnostic/refresh` | an acknowledgement (`null`), then a pull for every document open on that server |
+
+Each pull carries the `resultId` of that server's last report for that
+document as `previousResultId` (none the first time; forgotten on
+`didClose` and on a restart). The reply is a
+`DocumentDiagnosticReport` (`message::parse_document_diagnostic_report`):
+
+- `kind: "full"` — its `items` replace that server's diagnostics for the file
+  in the same per-(file, server) map push fills (T123b), and its `resultId`
+  is kept for the next pull. An empty `items` clears them.
+- `kind: "unchanged"` — the server's previous report still stands: the
+  diagnostics are left as they are and only the `resultId` is updated.
+- `relatedDocuments` — the same two kinds for other files (a header whose
+  diagnostics changed because this file did), merged the same way.
+
+A reply is dropped when the document changed or closed while the request was
+out (its positions would describe other text); the pull that change scheduled
+brings the current report. An error reply (`ServerCancelled`, an unsupported
+method) is silent, like the other ambient requests. Push and pull can both
+come from one server; whichever arrives last for a file wins, as with two
+pushes. The client declares `workspace.diagnostics.refreshSupport: true`.
+Nothing in the host changed: underlines, inline text and the Problems panel
+already read the merged map every tick.
+
+Tested by `message` unit tests (full, unchanged and related reports) and in
+`tui/tests/lsp_smoke.rs` against a pull-only Python mock (no
+`publishDiagnostics` at all): its report produces underlines in a live
+`App`, a second pull carries the first `resultId`, an `unchanged` reply
+keeps the diagnostics, and a refresh request re-pulls.
+
+## Call and type hierarchy (T620)
+
+| Action | Menu (Tools → Language Server) | Requests |
+| ------ | ------------------------------ | -------- |
+| `lsp.call_hierarchy` | Call Hierarchy (Callers) | `textDocument/prepareCallHierarchy`, then `callHierarchy/incomingCalls` |
+| `lsp.call_hierarchy_outgoing` | Call Hierarchy (Callees) | `textDocument/prepareCallHierarchy`, then `callHierarchy/outgoingCalls` |
+| `lsp.type_hierarchy_supertypes` | Type Hierarchy (Supertypes) | `textDocument/prepareTypeHierarchy`, then `typeHierarchy/supertypes` |
+| `lsp.type_hierarchy_subtypes` | Type Hierarchy (Subtypes) | `textDocument/prepareTypeHierarchy`, then `typeHierarchy/subtypes` |
+
+The prepare step fans out to every server handling the file (T123b). Each
+server's first prepared item comes back as `LspEvent::CallHierarchyPrepared`
+or `LspEvent::TypeHierarchyPrepared` carrying a `HierarchyItem`: the item's
+raw JSON plus `server`, the language id of the server that produced it.
+`Lsp::request_incoming_calls`, `request_outgoing_calls`, `request_supertypes`
+and `request_subtypes` take that `HierarchyItem` and send the follow-up to
+that server only, since the item is opaque to every other server (this closes
+T123b's call-hierarchy limit). The reply is one `LspEvent::Hierarchy` with its
+`HierarchyDirection` (`Incoming`, `Outgoing`, `Supertypes`, `Subtypes`) and
+the locations, sent even when empty so the host can say there are none:
+
+| Direction | Location of each result |
+| --------- | ----------------------- |
+| Incoming | the call site in the caller: its first `fromRanges` entry (else the caller's `selectionRange`, else `range`) |
+| Outgoing | the callee itself: `to.uri` at `to.selectionRange` (else `range`); the `fromRanges` are call sites in the current function, which the user is already looking at |
+| Supertypes / Subtypes | each `TypeHierarchyItem`'s `uri` at its `selectionRange` (else `range`) |
+
+The host shows the results in the static result list the references use,
+titled by direction (`ui.hierarchy_incoming`, `…_outgoing`,
+`…_supertypes`, `…_subtypes`). It keeps the prepared item while that list is
+open, so **`Alt+D`** flips the direction (callers ⇄ callees, supertypes ⇄
+subtypes) by asking the same server again, without preparing anew. An empty
+result shows `status.hierarchy_none` instead of an empty list.
+
+The client declares `textDocument.callHierarchy` and
+`textDocument.typeHierarchy`. Parsers: `message::first_hierarchy_item`,
+`parse_incoming_calls`, `parse_outgoing_calls`, `parse_type_hierarchy_items`.
+Host: `tui/src/app/hierarchy.rs`. Tested against a Python mock in
+`tui/tests/lsp_smoke.rs` (all four directions, the toggle, and two servers
+answering prepare with each follow-up reaching only its own server).
 
 ## Inline diagnostics (T614)
 
@@ -229,18 +312,20 @@ servers at read time, same external shape as before (just `Diagnostic`
 instead of `&Diagnostic`, since a flattened merge can't be borrowed).
 **Deliberately not fanned out**, documented in each method's own doc
 comment as a real, narrow limitation rather than silently applied:
-`request_completion_resolve`, `execute_command`, and
-`request_incoming_calls` — each continues a response one *specific*
-earlier-answering server gave (a completion item's opaque resolve
-payload, a code action/lens's own command, a call-hierarchy item), and
+`request_completion_resolve` and `execute_command` — each continues a
+response one *specific* earlier-answering server gave (a completion
+item's opaque resolve payload, a code action/lens's own command), and
 nothing tracks *which* server that was once more than one is active for
-the same file, so these three still target only the first matching
+the same file, so these two still target only the first matching
 config. Correct whenever only one server handles a file (still the
 common case); when more than one does *and* the feature in question is
-one of these three, no worse than before T123b. Properly fixing this
-would mean tagging completion items / code lenses / call-hierarchy items
-with their originating server through `LspEvent`, `CompletionItem`, and
-`CodeLens` — a real follow-up, not attempted here.
+one of these two, no worse than before T123b. Properly fixing this
+would mean tagging completion items and code lenses with their
+originating server through `LspEvent`, `CompletionItem`, and `CodeLens`
+— a real follow-up, not attempted here. Call- and type-hierarchy items
+used to share this limit; since T620 each one is a `HierarchyItem`
+tagged with the server that prepared it, and the follow-up request goes
+to that server only (§ Call and type hierarchy).
 A crashed server (the reader thread detects the dead process via EOF) is
 now respawned automatically, up to 3 consecutive attempts since it last
 stayed up for 30 seconds (a genuine crash loop — a bad command, a real bug

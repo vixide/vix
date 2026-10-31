@@ -13,7 +13,11 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
+mod hierarchy;
 pub mod inline;
+mod pull;
+
+pub use hierarchy::{HierarchyDirection, HierarchyItem};
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
@@ -61,8 +65,18 @@ enum Pending {
     CodeLensResolve,
     PrepareCallHierarchy,
     IncomingCalls,
+    /// `callHierarchy/outgoingCalls` (T620).
+    OutgoingCalls,
+    /// `textDocument/prepareTypeHierarchy` (T620).
+    PrepareTypeHierarchy,
+    /// `typeHierarchy/supertypes` (T620).
+    Supertypes,
+    /// `typeHierarchy/subtypes` (T620).
+    Subtypes,
     PrepareRename,
     WorkspaceDiagnostics,
+    /// `textDocument/diagnostic` (T619): silent on error, routed by its target.
+    DocumentDiagnostics,
     /// `semanticTokens/full`: the reply is the base for later deltas.
     SemanticTokens,
     /// `semanticTokens/full/delta` (T615): edits against the stored base.
@@ -118,8 +132,21 @@ pub enum LspEvent {
     Completion(vix_lsp_core::CompletionList),
     /// A references response: every (file, 0-based line, character) location.
     References(Vec<(PathBuf, u32, u32)>),
-    /// A `prepareCallHierarchy` result: the symbol item to query calls for.
-    CallHierarchyPrepared(serde_json::Value),
+    /// A `prepareCallHierarchy` result: the symbol item to query calls for,
+    /// tagged with the server that produced it (T620).
+    CallHierarchyPrepared(HierarchyItem),
+    /// A `prepareTypeHierarchy` result: the type item to query super- or
+    /// subtypes for, tagged with the server that produced it (T620).
+    TypeHierarchyPrepared(HierarchyItem),
+    /// A call- or type-hierarchy reply (T620): which direction was asked,
+    /// and every (file, 0-based line, character) result. Sent even when
+    /// empty, so the host can say there are none.
+    Hierarchy {
+        /// The direction the request asked for.
+        direction: HierarchyDirection,
+        /// Each result's location.
+        locations: Vec<(PathBuf, u32, u32)>,
+    },
     /// A document-symbol response for the active file: `(0-based line, character,
     /// name)`.
     DocumentSymbols(Vec<(u32, u32, String)>),
@@ -414,6 +441,12 @@ struct Server {
     /// The commands it runs via `workspace/executeCommand`
     /// (`executeCommandProvider.commands`).
     execute_commands: Vec<String>,
+    /// Whether it offers per-document pull diagnostics
+    /// (`diagnosticProvider`, T619).
+    diagnostic_provider: bool,
+    /// Per document, the `resultId` of its last pull-diagnostic report
+    /// (T619), sent back as `previousResultId`.
+    diagnostic_result_ids: HashMap<String, String>,
     /// Whether `initialize` has completed and `initialized` been sent.
     ready: bool,
     /// Messages deferred until the server is `ready`.
@@ -493,6 +526,9 @@ pub struct Lsp {
     /// Languages that failed to spawn or used up their respawn budget, and
     /// stay down until an explicit restart or a successful spawn (T732).
     failed: HashSet<String>,
+    /// Debounced pull-diagnostic requests (T619): `(language, uri)` and when
+    /// the pull is due, sent by [`Lsp::poll`].
+    pull_due: HashMap<(String, String), Instant>,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -522,6 +558,7 @@ impl Lsp {
             edit_replies: Vec::new(),
             last_errors: HashMap::new(),
             failed: HashSet::new(),
+            pull_due: HashMap::new(),
         }
     }
 
@@ -611,6 +648,7 @@ impl Lsp {
                 per_lang.remove(&lang);
             }
             self.diagnostics.retain(|_, m| !m.is_empty());
+            self.pull_due.retain(|(l, _), _| *l != lang);
             self.restart_attempts.remove(&lang);
             self.last_errors.remove(&lang);
             self.failed.remove(&lang);
@@ -751,9 +789,11 @@ impl Lsp {
     /// event loop should tick faster to deliver the response promptly.
     #[must_use]
     pub fn busy(&self) -> bool {
-        self.servers
-            .values()
-            .any(|s| !s.ready || !s.pending.is_empty())
+        !self.pull_due.is_empty()
+            || self
+                .servers
+                .values()
+                .any(|s| !s.ready || !s.pending.is_empty())
     }
 
     /// Launch (if needed) and return the server for `lang`, or `None` if it could
@@ -793,6 +833,11 @@ impl Lsp {
                 "textDocument/didOpen",
                 &message::did_open_params(&uri, &lang, 1, text),
             ));
+            // T619: a server still starting is pulled once `initialize`
+            // says whether it offers pull diagnostics.
+            if server.ready && server.diagnostic_provider {
+                self.pull_diagnostics(&lang, &uri);
+            }
         }
     }
 
@@ -834,6 +879,9 @@ impl Lsp {
             server.docs.insert(uri.clone(), v);
             server.texts.insert(uri.clone(), text.to_string());
             server.send(message::notification("textDocument/didChange", &params));
+            if server.ready && server.diagnostic_provider {
+                self.schedule_pull(&config.language_id, &uri);
+            }
         }
     }
 
@@ -849,10 +897,13 @@ impl Lsp {
             {
                 server.texts.remove(&uri);
                 server.semantic_results.remove(&uri);
+                server.diagnostic_result_ids.remove(&uri);
                 server.send(message::notification(
                     "textDocument/didClose",
                     &message::did_close_params(&uri),
                 ));
+                self.pull_due
+                    .remove(&(config.language_id.clone(), uri.clone()));
             }
         }
     }
@@ -983,37 +1034,6 @@ impl Lsp {
             character,
             Pending::PrepareCallHierarchy,
         );
-    }
-
-    /// Step 2 of call hierarchy: request the incoming calls (callers) for the
-    /// prepared `item`. The response arrives as `LspEvent::References`.
-    ///
-    /// Deliberately **not** fanned out across every server handling `path`
-    /// (T123b's scope cut, `spec/index.md` "Known gaps"): `item` is an
-    /// opaque payload one specific server produced in step 1
-    /// (`request_prepare_call_hierarchy`, which *does* fan out), and
-    /// nothing here tracks which one — sending it to every matching server
-    /// would mean sending it to servers that never issued it. Targets the
-    /// first matching config, same as before T123b; correct when only one
-    /// server handles `path` (still the common case), and no worse than
-    /// today when more than one does and call hierarchy specifically is
-    /// the feature in use.
-    pub fn request_incoming_calls(&mut self, path: &Path, item: serde_json::Value) {
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
-        let Some(server) = self.servers.get_mut(&config.language_id) else {
-            return;
-        };
-        let id = server.alloc_id();
-        server.pending.insert(id, Pending::IncomingCalls);
-        let mut params = serde_json::Map::new();
-        params.insert("item".to_string(), item); // consumes `item`
-        server.send(message::request(
-            id,
-            "callHierarchy/incomingCalls",
-            &serde_json::Value::Object(params),
-        ));
     }
 
     /// Request all references to the symbol at `(line, character)`, from
@@ -1541,6 +1561,7 @@ impl Lsp {
     /// Called once per event-loop iteration; cheap when nothing is in flight.
     pub fn poll(&mut self) -> Vec<LspEvent> {
         let mut events = Vec::new();
+        self.send_due_pulls();
         let langs: Vec<String> = self.servers.keys().cloned().collect();
         for lang in langs {
             // Drain this server's channel into owned messages first, so the
@@ -1644,6 +1665,15 @@ impl Lsp {
                 }
                 return;
             }
+            if method == "workspace/diagnostic/refresh" {
+                // T619: acknowledge, then re-pull every open document.
+                if let Some(server) = self.servers.get_mut(lang) {
+                    let id = msg.get("id").cloned().unwrap_or(Value::Null);
+                    server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": null }));
+                }
+                self.pull_all_open(lang);
+                return;
+            }
             if method == "workspace/applyEdit" {
                 // Apply the edit on the host and acknowledge optimistically.
                 if let Some(params) = msg.get("params") {
@@ -1718,50 +1748,7 @@ impl Lsp {
         // last use.
         let semantic_tokens_legend = server.semantic_tokens_legend.clone();
         let Some(result) = msg.get("result") else {
-            // T123 audit: a JSON-RPC `error` object here used to be
-            // silently dropped -- a failed rename/code-action/format/…
-            // just appeared to do nothing. Surface the server's own
-            // message instead. `PrepareRename` is a deliberate exception
-            // (T134 audit): most servers implement plain `rename` without
-            // ever implementing this refinement, and an unrelated "method
-            // not found" error there shouldn't read to the user as "you
-            // can't rename this" -- fall back to the client's own default
-            // seed instead of surfacing a scary error for an optional step.
-            if matches!(kind, Pending::PrepareRename) {
-                events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
-                return;
-            }
-            // T123d: pull diagnostics (`workspace/diagnostic`) is a newer
-            // LSP 3.17 addition most servers don't implement yet; a "method
-            // not found" here is expected and silent, not a user-visible
-            // failure -- push (`publishDiagnostics`) already covers the
-            // baseline experience regardless.
-            // T123a: semantic tokens is likewise a newer, optional LSP 3.17
-            // capability -- Tree-sitter's own highlighting already covers
-            // the baseline, so a server without support (or a transient
-            // failure) shouldn't interrupt the user with an error.
-            // T726: background lens refreshes and resolves are ambient too.
-            if matches!(
-                kind,
-                Pending::WorkspaceDiagnostics
-                    | Pending::SemanticTokens
-                    | Pending::SemanticTokensDelta
-                    | Pending::SemanticTokensRange
-                    | Pending::CodeLensAuto
-                    | Pending::CodeLensResolve
-            ) {
-                return;
-            }
-            if let Some(error) = msg.get("error") {
-                let text = error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("the server returned an error")
-                    .to_string();
-                self.last_errors
-                    .insert(lang.to_string(), ServerError::Request(text.clone()));
-                events.push(LspEvent::RequestFailed(text));
-            }
+            self.error_reply(lang, kind, msg, events);
             return;
         };
         // `null` here is meaningful for `PrepareRename` (T134 audit): the
@@ -1786,6 +1773,18 @@ impl Lsp {
                 self.set_diagnostics(lang, &path, diags);
                 events.push(LspEvent::Diagnostics(path));
             }
+            return;
+        }
+        // T619: a per-document pull, merged like a push for its document.
+        if matches!(kind, Pending::DocumentDiagnostics) {
+            if let Some((target, true)) = target {
+                self.apply_pull_reply(lang, &target.uri, result, events);
+            }
+            return;
+        }
+        // T620: hierarchy replies need `lang` (a prepared item is tagged
+        // with its server) and report an empty or `null` result too.
+        if Self::hierarchy_reply(lang, kind, result, events) {
             return;
         }
         // T123a: needs the legend captured above (per-server state,
@@ -1830,6 +1829,58 @@ impl Lsp {
             return;
         }
         Self::response_to_events(kind, result, events);
+    }
+
+    /// A reply with no `result` (normally a JSON-RPC `error`) for request
+    /// `kind` from server `lang`: surfaced to the host, unless the request is
+    /// optional or ambient. Split out of [`Lsp::handle_response`] to keep that
+    /// within the line limit.
+    fn error_reply(&mut self, lang: &str, kind: Pending, msg: &Value, events: &mut Vec<LspEvent>) {
+        // T123 audit: a JSON-RPC `error` object here used to be
+        // silently dropped -- a failed rename/code-action/format/…
+        // just appeared to do nothing. Surface the server's own
+        // message instead. `PrepareRename` is a deliberate exception
+        // (T134 audit): most servers implement plain `rename` without
+        // ever implementing this refinement, and an unrelated "method
+        // not found" error there shouldn't read to the user as "you
+        // can't rename this" -- fall back to the client's own default
+        // seed instead of surfacing a scary error for an optional step.
+        if matches!(kind, Pending::PrepareRename) {
+            events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
+            return;
+        }
+        // T123d: pull diagnostics (`workspace/diagnostic`) is a newer
+        // LSP 3.17 addition most servers don't implement yet; a "method
+        // not found" here is expected and silent, not a user-visible
+        // failure -- push (`publishDiagnostics`) already covers the
+        // baseline experience regardless. T619: so are per-document pulls.
+        // T123a: semantic tokens is likewise a newer, optional LSP 3.17
+        // capability -- Tree-sitter's own highlighting already covers
+        // the baseline, so a server without support (or a transient
+        // failure) shouldn't interrupt the user with an error.
+        // T726: background lens refreshes and resolves are ambient too.
+        if matches!(
+            kind,
+            Pending::WorkspaceDiagnostics
+                | Pending::DocumentDiagnostics
+                | Pending::SemanticTokens
+                | Pending::SemanticTokensDelta
+                | Pending::SemanticTokensRange
+                | Pending::CodeLensAuto
+                | Pending::CodeLensResolve
+        ) {
+            return;
+        }
+        if let Some(error) = msg.get("error") {
+            let text = error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("the server returned an error")
+                .to_string();
+            self.last_errors
+                .insert(lang.to_string(), ServerError::Request(text.clone()));
+            events.push(LspEvent::RequestFailed(text));
+        }
     }
 
     /// The encoded token data a semantic-tokens reply stands for (T615),
@@ -1963,26 +2014,6 @@ impl Lsp {
     /// keep each within the line limit.
     fn response_to_events_more(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
         match kind {
-            Pending::PrepareCallHierarchy => {
-                if let Some(item) = message::first_call_hierarchy_item(result) {
-                    events.push(LspEvent::CallHierarchyPrepared(item));
-                }
-            }
-            Pending::IncomingCalls => {
-                let locs: Vec<(PathBuf, u32, u32)> = message::parse_incoming_calls(result)
-                    .into_iter()
-                    .map(|l| {
-                        (
-                            uri_to_path(&l.uri),
-                            l.range.start.line,
-                            l.range.start.character,
-                        )
-                    })
-                    .collect();
-                if !locs.is_empty() {
-                    events.push(LspEvent::References(locs));
-                }
-            }
             Pending::DocumentSymbols => {
                 let syms = message::parse_document_symbols(result);
                 if !syms.is_empty() {
@@ -2096,6 +2127,7 @@ impl Lsp {
                 (true, true) => LensSupport::Resolve,
             };
             server.execute_commands = message::parse_execute_commands(result);
+            server.diagnostic_provider = message::parse_diagnostic_provider(result);
             server.capabilities = message::parse_capability_names(result);
         }
         server.ready = true;
@@ -2104,6 +2136,10 @@ impl Lsp {
         let queued = std::mem::take(&mut server.queue);
         for m in queued {
             server.write_now(&m);
+        }
+        // T619: the documents opened while it started can be pulled now.
+        if server.diagnostic_provider {
+            self.pull_all_open(lang);
         }
     }
 
@@ -2330,6 +2366,8 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         workspace_folders_change_support: false,
         code_lens: LensSupport::None,
         execute_commands: Vec::new(),
+        diagnostic_provider: false,
+        diagnostic_result_ids: HashMap::new(),
         ready: false,
         queue: Vec::new(),
         ready_since: None,

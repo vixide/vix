@@ -37,6 +37,7 @@ mod git_graph;
 mod git_off;
 #[cfg(feature = "git")]
 mod git_stash_worktree;
+mod hierarchy;
 mod hl7;
 mod hot_exit;
 #[cfg(feature = "http")]
@@ -128,6 +129,7 @@ use regex::Regex;
 
 use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
 use crate::explorer::Explorer;
+use crate::lsp::HierarchyDirection;
 use crate::menu::Menu;
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
@@ -1994,6 +1996,9 @@ pub struct App {
     node_expansions: Vec<textobjects::NodeExpansion>,
     /// Workspace-wide search panel, when open.
     pub(crate) workspace_search: Option<WorkspaceSearch>,
+    /// The call or type hierarchy asked for or shown (T620), kept while its
+    /// result list is open so `Alt+D` can flip the direction.
+    hierarchy: Option<hierarchy::HierarchyView>,
     /// Active jump-to-line labels: `(label, 0-based line)` for each visible line,
     /// with the label prefix typed so far. `None` when jump mode is off.
     pub(crate) jump: Option<JumpMode>,
@@ -2756,6 +2761,7 @@ impl App {
             pending_structural: (false, None),
             node_expansions: Vec::new(),
             workspace_search: None,
+            hierarchy: None,
             jump: None,
             prompt: None,
             paste: None,
@@ -3803,7 +3809,12 @@ impl App {
             "nav.goto_implementation" => self.goto_implementation(),
             "nav.goto_type_definition" => self.goto_type_definition(),
             "lsp.references" => self.find_references(),
-            "lsp.call_hierarchy" => self.call_hierarchy(),
+            "lsp.call_hierarchy" => self.start_hierarchy(HierarchyDirection::Incoming),
+            "lsp.call_hierarchy_outgoing" => self.start_hierarchy(HierarchyDirection::Outgoing),
+            "lsp.type_hierarchy_supertypes" => {
+                self.start_hierarchy(HierarchyDirection::Supertypes);
+            }
+            "lsp.type_hierarchy_subtypes" => self.start_hierarchy(HierarchyDirection::Subtypes),
             "lsp.format" => self.lsp_format(),
             "lsp.document_symbols" => self.request_document_symbols(),
             "lsp.signature_help" => self.lsp_signature_help(),
@@ -7663,12 +7674,15 @@ impl App {
                 }
                 crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
                 crate::lsp::LspEvent::CallHierarchyPrepared(item) => {
-                    if let Some(path) = self.active_path()
-                        && self.lsp.handles(&path)
-                    {
-                        self.lsp.request_incoming_calls(&path, item);
-                    }
+                    self.on_hierarchy_prepared(item, true);
                 }
+                crate::lsp::LspEvent::TypeHierarchyPrepared(item) => {
+                    self.on_hierarchy_prepared(item, false);
+                }
+                crate::lsp::LspEvent::Hierarchy {
+                    direction,
+                    locations,
+                } => self.on_hierarchy_results(direction, &locations),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
@@ -12269,20 +12283,6 @@ impl App {
             PromptKind::GotoPercent => self.editor.goto_percent(n, area),
             PromptKind::GotoByte => self.editor.goto_byte(n, area),
             _ => self.editor.goto_section(n, area),
-        }
-    }
-
-    /// Show the call hierarchy (incoming calls / callers) of the symbol under the
-    /// cursor (LSP); results land in the references jump list.
-    fn call_hierarchy(&mut self) {
-        if let Some(path) = self.active_path()
-            && self.lsp.handles(&path)
-        {
-            let (line, character) = self.cursor_lsp_position(&path);
-            self.lsp
-                .request_prepare_call_hierarchy(&path, line, character);
-        } else {
-            self.status = t!("status.lsp_inactive").to_string();
         }
     }
 

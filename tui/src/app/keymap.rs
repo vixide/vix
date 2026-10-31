@@ -401,7 +401,7 @@ impl App {
         panel!(structural_replace, sr_key);
         panel!(replace_confirm, replace_confirm_key);
         panel!(wgrep_confirm, wgrep_confirm_key);
-        panel!(workspace_search, ps_key);
+        panel!(workspace_search, workspace_search_key);
         panel!(confirm, confirm_key);
         panel!(script_trust, script_trust_key);
         panel!(unsaved, unsaved_key);

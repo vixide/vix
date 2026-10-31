@@ -7220,7 +7220,7 @@ new action.
   - Drop stale suggestions when the revision changes.
 
   Write the spec first. **Large.**
-- [ ] **T619 — Per-document pull diagnostics.** Vix has no
+- [x] **T619 — Per-document pull diagnostics.** Vix has no
   `textDocument/diagnostic`. It pulls only `workspace/diagnostic`, and
   only when Problems opens. Pull-only servers such as Roslyn therefore
   show no underlines. Fix: when the server offers `diagnosticProvider`,
@@ -7228,7 +7228,7 @@ new action.
   `previousResultId`, handle `workspace/diagnostic/refresh`, and merge
   into the per-(file, server) map. Tests: full and unchanged reports, and
   a pull-only mock server producing underlines. **Small.**
-- [ ] **T620 — Outgoing calls and type hierarchy.** The `vix-lsp` spec
+- [x] **T620 — Outgoing calls and type hierarchy.** The `vix-lsp` spec
   (line 74) says "outgoing calls not wired", and there is no
   `typeHierarchy` at all. Add `request_outgoing_calls`,
   `prepare_type_hierarchy`, and `supertypes`/`subtypes` next to
@@ -9454,9 +9454,9 @@ scratch each time they come up.
 **Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
 everything in Q except T718. What is open, by run:
 
-- **Run M:** T611, T617–T621, T623, T624, T633, T635, T636 and T644 are
-  open; T612–T616, T622, T625–T632, T634, T637 and T638 are done
-  (2026-10-31). T610 is partly done (the `*-tool` converters and
+- **Run M:** T611, T617, T618, T621, T623, T624, T633, T635, T636 and
+  T644 are open; T612–T616, T619, T620, T622, T625–T632, T634, T637 and
+  T638 are done (2026-10-31). T610 is partly done (the `*-tool` converters and
   `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
   done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half
   remains).

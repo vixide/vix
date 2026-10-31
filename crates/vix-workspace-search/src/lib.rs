@@ -202,6 +202,9 @@ pub struct WorkspaceSearch {
     pub selected: usize,
     /// Status/summary line shown under the inputs.
     pub status: String,
+    /// The panel's title when it shows a fixed list that names itself (a
+    /// call or type hierarchy, T620); `None` uses the default title.
+    pub title: Option<String>,
 }
 
 impl WorkspaceSearch {
@@ -220,6 +223,7 @@ impl WorkspaceSearch {
             hits: Vec::new(),
             selected: 0,
             status: t!("status.workspace_search_prompt").to_string(),
+            title: None,
         }
     }
 

@@ -30,12 +30,14 @@ Most actions live under **Tools → Language Server** and the command palette
 
 | Capability | How to use it | LSP method(s) |
 | ---------- | ------------- | ------------- |
-| **Diagnostics** | Errors/warnings underline in color; **Diagnostics…** opens a workspace-wide list (Enter jumps). | `publishDiagnostics` |
+| **Diagnostics** | Errors/warnings underline in color; **Diagnostics…** opens a workspace-wide list (Enter jumps). A server that waits to be asked is asked after each open and shortly after you stop typing. | `publishDiagnostics`, `textDocument/diagnostic`, `workspace/diagnostic` |
 | **Hover** | Type info / docs popup for the symbol under the cursor. | `hover` |
 | **Completion** | Auto-complete popup; detail/docs fill in as you scroll the list. | `completion`, `completionItem/resolve` |
 | **Go to definition** | `F12` jumps to where a symbol is defined. | `definition` |
 | **Implementation / type definition** | Jump to the implementation or the type's definition. | `implementation`, `typeDefinition` |
 | **Find references** | Lists every use in the results panel (Enter jumps). | `references` |
+| **Call hierarchy** | Callers or callees of the function under the cursor in the results panel; `Alt+D` there flips between them. | `prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` |
+| **Type hierarchy** | Supertypes or subtypes of the type under the cursor; `Alt+D` flips between them. | `prepareTypeHierarchy`, `typeHierarchy/supertypes`, `typeHierarchy/subtypes` |
 | **Highlight occurrences** | Marks the other occurrences of the symbol under the cursor. | `documentHighlight` |
 | **Document symbols** | Outline of the current file; Enter jumps. | `documentSymbol` |
 | **Workspace symbols** | Prompt for a query, jump to a symbol anywhere in the project. | `workspace/symbol` |

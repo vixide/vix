@@ -96,13 +96,15 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 "selectionRange": {},
                 "linkedEditingRange": {},
                 "callHierarchy": {},
+                // T620: supertypes / subtypes.
+                "typeHierarchy": {},
                 "inlayHint": {},
                 "publishDiagnostics": { "relatedInformation": true },
-                // T123d: opts into pull-based `textDocument/diagnostic` /
-                // `workspace/diagnostic`, alongside push
+                // T123d, T619: opts into pull-based `textDocument/diagnostic`
+                // / `workspace/diagnostic`, alongside push
                 // (`publishDiagnostics`) — some servers only enable pull
                 // support for clients that declare this.
-                "diagnostic": {},
+                "diagnostic": { "relatedDocumentSupport": true },
                 // T123a, T615: `full`, `full/delta` and `range` requests
                 // (the host asks for the viewport when `range` is offered,
                 // else a delta against the last full result). `tokenTypes`/
@@ -133,10 +135,9 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 "applyEdit": true,
                 "symbol": {},
                 "executeCommand": {},
-                // T123d: no `previousResultIds` tracking in v1, so the
-                // server never needs to ask the client to discard cached
-                // reports.
-                "diagnostics": { "refreshSupport": false },
+                // T619: a `workspace/diagnostic/refresh` request re-pulls
+                // every open document from that server.
+                "diagnostics": { "refreshSupport": true },
                 // T726: lenses are re-requested on `workspace/codeLens/refresh`.
                 "codeLens": { "refreshSupport": true },
                 // T123f: Vix understands `workspaceFolders` and will send
@@ -302,6 +303,89 @@ pub fn workspace_symbol_params(query: &str) -> Value {
 #[must_use]
 pub fn workspace_diagnostic_params() -> Value {
     json!({ "previousResultIds": [] })
+}
+
+/// A `DocumentDiagnosticParams` body (T619): the document, plus the
+/// `resultId` of the last report this server sent for it, if any, so the
+/// server can answer `unchanged` instead of resending the same report.
+#[must_use]
+pub fn document_diagnostic_params(uri: &str, previous_result_id: Option<&str>) -> Value {
+    let mut params = json!({ "textDocument": { "uri": uri } });
+    if let Some(id) = previous_result_id {
+        params["previousResultId"] = Value::String(id.to_string());
+    }
+    params
+}
+
+/// Whether a server's `initialize` result offers per-document pull
+/// diagnostics (T619): `capabilities.diagnosticProvider` is present and not
+/// `null` or `false`.
+#[must_use]
+pub fn parse_diagnostic_provider(result: &Value) -> bool {
+    result
+        .get("capabilities")
+        .and_then(|c| c.get("diagnosticProvider"))
+        .is_some_and(|p| !p.is_null() && p.as_bool() != Some(false))
+}
+
+/// One document's part of a `textDocument/diagnostic` reply (T619).
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum DiagnosticReport {
+    /// `kind: "full"`: these diagnostics replace the previous ones.
+    Full {
+        /// The id to send as `previousResultId` next time, if the server gave one.
+        result_id: Option<String>,
+        /// The document's diagnostics now (empty clears them).
+        items: Vec<Diagnostic>,
+    },
+    /// `kind: "unchanged"`: the previous report still stands.
+    Unchanged {
+        /// The id to send as `previousResultId` next time.
+        result_id: String,
+    },
+}
+
+/// Parse one `FullDocumentDiagnosticReport` / `UnchangedDocumentDiagnosticReport`.
+fn parse_diagnostic_report(v: &Value) -> Option<DiagnosticReport> {
+    let result_id = v
+        .get("resultId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    match v.get("kind").and_then(Value::as_str)? {
+        "full" => Some(DiagnosticReport::Full {
+            result_id,
+            items: v
+                .get("items")
+                .and_then(Value::as_array)
+                .map(|arr| arr.iter().filter_map(parse_one_diagnostic).collect())
+                .unwrap_or_default(),
+        }),
+        "unchanged" => Some(DiagnosticReport::Unchanged {
+            result_id: result_id?,
+        }),
+        _ => None,
+    }
+}
+
+/// Parse a `textDocument/diagnostic` result (T619) into the asked-about
+/// document's report and the reports for its `relatedDocuments`, as
+/// `(uri, report)` pairs. `None` when the result is not a report.
+#[must_use]
+pub fn parse_document_diagnostic_report(
+    result: &Value,
+) -> Option<(DiagnosticReport, Vec<(String, DiagnosticReport)>)> {
+    let main = parse_diagnostic_report(result)?;
+    let related = result
+        .get("relatedDocuments")
+        .and_then(Value::as_object)
+        .map(|docs| {
+            docs.iter()
+                .filter_map(|(uri, r)| Some((uri.clone(), parse_diagnostic_report(r)?)))
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((main, related))
 }
 
 /// A `DidChangeWorkspaceFoldersParams` body (T123f): the folders newly added
@@ -1271,11 +1355,57 @@ fn parse_location(v: &Value) -> Option<Location> {
     Some(Location { uri, range })
 }
 
-/// The first item of a `textDocument/prepareCallHierarchy` result (the symbol to
-/// query calls for), cloned for round-tripping to `callHierarchy/incomingCalls`.
+/// The first item of a `textDocument/prepareCallHierarchy` or
+/// `textDocument/prepareTypeHierarchy` result (the symbol to query), cloned
+/// for round-tripping to `callHierarchy/*` or `typeHierarchy/*` (T620).
 #[must_use]
-pub fn first_call_hierarchy_item(result: &Value) -> Option<Value> {
+pub fn first_hierarchy_item(result: &Value) -> Option<Value> {
     result.as_array()?.first().cloned()
+}
+
+/// A call- or type-hierarchy item's own location: its `uri` at its
+/// `selectionRange` (the name), else its whole `range` (T620).
+fn hierarchy_item_location(item: &Value) -> Option<Location> {
+    let uri = item.get("uri").and_then(Value::as_str)?.to_string();
+    let range = item
+        .get("selectionRange")
+        .and_then(parse_range)
+        .or_else(|| item.get("range").and_then(parse_range))
+        .unwrap_or_default();
+    Some(Location { uri, range })
+}
+
+/// Parse a `callHierarchy/outgoingCalls` result into the callees' locations
+/// (T620): each `to` item's `uri` at its `selectionRange` (else `range`). The
+/// `fromRanges` are call sites inside the function already on screen, so the
+/// list points at what is called instead.
+#[must_use]
+pub fn parse_outgoing_calls(result: &Value) -> Vec<Location> {
+    result
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|call| hierarchy_item_location(call.get("to")?))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse a `typeHierarchy/supertypes` or `typeHierarchy/subtypes` result
+/// (`TypeHierarchyItem[]`) into each type's location (T620).
+#[must_use]
+pub fn parse_type_hierarchy_items(result: &Value) -> Vec<Location> {
+    result
+        .as_array()
+        .map(|arr| arr.iter().filter_map(hierarchy_item_location).collect())
+        .unwrap_or_default()
+}
+
+/// The `{ "item": item }` params of every call- and type-hierarchy follow-up
+/// request (T620).
+#[must_use]
+pub fn hierarchy_item_params(item: &Value) -> Value {
+    json!({ "item": item })
 }
 
 /// Parse a `callHierarchy/incomingCalls` result into the call-site locations:
@@ -1467,8 +1597,8 @@ mod tests {
         let prep = json!([{ "name": "f", "uri": "file:///a.rs", "kind": 12,
             "range": {"start":{"line":1,"character":0},"end":{"line":1,"character":1}},
             "selectionRange": {"start":{"line":1,"character":3},"end":{"line":1,"character":4}} }]);
-        assert!(first_call_hierarchy_item(&prep).is_some());
-        assert!(first_call_hierarchy_item(&Value::Null).is_none());
+        assert!(first_hierarchy_item(&prep).is_some());
+        assert!(first_hierarchy_item(&Value::Null).is_none());
 
         let incoming = json!([{
             "from": { "name": "caller", "uri": "file:///b.rs", "kind": 12,
@@ -1586,9 +1716,119 @@ mod tests {
         let params = initialize_params(None, &[]);
         assert_eq!(
             params["capabilities"]["textDocument"]["diagnostic"],
+            json!({ "relatedDocumentSupport": true })
+        );
+        assert_eq!(
+            params["capabilities"]["workspace"]["diagnostics"]["refreshSupport"],
+            true
+        );
+        assert_eq!(
+            params["capabilities"]["textDocument"]["typeHierarchy"],
             json!({})
         );
         assert_eq!(params["capabilities"]["window"]["workDoneProgress"], true);
+    }
+
+    #[test]
+    fn document_diagnostic_params_carry_the_previous_result_id() {
+        let first = document_diagnostic_params("file:///a.rs", None);
+        assert_eq!(first, json!({ "textDocument": { "uri": "file:///a.rs" } }));
+        let next = document_diagnostic_params("file:///a.rs", Some("r1"));
+        assert_eq!(next["previousResultId"], "r1");
+    }
+
+    #[test]
+    fn diagnostic_provider_is_read_from_initialize() {
+        let on = json!({ "capabilities": { "diagnosticProvider": {
+            "interFileDependencies": false, "workspaceDiagnostics": false } } });
+        assert!(parse_diagnostic_provider(&on));
+        assert!(parse_diagnostic_provider(
+            &json!({ "capabilities": { "diagnosticProvider": true } })
+        ));
+        assert!(!parse_diagnostic_provider(
+            &json!({ "capabilities": { "diagnosticProvider": null } })
+        ));
+        assert!(!parse_diagnostic_provider(&json!({ "capabilities": {} })));
+    }
+
+    #[test]
+    fn full_document_diagnostic_report_parses_items_and_result_id() {
+        let result = json!({ "kind": "full", "resultId": "r1", "items": [
+            { "range": {"start":{"line":0,"character":0},"end":{"line":0,"character":3}},
+              "severity": 2, "message": "pulled" } ] });
+        let (main, related) = parse_document_diagnostic_report(&result).expect("a report");
+        let DiagnosticReport::Full { result_id, items } = main else {
+            panic!("expected a full report");
+        };
+        assert_eq!(result_id.as_deref(), Some("r1"));
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].message, "pulled");
+        assert_eq!(items[0].severity, Severity::Warning);
+        assert!(related.is_empty());
+    }
+
+    #[test]
+    fn unchanged_and_related_document_reports_parse() {
+        let result = json!({ "kind": "unchanged", "resultId": "r2", "relatedDocuments": {
+            "file:///h.rs": { "kind": "full", "items": [] },
+            "file:///g.rs": { "kind": "unchanged", "resultId": "g1" },
+            "file:///bad.rs": { "kind": "unchanged" } } });
+        let (main, mut related) = parse_document_diagnostic_report(&result).expect("a report");
+        assert!(matches!(main, DiagnosticReport::Unchanged { ref result_id } if result_id == "r2"));
+        related.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            related.len(),
+            2,
+            "an unchanged report with no id is skipped"
+        );
+        assert!(matches!(
+            &related[0],
+            (uri, DiagnosticReport::Unchanged { result_id }) if uri == "file:///g.rs" && result_id == "g1"
+        ));
+        assert!(matches!(
+            &related[1],
+            (uri, DiagnosticReport::Full { items, result_id: None }) if uri == "file:///h.rs" && items.is_empty()
+        ));
+        assert!(parse_document_diagnostic_report(&Value::Null).is_none());
+        assert!(parse_document_diagnostic_report(&json!({ "kind": "other" })).is_none());
+    }
+
+    #[test]
+    fn outgoing_calls_and_type_hierarchy_items_parse_to_their_own_locations() {
+        let outgoing = json!([{
+            "to": { "name": "callee", "uri": "file:///c.rs", "kind": 12,
+                "range": {"start":{"line":3,"character":0},"end":{"line":5,"character":1}},
+                "selectionRange": {"start":{"line":3,"character":3},"end":{"line":3,"character":9}} },
+            "fromRanges": [ {"start":{"line":1,"character":4},"end":{"line":1,"character":10}} ]
+        }, { "fromRanges": [] }]);
+        let calls = parse_outgoing_calls(&outgoing);
+        assert_eq!(calls.len(), 1, "an entry with no `to` is skipped");
+        assert_eq!(calls[0].uri, "file:///c.rs");
+        assert_eq!(
+            calls[0].range.start.line, 3,
+            "the callee, not the call site"
+        );
+        assert_eq!(calls[0].range.start.character, 3);
+
+        let types = json!([
+            { "name": "Base", "uri": "file:///t.rs", "kind": 5,
+              "range": {"start":{"line":7,"character":0},"end":{"line":9,"character":1}} },
+            { "name": "Other", "uri": "file:///u.rs", "kind": 5,
+              "range": {"start":{"line":1,"character":0},"end":{"line":2,"character":1}},
+              "selectionRange": {"start":{"line":1,"character":6},"end":{"line":1,"character":11}} }
+        ]);
+        let items = parse_type_hierarchy_items(&types);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].range.start.line, 7, "falls back to `range`");
+        assert_eq!(
+            items[1].range.start.character, 6,
+            "prefers `selectionRange`"
+        );
+        assert!(parse_type_hierarchy_items(&Value::Null).is_empty());
+        assert_eq!(
+            hierarchy_item_params(&json!({"name": "f"})),
+            json!({"item": {"name": "f"}})
+        );
     }
 
     #[test]

@@ -4,6 +4,7 @@ textDocument/codeAction	Source actions (organize imports, fix all) on save and v
 textDocument/codeLens	Inline actions above functions
 textDocument/completion	Auto-completion with live filtering and debounce
 textDocument/definition	Jump to definition
+textDocument/diagnostic	Pull diagnostics per document after open and debounced change; previousResultId; workspace/diagnostic/refresh
 textDocument/didChange	Notify server of file changes (full document sync)
 textDocument/didClose	Notify server when a file is closed
 textDocument/didOpen	Notify server when a file is opened
@@ -16,6 +17,8 @@ textDocument/hover	Type information and documentation popup
 textDocument/implementation	Jump to implementation
 textDocument/inlayHint	Inline type annotations
 textDocument/linkedEditingRange	Linked editing (e.g. rename HTML tag pairs)
+textDocument/prepareCallHierarchy	Call hierarchy: callHierarchy/incomingCalls (callers) and outgoingCalls (callees)
+textDocument/prepareTypeHierarchy	Type hierarchy: typeHierarchy/supertypes and subtypes
 textDocument/publishDiagnostics	Error/warning squiggles, problems panel, hover popup, status bar
 textDocument/rangeFormatting	Format selected range
 textDocument/references	Find all references (results in bottom panel)
