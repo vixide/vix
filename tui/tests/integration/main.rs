@@ -48,14 +48,14 @@ mod scripting;
 mod structural_replace;
 mod task_problems;
 mod terminal_protocol;
+#[cfg(all(unix, feature = "terminal"))]
+mod terminals;
 #[cfg(any(
     feature = "syntax-common",
     feature = "syntax-all",
     feature = "lang-rust"
 ))]
 mod textobjects;
-#[cfg(all(unix, feature = "terminal"))]
-mod terminals;
 mod themes;
 mod tutor;
 mod undo_tree;
