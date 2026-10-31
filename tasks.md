@@ -7244,7 +7244,8 @@ new action.
   (using the existing URL opener). Optional: send a color chosen in
   `vix-x11-color-picker` back to the server via `colorPresentation`.
   **Small.**
-- [ ] **T622 — Multi-cursor depth.** `CaretMove`
+- [x] **T622 — Multi-cursor depth.** `CaretMove`
+  *Done 2026-10-31: `CaretMove` gains Word/Line/TextStart/Home/Buffer motions (named motions, Ctrl+←/→, Home/End route through `multi_move`); carets keep add order (primary = newest); `skip_occurrence`, `remove_last_caret`, `split_selection_into_lines`, `select_matches_in_selection` (`edit.split_selection_into_lines`, `edit.select_regex_in_selection` + prompt); line-per-caret paste and joined multi-caret copy/cut; undo/redo collapse to the primary; completion/snippets explicitly single-caret; the dispatch moved to `tui/src/app/multi_cursor.rs`; `catalog.rs` asserts real behavior. Spec: `crates/vix-editor-core/spec/index.md` § Multiple carets.*
   (`crates/vix-editor-core/src/multicursor.rs:42-51`) has only
   Left/Right/Up/Down. `skip_multi_cursor` and its `_back` variant
   (`tui/src/app.rs:3686-3690`) just call `add_next_occurrence`, and

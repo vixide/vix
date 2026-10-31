@@ -122,6 +122,8 @@ The **Select** submenu, in menu order:
 | Select All Occurrences | | Put a caret on every occurrence of the selection, or of the word at the cursor |
 | Column Select Up | `Alt+Shift+↑` | Extend a rectangular block of carets upward |
 | Column Select Down | `Alt+Shift+↓` | Extend a rectangular block of carets downward |
+| Split Selection into Lines | | Turn each selection into one selection per line it covers (T622) |
+| Select Regex Matches in Selection | | Prompt for a regex; select each match inside the selections (T622) |
 | Select All | `Ctrl+A` | Select the whole buffer |
 
 Up precedes Down, as the arrow keys do — the same order the Move submenu uses.

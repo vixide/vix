@@ -68,6 +68,7 @@ mod large_file;
 mod lsp_dap;
 mod lsp_status;
 mod modal;
+mod multi_cursor;
 #[cfg(feature = "oc")]
 mod oc;
 #[cfg(not(feature = "oc"))]
@@ -221,6 +222,9 @@ pub enum PromptKind {
     /// Pipe the selection (or buffer) through a shell command, replacing it
     /// with the output (T659).
     PipeSelection,
+    /// A regex whose matches inside the current selections become the new
+    /// carets (`edit.select_regex_in_selection`, T622).
+    SelectRegexInSelection,
     /// Pipe the selection (or buffer) through a shell command, inserting the
     /// output at the cursor (T659).
     InsertCommandOutput,
@@ -3208,6 +3212,7 @@ impl App {
             a if self.run_file_action(a) => {}
             a if self.run_edit_action(a) => {}
             a if self.run_motion_action(a) => {}
+            a if self.run_multi_cursor_action(a) => {}
             "explorer.filter_include" => {
                 let cur = self.explorer.include_filter.clone();
                 self.prompt = Some(
@@ -4195,17 +4200,11 @@ impl App {
             "indent_line" | "indent_selection" => edm!(indent_line),
             "outdent_line" | "outdent_selection" => edm!(outdent_line),
             // multiple cursors
-            "spawn_multi_cursor"
-            | "spawn_multi_cursor_select"
-            | "skip_multi_cursor"
-            | "skip_multi_cursor_back" => edm!(add_next_occurrence),
-            "remove_multi_cursor" | "remove_all_multi_cursors" => ed!(clear_carets),
+            _ if self.run_multi_cursor_catalog(id) => {}
             _ if self.run_app_action(id) => {}
             // not implemented yet (modes, macros, suspend, autocomplete, …)
             "diff_next" => self.diff_goto(true),
             "diff_previous" => self.diff_goto(false),
-            "spawn_multi_cursor_up" => ed!(add_caret_above),
-            "spawn_multi_cursor_down" => ed!(add_caret_below),
             "toggle_overwrite_mode" => {
                 self.flags.toggle(AppFlags::OVERWRITE);
                 self.status = t!(if self.flags.contains(AppFlags::OVERWRITE) {
@@ -13449,6 +13448,7 @@ impl App {
             | PromptKind::CoworkMute
             | PromptKind::CoworkRemove => self.accept_cowork_prompt(prompt.kind, &prompt.input),
             PromptKind::PipeSelection => self.pipe_selection(&prompt.input, true),
+            PromptKind::SelectRegexInSelection => self.select_regex_in_selection(&prompt.input),
             PromptKind::InsertCommandOutput => self.pipe_selection(&prompt.input, false),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
@@ -14136,6 +14136,8 @@ impl App {
             "edit.select_section",
             "edit.column_select_down",
             "edit.column_select_up",
+            "edit.split_selection_into_lines",
+            "edit.select_regex_in_selection",
             "edit.undo_branch",
         ];
         !READ_ONLY_SAFE.contains(&action)

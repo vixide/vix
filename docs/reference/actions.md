@@ -538,9 +538,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `quit` | Quit | Catalog |
 | `quit_all` | Quit All | Catalog |
 | `redo` | Redo | Catalog |
-| `remove_all_multi_cursors` | Remove All Multi-Cursors | Catalog |
 | `remove_duplicate_lines` | Remove Duplicate Lines | Catalog |
-| `remove_multi_cursor` | Remove Multi-Cursor | Catalog |
 | `reset_search` | Reset Search | Catalog |
 | `reverse_lines` | Reverse Lines | Catalog |
 | `roam.alias_add` | Add Alias… | Menu |
@@ -608,8 +606,6 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `shuffle` | Shuffle Lines | Catalog |
 | `sort_lines` | Sort Lines | Catalog |
 | `sort_unique` | Sort Lines Unique | Catalog |
-| `spawn_multi_cursor_down` | Add Multi-Cursor Down | Catalog |
-| `spawn_multi_cursor_up` | Add Multi-Cursor Up | Catalog |
 | `spell.suggest` | Spelling Suggestions | Catalog |
 | `start` | Start | Catalog |
 | `start_of_line` | Start of Line | Catalog |
@@ -779,4 +775,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**772 actions.**
+**768 actions.**

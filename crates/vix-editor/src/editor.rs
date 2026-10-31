@@ -1141,9 +1141,14 @@ impl Editor {
     /// Move the active cursor to the start of its current line.
     /// Smart Home: jump to the first non-blank character of the line; if already
     /// there (or the line is blank), jump to column 0. Pressing Home repeatedly
-    /// toggles between the two.
+    /// toggles between the two. With extra carets, every caret moves (T622).
     pub fn cursor_line_home(&mut self) {
         if let Some(t) = self.active_tab_mut() {
+            if t.editor.has_multi_carets() {
+                t.editor
+                    .multi_move(vix_editor_core::multicursor::CaretMove::Home, false);
+                return;
+            }
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
             let row = code.char_to_line(cur);
@@ -1186,6 +1191,11 @@ impl Editor {
     /// Move the active cursor to the end of its current line.
     pub fn cursor_line_end(&mut self) {
         if let Some(t) = self.active_tab_mut() {
+            if t.editor.has_multi_carets() {
+                t.editor
+                    .multi_move(vix_editor_core::multicursor::CaretMove::LineEnd, false);
+                return;
+            }
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
             let row = code.char_to_line(cur);
@@ -1198,6 +1208,11 @@ impl Editor {
     /// start, unlike the smart-Home [`cursor_line_home`](Self::cursor_line_home)).
     pub fn cursor_line_start(&mut self) {
         if let Some(t) = self.active_tab_mut() {
+            if t.editor.has_multi_carets() {
+                t.editor
+                    .multi_move(vix_editor_core::multicursor::CaretMove::LineStart, false);
+                return;
+            }
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
             let row = code.char_to_line(cur);

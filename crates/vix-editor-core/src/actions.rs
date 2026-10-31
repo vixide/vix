@@ -656,6 +656,10 @@ pub struct Cut;
 
 impl Action for Cut {
     fn apply(&mut self, editor: &mut Editor) {
+        if editor.has_multi_carets() {
+            editor.multi_cut();
+            return;
+        }
         // 1. Extract current cursor and selection
         let mut cursor = editor.get_cursor();
         let mut selection = editor.get_selection();
@@ -693,6 +697,15 @@ pub struct Copy;
 
 impl Action for Copy {
     fn apply(&mut self, editor: &mut Editor) {
+        // Several carets: copy every selection, joined with newlines, so a
+        // paste into the same number of carets puts one back at each.
+        if editor.has_multi_carets() {
+            let texts = editor.caret_selection_texts();
+            if !texts.is_empty() {
+                editor.copy_to_clipboard(&texts.join("\n"));
+            }
+            return;
+        }
         // 1. Extract current selection
         let selection = editor.get_selection();
 
@@ -741,6 +754,10 @@ impl Action for Undo {
         // 3. If nothing to undo, return
         let Some(batch) = edits else { return };
 
+        // The history records only the primary caret, so extra carets
+        // (now pointing at stale offsets) collapse into it.
+        editor.clear_carets();
+
         // 4. Restore cursor and selection from saved state if possible
         if let Some(before) = batch.state_before {
             editor.set_cursor(before.offset);
@@ -779,6 +796,10 @@ impl Action for Redo {
 
         // 3. If nothing to redo, return
         let Some(batch) = edits else { return };
+
+        // The history records only the primary caret, so extra carets
+        // (now pointing at stale offsets) collapse into it.
+        editor.clear_carets();
 
         // 4. Restore cursor and selection from saved state if possible
         if let Some(after) = batch.state_after {

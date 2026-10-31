@@ -12,77 +12,114 @@ use crate::actions::{
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, UnIndent, Undo,
 };
 use crate::editor::Editor;
+use crate::multicursor::CaretMove;
 use crate::selection::Selection;
 
 impl Editor {
     // ----- cursor movement ------------------------------------------------
     /// Move the cursor up one line.
     pub fn cursor_up(&mut self) {
+        if self.multi_motion(CaretMove::Up, false) {
+            return;
+        }
         self.apply(MoveUp { shift: false });
     }
     /// Move the cursor down one line.
     pub fn cursor_down(&mut self) {
+        if self.multi_motion(CaretMove::Down, false) {
+            return;
+        }
         self.apply(MoveDown { shift: false });
     }
     /// Move the cursor one character to the left.
     pub fn cursor_left(&mut self) {
+        if self.multi_motion(CaretMove::Left, false) {
+            return;
+        }
         self.apply(MoveLeft { shift: false });
     }
     /// Move the cursor one character to the right.
     pub fn cursor_right(&mut self) {
+        if self.multi_motion(CaretMove::Right, false) {
+            return;
+        }
         self.apply(MoveRight { shift: false });
     }
     /// Extend the selection one line up.
     pub fn select_up(&mut self) {
+        if self.multi_motion(CaretMove::Up, true) {
+            return;
+        }
         self.apply(MoveUp { shift: true });
     }
     /// Extend the selection one line down.
     pub fn select_down(&mut self) {
+        if self.multi_motion(CaretMove::Down, true) {
+            return;
+        }
         self.apply(MoveDown { shift: true });
     }
     /// Extend the selection one character to the left.
     pub fn select_left(&mut self) {
+        if self.multi_motion(CaretMove::Left, true) {
+            return;
+        }
         self.apply(MoveLeft { shift: true });
     }
     /// Extend the selection one character to the right.
     pub fn select_right(&mut self) {
+        if self.multi_motion(CaretMove::Right, true) {
+            return;
+        }
         self.apply(MoveRight { shift: true });
     }
 
     /// Move the cursor to the very start of the buffer.
     pub fn cursor_start(&mut self) {
+        if self.multi_motion(CaretMove::BufferStart, false) {
+            return;
+        }
         self.clear_selection();
         self.set_cursor(0);
     }
     /// Move the cursor to the very end of the buffer.
     pub fn cursor_end(&mut self) {
+        if self.multi_motion(CaretMove::BufferEnd, false) {
+            return;
+        }
         self.clear_selection();
         self.set_cursor(self.code_ref().len_chars());
     }
     /// Extend the selection to the start of the buffer.
     pub fn select_to_start(&mut self) {
+        if self.multi_motion(CaretMove::BufferStart, true) {
+            return;
+        }
         self.extend_selection(0);
         self.set_cursor(0);
     }
     /// Extend the selection to the end of the buffer.
     pub fn select_to_end(&mut self) {
+        if self.multi_motion(CaretMove::BufferEnd, true) {
+            return;
+        }
         let end = self.code_ref().len_chars();
         self.extend_selection(end);
         self.set_cursor(end);
     }
 
     // ----- line motions ---------------------------------------------------
-    fn line_start(&self, pos: usize) -> usize {
+    pub(crate) fn line_start(&self, pos: usize) -> usize {
         self.code_ref()
             .line_to_char(self.code_ref().char_to_line(pos))
     }
-    fn line_end(&self, pos: usize) -> usize {
+    pub(crate) fn line_end(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let row = code.char_to_line(pos);
         code.line_to_char(row) + code.line_len(row)
     }
     /// First non-whitespace column of the cursor's line.
-    fn line_first_text(&self, pos: usize) -> usize {
+    pub(crate) fn line_first_text(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let row = code.char_to_line(pos);
         let start = code.line_to_char(row);
@@ -94,24 +131,36 @@ impl Editor {
 
     /// Move the cursor to the start of the current line.
     pub fn start_of_line(&mut self) {
+        if self.multi_motion(CaretMove::LineStart, false) {
+            return;
+        }
         self.clear_selection();
         let p = self.line_start(self.get_cursor());
         self.set_cursor(p);
     }
     /// Move the cursor to the end of the current line.
     pub fn end_of_line(&mut self) {
+        if self.multi_motion(CaretMove::LineEnd, false) {
+            return;
+        }
         self.clear_selection();
         let p = self.line_end(self.get_cursor());
         self.set_cursor(p);
     }
     /// Move to the first non-whitespace character of the line.
     pub fn start_of_text(&mut self) {
+        if self.multi_motion(CaretMove::TextStart, false) {
+            return;
+        }
         self.clear_selection();
         let p = self.line_first_text(self.get_cursor());
         self.set_cursor(p);
     }
     /// Toggle between the first non-whitespace character and column 0.
     pub fn start_of_text_toggle(&mut self) {
+        if self.multi_motion(CaretMove::Home, false) {
+            return;
+        }
         self.clear_selection();
         let cur = self.get_cursor();
         let text = self.line_first_text(cur);
@@ -124,24 +173,36 @@ impl Editor {
     }
     /// Extend the selection to the start of the current line.
     pub fn select_to_start_of_line(&mut self) {
+        if self.multi_motion(CaretMove::LineStart, true) {
+            return;
+        }
         let p = self.line_start(self.get_cursor());
         self.extend_selection(p);
         self.set_cursor(p);
     }
     /// Extend the selection to the end of the current line.
     pub fn select_to_end_of_line(&mut self) {
+        if self.multi_motion(CaretMove::LineEnd, true) {
+            return;
+        }
         let p = self.line_end(self.get_cursor());
         self.extend_selection(p);
         self.set_cursor(p);
     }
     /// Extend the selection to the first non-whitespace character of the line.
     pub fn select_to_start_of_text(&mut self) {
+        if self.multi_motion(CaretMove::TextStart, true) {
+            return;
+        }
         let p = self.line_first_text(self.get_cursor());
         self.extend_selection(p);
         self.set_cursor(p);
     }
     /// Extend the selection, toggling between the first non-whitespace character and column 0.
     pub fn select_to_start_of_text_toggle(&mut self) {
+        if self.multi_motion(CaretMove::Home, true) {
+            return;
+        }
         let cur = self.get_cursor();
         let text = self.line_first_text(cur);
         let p = if cur == text {
@@ -168,7 +229,7 @@ impl Editor {
     }
 
     // ----- word motions (sub-word approximates whole-word) ----------------
-    fn next_word(&self, pos: usize) -> usize {
+    pub(crate) fn next_word(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let len = code.len_chars();
         if pos >= len {
@@ -183,7 +244,7 @@ impl Editor {
             e2.max(pos + 1)
         }
     }
-    fn prev_word(&self, pos: usize) -> usize {
+    pub(crate) fn prev_word(&self, pos: usize) -> usize {
         let code = self.code_ref();
         if pos == 0 {
             return 0;
@@ -194,12 +255,18 @@ impl Editor {
 
     /// Move the cursor to the start of the next word.
     pub fn word_right(&mut self) {
+        if self.multi_motion(CaretMove::WordRight, false) {
+            return;
+        }
         self.clear_selection();
         let p = self.next_word(self.get_cursor());
         self.set_cursor(p);
     }
     /// Move the cursor to the start of the previous word.
     pub fn word_left(&mut self) {
+        if self.multi_motion(CaretMove::WordLeft, false) {
+            return;
+        }
         self.clear_selection();
         let p = self.prev_word(self.get_cursor());
         self.set_cursor(p);
@@ -214,12 +281,18 @@ impl Editor {
     }
     /// Extend the selection to the start of the next word.
     pub fn select_word_right(&mut self) {
+        if self.multi_motion(CaretMove::WordRight, true) {
+            return;
+        }
         let p = self.next_word(self.get_cursor());
         self.extend_selection(p);
         self.set_cursor(p);
     }
     /// Extend the selection to the start of the previous word.
     pub fn select_word_left(&mut self) {
+        if self.multi_motion(CaretMove::WordLeft, true) {
+            return;
+        }
         let p = self.prev_word(self.get_cursor());
         self.extend_selection(p);
         self.set_cursor(p);

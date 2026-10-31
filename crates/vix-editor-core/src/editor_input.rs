@@ -36,10 +36,18 @@ impl Editor {
             KeyCode::Char('a') if ctrl => self.apply(SelectAll {}),
             // Multiple-caret routing: while extra carets exist, edit/move them all.
             KeyCode::Esc if self.has_multi_carets() => self.clear_carets(),
+            KeyCode::Left if ctrl && self.has_multi_carets() => {
+                self.multi_move(CaretMove::WordLeft, shift);
+            }
+            KeyCode::Right if ctrl && self.has_multi_carets() => {
+                self.multi_move(CaretMove::WordRight, shift);
+            }
             KeyCode::Left if self.has_multi_carets() => self.multi_move(CaretMove::Left, shift),
             KeyCode::Right if self.has_multi_carets() => self.multi_move(CaretMove::Right, shift),
             KeyCode::Up if self.has_multi_carets() => self.multi_move(CaretMove::Up, shift),
             KeyCode::Down if self.has_multi_carets() => self.multi_move(CaretMove::Down, shift),
+            KeyCode::Home if self.has_multi_carets() => self.multi_move(CaretMove::Home, shift),
+            KeyCode::End if self.has_multi_carets() => self.multi_move(CaretMove::LineEnd, shift),
             KeyCode::Backspace if self.has_multi_carets() => self.multi_delete(false),
             KeyCode::Enter if self.has_multi_carets() => self.multi_insert("\n"),
             KeyCode::Char(c) if self.has_multi_carets() && !ctrl => {

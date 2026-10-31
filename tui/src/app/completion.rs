@@ -176,6 +176,14 @@ impl App {
         self.completion.as_ref()
     }
 
+    /// Whether the active editor has extra carets. Completion and snippet
+    /// expansion are single-caret features, so they stand aside then (T622).
+    pub(super) fn multi_caret_active(&self) -> bool {
+        self.editor
+            .active_tab()
+            .is_some_and(|t| t.editor.has_multi_carets())
+    }
+
     /// The char offset where the word before the cursor starts, and that
     /// word (the filter query for a freshly opened popup).
     pub(super) fn word_anchor(&self) -> (usize, String) {
@@ -190,6 +198,9 @@ impl App {
     /// Open a completion popup over `items` (a non-LSP completer's list),
     /// anchored at the word before the cursor and filtered by it.
     pub(super) fn open_completion(&mut self, items: Vec<CompletionItem>) {
+        if self.multi_caret_active() {
+            return;
+        }
         let (anchor, query) = self.word_anchor();
         self.completion = Some(CompletionPopup::new(items, false, anchor, &query));
     }
@@ -199,6 +210,9 @@ impl App {
     /// anchor. An empty reply only matters for an open incomplete popup —
     /// nothing matches any more, so it closes.
     pub(super) fn on_completion_list(&mut self, list: CompletionList) {
+        if self.multi_caret_active() {
+            return;
+        }
         if list.items.is_empty() {
             if self.completion.as_ref().is_some_and(|p| p.is_incomplete) {
                 self.completion = None;
@@ -240,6 +254,9 @@ impl App {
     /// A snippet item (`insertTextFormat` 2, T613) inserts its body with the
     /// tabstop markers removed and starts a tabstop session over it, so Tab
     /// walks `$1`, `$2`, … then `$0`.
+    ///
+    /// Completion is single-caret (T622): accepting drops any extra carets
+    /// first, since the edit is computed for the primary caret alone.
     pub(super) fn accept_completion(&mut self) {
         let Some(popup) = self.completion.take() else {
             return;
@@ -257,6 +274,7 @@ impl App {
         if tab.is_image() || tab.read_only {
             return;
         }
+        tab.editor.clear_carets();
         let snippet = item
             .is_snippet()
             .then(|| crate::snippet_tool::parse_lsp(&item.insert_text));
@@ -354,6 +372,13 @@ impl App {
     /// schedule a debounced completion request after a word or trigger
     /// character. Any other key cancels a pending auto-request.
     pub(super) fn completion_after_key(&mut self, key: KeyEvent) {
+        // Completion is single-caret (T622): with extra carets the popup
+        // closes and nothing is requested.
+        if self.multi_caret_active() {
+            self.completion = None;
+            self.completion_due = None;
+            return;
+        }
         if self.completion.is_some() {
             self.refresh_completion_popup();
             return;

@@ -86,6 +86,73 @@ Until T753 the soft-wrap renderer drew only the bar, so a breakpoint or the
 stopped line was missing there; both renderers now share
 `draw_gutter_sign`.
 
+## Multiple carets (T622)
+
+`multicursor.rs` keeps a primary caret (`cursor` + `selection`) and zero or
+more extra carets. Carets keep their **add order**: the primary is always
+the newest caret and the extras are oldest first. Moves and edits never
+reorder them (two carets landing on one spot merge, the earlier one
+winning), so "the newest caret" means the same thing before and after an
+edit.
+
+- **Adding.** `add_next_occurrence` (`spawn_multi_cursor`, Ctrl+D) selects
+  the next occurrence of the selection (or the word at the cursor);
+  `add_caret_above`/`add_caret_below` (`spawn_multi_cursor_up`/`_down`) add
+  a bare caret one line from the newest caret, so repeating keeps going;
+  `add_caret_at` is Alt+click; `column_select` grows a rectangle whose
+  columns come from its oldest caret, so a short line in the middle doesn't
+  narrow the lines after it. Every new caret becomes primary.
+- **Skipping and removing.** `skip_occurrence(forward)`
+  (`skip_multi_cursor`, `skip_multi_cursor_back`) moves the newest caret's
+  selection on to the next (or previous) occurrence, wrapping around the
+  buffer and passing over ranges another caret already holds.
+  `remove_last_caret` (`remove_multi_cursor`) drops the newest caret and
+  promotes the one before it; `clear_carets` (`remove_all_multi_cursors`)
+  drops all the extras.
+- **Selections.** `split_selection_into_lines`
+  (`edit.split_selection_into_lines`, Helix/Kakoune `Alt-s`; also the
+  catalog's `spawn_multi_cursor_select`) turns each selection into one per
+  line it covers, without newlines; empty pieces (a blank line, or the
+  column-0 end of a selection that stops after a newline) are dropped.
+  `select_matches_in_selection(find)` (`edit.select_regex_in_selection`,
+  Kakoune/Helix `s`) replaces the carets with one selection per match of
+  `find` inside the selections, or in the whole buffer when nothing is
+  selected; `find` returns byte ranges (what a regex reports) and the
+  widget converts them to characters, so the widget needs no regex
+  dependency. The App prompts for the pattern. Both put the primary on the
+  last piece, and leave the carets alone when there is nothing to do.
+- **Motions.** `multi_move(CaretMove, shift)` moves every caret: `Left`,
+  `Right`, `Up`, `Down`, `WordLeft`, `WordRight`, `LineStart`, `LineEnd`,
+  `TextStart` (first non-blank), `Home` (smart Home: first non-blank, or
+  column 0 when already there) and `BufferStart`/`BufferEnd` (which merge
+  the carets). With `shift` each caret extends its own selection. The named
+  motions (`cursor_*`, `select_*`, `word_*`, `select_word_*`,
+  `start_of_line`, `end_of_line`, `start_of_text[_toggle]`, `select_to_*`)
+  route through it whenever extra carets exist, as do the keys (arrows,
+  Ctrl+←/→, Home, End) and the App's Home/End/line-start/line-end. Page,
+  half-page, paragraph and Go-menu jumps move the primary only.
+- **Edits.** Typing, Enter, Backspace and Delete apply at every caret in one
+  undo transaction (`multi_insert`, `multi_delete`). Copy with several
+  carets copies every selection joined with newlines, in buffer order; Cut
+  does the same and removes them; a paste (the clipboard or a bracketed
+  terminal paste) with exactly one line per caret (ignoring one trailing
+  newline) puts one line at each caret in buffer order, and otherwise puts
+  the whole text at every caret (`multi_paste`, no re-indenting).
+- **Undo.** A multi-caret edit is one undo step. The history records only
+  the primary caret, so Undo and Redo collapse the carets into it, at its
+  position before (Undo) or after (Redo) the edit.
+- **Cowork and LSP.** Every multi-caret edit goes through the rope's
+  `insert`/`remove`, so the edit log carries one splice per caret in order
+  and a peer's replay reproduces the buffer; `apply_remote_edits` keeps each
+  extra caret on its character. LSP sync diffs whole texts (T615), so a
+  multi-caret edit needs nothing special there.
+- **Single-caret features.** Completion (T612) and snippets (T613) stay
+  single-caret: with extra carets the completion popup closes and no
+  request is made, an arriving completion list is ignored, accepting a
+  completion first drops the extra carets, and Tab after a snippet prefix
+  is the plain Tab key. Auto-pairing and overwrite mode are also skipped
+  with extra carets.
+
 ## Sub-specs
 
 - [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,

@@ -769,8 +769,16 @@ impl Editor {
     /// the terminal hands over. Going through one path is what keeps a terminal
     /// paste undoable in a single step: replayed as individual key events it
     /// would leave one undo entry per character.
+    ///
+    /// With extra carets it pastes at every caret instead (see
+    /// [`Editor::multi_paste`]: one line per caret when the counts match),
+    /// without re-indenting.
     pub fn paste_text(&mut self, text: &str) {
         if text.is_empty() {
+            return;
+        }
+        if self.has_multi_carets() {
+            self.multi_paste(text);
             return;
         }
         let mut cursor = self.get_cursor();
