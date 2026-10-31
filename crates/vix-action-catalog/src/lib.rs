@@ -750,6 +750,10 @@ pub mod dispatch_scan {
         ("tui/src/app/insert_tools.rs", "run_tools_action"),
         ("tui/src/app/keymap.rs", "run_vim_action"),
         ("tui/src/app/git.rs", "run_git_action"),
+        (
+            "tui/src/app/git_stash_worktree.rs",
+            "run_git_stash_worktree_action",
+        ),
         ("tui/src/app/jj.rs", "run_jj_action"),
         ("tui/src/app/oc.rs", "run_oc_action"),
         ("tui/src/app/im.rs", "run_im_action"),

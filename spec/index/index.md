@@ -211,7 +211,7 @@ anything still in design.
 | Search | Incremental find, find/replace with regex + capture groups, smart case, workspace-wide search/replace, interactive query-replace, TODO finder |
 | Navigation | Position history, go-to definition/symbol/line/percent/byte, jump labels, matching tag, breadcrumbs, outline panel |
 | Language support | Tree-sitter highlighting (feature-gated grammars), LSP (diagnostics, hover, completion, references, call hierarchy, rename, code actions/lens, inlay hints), DAP debugging |
-| Version control | Git status/diff/blame, per-hunk stage/unstage/revert, branch/stash/amend, merge-conflict resolver, diff gutter, word-level diff |
+| Version control | Git status/diff/blame, per-hunk stage/unstage/revert, branch/stash/amend, stash list, worktrees, merge-conflict resolver, diff gutter, word-level diff |
 | Data & tools | Database workbench (SQLite/Postgres/MySQL), HTTP client, test runner, task runner, integrated terminal, converters, generators, pickers, info panels |
 | Org mode | Headlines, TODO/checkbox cookies, agenda, capture, refile, footnotes, id links, tables (`TBLFM`), column view, Org-roam, dailies, backlinks, export |
 | Presentation | Monochrome bundled themes plus custom JSON themes, base16 palettes, Zen mode, split panes (up to 2×2), 27 UI languages, ten keymaps |

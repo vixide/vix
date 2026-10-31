@@ -25,6 +25,52 @@ caller outside this crate is the Rhai plugin installer
 [`parse_log`]) list commits into a [`LogPanel`]; [`show_commit`]/
 [`show_file_at`]/[`resolve_short_sha`] read a commit's diff or a file's
 content at a revision. See [git-history](git-history/index.md).
+- **Stash and worktrees** (T634): [`parse_stash_list`]/
+[`parse_worktree_list`] and their runners; see the section below.
+
+## Stash list and worktrees (T634)
+
+| Action                | Menu                         | Behavior |
+| --------------------- | ---------------------------- | -------- |
+| `git.stash_list`      | Git → Stash List…            | A chooser over `git stash list`: `Enter` shows the stash's diff (`git stash show -p`) in a read-only tab titled `stash@{N}`, the same as Browse Log; `a` applies it (`git stash apply`, kept); `p` pops it; `d`/`Delete` drops it after a confirmation |
+| `git.worktree_add`    | Git → Worktree → Add…        | Prompt for a folder (relative to the workspace root, or absolute) and `git worktree add <path>`: a new branch named after the folder, from `HEAD` |
+| `git.worktree_list`   | Git → Worktree → List…       | A chooser over `git worktree list --porcelain`, the current worktree highlighted and marked; `Enter` switches the workspace to it, `d` removes one after a confirmation, `a` adds one |
+| `git.worktree_remove` | Git → Worktree → Remove…     | The same chooser, where `Enter` removes the highlighted worktree after a confirmation |
+
+- **Pure parsers.** [`parse_stash_list`] reads the default `%gd: %gs` lines
+  into [`StashEntry`] rows (index + message), skipping anything that isn't a
+  `stash@{N}` line. [`parse_worktree_list`] reads the porcelain records into
+  [`Worktree`]s: path, `HEAD`, a [`Checkout`] (branch without `refs/heads/`,
+  detached, or bare), and the `locked`/`prunable` marks; unknown attribute
+  lines are ignored so a newer git can't break it.
+- **Runners.** [`stash_list`], [`stash_apply`], [`stash_pop_at`],
+  [`stash_drop`], [`stash_show`] name a stash only as `stash@{N}` built from
+  its index, so no typed text reaches git. [`worktree_list`],
+  [`worktree_add`], [`worktree_remove`] refuse an empty, option-shaped
+  (`-…`) or control-character path with `GitError::InvalidArgument` before
+  starting git. Nothing passes `--force`: git itself refuses to remove a
+  worktree with changes or untracked files, and that refusal is shown.
+- **Destructive actions confirm first.** Dropping a stash and removing a
+  worktree go through a yes/no `Confirm` (`ConfirmKind::GitStashDrop`,
+  `GitWorktreeRemove`); the chooser closes under the question and comes back
+  after it, either answer. The main worktree (the first record) and the one
+  holding the workspace can't be removed from the chooser.
+- **Switching reuses the project switch.** `Enter` on another worktree calls
+  the same `App::switch_workspace` as **Project → Switch…**: it saves the
+  current workspace's session, re-roots the explorer, LSP and git state, and
+  restores the worktree's own saved session, so each worktree keeps its own
+  open tabs. A bare or missing (`prunable`) worktree can't be opened.
+- **Remote workspaces.** Every runner goes through `git_command`, so under a
+  remote authority the stash and worktree commands run on the remote host,
+  and the worktree paths git prints are that host's paths, which is what the
+  authority opens on a switch.
+
+Code: `crates/vix-git/src/stash.rs`, `crates/vix-git/src/worktree.rs`; the
+choosers in `tui/src/app/git_stash_worktree.rs` and
+`tui/src/ui/choosers.rs` (`draw_stash_chooser`, `draw_worktree_chooser`).
+Tests: the parsers' unit tests, `crates/vix-git/tests/stash_worktree.rs`
+(the runners against a temporary repository), and
+`tui/tests/integration/git.rs` (the choosers end to end).
 
 ## Sub-specs
 

@@ -10,6 +10,19 @@
 //!   [`status`], [`head_blob`], and the staging/commit helpers. Using the user's
 //!   own `git` means credential helpers, SSH agents, and hooks all behave exactly
 //!   as on the command line.
+//! - **Stash and worktrees** (T634): [`parse_stash_list`] and
+//!   [`parse_worktree_list`] (pure), with runners to list, apply, pop, drop and
+//!   show a stash, and to list, add and remove a worktree.
+
+mod stash;
+mod worktree;
+
+pub use stash::{StashEntry, parse_stash_list, stash_ref};
+#[cfg(feature = "process")]
+pub use stash::{stash_apply, stash_drop, stash_list, stash_pop_at, stash_show};
+pub use worktree::{Checkout, Worktree, parse_worktree_list};
+#[cfg(feature = "process")]
+pub use worktree::{worktree_add, worktree_list, worktree_remove};
 
 #[cfg(feature = "process")]
 use std::ffi::OsString;

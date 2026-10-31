@@ -108,6 +108,7 @@ impl App {
             "git.conflict_list" => self.open_conflict_list(),
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
+            other if self.run_git_stash_worktree_action(other) => {}
             "git.amend" => {
                 if !self.commit_signing_blocked() {
                     self.git_op(crate::git::commit_amend, "status.git_amended");
@@ -1455,7 +1456,7 @@ fn rebuild_with_resolution(
 
 /// The text to show for a failed git command: a translated install hint when
 /// git isn't there at all (T673), otherwise git's own message.
-fn git_error_text(e: &crate::git::GitError) -> String {
+pub(super) fn git_error_text(e: &crate::git::GitError) -> String {
     match e {
         crate::git::GitError::NotInstalled => t!("msg.git_not_installed").to_string(),
         other => other.to_string(),
@@ -1561,6 +1562,25 @@ impl App {
     /// A key in a git confirm: `y` discards the file (T657) or stages
     /// everything and commits (smart commit); `n`/`Esc` cancels.
     pub(super) fn git_confirm_key(&mut self, kind: ConfirmKind, key: KeyEvent) {
+        if matches!(
+            kind,
+            ConfirmKind::GitStashDrop | ConfirmKind::GitWorktreeRemove
+        ) {
+            let yes = match key.code {
+                KeyCode::Char('y' | 'Y') => true,
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => false,
+                _ => return,
+            };
+            let Some(target) = self.confirm.take().and_then(|c| c.paths.into_iter().next()) else {
+                return;
+            };
+            if kind == ConfirmKind::GitStashDrop {
+                self.git_stash_drop_answered(&target, yes);
+            } else {
+                self.git_worktree_remove_answered(&target, yes);
+            }
+            return;
+        }
         match (key.code, kind) {
             (KeyCode::Char('y' | 'Y'), ConfirmKind::GitDiscard) => {
                 if let Some(rel) = self.confirm.take().and_then(|c| c.paths.into_iter().next()) {

@@ -58,6 +58,8 @@ The **Git** menu gathers the git actions:
 - **Changes…** — open the Changes panel (see below).
 - **Switch Branch…** — choose a local branch to check out.
 - **Pull** / **Push** / **Fetch** — sync with the remote.
+- **Stash List…** and **Worktree ▸** — manage stashes and worktrees (see
+  below).
 
 Every Git menu item is also available from the command palette (for example,
 "Git: Changes").
@@ -178,6 +180,47 @@ Beyond the plain streamed-to-the-dock **Log** views (**All**, **Graph**,
 
 None of these three write anything — they're all read-only views for
 looking at history, not editing it.
+
+## Stash list
+
+**Git → Stash** and **Git → Stash Pop** stash the working tree and restore
+the most recent stash. **Git → Stash List…** lists every stash
+(`stash@{0}` is the newest) in a chooser:
+
+| Key                | Action                                                     |
+| ------------------ | ---------------------------------------------------------- |
+| `↑` / `↓`          | Move the selection                                         |
+| `Enter` (or click) | Open the stash's diff in a read-only tab titled `stash@{N}` |
+| `a`                | Apply the stash and keep it in the list                    |
+| `p`                | Pop the stash: apply it, then remove it from the list      |
+| `d` / `Delete`     | Drop the stash, after a yes/no question                    |
+| `Esc`              | Close the chooser                                          |
+
+After an apply or pop, unmodified open files are reloaded from disk. A
+conflict is reported in the message drawer and the stash is kept.
+
+## Worktrees
+
+A worktree is a second checkout of the same repository in its own folder,
+usually on its own branch, so you can work on two branches at once. The
+**Git → Worktree** submenu manages them:
+
+- **Add…** asks for a folder (relative to the workspace, such as
+  `../my-feature`) and runs `git worktree add`. git creates a new branch
+  named after the folder, starting at the current commit.
+- **List…** shows every worktree: its folder, its branch (or `detached` /
+  `bare`), and whether it is the current one, locked, or missing. `Enter`
+  switches the workspace to the highlighted worktree, `a` adds one, and `d`
+  removes one.
+- **Remove…** shows the same list; `Enter` removes the highlighted worktree.
+
+Switching works like **Project → Switch…**: Vix saves the current
+workspace's session and restores the worktree's own, so each worktree
+remembers its own open files. Removing asks first, and git refuses to remove
+a worktree with uncommitted changes or untracked files. You can't remove the
+main worktree, or the one you have open, from here.
+
+In a remote workspace, stash and worktree commands run on the remote host.
 
 ## Roadmap
 

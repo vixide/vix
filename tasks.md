@@ -7361,7 +7361,7 @@ new action.
 
   Tests: a pure todo parse/serialize round trip, and squashing two commits
   in a temp repo. **Medium.**
-- [ ] **T634 — Git stash list and worktrees.** `tui/src/app/git.rs:110-111`
+- [x] **T634 — Git stash list and worktrees.** `tui/src/app/git.rs:110-111`
   has only `stash_push` and `stash_pop`, and there is no worktree support.
   Magit, Neogit, and VS Code all have both. Add `git.stash_list`, a
   chooser with apply, pop, drop, and show (a diff in a read-only tab, the

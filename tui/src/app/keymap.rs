@@ -120,6 +120,8 @@ impl App {
             branch_chooser,
             git_log,
             git_graph,
+            stash_chooser,
+            worktree_chooser,
             oc,
             im_dialog,
             task_chooser,
@@ -392,6 +394,8 @@ impl App {
         panel!(branch_chooser, branch_key);
         panel!(git_log, git_log_key);
         panel!(git_graph, git_graph_key);
+        panel!(stash_chooser, stash_chooser_key);
+        panel!(worktree_chooser, worktree_chooser_key);
         panel!(oc, oc_key);
         panel!(im_dialog, im_dialog_key);
         panel!(task_chooser, tasks_key);

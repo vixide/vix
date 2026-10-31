@@ -47,7 +47,8 @@ use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
     draw_diff_view, draw_encoding_chooser, draw_git_log, draw_git_panel, draw_http_env_chooser,
     draw_location_chooser, draw_macro_chooser, draw_recent_chooser, draw_refile_chooser,
-    draw_spell_suggest, draw_task_chooser, draw_workspace_chooser,
+    draw_spell_suggest, draw_stash_chooser, draw_task_chooser, draw_workspace_chooser,
+    draw_worktree_chooser,
 };
 #[cfg(feature = "script")]
 use choosers::{draw_plugin_chooser, draw_script_chooser};
@@ -659,6 +660,12 @@ fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.task_chooser.is_some() {
         draw_task_chooser(app, frame, area);
+    }
+    if app.stash_chooser.is_some() {
+        draw_stash_chooser(app, frame, area);
+    }
+    if app.worktree_chooser.is_some() {
+        draw_worktree_chooser(app, frame, area);
     }
     #[cfg(feature = "script")]
     if app.script_chooser.is_some() {

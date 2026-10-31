@@ -1547,6 +1547,13 @@ const GIT_RESOLVE: &[Item] = &[
     Item::leaf("menu.item.git.conflict_both", "git.conflict_both", ""),
 ];
 
+/// Worktree commands (T634), grouped under Git → Worktree.
+const GIT_WORKTREE: &[Item] = &[
+    Item::leaf("menu.item.git.worktree_add", "git.worktree_add", ""),
+    Item::leaf("menu.item.git.worktree_list", "git.worktree_list", ""),
+    Item::leaf("menu.item.git.worktree_remove", "git.worktree_remove", ""),
+];
+
 /// Pull strategies, grouped under Git → Pull.
 const GIT_PULL: &[Item] = &[
     Item::leaf("menu.item.git.pull_ff", "git.pull_ff", ""),
@@ -1582,6 +1589,8 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.amend", "git.amend", ""),
     Item::leaf("menu.item.git.stash", "git.stash", ""),
     Item::leaf("menu.item.git.stash_pop", "git.stash_pop", ""),
+    Item::leaf("menu.item.git.stash_list", "git.stash_list", ""),
+    Item::sub("menu.item.git.worktree", GIT_WORKTREE),
     SEP,
     Item::sub("menu.item.git.pull", GIT_PULL),
     Item::leaf("menu.item.git.push", "git.push", ""),

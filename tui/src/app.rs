@@ -34,6 +34,8 @@ mod git;
 mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
+#[cfg(feature = "git")]
+mod git_stash_worktree;
 mod hl7;
 mod hot_exit;
 #[cfg(feature = "http")]
@@ -238,6 +240,8 @@ pub enum PromptKind {
     /// Enter a revision (branch, tag, or commit-ish) to open the active
     /// file's content at, in a read-only tab (T207).
     GitOpenAtRevision,
+    /// Enter a path for a new linked worktree (`git worktree add`, T634).
+    GitWorktreeAdd,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
     WorkspaceSymbol,
     /// Enter a free-text instruction for the AI to apply to the selection
@@ -813,6 +817,10 @@ pub enum ConfirmKind {
     /// Offer back a hot-exit backup of unsaved text (T629): recover, show
     /// the diff, discard, or decide later.
     RecoverBackup,
+    /// Drop a stash (T634); [`Confirm::paths`] holds its `stash@{N}`.
+    GitStashDrop,
+    /// Remove a linked worktree (T634); [`Confirm::paths`] holds its path.
+    GitWorktreeRemove,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -918,6 +926,50 @@ pub struct BranchChooser {
     /// When true, the chosen branch is merged into the current branch; otherwise
     /// it is checked out.
     pub merge: bool,
+}
+
+/// The stash chooser (**Git → Stash List…**, T634): every stash, most recent
+/// first. `Enter` shows the highlighted stash's diff in a read-only tab; `a`
+/// applies, `p` pops, and `d` drops it after a confirmation.
+pub struct StashChooser {
+    /// `git stash list`'s rows.
+    pub entries: Vec<crate::git::StashEntry>,
+    /// Index of the highlighted row.
+    pub selected: usize,
+}
+
+/// The worktree chooser (**Git → Worktree → List…** / **Remove…**, T634):
+/// every worktree of the repository, the main one first. In list mode
+/// `Enter` switches the workspace to the highlighted worktree through the
+/// project-switch path, so each worktree keeps its own session; `d` removes
+/// one after a confirmation. In remove mode `Enter` is that removal.
+pub struct WorktreeChooser {
+    /// `git worktree list --porcelain`'s records.
+    pub worktrees: Vec<crate::git::Worktree>,
+    /// Index of the highlighted row.
+    pub selected: usize,
+    /// Opened by **Remove…**: `Enter` removes rather than switches.
+    pub remove: bool,
+}
+
+impl WorktreeChooser {
+    /// The index of the worktree holding `root` (the workspace root).
+    #[must_use]
+    pub fn current(&self, root: &Path) -> Option<usize> {
+        Self::current_in(&self.worktrees, root)
+    }
+
+    /// The worktree in `worktrees` whose directory holds `root` — the
+    /// longest match, since a linked worktree may live inside the main one.
+    #[must_use]
+    pub fn current_in(worktrees: &[crate::git::Worktree], root: &Path) -> Option<usize> {
+        worktrees
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| root.starts_with(&w.path))
+            .max_by_key(|(_, w)| w.path.components().count())
+            .map(|(i, _)| i)
+    }
 }
 
 /// The task chooser (Tools → Tasks…, Project → Run Task…): named tasks —
@@ -1975,6 +2027,10 @@ pub struct App {
     pub(crate) git_log: Option<crate::git::LogPanel>,
     /// The interactive Git graph overlay (T681), when open.
     pub(crate) git_graph: Option<crate::git_graph::Panel>,
+    /// The stash chooser (T634: **Git → Stash List…**), when open.
+    pub(crate) stash_chooser: Option<StashChooser>,
+    /// The worktree chooser (T634: **Git → Worktree**), when open.
+    pub(crate) worktree_chooser: Option<WorktreeChooser>,
     /// The OC container panel (T702-T704), when open.
     pub(crate) oc: Option<crate::oci_panel::Panel>,
     /// The IM menu's state: inbox, dock panel, connections (T752).
@@ -2671,6 +2727,8 @@ impl App {
             branch_chooser: None,
             git_log: None,
             git_graph: None,
+            stash_chooser: None,
+            worktree_chooser: None,
             oc: None,
             im: im::ImState::new(&settings),
             im_dialog: None,
@@ -8084,12 +8142,15 @@ impl App {
             // A different confirm replaced it: forget the stale target.
             self.save_as_overwrite = None;
         }
-        if let Some(kind) = self
-            .confirm
-            .as_ref()
-            .map(|c| c.kind)
-            .filter(|k| matches!(k, ConfirmKind::GitDiscard | ConfirmKind::StageAllAndCommit))
-        {
+        if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {
+            matches!(
+                k,
+                ConfirmKind::GitDiscard
+                    | ConfirmKind::StageAllAndCommit
+                    | ConfirmKind::GitStashDrop
+                    | ConfirmKind::GitWorktreeRemove
+            )
+        }) {
             self.git_confirm_key(kind, key);
             return;
         }
@@ -8947,6 +9008,8 @@ impl App {
         panel!(branch_chooser, branch_mouse);
         panel!(git_log, git_log_mouse);
         panel!(git_graph, git_graph_mouse);
+        panel!(stash_chooser, stash_chooser_mouse);
+        panel!(worktree_chooser, worktree_chooser_mouse);
         panel!(oc, oc_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
@@ -13378,6 +13441,8 @@ impl App {
             PromptKind::GitGrep => self.git_grep(&prompt.input),
             #[cfg(feature = "git")]
             PromptKind::GitOpenAtRevision => self.git_open_at_revision(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitWorktreeAdd => self.git_worktree_add(prompt.input.trim()),
             #[cfg(not(feature = "git"))]
             PromptKind::GitCommit
             | PromptKind::GitNewBranch
@@ -13385,7 +13450,8 @@ impl App {
             | PromptKind::GitEditDescription
             | PromptKind::GitDeleteBranch
             | PromptKind::GitGrep
-            | PromptKind::GitOpenAtRevision => {}
+            | PromptKind::GitOpenAtRevision
+            | PromptKind::GitWorktreeAdd => {}
             PromptKind::WorkspaceSymbol => {
                 if let Some(path) = self.active_path()
                     && self.lsp.handles(&path)
