@@ -24,6 +24,7 @@ mod fhir;
 mod fhir_http;
 #[cfg(not(feature = "http"))]
 mod fhir_http_off;
+mod focus;
 #[cfg(feature = "cowork")]
 use cowork as cowork_state;
 #[cfg(not(feature = "cowork"))]
@@ -1506,6 +1507,10 @@ pub struct Layout {
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
     pub tabs: Rect,
+    /// Areas drawn this frame whose URLs get OSC 8 hyperlinks (T628), each
+    /// with the full URLs that may show there (a visible URL may be cut off
+    /// by the pane edge or a horizontal scroll). Cleared at each frame start.
+    pub hyperlink_regions: Vec<(Rect, Vec<String>)>,
     /// Editor viewport rectangle.
     pub editor: Rect,
     /// Code-overview minimap rectangle (a column at the right of the editor),
@@ -2411,6 +2416,10 @@ pub struct App {
     pub status: String,
     /// Pane rectangles recorded during the last render.
     pub layout: Layout,
+    /// What the terminal can show (T628): the color depth every frame is
+    /// downsampled to, and whether URLs get OSC 8 hyperlinks. The terminal
+    /// front end sets it from the environment at startup.
+    pub terminal_caps: crate::term_caps::TerminalCaps,
     /// File paths under the workspace root, for the palette file finder.
     file_index: Vec<PathBuf>,
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
@@ -2848,6 +2857,7 @@ impl App {
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
             layout: Layout::default(),
+            terminal_caps: crate::term_caps::TerminalCaps::default(),
             settings,
             settings_path: None,
             session_path: None,
@@ -3264,12 +3274,15 @@ impl App {
                 .to_string();
             }
             "view.auto_save" => {
-                self.settings.editor_behavior.auto_save = !self.settings.editor_behavior.auto_save;
-                self.status = t!(
-                    "status.auto_save",
-                    on = self.settings.editor_behavior.auto_save
-                )
-                .to_string();
+                // Off turns on the interval mode; any mode (interval or
+                // focus-lost, T628) turns off.
+                let behavior = &mut self.settings.editor_behavior;
+                behavior.auto_save = if behavior.auto_save.is_on() {
+                    crate::settings::AutoSave::Off
+                } else {
+                    crate::settings::AutoSave::Interval
+                };
+                self.status = t!("status.auto_save", on = behavior.auto_save.is_on()).to_string();
             }
             "view.sticky_scroll" => {
                 self.settings.editor_behavior.sticky_scroll =
@@ -4240,22 +4253,7 @@ impl App {
     /// [`App::save`] owns for the active buffer.
     fn save_all(&mut self) {
         let original = self.editor.active;
-        let wgrep = Path::new(Self::WGREP_RESULTS_PATH);
-        let mut targets = Vec::new();
-        let mut skipped = 0usize;
-        for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
-            // A Cowork guest's shared-in tab is saved by its host (Save asks).
-            let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
-                && !t.is_image()
-                && !t.is_remote()
-                && !t.read_only
-                && t.fs_access != crate::editor::FsAccess::ReadOnly;
-            if savable {
-                targets.push(i);
-            } else {
-                skipped += 1;
-            }
-        }
+        let (targets, skipped) = self.savable_dirty_tabs();
         let mut saved = 0usize;
         for i in targets {
             self.editor.active = i;
@@ -4276,6 +4274,30 @@ impl App {
         } else {
             t!("status.saved_all_skipped", count = saved, skipped = skipped).to_string()
         };
+    }
+
+    /// The dirty tabs Save All (and focus-lost auto-save, T628) can write in
+    /// place, by index, and how many dirty tabs it has to skip: untitled
+    /// buffers, images, remote and read-only tabs, and files this user can't
+    /// write.
+    fn savable_dirty_tabs(&self) -> (Vec<usize>, usize) {
+        let wgrep = Path::new(Self::WGREP_RESULTS_PATH);
+        let mut targets = Vec::new();
+        let mut skipped = 0usize;
+        for (i, t) in self.editor.tabs.iter().enumerate().filter(|(_, t)| t.dirty) {
+            // A Cowork guest's shared-in tab is saved by its host (Save asks).
+            let savable = t.path.as_deref().is_some_and(|p| p != wgrep)
+                && !t.is_image()
+                && !t.is_remote()
+                && !t.read_only
+                && t.fs_access != crate::editor::FsAccess::ReadOnly;
+            if savable {
+                targets.push(i);
+            } else {
+                skipped += 1;
+            }
+        }
+        (targets, skipped)
     }
 
     /// Write the active buffer to its file (applying the on-save options) and
@@ -5514,7 +5536,7 @@ impl App {
     /// Periodically save the active dirty, file-backed buffer when auto-save is
     /// enabled (every few seconds). Uses a plain write (no format-on-save churn).
     pub fn poll_auto_save(&mut self) {
-        if !self.settings.editor_behavior.auto_save {
+        if self.settings.editor_behavior.auto_save != crate::settings::AutoSave::Interval {
             return;
         }
         if self

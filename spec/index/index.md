@@ -172,6 +172,17 @@ narrative version.
 hit-tested. Keys go to `App::on_key`, mouse to `App::on_mouse`, and a bracketed
 paste to `App::on_paste` (see
 [`crates/vix-editor/spec/bracketed-paste/index.md`](../../crates/vix-editor/spec/bracketed-paste/index.md)).
+Focus reports go to `App::on_focus_gained` / `App::on_focus_lost` (see
+[`crates/vix-editor/spec/save-automation/index.md`](../../crates/vix-editor/spec/save-automation/index.md)).
+
+Terminal protocol (T628): each frame is drawn inside a synchronized update
+(DEC mode 2026, `BeginSynchronizedUpdate` / `EndSynchronizedUpdate`), so the
+terminal never shows a half-painted frame. `App::terminal_caps` (set once at
+startup from `COLORTERM`/`TERM`/`TERM_PROGRAM`, with no terminal query)
+decides the color depth every frame is downsampled to (see
+[`crates/vix-theme/spec/index.md`](../../crates/vix-theme/spec/index.md)) and
+whether URLs in the markdown preview and the messages dock get OSC 8
+hyperlinks. Terminals without these features ignore the escapes.
 
 `on_key` resolves, in strict priority order:
 
@@ -215,7 +226,7 @@ anything still in design.
 | Data & tools | Database workbench (SQLite/Postgres/MySQL), HTTP client, test runner, task runner, integrated terminal, converters, generators, pickers, info panels |
 | Org mode | Headlines, TODO/checkbox cookies, agenda, capture, refile, footnotes, id links, tables (`TBLFM`), column view, Org-roam, dailies, backlinks, export |
 | Presentation | Monochrome bundled themes plus custom JSON themes, base16 palettes, Zen mode, split panes (up to 2×2), 27 UI languages, ten keymaps |
-| Terminal integration | Mouse (click/drag/wheel/hover), in-terminal images, bracketed paste, macOS `Command` folded to `Control`, suspend/resume |
+| Terminal integration | Mouse (click/drag/wheel/hover), in-terminal images, bracketed paste, macOS `Command` folded to `Control`, suspend/resume, synchronized output, focus events, color-depth fallback, OSC 8 hyperlinks |
 
 ### Quality gates
 

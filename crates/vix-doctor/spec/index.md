@@ -39,6 +39,10 @@ to report).
 - **Terminal color support.** Reads `TERM`: fail if unset or `"dumb"`.
   Notes (does not fail on) `NO_COLOR` being set, since that's a
   deliberate opt-out, not a misconfiguration.
+- **Terminal colors** (added by the App shell, `vix::term_caps::doctor_check`,
+  T628). Always a pass: names the color depth frames are downsampled to
+  (`truecolor`, `256` or `16`, see `crates/vix-theme/spec/index.md`) and the
+  `COLORTERM`, `TERM` and `TERM_PROGRAM` values it was chosen from.
 
 ## Design notes
 

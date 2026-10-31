@@ -164,6 +164,18 @@ pub(super) fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
+/// Make the URLs in notifications clickable (T628): record the message list's
+/// area and every URL the messages carry for the end-of-frame hyperlink pass.
+fn register_message_links(app: &mut App, list_area: Rect) {
+    if !app.terminal_caps.hyperlinks {
+        return;
+    }
+    let urls = super::hyperlink::urls_in(app.messages.items.iter().map(|m| m.text.as_str()));
+    if !urls.is_empty() {
+        app.layout.hyperlink_regions.push((list_area, urls));
+    }
+}
+
 pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Messages;
     let block = Block::default()
@@ -235,6 +247,7 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
+    register_message_links(app, list_area);
     // Mirrored layouts right-align each message, so the close "x" lands on the
     // dock's right edge where `messages_mouse` hits it (T564).
     if super::layout_mirrored(app) {

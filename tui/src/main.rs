@@ -16,14 +16,15 @@ use std::time::Duration;
 
 use clap::Parser;
 use crossterm::event::{
-    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-    Event,
+    self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+    EnableFocusChange, EnableMouseCapture, Event,
 };
 #[cfg(target_os = "macos")]
 use crossterm::event::{
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
-use crossterm::execute;
+use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
+use crossterm::{execute, queue};
 
 use vix::app::{App, AppFlags};
 use vix::cli::Cli;
@@ -231,6 +232,9 @@ fn main() -> io::Result<()> {
     {
         app.image_probe = Some(probe_terminal_graphics);
     }
+    // Color depth and hyperlink support, from the environment only: no
+    // terminal query, so startup pays nothing for it (T628, T749).
+    app.terminal_caps = vix::term_caps::TerminalCaps::from_process_env();
     // Scripts, key overrides, the welcome screen, and the initial files /
     // session / stdin buffer / `--diff` — shared with the GUI front end.
     app.start(&cli)?;
@@ -243,6 +247,10 @@ fn main() -> io::Result<()> {
     // auto-indent from re-indenting each pasted line. Best-effort — terminals
     // without support simply keep sending keys.
     let _ = execute!(io::stdout(), EnableBracketedPaste);
+    // Ask for focus reports (xterm mode 1004): gaining focus checks open files
+    // for outside changes at once, and losing it can auto-save (T628).
+    // Best-effort — terminals without support never send them.
+    let _ = execute!(io::stdout(), EnableFocusChange);
     // macOS: ask for the kitty keyboard protocol's disambiguated key encoding.
     // It is the only way a terminal can report the `Command` modifier at all —
     // crossterm sets `KeyModifiers::SUPER` only with these flags on — and Vix
@@ -265,13 +273,18 @@ fn main() -> io::Result<()> {
     // rather than sitting on whatever was on screen before Vix started for
     // however long that refresh takes (T122). `run`'s own loop redraws with
     // the real git state on its first iteration.
-    let _ = terminal.draw(|frame| ui::draw(&mut app, frame));
+    let _ = draw(&mut terminal, &mut app);
     app.refresh_git();
     let result = run(&mut terminal, &mut app);
     let _ = write!(io::stdout(), "\x1b[?1003l");
     #[cfg(target_os = "macos")]
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
-    let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);
+    let _ = execute!(
+        io::stdout(),
+        DisableFocusChange,
+        DisableBracketedPaste,
+        DisableMouseCapture
+    );
     let _ = io::stdout().flush();
     ratatui::restore();
     app.on_exit();
@@ -291,11 +304,22 @@ fn probe_terminal_graphics() -> Option<ratatui_image::picker::Picker> {
     ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok()
 }
 
+/// Draw one frame inside a synchronized update (DEC mode 2026): the terminal
+/// holds the screen until the whole frame has arrived, so a large redraw
+/// never shows half-painted (T628). Terminals without the mode ignore it.
+fn draw(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
+    queue!(io::stdout(), BeginSynchronizedUpdate)?;
+    let drawn = terminal.draw(|frame| ui::draw(app, frame)).map(|_| ());
+    // End the update even when the draw failed, or the screen stays frozen.
+    execute!(io::stdout(), EndSynchronizedUpdate)?;
+    drawn
+}
+
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
         // Background work shared with the GUI front end (`App::tick`).
         app.tick();
-        terminal.draw(|frame| ui::draw(app, frame))?;
+        draw(terminal, app)?;
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());
         }
@@ -309,7 +333,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
                 Event::Key(key) => app.on_key(key.into()),
                 Event::Mouse(mouse) => app.on_mouse(mouse.into()),
                 Event::Paste(text) => app.on_paste(&text),
-                _ => {}
+                Event::FocusGained => app.on_focus_gained(),
+                Event::FocusLost => app.on_focus_lost(),
+                Event::Resize(..) => {}
             }
         }
         if app.flags.contains(AppFlags::SUSPEND_REQUESTED) {
@@ -327,12 +353,22 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal) {
         let _ = write!(io::stdout(), "\x1b[?1003l");
         #[cfg(target_os = "macos")]
         let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
-        let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);
+        let _ = execute!(
+            io::stdout(),
+            DisableFocusChange,
+            DisableBracketedPaste,
+            DisableMouseCapture
+        );
         let _ = io::stdout().flush();
         ratatui::restore();
         let _ = nix::sys::signal::raise(nix::sys::signal::Signal::SIGTSTP);
         *terminal = ratatui::init();
-        let _ = execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste);
+        let _ = execute!(
+            io::stdout(),
+            EnableMouseCapture,
+            EnableBracketedPaste,
+            EnableFocusChange
+        );
         #[cfg(target_os = "macos")]
         let _ = execute!(
             io::stdout(),

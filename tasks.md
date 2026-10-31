@@ -7288,7 +7288,29 @@ new action.
   Tests: precedence, an untrusted workspace ignores the project file, and
   unknown keys are reported. Do this after T626. **Medium.**
   Done: `vix_settings::{merge_layer, unmerge, unknown_keys, language_key_problems, LANGUAGE_KEYS}` and `Settings::{languages, for_language}` (`crates/vix-settings/src/layers.rs`); host side in `tui/src/app/project_settings.rs` (loaded in `App::start`, on trust, on workspace switch and on reload; saving `.vix/settings.toml` reloads). The T132 trust prompt moved to `tui/src/app/trust.rs` so it exists in every build and also asks for a settings file. Never read for a remote workspace. Per-language keys apply on open (indent, display flags), on save (trim/final newline, format on save) and to Edit → Wrap; `.editorconfig` still wins. Tests in `tui/tests/integration/project_settings.rs` and the crate's unit tests. Not done: the user file's unknown top-level keys are not reported (only the project file's), and a buffer already open when settings reload keeps its indent/display until reopened.
-- [ ] **T628 — Terminal protocol polish.** `tui/src/main.rs:209-225` enables
+- [x] **T628 — Terminal protocol polish.** Done 2026-10-31: `tui/src/main.rs`
+  draws every frame through a `draw` helper inside
+  `Begin/EndSynchronizedUpdate`, and enables focus change (also around
+  suspend/resume). `App::on_focus_gained` runs the external-change check at
+  once (bypassing its 1 s throttle; the task's `app.rs:5073` had moved to
+  `poll_file_changes` ~5600); `App::on_focus_lost` saves Save All's set of
+  tabs when `auto_save = "focus_lost"` (new `tui/src/app/focus.rs`).
+  `auto_save` is now `vix_settings::AutoSave` (`off`/`interval`/
+  `focus_lost`; old booleans still load). Pure
+  `vix_theme::color_depth::{detect, downsample, downsample_buffer}` over a
+  `TermEnv` the caller fills (`vix::term_caps::TerminalCaps`, read once from
+  the environment, no terminal query), applied as the last end-of-frame pass
+  in `ui::draw`; `--doctor` gains a "terminal colors" row. OSC 8 hyperlinks
+  (`tui/src/ui/hyperlink.rs`): the markdown preview and messages dock record
+  their area and URLs, and an end-of-frame pass wraps each URL cell with a
+  forced width of 1. Specs: `crates/vix-theme/spec`,
+  `crates/vix-editor/spec/save-automation`, the markdown-preview,
+  right-dock and doctor specs, `spec/index`. Tests:
+  `tui/tests/integration/terminal_protocol.rs` plus unit tests in
+  `vix-theme`, `vix-settings`, `term_caps` and `ui::hyperlink`. Not done: the
+  GUI front ends don't forward window focus to the new handlers, and there
+  is no setting to override the detected color depth (set `COLORTERM`).
+  Original task: `tui/src/main.rs:209-225` enables
   only mouse capture, bracketed paste, and keyboard disambiguation. Vix
   has no synchronized output, no focus events, and no color-depth
   fallback: themes emit raw RGB, and there is no `COLORTERM` check. Fix:

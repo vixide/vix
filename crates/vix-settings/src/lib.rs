@@ -600,14 +600,67 @@ impl Default for SaveSettings {
     }
 }
 
+/// When Vix saves dirty file-backed buffers by itself (the `auto_save`
+/// setting). Written as a string (`"off"`, `"interval"`, `"focus_lost"`);
+/// a boolean from older config files still loads (`true` is `"interval"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoSave {
+    /// Never save automatically.
+    #[default]
+    Off,
+    /// Save the active dirty buffer every few seconds.
+    Interval,
+    /// Save every dirty buffer when the terminal window loses focus (T628).
+    FocusLost,
+}
+
+impl AutoSave {
+    /// Whether any automatic saving is on.
+    #[must_use]
+    pub fn is_on(self) -> bool {
+        self != AutoSave::Off
+    }
+}
+
+impl<'de> Deserialize<'de> for AutoSave {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        /// Either spelling `auto_save` has had.
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            /// The pre-T628 boolean.
+            Bool(bool),
+            /// A mode name.
+            Name(String),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Bool(true) => Ok(AutoSave::Interval),
+            Raw::Bool(false) => Ok(AutoSave::Off),
+            Raw::Name(name) => match name.trim().to_ascii_lowercase().as_str() {
+                "off" | "false" => Ok(AutoSave::Off),
+                "interval" | "on" | "true" => Ok(AutoSave::Interval),
+                "focus_lost" | "focus-lost" => Ok(AutoSave::FocusLost),
+                other => Err(serde::de::Error::unknown_variant(
+                    other,
+                    &["off", "interval", "focus_lost"],
+                )),
+            },
+        }
+    }
+}
+
 /// Editor-session behaviors: periodic autosave, sticky scroll, and
 /// cross-session persistent undo (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[non_exhaustive]
 pub struct EditorBehaviorSettings {
-    /// Periodically save the active dirty file-backed buffer (every few seconds).
-    pub auto_save: bool,
+    /// When to save dirty file-backed buffers on their own: `"off"`,
+    /// `"interval"` (the active buffer every few seconds) or `"focus_lost"`
+    /// (every buffer when the terminal loses focus, T628). The old `true` /
+    /// `false` still load, as `"interval"` / `"off"`.
+    pub auto_save: AutoSave,
     /// Pin the enclosing scope's header line at the top of the editor while
     /// scrolling (sticky scroll).
     pub sticky_scroll: bool,
@@ -650,7 +703,7 @@ fn default_read_only_paths() -> Vec<String> {
 impl Default for EditorBehaviorSettings {
     fn default() -> Self {
         EditorBehaviorSettings {
-            auto_save: false,
+            auto_save: AutoSave::Off,
             sticky_scroll: true,
             persistent_undo: true,
             local_history_keep: 50,
@@ -1157,9 +1210,9 @@ fn cmd_double_quote(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CompletionSettings, EditorBehaviorSettings, GutterSettings, PanelSettings, SaveSettings,
-        SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings, ViewportSettings,
-        cmd_double_quote, sh_single_quote,
+        AutoSave, CompletionSettings, EditorBehaviorSettings, GutterSettings, PanelSettings,
+        SaveSettings, SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings,
+        ViewportSettings, cmd_double_quote, sh_single_quote,
     };
     use crate::EntryType;
 
@@ -1527,5 +1580,33 @@ theme = "light"
         );
         assert_eq!(reloaded.theme, original.theme);
         assert_eq!(reloaded.tab_width, original.tab_width);
+    }
+
+    #[test]
+    fn auto_save_loads_old_booleans_and_new_mode_names() {
+        let load = |src: &str| {
+            toml::from_str::<Settings>(src)
+                .unwrap()
+                .editor_behavior
+                .auto_save
+        };
+        assert_eq!(load("auto_save = true\n"), AutoSave::Interval);
+        assert_eq!(load("auto_save = false\n"), AutoSave::Off);
+        assert_eq!(load("auto_save = \"focus_lost\"\n"), AutoSave::FocusLost);
+        assert_eq!(load("auto_save = \"interval\"\n"), AutoSave::Interval);
+        assert_eq!(load(""), AutoSave::Off);
+        assert!(toml::from_str::<Settings>("auto_save = \"sometimes\"\n").is_err());
+    }
+
+    #[test]
+    fn auto_save_round_trips_as_a_mode_name() {
+        let mut s = Settings::default();
+        s.editor_behavior.auto_save = AutoSave::FocusLost;
+        let saved = toml::to_string(&s).unwrap();
+        assert!(saved.contains("auto_save = \"focus_lost\""), "{saved}");
+        let back: Settings = toml::from_str(&saved).unwrap();
+        assert_eq!(back.editor_behavior.auto_save, AutoSave::FocusLost);
+        assert!(back.editor_behavior.auto_save.is_on());
+        assert!(!AutoSave::Off.is_on());
     }
 }

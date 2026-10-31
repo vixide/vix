@@ -86,9 +86,10 @@ format_on_save = false
 # Languages formatted with your own Prettier (Format Document and
 # format-on-save) instead of the language server, e.g. ["typescript", "css"].
 prettier_languages = []
-# Periodically save the active dirty file-backed buffer (every few
-# seconds).
-auto_save = false
+# Save dirty file-backed buffers on their own: "off", "interval" (the
+# active buffer every few seconds) or "focus_lost" (every buffer when the
+# terminal window loses focus).
+auto_save = "off"
 # Pin the enclosing scope's header line at the top of the editor while
 # scrolling (sticky scroll).
 sticky_scroll = true

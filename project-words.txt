@@ -755,3 +755,5 @@ Majuscules
 mots
 modifiés
 relocalize
+# T628 (terminal protocol: TERM values)
+wezterm

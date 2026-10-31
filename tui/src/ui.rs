@@ -21,6 +21,7 @@ mod git_graph;
 mod help;
 mod hints;
 mod hl7;
+mod hyperlink;
 mod im;
 mod info_panels;
 mod large_file;
@@ -208,6 +209,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     // column; the editor draws a thread's ◆ over the diff/coverage bar on
     // that one line (see `Editor::set_comment_marks`).
     app.refresh_thread_marks_if_stale();
+    app.layout.hyperlink_regions.clear();
     let area = frame.area();
     // Paint the whole frame in the theme's background so every pane (and the gaps
     // between them) shares one background — important for the light theme.
@@ -308,8 +310,17 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
 
     draw_overlays(app, frame, area, rows[0]);
+    end_of_frame_passes(app, frame);
+}
+
+/// The passes over the finished frame, in order: right-to-left text, the
+/// single-color repaint, OSC 8 hyperlinks, and last the downsample of every
+/// color to what the terminal shows (T628).
+fn end_of_frame_passes(app: &App, frame: &mut Frame) {
     right_to_left_passes(app, frame);
     single_color_pass(frame);
+    hyperlink::apply(app, frame);
+    crate::theme::color_depth::downsample_buffer(frame.buffer_mut(), app.terminal_caps.color_depth);
 }
 
 /// The docks beside the editor, each only when shown: messages, IM, outline,
