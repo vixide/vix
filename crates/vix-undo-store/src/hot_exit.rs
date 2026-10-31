@@ -274,14 +274,14 @@ mod tests {
             .read(BackupKey::Untitled { workspace: "/w1", id: &a })
             .unwrap();
         assert_eq!(got.text, "one");
-        assert!(s.untitled_ids("/none").is_empty());
+        assert_eq!(s.untitled_ids("/none"), Vec::<String>::new());
         let _ = std::fs::remove_dir_all(s.root());
     }
 
     #[test]
     fn a_missing_directory_lists_nothing() {
         let s = store("missing");
-        assert!(s.untitled_ids("/w").is_empty());
+        assert_eq!(s.untitled_ids("/w"), Vec::<String>::new());
         assert!(s.read(BackupKey::File("/w/a")).is_none());
     }
 }

@@ -76,7 +76,7 @@ fn a_stale_backup_is_shown_as_a_diff_then_discarded() {
     app.open_initial(&file);
     app.on_key(key('d'));
     let view = app.diff_view.as_ref().expect("d opens the diff");
-    assert!(!view.lines.is_empty());
+    assert_ne!(view.lines.len(), 0, "the diff has lines");
     assert!(!prompt_open(&app), "the diff is on top");
     app.on_key(esc());
     assert!(app.diff_view.is_none());
