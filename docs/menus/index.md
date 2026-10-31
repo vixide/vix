@@ -248,6 +248,9 @@ Jujutsu (`jj`) — a Git-compatible VCS. Mirrors the Git menu's purpose using
 | Log ▸          | Submenu: Summary / Since 1 day/week/month ago / All (`git log …`) |
 | Grep…          | Prompt for a regex and `git grep` the repository         |
 | Branch ▸       | Submenu of branch commands (below)                       |
+| Stash / Stash Pop | Stash the working tree / restore the latest stash     |
+| Stash List…    | Choose a stash to show, apply, pop, or drop              |
+| Worktree ▸     | Submenu of worktree commands (below)                     |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |
@@ -263,6 +266,14 @@ The **Branch** submenu:
 | Merge…           | Choose a branch to merge into the current one         |
 | Delete…          | Prompt for a branch name and `git branch --delete` it |
 | Edit Description… | Prompt for text and set it via `git branch --edit-description` |
+
+The **Worktree** submenu:
+
+| Item    | Action                                                         |
+| ------- | -------------------------------------------------------------- |
+| Add…    | Prompt for a folder and add a worktree there on a new branch   |
+| List…   | Choose a worktree and switch the workspace to it               |
+| Remove… | Choose a linked worktree and remove it, after a confirmation   |
 
 ## IM menu
 

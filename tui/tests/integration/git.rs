@@ -970,3 +970,161 @@ fn git_graph_checkout_branch_and_cherry_pick_confirm_before_acting() {
     assert!(app.git_graph.is_none());
     fs::remove_dir_all(&dir).ok();
 }
+
+/// A fixture `git` for the T634 tests: isolated from the developer's global
+/// and system config on this command alone, never through the process env.
+fn t634_git(dir: &Path, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .current_dir(dir)
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A one-commit repository under `<unique>/repo`; its local config carries
+/// the identity and turns signing off, so the app's own git calls need no
+/// global setup.
+fn t634_repo(name: &str) -> PathBuf {
+    let base = unique_dir(name);
+    let dir = base.join("repo");
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    t634_git(&dir, &["init", "-q"]);
+    for (k, v) in [
+        ("user.name", "Vix Test"),
+        ("user.email", "test@example.invalid"),
+        ("commit.gpgsign", "false"),
+    ] {
+        t634_git(&dir, &["config", k, v]);
+    }
+    fs::write(dir.join("a.txt"), "one\n").unwrap();
+    t634_git(&dir, &["add", "a.txt"]);
+    t634_git(&dir, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+/// T634: Git → Stash List… shows, applies, pops and drops stashes, and a
+/// drop asks first.
+#[test]
+fn git_stash_list_chooser_shows_pops_and_drops_after_confirming() {
+    let dir = t634_repo("t634stash");
+    let file = dir.join("a.txt");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(&file, "one\ntwo\n").unwrap();
+    app.run_action("git.stash");
+    fs::write(&file, "one\nthree\n").unwrap();
+    app.run_action("git.stash");
+
+    app.run_action("git.stash_list");
+    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 2);
+
+    // `d` asks; `n` keeps the stash and brings the chooser back.
+    app.on_key(key('d'));
+    assert!(app.stash_chooser.is_none());
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(vix::app::ConfirmKind::GitStashDrop)
+    );
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none());
+    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 2);
+
+    // `d` then `y` drops the newest ("three").
+    app.on_key(key('d'));
+    app.on_key(key('y'));
+    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 1);
+
+    // `a` applies the remaining one and keeps it.
+    app.on_key(key('a'));
+    assert!(app.stash_chooser.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
+    t634_git(&dir, &["checkout", "--", "a.txt"]);
+
+    // Enter shows its diff in a read-only tab.
+    app.run_action("git.stash_list");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.stash_chooser.is_none());
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.path.as_deref(), Some(Path::new("stash@{0}")));
+    assert!(tab.text().contains("+two"));
+
+    // `p` pops it: the tree has "two" again and the list is empty, so the
+    // chooser closes.
+    app.run_action("git.stash_list");
+    app.on_key(key('p'));
+    assert!(app.stash_chooser.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
+
+    // No stashes: the chooser doesn't open.
+    app.run_action("git.stash_list");
+    assert!(app.stash_chooser.is_none());
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// T634: Git → Worktree adds, lists, switches to, and (after confirming)
+/// removes a worktree.
+#[test]
+fn git_worktree_add_list_switch_and_remove() {
+    let dir = t634_repo("t634wt");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+
+    app.run_action("git.worktree_add");
+    assert!(app.prompt.is_some());
+    for ch in "../wt-one".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    let wt = dir.parent().unwrap().join("wt-one");
+    assert!(wt.join("a.txt").is_file(), "{}", app.status);
+
+    app.run_action("git.worktree_list");
+    let c = app.worktree_chooser.as_ref().unwrap();
+    assert_eq!(c.worktrees.len(), 2);
+    assert_eq!(c.selected, 0, "the current worktree is highlighted");
+    assert_eq!(c.worktrees[1].branch(), Some("wt-one"));
+
+    // The main worktree can't be removed.
+    app.on_key(key('d'));
+    assert!(app.confirm.is_none());
+
+    // Remove mode: Enter asks, `y` removes, and the list comes back.
+    app.worktree_chooser = None;
+    app.run_action("git.worktree_remove");
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(vix::app::ConfirmKind::GitWorktreeRemove)
+    );
+    app.on_key(key('y'));
+    assert!(!wt.exists());
+    assert_eq!(app.worktree_chooser.as_ref().unwrap().worktrees.len(), 1);
+    app.worktree_chooser = None;
+
+    // Add another and switch to it through the project-switch path.
+    app.run_action("git.worktree_add");
+    for ch in "../wt-two".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    app.run_action("git.worktree_list");
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.worktree_chooser.is_none());
+    let two = dir.parent().unwrap().join("wt-two").canonicalize().unwrap();
+    assert_eq!(app.root.canonicalize().unwrap(), two);
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}

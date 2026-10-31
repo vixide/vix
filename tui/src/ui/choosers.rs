@@ -26,6 +26,81 @@ pub(super) fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
     );
 }
 
+/// **Git → Stash List…** (T634): one row per stash, `stash@{N}  message`.
+pub(super) fn draw_stash_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.stash_chooser.as_ref() else {
+        return;
+    };
+    let labels: Vec<String> = c
+        .entries
+        .iter()
+        .map(|e| format!("{}  {}", e.reference(), e.message))
+        .collect();
+    let hint = t!("ui.git_stash_hint");
+    app.layout.chooser = draw_list_chooser_sized(
+        frame,
+        area,
+        (&t!("ui.git_stash_list"), &hint),
+        &labels,
+        c.selected,
+        72,
+    );
+}
+
+/// **Git → Worktree** (T634): one row per worktree — path, branch (or a
+/// detached/bare tag), and its current/locked/missing marks.
+pub(super) fn draw_worktree_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.worktree_chooser.as_ref() else {
+        return;
+    };
+    let current = c.current(&app.root);
+    let labels: Vec<String> = c
+        .worktrees
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            let what = match &w.checkout {
+                crate::git::Checkout::Branch(b) => b.clone(),
+                crate::git::Checkout::Detached => {
+                    let sha = w.head.as_deref().unwrap_or("");
+                    format!(
+                        "{} {}",
+                        t!("ui.git_worktree_detached"),
+                        sha.get(..7).unwrap_or(sha)
+                    )
+                }
+                crate::git::Checkout::Bare => t!("ui.git_worktree_bare").to_string(),
+            };
+            let mut marks = Vec::new();
+            if current == Some(i) {
+                marks.push(t!("ui.git_worktree_current"));
+            }
+            if w.locked {
+                marks.push(t!("ui.git_worktree_locked"));
+            }
+            if w.prunable {
+                marks.push(t!("ui.git_worktree_missing"));
+            }
+            let marks = if marks.is_empty() {
+                String::new()
+            } else {
+                format!("  ({})", marks.join(", "))
+            };
+            format!("{}  [{what}]{marks}", w.path.display())
+        })
+        .collect();
+    let (title, hint) = if c.remove {
+        (
+            t!("ui.git_worktree_remove"),
+            t!("ui.git_worktree_remove_hint"),
+        )
+    } else {
+        (t!("ui.git_worktrees"), t!("ui.git_worktree_hint"))
+    };
+    app.layout.chooser =
+        draw_list_chooser_sized(frame, area, (&title, &hint), &labels, c.selected, 80);
+}
+
 pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::diff_view::Kind;
     let Some(d) = app.diff_view.as_ref() else {
@@ -525,7 +600,20 @@ fn draw_list_chooser(
     labels: &[String],
     selected: usize,
 ) -> Rect {
-    let width = 34u16.min(area.width);
+    draw_list_chooser_sized(frame, area, (title, hint), labels, selected, 34)
+}
+
+/// [`draw_list_chooser`] at `width` columns, for rows that carry more than a
+/// name (the T634 stash and worktree choosers).
+fn draw_list_chooser_sized(
+    frame: &mut Frame,
+    area: Rect,
+    (title, hint): (&str, &str),
+    labels: &[String],
+    selected: usize,
+    width: u16,
+) -> Rect {
+    let width = width.min(area.width);
     let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX) + 4).min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,

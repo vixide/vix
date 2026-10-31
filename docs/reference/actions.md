@@ -221,10 +221,14 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.revert_hunk` | Revert Hunk | Menu |
 | `git.stage_hunk` | Stage Hunk | Menu |
 | `git.stash` | Stash | Menu |
+| `git.stash_list` | Stash List… | Menu |
 | `git.stash_pop` | Stash Pop | Menu |
 | `git.status` | Status… | Menu |
 | `git.switch_branch` | Switch… | Menu |
 | `git.unstage_hunk` | Unstage Hunk | Menu |
+| `git.worktree_add` | Add… | Menu |
+| `git.worktree_list` | List… | Menu |
+| `git.worktree_remove` | Remove… | Menu |
 | `half_page_down` | Half Page Down | Catalog |
 | `half_page_up` | Half Page Up | Catalog |
 | `help.doctor` | Run Diagnostics | Menu |
@@ -764,4 +768,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**757 actions.**
+**761 actions.**

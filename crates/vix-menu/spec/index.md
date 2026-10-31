@@ -358,6 +358,9 @@ The database workbench; see [`crates/vix-db/spec/index.md`](../../vix-db/spec/in
 | Grep…           | Prompt for a regex and `git grep -n` the repository (to the dock) |
 | *— separator —* |                                                               |
 | Branch ▸        | Submenu of branch commands (below)                            |
+| Stash / Stash Pop | `git stash push` / `git stash pop`                          |
+| Stash List…     | Choose a stash to show, apply, pop, or drop (drop confirms; T634) |
+| Worktree ▸      | Submenu of worktree commands (below; T634)                    |
 | *— separator —* |                                                               |
 | Pull            | `git pull` (streamed to the bottom dock)                      |
 | Push            | `git push` (streamed to the bottom dock)                      |
@@ -375,6 +378,14 @@ The **Branch** submenu:
 | Merge…            | Choose a branch to merge into the current one                |
 | Delete…           | Prompt for a branch name and `git branch --delete` it        |
 | Edit Description… | Prompt for text, set via `git branch --edit-description` (a throwaway `GIT_EDITOR` writes it) |
+
+The **Worktree** submenu (T634; `crates/vix-git/spec/index.md`):
+
+| Item     | Action                                                                  |
+| -------- | ----------------------------------------------------------------------- |
+| Add…     | Prompt for a folder and `git worktree add` it on a new branch named after it (`git.worktree_add`) |
+| List…    | Choose a worktree to switch the workspace to; `d` removes one after a confirmation (`git.worktree_list`) |
+| Remove…  | Choose a linked worktree to remove, after a confirmation (`git.worktree_remove`) |
 
 ## IM menu
 
