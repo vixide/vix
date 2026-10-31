@@ -313,6 +313,26 @@ impl App {
         false
     }
 
+    /// The dashboard and QR-code boxes capture every key while open and close
+    /// on `Esc`/`Enter` (and `q` for the QR code). Returns `true` when one is
+    /// open. Split out of [`App::try_panel_key`] to keep it within the line
+    /// limit.
+    fn try_info_box_key(&mut self, key: KeyEvent) -> bool {
+        if self.dashboard.is_some() {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
+                self.close_dashboard();
+            }
+            return true;
+        }
+        if self.qrcode.is_some() {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+                self.qrcode = None;
+            }
+            return true;
+        }
+        false
+    }
+
     /// Route `key` to the lower-priority list/panel overlays (choosers, tool
     /// panels, prompt, palette, search, menu). Returns `true` when one consumed
     /// the key. Split out of [`App::try_overlay_key`] to keep both within the
@@ -366,16 +386,7 @@ impl App {
         panel!(snippets, snippets_key);
         panel!(vcard, vcard_key);
         panel!(contacts, contacts_key);
-        if self.dashboard.is_some() {
-            if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
-                self.close_dashboard();
-            }
-            return true;
-        }
-        if self.qrcode.is_some() {
-            if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
-                self.qrcode = None;
-            }
+        if self.try_info_box_key(key) {
             return true;
         }
         panel!(ai_diff, ai_diff_key);
