@@ -92,6 +92,7 @@ mod structural_replace;
 mod terminal;
 #[cfg(not(feature = "terminal"))]
 mod terminal_off;
+mod textobjects;
 mod trust;
 mod tutor;
 mod undo_tree;
@@ -1873,6 +1874,10 @@ pub enum ModalPending {
     G,
     /// Waiting for the register-name letter after `"` (e.g. `"a`).
     RegisterSelect,
+    /// Waiting for the textobject letter after `]` (`]f`, `]c`, `]a`, T616).
+    BracketNext,
+    /// Waiting for the textobject letter after `[` (`[f`, `[c`, `[a`, T616).
+    BracketPrev,
 }
 
 bitflags::bitflags! {
@@ -1975,6 +1980,10 @@ pub struct App {
     /// the pattern prompt is answered) the compiled pattern plus its
     /// original text, awaiting the replacement-template prompt.
     pending_structural: (bool, Option<(vix_structural_replace::Pattern, String)>),
+    /// Offline structural expansions and textobject selections, newest
+    /// last, so Shrink Selection can undo them without a language server
+    /// (T616).
+    node_expansions: Vec<textobjects::NodeExpansion>,
     /// Workspace-wide search panel, when open.
     pub(crate) workspace_search: Option<WorkspaceSearch>,
     /// Active jump-to-line labels: `(label, 0-based line)` for each visible line,
@@ -2728,6 +2737,7 @@ impl App {
             query_replace: None,
             structural_replace: None,
             pending_structural: (false, None),
+            node_expansions: Vec::new(),
             workspace_search: None,
             jump: None,
             prompt: None,
@@ -3187,7 +3197,10 @@ impl App {
         }
         // Go-menu navigation and Org → Contacts live in their own dispatchers
         // (keeps this function within the line limit).
-        if self.go_action(action) || self.contacts_action(action) || self.run_remote_action(action)
+        if self.go_action(action)
+            || self.contacts_action(action)
+            || self.run_remote_action(action)
+            || self.run_textobject_action(action)
         {
             return;
         }
@@ -4983,11 +4996,12 @@ impl App {
             self.lsp.request_selection_range(&path, line, character);
             return;
         }
-        // Offline fallback: expand to the enclosing Tree-sitter node (expand only).
+        // Offline fallback: expand to the enclosing Tree-sitter node; shrink
+        // undoes the last offline expansion (T616).
         if expand {
             self.expand_selection_to_node();
         } else {
-            self.status = t!("status.lsp_inactive").to_string();
+            self.shrink_selection_offline();
         }
     }
 
@@ -5007,7 +5021,8 @@ impl App {
     }
 
     /// Grow the active selection to the smallest enclosing Tree-sitter node
-    /// (offline structural selection). No-op without a parse tree.
+    /// (offline structural selection), remembering the old one for the
+    /// offline shrink. No-op without a parse tree.
     fn expand_selection_to_node(&mut self) {
         let Some(t) = self.editor.active_tab_mut() else {
             return;
@@ -5019,7 +5034,7 @@ impl App {
             })
         };
         match t.editor.code_ref().expand_to_node(s, e) {
-            Some((ns, ne)) => t.editor.set_selection_range(ns, ne),
+            Some((ns, ne)) => self.select_remembering(ns, ne),
             None => self.status = t!("status.no_node_selection").to_string(),
         }
     }

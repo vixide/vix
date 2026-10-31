@@ -95,6 +95,7 @@ jobs:
           cargo install cargo-hack --locked
           cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
           cargo test -p vix-tui --no-default-features
+          cargo test -p vix-editor-core --features syntax-all --lib textobject
           cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
           cargo test -p vix-tui --features cowork --lib cowork
           cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings

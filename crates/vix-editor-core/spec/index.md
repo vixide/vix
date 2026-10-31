@@ -90,6 +90,8 @@ stopped line was missing there; both renderers now share
 
 - [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,
   injections, the compiled-query cache, and incremental/background reparsing.
+- [Textobjects](textobjects/index.md) — function/class/parameter ranges and
+  next/previous motions from bundled `textobjects.scm` queries (T616).
 
 ## Catalog
 

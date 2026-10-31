@@ -114,6 +114,11 @@ The **Select** submenu, in menu order:
 | Select Line | | Select the cursor's whole line |
 | Select Paragraph | | Select the paragraph around the cursor (blank-line delimited) |
 | Select Section | | Select the section around the cursor (two or more blank lines delimit) |
+| *— separator —* | | |
+| Function (Inside) / (Around) | | Select the body, or the whole, of the function around the cursor (Tree-sitter textobject, T616) |
+| Class (Inside) / (Around) | | The same for a class, struct, enum, trait, interface or impl block |
+| Parameter (Inside) / (Around) | | The parameter or argument under the cursor; Around adds its separating comma |
+| *— separator —* | | |
 | Select All Occurrences | | Put a caret on every occurrence of the selection, or of the word at the cursor |
 | Column Select Up | `Alt+Shift+↑` | Extend a rectangular block of carets upward |
 | Column Select Down | `Alt+Shift+↓` | Extend a rectangular block of carets downward |
@@ -260,6 +265,7 @@ jumps). Actions are `nav.*` / `lsp.*` / `git.*`.
 | Next / Previous Change  | Jump between git hunks                                |
 | Recent Locations        | Position history back / forward                      |
 | Jump                    | Leap-style jump to a line by label                   |
+| Function ▸ / Class ▸    | Next / Previous function or class (Tree-sitter textobjects, T616; wraps at the file's ends) |
 | Matching Tag            | Jump to the matching HTML/XML tag                    |
 | Go to Percent / Byte    | Jump to a document percentage or byte offset         |
 

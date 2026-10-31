@@ -124,10 +124,16 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.section_end` | End | Menu |
 | `edit.section_start` | Start | Menu |
 | `edit.select_all_occurrences` | Select All Occurrences | Menu |
+| `edit.select_class_around` | Class (Around) | Menu |
+| `edit.select_class_inside` | Class (Inside) | Menu |
+| `edit.select_function_around` | Function (Around) | Menu |
+| `edit.select_function_inside` | Function (Inside) | Menu |
 | `edit.select_less` | Select Less | Menu |
 | `edit.select_line` | Select Line | Menu |
 | `edit.select_more` | Select More | Menu |
 | `edit.select_paragraph` | Select Paragraph | Menu |
+| `edit.select_parameter_around` | Parameter (Around) | Menu |
+| `edit.select_parameter_inside` | Parameter (Inside) | Menu |
 | `edit.select_section` | Select Section | Menu |
 | `edit.structural_replace` | Structural Replace… | Menu |
 | `edit.structural_replace_workspace` | Structural Replace in Workspace… | Menu |
@@ -353,11 +359,15 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `nav.line_next` | Next | Menu |
 | `nav.line_prev` | Previous | Menu |
 | `nav.matching_tag` | Matching Tag | Menu |
+| `nav.next_class` | Next | Menu |
+| `nav.next_function` | Next | Menu |
 | `nav.next_issue` | Next Issue | Menu |
 | `nav.outline` | Outline | Palette |
 | `nav.para_next` | Next | Menu |
 | `nav.para_prev` | Previous | Menu |
 | `nav.peek_definition` | Peek Definition | Menu |
+| `nav.prev_class` | Previous | Menu |
+| `nav.prev_function` | Previous | Menu |
 | `nav.prev_issue` | Previous Issue | Menu |
 | `nav.recent_locations` | Recent Locations… | Menu |
 | `nav.search_everywhere` | Search Everywhere | Menu |
@@ -769,4 +779,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**762 actions.**
+**772 actions.**

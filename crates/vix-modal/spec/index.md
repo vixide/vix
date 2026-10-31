@@ -290,6 +290,37 @@ tag objects (`it`/`at` for HTML/XML — `vix-tags`' matching-tag jump is a
 related but distinct feature already shipped elsewhere), custom
 user-defined objects.
 
+## Tree-sitter textobjects and motions (T616)
+
+On top of v1's delimiter objects, the engine binds the syntax-aware
+textobjects from `crates/vix-editor-core/spec/textobjects/index.md`, with
+the letters nvim-treesitter-textobjects configurations conventionally use:
+
+| Keys | Object / motion |
+| --- | --- |
+| `if` / `af` | the function around the cursor: its body / the whole function |
+| `ic` / `ac` | the class (struct, enum, trait, impl, interface, …) around the cursor |
+| `ia` / `aa` | the parameter or argument under the cursor / with its separating comma |
+| `]f` / `[f` (also `]m` / `[m`) | to the start of the next / previous function |
+| `]c` / `[c` | to the start of the next / previous class |
+| `]a` / `[a` | to the start of the next / previous parameter |
+
+- After an operator (`daf`, `cif`, `yac`, `d]f`, …) they compose exactly like
+  the delimiter objects and motions: an object is a character-wise range, a
+  `]`/`[` motion is exclusive like `w`.
+- **Counts.** `2daf` acts on the second enclosing function (outward from the
+  innermost); `3]f` jumps three functions ahead. A count before the operator
+  and one after multiply, as everywhere else.
+- **Visual mode** gains `i`/`a` + any object (this one and v1's — `viw`,
+  `vi(` work too). For the Tree-sitter objects, repeating grows outward:
+  after `vaf`, a second `af` selects the function enclosing that one.
+- The motions wrap at the buffer's ends, like the Go menu's commands.
+- These are not pure functions of `text: &str` like the rest of this crate:
+  they need the parse tree, so the host (`tui/src/app/modal.rs`) asks
+  `vix-editor-core` for the range and feeds it to the same operator path.
+  Vim's own `]]`/`[[` section motions and `]c` (next diff hunk, in diff
+  mode) are not bound; `]c` means class here, as in those configurations.
+
 ## v1 cut line, summarized
 
 Explicit, per `tasks.md` T111 ("no ex commands, no macros — Vix already has

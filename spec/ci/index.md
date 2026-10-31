@@ -209,7 +209,10 @@ runs the same three (the `cargo hack` step is skipped with a note when
 `jupyter` feature is handled the same way: `cargo clippy --features jupyter
 --all-targets -- -D warnings`, `cargo test --features jupyter --lib jupyter`
 and `cargo test --features jupyter --test jupyter` (the App against an
-in-process fake kernel; no Python). The checks that read source text or render the
+in-process fake kernel; no Python). The same job (and `scripts/check`) runs
+`cargo test -p vix-editor-core --features syntax-all --lib textobject` (T616):
+it compiles every bundled `textobjects.scm` against its grammar and runs the
+per-language fixtures, which the default grammar set would skip. The checks that read source text or render the
 whole product — `tui/tests/action_catalog.rs` (via `dispatch_scan`), the menu-bar
 insta snapshots, `tui/tests/integration/menu.rs`'s Alt-letter test, and the
 `list_commands --write` / `generate_man` diffs — are **default-feature only**: they

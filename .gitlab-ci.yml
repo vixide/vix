@@ -151,6 +151,8 @@ feature-combos:
     - cargo install cargo-hack --locked
     - cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
     - cargo test -p vix-tui --no-default-features
+    # Every grammar's textobjects query (T616).
+    - cargo test -p vix-editor-core --features syntax-all --lib textobject
     # The opt-in `cowork` feature is in no default build: lint and test it here.
     - cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
     - cargo test -p vix-tui --features cowork --lib cowork

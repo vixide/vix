@@ -30,6 +30,8 @@ pub mod remote;
 pub mod render;
 /// Text selection ranges and selection-snapping modes.
 pub mod selection;
+/// Tree-sitter textobjects: function/class/parameter ranges and motions.
+pub mod textobject;
 /// Language detection and indentation, comment, color, and text helpers.
 pub mod utils;
 pub mod virtual_text;

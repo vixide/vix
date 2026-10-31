@@ -430,6 +430,33 @@ const GO_SECTION: &[Item] = &[
     Item::leaf("menu.go.number", "nav.goto_section", ""),
 ];
 
+/// Go → Function: next/previous function by Tree-sitter textobject (T616).
+const GO_FUNCTION: &[Item] = &[
+    Item::leaf_shared_help(
+        "menu.go.next",
+        "nav.next_function",
+        "",
+        "menu.go.next_function",
+    ),
+    Item::leaf_shared_help(
+        "menu.go.previous",
+        "nav.prev_function",
+        "",
+        "menu.go.prev_function",
+    ),
+];
+
+/// Go → Class: next/previous class-like type by Tree-sitter textobject (T616).
+const GO_CLASS: &[Item] = &[
+    Item::leaf_shared_help("menu.go.next", "nav.next_class", "", "menu.go.next_class"),
+    Item::leaf_shared_help(
+        "menu.go.previous",
+        "nav.prev_class",
+        "",
+        "menu.go.prev_class",
+    ),
+];
+
 /// Go → File: start/end of the buffer.
 const GO_FILE: &[Item] = &[
     Item::leaf("menu.go.start", "edit.go_first", ""),
@@ -464,6 +491,8 @@ const GO: &[Item] = &[
     Item::sub("menu.go.sentence", GO_SENTENCE),
     Item::sub("menu.go.paragraph", GO_PARAGRAPH),
     Item::sub("menu.go.section", GO_SECTION),
+    Item::sub("menu.go.function", GO_FUNCTION),
+    Item::sub("menu.go.class", GO_CLASS),
     Item::sub("menu.go.file", GO_FILE),
     SEP,
     Item::leaf("menu.go.matching_tag", "nav.matching_tag", ""),
@@ -542,6 +571,38 @@ const EDIT_SELECT: &[Item] = &[
         "",
     ),
     Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
+    SEP,
+    Item::leaf(
+        "menu.item.edit.select_function_inside",
+        "edit.select_function_inside",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_function_around",
+        "edit.select_function_around",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_class_inside",
+        "edit.select_class_inside",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_class_around",
+        "edit.select_class_around",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_parameter_inside",
+        "edit.select_parameter_inside",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_parameter_around",
+        "edit.select_parameter_around",
+        "",
+    ),
+    SEP,
     Item::leaf(
         "menu.item.edit.select_all_occurrences",
         "edit.select_all_occurrences",
