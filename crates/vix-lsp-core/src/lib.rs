@@ -114,6 +114,10 @@ pub struct CompletionItem {
     /// `commitCharacters`: typing one of these while the item is selected
     /// accepts it before the character is inserted.
     pub commit_chars: Vec<String>,
+    /// The LSP `insertTextFormat` (T613): `1` plain text, `2` a snippet with
+    /// `$1`/`${1:x}`/`$0` tabstops; `None` when the server sent none (plain
+    /// text). See [`CompletionItem::is_snippet`].
+    pub insert_text_format: Option<u32>,
 }
 
 impl CompletionItem {
@@ -141,6 +145,13 @@ impl CompletionItem {
     #[must_use]
     pub fn sort_key(&self) -> &str {
         self.sort_text.as_deref().unwrap_or(&self.label)
+    }
+
+    /// Whether [`CompletionItem::insert_text`] is a snippet body
+    /// (`insertTextFormat` 2) rather than plain text.
+    #[must_use]
+    pub fn is_snippet(&self) -> bool {
+        self.insert_text_format == Some(2)
     }
 
     /// Whether typing `ch` commits (accepts) this item.

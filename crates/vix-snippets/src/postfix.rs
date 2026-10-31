@@ -172,9 +172,12 @@ fn item_name(expr: &str) -> String {
     }
 }
 
-/// Escape snippet metacharacters in `s`.
+/// Escape snippet metacharacters in `s` (`\\`, `$`, and `}`, which would
+/// otherwise close an enclosing placeholder).
 fn escape(s: &str) -> String {
-    s.replace('$', "\\$")
+    s.replace('\\', "\\\\")
+        .replace('$', "\\$")
+        .replace('}', "\\}")
 }
 
 /// Expand a postfix template at the end of `before` (the text of the line up
@@ -256,6 +259,15 @@ mod tests {
         assert_eq!(e.body, "console.log(\\$el);$0");
         // And the snippet parser reads it back as a literal dollar.
         assert!(vix_snippet_tool::parse(&e.body).text.contains("$el"));
+        // Backslashes and braces round-trip too.
+        let e = expand("m[\"a\\\\}\"].log", Family::Script).unwrap();
+        assert!(
+            vix_snippet_tool::parse(&e.body)
+                .text
+                .contains("m[\"a\\\\}\"]"),
+            "{}",
+            e.body
+        );
     }
 
     #[test]

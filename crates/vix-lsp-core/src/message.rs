@@ -78,7 +78,8 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // requests carry a `CompletionContext`.
                 "completion": {
                     "completionItem": {
-                        "snippetSupport": false,
+                        // T613: format-2 bodies start a tabstop session.
+                        "snippetSupport": true,
                         "documentationFormat": ["plaintext"],
                         "insertReplaceSupport": true,
                         "commitCharactersSupport": true
@@ -1195,6 +1196,10 @@ fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
             .and_then(Value::as_u64)
             .and_then(|k| u32::try_from(k).ok()),
         commit_chars,
+        insert_text_format: v
+            .get("insertTextFormat")
+            .and_then(Value::as_u64)
+            .and_then(|f| u32::try_from(f).ok()),
         label,
         insert_text,
     })
@@ -1849,6 +1854,24 @@ mod tests {
         assert_eq!(vec.additional_edits.len(), 0);
         // A bare array is a complete list.
         assert!(!parse_completion(&json!([{ "label": "x" }])).is_incomplete);
+    }
+
+    #[test]
+    fn completion_keeps_insert_text_format_and_advertises_snippets() {
+        let list = parse_completion(&json!([
+            { "label": "fn", "insertText": "fn ${1:name}() {$0}", "insertTextFormat": 2 },
+            { "label": "plain", "insertTextFormat": 1 },
+            { "label": "bare" }
+        ]));
+        assert!(list.items[0].is_snippet());
+        assert_eq!(list.items[0].insert_text, "fn ${1:name}() {$0}");
+        assert_eq!(list.items[1].insert_text_format, Some(1));
+        assert!(!list.items[1].is_snippet());
+        assert_eq!(list.items[2].insert_text_format, None);
+        let init = initialize_params(None, &[]);
+        let snippets =
+            &init["capabilities"]["textDocument"]["completion"]["completionItem"]["snippetSupport"];
+        assert_eq!(snippets, &json!(true));
     }
 
     #[test]

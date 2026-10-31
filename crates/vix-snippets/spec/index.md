@@ -67,7 +67,17 @@ The body uses the TextMate/VS Code tabstop syntax:
 - `${1:placeholder}` — a tabstop pre-filled with `placeholder` (selected when
   reached, so typing replaces it).
 - `$0` — the final cursor position (visited last).
-- `\$` — a literal dollar sign.
+- `${1:outer ${2:inner}}` — placeholders nest: Tab visits `$1` (selecting
+  the whole `outer inner`), then the nested `$2`. Typing over `$1` removes
+  the nested `$2` with it, so Tab then skips it (T613).
+- `${1|one,two,three|}` — a choice, inserted as its first option.
+- A number used twice (a mirror, `${1:x} = $1`) is visited once, at its
+  first occurrence; the other copies are plain text.
+- `\$`, `\}`, `\\` — a literal dollar sign, closing brace, backslash.
+- A malformed construct (an unclosed `${1:`) is inserted as literal text.
+- `$NAME` variables are literal text in snippet files; only LSP snippet
+  completions resolve them (see the
+  [lsp spec](../../vix-lsp/spec/index.md#snippet-completions-t613)).
 - `\t` / `\n` in JSON strings are a literal tab / newline in the body.
 
 Interpolated shell code and `\u` escapes are **not** supported.
