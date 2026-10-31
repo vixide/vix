@@ -643,7 +643,7 @@ impl App {
         // T652: sync first so the request (and the version its reply is
         // checked against) reflects the buffer as it is now.
         self.lsp_sync_active();
-        let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
+        let tab_size = u32::try_from(self.buffer_settings().tab_width).unwrap_or(4);
         let enc = self.lsp.encoding_for(&path);
         let sel = self.editor.active_tab_mut().and_then(|t| {
             let s = t.editor.get_selection()?;

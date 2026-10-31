@@ -40,6 +40,7 @@ mod modal;
 mod org;
 mod palette;
 mod panels;
+mod project_settings;
 mod save;
 #[cfg(feature = "script")]
 mod scripting;
