@@ -190,6 +190,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.reopen_closed", "file.reopen_closed"),
     ("cmd.quit", "file.quit"),
     ("cmd.undo", "edit.undo"),
+    ("cmd.undo_tree", "edit.undo_tree"),
     ("cmd.redo", "edit.redo"),
     ("cmd.select_all", "edit.select_all"),
     ("cmd.select_all_occurrences", "edit.select_all_occurrences"),

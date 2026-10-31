@@ -1230,6 +1230,41 @@ impl Editor {
         self.code.switch_undo_branch()
     }
 
+    /// Move the buffer to undo-tree state `seq` (see
+    /// [`History::nodes`](crate::history::History::nodes)): undo up to the
+    /// common ancestor, then redo down `seq`'s branch, so the text and the
+    /// history's current state move together. The cursor lands where the last
+    /// step's undo or redo puts it.
+    ///
+    /// Returns `false` and changes nothing when `seq` is not a live state, or
+    /// while the edit log is on (a shared buffer, where local undo is off).
+    pub fn goto_undo_state(&mut self, seq: usize) -> bool {
+        if self.code.is_edit_logging() {
+            return false;
+        }
+        let Some(path) = self.code.history().path_to(seq) else {
+            return false;
+        };
+        while !path.contains(&self.code.history().current()) {
+            let before = self.code.history().current();
+            self.apply(crate::actions::Undo {});
+            if self.code.history().current() == before {
+                return false;
+            }
+        }
+        let here = self.code.history().current();
+        let Some(pos) = path.iter().position(|&n| n == here) else {
+            return false;
+        };
+        for &next in &path[pos + 1..] {
+            if !self.code.select_redo_branch(next) {
+                return false;
+            }
+            self.apply(crate::actions::Redo {});
+        }
+        true
+    }
+
     /// A counter that increases on every content edit, for cheap change detection
     /// (e.g. deciding when to push a `didChange` to a language server).
     #[must_use]
@@ -1436,5 +1471,34 @@ mod tests {
         assert!(e.is_line_hidden(4), "outer fold stays");
         assert!(e.unfold(0) && !e.has_folds());
         assert!(!e.fold(5), "no range covers line 5");
+    }
+
+    /// T638: `goto_undo_state` reaches any state in the tree, across branches,
+    /// and keeps the history's current state in step with the text.
+    #[test]
+    fn goto_undo_state_crosses_branches() {
+        let mut e = Editor::new("text", "x", Vec::new()).unwrap();
+        e.set_content("a"); // 1
+        e.set_content("ab"); // 2
+        e.apply(crate::actions::Undo);
+        e.set_content("ac"); // 3, a sibling branch of 2
+        assert!(e.goto_undo_state(2));
+        assert_eq!(e.get_content(), "ab");
+        assert_eq!(e.code_ref().history().current(), 2);
+        assert!(e.goto_undo_state(0));
+        assert_eq!(e.get_content(), "x");
+        assert!(e.goto_undo_state(3));
+        assert_eq!(e.get_content(), "ac");
+        assert!(!e.goto_undo_state(42), "no such state");
+        assert_eq!(e.get_content(), "ac");
+    }
+
+    #[test]
+    fn goto_undo_state_refuses_while_shared() {
+        let mut e = Editor::new("text", "x", Vec::new()).unwrap();
+        e.set_content("y");
+        e.start_edit_log();
+        assert!(!e.goto_undo_state(0));
+        assert_eq!(e.get_content(), "y");
     }
 }

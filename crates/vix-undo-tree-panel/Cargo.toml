@@ -1,0 +1,14 @@
+[package]
+name = "vix-undo-tree-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Draw a buffer's undo tree as an ASCII graph, preview any state live by moving the selection, then keep it (Enter) or go back to where you started (Esc)."
+
+[dependencies]
+vix-list-state = { workspace = true }
+
+[lints]
+workspace = true

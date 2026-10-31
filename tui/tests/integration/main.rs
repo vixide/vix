@@ -48,4 +48,5 @@ mod scripting;
 mod structural_replace;
 mod themes;
 mod tutor;
+mod undo_tree;
 mod workspace;

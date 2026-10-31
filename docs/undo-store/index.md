@@ -8,7 +8,8 @@ closing and reopening the file, across separate runs of Vix.
 
 Vix's undo is a branch-preserving *tree*, not a simple linear stack (see
 **Edit → Switch Undo Branch**, `edit.undo_branch`, for moving between
-branches). Persistent undo saves that whole tree to disk and restores it the
+branches, and [**Edit → Undo Tree…**](../undo-tree/index.md) to see the
+tree and jump to any state in it). Persistent undo saves that whole tree to disk and restores it the
 next time the same file is opened, so an undo history you built up in a
 previous session is still there — you can undo past the point where you last
 saved, even after quitting and relaunching Vix.

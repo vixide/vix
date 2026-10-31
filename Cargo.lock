@@ -7163,6 +7163,7 @@ dependencies = [
  "vix-todo-tree",
  "vix-tutor",
  "vix-undo-store",
+ "vix-undo-tree-panel",
  "vix-unit-converter-tool",
  "vix-url-tool",
  "vix-uuid-tool",
@@ -7193,6 +7194,13 @@ dependencies = [
  "vix-editor-core",
  "vix-fileops",
  "vix-settings",
+]
+
+[[package]]
+name = "vix-undo-tree-panel"
+version = "2.0.0"
+dependencies = [
+ "vix-list-state",
 ]
 
 [[package]]

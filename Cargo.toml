@@ -290,6 +290,7 @@ vix-theme-model = { path = "crates/vix-theme-model", version = "2.0.0" }
 vix-time-zone-model = { path = "crates/vix-time-zone-model", version = "2.0.0" }
 vix-tutor = { path = "crates/vix-tutor", version = "2.0.0" }
 vix-undo-store = { path = "crates/vix-undo-store", version = "2.0.0" }
+vix-undo-tree-panel = { path = "crates/vix-undo-tree-panel", version = "2.0.0" }
 vix-unit-converter-tool = { path = "crates/vix-unit-converter-tool", version = "2.0.0" }
 vix-url-tool = { path = "crates/vix-url-tool", version = "2.0.0" }
 vix-uuid-tool = { path = "crates/vix-uuid-tool", version = "2.0.0" }
