@@ -74,6 +74,7 @@ mod org_table;
 mod picker_panels;
 mod pipe;
 mod prettier;
+mod project_settings;
 mod remote_search;
 mod remote_session;
 mod roam;
@@ -87,6 +88,7 @@ mod structural_replace;
 mod terminal;
 #[cfg(not(feature = "terminal"))]
 mod terminal_off;
+mod trust;
 mod tutor;
 
 use std::collections::VecDeque;
@@ -822,12 +824,17 @@ pub struct Confirm {
     pub kind: ConfirmKind,
 }
 
-/// A pending "trust this workspace's scripts?" decision (T132), shown once
-/// per untrusted workspace that has at least one project script.
+/// A pending "trust this workspace?" decision (T132, T627), shown once per
+/// untrusted workspace that has at least one project script or a project
+/// settings file.
+#[non_exhaustive]
 pub struct ScriptTrustPrompt {
     /// How many `.rhai` files are waiting under `.vix/scripts/`, unloaded
     /// until this prompt is answered.
     pub count: usize,
+    /// Whether `.vix/settings.toml` is waiting too, unapplied until this
+    /// prompt is answered (T627).
+    pub settings: bool,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):
@@ -1930,8 +1937,11 @@ pub struct App {
     /// can backdate it instead of sleeping. (Kept here rather than on
     /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
     /// change.)
-    #[cfg(feature = "script")]
     pub(crate) script_trust_opened_at: Option<std::time::Instant>,
+    /// The project settings layer in effect (T627), when this workspace's
+    /// `.vix/settings.toml` was merged into [`App::settings`]; `None` when
+    /// [`App::settings`] is the user settings alone.
+    project_settings: Option<Box<project_settings::ProjectLayer>>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub(crate) replace_confirm: Option<ReplaceConfirm>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
@@ -2642,8 +2652,8 @@ impl App {
             confirm: None,
             save_as_overwrite: None,
             script_trust: None,
-            #[cfg(feature = "script")]
             script_trust_opened_at: None,
+            project_settings: None,
             replace_confirm: None,
             wgrep_baseline: None,
             wgrep_confirm: None,
@@ -4179,20 +4189,26 @@ impl App {
         if !self.write_active_to_disk() {
             return;
         }
-        // T626: saving the settings file applies it live.
+        // T626: saving the settings file applies it live; T627: so does
+        // saving the project settings file.
         if self
             .active_path()
-            .is_some_and(|p| self.is_settings_file(&p))
+            .is_some_and(|p| self.is_settings_file(&p) || self.is_project_settings_file(&p))
         {
             self.reload_settings_from_disk();
         }
         // Format on save: re-format via the language server, then re-save once the
         // edits land (see `apply_lsp_edits`). The plain save above already wrote
         // the file, so it is never lost if formatting is slow or unsupported.
-        if self.settings.save.format_on_save && self.prettier_format_on_save() {
+        // Both read the buffer's language settings (T627).
+        let (format_on_save, tab_width) = {
+            let s = self.buffer_settings();
+            (s.save.format_on_save, s.tab_width)
+        };
+        if format_on_save && self.prettier_format_on_save() {
             return;
         }
-        if self.settings.save.format_on_save
+        if format_on_save
             && let Some(p) = self.active_path()
             && self.lsp.handles(&p)
         {
@@ -4200,7 +4216,7 @@ impl App {
             // Sync first, so the request carries the version that was just
             // saved and its reply isn't judged stale against it (T652).
             self.lsp_sync_active();
-            let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
+            let tab_size = u32::try_from(tab_width).unwrap_or(4);
             self.lsp.request_formatting(&p, tab_size);
         }
     }
@@ -4336,11 +4352,13 @@ impl App {
         }
     }
 
-    /// On-save normalization options derived from the current settings.
+    /// On-save normalization options derived from the active buffer's
+    /// settings (its language's overrides included, T627).
     fn save_options(&self) -> crate::editor::SaveOptions {
+        let settings = self.buffer_settings();
         let mut opts = crate::editor::SaveOptions {
-            trim_trailing_whitespace: self.settings.save.trim_trailing_whitespace,
-            ensure_final_newline: self.settings.save.ensure_final_newline,
+            trim_trailing_whitespace: settings.save.trim_trailing_whitespace,
+            ensure_final_newline: settings.save.ensure_final_newline,
         };
         // Let the active file's .editorconfig override the global on-save rules.
         if self.settings.typing.editorconfig
@@ -4672,7 +4690,7 @@ impl App {
     /// non-blank lines holding it). No-op (with a status note) when the text is
     /// already wrapped or the cursor is not in a paragraph.
     fn wrap_text(&mut self) {
-        let width = self.settings.wrap_column;
+        let width = self.buffer_settings().wrap_column;
         let selected = self
             .editor
             .active_tab_mut()
@@ -8416,16 +8434,36 @@ impl App {
         }
     }
 
-    /// Apply the `.editorconfig` indent (style/size) for `path` to the active tab,
-    /// when `EditorConfig` support is enabled and the file's config specifies one.
+    /// Apply the active tab's per-buffer settings: its language's overrides
+    /// (T627) for indent and display, then the `.editorconfig` indent
+    /// (style/size) for `path`, when `EditorConfig` support is enabled and
+    /// the file's config specifies one.
     fn apply_editorconfig_indent(&mut self, path: &Path) {
-        let auto_pair = self.settings.typing.auto_pair;
-        let rainbow = self.settings.editor_visual.rainbow_brackets;
-        let relative = self.settings.gutter.relative_line_numbers;
+        let settings = self.buffer_settings();
+        let auto_pair = settings.typing.auto_pair;
+        let rainbow = settings.editor_visual.rainbow_brackets;
+        let relative = settings.gutter.relative_line_numbers;
+        // Only a language override touches indent and display: otherwise the
+        // tab keeps what the editor gave it (and any View toggle since).
+        let language = matches!(settings, std::borrow::Cow::Owned(_)).then(|| {
+            (
+                settings.indent_string(),
+                settings.gutter.line_numbers,
+                settings.gutter.show_whitespace,
+                settings.editor_visual.soft_wrap,
+            )
+        });
+        drop(settings);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
             tab.editor.set_rainbow_brackets(rainbow);
             tab.editor.set_relative_line_numbers(relative);
+            if let Some((indent, numbers, whitespace, wrap)) = language {
+                tab.editor.set_indent(Some(indent));
+                tab.editor.show_line_numbers(numbers);
+                tab.editor.show_whitespace(whitespace);
+                tab.editor.set_soft_wrap(wrap);
+            }
         }
         if !self.settings.typing.editorconfig {
             return;

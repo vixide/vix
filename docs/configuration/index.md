@@ -178,6 +178,51 @@ its inner edge), and
 choosing a theme (**View → Theme…**), language (**View → Locale…**), or keymap
 (**View → Keymap…**).
 
+## Project and language settings
+
+A workspace can carry its own settings in `<root>/.vix/settings.toml`, in the
+same format as `config.toml`, naming only the keys it changes. A
+`[languages.<id>]` table sets per-language values, in either file, for each
+of Vix's language ids (`rust`, `python`, `markdown`, `shell`, `text`, …):
+
+```toml
+# <root>/.vix/settings.toml
+tab_width = 2
+format_on_save = true
+
+[languages.python]
+tab_width = 4
+
+[languages.markdown]
+soft_wrap = true
+trim_trailing_whitespace = false
+```
+
+Later layers win: built-in defaults, then your `config.toml`, then the
+project file, then the buffer's language table. Tables merge key by key, so
+a project's `[languages.python]` adds to yours rather than replacing it;
+any other value replaces yours whole.
+
+- **Trust first.** A project file can change which commands Vix runs, so it
+  applies only after you trust the workspace, at the same prompt that asks
+  about `.vix/scripts/` ("Trust Workspace?"). Until then, or after **N**, it
+  is ignored. A remote (SSH) workspace's project file is never read.
+- **Per-language keys** are the ones about a single buffer: `indent_style`,
+  `tab_width`, `wrap_column`, `trim_trailing_whitespace`,
+  `ensure_final_newline`, `format_on_save`, `soft_wrap`, `show_whitespace`,
+  `line_numbers`, `relative_line_numbers`, `auto_pair` and
+  `rainbow_brackets`. Other keys in a language table are reported and
+  ignored. A file's `.editorconfig` still wins for indentation and the
+  on-save rules.
+- **Unknown keys** in the project file (a typo, or a key from a newer Vix)
+  are reported in the message drawer and ignored; a value of the wrong type
+  makes Vix ignore the whole project file and say why.
+- **Your file stays yours.** Changes made inside Vix are saved to
+  `config.toml`, never to the project file, and the project's values are
+  never copied into `config.toml`.
+- **Live reload.** Saving `.vix/settings.toml` (or `config.toml`) in Vix
+  applies it at once, as does **Vix → Reload Settings**.
+
 ## Custom themes directory
 
 Custom JSON themes live next to the config file, in a `tui/themes/` subdirectory
