@@ -59,7 +59,10 @@ fn a_crashed_buffer_round_trips_through_its_backup() {
     app.on_key(key('r'));
     assert!(!prompt_open(&app));
     assert_eq!(active_text(&app), "two\n");
-    assert!(app.editor.active_tab().unwrap().dirty, "recovered, not saved");
+    assert!(
+        app.editor.active_tab().unwrap().dirty,
+        "recovered, not saved"
+    );
     assert_eq!(fs::read_to_string(&file).unwrap(), "one\n");
     assert!(!app.recovery_pending());
 }
@@ -206,5 +209,8 @@ fn without_an_explicit_directory_backups_follow_the_session_file() {
     let _ = fs::remove_dir_all(&store);
     let mut again = app_at(&dir);
     again.open_initial(&file);
-    assert!(!prompt_open(&again), "a different session file, a different store");
+    assert!(
+        !prompt_open(&again),
+        "a different session file, a different store"
+    );
 }

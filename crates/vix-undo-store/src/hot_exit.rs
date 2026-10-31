@@ -265,13 +265,30 @@ mod tests {
         let b = new_session_id();
         assert_ne!(a, b);
         assert!(valid_id(&a));
-        s.write(BackupKey::Untitled { workspace: "/w1", id: &a }, "one").unwrap();
-        s.write(BackupKey::Untitled { workspace: "/w2", id: &b }, "two").unwrap();
+        s.write(
+            BackupKey::Untitled {
+                workspace: "/w1",
+                id: &a,
+            },
+            "one",
+        )
+        .unwrap();
+        s.write(
+            BackupKey::Untitled {
+                workspace: "/w2",
+                id: &b,
+            },
+            "two",
+        )
+        .unwrap();
         s.write(BackupKey::File("/w1/x"), "file").unwrap();
         assert_eq!(s.untitled_ids("/w1"), vec![a.clone()]);
         assert_eq!(s.untitled_ids("/w2"), vec![b]);
         let got = s
-            .read(BackupKey::Untitled { workspace: "/w1", id: &a })
+            .read(BackupKey::Untitled {
+                workspace: "/w1",
+                id: &a,
+            })
             .unwrap();
         assert_eq!(got.text, "one");
         assert_eq!(s.untitled_ids("/none"), Vec::<String>::new());
