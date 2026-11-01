@@ -141,6 +141,11 @@ impl App {
                     .map(|(line, m)| (line, mark_hex(m)))
                     .collect();
                 self.editor.tabs[i].editor.set_gutter_marks(marks);
+                // Filler rows (T671) keep the shorter side of each change
+                // row-aligned with the longer one.
+                self.editor.tabs[i]
+                    .editor
+                    .set_filler_rows(compare::fillers(&c.hunks, side));
             }
         }
         let Some((side, l, r)) = self.compare_side() else {
@@ -290,6 +295,7 @@ impl App {
         };
         for i in [l, r] {
             self.editor.tabs[i].editor.clear_gutter_marks();
+            self.editor.tabs[i].editor.clear_filler_rows();
         }
         self.compare = None;
         self.editor.split_root = None;

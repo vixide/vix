@@ -18,8 +18,8 @@ fn cursor_screen_yx(app: &App) -> Option<(u16, u16)> {
     let area = app.layout.editor;
     let t = app.editor.active_tab()?;
     let (line, col) = app.editor.cursor_1based();
-    let off_y = t.editor.get_offset_y();
-    let y = area.y + u16::try_from(line.saturating_sub(1).saturating_sub(off_y)).unwrap_or(0);
+    let row = t.editor.display_row(line.saturating_sub(1));
+    let y = area.y + u16::try_from(row).unwrap_or(0);
     let x = area.x
         + u16::try_from(col.saturating_sub(1))
             .unwrap_or(0)

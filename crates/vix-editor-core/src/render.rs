@@ -208,15 +208,18 @@ impl Editor {
         if line < self.offset_y {
             return None;
         }
-        let row = if self.has_folds() {
-            if self.is_line_hidden(line) {
-                return None;
-            }
+        let row = if !self.has_folds() && self.fillers.is_empty() {
+            line - self.offset_y
+        } else if self.is_line_hidden(line) {
+            return None;
+        } else {
             (self.offset_y..line)
                 .filter(|&l| !self.is_line_hidden(l))
                 .count()
-        } else {
-            line - self.offset_y
+                + (self.offset_y..=line)
+                    .filter(|&l| !self.is_line_hidden(l))
+                    .map(|l| self.filler_before(l))
+                    .sum::<usize>()
         };
         let draw_y = area
             .top()
@@ -226,23 +229,60 @@ impl Editor {
 
     /// The logical line drawn at screen row `screen_y` (0-based within the view),
     /// accounting for folds. With no active folds this is `offset_y + screen_y`.
-    fn line_at_row(&self, screen_y: usize) -> Option<usize> {
+    pub(crate) fn line_at_row(&self, screen_y: usize) -> Option<usize> {
+        self.row_info(screen_y).map(|(line, _)| line)
+    }
+
+    /// The line at screen row `screen_y` and whether that row is a filler (T671)
+    /// rather than the line's own row. A filler row reports the next real line
+    /// after it. `None` past the end of the text.
+    fn row_info(&self, screen_y: usize) -> Option<(usize, bool)> {
         let total = self.code_ref().len_lines();
-        if !self.has_folds() {
+        if !self.has_folds() && self.fillers.is_empty() {
             let line = self.offset_y + screen_y;
-            return (line < total).then_some(line);
+            return (line < total).then_some((line, false));
         }
         let mut count = 0;
         for line in self.offset_y..total {
             if self.is_line_hidden(line) {
                 continue;
             }
+            count += self.filler_before(line);
+            if screen_y < count {
+                return Some((line, true));
+            }
             if count == screen_y {
-                return Some(line);
+                return Some((line, false));
             }
             count += 1;
         }
         None
+    }
+
+    /// Whether screen row `screen_y` is a filler row.
+    fn row_is_filler(&self, screen_y: usize) -> bool {
+        self.row_info(screen_y).is_some_and(|(_, f)| f)
+    }
+
+    /// Draw the filler rows (T671) due just before `line`, starting at view row
+    /// `row`; returns the next free row.
+    fn draw_filler_rows(&self, area: Rect, buf: &mut Buffer, mut row: u16, line: usize) -> u16 {
+        let text_x = area
+            .left()
+            .saturating_add(u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX));
+        for _ in 0..self.filler_before(line) {
+            let y = area.top().saturating_add(row);
+            if y >= area.bottom() {
+                break;
+            }
+            for x in text_x..area.right() {
+                buf[(x, y)]
+                    .set_symbol("\u{2571}")
+                    .set_style(self.line_number_style);
+            }
+            row = row.saturating_add(1);
+        }
+        row
     }
 
     /// Draw line numbers, the git-diff gutter, and the (optionally
@@ -271,6 +311,7 @@ impl Editor {
             if self.is_line_hidden(line_idx) {
                 continue;
             }
+            row = self.draw_filler_rows(area, buf, row, line_idx);
             let draw_y = area.top() + row;
             if draw_y >= area.bottom() {
                 break;
@@ -368,6 +409,8 @@ impl Editor {
                 default_text_style,
             );
         }
+        // Filler rows after the last line (the other side ends with more lines).
+        self.draw_filler_rows(area, buf, row, total_lines);
     }
 
     /// Draw the fold marker (▸ folded, ▾ open) in the gutter padding column just
@@ -632,6 +675,9 @@ impl Editor {
         let step = unit.chars().count();
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
         for screen_y in 0..(area.height as usize) {
+            if self.row_is_filler(screen_y) {
+                continue;
+            }
             let Some(line_idx) = self.line_at_row(screen_y) else {
                 break;
             };
@@ -704,6 +750,9 @@ impl Editor {
             });
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
         for screen_y in 0..(area.height as usize) {
+            if self.row_is_filler(screen_y) {
+                continue;
+            }
             let Some(line_idx) = self.line_at_row(screen_y) else {
                 break;
             };
@@ -765,6 +814,9 @@ impl Editor {
         // now memoizes one entry instead of one per visible line.
         let mut region: Option<(usize, usize)> = None;
         for screen_y in 0..(area.height as usize) {
+            if self.row_is_filler(screen_y) {
+                continue;
+            }
             let Some(line_idx) = self.line_at_row(screen_y) else {
                 break;
             };
@@ -814,6 +866,9 @@ impl Editor {
         }
         highlights.extend(treesitter_highlights);
         for screen_y in 0..(area.height as usize) {
+            if self.row_is_filler(screen_y) {
+                continue;
+            }
             let Some(line_idx) = self.line_at_row(screen_y) else {
                 break;
             };
@@ -1218,5 +1273,116 @@ mod overhang_tests {
             (&ed).render(Rect::new(0, 0, 40, 9), &mut buf);
             (&ed).render(Rect::new(30, 5, 10, 3), &mut buf);
         }
+    }
+}
+
+#[cfg(test)]
+mod filler_tests {
+    use super::*;
+
+    fn pad(ed: &Editor) -> u16 {
+        u16::try_from(ed.get_line_number_width()).unwrap()
+    }
+
+    fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
+        (x0..x1)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    /// A 6-line editor, no gutter, with 2 filler rows before line 2 (T671).
+    fn with_fillers() -> Editor {
+        let mut ed = Editor::new("text", "l0\nl1\nl2\nl3\nl4\nl5", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_filler_rows(vec![(2, 2)]);
+        ed
+    }
+
+    #[test]
+    fn filler_rows_push_later_lines_down() {
+        let ed = with_fillers();
+        let area = Rect::new(0, 0, 10, 8);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let text: Vec<String> = (0..7)
+            .map(|y| row(&buf, y, pad(&ed), pad(&ed) + 2))
+            .collect();
+        assert_eq!(
+            text,
+            [
+                "l0",
+                "l1",
+                "\u{2571}\u{2571}",
+                "\u{2571}\u{2571}",
+                "l2",
+                "l3",
+                "l4"
+            ]
+        );
+    }
+
+    #[test]
+    fn filler_rows_after_the_last_line_are_drawn() {
+        let mut ed = Editor::new("text", "a\nb", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_filler_rows(vec![(2, 1)]);
+        let area = Rect::new(0, 0, 4, 4);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        assert_eq!(row(&buf, 2, pad(&ed), pad(&ed) + 1), "\u{2571}");
+    }
+
+    #[test]
+    fn a_click_on_a_filler_row_lands_on_the_next_real_line() {
+        let ed = with_fillers();
+        let area = Rect::new(0, 0, 10, 8);
+        let pos = |y| ed.cursor_from_mouse(pad(&ed), y, &area).unwrap();
+        // Rows 2 and 3 are fillers; row 4 is line 2 ("l2" starts at char 6).
+        assert_eq!(pos(2), 6);
+        assert_eq!(pos(3), 6);
+        assert_eq!(pos(4), 6);
+        assert_eq!(pos(5), 9, "row 5 is line 3");
+        assert_eq!(pos(1), 3, "rows above the filler are unchanged");
+    }
+
+    #[test]
+    fn the_cursor_is_never_drawn_on_a_filler_row() {
+        let mut ed = with_fillers();
+        ed.set_cursor_style(Some(Style::default().bg(Color::Red)));
+        for c in 0..=17 {
+            ed.set_cursor(c);
+            let area = Rect::new(0, 0, 10, 8);
+            let mut buf = Buffer::empty(area);
+            (&ed).render(area, &mut buf);
+            for y in [2, 3] {
+                assert_ne!(
+                    buf[(pad(&ed), y)].bg,
+                    Color::Red,
+                    "cursor {c} on filler row {y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn display_row_and_focus_count_filler_rows() {
+        let mut ed = with_fillers();
+        assert_eq!(ed.display_row(1), 1);
+        assert_eq!(ed.display_row(2), 4);
+        assert_eq!(ed.display_row(5), 7);
+        // A 5-row view: line 5 sits on row 7, so focusing it scrolls.
+        ed.set_cursor(15);
+        ed.focus(&Rect::new(0, 0, 10, 5));
+        assert!(ed.get_offset_y() > 0);
+        assert!(ed.display_row(5) < 5, "the cursor row fits the view");
+    }
+
+    #[test]
+    fn filler_rows_merge_and_ignore_soft_wrap() {
+        let mut ed = with_fillers();
+        ed.set_filler_rows(vec![(3, 1), (3, 2), (1, 0)]);
+        assert_eq!(ed.filler_rows(), [(3, 3)]);
+        ed.set_soft_wrap(true);
+        assert_eq!(ed.filler_before(3), 0, "unwrapped views only");
     }
 }

@@ -103,6 +103,11 @@ pub struct Editor {
     /// the line-number gutter.
     pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
 
+    /// Virtual blank rows (T671): `(line, count)` draws `count` filler rows
+    /// just before real line `line`. Sorted by line, one entry per line, no
+    /// zero counts. Drawn by the unwrapped renderer only.
+    pub(crate) fillers: Vec<(usize, usize)>,
+
     /// Foldable line ranges (from the language server): `(start_line, end_line)`,
     /// both 0-based. A range can be folded by its start line.
     pub(crate) fold_ranges: Vec<(usize, usize)>,
@@ -223,6 +228,7 @@ impl Editor {
             diagnostic_marks: None,
             word_marks: None,
             gutter_marks: None,
+            fillers: Vec::new(),
             fold_ranges: Vec::new(),
             folds: Vec::new(),
             inlay_hints: Vec::new(),
@@ -339,6 +345,12 @@ impl Editor {
 
         if line < self.offset_y {
             self.offset_y = line;
+        } else if !self.fillers.is_empty() {
+            // Filler rows make a line take more than one screen row: scroll
+            // until the cursor's row fits.
+            while self.offset_y < line && self.display_row(line) >= visible_height {
+                self.offset_y += 1;
+            }
         } else if line >= self.offset_y + visible_height {
             self.offset_y = line.saturating_sub(visible_height.saturating_sub(1));
         }
@@ -437,10 +449,14 @@ impl Editor {
             return Some(ch);
         }
 
-        let clicked_row = (mouse_y - area.top()) as usize + self.offset_y;
-        if clicked_row >= self.code.len_lines() {
-            return None;
-        }
+        // A row with no line behind it (a filler) resolves to the next real
+        // line, so a click there lands on a line, never in the void.
+        let clicked_row = if self.fillers.is_empty() {
+            let r = (mouse_y - area.top()) as usize + self.offset_y;
+            (r < self.code.len_lines()).then_some(r)?
+        } else {
+            self.line_at_row((mouse_y - area.top()) as usize)?
+        };
 
         let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
 
@@ -950,6 +966,72 @@ impl Editor {
                     .collect(),
             )
         };
+    }
+
+    /// Set the virtual filler rows (T671): each `(line, count)` draws `count`
+    /// blank rows just before real line `line` (`line` may equal the line count,
+    /// for rows after the last line). Used by side-by-side Compare Files to
+    /// keep the shorter side of a change row-aligned. Fillers are not text: the
+    /// cursor never enters one, a click on one lands on the next real line, and
+    /// they take part in scrolling. Unwrapped views only; with soft wrap on they
+    /// are ignored. Duplicates are merged and zero counts dropped.
+    pub fn set_filler_rows(&mut self, rows: Vec<(usize, usize)>) {
+        let mut merged: Vec<(usize, usize)> = Vec::new();
+        let mut rows = rows;
+        rows.sort_by_key(|&(l, _)| l);
+        for (line, count) in rows {
+            if count == 0 {
+                continue;
+            }
+            match merged.last_mut() {
+                Some(last) if last.0 == line => last.1 += count,
+                _ => merged.push((line, count)),
+            }
+        }
+        self.fillers = merged;
+    }
+
+    /// Remove all filler rows.
+    pub fn clear_filler_rows(&mut self) {
+        self.fillers.clear();
+    }
+
+    /// The filler rows, as `(line, count)` pairs sorted by line.
+    #[must_use]
+    pub fn filler_rows(&self) -> &[(usize, usize)] {
+        &self.fillers
+    }
+
+    /// How many filler rows are drawn just before `line` (0 in soft-wrap mode).
+    #[must_use]
+    pub fn filler_before(&self, line: usize) -> usize {
+        if self.fillers.is_empty() || self.flags.contains(Flags::SOFT_WRAP) {
+            return 0;
+        }
+        self.fillers
+            .binary_search_by_key(&line, |&(l, _)| l)
+            .map_or(0, |i| self.fillers[i].1)
+    }
+
+    /// The row of `line` within the view (0 is the top), counting fold-hidden
+    /// lines as absent and filler rows as present. `line` is assumed to be at or
+    /// below the top line and not hidden.
+    #[must_use]
+    pub fn display_row(&self, line: usize) -> usize {
+        if line < self.offset_y {
+            return 0;
+        }
+        let mut row = 0;
+        for l in self.offset_y..=line {
+            if self.is_line_hidden(l) {
+                continue;
+            }
+            row += self.filler_before(l);
+            if l < line {
+                row += 1;
+            }
+        }
+        row
     }
 
     /// Clear all git diff gutter marks.

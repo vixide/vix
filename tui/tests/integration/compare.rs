@@ -135,6 +135,25 @@ fn the_other_pane_follows_the_focused_scroll() {
 }
 
 #[test]
+fn the_shorter_side_gets_filler_rows_and_close_removes_them() {
+    let (mut app, dir) = comparing("cmp-filler", OLD, NEW);
+    assert!(app.refresh_compare());
+    let fillers = |app: &App, name: &str| {
+        app.editor
+            .tabs
+            .iter()
+            .find(|t| t.path.as_deref().and_then(Path::file_name) == Some(name.as_ref()))
+            .map(|t| t.editor.filler_rows().to_vec())
+            .unwrap()
+    };
+    assert_eq!(fillers(&app, "old.txt"), [(3, 2)], "left lacks x and y");
+    assert_eq!(fillers(&app, "new.txt"), Vec::<(usize, usize)>::new());
+    app.run_action("diff.close");
+    assert_eq!(fillers(&app, "old.txt"), Vec::<(usize, usize)>::new());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn close_comparison_keeps_both_tabs() {
     let (mut app, dir) = comparing("cmp-close", OLD, NEW);
     app.run_action("diff.close");
