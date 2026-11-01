@@ -27,8 +27,10 @@ terminals already open. Several terminals can be open at once, as tabs (T631).
   Any other key first returns the view to the live screen, then goes to the
   shell.
 - The PTY is resized to match the overlay each frame so the shell wraps correctly.
-- When a shell exits, `poll_terminal` closes its tab and reports
-  `status.terminal_closed`; the overlay goes with the last tab.
+- When a shell exits, `poll_terminal` reports it once (`status.terminal_exited`)
+  and the tab **stays**, marked `exited` in the title, with its transcript. Enter
+  restarts the shell in place; any other key closes the tab
+  (`status.terminal_closed`); the overlay goes with the last tab (T666).
 - Opened before the first frame has been drawn (no editor area yet), the PTY
   starts at 24 x 80 rather than 1 x 1; the first frame resizes it.
 - `Terminal::send_bytes` writes already-encoded input. Its callers are Cowork's
@@ -51,6 +53,9 @@ The **Tools → Terminal** submenu:
 | New Terminal | `terminal.new` | Opens another terminal as a new tab, makes it active and shows the overlay. |
 | Next Terminal / Previous Terminal | `terminal.next` / `terminal.prev` | Activates the next / previous tab (wrapping) and shows the overlay. |
 | Copy Terminal Text | `terminal.copy` | Copies the active terminal's selection, or its whole visible view, to the clipboard. |
+| Send Selection to Terminal | `terminal.send_selection` | Sends the editor's selection, else its current line, to the active terminal as a command and presses Enter (T666). |
+| Restart Terminal | `terminal.restart` | Runs the active terminal's command again on a fresh PTY in place (T666). |
+| Toggle Terminal Key Capture | `terminal.toggle_capture` | Chooses whether Ctrl/Alt chords reach the shell or the editor (T666). |
 | Close Terminal | `terminal.close` | Stops the active terminal's shell and removes its tab; the next tab becomes active. |
 
 With no terminal open, the last four say so (`status.terminal_none`). With more
@@ -95,6 +100,43 @@ The renderer records the terminal's screen rectangle (`Layout::terminal`).
   buffer's fallback-aware copy when there is one (else `vix-clipboard`), and the
   status says so (`status.terminal_copied`). The selection is in view
   coordinates, so scrolling, resizing and typing clear it.
+
+## Terminal-to-editor bridge (T666)
+
+- **Working directory (OSC 7).** The reader thread watches the shell's output for
+  `ESC ] 7 ; file://host/path` (ended by BEL or `ESC \`), across read-chunk
+  boundaries (`Osc7Scanner`, pure and unit tested; the host part is ignored,
+  `%XX` is decoded, `file:///C:/x` becomes `C:/x`). `Terminal::cwd` is the last
+  directory announced, else the directory the terminal started in. Shells
+  announce it with a prompt hook (zsh/bash/fish integration, or
+  `printf '\033]7;file://localhost%s\007' "$PWD"`); without one, paths resolve
+  against the starting directory and then the workspace root.
+- **Open from output.** Ctrl+click on terminal output (the view, so scrollback
+  too) opens a location and hides the overlay. The clicked word is read as
+  `path[:line[:col]]` (`word_in`, quotes/brackets/trailing punctuation trimmed);
+  if that file exists (against the terminal's directory, then the workspace
+  root) it opens there. Otherwise the whole row goes through the same problem-matcher
+  parser as the task dock (`vix_tasks::matcher::locate`, T632 - one parser, via
+  `App::output_location`, shared with `dock_line_location`), which finds rustc
+  arrows, Python frames, gcc/tsc/eslint/go lines and so on. Nothing found: the
+  click does nothing. When the child asked for the mouse, Ctrl+click still opens a
+  location if there is one under the pointer, else goes to the child.
+- **Send to Terminal.** `Terminal::send_text` wraps the text in bracketed-paste
+  markers when the shell asked for them (`paste_bytes`), else sends newlines as
+  carriage returns, then Enter. With no terminal open one is opened; with no
+  buffer or only blank text, `status.terminal_nothing_to_send`.
+- **Restart in place.** `Terminal::restart` starts the saved command (program,
+  arguments and directory) on a new PTY **sharing the same parser**, so screen
+  and scrollback are kept; it first leaves the alternate screen (only if the old
+  shell was on it) and mouse modes, and writes a separator line
+  (`ui.terminal_restarted`). It works on a live terminal too (the old child is
+  killed once the new one has spawned), and the OSC 7 directory resets.
+- **Key capture.** `Ctrl+\` or `terminal.toggle_capture` flips a per-terminal flag
+  (default on). With capture off, keys carrying Ctrl or Alt (other than the
+  overlay's own chords: `Ctrl+]`, `Ctrl+\`, `Ctrl+PgUp`/`Ctrl+PgDn`) are
+  not forwarded; `terminal_key` returns `false` and they fall through to the
+  editor's normal handling while the overlay stays open. Plain and Shift keys
+  still go to the shell. The title says `editor keys` while it is off.
 
 ## Remote workspaces (T716)
 
@@ -142,5 +184,10 @@ closing, and scrollback paging, the cap and wheel scrolling.
   a control directory path too long for a socket) it makes a new connection.
 - Tabs are numbered, not named: `vt100` 0.16 no longer exposes the window title
   the shell sets.
+- OSC 7 is only seen when the shell prints it; Vix does not inject a prompt
+  hook. A remote (SSH) terminal reports the remote directory, which Ctrl+click
+  resolves through the workspace authority.
+- Ctrl+click maps the click to a character column, so a row with wide (CJK)
+  characters before the path can pick the neighboring word.
 - Clicking a tab in the strip does not switch to it; use `Ctrl+PgUp`/`Ctrl+PgDn`
   or the menu.

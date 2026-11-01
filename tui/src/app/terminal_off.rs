@@ -15,13 +15,20 @@ impl App {
     }
 
     /// The terminal can't be open, so it never takes a key.
-    pub(super) fn terminal_key(&mut self, _key: KeyEvent) {
+    pub(super) fn terminal_key(&mut self, _key: KeyEvent) -> bool {
         debug_assert!(self.terminals.is_empty());
+        false
     }
 
     /// No terminal overlay to take the mouse.
     pub(super) fn terminal_mouse(&mut self, _mouse: MouseEvent) -> bool {
         debug_assert!(self.terminals.is_empty());
+        false
+    }
+
+    /// No terminal, so no shell.
+    #[must_use]
+    pub fn terminal_alive(&self) -> bool {
         false
     }
 

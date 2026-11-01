@@ -50,6 +50,89 @@ pub struct Terminal {
     rows: u16,
     cols: u16,
     selection: Option<Selection>,
+    /// What was spawned, so [`Terminal::restart`] can run it again (T666).
+    spawn: SpawnSpec,
+    /// The shell's working directory as last announced by OSC 7 (T666).
+    osc_cwd: Arc<Mutex<Option<std::path::PathBuf>>>,
+    /// Whether editor chords go to the shell (`true`, the default) or stay
+    /// with the editor (T666).
+    capture: bool,
+    /// Whether the shell's exit has been reported (see
+    /// [`Terminal::take_exit_notice`]).
+    exit_noted: bool,
+}
+
+/// The command a [`Terminal`] runs, kept for [`Terminal::restart`].
+#[derive(Debug, Clone)]
+struct SpawnSpec {
+    program: std::ffi::OsString,
+    args: Vec<std::ffi::OsString>,
+    cwd: std::path::PathBuf,
+}
+
+/// The live half of a terminal: the PTY and its child.
+struct Pty {
+    writer: Box<dyn Write + Send>,
+    master: Box<dyn portable_pty::MasterPty + Send>,
+    child: Box<dyn portable_pty::Child + Send + Sync>,
+    alive: Arc<AtomicBool>,
+}
+
+/// Open a PTY of `rows`x`cols` running `spec`, with a reader thread feeding
+/// `parser` and tracking OSC 7 into `osc_cwd`.
+fn spawn_pty(
+    spec: &SpawnSpec,
+    rows: u16,
+    cols: u16,
+    parser: &Arc<Mutex<vt100::Parser>>,
+    osc_cwd: &Arc<Mutex<Option<std::path::PathBuf>>>,
+) -> std::io::Result<Pty> {
+    let pty = portable_pty::native_pty_system();
+    let size = portable_pty::PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    };
+    let pair = pty.openpty(size).map_err(|e| to_io(&e))?;
+    let mut cmd = portable_pty::CommandBuilder::new(&spec.program);
+    cmd.args(&spec.args);
+    cmd.cwd(&spec.cwd);
+    cmd.env("TERM", "xterm-256color");
+    let child = pair.slave.spawn_command(cmd).map_err(|e| to_io(&e))?;
+    drop(pair.slave);
+    let mut reader = pair.master.try_clone_reader().map_err(|e| to_io(&e))?;
+    let writer = pair.master.take_writer().map_err(|e| to_io(&e))?;
+    let alive = Arc::new(AtomicBool::new(true));
+    let reader_parser = Arc::clone(parser);
+    let reader_alive = Arc::clone(&alive);
+    let reader_cwd = Arc::clone(osc_cwd);
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 8192];
+        let mut osc = Osc7Scanner::default();
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if let Some(dir) = osc.feed(&buf[..n]) {
+                        *reader_cwd
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(dir);
+                    }
+                    if let Ok(mut p) = reader_parser.lock() {
+                        p.process(&buf[..n]);
+                    }
+                }
+            }
+        }
+        reader_alive.store(false, Ordering::SeqCst);
+    });
+    Ok(Pty {
+        writer,
+        master: pair.master,
+        child,
+        alive,
+    })
 }
 
 impl Drop for Terminal {
@@ -97,56 +180,141 @@ impl Terminal {
     ) -> std::io::Result<Terminal> {
         let rows = rows.max(1);
         let cols = cols.max(1);
-        let pty = portable_pty::native_pty_system();
-        let size = portable_pty::PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
+        let spec = SpawnSpec {
+            program: program.as_ref().to_os_string(),
+            args: args.iter().map(|a| a.as_ref().to_os_string()).collect(),
+            cwd: cwd.to_path_buf(),
         };
-        let pair = pty.openpty(size).map_err(|e| to_io(&e))?;
-        let mut cmd = portable_pty::CommandBuilder::new(program);
-        cmd.args(args);
-        cmd.cwd(cwd);
-        cmd.env("TERM", "xterm-256color");
-        let child = pair.slave.spawn_command(cmd).map_err(|e| to_io(&e))?;
-        drop(pair.slave);
-        let mut reader = pair.master.try_clone_reader().map_err(|e| to_io(&e))?;
-        let writer = pair.master.take_writer().map_err(|e| to_io(&e))?;
-
         let parser = Arc::new(Mutex::new(vt100::Parser::new(
             rows,
             cols,
             clamp_scrollback(scrollback),
         )));
-        let alive = Arc::new(AtomicBool::new(true));
-        let reader_parser = Arc::clone(&parser);
-        let reader_alive = Arc::clone(&alive);
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 8192];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        if let Ok(mut p) = reader_parser.lock() {
-                            p.process(&buf[..n]);
-                        }
-                    }
-                }
-            }
-            reader_alive.store(false, Ordering::SeqCst);
-        });
-
+        let osc_cwd = Arc::new(Mutex::new(None));
+        let pty = spawn_pty(&spec, rows, cols, &parser, &osc_cwd)?;
         Ok(Terminal {
             parser,
-            writer,
-            master: pair.master,
-            child,
-            alive,
+            writer: pty.writer,
+            master: pty.master,
+            child: pty.child,
+            alive: pty.alive,
             rows,
             cols,
             selection: None,
+            spawn: spec,
+            osc_cwd,
+            capture: true,
+            exit_noted: false,
         })
+    }
+
+    /// Run the same command again on a fresh PTY, keeping this terminal's
+    /// screen and scrollback (T666). The old child is killed first; `marker`
+    /// is written into the transcript as a separator line, after the screen
+    /// is returned to its normal, mouse-free state (so a shell that died in
+    /// `vim` does not leave the new one on the alternate screen).
+    ///
+    /// # Errors
+    /// Returns an error if the new PTY cannot be created, in which case the
+    /// terminal is left as it was.
+    pub fn restart(&mut self, marker: &str) -> std::io::Result<()> {
+        let pty = spawn_pty(
+            &self.spawn,
+            self.rows,
+            self.cols,
+            &self.parser,
+            &self.osc_cwd,
+        )?;
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        self.selection = None;
+        {
+            let mut parser = self.lock();
+            parser.screen_mut().set_scrollback(0);
+            // Leave the alternate screen only if the old shell was on it:
+            // doing so from the normal screen would discard the transcript.
+            let leave_alt = if parser.screen().alternate_screen() {
+                "\x1b[?1049l"
+            } else {
+                ""
+            };
+            let reset = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[0m";
+            let line = marker.replace(['\r', '\n', '\x1b'], " ");
+            parser.process(format!("{leave_alt}{reset}\r\n{line}\r\n").as_bytes());
+        }
+        self.writer = pty.writer;
+        self.master = pty.master;
+        self.child = pty.child;
+        self.alive = pty.alive;
+        self.exit_noted = false;
+        *self
+            .osc_cwd
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        Ok(())
+    }
+
+    /// The shell's working directory: the last one it announced with OSC 7
+    /// (`ESC ] 7 ; file://host/path`), else the directory it was started in.
+    #[must_use]
+    pub fn cwd(&self) -> std::path::PathBuf {
+        self.osc_cwd
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+            .unwrap_or_else(|| self.spawn.cwd.clone())
+    }
+
+    /// `true` once for a shell that has exited: the host reports it, and the
+    /// tab stays (so it can be restarted) instead of being dropped.
+    pub fn take_exit_notice(&mut self) -> bool {
+        if self.alive() || self.exit_noted {
+            return false;
+        }
+        self.exit_noted = true;
+        true
+    }
+
+    /// Whether editor chords go to the shell (the default) rather than the
+    /// editor.
+    #[must_use]
+    pub fn capture(&self) -> bool {
+        self.capture
+    }
+
+    /// Choose whether editor chords go to the shell.
+    pub fn set_capture(&mut self, capture: bool) {
+        self.capture = capture;
+    }
+
+    /// Send `text` to the shell as if pasted, then Enter: wrapped in
+    /// bracketed-paste markers when the shell asked for them, else with
+    /// newlines as carriage returns (T666).
+    pub fn send_text(&mut self, text: &str) {
+        let bracketed = self.lock().screen().bracketed_paste();
+        self.scroll_to_bottom();
+        let bytes = paste_bytes(text, bracketed);
+        self.send_bytes(&bytes);
+    }
+
+    /// The text of view row `row` (0 is the top of what is shown), trailing
+    /// blanks trimmed.
+    #[must_use]
+    pub fn row_text(&self, row: u16) -> String {
+        let parser = self.lock();
+        let screen = parser.screen();
+        let (_, cols) = screen.size();
+        screen
+            .contents_between(row, 0, row, cols)
+            .trim_end()
+            .to_string()
+    }
+
+    /// The whitespace-delimited word under cell (`row`, `col`) of the view,
+    /// with surrounding quotes and brackets trimmed.
+    #[must_use]
+    pub fn word_at(&self, row: u16, col: u16) -> Option<String> {
+        word_in(&self.row_text(row), usize::from(col))
     }
 
     /// Whether the shell is still running (the reader thread sets this false on EOF).
@@ -293,6 +461,154 @@ impl Terminal {
             p.screen_mut().set_size(rows, cols);
         }
     }
+}
+
+/// What [`paste_bytes`] ends a pasted line with: Enter.
+const ENTER: u8 = b'\r';
+
+/// The bytes that send `text` to a shell as a pasted command and press
+/// Enter: inside bracketed-paste markers when `bracketed`, else with every
+/// newline sent as a carriage return (what Enter types).
+#[must_use]
+pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
+    let text = text.trim_end_matches(['\r', '\n']);
+    let mut out = Vec::new();
+    if bracketed {
+        out.extend_from_slice(b"\x1b[200~");
+        out.extend_from_slice(text.as_bytes());
+        out.extend_from_slice(b"\x1b[201~");
+    } else {
+        out.extend_from_slice(text.replace("\r\n", "\r").replace('\n', "\r").as_bytes());
+    }
+    out.push(ENTER);
+    out
+}
+
+/// The whitespace-delimited word of `line` that covers character column
+/// `col`, with surrounding quotes, brackets and trailing `,;.` trimmed;
+/// `None` on blank space. The pure half of [`Terminal::word_at`].
+#[must_use]
+pub fn word_in(line: &str, col: usize) -> Option<String> {
+    let chars: Vec<char> = line.chars().collect();
+    if chars.get(col).is_none_or(|c| c.is_whitespace()) {
+        return None;
+    }
+    let mut start = col;
+    while start > 0 && !chars[start - 1].is_whitespace() {
+        start -= 1;
+    }
+    let mut end = col;
+    while end + 1 < chars.len() && !chars[end + 1].is_whitespace() {
+        end += 1;
+    }
+    let word: String = chars[start..=end].iter().collect();
+    let word = word.trim_matches(|c| {
+        matches!(
+            c,
+            '"' | '\'' | '`' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';'
+        )
+    });
+    let word = word.trim_end_matches('.');
+    (!word.is_empty()).then(|| word.to_string())
+}
+
+/// Finds OSC 7 (`ESC ] 7 ; file://host/path` ended by BEL or `ESC \`) in the
+/// bytes a shell prints, across chunk boundaries: the way a shell tells its
+/// terminal where it is (T666). Everything else passes through untouched; the
+/// scanner only watches.
+#[derive(Debug, Default)]
+pub struct Osc7Scanner {
+    carry: Vec<u8>,
+}
+
+/// The start of an OSC 7 sequence.
+const OSC7: &[u8] = b"\x1b]7;";
+
+/// The longest OSC 7 body kept while waiting for its terminator.
+const OSC7_MAX: usize = 4096;
+
+impl Osc7Scanner {
+    /// Feed the next chunk of output; returns the last directory announced in
+    /// it (or completed by it), if any.
+    pub fn feed(&mut self, bytes: &[u8]) -> Option<std::path::PathBuf> {
+        self.carry.extend_from_slice(bytes);
+        let mut found = None;
+        let mut pos = 0;
+        loop {
+            let rest = &self.carry[pos..];
+            let Some(at) = find_sub(rest, OSC7) else {
+                // Keep a possible start of the marker split across chunks.
+                let keep = (1..OSC7.len())
+                    .rev()
+                    .find(|&k| rest.ends_with(&OSC7[..k]))
+                    .unwrap_or(0);
+                pos = self.carry.len() - keep;
+                break;
+            };
+            let body_at = pos + at + OSC7.len();
+            let body = &self.carry[body_at..];
+            if let Some((len, term)) = osc_end(body) {
+                if let Some(dir) = parse_file_uri(&body[..len]) {
+                    found = Some(dir);
+                }
+                pos = body_at + len + term;
+            } else {
+                // Unterminated: wait for more, unless it is hopeless.
+                pos = if body.len() > OSC7_MAX {
+                    self.carry.len()
+                } else {
+                    pos + at
+                };
+                break;
+            }
+        }
+        self.carry.drain(..pos);
+        found
+    }
+}
+
+/// Index of the first occurrence of `needle` in `hay`.
+fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Where an OSC body ends: (body length, terminator length), for BEL or `ESC \`.
+fn osc_end(body: &[u8]) -> Option<(usize, usize)> {
+    body.iter().enumerate().find_map(|(i, &b)| match b {
+        0x07 => Some((i, 1)),
+        0x1b if body.get(i + 1) == Some(&b'\\') => Some((i, 2)),
+        _ => None,
+    })
+}
+
+/// The directory a `file://host/path` URI names (host ignored, `%XX`
+/// decoded), or `None` for another scheme or a relative path.
+fn parse_file_uri(uri: &[u8]) -> Option<std::path::PathBuf> {
+    let uri = std::str::from_utf8(uri).ok()?;
+    let rest = uri.strip_prefix("file://")?;
+    let path = &rest[rest.find('/')?..];
+    let mut bytes = Vec::with_capacity(path.len());
+    let raw = path.as_bytes();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'%'
+            && let Some(hex) = path.get(i + 1..i + 3)
+            && let Ok(v) = u8::from_str_radix(hex, 16)
+        {
+            bytes.push(v);
+            i += 3;
+        } else {
+            bytes.push(raw[i]);
+            i += 1;
+        }
+    }
+    let mut text = String::from_utf8(bytes).ok()?;
+    // `file:///C:/x` is the Windows path `C:/x`.
+    let b = text.as_bytes();
+    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+        text.remove(0);
+    }
+    Some(std::path::PathBuf::from(text))
 }
 
 /// Scroll `parser`'s view `delta` lines back (negative: forward), clamped to
@@ -689,5 +1005,64 @@ mod tests {
             !alive.load(Ordering::SeqCst),
             "reader thread never saw EOF — the shell leaked"
         );
+    }
+
+    #[test]
+    fn osc7_reads_a_directory_with_either_terminator() {
+        let mut s = Osc7Scanner::default();
+        assert_eq!(
+            s.feed(b"ls\x1b]7;file://host/home/me/proj\x07$ "),
+            Some(std::path::PathBuf::from("/home/me/proj"))
+        );
+        assert_eq!(
+            s.feed(b"\x1b]7;file:///tmp/a%20b\x1b\\"),
+            Some(std::path::PathBuf::from("/tmp/a b"))
+        );
+        assert_eq!(s.feed(b"plain output"), None);
+    }
+
+    #[test]
+    fn osc7_survives_chunk_boundaries_and_keeps_the_last() {
+        let mut s = Osc7Scanner::default();
+        assert_eq!(s.feed(b"x\x1b]"), None);
+        assert_eq!(s.feed(b"7;file:///usr/"), None);
+        assert_eq!(
+            s.feed(b"local\x07 \x1b]7;file:///etc\x07"),
+            Some(std::path::PathBuf::from("/etc"))
+        );
+        // A non-file URI and a runaway body are ignored, not fatal.
+        assert_eq!(s.feed(b"\x1b]7;https://x/y\x07"), None);
+        let mut big = b"\x1b]7;file:///".to_vec();
+        big.extend(std::iter::repeat_n(b'a', OSC7_MAX + 10));
+        assert_eq!(s.feed(&big), None);
+        assert_eq!(
+            s.feed(b"\x1b]7;file:///ok\x07"),
+            Some(std::path::PathBuf::from("/ok"))
+        );
+    }
+
+    #[test]
+    fn osc7_windows_drive_path() {
+        let mut s = Osc7Scanner::default();
+        assert_eq!(
+            s.feed(b"\x1b]7;file:///C:/work\x07"),
+            Some(std::path::PathBuf::from("C:/work"))
+        );
+    }
+
+    #[test]
+    fn word_in_picks_the_word_under_the_column() {
+        let line = "error at (src/main.rs:12:5), see";
+        assert_eq!(word_in(line, 12).as_deref(), Some("src/main.rs:12:5"));
+        assert_eq!(word_in(line, 6), Some("at".to_string()));
+        assert_eq!(word_in(line, 5), None);
+        assert_eq!(word_in(line, 500), None);
+    }
+
+    #[test]
+    fn paste_bytes_brackets_or_converts_newlines() {
+        assert_eq!(paste_bytes("ls\n", false), b"ls\r");
+        assert_eq!(paste_bytes("a\nb\r\nc", false), b"a\rb\rc\r");
+        assert_eq!(paste_bytes("a\nb", true), b"\x1b[200~a\nb\x1b[201~\r");
     }
 }

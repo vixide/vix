@@ -7979,7 +7979,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     added under `tui/src/ui/`, and it parses git's own unified diff
     rather than using `vix-diff-view` (which diffs two texts). T664's
     `rev_blob` was not needed.
-- [ ] **T666 — Terminal-to-editor bridge (after T631).**
+- [x] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632
     makes `path:line` clickable only in the task dock. Vix doesn't
@@ -7998,6 +7998,18 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `path:line` matcher shared with T632, so there is one parser.
     Add `terminal.send_selection` and `terminal.restart`, plus a
     capture toggle shown in the overlay title. **M.**
+  - **Done 2026-11-01** (`feat/t666-terminal-bridge`): all four parts.
+    `Osc7Scanner` in `vix-terminal` tracks the shell's directory (OSC 7);
+    Ctrl+click opens a `path:line[:col]` (clicked word first, then the
+    task dock's `vix_tasks::matcher::locate` through a shared
+    `App::output_location`, so there is one parser); `terminal.send_selection`,
+    `terminal.restart` (same parser, so the transcript stays) and
+    `terminal.toggle_capture` (also `Ctrl+\`, shown in the title as
+    `editor keys`). Behavior change: an exited shell now keeps its tab
+    (Enter restarts, any other key closes) instead of closing at once.
+    **Not done:** the `path:line` matcher is not a separate shared crate
+    (the host composes `vix-tasks` and `vix-terminal`), and Vix does not
+    inject an OSC 7 prompt hook into the shell.
 - [ ] **T667 — Project environment activation, gated by trust (after
   T627).**
   - **Problem.** Python and Node language servers, tasks and the

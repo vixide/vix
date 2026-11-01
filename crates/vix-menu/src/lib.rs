@@ -1384,6 +1384,17 @@ const TOOLS_TERMINAL: &[Item] = &[
     Item::leaf("menu.item.terminal.next", "terminal.next", ""),
     Item::leaf("menu.item.terminal.prev", "terminal.prev", ""),
     Item::leaf("menu.item.terminal.copy", "terminal.copy", ""),
+    Item::leaf(
+        "menu.item.terminal.send_selection",
+        "terminal.send_selection",
+        "",
+    ),
+    Item::leaf("menu.item.terminal.restart", "terminal.restart", ""),
+    Item::leaf(
+        "menu.item.terminal.toggle_capture",
+        "terminal.toggle_capture",
+        "",
+    ),
     Item::leaf("menu.item.terminal.close", "terminal.close", ""),
 ];
 

@@ -101,6 +101,11 @@ impl<T> Tabs<T> {
         self.items.iter().map(|(id, t)| (*id, t))
     }
 
+    /// Every tab in order, mutably.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (u64, &mut T)> {
+        self.items.iter_mut().map(|(id, t)| (*id, t))
+    }
+
     /// Activate the next tab, wrapping around.
     pub fn next(&mut self) {
         if !self.items.is_empty() {

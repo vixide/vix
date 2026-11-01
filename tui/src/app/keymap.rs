@@ -354,8 +354,7 @@ impl App {
         }
         // The shown integrated terminal captures all keys (forwarded to the
         // shell) except its own chords, handled inside the key handler.
-        if self.terminal_visible() {
-            self.terminal_key(key);
+        if self.terminal_visible() && self.terminal_key(key) {
             return true;
         }
         panel!(db, db_key);

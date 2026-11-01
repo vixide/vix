@@ -111,6 +111,14 @@ pub(super) fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
     if offset > 0 {
         title = format!("{title} · {}", t!("ui.terminal_scrolled", n = offset));
     }
+    if let Some(term) = app.terminals.active() {
+        if !term.alive() {
+            title = format!("{title} · {}", t!("ui.terminal_exited"));
+        }
+        if !term.capture() {
+            title = format!("{title} · {}", t!("ui.terminal_capture_off"));
+        }
+    }
     let mut inner = draw_frame(frame, area, &title);
     if app.terminals.len() > 1 && inner.height > 1 {
         let strip = Rect { height: 1, ..inner };

@@ -159,3 +159,166 @@ fn the_scrollback_scrolls_and_is_capped() {
     assert_eq!(app.terminal_scroll_offset(), 0);
     app.run_action("terminal.close");
 }
+
+/// The (column, row) of the first screen cell where `needle` starts.
+fn find_on_screen(app: &App, needle: &str) -> (u16, u16) {
+    let screen = app.terminal_screen_text().unwrap_or_default();
+    for (row, line) in screen.lines().enumerate() {
+        if let Some(byte) = line.find(needle) {
+            let col = line[..byte].chars().count();
+            return (u16::try_from(col).unwrap(), u16::try_from(row).unwrap());
+        }
+    }
+    panic!("{needle:?} is not on the terminal screen:\n{screen}");
+}
+
+/// A Ctrl+click at (`col`, `row`) of the terminal's screen.
+fn ctrl_click(app: &mut App, col: u16, row: u16) {
+    app.layout.terminal = Rect::new(0, 0, 80, 24);
+    let mut event = click(col, row);
+    event.modifiers = KeyModifiers::CONTROL;
+    app.on_mouse(event);
+}
+
+/// Ctrl+click on `path:line:col` in terminal output opens it there, resolved
+/// against the shell's working directory, which OSC 7 keeps up to date (T666).
+#[test]
+fn ctrl_click_opens_a_path_line_resolved_against_the_osc7_directory() {
+    let dir = unique_dir("t666-open");
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    fs::write(dir.join("top.txt"), "one\ntwo\nthree\n").unwrap();
+    fs::write(dir.join("sub/inner.txt"), "a\nb\ncc\nd\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("tools.terminal");
+
+    // A path relative to the starting directory (the workspace root).
+    run_line(&mut app, "echo see top.txt:2:1 now");
+    until_tab_shows(&mut app, 0, "see top.txt:2:1 now");
+    settle(&app);
+    let (col, row) = find_on_screen(&app, "top.txt");
+    ctrl_click(&mut app, col + 2, row);
+    assert!(!app.terminal_visible(), "opening hides the overlay");
+    assert!(
+        app.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some_and(|p| p.ends_with("top.txt"))
+    );
+    assert_eq!(app.editor.cursor_line(), 1);
+
+    // After `cd sub` and an OSC 7 report, `inner.txt` resolves under `sub`.
+    app.run_action("tools.terminal");
+    run_line(&mut app, "cd sub");
+    run_line(
+        &mut app,
+        r#"printf '\033]7;file://localhost%s\007' "$PWD"; echo at inner.txt:3 end"#,
+    );
+    until_tab_shows(&mut app, 0, "at inner.txt:3 end");
+    settle(&app);
+    let (col, row) = find_on_screen(&app, "at inner.txt:3 end");
+    ctrl_click(&mut app, col + 5, row);
+    assert!(
+        app.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some_and(|p| p.ends_with("sub/inner.txt")),
+        "resolved against the OSC 7 directory"
+    );
+    assert_eq!(app.editor.cursor_line(), 2);
+
+    // A click on plain words opens nothing and leaves the overlay alone.
+    app.run_action("tools.terminal");
+    let (col, row) = find_on_screen(&app, "at inner.txt:3 end");
+    ctrl_click(&mut app, col, row);
+    assert!(app.terminal_visible());
+    app.run_action("terminal.close");
+}
+
+/// Send to Terminal sends the selection, or the current line, as a command.
+#[test]
+fn send_selection_runs_the_current_line_in_the_terminal() {
+    let dir = unique_dir("t666-send");
+    fs::write(dir.join("cmds.sh"), "echo first\nexpr 660000 + 6\n").unwrap();
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("cmds.sh"), false).unwrap();
+    app.editor.goto(2, Some(1), Rect::new(0, 0, 80, 24));
+    assert_eq!(app.terminal_count(), 0);
+    app.run_action("terminal.send_selection");
+    assert_eq!(app.terminal_count(), 1, "a terminal is opened for it");
+    assert!(app.terminal_visible());
+    until_tab_shows(&mut app, 0, "660006");
+    app.run_action("terminal.close");
+
+    // Nothing to send without a buffer: no terminal, no panic.
+    let mut empty = app_at(&dir);
+    empty.run_action("terminal.send_selection");
+    assert_eq!(empty.terminal_count(), 0);
+}
+
+/// An exited shell keeps its tab; Enter restarts it in place with the old
+/// transcript above the new prompt; any other key closes it instead.
+#[test]
+fn an_exited_terminal_restarts_in_place_keeping_its_transcript() {
+    let dir = unique_dir("t666-restart");
+    let mut app = app_at(&dir);
+    app.run_action("tools.terminal");
+    run_line(&mut app, "expr 660000 + 60");
+    until_tab_shows(&mut app, 0, "660060");
+    run_line(&mut app, "exit");
+    wait_until(
+        &mut app,
+        App::poll_terminal,
+        |a| !a.terminal_alive(),
+        Duration::from_secs(10),
+    );
+    assert_eq!(app.terminal_count(), 1, "the exited tab stays");
+    assert!(app.terminal_visible());
+
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.terminal_alive(), "Enter restarted the shell");
+    assert_eq!(app.terminal_count(), 1);
+    run_line(&mut app, "expr 770000 + 7");
+    until_tab_shows(&mut app, 0, "770007");
+    let screen = app.terminal_screen_text().unwrap();
+    assert!(
+        screen.contains("660060"),
+        "the transcript is kept:\n{screen}"
+    );
+
+    // The explicit action restarts a live shell too.
+    app.run_action("terminal.restart");
+    assert!(app.terminal_alive());
+    assert_eq!(app.terminal_count(), 1);
+
+    // Another key on an exited terminal closes it.
+    run_line(&mut app, "exit");
+    wait_until(
+        &mut app,
+        App::poll_terminal,
+        |a| !a.terminal_alive(),
+        Duration::from_secs(10),
+    );
+    app.on_key(key('q'));
+    assert_eq!(app.terminal_count(), 0);
+    // Nothing to restart: no panic.
+    app.run_action("terminal.restart");
+}
+
+/// With capture off, Ctrl chords stay with the editor instead of reaching the
+/// shell; toggling again gives them back (T666).
+#[test]
+fn key_capture_toggle_decides_who_gets_ctrl_chords() {
+    let dir = unique_dir("t666-capture");
+    let mut app = app_at(&dir);
+    app.run_action("tools.terminal");
+    type_str(&mut app, "expr 880000 +");
+    app.on_key(ctrl('\\'));
+    // Ctrl+A would move the shell's cursor to the line start (and break the
+    // command); with capture off it must not get there.
+    app.on_key(ctrl('a'));
+    app.run_action("terminal.toggle_capture");
+    type_str(&mut app, " 8");
+    app.on_key(keycode(KeyCode::Enter));
+    until_tab_shows(&mut app, 0, "880008");
+    app.run_action("terminal.close");
+}

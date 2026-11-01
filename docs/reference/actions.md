@@ -630,6 +630,9 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `terminal.new` | New Terminal | Menu |
 | `terminal.next` | Next Terminal | Menu |
 | `terminal.prev` | Previous Terminal | Menu |
+| `terminal.restart` | Restart Terminal | Menu |
+| `terminal.send_selection` | Send Selection to Terminal | Menu |
+| `terminal.toggle_capture` | Toggle Terminal Key Capture | Menu |
 | `toggle_diff_gutter` | Toggle Diff Gutter | Catalog |
 | `toggle_help` | Toggle Help | Catalog |
 | `toggle_highlight_search` | Toggle Search Highlights | Menu |
@@ -789,4 +792,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**782 actions.**
+**785 actions.**

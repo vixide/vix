@@ -1,7 +1,7 @@
 //! Integrated terminals (T631): several PTY shells as tabs of one overlay,
 //! with scrollback, mouse selection and copy, and mouse forwarding.
 
-use super::{App, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use super::{App, Focus, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use crate::terminal::{Selection, Terminal};
 
 /// Lines one mouse-wheel notch scrolls the terminal's scrollback.
@@ -17,6 +17,9 @@ impl App {
             "terminal.next" => self.switch_terminal(true),
             "terminal.prev" => self.switch_terminal(false),
             "terminal.copy" => self.terminal_copy(),
+            "terminal.send_selection" => self.terminal_send_selection(),
+            "terminal.restart" => self.terminal_restart(),
+            "terminal.toggle_capture" => self.terminal_toggle_capture(),
             _ => return false,
         }
         true
@@ -121,28 +124,47 @@ impl App {
         self.status = t!("status.terminal_copied").to_string();
     }
 
-    /// Handle a key while the terminal overlay is shown. `Ctrl+]` hides it;
-    /// Shift+PgUp/PgDn page the scrollback and Shift+Home/End jump to its
-    /// top or back to the live screen; Ctrl+PgUp/PgDn switch terminals.
-    /// Every other key returns to the live screen and goes to the active
-    /// shell. A dead shell closes on the next key.
-    pub(super) fn terminal_key(&mut self, key: KeyEvent) {
+    /// Handle a key while the terminal overlay is shown; `false` when it is
+    /// left for the editor (capture is off, T666, and the key is a Ctrl or
+    /// Alt chord). `Ctrl+]` hides the overlay and `Ctrl+\` toggles whether
+    /// chords go to the shell; Shift+PgUp/PgDn page the scrollback and
+    /// Shift+Home/End jump to its top or back to the live screen;
+    /// Ctrl+PgUp/PgDn switch terminals. Every other key returns to the live
+    /// screen and goes to the active shell. After the shell has exited,
+    /// Enter restarts it and any other key closes the tab.
+    pub(super) fn terminal_key(&mut self, key: KeyEvent) -> bool {
         let ctrl = Self::ctrl(&key);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         if ctrl && matches!(key.code, KeyCode::Char(']')) {
             self.terminals.set_shown(false);
-            return;
+            return true;
+        }
+        if ctrl && matches!(key.code, KeyCode::Char('\\')) {
+            self.terminal_toggle_capture();
+            return true;
         }
         if ctrl && matches!(key.code, KeyCode::PageUp | KeyCode::PageDown) {
             self.switch_terminal(key.code == KeyCode::PageDown);
-            return;
+            return true;
         }
         let Some(term) = self.terminals.active_mut() else {
-            return;
+            return true;
         };
+        if !term.capture()
+            && key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return false;
+        }
         if !term.alive() {
-            self.terminals.close_active();
-            return;
+            if key.code == KeyCode::Enter {
+                self.terminal_restart();
+            } else {
+                self.terminals.close_active();
+                self.status = t!("status.terminal_closed").to_string();
+            }
+            return true;
         }
         let page = isize::try_from(term.size().0.saturating_sub(1).max(1)).unwrap_or(1);
         match key.code {
@@ -162,6 +184,112 @@ impl App {
                 term.send_key(key);
             }
         }
+        true
+    }
+
+    /// Restart the active terminal's shell in place, keeping its transcript
+    /// (T666).
+    fn terminal_restart(&mut self) {
+        let marker = t!("ui.terminal_restarted").to_string();
+        let Some(term) = self.terminals.active_mut() else {
+            self.status = t!("status.terminal_none").to_string();
+            return;
+        };
+        match term.restart(&marker) {
+            Ok(()) => self.status = t!("status.terminal_restarted").to_string(),
+            Err(e) => self
+                .messages
+                .error(t!("msg.command_failed", error = e).to_string()),
+        }
+    }
+
+    /// Choose whether editor chords go to the active terminal's shell or to
+    /// the editor (T666).
+    fn terminal_toggle_capture(&mut self) {
+        let Some(term) = self.terminals.active_mut() else {
+            self.status = t!("status.terminal_none").to_string();
+            return;
+        };
+        let capture = !term.capture();
+        term.set_capture(capture);
+        self.status = if capture {
+            t!("status.terminal_capture_on")
+        } else {
+            t!("status.terminal_capture_off")
+        }
+        .to_string();
+    }
+
+    /// Send the editor's selection, or its current line, to the active
+    /// terminal as a command and press Enter (T666); opens a terminal first
+    /// if none is open.
+    fn terminal_send_selection(&mut self) {
+        let text = self.editor.active_tab_mut().and_then(|t| {
+            t.editor
+                .get_selection_text()
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    let line = t.editor.cursor_line();
+                    t.text().lines().nth(line).map(str::to_string)
+                })
+        });
+        let Some(text) = text.filter(|s| !s.trim().is_empty()) else {
+            self.status = t!("status.terminal_nothing_to_send").to_string();
+            return;
+        };
+        if self.terminals.is_empty() {
+            self.open_new_terminal();
+        }
+        let Some(term) = self.terminals.active_mut() else {
+            return;
+        };
+        term.send_text(&text);
+        self.terminals.set_shown(true);
+    }
+
+    /// The file and position a click on cell (`row`, `col`) of the active
+    /// terminal's view names: the clicked word read as `path[:line[:col]]`,
+    /// else a location the problem matchers find in the whole row (T632's
+    /// parser), resolved against the shell's working directory (OSC 7).
+    pub(super) fn terminal_location_at(
+        &self,
+        row: u16,
+        col: u16,
+    ) -> Option<(std::path::PathBuf, Option<(usize, usize)>)> {
+        let term = self.terminals.active()?;
+        let cwd = term.cwd();
+        let auth = crate::authority::current();
+        if let Some(word) = term.word_at(row, col) {
+            let (file, target) = crate::palette::parse_path_target(word.trim_end_matches(':'));
+            if !file.is_empty() {
+                for base in [cwd.as_path(), self.root.as_path()] {
+                    let path = vix_tasks::matcher::resolve_path(base, &file);
+                    if auth.is_file(&path) {
+                        return Some((path, target));
+                    }
+                }
+            }
+        }
+        let (path, line, col) = self.output_location(&term.row_text(row), &cwd)?;
+        Some((path, Some((line, col.unwrap_or(1)))))
+    }
+
+    /// Ctrl+click on terminal output: open the `path:line` under the pointer
+    /// and hide the overlay. `false` when there is nothing to open there.
+    fn terminal_open_at(&mut self, row: u16, col: u16) -> bool {
+        let Some((path, target)) = self.terminal_location_at(row, col) else {
+            return false;
+        };
+        self.terminals.set_shown(false);
+        self.with_jump(|s| {
+            s.open_path(&path, false);
+            if let Some((line, col)) = target {
+                let area = s.editor_view();
+                s.editor.goto(line, Some(col), area);
+            }
+            s.focus = Focus::Editor;
+        });
+        true
     }
 
     /// A mouse event while the terminal overlay is shown; `true` when it
@@ -175,10 +303,16 @@ impl App {
             return false;
         }
         let cell = (mouse.row - area.y, mouse.column - area.x);
+        let shift = mouse.modifiers.contains(KeyModifiers::SHIFT);
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+            && mouse.modifiers.contains(KeyModifiers::CONTROL)
+            && self.terminal_open_at(cell.0, cell.1)
+        {
+            return true;
+        }
         let Some(term) = self.terminals.active_mut() else {
             return false;
         };
-        let shift = mouse.modifiers.contains(KeyModifiers::SHIFT);
         if !shift && term.wants_mouse() {
             term.send_mouse(mouse.kind, cell.1, cell.0, mouse.modifiers);
             return true;
@@ -209,11 +343,16 @@ impl App {
         true
     }
 
-    /// Drain the terminals: close each whose shell has exited. Called each
-    /// loop.
+    /// Note each terminal whose shell has exited. Called each loop.
     pub fn poll_terminal(&mut self) {
-        if !self.terminals.retain(Terminal::alive).is_empty() {
-            self.status = t!("status.terminal_closed").to_string();
+        // An exited shell keeps its tab (and transcript) so it can be
+        // restarted in place (T666); it is reported once.
+        let mut exited = false;
+        for (_, term) in self.terminals.iter_mut() {
+            exited |= term.take_exit_notice();
+        }
+        if exited {
+            self.status = t!("status.terminal_exited").to_string();
         }
     }
 
@@ -222,6 +361,13 @@ impl App {
     #[must_use]
     pub fn terminal_running(&self) -> bool {
         !self.terminals.is_empty()
+    }
+
+    /// Whether the active terminal's shell is still running (`false` with
+    /// none open, or after it exited and before it is restarted or closed).
+    #[must_use]
+    pub fn terminal_alive(&self) -> bool {
+        self.terminals.active().is_some_and(Terminal::alive)
     }
 
     /// Whether the terminal overlay is shown (it then takes every key).

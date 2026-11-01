@@ -234,12 +234,25 @@ impl App {
     /// matchers' single-line patterns, resolved against the last run's cwd
     /// (else the workspace root).
     pub(super) fn dock_line_location(&self, line: &str) -> Option<(PathBuf, usize, Option<usize>)> {
-        let (file, line_no, col) = matcher::locate(line)?;
         let cwd = if self.task_problems.cwd().as_os_str().is_empty() {
             self.root.as_path()
         } else {
             self.task_problems.cwd()
         };
+        self.output_location(line, cwd)
+    }
+
+    /// The existing file and `line[:col]` one line of command output names,
+    /// by the problem matchers' patterns, resolved against `cwd` (the
+    /// directory the output was printed in) and then the workspace root.
+    /// Shared by the task dock (T632) and the terminal's Ctrl+click (T666),
+    /// so there is one parser.
+    pub(super) fn output_location(
+        &self,
+        line: &str,
+        cwd: &std::path::Path,
+    ) -> Option<(PathBuf, usize, Option<usize>)> {
+        let (file, line_no, col) = matcher::locate(line)?;
         let path = matcher::resolve_path(cwd, &file);
         let auth = crate::authority::current();
         if auth.is_file(&path) {
