@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Branch review: a multi-file diff model for a revision range, with saved line comments and Markdown/JSON export."
+description = "Review a branch, a commit range, a commit or a stash as one multi-file diff, with line comments that are saved per repository and exported as Markdown."
 
 [dependencies]
 serde = { workspace = true }

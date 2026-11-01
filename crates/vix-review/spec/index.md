@@ -34,7 +34,7 @@ whitespace or control characters) and passed after `--end-of-options`.
   commit header, so it shows what that revision changed.
 
 Prefixes are forced to `a/` and `b/` (`vix_git::review_diff`) so the output
-parses whatever the user's `diff.noprefix` says. An empty diff opens nothing.
+parses whatever the user's git config says about diff prefixes. An empty diff opens nothing.
 
 ## The buffer
 

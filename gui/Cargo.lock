@@ -12320,6 +12320,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-review"
+version = "2.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "vix-right-dock"
 version = "2.0.0"
 
@@ -12631,6 +12639,7 @@ dependencies = [
  "vix-pomodoro-tool",
  "vix-qr-tool",
  "vix-regex-tool",
+ "vix-review",
  "vix-right-dock",
  "vix-roam",
  "vix-script",
