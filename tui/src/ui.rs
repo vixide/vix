@@ -98,7 +98,7 @@ use tool_panels::{
 };
 use undo_tree::draw_undo_tree;
 
-use crate::app::{App, AppFlags, Focus};
+use crate::app::{App, AppFlags, Focus, OverlayId};
 use crate::menu::MenuDef;
 use crate::theme;
 
@@ -398,315 +398,146 @@ fn reflect_panels(app: &App, buf: &mut ratatui::buffer::Buffer) {
     }
 }
 
-/// Draw any active overlay on top of the base frame. Split out of `draw` to keep
-/// each function focused; behavior is identical to inlining this dispatch.
+/// Draw every open overlay on top of the base frame, bottom of the stack
+/// first. The order is the one table in `crate::app::overlays::OVERLAYS` --
+/// the same table `App::route_overlay_key` walks backwards to deliver keys,
+/// so the topmost layer drawn is the one that takes the key (T611).
 fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
-    // Overlays.
-    if app.jump.is_some() {
-        draw_jump_labels(app, frame);
-    }
-    if app.visible.contains(crate::app::Visible::CALENDAR) {
-        draw_calendar(app, frame, area);
-    }
-    if app.visible.contains(crate::app::Visible::CLOCK) {
-        draw_clock(app, frame, area);
-    }
-    if app.menu.is_open() {
-        if let Some(i) = app.menu.open {
-            app.layout.menu_dropdown =
-                menu_dropdown_rect_for(app.menu.defs(), area, menu_bar, i, layout_mirrored(app));
-        }
-        draw_menu_dropdown(app, frame);
-    }
-    if app.search.is_some() {
-        draw_search(app, frame, area);
-    }
-    if app.palette.is_some() {
-        draw_palette(app, frame, area);
-    }
-    if app.workspace_search.is_some() {
-        draw_workspace_search(app, frame, area);
-    }
-    if app.keybinding_editor.is_some() {
-        draw_keybinding_editor(app, frame, area);
-    }
-    if app.prompt.is_some() {
-        draw_prompt(app, frame, area);
-    }
-    if app.query_replace.is_some() {
-        draw_query_replace(app, frame, area);
-    }
-    if app.confirm.is_some() {
-        draw_confirm(app, frame, area);
-    }
-    if app.script_trust.is_some() {
-        draw_script_trust(app, frame, area);
-    }
-    if app.replace_confirm.is_some() {
-        draw_replace_confirm(app, frame, area);
-    }
-    if app.unsaved.is_some() {
-        draw_unsaved(app, frame, area);
-    }
-    if app.spell_suggest.is_some() {
-        draw_spell_suggest(app, frame, area);
-    }
-    if app.context_menu.is_some() {
-        draw_context_menu(app, frame, area);
-    }
-    if app.git_panel.is_some() {
-        draw_git_panel(app, frame, area);
-    }
-    draw_chooser_overlays(app, frame, area);
-    if app.nerd_palette.is_some() {
-        draw_nerd_palette(app, frame, area);
-    }
-    if app.ascii_panel.is_some() {
-        draw_ascii_panel(app, frame, area);
-    }
-    if app.edit_table.is_some() {
-        draw_edit_table(app, frame, area);
-    }
-    if app.column_view.is_some() {
-        draw_column_view(app, frame, area);
-    }
-    if app.edit_outline.is_some() {
-        draw_edit_outline(app, frame, area);
-    }
-    if app.edit_value.is_some() {
-        draw_edit_value(app, frame, area);
-    }
-    if app.edit_bytes.is_some() {
-        draw_edit_bytes(app, frame, area);
-    }
-    if app.large_file.is_some() {
-        large_file::draw_large_file(app, frame, area);
-    }
-    if app.qrcode.is_some() {
-        draw_qrcode(app, frame, area);
-    }
-    draw_capability_overlays(app, frame, area);
-    if app.theme_editor.is_some() {
-        draw_theme_editor(app, frame, area);
-    }
-    if app.undo_tree.is_some() {
-        draw_undo_tree(app, frame, area);
-    }
-    if app.x11_panel.is_some() {
-        draw_x11_panel(app, frame, area);
-    }
-    if app.html_panel.is_some() {
-        draw_html_panel(app, frame, area);
-    }
-    draw_overlays_aux(app, frame, area);
-}
-
-/// The overlays owned by optional capabilities, in stacking order: the AI chat
-/// panel, the integrated terminal, then the AI diff review. A build without a
-/// capability simply skips its overlay.
-fn draw_capability_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
-    #[cfg(feature = "ai")]
-    if app.ai_panel.is_some() {
-        draw_ai_panel(app, frame, area);
-    }
-    #[cfg(feature = "terminal")]
-    draw_terminal(app, frame, area);
-    // A Cowork guest's view of the host's shared terminal (T697).
-    #[cfg(feature = "cowork")]
-    draw_cowork_terminal(app, frame, area);
-    // The host confirms sharing its terminal while it is open: draw that
-    // confirmation again over it, or it would be hidden.
-    #[cfg(feature = "cowork")]
-    if app.confirm.as_ref().is_some_and(|c| {
-        matches!(
-            c.kind,
-            crate::app::ConfirmKind::CoworkShareTerminal
-                | crate::app::ConfirmKind::CoworkTerminalInput
-        )
-    }) {
-        draw_confirm(app, frame, area);
-    }
-    #[cfg(feature = "ai")]
-    if app.ai_diff_review().is_some() {
-        draw_ai_diff(app, frame, area);
-    }
-    #[cfg(not(any(feature = "ai", feature = "terminal")))]
-    let _ = (app, frame, area);
-}
-
-/// The `sql` capability's overlays: the SQL statement editor, then the DB
-/// workbench on top of it. Nothing to draw in a build without the feature.
-#[cfg(feature = "sql")]
-fn draw_sql_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.edit_sql.is_some() {
-        edit_surfaces::draw_edit_sql(app, frame, area);
-    }
-    if app.db.is_some() {
-        db::draw_db(app, frame, area);
+    // Collected first: drawing takes `&mut App`, and a layer may close or open
+    // others, which the old per-layer `is_some()` cascade also tolerated.
+    let open: Vec<OverlayId> = app.open_overlays().map(|o| o.id).collect();
+    for id in open {
+        draw_overlay(app, frame, area, menu_bar, id);
     }
 }
 
-/// See the `sql` version above.
-#[cfg(not(feature = "sql"))]
-fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
-
-/// The list-style overlays that each return early when closed.
-fn draw_listing_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
-    git_graph::draw_git_graph(app, frame, area);
-    oc::draw_oc(app, frame, area);
-    im::draw_im_dialog(app, frame, area);
-    draw_todo_tree(app, frame, area);
-    draw_fhir_bundle(app, frame, area);
-    hl7::draw_hl7_panel(app, frame, area);
-    draw_http_env_chooser(app, frame, area);
-    draw_choice_list(app, frame, area);
+/// The menu bar's open dropdown: place it, then draw it.
+fn draw_menu_overlay(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
+    if let Some(i) = app.menu.open {
+        app.layout.menu_dropdown =
+            menu_dropdown_rect_for(app.menu.defs(), area, menu_bar, i, layout_mirrored(app));
+    }
+    draw_menu_dropdown(app, frame);
 }
 
-/// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
-/// per-function line limit). Behavior is identical to inlining this dispatch.
-fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
-    // Which-key popup for a pending key prefix (drawn under other modals).
-    draw_which_key(app, frame, area);
-    // Each draws only when its confirm is open.
-    draw_wgrep_confirm(app, frame, area);
-    draw_dir_edit_confirm(app, frame, area);
-    if app.git_log.is_some() {
-        draw_git_log(app, frame, area);
-    }
-    draw_listing_overlays(app, frame, area);
-    if app.structural_replace.is_some() {
-        draw_structural_replace(app, frame, area);
-    }
-    draw_sql_overlays(app, frame, area);
-    if app.media_type_panel.is_some() {
-        draw_media_type_panel(app, frame, area);
-    }
-    if app.encoding_chooser.is_some() {
-        draw_encoding_chooser(app, frame, area);
-    }
-    if app.macro_chooser.is_some() {
-        draw_macro_chooser(app, frame, area);
-    }
-    if app.clipboard_chooser.is_some() {
-        draw_clipboard_chooser(app, frame, area);
-    }
-    if app.workspace_chooser.is_some() {
-        draw_workspace_chooser(app, frame, area);
-    }
-    if app.system_info.is_some() {
-        draw_system_info(app, frame, area);
-    }
-    if app.lsp_status.is_some() {
-        draw_lsp_status(app, frame, area);
-    }
-    if app.file_info.is_some() {
-        draw_file_info(app, frame, area);
-    }
-    if app.text_info.is_some() {
-        draw_text_info(app, frame, area);
-    }
-    if app.markdown_preview.is_some() {
-        draw_markdown_preview(app, frame, area);
-    }
-    if app.markdown_toc.is_some() {
-        draw_markdown_toc(app, frame, area);
-    }
-    if app.snippets.is_some() {
-        draw_snippets(app, frame, area);
-    }
-    if app.contacts.is_some() {
-        draw_contacts(app, frame, area);
-    }
-    if app.vcard.is_some() {
-        draw_vcard(app, frame, area);
-    }
-    if app.dashboard.is_some() {
-        draw_dashboard(app, frame, area);
-    }
-    if app.outline.is_some() {
-        draw_outline(app, frame, area);
-    }
-    if app.conflict_list.is_some() {
-        draw_conflict_list(app, frame, area);
-    }
-    if app.completion.is_some() {
-        draw_completion(app, frame);
-    }
-    if app.hover.is_some() {
-        draw_hover(app, frame);
-    }
-    if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
-        draw_paste_conflict(app, frame, area);
-    }
-    if app.help.is_some() {
-        draw_help(app, frame, area);
-    }
-    if app.dialog.is_some() {
-        draw_dialog(app, frame, area);
-    }
-    if app.color_converter.is_some() {
-        draw_color_converter(app, frame, area);
-    }
-    if app.unit_converter.is_some() {
-        draw_unit_converter(app, frame, area);
-    }
-    if app.calculator.is_some() {
-        draw_calculator(app, frame, area);
-    }
-    if app.regex_tester.is_some() {
-        draw_regex_tester(app, frame, area);
-    }
-    if app.code_actions.is_some() {
-        draw_code_actions(app, frame, area);
-    }
-    if app.visible.contains(crate::app::Visible::POMODORO) {
-        draw_pomodoro(app, frame, area);
-    }
-    if app.welcome.is_some() {
-        draw_welcome(app, frame, area);
+/// Part 1 of the overlay draw dispatch (split for the per-function line limit).
+fn draw_overlay(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect, id: OverlayId) {
+    match id {
+        OverlayId::Jump => draw_jump_labels(app, frame),
+        OverlayId::Calendar => draw_calendar(app, frame, area),
+        OverlayId::Clock => draw_clock(app, frame, area),
+        OverlayId::Menu => draw_menu_overlay(app, frame, area, menu_bar),
+        OverlayId::Search => draw_search(app, frame, area),
+        OverlayId::Palette => draw_palette(app, frame, area),
+        OverlayId::WorkspaceSearch => draw_workspace_search(app, frame, area),
+        OverlayId::KeybindingEditor => draw_keybinding_editor(app, frame, area),
+        OverlayId::Prompt => draw_prompt(app, frame, area),
+        OverlayId::QueryReplace => draw_query_replace(app, frame, area),
+        OverlayId::Confirm => draw_confirm(app, frame, area),
+        OverlayId::ScriptTrust => draw_script_trust(app, frame, area),
+        OverlayId::ReplaceConfirm => draw_replace_confirm(app, frame, area),
+        OverlayId::Unsaved => draw_unsaved(app, frame, area),
+        OverlayId::SpellSuggest => draw_spell_suggest(app, frame, area),
+        OverlayId::ContextMenu => draw_context_menu(app, frame, area),
+        OverlayId::GitPanel => draw_git_panel(app, frame, area),
+        OverlayId::BranchChooser => draw_branch_chooser(app, frame, area),
+        OverlayId::TaskChooser => draw_task_chooser(app, frame, area),
+        OverlayId::StashChooser => draw_stash_chooser(app, frame, area),
+        OverlayId::WorktreeChooser => draw_worktree_chooser(app, frame, area),
+        #[cfg(feature = "script")]
+        OverlayId::ScriptChooser => draw_script_chooser(app, frame, area),
+        #[cfg(feature = "script")]
+        OverlayId::PluginChooser => draw_plugin_chooser(app, frame, area),
+        OverlayId::DiffView => draw_diff_view(app, frame, area),
+        OverlayId::LocationChooser => draw_location_chooser(app, frame, area),
+        OverlayId::CaptureChooser => draw_capture_chooser(app, frame, area),
+        OverlayId::RefileChooser => draw_refile_chooser(app, frame, area),
+        OverlayId::RecentChooser => draw_recent_chooser(app, frame, area),
+        OverlayId::FileBrowser => draw_file_browser(app, frame, area),
+        OverlayId::NerdPalette => draw_nerd_palette(app, frame, area),
+        OverlayId::AsciiPanel => draw_ascii_panel(app, frame, area),
+        OverlayId::EditTable => draw_edit_table(app, frame, area),
+        OverlayId::ColumnView => draw_column_view(app, frame, area),
+        OverlayId::EditOutline => draw_edit_outline(app, frame, area),
+        OverlayId::EditValue => draw_edit_value(app, frame, area),
+        OverlayId::EditBytes => draw_edit_bytes(app, frame, area),
+        _ => draw_overlay_2(app, frame, area, id),
     }
 }
 
-/// The chooser-family overlays (branch/task/diff/location/recent/file
-/// browser). Split out of [`draw_overlays`] to keep it within the line limit.
-fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.branch_chooser.is_some() {
-        draw_branch_chooser(app, frame, area);
+/// Part 2 of the overlay draw dispatch (split for the per-function line limit).
+fn draw_overlay_2(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
+    match id {
+        OverlayId::LargeFile => large_file::draw_large_file(app, frame, area),
+        OverlayId::Qrcode => draw_qrcode(app, frame, area),
+        #[cfg(feature = "ai")]
+        OverlayId::AiPanel => draw_ai_panel(app, frame, area),
+        #[cfg(feature = "terminal")]
+        OverlayId::Terminal => draw_terminal(app, frame, area),
+        #[cfg(feature = "cowork")]
+        OverlayId::CoworkTerminal => draw_cowork_terminal(app, frame, area),
+        #[cfg(feature = "cowork")]
+        OverlayId::CoworkConfirm => draw_confirm(app, frame, area),
+        #[cfg(feature = "ai")]
+        OverlayId::AiDiff => draw_ai_diff(app, frame, area),
+        OverlayId::ThemeEditor => draw_theme_editor(app, frame, area),
+        OverlayId::UndoTree => draw_undo_tree(app, frame, area),
+        OverlayId::X11Panel => draw_x11_panel(app, frame, area),
+        OverlayId::HtmlPanel => draw_html_panel(app, frame, area),
+        OverlayId::WhichKey => draw_which_key(app, frame, area),
+        OverlayId::WgrepConfirm => draw_wgrep_confirm(app, frame, area),
+        OverlayId::DirEditConfirm => draw_dir_edit_confirm(app, frame, area),
+        OverlayId::GitLog => draw_git_log(app, frame, area),
+        OverlayId::GitGraph => git_graph::draw_git_graph(app, frame, area),
+        OverlayId::Oc => oc::draw_oc(app, frame, area),
+        OverlayId::ImDialog => im::draw_im_dialog(app, frame, area),
+        OverlayId::TodoTree => draw_todo_tree(app, frame, area),
+        OverlayId::FhirBundle => draw_fhir_bundle(app, frame, area),
+        OverlayId::Hl7Panel => hl7::draw_hl7_panel(app, frame, area),
+        OverlayId::HttpEnvChooser => draw_http_env_chooser(app, frame, area),
+        OverlayId::ChoiceList => draw_choice_list(app, frame, area),
+        OverlayId::StructuralReplace => draw_structural_replace(app, frame, area),
+        #[cfg(feature = "sql")]
+        OverlayId::EditSql => edit_surfaces::draw_edit_sql(app, frame, area),
+        #[cfg(feature = "sql")]
+        OverlayId::Db => db::draw_db(app, frame, area),
+        OverlayId::MediaTypePanel => draw_media_type_panel(app, frame, area),
+        OverlayId::EncodingChooser => draw_encoding_chooser(app, frame, area),
+        OverlayId::MacroChooser => draw_macro_chooser(app, frame, area),
+        OverlayId::ClipboardChooser => draw_clipboard_chooser(app, frame, area),
+        OverlayId::WorkspaceChooser => draw_workspace_chooser(app, frame, area),
+        OverlayId::SystemInfo => draw_system_info(app, frame, area),
+        OverlayId::LspStatus => draw_lsp_status(app, frame, area),
+        OverlayId::FileInfo => draw_file_info(app, frame, area),
+        OverlayId::TextInfo => draw_text_info(app, frame, area),
+        OverlayId::MarkdownPreview => draw_markdown_preview(app, frame, area),
+        _ => draw_overlay_3(app, frame, area, id),
     }
-    if app.task_chooser.is_some() {
-        draw_task_chooser(app, frame, area);
-    }
-    if app.stash_chooser.is_some() {
-        draw_stash_chooser(app, frame, area);
-    }
-    if app.worktree_chooser.is_some() {
-        draw_worktree_chooser(app, frame, area);
-    }
-    #[cfg(feature = "script")]
-    if app.script_chooser.is_some() {
-        draw_script_chooser(app, frame, area);
-    }
-    #[cfg(feature = "script")]
-    if app.plugin_chooser.is_some() {
-        draw_plugin_chooser(app, frame, area);
-    }
-    if app.diff_view.is_some() {
-        draw_diff_view(app, frame, area);
-    }
-    if app.location_chooser.is_some() {
-        draw_location_chooser(app, frame, area);
-    }
-    if app.capture_chooser.is_some() {
-        draw_capture_chooser(app, frame, area);
-    }
-    if app.refile_chooser.is_some() {
-        draw_refile_chooser(app, frame, area);
-    }
-    if app.recent_chooser.is_some() {
-        draw_recent_chooser(app, frame, area);
-    }
-    if app.file_browser.is_some() {
-        draw_file_browser(app, frame, area);
+}
+
+/// Part 3 of the overlay draw dispatch (split for the per-function line limit).
+fn draw_overlay_3(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
+    match id {
+        OverlayId::MarkdownToc => draw_markdown_toc(app, frame, area),
+        OverlayId::Snippets => draw_snippets(app, frame, area),
+        OverlayId::Contacts => draw_contacts(app, frame, area),
+        OverlayId::Vcard => draw_vcard(app, frame, area),
+        OverlayId::Dashboard => draw_dashboard(app, frame, area),
+        OverlayId::Outline => draw_outline(app, frame, area),
+        OverlayId::ConflictList => draw_conflict_list(app, frame, area),
+        OverlayId::Completion => draw_completion(app, frame),
+        OverlayId::Hover => draw_hover(app, frame),
+        OverlayId::Paste => draw_paste_conflict(app, frame, area),
+        OverlayId::Help => draw_help(app, frame, area),
+        OverlayId::Dialog => draw_dialog(app, frame, area),
+        OverlayId::ColorConverter => draw_color_converter(app, frame, area),
+        OverlayId::UnitConverter => draw_unit_converter(app, frame, area),
+        OverlayId::Calculator => draw_calculator(app, frame, area),
+        OverlayId::RegexTester => draw_regex_tester(app, frame, area),
+        OverlayId::CodeActions => draw_code_actions(app, frame, area),
+        OverlayId::Pomodoro => draw_pomodoro(app, frame, area),
+        OverlayId::Welcome => draw_welcome(app, frame, area),
+        _ => {}
     }
 }
 

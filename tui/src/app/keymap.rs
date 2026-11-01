@@ -1,5 +1,5 @@
 //! Keyboard dispatch: the modal-overlay routing chain (`on_key`,
-//! `try_overlay_key`/`try_panel_key`/`try_tool_dialog_key`), the ten
+//! `route_overlay_key` over the one table in `overlays.rs`), the ten
 //! keymap-specific dispatchers (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/
 //! Eclipse/Sublime and their `*_token` helpers), and the small pieces that
 //! read the active keymap for display (`mode_indicator`, `which_key`).
@@ -19,247 +19,116 @@ use crate::editor_core::actions::Copy as CopyAction;
 impl App {
     // ----- top-level event entry -----------------------------------------
 
-    /// Route `key` to the highest-priority open modal layer, if any. Returns
-    /// `true` when a layer consumed the key (so [`App::on_key`] should stop).
-    /// Extracted from `on_key` to keep that function within the line limit.
-    /// Route a key to an open tool dialog (color/unit converter, calculator,
-    /// regex tester, code-action chooser). Returns `true` if one consumed it.
-    fn try_tool_dialog_key(&mut self, key: KeyEvent) -> bool {
-        if self.color_converter.is_some() {
-            self.color_converter_key(key);
-        } else if self.unit_converter.is_some() {
-            self.unit_converter_key(key);
-        } else if self.calculator.is_some() {
-            self.calculator_key(key);
-        } else if self.regex_tester.is_some() {
-            self.regex_tester_key(key);
-        } else if self.code_actions.is_some() {
-            self.code_action_key(key);
-        } else {
-            return false;
+    /// A key while the help panel is open: type to filter, arrows and paging
+    /// scroll, `Esc`/`F1` closes. It takes every key.
+    pub(super) fn help_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.help_body.height as usize).max(1);
+        match key.code {
+            KeyCode::Esc | KeyCode::F(1) => self.help = None,
+            KeyCode::Backspace => {
+                if let Some(h) = self.help.as_mut() {
+                    h.backspace();
+                }
+            }
+            KeyCode::Up => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_up(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_down(1);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_down(page);
+                }
+            }
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(h) = self.help.as_mut() {
+                    h.push(c);
+                }
+            }
+            _ => {}
         }
-        true
     }
 
-    /// Whether a modal layer is taking keystrokes, so a keypress does not reach
-    /// the editor. Mirrors the conditions of the dispatch chain below —
-    /// [`App::try_overlay_key`], [`App::try_tool_dialog_key`], and
-    /// [`App::try_panel_key`] — plus the jump-label mode `on_key` checks first;
-    /// keep this list in step with them.
-    ///
-    /// Used to route a bracketed paste ([`App::on_paste`]): text pasted while a
-    /// prompt, the palette, the search bar, or a panel is up belongs to that
-    /// input, not to the buffer behind it.
-    fn overlay_capturing_keys(&self) -> bool {
-        macro_rules! any_open {
-            ($($field:ident),* $(,)?) => { $(self.$field.is_some() ||)* false };
-        }
-        any_open!(
-            // `on_key`'s jump-label mode, then `try_overlay_key`.
-            jump,
-            welcome,
-            help,
-            dialog,
-            // `try_tool_dialog_key`.
-            color_converter,
-            unit_converter,
-            calculator,
-            regex_tester,
-            code_actions,
-            // `try_panel_key`.
-            db,
-            edit_table,
-            column_view,
-            edit_outline,
-            edit_value,
-            edit_bytes,
-            large_file,
-            edit_sql,
-            file_browser,
-            recent_chooser,
-            location_chooser,
-            capture_chooser,
-            refile_chooser,
-            nerd_palette,
-            ascii_panel,
-            x11_panel,
-            theme_editor,
-            undo_tree,
-            media_type_panel,
-            todo_tree,
-            hl7_panel,
-            fhir_bundle,
-            choice_list,
-            html_panel,
-            system_info,
-            lsp_status,
-            file_info,
-            text_info,
-            markdown_preview,
-            markdown_toc,
-            snippets,
-            vcard,
-            contacts,
-            dashboard,
-            qrcode,
-            ai_diff,
-            ai_panel,
-            outline,
-            conflict_list,
-            query_replace,
-            structural_replace,
-            replace_confirm,
-            wgrep_confirm,
-            dir_edit_confirm,
-            workspace_search,
-            confirm,
-            script_trust,
-            unsaved,
-            spell_suggest,
-            context_menu,
-            git_panel,
-            branch_chooser,
-            git_log,
-            git_graph,
-            stash_chooser,
-            worktree_chooser,
-            oc,
-            im_dialog,
-            task_chooser,
-            macro_chooser,
-            encoding_chooser,
-            http_env_chooser,
-            script_chooser,
-            plugin_chooser,
-            clipboard_chooser,
-            workspace_chooser,
-            diff_view,
-            prompt,
-            keybinding_editor,
-            palette,
-            search,
-        ) || self.visible.contains(crate::app::Visible::POMODORO)
-            || self.visible.contains(crate::app::Visible::CALENDAR)
-            || self.visible.contains(crate::app::Visible::CLOCK)
-            || self.menu.is_open()
-            || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
-            // A Cowork guest's view of a shared terminal (T697).
-            || self.cowork_terminal_viewing()
-            // The shown integrated terminal (T631), first in `try_panel_key`.
-            || self.terminal_visible()
-    }
-
-    fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
-        if self.welcome.is_some() {
-            self.welcome_key(key);
-            return true;
-        }
-        if self.help.is_some() {
-            let page = (self.layout.help_body.height as usize).max(1);
-            match key.code {
-                KeyCode::Esc | KeyCode::F(1) => self.help = None,
-                KeyCode::Backspace => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.backspace();
-                    }
-                }
-                KeyCode::Up => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.scroll_up(1);
-                    }
-                }
-                KeyCode::Down => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.scroll_down(1);
-                    }
-                }
-                KeyCode::PageUp => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.scroll_up(page);
-                    }
-                }
-                KeyCode::PageDown => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.scroll_down(page);
-                    }
-                }
-                KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
-                    if let Some(h) = self.help.as_mut() {
-                        h.push(c);
-                    }
-                }
-                _ => {}
-            }
-            return true;
-        }
-        // The info dialog. A plain dialog (About) closes on Enter/Esc/Space/O. A
-        // text-field dialog (Website/Email) closes on Esc; Ctrl+C copies the
-        // selection, and other keys drive selection/navigation in the field.
-        if self.dialog.is_some() {
-            let has_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some());
-            if !has_field {
-                if matches!(
-                    key.code,
-                    KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ' | 'o' | 'O')
-                ) {
-                    self.dialog = None;
-                }
-                return true;
-            }
-            if key.code == KeyCode::Esc {
+    /// A key while the info dialog is open. A plain dialog (About) closes on
+    /// Enter/Esc/Space/O. A text-field dialog (Website/Email) closes on Esc;
+    /// Ctrl+C copies the selection, and other keys drive selection/navigation
+    /// in the field. It takes every key.
+    pub(super) fn dialog_key(&mut self, key: KeyEvent) {
+        let has_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some());
+        if !has_field {
+            if matches!(
+                key.code,
+                KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ' | 'o' | 'O')
+            ) {
                 self.dialog = None;
-                return true;
             }
-            let area = self.dialog_field_area();
-            if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
-                if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')) {
-                    ed.apply(CopyAction {});
-                } else {
-                    let _ = ed.input(key, &area);
-                }
+            return;
+        }
+        if key.code == KeyCode::Esc {
+            self.dialog = None;
+            return;
+        }
+        let area = self.dialog_field_area();
+        if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
+            if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')) {
+                ed.apply(CopyAction {});
+            } else {
+                let _ = ed.input(key, &area);
             }
-            return true;
         }
-        if self.try_tool_dialog_key(key) {
-            return true;
-        }
-        if self.visible.contains(crate::app::Visible::POMODORO) {
-            self.pomodoro_key(key);
-            return true;
-        }
-        // While the calendar box is open it captures left/right to page months.
-        if self.visible.contains(crate::app::Visible::CALENDAR) {
-            self.calendar_key(key);
-            return true;
-        }
-        // While the clock box is open it captures up/down to pick a time row and
-        // Enter to insert it.
-        if self.visible.contains(crate::app::Visible::CLOCK) {
-            match key.code {
-                KeyCode::Up => self.clock.up(),
-                KeyCode::Down => self.clock.down(),
-                KeyCode::Enter => {
-                    let now = crate::clock::now_local();
-                    if let Some(text) = self.clock.selected_value(&now) {
-                        let area = self.editor_view();
-                        self.editor.insert_str(&text, area);
-                    }
-                    self.visible.set(crate::app::Visible::CLOCK, false);
+    }
+
+    /// A key while the clock box is open: up/down pick a time row, Enter
+    /// inserts it, `Esc`/`q` closes.
+    pub(super) fn clock_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => self.clock.up(),
+            KeyCode::Down => self.clock.down(),
+            KeyCode::Enter => {
+                let now = crate::clock::now_local();
+                if let Some(text) = self.clock.selected_value(&now) {
+                    let area = self.editor_view();
+                    self.editor.insert_str(&text, area);
                 }
-                KeyCode::Esc | KeyCode::Char('q') => {
-                    self.visible.set(crate::app::Visible::CLOCK, false);
-                }
-                _ => {}
+                self.visible.set(crate::app::Visible::CLOCK, false);
             }
-            return true;
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.visible.set(crate::app::Visible::CLOCK, false);
+            }
+            _ => {}
         }
-        self.try_panel_key(key)
+    }
+
+    /// A key while the dashboard is open: `Esc`/`Enter` close it; it takes
+    /// every key.
+    pub(super) fn dashboard_key(&mut self, key: KeyEvent) {
+        if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
+            self.close_dashboard();
+        }
+    }
+
+    /// A key while the QR-code box is open: `Esc`/`Enter`/`q` close it; it
+    /// takes every key.
+    pub(super) fn qrcode_key(&mut self, key: KeyEvent) {
+        if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+            self.qrcode = None;
+        }
     }
 
     /// Handle a key while the calendar overlay is open: arrows page the day/
     /// month/year (with Ctrl / Ctrl+Shift), Enter accepts, Esc/`q` closes. Split
-    /// out of [`App::try_overlay_key`] to keep it within the line limit.
-    fn calendar_key(&mut self, key: KeyEvent) {
+    /// out of [`App::route_overlay_key`] to keep it within the line limit.
+    pub(super) fn calendar_key(&mut self, key: KeyEvent) {
         let ctrl = Self::ctrl(&key);
         let shift = Self::shift(&key);
         match key.code {
@@ -291,156 +160,6 @@ impl App {
             }
             _ => {}
         }
-    }
-
-    /// Cowork's shared terminal (T697), ahead of the integrated terminal:
-    /// the host's share/allow-input confirmation is asked while its terminal
-    /// is open, so it answers first; and a guest's view of the host's
-    /// terminal, drawn over everything, takes every key while open.
-    fn try_cowork_terminal_key(&mut self, key: KeyEvent) -> bool {
-        if self.confirm.as_ref().is_some_and(|c| {
-            matches!(
-                c.kind,
-                crate::app::ConfirmKind::CoworkShareTerminal
-                    | crate::app::ConfirmKind::CoworkTerminalInput
-            )
-        }) {
-            self.confirm_key(key);
-            return true;
-        }
-        if self.cowork_terminal_viewing() {
-            self.cowork_terminal_key(key);
-            return true;
-        }
-        false
-    }
-
-    /// The dashboard and QR-code boxes capture every key while open and close
-    /// on `Esc`/`Enter` (and `q` for the QR code). Returns `true` when one is
-    /// open. Split out of [`App::try_panel_key`] to keep it within the line
-    /// limit.
-    fn try_info_box_key(&mut self, key: KeyEvent) -> bool {
-        if self.dashboard.is_some() {
-            if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
-                self.close_dashboard();
-            }
-            return true;
-        }
-        if self.qrcode.is_some() {
-            if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
-                self.qrcode = None;
-            }
-            return true;
-        }
-        false
-    }
-
-    /// Route `key` to the lower-priority list/panel overlays (choosers, tool
-    /// panels, prompt, palette, search, menu). Returns `true` when one consumed
-    /// the key. Split out of [`App::try_overlay_key`] to keep both within the
-    /// line limit; the priority order is preserved by calling this last.
-    fn try_panel_key(&mut self, key: KeyEvent) -> bool {
-        // Each panel that is open captures the key by delegating to its handler.
-        macro_rules! panel {
-            ($field:ident, $handler:ident) => {
-                if self.$field.is_some() {
-                    self.$handler(key);
-                    return true;
-                }
-            };
-        }
-        if self.try_cowork_terminal_key(key) {
-            return true;
-        }
-        // The shown integrated terminal captures all keys (forwarded to the
-        // shell) except its own chords, handled inside the key handler.
-        if self.terminal_visible() && self.terminal_key(key) {
-            return true;
-        }
-        panel!(db, db_key);
-        panel!(edit_table, edit_table_key);
-        panel!(column_view, column_view_key);
-        panel!(edit_outline, edit_outline_key);
-        panel!(edit_value, edit_value_key);
-        panel!(edit_bytes, edit_bytes_key);
-        panel!(large_file, large_file_key);
-        panel!(edit_sql, edit_sql_key);
-        panel!(file_browser, file_browser_key);
-        panel!(recent_chooser, recent_key);
-        panel!(location_chooser, location_key);
-        panel!(capture_chooser, capture_chooser_key);
-        panel!(refile_chooser, refile_chooser_key);
-        panel!(nerd_palette, nerd_key);
-        panel!(ascii_panel, ascii_key);
-        panel!(x11_panel, x11_key);
-        panel!(theme_editor, theme_editor_key);
-        panel!(undo_tree, undo_tree_key);
-        panel!(media_type_panel, media_type_key);
-        panel!(todo_tree, todo_tree_key);
-        panel!(hl7_panel, hl7_key);
-        panel!(fhir_bundle, fhir_bundle_key);
-        panel!(choice_list, choice_list_key);
-        panel!(html_panel, html_key);
-        panel!(system_info, system_info_key);
-        panel!(lsp_status, lsp_status_key);
-        panel!(file_info, file_info_key);
-        panel!(text_info, text_info_key);
-        panel!(markdown_toc, markdown_toc_key);
-        panel!(markdown_preview, markdown_preview_key);
-        panel!(snippets, snippets_key);
-        panel!(vcard, vcard_key);
-        panel!(contacts, contacts_key);
-        if self.try_info_box_key(key) {
-            return true;
-        }
-        panel!(ai_diff, ai_diff_key);
-        panel!(ai_panel, ai_panel_key);
-        panel!(outline, outline_key);
-        panel!(conflict_list, conflict_list_key);
-        panel!(query_replace, qr_key);
-        panel!(structural_replace, sr_key);
-        panel!(replace_confirm, replace_confirm_key);
-        panel!(wgrep_confirm, wgrep_confirm_key);
-        panel!(dir_edit_confirm, dir_edit_confirm_key);
-        panel!(workspace_search, ps_key);
-        panel!(confirm, confirm_key);
-        panel!(script_trust, script_trust_key);
-        panel!(unsaved, unsaved_key);
-        panel!(spell_suggest, spell_suggest_key);
-        panel!(context_menu, context_menu_key);
-        panel!(git_panel, git_panel_key);
-        panel!(branch_chooser, branch_key);
-        panel!(git_log, git_log_key);
-        panel!(git_graph, git_graph_key);
-        panel!(stash_chooser, stash_chooser_key);
-        panel!(worktree_chooser, worktree_chooser_key);
-        panel!(oc, oc_key);
-        panel!(im_dialog, im_dialog_key);
-        panel!(task_chooser, tasks_key);
-        panel!(macro_chooser, macro_key);
-        panel!(encoding_chooser, encoding_key);
-        panel!(http_env_chooser, http_env_key);
-        panel!(script_chooser, script_chooser_key);
-        panel!(plugin_chooser, plugin_chooser_key);
-        panel!(clipboard_chooser, clipboard_key);
-        panel!(workspace_chooser, workspace_chooser_key);
-        panel!(diff_view, diff_view_key);
-        if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
-            self.paste_key(key);
-            return true;
-        }
-        panel!(prompt, prompt_key);
-        // Must come after `prompt`: rebinding opens a `Prompt` while
-        // `keybinding_editor` stays `Some` underneath it, and `Prompt` has
-        // to win the key or the rebind prompt would be unreachable.
-        panel!(keybinding_editor, keybinding_editor_key);
-        panel!(palette, palette_key);
-        panel!(search, search_key);
-        if self.menu.is_open() {
-            self.menu_key(key);
-            return true;
-        }
-        false
     }
 
     /// Fold macOS's `Command` modifier into `Control`, so `Cmd+C` drives the
@@ -503,7 +222,7 @@ impl App {
             }
         }
         // Modal layers, in priority order.
-        if self.try_overlay_key(key) {
+        if self.route_overlay_key(key) {
             return;
         }
         // The IM panel takes plain keys while it has focus; chords fall

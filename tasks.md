@@ -7066,7 +7066,7 @@ new action.
   vix-ai-core, using `enum Error { Spawn(io::Error), Failed { code,
   stderr } }`, plus `thiserror` (already in the tree transitively). Turn
   "not installed" into a translated hint. **Medium, lower priority.**
-- [ ] **T611 — One overlay priority table for drawing and key routing.**
+- [x] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
   lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
   checks (`tui/src/ui.rs:337+`). Key priority is a separately ordered chain
@@ -7075,6 +7075,16 @@ new action.
   paths iterate, plus a test asserting that they agree for every overlay.
   Step 2, later, after a spec: an `Overlay` enum for the modals that are
   mutually exclusive. **Large (step 1 is medium).**
+  - Step 1 done 2026-11-01: `tui/src/app/overlays.rs` holds `OVERLAYS`, one
+    row per layer (91), bottom of the stack first; `ui::draw_overlays` walks
+    it forwards, `App::route_overlay_key` backwards, and
+    `overlay_capturing_keys` reads it too (a third copy removed). Spec:
+    `spec/overlay-priority/index.md`. Tests assert the two orders are one
+    table read both ways and that `Esc` closes stacked layers top-down.
+    **Step 2 (the `Overlay` enum of exclusive modals) is not done**, so the
+    box is ticked for step 1 only. Key order now follows the old drawing
+    order where the two disagreed (only visible with two layers open); the
+    cases are listed in the spec.
 
 - [x] **T639 — `password_prompt_gates_server_connections` does a real OS
   keyring lookup, so it flakes under load.** Found 2026-10-22 while

@@ -67,6 +67,8 @@ use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
 use jupyter_off as jupyter_state;
 mod keymap;
+mod overlays;
+pub(crate) use overlays::OverlayId;
 mod large_file;
 mod lsp_dap;
 mod lsp_status;

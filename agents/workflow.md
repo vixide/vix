@@ -115,6 +115,7 @@ the repo-root `spec/`. Notable ones:
 | --------------------------------------- | --------------------------------------------- |
 | `spec/index`                            | Overview, dependencies, architecture, status  |
 | `spec/navigation`                       | Position history, go-to-definition/symbol     |
+| `spec/overlay-priority`                 | One table orders overlay drawing and keys     |
 | `spec/tools`                            | The Tools menu and which crate owns each item |
 | `spec/test`                             | Test strategy: unit, integration, fuzz, bench |
 | `spec/ci`                               | The gate, and the three forges that run it    |
