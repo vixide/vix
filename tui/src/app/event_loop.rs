@@ -31,6 +31,7 @@ impl App {
     pub fn start(&mut self, cli: &Cli) -> io::Result<()> {
         self.load_scripts();
         self.maybe_prompt_script_trust();
+        self.reload_project_env_quietly();
         // T627: a trusted workspace's `.vix/settings.toml`, before any buffer
         // opens so the first ones already see it.
         self.load_project_settings();

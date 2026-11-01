@@ -263,6 +263,7 @@ vix-outline-panel = { path = "crates/vix-outline-panel", version = "2.0.0" }
 vix-todo-tree = { path = "crates/vix-todo-tree", version = "2.0.0" }
 vix-choice-list = { path = "crates/vix-choice-list", version = "2.0.0" }
 vix-palette = { path = "crates/vix-palette", version = "2.0.0" }
+vix-project-env = { path = "crates/vix-project-env", version = "2.0.0" }
 vix-pomodoro-tool = { path = "crates/vix-pomodoro-tool", version = "2.0.0" }
 vix-qr-tool = { path = "crates/vix-qr-tool", version = "2.0.0" }
 vix-regex-tool = { path = "crates/vix-regex-tool", version = "2.0.0" }

@@ -1,0 +1,19 @@
+[package]
+name = "vix-project-env"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Resolves a workspace's development environment once, and applies it to the language servers, tasks and terminal Vix spawns"
+
+[features]
+default = []
+# Start `direnv`/`mise` (only ever for a trusted workspace). Off, nothing is spawned.
+process = []
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

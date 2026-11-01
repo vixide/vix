@@ -2443,6 +2443,7 @@ const PROJECT: &[Item] = &[
     SEP,
     Item::sub("menu.item.project.subproject", PROJECT_SUBPROJECT),
     SEP,
+    Item::leaf("menu.item.project.reload_env", "project.reload_env", ""),
     Item::leaf(
         "menu.item.project.discard_command_cache",
         "project.discard_command_cache",

@@ -103,7 +103,7 @@ lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
 dap = ["vix-dap/process"]
 # The shell runner: Run Command, project tasks, tests, and everything that
 # funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
-tasks = ["vix-format-tool/process", "vix-authority/process", "vix-authority/ssh"]
+tasks = ["vix-project-env/process", "vix-format-tool/process","vix-authority/process", "vix-authority/ssh"]
 hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
@@ -366,6 +366,8 @@ vix-todo-tree = { workspace = true }
 vix-choice-list = { workspace = true }
 # Command palette (Ctrl+P) with prefix-driven modes.
 vix-palette = { workspace = true }
+# Project environment activation (venv, direnv, mise), trust-gated.
+vix-project-env = { workspace = true }
 # A Pomodoro work/break countdown as a small state machine.
 vix-pomodoro-tool = { workspace = true }
 # QR code generation (Tools → QR Code).

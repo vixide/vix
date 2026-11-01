@@ -530,6 +530,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `project.discard_command_cache` | Discard Command Cache | Menu |
 | `project.install` | Install | Menu |
 | `project.package` | Package | Menu |
+| `project.reload_env` | Reload Environment | Menu |
 | `project.repeat_last_task` | Repeat Last Task | Menu |
 | `project.run` | Run | Menu |
 | `project.run_config` | Run Configuration… | Menu |
@@ -792,4 +793,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**785 actions.**
+**786 actions.**

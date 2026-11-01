@@ -2283,8 +2283,17 @@ fn start_process(program: &str, args: &[String], root: Option<&Path>) -> Option<
             spec = spec.current_dir(root);
         }
     }
-    auth.command(&spec)
-        .ok()?
+    let mut command = auth.command(&spec).ok()?;
+    if auth.is_local() {
+        // The workspace's activated environment (venv/direnv/mise; T667).
+        vix_project_env::apply_to(|k, v| {
+            match v {
+                Some(v) => command.env(k, v),
+                None => command.env_remove(k),
+            };
+        });
+    }
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

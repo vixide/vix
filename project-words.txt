@@ -760,3 +760,6 @@ wezterm
 # T632 (problem matchers)
 mypy
 vixrecover
+# T667 (project environment)
+pyvenv
+PYTHONHOME

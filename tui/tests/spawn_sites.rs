@@ -84,6 +84,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `oc`",
     ),
     (
+        "crates/vix-project-env/src/run.rs",
+        "direnv/mise, only ever for a trusted workspace (T667)",
+        "`process` feature, enabled only by root `tasks`",
+    ),
+    (
         "crates/vix-lsp/src/lib.rs",
         "language-server process",
         "`process` feature, enabled only by root `lsp`",

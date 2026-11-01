@@ -42,6 +42,9 @@ mod modal;
 mod org;
 mod palette;
 mod panels;
+// The Project menu (and so `project.reload_env`) needs the `tasks` capability.
+#[cfg(feature = "tasks")]
+mod project_env;
 mod project_settings;
 mod save;
 #[cfg(feature = "script")]

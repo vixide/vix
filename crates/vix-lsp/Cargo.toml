@@ -16,6 +16,7 @@ process = ["vix-authority/process"]
 serde_json = { workspace = true }
 vix-authority = { workspace = true }
 vix-lsp-core = { workspace = true }
+vix-project-env = { workspace = true }
 vix-settings = { workspace = true }
 
 [lints]

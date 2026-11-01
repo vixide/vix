@@ -8010,8 +8010,15 @@ widgets, and a markup-hiding Markdown "compose" mode.
     **Not done:** the `path:line` matcher is not a separate shared crate
     (the host composes `vix-tasks` and `vix-terminal`), and Vix does not
     inject an OSC 7 prompt hook into the shell.
-- [ ] **T667 — Project environment activation, gated by trust (after
-  T627).**
+- [x] **T667 — Project environment activation, gated by trust (after
+  T627).** Mostly done 2026-11-01 (`feat/t667-env-activation-2`): done are
+  the `vix-project-env` crate (venv / direnv / mise), applying it where
+  `vix-lsp`, the shell/task runner and `vix-terminal` build their command
+  (local authority only), the status-bar segment, `project.reload_env`, and
+  the trust gate on T627's workspace-trust decision (`direnv`/`mise` never
+  run for an untrusted workspace; tested at crate and app level). Not done:
+  user-defined detectors, and `.envrc`/`mise` config alone does not raise
+  the trust prompt (trust is asked only for scripts/project settings).
   - **Problem.** Python and Node language servers, tasks and the
     terminal start with Vix's own environment. A project's `.venv`,
     direnv `.envrc`, mise/asdf, pipenv or poetry environment is ignored,

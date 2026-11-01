@@ -81,6 +81,7 @@ mod org_table;
 mod picker_panels;
 mod pipe;
 mod prettier;
+mod project_env;
 mod project_settings;
 mod remote_search;
 mod remote_session;
@@ -2018,6 +2019,9 @@ pub struct App {
     /// Kept outside [`ConfirmKind`] so that published enum keeps its 1.x
     /// variants; it only counts while the confirm still names this path.
     save_as_overwrite: Option<PathBuf>,
+    /// The source of the project environment now applied to spawned
+    /// processes (T667), shown in the status bar.
+    pub(crate) project_env_source: Option<vix_project_env::Source>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub(crate) script_trust: Option<ScriptTrustPrompt>,
     /// When [`App::script_trust`] last opened. Keys arriving sooner than
@@ -2785,6 +2789,7 @@ impl App {
             paste: None,
             confirm: None,
             save_as_overwrite: None,
+            project_env_source: None,
             script_trust: None,
             script_trust_opened_at: None,
             project_settings: None,
@@ -3530,6 +3535,7 @@ impl App {
             "project.test_at_point" => self.project_test_at_point(),
             "project.run_task" => self.open_project_run_task(),
             "project.repeat_last_task" => self.repeat_last_project_task(),
+            "project.reload_env" => self.reload_project_env(),
             "project.discard_command_cache" => self.discard_project_command_cache(),
             "project.subproject.find_file" => self.open_subproject_find_file(),
             "project.subproject.configure" => {
@@ -14367,6 +14373,23 @@ fn shell_command(
     }
 }
 
+/// Apply the workspace's activated project environment (venv/direnv/mise;
+/// T667) to a command about to run on this machine. A remote authority runs
+/// the command elsewhere, where local paths and variables mean nothing, so it
+/// is left alone.
+#[cfg(feature = "tasks")]
+fn apply_project_env(auth: &dyn crate::authority::Authority, command: &mut std::process::Command) {
+    if !auth.is_local() {
+        return;
+    }
+    vix_project_env::apply_to(|k, v| {
+        match v {
+            Some(v) => command.env(k, v),
+            None => command.env_remove(k),
+        };
+    });
+}
+
 /// Start `script` in the platform shell in `dir` with stdin closed, stdout
 /// piped and stderr discarded. `no_tty` also applies [`no_tty_prompts`]. This and
 /// [`run_shell_filter`] are the only places Vix starts a shell, so a build
@@ -14390,6 +14413,7 @@ fn spawn_shell_on(
         spec = no_tty_prompts(spec);
     }
     let mut command = auth.command(&spec)?;
+    apply_project_env(auth, &mut command);
     if no_tty {
         detach_from_tty(&mut command);
     }
@@ -14434,6 +14458,7 @@ fn run_shell_filter(
     let mut command = auth.command(&no_tty_prompts(
         shell_command(&*auth, script).current_dir(dir),
     ))?;
+    apply_project_env(&*auth, &mut command);
     detach_from_tty(&mut command);
     let mut child = command
         .stdin(std::process::Stdio::piped())

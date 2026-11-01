@@ -6671,6 +6671,7 @@ dependencies = [
  "serde_json",
  "vix-authority",
  "vix-lsp-core",
+ "vix-project-env",
  "vix-settings",
 ]
 
@@ -6810,6 +6811,13 @@ dependencies = [
 [[package]]
 name = "vix-pomodoro-tool"
 version = "2.0.0"
+
+[[package]]
+name = "vix-project-env"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "vix-qr-tool"
@@ -6954,6 +6962,7 @@ dependencies = [
  "anyhow",
  "portable-pty",
  "vix-input",
+ "vix-project-env",
  "vt100",
 ]
 
@@ -7139,6 +7148,7 @@ dependencies = [
  "vix-outline-panel",
  "vix-palette",
  "vix-pomodoro-tool",
+ "vix-project-env",
  "vix-qr-tool",
  "vix-regex-tool",
  "vix-review",

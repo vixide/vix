@@ -98,6 +98,11 @@ fn spawn_pty(
     let mut cmd = portable_pty::CommandBuilder::new(&spec.program);
     cmd.args(&spec.args);
     cmd.cwd(&spec.cwd);
+    // The workspace's activated environment (venv/direnv/mise; T667).
+    vix_project_env::apply_to(|key, value| match value {
+        Some(value) => cmd.env(key, value),
+        None => cmd.env_remove(key),
+    });
     cmd.env("TERM", "xterm-256color");
     let child = pair.slave.spawn_command(cmd).map_err(|e| to_io(&e))?;
     drop(pair.slave);

@@ -76,6 +76,7 @@ impl App {
             return;
         }
         self.set_scripts_trusted(Some(true));
+        self.reload_project_env_quietly();
         self.load_scripts();
         self.resolve_key_overrides();
         self.load_project_settings();

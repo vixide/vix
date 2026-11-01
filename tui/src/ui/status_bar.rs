@@ -43,7 +43,11 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.cowork_segment(),
         app.jupyter_segment()
     );
-    let segments = format!("{before_git}{git}{}{info}", app.im_status_segment());
+    let segments = format!(
+        "{before_git}{git}{}{}{info}",
+        app.project_env_segment(),
+        app.im_status_segment()
+    );
     let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
