@@ -37,6 +37,8 @@ mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
 #[cfg(feature = "git")]
+mod git_review;
+#[cfg(feature = "git")]
 mod git_stash_worktree;
 mod hl7;
 mod hot_exit;
@@ -249,6 +251,10 @@ pub enum PromptKind {
     /// Enter a revision (branch, tag, or commit-ish) to open the active
     /// file's content at, in a read-only tab (T207).
     GitOpenAtRevision,
+    /// Enter a revision range to review as one multi-file diff (T665).
+    GitReview,
+    /// Enter the comment for the review line under the cursor (T665).
+    GitReviewComment,
     /// Enter a path for a new linked worktree (`git worktree add`, T634).
     GitWorktreeAdd,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
@@ -2461,6 +2467,9 @@ pub struct App {
     /// other than HEAD. Cleared with `git_head_cache` and on a base change.
     #[cfg(feature = "git")]
     git_gutter_base_cache: std::collections::HashMap<PathBuf, String>,
+    /// The branch review shown in the editor (T665: **Git -> Review Range**).
+    #[cfg(feature = "git")]
+    pub review: Option<git_review::ReviewState>,
     /// Cache for the declaration scan behind [`App::sticky_header`] and
     /// [`App::breadcrumb`]: `(active tab index, path, buffer revision, the
     /// symbols found)`. A cache hit avoids re-materializing the whole buffer
@@ -2960,6 +2969,8 @@ impl App {
             git_gutter_cache_key: None,
             #[cfg(feature = "git")]
             git_gutter_base_cache: std::collections::HashMap::new(),
+            #[cfg(feature = "git")]
+            review: None,
             symbols_cache: std::cell::RefCell::new(None),
             coverage: None,
             speller: None,
@@ -13575,6 +13586,10 @@ impl App {
             PromptKind::GitOpenAtRevision => self.git_open_at_revision(prompt.input.trim()),
             #[cfg(feature = "git")]
             PromptKind::GitWorktreeAdd => self.git_worktree_add(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitReview => self.open_review(prompt.input.trim()),
+            #[cfg(feature = "git")]
+            PromptKind::GitReviewComment => self.accept_review_comment(&prompt.input),
             #[cfg(not(feature = "git"))]
             PromptKind::GitCommit
             | PromptKind::GitNewBranch
@@ -13583,6 +13598,8 @@ impl App {
             | PromptKind::GitDeleteBranch
             | PromptKind::GitGrep
             | PromptKind::GitOpenAtRevision
+            | PromptKind::GitReview
+            | PromptKind::GitReviewComment
             | PromptKind::GitWorktreeAdd => {}
             PromptKind::WorkspaceSymbol => {
                 if let Some(path) = self.active_path()

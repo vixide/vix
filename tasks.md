@@ -7951,7 +7951,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `gutter: true`). The base is in the gutter cache key. The gutter is
     line-level, so there was no word diff to reuse. T657's staged-hunk
     marking is resolved by the `index` base; the default stays `head`.
-- [ ] **T665 — Review a branch or commit range, with saved line
+- [x] **T665 — Review a branch or commit range, with saved line
   comments.**
   - **Vix today.** The git panel shows working-tree changes, and git
     history opens one file at a revision
@@ -7966,6 +7966,19 @@ widgets, and a markup-hiding Markdown "compose" mode.
     later). Store comments in `.vix/review/<range>.json`, and export them
     to Markdown so they can be pasted into a PR or an agent prompt.
     Rendering stays in `tui/src/ui/`. **M.**
+  - **Done in part 2026-11-01** (`feat/t665-branch-review`): new
+    `vix-review` crate plus `vix_git::review_diff`; Git → Review Range…,
+    Comment on Review Line…, Next/Previous Review Hunk and Export Review
+    Comments. A range (`a..b`, `a...b`) or a single commit/stash opens as
+    one read-only multi-file buffer, comments sit under their lines and are
+    stored in `.vix/review/<range>.json`, and export writes Markdown too.
+    **Not done:** stage/discard of a hunk from the review buffer (the
+    existing `git.stage_hunk` still works on the file itself), and a
+    stash chooser as a range source (type `stash@{n}`). The review is a
+    plain text buffer rendered by the existing editor, so nothing was
+    added under `tui/src/ui/`, and it parses git's own unified diff
+    rather than using `vix-diff-view` (which diffs two texts). T664's
+    `rev_blob` was not needed.
 - [ ] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632

@@ -94,6 +94,15 @@ changes are kept. It refuses an untracked file rather than deleting it.
 against: `head` (default), `index` (staged hunks stop being marked), `disk`
 (only unsaved edits) or a branch. See the `git_gutter_base` setting.
 
+**Git → Review Range…** opens a branch comparison (`main..feature`), a commit
+or a stash (`stash@{0}`) as one read-only multi-file diff. **Next/Previous
+Review Hunk** move between hunks, and **Comment on Review Line…** saves a
+comment on the line under the cursor (empty text removes it) in
+`.vix/review/<range>.json`, shown under the line and reloaded the next time you
+review that range. **Export Review Comments** writes the same comments as
+Markdown (`.vix/review/<range>.md`) to paste into a pull request or an agent
+prompt. See [Branch review](../../crates/vix-review/spec/index.md).
+
 **Git → Diff with HEAD** and **Git → Diff with Staged** open the active
 file's diff against its committed or staged version, including unsaved edits.
 

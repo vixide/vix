@@ -1673,6 +1673,13 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.unstage_hunk", "git.unstage_hunk", ""),
     Item::leaf("menu.item.git.revert_hunk", "git.revert_hunk", ""),
     SEP,
+    // T665: review a branch or commit range as one multi-file diff.
+    Item::leaf("menu.item.git.review", "git.review", ""),
+    Item::leaf("menu.item.git.review_comment", "git.review_comment", ""),
+    Item::leaf("menu.item.git.review_next", "git.review_next", ""),
+    Item::leaf("menu.item.git.review_prev", "git.review_prev", ""),
+    Item::leaf("menu.item.git.review_export", "git.review_export", ""),
+    SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
     Item::leaf("menu.item.git.conflict_list", "git.conflict_list", ""),
     Item::sub("menu.item.git.resolve", GIT_RESOLVE),

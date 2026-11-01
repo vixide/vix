@@ -1326,6 +1326,35 @@ pub fn show_commit(dir: &Path, sha: &str, rel_path: Option<&str>) -> Option<Stri
 }
 
 #[cfg(feature = "process")]
+/// The unified diff of a revision range for Review (T665): `a..b` and `a...b`
+/// run `git diff`, while a single revision (a commit, a tag, `stash@{0}`) runs
+/// `git show` with no commit header, so it shows what that revision changed.
+/// Prefixes are forced to `a/` and `b/` so the output parses whatever the
+/// user's `diff.noprefix` says. `None` on any failure, including a `range`
+/// that fails the same validation [`checkout`] applies to a ref name.
+#[must_use]
+pub fn review_diff(dir: &Path, range: &str) -> Option<String> {
+    if !valid_ref_name(range) {
+        return None;
+    }
+    let common = [
+        "--no-color",
+        "--no-ext-diff",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+    ];
+    let mut args: Vec<&str> = if range.contains("..") {
+        vec!["diff"]
+    } else {
+        vec!["show", "--format="]
+    };
+    args.extend(common);
+    args.push("--end-of-options");
+    args.push(range);
+    git_stdout(dir, &args)
+}
+
+#[cfg(feature = "process")]
 /// `rel_path`'s content at `revision` (`git show <revision>:<rel_path>`, e.g.
 /// **Git → Open File at Revision…**). `None` when `revision` doesn't resolve,
 /// the path isn't in that tree, or `revision` fails the same validation
@@ -1414,6 +1443,7 @@ mod tests {
         assert!(show_commit(&dir, "--upload-pack=evil", None).is_none());
         assert!(show_file_at(&dir, "--upload-pack=evil", "a.rs").is_none());
         assert!(resolve_short_sha(&dir, "--upload-pack=evil").is_none());
+        assert!(review_diff(&dir, "--output=x..y").is_none());
     }
 
     #[cfg(feature = "process")]

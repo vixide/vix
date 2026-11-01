@@ -28,6 +28,10 @@ caller outside this crate is the Rhai plugin installer
 [`parse_log`]) list commits into a [`LogPanel`]; [`show_commit`]/
 [`show_file_at`]/[`resolve_short_sha`] read a commit's diff or a file's
 content at a revision. See [git-history](git-history/index.md).
+- **Review** (T665): [`review_diff`] gives the unified diff of a revision
+range for **Git → Review Range…**; the multi-file model, comments and export
+are in the `vix-review` crate (see
+[its spec](../../vix-review/spec/index.md)).
 - **Stash and worktrees** (T634): [`parse_stash_list`]/
 [`parse_worktree_list`] and their runners; see the section below.
 

@@ -110,6 +110,7 @@ impl App {
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
             other if self.run_git_stash_worktree_action(other) => {}
+            other if self.run_git_review_action(other) => {}
             "git.amend" => {
                 if !self.commit_signing_blocked() {
                     self.git_op(crate::git::commit_amend, "status.git_amended");

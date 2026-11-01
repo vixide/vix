@@ -1202,3 +1202,146 @@ fn gutter_base_changes_what_the_gutter_marks() {
     assert_ne!(app.settings.git_gutter_base, "branch:base-branch");
     fs::remove_dir_all(&dir).ok();
 }
+
+const REVIEW_DIFF: &str = "diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1,3 +1,3 @@\n keep\n-old\n+new\n tail\n@@ -10,1 +10,2 @@\n ctx\n+more\n";
+
+fn type_text(app: &mut App, text: &str) {
+    for ch in text.chars() {
+        app.on_key(key(ch));
+    }
+}
+
+/// T665: a range opens as one read-only multi-file buffer; a comment on a
+/// diff line is saved under `.vix/review/`, shows under the line, exports as
+/// Markdown, and comes back when the same range is reviewed again.
+#[test]
+fn review_comments_save_export_and_reload() {
+    let dir = unique_dir("review-comments");
+    let _ = fs::remove_dir_all(dir.join(".vix"));
+    let mut app = app_at(&dir);
+    app.open_review_from_diff("main..feat", REVIEW_DIFF);
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.path.as_deref(), Some(Path::new("review main..feat")));
+    assert!(tab.read_only);
+    assert!(tab.text().contains("=== src/a.rs"));
+
+    // Not on a diff line: refused with a status, no prompt.
+    app.editor.goto(1, None, app.layout.editor);
+    app.run_action("git.review_comment");
+    assert!(app.prompt.is_none());
+
+    // Row 7 (1-based) is the `+new` line.
+    app.editor.goto(7, None, app.layout.editor);
+    app.run_action("git.review_comment");
+    assert!(matches!(
+        app.prompt.as_ref().map(|p| p.kind),
+        Some(PromptKind::GitReviewComment)
+    ));
+    type_text(&mut app, "why rename?");
+    app.on_key(keycode(KeyCode::Enter));
+    let state = app.review.as_ref().unwrap();
+    assert_eq!(state.review.comments.len(), 1);
+    assert_eq!(state.review.comments[0].line, 2);
+    assert_eq!(state.review.comments[0].code, "new");
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("    >> why rename?")
+    );
+    let json = fs::read_to_string(dir.join(".vix/review/main..feat.json")).unwrap();
+    assert!(json.contains("why rename?"));
+
+    app.run_action("git.review_export");
+    let md = fs::read_to_string(dir.join(".vix/review/main..feat.md")).unwrap();
+    assert!(md.contains("## `src/a.rs`") && md.contains("- **Line 2**: why rename?"));
+
+    // Reviewing the same range in a fresh session reloads the comment.
+    let mut again = app_at(&dir);
+    again.open_review_from_diff("main..feat", REVIEW_DIFF);
+    assert_eq!(again.review.as_ref().unwrap().review.comments.len(), 1);
+    assert!(
+        again
+            .editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains(">> why rename?")
+    );
+
+    // Commenting again with empty text removes it from the buffer and file.
+    again.editor.goto(7, None, again.layout.editor);
+    again.run_action("git.review_comment");
+    assert_eq!(again.prompt.as_ref().unwrap().input, "why rename?");
+    for _ in 0.."why rename?".len() {
+        again.on_key(keycode(KeyCode::Backspace));
+    }
+    again.on_key(keycode(KeyCode::Enter));
+    assert_eq!(again.review.as_ref().unwrap().review.comments.len(), 0);
+    assert!(!again.editor.active_tab().unwrap().text().contains(">>"));
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T665: next/prev hunk move between hunk headers and wrap; outside a review
+/// tab the actions only report that.
+#[test]
+fn review_hunk_navigation_wraps_and_needs_a_review_tab() {
+    let dir = unique_dir("review-nav");
+    let mut app = app_at(&dir);
+    app.run_action("git.review_next");
+    assert!(app.review.is_none());
+    app.open_review_from_diff("a..b", REVIEW_DIFF);
+    app.editor.goto(1, None, app.layout.editor);
+    app.run_action("git.review_next");
+    assert_eq!(app.editor.cursor_line(), 3);
+    app.run_action("git.review_next");
+    assert_eq!(app.editor.cursor_line(), 8);
+    app.run_action("git.review_next");
+    assert_eq!(app.editor.cursor_line(), 3, "wraps to the first hunk");
+    app.run_action("git.review_prev");
+    assert_eq!(app.editor.cursor_line(), 8, "wraps to the last hunk");
+    // An empty diff opens nothing.
+    let before = app.editor.tabs.len();
+    app.open_review_from_diff("x..y", "");
+    assert_eq!(app.editor.tabs.len(), before);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T665: `git.review` asks for a range and reviews what git reports for it,
+/// both for an `a..b` range and for a single commit.
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn review_range_and_single_commit_use_real_git_diffs() {
+    let dir = unique_dir("review-git").canonicalize().unwrap();
+    init_git_repo(&dir, "Ada Lovelace");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .output()
+            .unwrap();
+    };
+    fs::write(dir.join("f"), "one\ntwo\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-q", "-m", "seed"]);
+    fs::write(dir.join("f"), "one\nTWO\n").unwrap();
+    git(&["commit", "-q", "-am", "change"]);
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    for range in ["HEAD~1..HEAD", "HEAD"] {
+        app.run_action("git.review");
+        assert!(matches!(
+            app.prompt.as_ref().map(|p| p.kind),
+            Some(PromptKind::GitReview)
+        ));
+        type_text(&mut app, range);
+        app.on_key(keycode(KeyCode::Enter));
+        let state = app.review.as_ref().unwrap();
+        assert_eq!(state.review.range, range);
+        assert_eq!(state.review.files[0].path, "f");
+        assert!(app.editor.active_tab().unwrap().text().contains("+TWO"));
+    }
+    fs::remove_dir_all(&dir).ok();
+}

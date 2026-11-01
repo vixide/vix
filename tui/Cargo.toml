@@ -391,6 +391,8 @@ vix-snippet-tool = { workspace = true }
 vix-spellcheck = { path = "../crates/vix-spellcheck", version = "2.0.0", default-features = false }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { workspace = true }
+# Branch review: a multi-file diff of a revision range with saved line comments.
+vix-review = { workspace = true }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
 vix-structural-replace = { workspace = true }
 # A read-only snapshot of host system information, plus the panel's selection.

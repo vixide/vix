@@ -274,6 +274,7 @@ vix-settings = { path = "crates/vix-settings", version = "2.0.0" }
 vix-settings-bundle = { path = "crates/vix-settings-bundle", version = "2.0.0" }
 vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "2.0.0" }
 vix-snippets = { path = "crates/vix-snippets", version = "2.0.0" }
+vix-review = { path = "crates/vix-review", version = "2.0.0" }
 vix-spellcheck = { path = "crates/vix-spellcheck", version = "2.0.0" }
 vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "2.0.0" }
 vix-structural-replace = { path = "crates/vix-structural-replace", version = "2.0.0" }
