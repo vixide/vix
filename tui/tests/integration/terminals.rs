@@ -160,15 +160,21 @@ fn the_scrollback_scrolls_and_is_capped() {
     app.run_action("terminal.close");
 }
 
-/// The (column, row) of the first screen cell where `needle` starts.
+/// The (column, row) of the first screen cell where `needle` starts. Rows
+/// are read with the same `row_text` the click handler uses: the text of
+/// `terminal_screen_text` can drop a leading blank row, which would shift
+/// every row index by one.
 fn find_on_screen(app: &App, needle: &str) -> (u16, u16) {
-    let screen = app.terminal_screen_text().unwrap_or_default();
-    for (row, line) in screen.lines().enumerate() {
+    let term = app.terminals.active().expect("an active terminal");
+    let (rows, _) = term.size();
+    for row in 0..rows {
+        let line = term.row_text(row);
         if let Some(byte) = line.find(needle) {
             let col = line[..byte].chars().count();
-            return (u16::try_from(col).unwrap(), u16::try_from(row).unwrap());
+            return (u16::try_from(col).unwrap(), row);
         }
     }
+    let screen = app.terminal_screen_text().unwrap_or_default();
     panic!("{needle:?} is not on the terminal screen:\n{screen}");
 }
 
@@ -192,10 +198,12 @@ fn ctrl_click_opens_a_path_line_resolved_against_the_osc7_directory() {
     app.run_action("tools.terminal");
 
     // A path relative to the starting directory (the workspace root).
-    run_line(&mut app, "echo see top.txt:2:1 now");
-    until_tab_shows(&mut app, 0, "see top.txt:2:1 now");
+    // The `$((6*7))` is expanded only by the shell, so "now 42" appears on the
+    // screen only once the command has really run, never in the typed echo.
+    run_line(&mut app, "echo see top.txt:2:1 now $((6*7))");
+    until_tab_shows(&mut app, 0, "top.txt:2:1 now 42");
     settle(&app);
-    let (col, row) = find_on_screen(&app, "top.txt");
+    let (col, row) = find_on_screen(&app, "top.txt:2:1 now 42");
     ctrl_click(&mut app, col + 2, row);
     assert!(!app.terminal_visible(), "opening hides the overlay");
     assert!(
@@ -211,24 +219,28 @@ fn ctrl_click_opens_a_path_line_resolved_against_the_osc7_directory() {
     run_line(&mut app, "cd sub");
     run_line(
         &mut app,
-        r#"printf '\033]7;file://localhost%s\007' "$PWD"; echo at inner.txt:3 end"#,
+        r#"printf '\033]7;file://localhost%s\007' "$PWD"; echo at inner.txt:3 end $((6*7))"#,
     );
-    until_tab_shows(&mut app, 0, "at inner.txt:3 end");
+    // The OSC 7 precedes the echo in the same byte stream, so seeing the
+    // computed "end 42" proves the new directory has been reported.
+    until_tab_shows(&mut app, 0, "at inner.txt:3 end 42");
     settle(&app);
-    let (col, row) = find_on_screen(&app, "at inner.txt:3 end");
+    let (col, row) = find_on_screen(&app, "at inner.txt:3 end 42");
     ctrl_click(&mut app, col + 5, row);
     assert!(
         app.editor
             .active_tab()
             .and_then(|t| t.path.as_ref())
             .is_some_and(|p| p.ends_with("sub/inner.txt")),
-        "resolved against the OSC 7 directory"
+        "resolved against the OSC 7 directory: {:?}\n{}",
+        app.editor.active_tab().and_then(|t| t.path.clone()),
+        app.terminal_screen_text().unwrap_or_default()
     );
     assert_eq!(app.editor.cursor_line(), 2);
 
     // A click on plain words opens nothing and leaves the overlay alone.
     app.run_action("tools.terminal");
-    let (col, row) = find_on_screen(&app, "at inner.txt:3 end");
+    let (col, row) = find_on_screen(&app, "at inner.txt:3 end 42");
     ctrl_click(&mut app, col, row);
     assert!(app.terminal_visible());
     app.run_action("terminal.close");

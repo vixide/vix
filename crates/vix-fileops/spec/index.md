@@ -148,8 +148,11 @@ symlink rather than following it into some other file:
   `*.vixrecover` file (magic line, original path line, original bytes), and
   deletes the copy after the data is flushed. A copy left behind means the
   save was interrupted: `pending_recoveries(dir)` lists them and
-  `Recovery::{contents, restore, discard}` act on one. At startup the app
-  reports the count in the status line (`status.interrupted_saves`). Still to
+  `Recovery::{contents, restore, discard}` act on one. At startup `main`
+  calls `App::notice_interrupted_saves`, which reports the count in the status
+  line (`status.interrupted_saves`); it is opt-in and never part of `App::new`,
+  so tests never read the machine's real recovery directory (tests use
+  `notice_interrupted_saves_in` with a temp directory). Still to
   do: the Restore / Diff / Discard prompt, which is to share T629's recovery
   prompt (T629 has not landed).
 - `write_atomic_private(path, data)` — same mechanics, but a **new** file

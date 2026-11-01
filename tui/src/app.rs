@@ -3038,23 +3038,32 @@ impl App {
             modal_last_change: Vec::new(),
         };
         app.validate_keymap();
-        app.notice_interrupted_saves();
         app
     }
 
     /// T663: if an earlier in-place save was interrupted, a pre-save copy of
     /// the file is still in the recovery directory; say so in the status line.
-    fn notice_interrupted_saves(&mut self) {
+    ///
+    /// Opt-in, like the system clipboard: only `main` calls it, so `App::new`
+    /// (and every test that builds an app) never reads the real
+    /// `recovery_dir()` of the machine it runs on.
+    pub fn notice_interrupted_saves(&mut self) {
         if let Some(dir) = vix_fileops::recovery_dir() {
-            let n = vix_fileops::pending_recoveries(&dir).len();
-            if n > 0 {
-                self.status = t!(
-                    "status.interrupted_saves",
-                    count = n,
-                    dir = dir.display().to_string()
-                )
-                .to_string();
-            }
+            self.notice_interrupted_saves_in(&dir);
+        }
+    }
+
+    /// [`App::notice_interrupted_saves`] for an explicit recovery directory
+    /// (what tests point at a temp directory).
+    pub fn notice_interrupted_saves_in(&mut self, dir: &std::path::Path) {
+        let n = vix_fileops::pending_recoveries(dir).len();
+        if n > 0 {
+            self.status = t!(
+                "status.interrupted_saves",
+                count = n,
+                dir = dir.display().to_string()
+            )
+            .to_string();
         }
     }
 
