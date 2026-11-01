@@ -7,9 +7,11 @@
 ///
 /// # Errors
 /// Returns an error when the input is not valid TOML.
-pub fn convert(input: &str) -> Result<String, String> {
-    let value: serde_json::Value = toml::from_str(input).map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
+    let value: serde_json::Value =
+        toml::from_str(input).map_err(|e| vix_convert_tabular::ConvertError::parse("TOML", e))?;
+    serde_json::to_string_pretty(&value)
+        .map_err(|e| vix_convert_tabular::ConvertError::render("JSON", e))
 }
 
 #[cfg(test)]

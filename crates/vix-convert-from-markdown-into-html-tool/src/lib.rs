@@ -8,7 +8,7 @@ use pulldown_cmark::{Parser, html};
 ///
 /// # Errors
 /// Never fails; returns `Result` for a uniform tool interface.
-pub fn convert(input: &str) -> Result<String, String> {
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     let parser = Parser::new(input);
     let mut out = String::new();
     html::push_html(&mut out, parser);

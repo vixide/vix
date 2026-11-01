@@ -4765,14 +4765,17 @@ impl App {
     /// nothing is selected, replacing it with the result. Used by the Convert and
     /// Checksum tools. No-op (with a status) on an image tab or empty input.
     fn transform_selection_or_buffer(&mut self, f: impl Fn(&str) -> String) {
-        self.transform_selection_or_buffer_try(|input| Ok(f(input)));
+        self.transform_selection_or_buffer_try(|input| Ok::<_, String>(f(input)));
     }
 
     /// Like [`Self::transform_selection_or_buffer`] but for fallible transforms
     /// (Convert tools that parse their input). On `Err` the buffer is left
     /// untouched and the error is shown in the status line. No-op (with a status)
     /// on an image tab or empty input.
-    fn transform_selection_or_buffer_try(&mut self, f: impl Fn(&str) -> Result<String, String>) {
+    fn transform_selection_or_buffer_try<E: std::fmt::Display>(
+        &mut self,
+        f: impl Fn(&str) -> Result<String, E>,
+    ) {
         if self.active_read_only() {
             self.status = t!("status.read_only_blocked").into();
             return;
@@ -4799,7 +4802,7 @@ impl App {
         let output = match f(&input) {
             Ok(out) => out,
             Err(e) => {
-                self.status = t!("status.convert_failed", error = e).to_string();
+                self.status = t!("status.convert_failed", error = e.to_string()).to_string();
                 return;
             }
         };

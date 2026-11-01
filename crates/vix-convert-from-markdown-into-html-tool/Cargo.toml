@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Convert: Markdown into HTML."
 
 [dependencies]
+vix-convert-tabular = { workspace = true }
 pulldown-cmark = { workspace = true }
 
 [dev-dependencies]

@@ -158,24 +158,82 @@ pub fn rows_to_json(rows: &[Vec<String>]) -> String {
     serde_json::to_string_pretty(&Value::Array(records)).unwrap_or_else(|_| "[]".to_string())
 }
 
+/// Why a Tools -> Convert conversion failed (T610).
+///
+/// Shared by [`json_to_rows`] and every `vix-convert-from-*-tool` crate so
+/// callers can tell bad input (`Parse`, `NotArrayOfObjects`,
+/// `ElementNotObject`) from a failure to produce output (`Render`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConvertError {
+    /// The input is not valid text of the source format.
+    Parse {
+        /// The source format, e.g. `"JSON"`.
+        format: &'static str,
+        /// The parser's own message.
+        message: String,
+    },
+    /// The input was JSON but not an array of objects.
+    NotArrayOfObjects,
+    /// An element of the JSON array was not an object.
+    ElementNotObject,
+    /// The value could not be written in the target format.
+    Render {
+        /// The target format, e.g. `"TOML"`.
+        format: &'static str,
+        /// The serializer's own message.
+        message: String,
+    },
+}
+
+impl ConvertError {
+    /// A [`ConvertError::Parse`] for `format` from any displayable error.
+    pub fn parse(format: &'static str, e: impl std::fmt::Display) -> Self {
+        Self::Parse {
+            format,
+            message: e.to_string(),
+        }
+    }
+
+    /// A [`ConvertError::Render`] for `format` from any displayable error.
+    pub fn render(format: &'static str, e: impl std::fmt::Display) -> Self {
+        Self::Render {
+            format,
+            message: e.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for ConvertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse { message, .. } | Self::Render { message, .. } => f.write_str(message),
+            Self::NotArrayOfObjects => f.write_str("expected a JSON array of objects"),
+            Self::ElementNotObject => f.write_str("expected every array element to be an object"),
+        }
+    }
+}
+
+impl std::error::Error for ConvertError {}
+
 /// Convert a JSON array of objects into header+data rows. The header is the
 /// union of all keys in first-seen order; each object yields one row, with
 /// missing keys rendered as empty fields. String values are used verbatim; other
 /// JSON values are rendered compactly (`42`, `true`, `null` → empty string).
 ///
 /// # Errors
-/// Returns an error message when the text is not valid JSON, is not an array, or
+/// Returns a [`ConvertError`] when the text is not valid JSON, is not an array, or
 /// contains a non-object element.
-pub fn json_to_rows(json: &str) -> Result<Vec<Vec<String>>, String> {
-    let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+pub fn json_to_rows(json: &str) -> Result<Vec<Vec<String>>, ConvertError> {
+    let value: Value = serde_json::from_str(json).map_err(|e| ConvertError::parse("JSON", e))?;
     let Value::Array(items) = value else {
-        return Err("expected a JSON array of objects".to_string());
+        return Err(ConvertError::NotArrayOfObjects);
     };
     let mut headers: Vec<String> = Vec::new();
     let mut objects: Vec<&Map<String, Value>> = Vec::new();
     for item in &items {
         let Value::Object(obj) = item else {
-            return Err("expected every array element to be an object".to_string());
+            return Err(ConvertError::ElementNotObject);
         };
         for key in obj.keys() {
             if !headers.iter().any(|h| h == key) {
@@ -209,6 +267,37 @@ fn value_to_field(v: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json_to_rows_reports_typed_errors() {
+        assert!(matches!(
+            json_to_rows("not json"),
+            Err(ConvertError::Parse { format: "JSON", .. })
+        ));
+        assert_eq!(
+            json_to_rows(r#"{"a":1}"#),
+            Err(ConvertError::NotArrayOfObjects)
+        );
+        assert_eq!(json_to_rows("[1]"), Err(ConvertError::ElementNotObject));
+    }
+
+    #[test]
+    fn convert_error_display_and_constructors() {
+        assert_eq!(
+            ConvertError::NotArrayOfObjects.to_string(),
+            "expected a JSON array of objects"
+        );
+        let e = ConvertError::render("TOML", "boom");
+        assert_eq!(e.to_string(), "boom");
+        assert_eq!(
+            e,
+            ConvertError::Render {
+                format: "TOML",
+                message: "boom".to_string()
+            }
+        );
+        let _: &dyn std::error::Error = &e;
+    }
 
     #[test]
     fn csv_round_trips_quoted_fields() {

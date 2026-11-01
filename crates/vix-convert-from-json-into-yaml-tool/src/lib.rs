@@ -7,9 +7,11 @@
 ///
 /// # Errors
 /// Returns an error when the input is not valid JSON.
-pub fn convert(input: &str) -> Result<String, String> {
-    let value: serde_json::Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
-    serde_norway::to_string(&value).map_err(|e| e.to_string())
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
+    let value: serde_json::Value = serde_json::from_str(input)
+        .map_err(|e| vix_convert_tabular::ConvertError::parse("JSON", e))?;
+    serde_norway::to_string(&value)
+        .map_err(|e| vix_convert_tabular::ConvertError::render("YAML", e))
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@
 /// # Errors
 /// Never fails today (CSV parsing is lenient); returns `Result` for a uniform
 /// tool interface with the directions that can fail.
-pub fn convert(input: &str) -> Result<String, String> {
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     Ok(vix_convert_tabular::rows_to_json(
         &vix_convert_tabular::parse_csv(input),
     ))

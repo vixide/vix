@@ -7066,6 +7066,12 @@ new action.
   vix-ai-core, using `enum Error { Spawn(io::Error), Failed { code,
   stderr } }`, plus `thiserror` (already in the tree transitively). Turn
   "not installed" into a translated hint. **Medium, lower priority.**
+  - **Partly done 2026-11-01** (`refactor/t610-typed-errors`): the 12
+    `vix-convert-from-*-tool` crates and `vix-convert-tabular::json_to_rows`
+    now return `ConvertError`. **Still `Result<_, String>`:** vix-base-tool,
+    vix-base64-tool, vix-calculator-tool, vix-db (session.rs),
+    vix-edit-value, vix-format-tool, vix-http-client (rest.rs), vix-jwt-tool,
+    vix-mcp-server, vix-script (catalog.rs), vix-url-tool, gui/vix-slint.
 - [x] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
   lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`

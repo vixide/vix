@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Convert: JSON into TOML."
 
 [dependencies]
+vix-convert-tabular = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 

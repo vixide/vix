@@ -8,7 +8,7 @@
 /// # Errors
 /// Returns an error when the input is not valid JSON, not an array, or contains
 /// a non-object element.
-pub fn convert(input: &str) -> Result<String, String> {
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     Ok(vix_convert_tabular::write_csv(
         &vix_convert_tabular::json_to_rows(input)?,
     ))

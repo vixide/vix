@@ -11647,6 +11647,7 @@ name = "vix-convert-from-html-into-markdown-tool"
 version = "2.0.0"
 dependencies = [
  "htmd",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -11662,6 +11663,7 @@ version = "2.0.0"
 dependencies = [
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -11677,6 +11679,7 @@ version = "2.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -11684,6 +11687,7 @@ name = "vix-convert-from-markdown-into-html-tool"
 version = "2.0.0"
 dependencies = [
  "pulldown-cmark",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -11692,6 +11696,7 @@ version = "2.0.0"
 dependencies = [
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -11714,6 +11719,7 @@ version = "2.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
+ "vix-convert-tabular",
 ]
 
 [[package]]

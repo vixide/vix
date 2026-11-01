@@ -7,8 +7,8 @@
 ///
 /// # Errors
 /// Returns an error when the HTML cannot be converted.
-pub fn convert(input: &str) -> Result<String, String> {
-    htmd::convert(input).map_err(|e| e.to_string())
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
+    htmd::convert(input).map_err(|e| vix_convert_tabular::ConvertError::parse("HTML", e))
 }
 
 #[cfg(test)]

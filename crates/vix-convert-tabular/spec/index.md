@@ -17,3 +17,18 @@ keys, in first-seen order) followed by one row per object.
 
 Centralizing the logic means CSV→JSON and JSON→CSV (and the TSV pair) share
 exactly one parser and one mapper, so the directions stay consistent.
+
+## Errors (T610)
+
+Fallible conversions return [`ConvertError`] (`#[non_exhaustive]`, hand-written
+`Display`/`Error`, no `thiserror`), not `Result<_, String>`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Parse { format, message }` | the input is not valid text of the source format |
+| `NotArrayOfObjects` | JSON input that is not an array |
+| `ElementNotObject` | an array element that is not an object |
+| `Render { format, message }` | the value cannot be written in the target format |
+
+Every `vix-convert-from-*-tool` crate's `convert` returns it. The Tools →
+Convert action shows it through the translated `status.convert_failed` line.

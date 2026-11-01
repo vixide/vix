@@ -7,7 +7,7 @@
 ///
 /// # Errors
 /// Never fails today; returns `Result` for a uniform tool interface.
-pub fn convert(input: &str) -> Result<String, String> {
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     Ok(vix_convert_tabular::write_csv(
         &vix_convert_tabular::parse_tsv(input),
     ))

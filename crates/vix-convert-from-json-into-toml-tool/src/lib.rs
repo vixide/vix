@@ -9,9 +9,10 @@
 /// # Errors
 /// Returns an error when the input is not valid JSON, or when it is not a
 /// top-level object (TOML cannot represent a top-level array or scalar).
-pub fn convert(input: &str) -> Result<String, String> {
-    let value: serde_json::Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
-    toml::to_string_pretty(&value).map_err(|e| e.to_string())
+pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
+    let value: serde_json::Value = serde_json::from_str(input)
+        .map_err(|e| vix_convert_tabular::ConvertError::parse("JSON", e))?;
+    toml::to_string_pretty(&value).map_err(|e| vix_convert_tabular::ConvertError::render("TOML", e))
 }
 
 #[cfg(test)]

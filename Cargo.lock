@@ -6133,6 +6133,7 @@ version = "2.0.0"
 dependencies = [
  "htmd",
  "proptest",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -6149,6 +6150,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -6165,6 +6167,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "serde_norway",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -6173,6 +6176,7 @@ version = "2.0.0"
 dependencies = [
  "proptest",
  "pulldown-cmark",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -6182,6 +6186,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
+ "vix-convert-tabular",
 ]
 
 [[package]]
@@ -6205,6 +6210,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "serde_norway",
+ "vix-convert-tabular",
 ]
 
 [[package]]
