@@ -54,6 +54,18 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir archives --pattern '*-linux-*.tar.xz'
+      - name: Verify the musl build is static (T670)
+        run: |
+          mkdir musl-check
+          for a in archives/*linux-musl*.tar.xz; do
+            [ -e "$a" ] || continue
+            tar -xJf "$a" -C musl-check
+          done
+          bins=$(find musl-check -type f -name vix)
+          if [ -n "$bins" ]; then
+            # shellcheck disable=SC2086
+            sh scripts/check-static-binary $bins
+          fi
       # nfpm runs from its pinned container image (NFPM_IMAGE in the script).
       - name: Build the packages
         env:

@@ -8114,6 +8114,13 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Fix.** Force a static, non-PIE link for that target: rustflags
     `-C target-feature=+crt-static -C relocation-model=static`, or link with
     `rust-lld`. Then check that `file` reports "statically linked".
+  - **Status 2026-11-01 (not marked done).** Applied the rustflags fix in
+    `.cargo/config.toml` and added `scripts/check-static-binary`, run in
+    `release-minimal.yml` and `linux-packages.yml`. Nothing was built or
+    run: it needs a musl toolchain and a CI release run. Still to do:
+    confirm the next release's musl archive passes the check and runs on
+    Alpine, then the `.apk`/`.rpm` follow-ups below. Open question: dist's
+    own build job has no check step (release.yml is generated).
   - **After the fix:** add the `.apk` back to `scripts/build-linux-packages`,
     and use the static `vix-tui` for the x86_64 `.rpm`, so RHEL/Rocky 8 and
     9 work.

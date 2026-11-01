@@ -35,3 +35,20 @@ The same file (`.cargo/config.toml`) also configures the
 plain `cargo build --target x86_64-unknown-linux-musl` then cross-compiles
 correctly; the Makefile's `build-linux`/`build-windows` targets rely on
 exactly this.
+
+## Static, non-PIE link (T670)
+
+The musl target must produce a fully static executable. The target table
+therefore also sets
+
+```toml
+rustflags = ["-C", "target-feature=+crt-static", "-C", "relocation-model=static"]
+```
+
+Without it, linking through a `musl-gcc` wrapper gave a dynamically linked
+PIE with `INTERP /lib/ld-musl-x86_64.so.1`: it could not start on glibc
+systems and crashed at startup on Alpine. `scripts/check-static-binary`
+fails if a binary is dynamically linked or has a `PT_INTERP`; it runs after
+the build in `release-minimal.yml` and over the musl release archive in
+`linux-packages.yml`. (A `RUSTFLAGS` environment variable replaces this
+config setting, so release jobs must not set one.)

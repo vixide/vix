@@ -14,8 +14,13 @@
 #   brew install FiloSottile/musl-cross/musl-cross    # Linux (MUSL)
 
 # Linux MUSL static target.
+# Linked fully statically and non-PIE (T670): linking through a `musl-gcc`
+# wrapper otherwise yielded a dynamically linked PIE whose INTERP is
+# /lib/ld-musl-x86_64.so.1, which crashes on Alpine and cannot start on glibc.
+# scripts/check-static-binary verifies the result in CI.
 [target.x86_64-unknown-linux-musl]
 linker = "x86_64-linux-musl-gcc"
+rustflags = ["-C", "target-feature=+crt-static", "-C", "relocation-model=static"]
 
 # Windows GNU target.
 [target.x86_64-pc-windows-gnu]

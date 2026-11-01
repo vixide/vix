@@ -1,0 +1,25 @@
+#!/bin/sh
+# Fail unless every given ELF file is statically linked (T670).
+#
+# The musl release build must not need a dynamic loader: a binary with an
+# INTERP such as /lib/ld-musl-x86_64.so.1 does not start on glibc systems and
+# crashed at startup on Alpine. Uses `file`; also `readelf` when available.
+#
+# Usage: scripts/check-static-binary PATH...
+set -eu
+[ "$#" -gt 0 ] || { echo "usage: $0 PATH..." >&2; exit 2; }
+status=0
+for bin in "$@"; do
+    desc=$(file -b "$bin")
+    echo "$bin: $desc"
+    case "$desc" in
+        *"dynamically linked"*|*"interpreter"*)
+            echo "FAIL: $bin is dynamically linked" >&2; status=1 ;;
+        *"statically linked"*|*"static-pie linked"*) ;;
+        *) echo "FAIL: $bin is not a static ELF executable" >&2; status=1 ;;
+    esac
+    if command -v readelf >/dev/null 2>&1 && readelf -lW "$bin" 2>/dev/null | grep -q 'INTERP'; then
+        echo "FAIL: $bin has a PT_INTERP program header" >&2; status=1
+    fi
+done
+exit "$status"
