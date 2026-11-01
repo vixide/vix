@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
+### Added
+
+- **Safe saving (T663).** Saving a file with several hard links, or one owned by another user, now writes in place instead of renaming a temp file over it, so the links and the owner survive. Every in-place save first copies the original to the recovery directory (`~/.local/state/vix/recovery`) and removes the copy once the write is flushed; a copy left behind by an interrupted save is reported at the next start. (The Restore / Diff / Discard prompt is not built yet.)
+
 ### Breaking
 
 - **`#[non_exhaustive]`** on the public types that keep growing: `PromptKind`, `App`, `Focus`, `Capability`, `Tab`, `vix_editor::Editor`, `LspEvent`, `Settings` and its section structs, and the theme structs (`CustomTheme`, `RegionColors`, `EditorColors`, `SyntaxColors`). Outside their crate they can no longer be built with a struct literal (start from `Default::default()` and assign fields) or matched exhaustively (add a `_` arm). Adding a field or variant to them is no longer a breaking change.

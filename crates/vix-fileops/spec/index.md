@@ -81,6 +81,20 @@ symlink rather than following it into some other file:
   umask-default mode, same as a plain `fs::write` — silently narrowing
   every new file to owner-only would be a surprise for a file meant to be
   shared or version-controlled.
+  **Hard links and ownership (T663).** A rename replaces the inode, which
+  would split a hard link or change the owner/group when saving another
+  user's file. So when the target's link count is above 1, or its uid/gid
+  differs from the new file's, `write_atomic` writes **in place** instead.
+  Every in-place write (this, and the old fallback when the directory is not
+  writable) first copies the original to `recovery_dir()`
+  (`$XDG_STATE_HOME/vix/recovery`, else `~/.local/state/vix/recovery`) as a
+  `*.vixrecover` file (magic line, original path line, original bytes), and
+  deletes the copy after the data is flushed. A copy left behind means the
+  save was interrupted: `pending_recoveries(dir)` lists them and
+  `Recovery::{contents, restore, discard}` act on one. At startup the app
+  reports the count in the status line (`status.interrupted_saves`). Still to
+  do: the Restore / Diff / Discard prompt, which is to share T629's recovery
+  prompt (T629 has not landed).
 - `write_atomic_private(path, data)` — same mechanics, but a **new** file
   is always created owner-only (0600 on Unix) regardless of umask (T133).
   For persisted files whose content is inherently sensitive even though

@@ -2570,7 +2570,24 @@ impl App {
             modal_last_change: Vec::new(),
         };
         app.validate_keymap();
+        app.notice_interrupted_saves();
         app
+    }
+
+    /// T663: if an earlier in-place save was interrupted, a pre-save copy of
+    /// the file is still in the recovery directory; say so in the status line.
+    fn notice_interrupted_saves(&mut self) {
+        if let Some(dir) = vix_fileops::recovery_dir() {
+            let n = vix_fileops::pending_recoveries(&dir).len();
+            if n > 0 {
+                self.status = t!(
+                    "status.interrupted_saves",
+                    count = n,
+                    dir = dir.display().to_string()
+                )
+                .to_string();
+            }
+        }
     }
 
     /// Report and correct an unrecognized persisted `settings.keymap` once,
