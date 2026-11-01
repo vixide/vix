@@ -299,6 +299,19 @@ edit.
 | `clear-info` | `clear_info` | `ClearInfo` |
 | `none` | `none` | `None` |
 
+## Filler rows (T671)
+
+`set_filler_rows(vec![(line, count)])` makes the unwrapped view draw `count`
+blank hatched rows just before real line `line` (`line` equal to the line count
+puts them after the last line); `clear_filler_rows`, `filler_rows`,
+`filler_before(line)` and `display_row(line)` (a line's row within the view,
+counting fillers and skipping folded lines) complete the API. Fillers are not
+text: no caret, selection, syntax, mark or indent guide is ever drawn on one
+(`row_info` tells the layers which rows are fillers), `cursor_from_mouse` maps a
+click on one to the next real line, and `focus` scrolls until the caret's
+display row fits. Soft wrap ignores them. Used by side-by-side Compare Files
+(`crates/vix-diff-view/spec/index.md`).
+
 ## Fold and Unfold (T658)
 
 Besides `toggle_fold` (fold or unfold the range starting at a line) and

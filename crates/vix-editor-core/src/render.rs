@@ -241,6 +241,10 @@ impl Editor {
                     self.draw_lens_row(buf, line, text_x0, area.right(), draw_y);
                     continue;
                 }
+                crate::lens::ViewRow::Filler(_) => {
+                    self.draw_filler_row(area, buf, draw_y);
+                    continue;
+                }
                 crate::lens::ViewRow::Text(line) => line,
             };
             if line_idx >= total_lines {
@@ -317,6 +321,19 @@ impl Editor {
                 draw_y,
                 default_text_style,
             );
+        }
+    }
+
+    /// Draw one filler row (T671) at screen row `y`: a hatch across the text
+    /// area, blank gutter.
+    fn draw_filler_row(&self, area: Rect, buf: &mut Buffer, y: u16) {
+        let text_x = area
+            .left()
+            .saturating_add(u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX));
+        for x in text_x..area.right() {
+            buf[(x, y)]
+                .set_symbol("\u{2571}")
+                .set_style(self.line_number_style);
         }
     }
 
@@ -1279,5 +1296,116 @@ mod gutter_sign_tests {
         assert_eq!(ed.comment_mark(5), None);
         ed.clear_comment_marks();
         assert_eq!(ed.comment_marks(), []);
+    }
+}
+
+#[cfg(test)]
+mod filler_tests {
+    use super::*;
+
+    fn pad(ed: &Editor) -> u16 {
+        u16::try_from(ed.get_line_number_width()).unwrap()
+    }
+
+    fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
+        (x0..x1)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    /// A 6-line editor, no gutter, with 2 filler rows before line 2 (T671).
+    fn with_fillers() -> Editor {
+        let mut ed = Editor::new("text", "l0\nl1\nl2\nl3\nl4\nl5", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_filler_rows(vec![(2, 2)]);
+        ed
+    }
+
+    #[test]
+    fn filler_rows_push_later_lines_down() {
+        let ed = with_fillers();
+        let area = Rect::new(0, 0, 10, 8);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let text: Vec<String> = (0..7)
+            .map(|y| row(&buf, y, pad(&ed), pad(&ed) + 2))
+            .collect();
+        assert_eq!(
+            text,
+            [
+                "l0",
+                "l1",
+                "\u{2571}\u{2571}",
+                "\u{2571}\u{2571}",
+                "l2",
+                "l3",
+                "l4"
+            ]
+        );
+    }
+
+    #[test]
+    fn filler_rows_after_the_last_line_are_drawn() {
+        let mut ed = Editor::new("text", "a\nb", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_filler_rows(vec![(2, 1)]);
+        let area = Rect::new(0, 0, 4, 4);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        assert_eq!(row(&buf, 2, pad(&ed), pad(&ed) + 1), "\u{2571}");
+    }
+
+    #[test]
+    fn a_click_on_a_filler_row_lands_on_the_next_real_line() {
+        let ed = with_fillers();
+        let area = Rect::new(0, 0, 10, 8);
+        let pos = |y| ed.cursor_from_mouse(pad(&ed), y, &area).unwrap();
+        // Rows 2 and 3 are fillers; row 4 is line 2 ("l2" starts at char 6).
+        assert_eq!(pos(2), 6);
+        assert_eq!(pos(3), 6);
+        assert_eq!(pos(4), 6);
+        assert_eq!(pos(5), 9, "row 5 is line 3");
+        assert_eq!(pos(1), 3, "rows above the filler are unchanged");
+    }
+
+    #[test]
+    fn the_cursor_is_never_drawn_on_a_filler_row() {
+        let mut ed = with_fillers();
+        ed.set_cursor_style(Some(Style::default().bg(Color::Red)));
+        for c in 0..=17 {
+            ed.set_cursor(c);
+            let area = Rect::new(0, 0, 10, 8);
+            let mut buf = Buffer::empty(area);
+            (&ed).render(area, &mut buf);
+            for y in [2, 3] {
+                assert_ne!(
+                    buf[(pad(&ed), y)].bg,
+                    Color::Red,
+                    "cursor {c} on filler row {y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn display_row_and_focus_count_filler_rows() {
+        let mut ed = with_fillers();
+        assert_eq!(ed.display_row(1), 1);
+        assert_eq!(ed.display_row(2), 4);
+        assert_eq!(ed.display_row(5), 7);
+        // A 5-row view: line 5 sits on row 7, so focusing it scrolls.
+        ed.set_cursor(15);
+        ed.focus(&Rect::new(0, 0, 10, 5));
+        assert!(ed.get_offset_y() > 0);
+        assert!(ed.display_row(5) < 5, "the cursor row fits the view");
+    }
+
+    #[test]
+    fn filler_rows_merge_and_ignore_soft_wrap() {
+        let mut ed = with_fillers();
+        ed.set_filler_rows(vec![(3, 1), (3, 2), (1, 0)]);
+        assert_eq!(ed.filler_rows(), [(3, 3)]);
+        ed.set_soft_wrap(true);
+        assert_eq!(ed.filler_before(3), 0, "unwrapped views only");
     }
 }

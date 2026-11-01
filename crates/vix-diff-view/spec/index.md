@@ -35,13 +35,23 @@ Both sides are real tabs in a vertical split: the left (old) file and the right
 - **Menu.** Tools → Compare holds Compare With File… and every `diff.*` action;
   they are in the command palette too.
 
-### Not yet: filler rows
+### Filler rows
 
-The two panes are aligned at their top lines, not row by row: below a change
-that gives one side more lines than the other, the rows no longer line up. Filler
-rows on the shorter side need the editor widget to draw rows with no buffer
-line behind them, in every render layer (text, syntax, selections, marks,
-guides, cursor, clicks, soft wrap), so they are tracked separately as T671.
+`compare::fillers(hunks, side)` gives the shorter side of each change the rows
+it lacks, as `(line, count)`: `count` blank rows just before real line `line`
+(a pure insertion on the other side puts them at the position the lines would
+go; after the last line, `line` is the line count). The host sets them on each
+tab's editor with `Editor::set_filler_rows` whenever the row map is recomputed,
+and clears them on `diff.close`. Below any change both panes are then row for
+row aligned.
+
+The editor treats a filler as a screen row with no line behind it: the cursor
+never enters one, a click on one lands on the next real line, the syntax,
+selection, mark and indent-guide layers skip it, and the scroll math
+(`focus`) counts it. Locked scrolling still sets the other pane's top *line*
+(`map_line`), which keeps the rows aligned except when the top line sits
+strictly inside a change whose two sides differ in length. Fillers are drawn in
+unwrapped views only; with soft wrap on they are ignored.
 
 ## Unified diff overlay
 

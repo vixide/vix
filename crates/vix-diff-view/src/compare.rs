@@ -107,6 +107,25 @@ pub fn hunks(left: &str, right: &str) -> Vec<Hunk> {
     out
 }
 
+/// The filler rows `side` needs to stay row-aligned with the other side (T671),
+/// as `(line, count)`: draw `count` blank rows just before real line `line` of
+/// this side's text. A hunk where the other side has more lines gives this side
+/// the difference, placed right after the hunk's lines here (before the line
+/// that follows them; for a pure insertion on the other side, at the position
+/// the lines would go).
+#[must_use]
+pub fn fillers(hunks: &[Hunk], side: Side) -> Vec<(usize, usize)> {
+    let other = side.other();
+    hunks
+        .iter()
+        .filter_map(|h| {
+            let here = h.on(side);
+            let there = h.on(other);
+            (there.len() > here.len()).then(|| (here.end, there.len() - here.len()))
+        })
+        .collect()
+}
+
 /// The line on the other side that corresponds to `line` on `side`. Inside a
 /// hunk it is the same offset into the other side's range, clamped to it.
 #[must_use]
@@ -234,6 +253,18 @@ mod tests {
 
     const L: &str = "a\nb\nc\nd\ne\n";
     const R: &str = "a\nB\nc\nx\ny\nd\ne\n";
+
+    #[test]
+    fn fillers_pad_the_shorter_side_of_each_change() {
+        let h = hunks(L, R);
+        // Right gained "x","y" after "c": the left needs 2 rows before its "d".
+        assert_eq!(fillers(&h, Side::Left), [(3, 2)]);
+        assert_eq!(fillers(&h, Side::Right), []);
+        // A deletion pads the right.
+        let h = hunks(R, L);
+        assert_eq!(fillers(&h, Side::Right), [(3, 2)]);
+        assert_eq!(fillers(&hunks(L, L), Side::Left), []);
+    }
 
     #[test]
     fn finds_changed_and_inserted_regions() {

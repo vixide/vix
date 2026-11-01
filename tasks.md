@@ -8030,7 +8030,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     - x86_64 under emulation: Debian, Fedora, Arch. Arch needs pacman's
       `--disable-sandbox` under QEMU. This testing is what found T670.
   - **Spec:** `spec/linux-packages/index.md`.
-- [ ] **T671 — Filler rows for side-by-side Compare Files (after T660).**
+- [x] **T671 — Filler rows for side-by-side Compare Files (after T660).**
   - **Today.** T660's two panes are aligned at their top lines only. Below a
     change that gives one side more lines, the rows no longer line up.
   - **Fix.** Let `vix-editor-core`'s `Editor` take a list of virtual blank

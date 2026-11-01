@@ -16,6 +16,9 @@ use crate::editor::{Editor, Flags};
 pub(crate) enum ViewRow {
     /// The virtual lens row above logical line `.0`.
     Lens(usize),
+    /// A virtual blank filler row (T671) before logical line `.0` (which may
+    /// be the line count, for fillers after the last line).
+    Filler(usize),
     /// Logical line `.0`'s own text.
     Text(usize),
 }
@@ -76,6 +79,15 @@ impl Editor {
         let mut line = self.offset_y;
         while line < total && rows.len() < max_rows {
             if !self.is_line_hidden(line) {
+                for _ in 0..self.filler_before(line) {
+                    if rows.len() >= max_rows {
+                        return rows;
+                    }
+                    rows.push(ViewRow::Filler(line));
+                }
+                if rows.len() >= max_rows {
+                    break;
+                }
                 if self.lens_row_above(line) {
                     rows.push(ViewRow::Lens(line));
                     if rows.len() >= max_rows {
@@ -85,6 +97,15 @@ impl Editor {
                 rows.push(ViewRow::Text(line));
             }
             line += 1;
+        }
+        if line >= total {
+            // Filler rows after the last line (the other side ends with more).
+            for _ in 0..self.filler_before(total) {
+                if rows.len() >= max_rows {
+                    break;
+                }
+                rows.push(ViewRow::Filler(total));
+            }
         }
         rows
     }
@@ -97,7 +118,7 @@ impl Editor {
             .enumerate()
             .filter_map(|(row, r)| match r {
                 ViewRow::Text(line) => Some((row, line)),
-                ViewRow::Lens(_) => None,
+                ViewRow::Lens(_) | ViewRow::Filler(_) => None,
             })
             .collect()
     }
@@ -110,23 +131,23 @@ impl Editor {
         if line < self.offset_y || line >= self.code.len_lines().max(1) {
             return None;
         }
-        if !self.has_folds() && self.code_lenses.is_empty() {
+        if !self.has_folds() && self.code_lenses.is_empty() && self.fillers.is_empty() {
             return Some(line - self.offset_y);
         }
         if self.is_line_hidden(line) {
             return None;
         }
-        let rows = if self.has_folds() {
+        let rows = if self.has_folds() || !self.fillers.is_empty() {
             (self.offset_y..line)
                 .filter(|&l| !self.is_line_hidden(l))
-                .map(|l| 1 + usize::from(self.lens_row_above(l)))
+                .map(|l| 1 + usize::from(self.lens_row_above(l)) + self.filler_before(l))
                 .sum()
         } else {
             let lo = self.code_lenses.partition_point(|l| l.0 < self.offset_y);
             let hi = self.code_lenses.partition_point(|l| l.0 < line);
             (line - self.offset_y) + (hi - lo)
         };
-        Some(rows + usize::from(self.lens_row_above(line)))
+        Some(rows + usize::from(self.lens_row_above(line)) + self.filler_before(line))
     }
 
     /// The row (0-based, within a view of `area`'s size) where `line`'s text
