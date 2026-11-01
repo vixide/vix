@@ -1128,3 +1128,77 @@ fn git_worktree_add_list_switch_and_remove() {
     assert_eq!(app.root.canonicalize().unwrap(), two);
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
+
+/// T664: the change gutter's base is a setting; unknown values normalize to
+/// `head`, and the default is `head`.
+#[test]
+fn gutter_base_setting_defaults_to_head_and_normalizes() {
+    let mut app = app_at(Path::new("."));
+    assert_eq!(app.settings.git_gutter_base, "head");
+    app.set_gutter_base("index");
+    assert_eq!(app.settings.git_gutter_base, "index");
+    app.set_gutter_base("branch:dev");
+    assert_eq!(app.settings.git_gutter_base, "branch:dev");
+    app.set_gutter_base("nonsense");
+    assert_eq!(app.settings.git_gutter_base, "head");
+}
+
+/// T664 (resolving T657's staged-hunk marking): after Stage Hunk the gutter
+/// still marks the hunk against `head` but not against `index`; against
+/// `disk` it marks only unsaved edits; against a branch it marks the whole
+/// difference from that branch. The chooser action lists every base.
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn gutter_base_changes_what_the_gutter_marks() {
+    let (dir, mut app) = app_in_repo_subdir("gutterbase");
+    app.open_initial(&dir.join("sub/f"));
+    let marks = |app: &App| {
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .map_or(0, Vec::len)
+    };
+    app.on_key(key('x'));
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 1, "edit is marked against head");
+
+    app.run_action("git.stage_hunk");
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 1, "head still marks the staged hunk");
+    app.set_gutter_base("index");
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 0, "index no longer marks the staged hunk");
+
+    // Disk: the edit is unsaved, so it is marked; after saving it is not.
+    app.set_gutter_base("disk");
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 1, "disk marks the unsaved edit");
+    app.run_action("file.save");
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 0, "saved edit is no longer a difference");
+
+    // Branch: a branch cut before the edit differs by that edit.
+    std::process::Command::new("git")
+        .current_dir(&dir)
+        .args(["branch", "base-branch", "HEAD"])
+        .output()
+        .unwrap();
+    app.set_gutter_base("branch:base-branch");
+    app.refresh_git_gutter();
+    assert_eq!(marks(&app), 1, "branch base marks the uncommitted edit");
+
+    // The chooser lists head, index, disk and the branches, preselecting the
+    // current base; choosing a row applies it.
+    app.run_action("git.gutter_base");
+    let c = app.branch_chooser.as_ref().expect("chooser opens");
+    assert!(c.gutter);
+    assert_eq!(&c.branches[..3], ["head", "index", "disk"]);
+    assert_eq!(c.branches[c.selected], "branch:base-branch");
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.branch_chooser.is_none());
+    assert_ne!(app.settings.git_gutter_base, "branch:base-branch");
+    fs::remove_dir_all(&dir).ok();
+}

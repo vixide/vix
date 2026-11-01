@@ -90,6 +90,10 @@ appears in the panel title (and in the status bar).
 Discard restores the file from the index (`git restore --worktree`), so staged
 changes are kept. It refuses an untracked file rather than deleting it.
 
+**Git → Change Gutter Base…** chooses what the editor's change gutter compares
+against: `head` (default), `index` (staged hunks stop being marked), `disk`
+(only unsaved edits) or a branch. See the `git_gutter_base` setting.
+
 **Git → Diff with HEAD** and **Git → Diff with Staged** open the active
 file's diff against its committed or staged version, including unsaved edits.
 

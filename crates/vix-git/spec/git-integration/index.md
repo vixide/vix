@@ -55,6 +55,33 @@ command palette) open the active file's unified diff against its committed or
 its staged version, using the buffer's text so unsaved edits show (T657). An
 identical file reports so in the status bar instead of opening an empty view.
 
+## Gutter base (Git → Change Gutter Base…, action `git.gutter_base`, setting `git_gutter_base`)
+
+The editor diff gutter compares the buffer against a configurable **base**
+(T664), the `git_gutter_base` setting:
+
+| Value | Compares against | Use |
+| ----- | ---------------- | --- |
+| `head` (default) | the last commit | everything not yet committed |
+| `index` | the staged version | a staged hunk stops being marked (resolves T657's staged-hunk marking, ttt #951) |
+| `disk` | the file as saved | exactly the unsaved edits |
+| `branch:<name>` | the tip of that branch | an agent's or feature's whole change as you scroll |
+
+An unrecognized value (or `branch:` with no name) means `head`. **Change
+Gutter Base…** (also in the command palette) opens a list chooser — `head`,
+`index`, `disk` and one `branch:<name>` row per local branch, the current base
+preselected — and applies the choice for the session. A file absent from the
+base (new, or not on that branch) compares against empty, so every line reads
+as added. The base is part of the gutter cache key
+`(path, buffer revision, base)`, so changing it recomputes at once; non-HEAD
+base text is cached per path and dropped on every git refresh (save, commit,
+checkout). The marks stay line-level (`vix_git::diff_marks`); the word-level
+diff lives in the diff views, not the gutter. Stage Hunk, Unstage Hunk and hunk
+navigation always work against HEAD/the index regardless of the gutter base.
+Implemented by `vix_git::GutterBase` / `vix_git::rev_blob` and
+`App::gutter_base_text` / `App::set_gutter_base`; the chooser reuses
+`BranchChooser` with `gutter: true`.
+
 ## Blame (Git → Blame Line, action `git.blame`)
 
 Annotates the **cursor's current line** with its `git blame` attribution in the

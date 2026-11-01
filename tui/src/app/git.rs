@@ -62,6 +62,7 @@ impl App {
             "git.pull_squash" => self.git_remote_command("git pull --squash"),
             "git.fetch" => self.git_remote_command("git fetch"),
             "git.switch_branch" => self.open_branch_chooser(),
+            "git.gutter_base" => self.open_gutter_base_chooser(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
@@ -131,6 +132,7 @@ impl App {
         // HEAD may have moved (commit/checkout) or the working tree changed; drop
         // the cached HEAD blobs so the diff gutter refetches.
         self.git_head_cache.clear();
+        self.git_gutter_base_cache.clear();
         self.git_gutter_cache_key = None;
         if self.flags.contains(AppFlags::GIT_REPO) {
             self.git_branch = crate::git::branch(&self.root);
@@ -166,21 +168,15 @@ impl App {
             }
             return;
         };
-        if self.git_gutter_cache_key.as_ref() == Some(&(path.clone(), revision)) {
+        let base = crate::git::GutterBase::parse(&self.settings.git_gutter_base);
+        let key = (path.clone(), revision, base.as_setting());
+        if self.git_gutter_cache_key.as_ref() == Some(&key) {
             return;
         }
-        self.git_gutter_cache_key = Some((path.clone(), revision));
+        self.git_gutter_cache_key = Some(key);
         let current = self.editor.active_tab().map(Tab::text).unwrap_or_default();
-        if !self.git_head_cache.contains_key(&path) {
-            let head = path
-                .strip_prefix(&self.root)
-                .ok()
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .and_then(|rel| crate::git::head_blob(&self.root, &rel))
-                .unwrap_or_default();
-            self.git_head_cache.insert(path.clone(), head);
-        }
-        let marks = crate::git::diff_marks(&self.git_head_cache[&path], &current);
+        let base_text = self.gutter_base_text(&path, &base);
+        let marks = crate::git::diff_marks(&base_text, &current);
         let styled: Vec<(usize, &str)> = marks
             .iter()
             .map(|&(line, m)| (line, gutter_hex(m)))
@@ -188,6 +184,81 @@ impl App {
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_gutter_marks(styled);
         }
+    }
+
+    /// The text of `path` at the change-gutter `base` (T664), cached per path
+    /// until the next git refresh. A file absent from the base (new, or not on
+    /// the branch) compares against empty, so every line reads as added.
+    fn gutter_base_text(&mut self, path: &Path, base: &crate::git::GutterBase) -> String {
+        use crate::git::GutterBase;
+        if matches!(base, GutterBase::Head) {
+            return self.head_text_cached(path);
+        }
+        if let Some(t) = self.git_gutter_base_cache.get(path) {
+            return t.clone();
+        }
+        let rel = path
+            .strip_prefix(&self.root)
+            .ok()
+            .map(|p| p.to_string_lossy().replace('\\', "/"));
+        let text = match base {
+            GutterBase::Disk => std::fs::read_to_string(path).unwrap_or_default(),
+            GutterBase::Index => rel
+                .and_then(|r| crate::git::index_blob(&self.root, &r))
+                .unwrap_or_default(),
+            GutterBase::Branch(b) => rel
+                .and_then(|r| crate::git::rev_blob(&self.root, b, &r))
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+        self.git_gutter_base_cache
+            .insert(path.to_path_buf(), text.clone());
+        text
+    }
+
+    /// The cached HEAD blob of `path`, fetched on first use.
+    fn head_text_cached(&mut self, path: &Path) -> String {
+        if !self.git_head_cache.contains_key(path) {
+            let head = path
+                .strip_prefix(&self.root)
+                .ok()
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .and_then(|rel| crate::git::head_blob(&self.root, &rel))
+                .unwrap_or_default();
+            self.git_head_cache.insert(path.to_path_buf(), head);
+        }
+        self.git_head_cache[path].clone()
+    }
+
+    /// Git -> Change Gutter Base...: choose what the change gutter compares
+    /// against (T664).
+    fn open_gutter_base_chooser(&mut self) {
+        if !self.require_git_repo() {
+            return;
+        }
+        let mut rows = vec!["head".to_string(), "index".to_string(), "disk".to_string()];
+        rows.extend(
+            crate::git::local_branches(&self.root)
+                .into_iter()
+                .map(|b| format!("branch:{b}")),
+        );
+        let current = crate::git::GutterBase::parse(&self.settings.git_gutter_base).as_setting();
+        let selected = rows.iter().position(|r| *r == current).unwrap_or(0);
+        self.branch_chooser = Some(BranchChooser {
+            branches: rows,
+            selected,
+            merge: false,
+            gutter: true,
+        });
+    }
+
+    /// Make `value` the change-gutter base and force a recompute (T664).
+    pub(crate) fn set_gutter_base(&mut self, value: &str) {
+        let base = crate::git::GutterBase::parse(value).as_setting();
+        self.settings.git_gutter_base.clone_from(&base);
+        self.git_gutter_base_cache.clear();
+        self.git_gutter_cache_key = None;
+        self.status = t!("status.gutter_base_set", base = base).to_string();
     }
 
     /// The diff hunks for the active tab (committed HEAD vs the current buffer),
@@ -1365,6 +1436,7 @@ impl App {
             branches,
             selected: 0,
             merge,
+            gutter: false,
         });
     }
 
@@ -1406,6 +1478,10 @@ impl App {
         let Some(branch) = c.branches.get(c.selected).cloned() else {
             return;
         };
+        if c.gutter {
+            self.set_gutter_base(&branch);
+            return;
+        }
         if c.merge {
             // Merge streams its output (and any conflicts) to the bottom dock;
             // git state and the tree refresh when it finishes.

@@ -15,15 +15,12 @@ pub(super) fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
     let Some(c) = app.branch_chooser.as_ref() else {
         return;
     };
-    let hint = t!("ui.branch_hint");
-    app.layout.chooser = draw_list_chooser(
-        frame,
-        area,
-        &t!("ui.branch"),
-        &hint,
-        &c.branches,
-        c.selected,
-    );
+    let (title, hint) = if c.gutter {
+        (t!("ui.gutter_base"), t!("ui.gutter_base_hint"))
+    } else {
+        (t!("ui.branch"), t!("ui.branch_hint"))
+    };
+    app.layout.chooser = draw_list_chooser(frame, area, &title, &hint, &c.branches, c.selected);
 }
 
 /// **Git → Stash List…** (T634): one row per stash, `stash@{N}  message`.

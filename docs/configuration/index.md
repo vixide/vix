@@ -23,6 +23,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
 | `remote_agent` | string | `"installed"` | Remote (SSH) workspaces: `"installed"` uses a `vix` of this exact version already on the remote machine as a faster file helper; `"upload"` also copies this `vix` there when it has none and the platform matches (SHA-256 checked on the remote side first); `"off"` uses shell commands only. Any other value behaves as `"installed"`. See [Remote editing](../remote-editing/index.md#the-remote-agent). |
+| `git_gutter_base` | string | `"head"` | What the editor's change gutter compares against: `"head"` (the last commit), `"index"` (the staged version, so staged hunks stop being marked), `"disk"` (the saved file, so only unsaved edits show) or `"branch:<name>"`. Any other value falls back to `"head"`. Git → Change Gutter Base… sets it. |
 | `smart_commit` | string | `"ask"` | What Git → Commit does when nothing is staged but files changed: `"ask"` (confirm, then stage everything with `git add -A`), `"always"` (stage everything without asking) or `"never"` (refuse). Any other value behaves as `"ask"`. |
 | `oc_engine` | string | `"auto"` | Which container engine the OC menu drives: `"auto"` (the first of `docker`, `podman`, `nerdctl` found on `PATH`) or one of those names. A named engine that is not installed falls back to the auto order. |
 | `oc_mode` | string | `"full"` | `"full"`, or `"read-only"` to let the OC menu list, inspect and show logs only. Any other value behaves as `"read-only"`. |
@@ -117,6 +118,7 @@ show_whitespace = false
 show_explorer = true
 explorer_delete = "trash"
 remote_agent = "installed"
+git_gutter_base = "head"
 smart_commit = "ask"
 oc_engine = "auto"
 oc_mode = "full"
