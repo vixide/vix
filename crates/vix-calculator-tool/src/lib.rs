@@ -8,13 +8,41 @@
 
 use evalexpr::Value;
 
+/// Why a formula could not be evaluated.
+///
+/// `Display` is the evaluator's own message (unchanged from the earlier
+/// `String` error).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CalcError {
+    /// The formula is malformed, names an unknown variable or function, or
+    /// failed while evaluating (type mismatch, division by zero, ...).
+    Eval {
+        /// The evaluator's own message.
+        message: String,
+    },
+}
+
+impl std::fmt::Display for CalcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Eval { message } => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for CalcError {}
+
 /// Evaluate `formula` and render the result.
 ///
 /// # Errors
-/// Returns the evaluator's error message when the formula is malformed or
+/// Returns a [`CalcError`] carrying the evaluator's message when the formula is malformed or
 /// references unknown variables/functions.
-pub fn eval(formula: &str) -> Result<String, String> {
-    match evalexpr::eval(formula).map_err(|e| e.to_string())? {
+pub fn eval(formula: &str) -> Result<String, CalcError> {
+    let value = evalexpr::eval(formula).map_err(|e| CalcError::Eval {
+        message: e.to_string(),
+    })?;
+    match value {
         Value::Int(i) => Ok(i.to_string()),
         Value::Float(f) => Ok(f.to_string()),
         Value::Boolean(b) => Ok(b.to_string()),
@@ -41,8 +69,8 @@ pub enum Focus {
 pub enum Outcome {
     /// The formula evaluated to this display string.
     Ok(String),
-    /// The formula failed with this error message.
-    Err(String),
+    /// The formula failed with this error.
+    Err(CalcError),
 }
 
 /// The Calculator dialog's editing state.
@@ -132,6 +160,14 @@ mod tests {
     fn reports_errors() {
         assert!(eval("2 +").is_err());
         assert!(eval("nope(").is_err());
+    }
+
+    #[test]
+    fn error_variant_and_display() {
+        let e = eval("2 +").unwrap_err();
+        assert!(matches!(&e, CalcError::Eval { message } if !message.is_empty()));
+        assert_ne!(e.to_string(), "");
+        let _: &dyn std::error::Error = &e;
     }
 
     #[test]

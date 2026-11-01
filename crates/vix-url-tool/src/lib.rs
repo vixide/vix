@@ -41,23 +41,49 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'|')
     .add(b'}');
 
+/// Why percent-encoded text could not be decoded.
+///
+/// `Display` text matches the earlier `String` error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UrlError {
+    /// The decoded bytes are not valid UTF-8 text.
+    NotUtf8(std::str::Utf8Error),
+}
+
+impl std::fmt::Display for UrlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotUtf8(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for UrlError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::NotUtf8(e) => Some(e),
+        }
+    }
+}
+
 /// Percent-encode `input` for safe use anywhere in a URL.
 ///
 /// # Errors
 /// Never fails; returns `Result` for a uniform tool interface with [`decode`].
-pub fn encode(input: &str) -> Result<String, String> {
+pub fn encode(input: &str) -> Result<String, UrlError> {
     Ok(percent_encode(input.as_bytes(), ENCODE_SET).to_string())
 }
 
 /// Decode percent-encoded `input` back to text.
 ///
 /// # Errors
-/// Returns an error when the decoded bytes are not valid UTF-8.
-pub fn decode(input: &str) -> Result<String, String> {
+/// Returns [`UrlError::NotUtf8`] when the decoded bytes are not valid UTF-8.
+pub fn decode(input: &str) -> Result<String, UrlError> {
     percent_decode_str(input)
         .decode_utf8()
         .map(std::borrow::Cow::into_owned)
-        .map_err(|e| e.to_string())
+        .map_err(UrlError::NotUtf8)
 }
 
 #[cfg(test)]
@@ -73,6 +99,14 @@ mod tests {
     #[test]
     fn leaves_unreserved_alone() {
         assert_eq!(encode("Aa0-_.~").unwrap(), "Aa0-_.~");
+    }
+
+    #[test]
+    fn invalid_utf8_is_a_typed_error() {
+        let e = decode("%FF").unwrap_err();
+        assert!(matches!(e, UrlError::NotUtf8(_)));
+        assert!(std::error::Error::source(&e).is_some());
+        assert_ne!(e.to_string(), "");
     }
 
     #[test]

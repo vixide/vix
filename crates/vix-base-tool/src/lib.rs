@@ -6,8 +6,39 @@
 //! re-renders it in one base (with the conventional prefix). Used by Tools →
 //! Convert → Number via `App::transform_selection_or_buffer_try`.
 
+/// Why a number could not be converted.
+///
+/// `Display` text matches the earlier `String` errors, so the translated
+/// `status.convert_failed` line is unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BaseError {
+    /// The input held no digits (empty, or only a sign / radix prefix).
+    NoNumber,
+    /// The digits are not valid in the detected base, or overflow `i128`.
+    Invalid(std::num::ParseIntError),
+}
+
+impl std::fmt::Display for BaseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoNumber => f.write_str("no number"),
+            Self::Invalid(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for BaseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::NoNumber => None,
+            Self::Invalid(e) => Some(e),
+        }
+    }
+}
+
 /// Parse `s` as an integer with an auto-detected radix.
-fn parse(s: &str) -> Result<i128, String> {
+fn parse(s: &str) -> Result<i128, BaseError> {
     let t = s.trim().replace('_', "");
     let (neg, body) = match t.strip_prefix('-') {
         Some(rest) => (true, rest),
@@ -24,9 +55,9 @@ fn parse(s: &str) -> Result<i128, String> {
             (10, body)
         };
     if digits.is_empty() {
-        return Err("no number".to_string());
+        return Err(BaseError::NoNumber);
     }
-    let n = i128::from_str_radix(digits, radix).map_err(|e| e.to_string())?;
+    let n = i128::from_str_radix(digits, radix).map_err(BaseError::Invalid)?;
     Ok(if neg { -n } else { n })
 }
 
@@ -40,32 +71,32 @@ fn render(n: i128, prefix: &str, f: impl Fn(u128) -> String) -> String {
 /// To decimal.
 ///
 /// # Errors
-/// Returns an error when `input` is not a valid integer in any supported base.
-pub fn to_dec(input: &str) -> Result<String, String> {
+/// Returns a [`BaseError`] when `input` is not a valid integer in any supported base.
+pub fn to_dec(input: &str) -> Result<String, BaseError> {
     Ok(parse(input)?.to_string())
 }
 
 /// To hexadecimal (`0x`).
 ///
 /// # Errors
-/// Returns an error when `input` is not a valid integer in any supported base.
-pub fn to_hex(input: &str) -> Result<String, String> {
+/// Returns a [`BaseError`] when `input` is not a valid integer in any supported base.
+pub fn to_hex(input: &str) -> Result<String, BaseError> {
     Ok(render(parse(input)?, "0x", |m| format!("{m:x}")))
 }
 
 /// To binary (`0b`).
 ///
 /// # Errors
-/// Returns an error when `input` is not a valid integer in any supported base.
-pub fn to_bin(input: &str) -> Result<String, String> {
+/// Returns a [`BaseError`] when `input` is not a valid integer in any supported base.
+pub fn to_bin(input: &str) -> Result<String, BaseError> {
     Ok(render(parse(input)?, "0b", |m| format!("{m:b}")))
 }
 
 /// To octal (`0o`).
 ///
 /// # Errors
-/// Returns an error when `input` is not a valid integer in any supported base.
-pub fn to_oct(input: &str) -> Result<String, String> {
+/// Returns a [`BaseError`] when `input` is not a valid integer in any supported base.
+pub fn to_oct(input: &str) -> Result<String, BaseError> {
     Ok(render(parse(input)?, "0o", |m| format!("{m:o}")))
 }
 
@@ -98,5 +129,17 @@ mod tests {
     fn rejects_garbage() {
         assert!(to_dec("nope").is_err());
         assert!(to_hex("").is_err());
+    }
+
+    #[test]
+    fn error_variants_and_display() {
+        assert_eq!(to_dec(""), Err(BaseError::NoNumber));
+        assert_eq!(to_dec("-0x"), Err(BaseError::NoNumber));
+        let e = to_dec("12z").unwrap_err();
+        assert!(matches!(e, BaseError::Invalid(_)));
+        assert!(std::error::Error::source(&e).is_some());
+        assert_eq!(BaseError::NoNumber.to_string(), "no number");
+        assert_ne!(e.to_string(), "");
+        let _: &dyn std::error::Error = &e;
     }
 }
