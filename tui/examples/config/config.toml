@@ -38,6 +38,10 @@ show_explorer = true
 # trash/Recycle Bin, undoable from there) or "hard" (remove outright, no
 # undo). Any other value falls back to "trash".
 explorer_delete = "trash"
+# What the editor's change gutter compares against: "head" (default),
+# "index" (staged hunks stop being marked), "disk" (marks unsaved edits) or
+# "branch:<name>". Any other value falls back to "head".
+git_gutter_base = "head"
 # What Git -> Commit does when nothing is staged but files changed: "ask"
 # (default -- confirm, then `git add -A`), "always", or "never".
 smart_commit = "ask"

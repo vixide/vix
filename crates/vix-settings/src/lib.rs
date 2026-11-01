@@ -90,6 +90,11 @@ pub struct Settings {
     /// value falls back to `"trash"`, the safer default, rather than
     /// silently hard-deleting on a typo.
     pub explorer_delete: String,
+    /// What the editor's change gutter compares against (T664): `"head"`
+    /// (default), `"index"` (staged hunks stop being marked), `"disk"` (marks
+    /// exactly the unsaved edits) or `"branch:<name>"`. Anything else is
+    /// treated as `"head"`. Git → Change Gutter Base… sets it.
+    pub git_gutter_base: String,
     /// What Git → Commit does when nothing is staged but the tree has
     /// changes (T577): `"ask"` (default — confirm, then `git add -A`),
     /// `"always"` (stage everything without asking) or `"never"` (refuse).
@@ -576,6 +581,7 @@ impl Default for Settings {
             subsystems: SubsystemSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
+            git_gutter_base: "head".to_string(),
             smart_commit: "ask".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,

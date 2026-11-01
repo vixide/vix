@@ -145,6 +145,64 @@ pub enum LineMark {
     Deleted,
 }
 
+/// What the editor's change gutter compares the buffer against (T664),
+/// stored as the `git_gutter_base` setting string.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[non_exhaustive]
+pub enum GutterBase {
+    /// The last commit (the default).
+    #[default]
+    Head,
+    /// The staged (index) version: a staged hunk stops being marked.
+    Index,
+    /// The file as saved on disk: marks exactly the unsaved edits.
+    Disk,
+    /// The tip of the named branch (or any rev git understands).
+    Branch(String),
+}
+
+impl GutterBase {
+    /// Parse a setting value (`head`, `index`, `disk`, `branch:<name>`).
+    /// Anything unrecognized, or a `branch:` with no name, is [`Self::Head`].
+    #[must_use]
+    pub fn parse(s: &str) -> Self {
+        match s.trim() {
+            "index" => Self::Index,
+            "disk" => Self::Disk,
+            other => match other.strip_prefix("branch:").map(str::trim) {
+                Some(name) if !name.is_empty() => Self::Branch(name.to_string()),
+                _ => Self::Head,
+            },
+        }
+    }
+
+    /// The setting string for this base; round-trips through [`Self::parse`].
+    #[must_use]
+    pub fn as_setting(&self) -> String {
+        match self {
+            Self::Head => "head".to_string(),
+            Self::Index => "index".to_string(),
+            Self::Disk => "disk".to_string(),
+            Self::Branch(b) => format!("branch:{b}"),
+        }
+    }
+}
+
+#[cfg(feature = "process")]
+/// The contents of `rel_path` at revision `rev` (a branch name, tag or hash),
+/// or `None` when the path does not exist there or on any error (T664).
+#[must_use]
+pub fn rev_blob(dir: &Path, rev: &str, rel_path: &str) -> Option<String> {
+    if rev.starts_with('-') {
+        return None; // never let a branch name act as a git option
+    }
+    let (cwd, path) = repo_target(dir, rel_path);
+    let out = git(&cwd, &["show", &format!("{rev}:{path}")]).ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
 /// Buffers longer than this get no gutter diff marks (T574).
 const GUTTER_DIFF_MAX_LINES: usize = 50_000;
 
@@ -1481,6 +1539,20 @@ mod tests {
 
         assert_eq!(rows[4].path, "gone.rs");
         assert_eq!(rows[4].staged, Some(Change::Deleted));
+    }
+
+    #[test]
+    fn gutter_base_parses_and_round_trips() {
+        for s in ["head", "index", "disk", "branch:feature/x"] {
+            assert_eq!(GutterBase::parse(s).as_setting(), s);
+        }
+        assert_eq!(GutterBase::parse("bogus"), GutterBase::Head);
+        assert_eq!(GutterBase::parse("branch:"), GutterBase::Head);
+        assert_eq!(GutterBase::parse(""), GutterBase::Head);
+        assert_eq!(
+            GutterBase::parse(" branch: dev "),
+            GutterBase::Branch("dev".into())
+        );
     }
 
     #[test]

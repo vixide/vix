@@ -7804,7 +7804,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Order.** Share the recovery directory and prompt with T629 (hot
     exit), and land this after it.
   - From Fresh (editing.md "Interrupted Saves"). **S–M.**
-- [ ] **T664 — Choose what the change gutter compares against.**
+- [x] **T664 — Choose what the change gutter compares against.**
   - **Vix today.** The gutter diffs the buffer against HEAD only
     (`crates/vix-git/spec/index.md:9`).
   - **Fresh.** Its live diff can compare against HEAD, the index, the
@@ -7816,6 +7816,11 @@ widgets, and a markup-hiding Markdown "compose" mode.
     (add the base to it) and word diff.
   - **Also fixes.** It resolves T657's staged-hunk marking: the `index`
     base, or a rule of "HEAD unless staged", decides that. **S–M.**
+  - **Done 2026-10-31** (`feat/t664-gutter-base`): `git_gutter_base` plus
+    Git → Change Gutter Base… (reuses the branch chooser overlay with
+    `gutter: true`). The base is in the gutter cache key. The gutter is
+    line-level, so there was no word diff to reuse. T657's staged-hunk
+    marking is resolved by the `index` base; the default stays `head`.
 - [ ] **T665 — Review a branch or commit range, with saved line
   comments.**
   - **Vix today.** The git panel shows working-tree changes, and git

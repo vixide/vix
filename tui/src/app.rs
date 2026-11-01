@@ -805,6 +805,10 @@ pub struct BranchChooser {
     /// When true, the chosen branch is merged into the current branch; otherwise
     /// it is checked out.
     pub merge: bool,
+    /// When true this is the change-gutter base chooser (T664): the rows are
+    /// `head`, `index`, `disk` and `branch:<name>` settings values and the
+    /// chosen one becomes `git_gutter_base`.
+    pub gutter: bool,
 }
 
 /// The task chooser (Tools → Tasks…, Project → Run Task…): named tasks —
@@ -2078,7 +2082,11 @@ pub struct App {
     /// (T510: `refresh_git_gutter` is called every redraw, so this skips
     /// recomputing the Myers diff when neither has changed since).
     #[cfg(feature = "git")]
-    git_gutter_cache_key: Option<(PathBuf, u64)>,
+    git_gutter_cache_key: Option<(PathBuf, u64, String)>,
+    /// Cached text of each file at the chosen gutter base (T664), for bases
+    /// other than HEAD. Cleared with `git_head_cache` and on a base change.
+    #[cfg(feature = "git")]
+    git_gutter_base_cache: std::collections::HashMap<PathBuf, String>,
     /// Cache for the declaration scan behind [`App::sticky_header`] and
     /// [`App::breadcrumb`]: `(active tab index, path, buffer revision, the
     /// symbols found)`. A cache hit avoids re-materializing the whole buffer
@@ -2508,6 +2516,8 @@ impl App {
             git_head_cache: std::collections::HashMap::new(),
             #[cfg(feature = "git")]
             git_gutter_cache_key: None,
+            #[cfg(feature = "git")]
+            git_gutter_base_cache: std::collections::HashMap::new(),
             symbols_cache: std::cell::RefCell::new(None),
             coverage: None,
             speller: None,
