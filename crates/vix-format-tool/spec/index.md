@@ -39,3 +39,14 @@ Node or Prettier.
   Otherwise only a `PATH` Prettier is used.
 
 Tests use a fake `prettier` shell script in a temp directory, never real Node.
+
+## Errors (T610)
+
+`FormatError`; `json_pretty`/`json_minify`/`yaml_format`/`toml_format` return `Result<String, FormatError>`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Parse { format, message }` | the input is not valid text of the format |
+| `Render { format, message }` | the parsed value cannot be written back out |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.

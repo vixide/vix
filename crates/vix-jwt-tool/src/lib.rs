@@ -8,18 +8,58 @@
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
+/// Why a JWT could not be decoded.
+///
+/// `Display` text matches the earlier `String` errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum JwtError {
+    /// Fewer than two non-empty dot-separated parts.
+    NotJwt,
+    /// A part is not valid `Base64URL`.
+    Base64(base64::DecodeError),
+    /// A part decoded to bytes that are not UTF-8 text.
+    NotUtf8(std::string::FromUtf8Error),
+    /// A part decoded to text that is not JSON.
+    Json {
+        /// The JSON parser's own message.
+        message: String,
+    },
+}
+
+impl std::fmt::Display for JwtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotJwt => f.write_str("not a JWT (expected header.payload.signature)"),
+            Self::Base64(e) => e.fmt(f),
+            Self::NotUtf8(e) => e.fmt(f),
+            Self::Json { message } => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for JwtError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Base64(e) => Some(e),
+            Self::NotUtf8(e) => Some(e),
+            Self::NotJwt | Self::Json { .. } => None,
+        }
+    }
+}
+
 /// Decode the header and payload of JWT `input` into pretty-printed JSON.
 ///
 /// # Errors
-/// Returns an error when the token does not have at least two dot-separated
+/// Returns a [`JwtError`] when the token does not have at least two dot-separated
 /// parts, a part is not valid `Base64URL`, or a part is not valid JSON.
-pub fn decode(input: &str) -> Result<String, String> {
+pub fn decode(input: &str) -> Result<String, JwtError> {
     let token = input.trim();
     let mut parts = token.split('.');
     let header = parts.next().filter(|s| !s.is_empty());
     let payload = parts.next().filter(|s| !s.is_empty());
     let (Some(header), Some(payload)) = (header, payload) else {
-        return Err("not a JWT (expected header.payload.signature)".to_string());
+        return Err(JwtError::NotJwt);
     };
     let header = decode_part(header)?;
     let payload = decode_part(payload)?;
@@ -49,13 +89,16 @@ fn header_is_alg_none(header_json: &str) -> bool {
 }
 
 /// Base64URL-decode one part and pretty-print it as JSON.
-fn decode_part(part: &str) -> Result<String, String> {
+fn decode_part(part: &str) -> Result<String, JwtError> {
+    let json_err = |e: serde_json::Error| JwtError::Json {
+        message: e.to_string(),
+    };
     let bytes = URL_SAFE_NO_PAD
         .decode(part.as_bytes())
-        .map_err(|e| e.to_string())?;
-    let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
+        .map_err(JwtError::Base64)?;
+    let text = String::from_utf8(bytes).map_err(JwtError::NotUtf8)?;
+    let value: serde_json::Value = serde_json::from_str(&text).map_err(json_err)?;
+    serde_json::to_string_pretty(&value).map_err(json_err)
 }
 
 #[cfg(test)]
@@ -90,6 +133,27 @@ mod tests {
     fn rejects_non_jwt() {
         assert!(decode("not-a-token").is_err());
         assert!(decode("").is_err());
+    }
+
+    #[test]
+    fn errors_are_typed() {
+        assert_eq!(decode("not-a-token"), Err(JwtError::NotJwt));
+        assert_eq!(decode(""), Err(JwtError::NotJwt));
+        assert!(matches!(decode("!!!.!!!.x"), Err(JwtError::Base64(_))));
+        // "_w" is the single byte 0xFF (not UTF-8); "e30" is "{}".
+        assert!(matches!(decode("_w.e30.x"), Err(JwtError::NotUtf8(_))));
+        // "aGk" is "hi" (not JSON).
+        let e = decode("aGk.e30.x").unwrap_err();
+        assert!(matches!(e, JwtError::Json { .. }));
+        assert_ne!(e.to_string(), "");
+        for e in [
+            decode("!!!.!!!.x").unwrap_err(),
+            decode("_w.e30.x").unwrap_err(),
+        ] {
+            assert!(std::error::Error::source(&e).is_some());
+            assert_ne!(e.to_string(), "");
+        }
+        assert!(std::error::Error::source(&JwtError::NotJwt).is_none());
     }
 
     // ---- property-based ("fuzz") tests ------------------------------------

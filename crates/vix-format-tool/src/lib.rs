@@ -10,40 +10,92 @@ pub mod prettier;
 #[cfg(feature = "process")]
 mod run;
 
+/// Why a document could not be reformatted.
+///
+/// `Display` is the parser's or serializer's own message (unchanged from the
+/// earlier `String` error).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FormatError {
+    /// The input is not valid text of the format.
+    Parse {
+        /// The format, e.g. `"JSON"`.
+        format: &'static str,
+        /// The parser's own message.
+        message: String,
+    },
+    /// The parsed value could not be written back out.
+    Render {
+        /// The format, e.g. `"TOML"`.
+        format: &'static str,
+        /// The serializer's own message.
+        message: String,
+    },
+}
+
+impl FormatError {
+    fn parse(format: &'static str, e: impl std::fmt::Display) -> Self {
+        Self::Parse {
+            format,
+            message: e.to_string(),
+        }
+    }
+
+    fn render(format: &'static str, e: impl std::fmt::Display) -> Self {
+        Self::Render {
+            format,
+            message: e.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse { message, .. } | Self::Render { message, .. } => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for FormatError {}
+
 /// Pretty-print JSON with two-space indentation.
 ///
 /// # Errors
-/// Returns an error when the input is not valid JSON.
-pub fn json_pretty(input: &str) -> Result<String, String> {
-    let v: serde_json::Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
+/// Returns a [`FormatError`] when the input is not valid JSON.
+pub fn json_pretty(input: &str) -> Result<String, FormatError> {
+    let v: serde_json::Value =
+        serde_json::from_str(input).map_err(|e| FormatError::parse("JSON", e))?;
+    serde_json::to_string_pretty(&v).map_err(|e| FormatError::render("JSON", e))
 }
 
 /// Minify JSON to its most compact single-line form.
 ///
 /// # Errors
-/// Returns an error when the input is not valid JSON.
-pub fn json_minify(input: &str) -> Result<String, String> {
-    let v: serde_json::Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
-    serde_json::to_string(&v).map_err(|e| e.to_string())
+/// Returns a [`FormatError`] when the input is not valid JSON.
+pub fn json_minify(input: &str) -> Result<String, FormatError> {
+    let v: serde_json::Value =
+        serde_json::from_str(input).map_err(|e| FormatError::parse("JSON", e))?;
+    serde_json::to_string(&v).map_err(|e| FormatError::render("JSON", e))
 }
 
 /// Canonicalize YAML (re-emit with consistent formatting).
 ///
 /// # Errors
-/// Returns an error when the input is not valid YAML.
-pub fn yaml_format(input: &str) -> Result<String, String> {
-    let v: serde_norway::Value = serde_norway::from_str(input).map_err(|e| e.to_string())?;
-    serde_norway::to_string(&v).map_err(|e| e.to_string())
+/// Returns a [`FormatError`] when the input is not valid YAML.
+pub fn yaml_format(input: &str) -> Result<String, FormatError> {
+    let v: serde_norway::Value =
+        serde_norway::from_str(input).map_err(|e| FormatError::parse("YAML", e))?;
+    serde_norway::to_string(&v).map_err(|e| FormatError::render("YAML", e))
 }
 
 /// Canonicalize TOML (re-emit pretty-printed).
 ///
 /// # Errors
-/// Returns an error when the input is not valid TOML, or is not a table.
-pub fn toml_format(input: &str) -> Result<String, String> {
-    let v: toml::Value = toml::from_str(input).map_err(|e| e.to_string())?;
-    toml::to_string_pretty(&v).map_err(|e| e.to_string())
+/// Returns a [`FormatError`] when the input is not valid TOML, or is not a table.
+pub fn toml_format(input: &str) -> Result<String, FormatError> {
+    let v: toml::Value = toml::from_str(input).map_err(|e| FormatError::parse("TOML", e))?;
+    toml::to_string_pretty(&v).map_err(|e| FormatError::render("TOML", e))
 }
 
 #[cfg(test)]
@@ -64,6 +116,25 @@ mod tests {
     fn json_rejects_bad_input() {
         assert!(json_pretty("{nope}").is_err());
         assert!(json_minify("{nope}").is_err());
+    }
+
+    #[test]
+    fn errors_are_typed_per_format() {
+        assert!(matches!(
+            json_pretty("{nope}"),
+            Err(FormatError::Parse { format: "JSON", .. })
+        ));
+        assert!(matches!(
+            yaml_format("a: [unclosed"),
+            Err(FormatError::Parse { format: "YAML", .. })
+        ));
+        let e = toml_format("= bad").unwrap_err();
+        assert!(matches!(e, FormatError::Parse { format: "TOML", .. }));
+        assert_ne!(e.to_string(), "");
+        let r = FormatError::render("TOML", "boom");
+        assert_eq!(r.to_string(), "boom");
+        assert!(matches!(r, FormatError::Render { format: "TOML", .. }));
+        let _: &dyn std::error::Error = &r;
     }
 
     #[test]
