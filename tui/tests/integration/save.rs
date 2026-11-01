@@ -233,3 +233,33 @@ fn saving_some_other_toml_file_does_not_reload_settings() {
     assert_eq!(app.settings.keymap, "apple");
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T663: a leftover pre-save copy in the recovery directory is reported in the
+/// status line -- but only when asked, with an explicit directory. `App::new`
+/// never reads the machine's real `recovery_dir()`, so a developer's own
+/// leftovers cannot leak into any test.
+#[test]
+fn interrupted_save_notice_reads_only_the_directory_it_is_given() {
+    let dir = unique_dir("recovery-notice");
+    let recovery = dir.join("recovery");
+    fs::create_dir_all(&recovery).unwrap();
+
+    // Building an app reads no recovery directory: nothing to report, whatever
+    // is in the real home.
+    let mut app = app_at(&dir);
+    let baseline = app.status.clone();
+
+    // An empty temp recovery directory is silent.
+    app.notice_interrupted_saves_in(&recovery);
+    assert_eq!(app.status, baseline);
+
+    // A leftover copy (magic line, original path, saved bytes) is reported.
+    fs::write(
+        recovery.join("1-0-a.txt.vixrecover"),
+        format!("VIXRECOVER\n{}\nold\n", dir.join("a.txt").display()),
+    )
+    .unwrap();
+    app.notice_interrupted_saves_in(&recovery);
+    assert_ne!(app.status, baseline);
+    fs::remove_dir_all(&dir).ok();
+}

@@ -213,6 +213,8 @@ fn main() -> io::Result<()> {
         |(t, _)| PathBuf::from(t.path()),
     );
     let mut app = App::new(root, settings);
+    // T663: opt-in (never in `App::new`) so tests do not read the real home.
+    app.notice_interrupted_saves();
     // The status-bar host, conflict-checked saves and the trust prompt
     // (T713, T714), before `start` loads scripts or restores the session.
     if let Some((target, agent_note)) = remote {
