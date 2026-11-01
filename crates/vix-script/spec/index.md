@@ -553,3 +553,15 @@ no files on disk beyond `discovery.rs`'s/`load_all`'s own filesystem tests
 (a `std::env::temp_dir()`-rooted scratch directory, same pattern as
 `vix-editorconfig`'s), the same terminal-independent-testing principle as
 everywhere else in this repo (`spec/test/index.md`).
+
+## Errors (T610)
+
+`CatalogError`; `Catalog::insert_toml` returns `Result<(), CatalogError>` and adds nothing on error (`Catalog::load_dir` still reports `"<file>: <reason>"` strings):
+
+| Variant | Meaning |
+| --- | --- |
+| `Parse { message }` | the locale file is not valid TOML |
+| `NotAString { key }` | the value at dotted `key` is neither a string nor a table |
+| `Read { message }` | the file could not be read (used by `load_dir`) |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.

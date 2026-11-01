@@ -50,10 +50,13 @@ impl Catalog {
     ///
     /// # Errors
     ///
-    /// Returns the TOML parse error, or names the first key whose value is
-    /// not a string or a table. Nothing is added on error.
-    pub fn insert_toml(&mut self, locale: &str, text: &str) -> Result<(), String> {
-        let table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
+    /// Returns [`CatalogError::Parse`] for invalid TOML, or
+    /// [`CatalogError::NotAString`] naming the first key whose value is not a
+    /// string or a table. Nothing is added on error.
+    pub fn insert_toml(&mut self, locale: &str, text: &str) -> Result<(), CatalogError> {
+        let table: toml::Table = toml::from_str(text).map_err(|e| CatalogError::Parse {
+            message: e.to_string(),
+        })?;
         let mut strings = HashMap::new();
         flatten("", &table, &mut strings)?;
         self.locales.insert(locale.to_string(), strings);
@@ -103,7 +106,9 @@ impl Catalog {
                 }
             }
             let result = std::fs::read_to_string(&path)
-                .map_err(|e| e.to_string())
+                .map_err(|e| CatalogError::Read {
+                    message: e.to_string(),
+                })
                 .and_then(|text| catalog.insert_toml(code, &text));
             if let Err(e) = result {
                 errors.push(format!("{name}: {e}"));
@@ -148,12 +153,47 @@ impl Catalog {
     }
 }
 
+/// Why a locale table could not be added to a [`Catalog`].
+///
+/// `Display` text matches the earlier `String` errors, so the `"<file>: <reason>"`
+/// lines [`Catalog::load_dir`] reports are unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CatalogError {
+    /// The text is not valid TOML.
+    Parse {
+        /// The TOML parser's own message.
+        message: String,
+    },
+    /// A value is neither a string nor a table.
+    NotAString {
+        /// The dotted key of the offending value.
+        key: String,
+    },
+    /// The file could not be read.
+    Read {
+        /// The I/O error's message.
+        message: String,
+    },
+}
+
+impl std::fmt::Display for CatalogError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse { message } | Self::Read { message } => f.write_str(message),
+            Self::NotAString { key } => write!(f, "{key}: not a string"),
+        }
+    }
+}
+
+impl std::error::Error for CatalogError {}
+
 /// Flatten `table` into `out` under `prefix`, joining nested keys with `.`.
 fn flatten(
     prefix: &str,
     table: &toml::Table,
     out: &mut HashMap<String, String>,
-) -> Result<(), String> {
+) -> Result<(), CatalogError> {
     for (key, value) in table {
         let full = if prefix.is_empty() {
             key.clone()
@@ -165,7 +205,7 @@ fn flatten(
                 out.insert(full, s.clone());
             }
             toml::Value::Table(t) => flatten(&full, t, out)?,
-            _ => return Err(format!("{full}: not a string")),
+            _ => return Err(CatalogError::NotAString { key: full }),
         }
     }
     Ok(())
@@ -229,8 +269,27 @@ mod tests {
         let err = c
             .insert_toml("en", "a = \"ok\"\n[cmd]\nn = 3\n")
             .unwrap_err();
-        assert!(err.contains("cmd.n"), "{err}");
+        assert_eq!(
+            err,
+            CatalogError::NotAString {
+                key: "cmd.n".to_string()
+            }
+        );
+        assert_eq!(err.to_string(), "cmd.n: not a string");
         assert!(c.is_empty());
+    }
+
+    #[test]
+    fn invalid_toml_is_a_parse_error() {
+        let mut c = Catalog::new();
+        let err = c.insert_toml("en", "= nope").unwrap_err();
+        assert!(matches!(&err, CatalogError::Parse { message } if !message.is_empty()));
+        assert_ne!(err.to_string(), "");
+        let read = CatalogError::Read {
+            message: "denied".to_string(),
+        };
+        assert_eq!(read.to_string(), "denied");
+        let _: &dyn std::error::Error = &read;
     }
 
     #[test]

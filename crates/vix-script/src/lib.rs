@@ -18,7 +18,7 @@ mod discovery;
 mod engine;
 pub mod plugins;
 
-pub use catalog::{Catalog, FALLBACK_LOCALE, MAX_FILE_BYTES};
+pub use catalog::{Catalog, CatalogError, FALLBACK_LOCALE, MAX_FILE_BYTES};
 pub use discovery::{DiscoveredScript, discover};
 pub use engine::{
     Command, HostMessage, HostState, InvokeOutcome, KeyBinding, LoadError, LoadedScript,
