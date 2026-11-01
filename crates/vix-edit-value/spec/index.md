@@ -37,3 +37,13 @@ state, and an undo history, and interprets keys itself, returning an `Outcome`
 (`Consumed`/`Close`/`Save`). `app` opens it with `Format::Json` or `Format::Yaml`,
 routes keys, and on save serializes into the active buffer before `file.save`.
 `ui` renders each row as indentation + a fold marker + `label: value`.
+
+## Errors (T610)
+
+`ParseError`; `Tree::from_text` returns `Result<Tree, ParseError>`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Syntax { message }` | the text is not valid JSON or YAML; `message` is the parser's own, line and column included |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.

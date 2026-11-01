@@ -92,6 +92,29 @@ enum Mode {
 /// Maximum number of undo steps retained.
 const HISTORY_CAP: usize = 200;
 
+/// Why [`Tree::from_text`] could not build a tree.
+///
+/// `Display` is the parser's own message, line and column included.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ParseError {
+    /// The text is not valid JSON or YAML.
+    Syntax {
+        /// The parser's own message.
+        message: String,
+    },
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Syntax { message } => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 /// A foldable, editable JSON/YAML value tree with a cursor and undo history.
 pub struct Tree {
     root: Val,
@@ -117,9 +140,11 @@ impl Tree {
     /// return a bare `Option`, so the caller could only show a static "not
     /// valid JSON or YAML" with no indication of what was actually wrong or
     /// where).
-    pub fn from_text(text: &str, format: Format) -> Result<Self, String> {
+    pub fn from_text(text: &str, format: Format) -> Result<Self, ParseError> {
         let parsed: serde_norway::Value =
-            serde_norway::from_str(text).map_err(|e| e.to_string())?;
+            serde_norway::from_str(text).map_err(|e| ParseError::Syntax {
+                message: e.to_string(),
+            })?;
         let mut tree = Tree {
             root: from_yaml(&parsed),
             format,
@@ -651,7 +676,10 @@ mod tests {
 
     #[test]
     fn invalid_input_is_an_error() {
-        assert!(Tree::from_text("{ not valid", Format::Json).is_err());
+        assert!(matches!(
+            Tree::from_text("{ not valid", Format::Json),
+            Err(ParseError::Syntax { .. })
+        ));
     }
 
     #[test]
@@ -664,7 +692,7 @@ mod tests {
             panic!("expected a parse error");
         };
         assert!(
-            err.to_lowercase().contains("line"),
+            err.to_string().to_lowercase().contains("line"),
             "the parser's own diagnostic names a location: {err:?}"
         );
     }

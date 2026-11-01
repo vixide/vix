@@ -11045,7 +11045,7 @@ impl App {
             Ok(tree) => self.edit_value = Some(tree),
             Err(e) => self
                 .messages
-                .warn(t!("msg.edit_value_parse", error = e).to_string()),
+                .warn(t!("msg.edit_value_parse", error = e.to_string()).to_string()),
         }
     }
 
