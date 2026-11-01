@@ -173,8 +173,13 @@ pub fn trash_path(path: &Path) -> io::Result<()> {
 ///
 /// Permissions match a plain write: an existing file keeps its exact mode; a new
 /// file gets the process umask default (`0666 & ~umask`), just as `fs::write`
-/// would. Note that, being a rename, this replaces the inode — hard links,
-/// ownership, ACLs, and xattrs are not carried over (only the Unix mode is).
+/// would. Being a rename, the atomic path replaces the inode, so when the
+/// target has more than one hard link, or its owner or group differs from the
+/// new file's (T663), it is skipped and the write is done **in place** instead
+/// (keeping the link and owner), after copying the original to the
+/// [`recovery_dir`]; a leftover copy marks an interrupted save, see
+/// [`pending_recoveries`]. ACLs and xattrs are still not carried over by the
+/// rename path.
 ///
 /// The atomic path needs write+execute permission on the *parent directory* (to
 /// create the temp and rename it). When only the file itself is writable (a
@@ -191,12 +196,190 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(atomic_err) => {
             // Fall back to a truncating in-place write, which needs write
-            // permission only on the file (not its directory).
+            // permission only on the file (not its directory). The original is
+            // copied to the recovery directory first (T663).
             let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            fs::write(&target, data)
+            write_in_place_with_recovery(&target, data, recovery_dir().as_deref())
                 .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))
         }
     }
+}
+
+/// Marker error: renaming a temp file over the target would change its
+/// identity (hard-link count or owner), so the caller must write in place.
+#[derive(Debug)]
+struct RenameWouldChangeIdentity;
+
+impl std::fmt::Display for RenameWouldChangeIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("an atomic rename would change the file's hard links or owner")
+    }
+}
+
+impl std::error::Error for RenameWouldChangeIdentity {}
+
+/// Whether a rename of `tmp` (just created by this process) over `target`
+/// would split a hard link or change the owner or group. Always `false` on
+/// non-Unix platforms and for a target that does not exist yet.
+#[cfg(unix)]
+fn rename_would_change_identity(target: &Path, tmp: &fs::File) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    let (Ok(old), Ok(new)) = (fs::metadata(target), tmp.metadata()) else {
+        return false;
+    };
+    old.nlink() > 1 || old.uid() != new.uid() || old.gid() != new.gid()
+}
+
+#[cfg(not(unix))]
+fn rename_would_change_identity(_target: &Path, _tmp: &fs::File) -> bool {
+    false
+}
+
+/// Magic first line of a recovery copy.
+const RECOVERY_MAGIC: &str = "VIXRECOVER";
+
+/// The directory holding pre-save copies of files that were written in place:
+/// `$XDG_STATE_HOME/vix/recovery`, else `~/.local/state/vix/recovery`. `None`
+/// when no home directory is known.
+#[must_use]
+pub fn recovery_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|h| PathBuf::from(h).join(".local").join("state"))
+        })?;
+    Some(base.join("vix").join("recovery"))
+}
+
+/// Write `data` over `target` in place, first copying the existing contents to
+/// `recovery` (when given and the target exists). The copy is deleted once the
+/// write has been flushed; if the process dies mid-write it stays behind for
+/// [`pending_recoveries`]. A failure to take the copy is not fatal: the save
+/// proceeds without one.
+///
+/// # Errors
+///
+/// Returns the I/O error of the in-place write.
+pub fn write_in_place_with_recovery(
+    target: &Path,
+    data: &[u8],
+    recovery: Option<&Path>,
+) -> io::Result<()> {
+    use std::io::Write as _;
+    // Open (without truncating) before taking the copy, so a target we cannot
+    // write leaves no copy behind.
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(target)?;
+    let backup = recovery.and_then(|dir| make_recovery_copy(target, dir));
+    f.set_len(0)?;
+    f.write_all(data)?;
+    f.sync_all()?;
+    if let Some(b) = backup {
+        let _ = fs::remove_file(b);
+    }
+    Ok(())
+}
+
+fn make_recovery_copy(target: &Path, dir: &Path) -> Option<PathBuf> {
+    use std::io::Write as _;
+    let original = fs::read(target).ok()?;
+    fs::create_dir_all(dir).ok()?;
+    let base = target
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("file");
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let dest = dir.join(format!("{}-{seq}-{base}.vixrecover", std::process::id()));
+    let mut out = format!("{RECOVERY_MAGIC}\n{}\n", target.display()).into_bytes();
+    out.extend_from_slice(&original);
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(&dest).ok()?;
+    f.write_all(&out).ok()?;
+    f.sync_all().ok()?;
+    Some(dest)
+}
+
+/// A leftover copy of a file whose in-place save was interrupted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recovery {
+    /// The recovery copy on disk.
+    pub copy: PathBuf,
+    /// The file that was being saved.
+    pub original: PathBuf,
+}
+
+impl Recovery {
+    /// The saved pre-save contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the copy cannot be read or is malformed.
+    pub fn contents(&self) -> io::Result<Vec<u8>> {
+        let raw = fs::read(&self.copy)?;
+        let bad = || io::Error::new(io::ErrorKind::InvalidData, "malformed recovery copy");
+        let mut parts = raw.splitn(3, |b| *b == b'\n');
+        parts.next().ok_or_else(bad)?;
+        parts.next().ok_or_else(bad)?;
+        Ok(parts.next().ok_or_else(bad)?.to_vec())
+    }
+
+    /// Restore: write the saved contents back over the original and delete the
+    /// copy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the copy cannot be read or the original written.
+    pub fn restore(&self) -> io::Result<()> {
+        let data = self.contents()?;
+        write_in_place_with_recovery(&self.original, &data, None)?;
+        fs::remove_file(&self.copy)
+    }
+
+    /// Discard: delete the copy and keep the file as it is on disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the copy cannot be deleted.
+    pub fn discard(&self) -> io::Result<()> {
+        fs::remove_file(&self.copy)
+    }
+}
+
+/// Leftover recovery copies in `dir`, ordered by file name. Unreadable or
+/// malformed entries are skipped.
+#[must_use]
+pub fn pending_recoveries(dir: &Path) -> Vec<Recovery> {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Recovery> = rd
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "vixrecover"))
+        .filter_map(|copy| {
+            let raw = fs::read(&copy).ok()?;
+            let mut lines = raw.splitn(3, |b| *b == b'\n');
+            if lines.next()? != RECOVERY_MAGIC.as_bytes() {
+                return None;
+            }
+            let original = PathBuf::from(String::from_utf8(lines.next()?.to_vec()).ok()?);
+            Some(Recovery { copy, original })
+        })
+        .collect();
+    out.sort_by(|a, b| a.copy.cmp(&b.copy));
+    out
 }
 
 /// Both `write_atomic`'s attempts failed (T535, Run H): report the
@@ -231,7 +414,7 @@ pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(atomic_err) => {
             let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            fs::write(&target, data)
+            write_in_place_with_recovery(&target, data, recovery_dir().as_deref())
                 .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
             if !existed {
                 restrict_to_owner(&target);
@@ -289,6 +472,14 @@ fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> 
         opts.mode(0o600);
     }
     let mut f = opts.open(&tmp)?;
+
+    // T663: a rename would split a hard link or change the owner/group; decline
+    // so the caller writes in place (after taking a recovery copy) instead.
+    if rename_would_change_identity(&target, &f) {
+        drop(f);
+        let _ = fs::remove_file(&tmp);
+        return Err(io::Error::other(RenameWouldChangeIdentity));
+    }
 
     let write_result = f.write_all(data).and_then(|()| f.sync_all());
     if let Err(e) = write_result {
@@ -807,6 +998,57 @@ mod tests {
             refused(stream(&dir, MAX_TEXT_BYTES).0),
             Some(TextReadError::NotRegular)
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_keeps_hard_links() {
+        let dir = scratch("hardlink");
+        let a = dir.join("a.txt");
+        let b = dir.join("b.txt");
+        fs::write(&a, b"old").unwrap();
+        fs::hard_link(&a, &b).unwrap();
+        write_atomic(&a, b"new").unwrap();
+        assert_eq!(fs::read(&b).unwrap(), b"new", "link was split");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn in_place_write_leaves_recovery_copy_only_if_interrupted() {
+        let dir = scratch("recover");
+        let rec = dir.join("rec");
+        let f = dir.join("f.txt");
+        fs::write(&f, b"original").unwrap();
+        // A completed save removes its copy.
+        write_in_place_with_recovery(&f, b"done", Some(&rec)).unwrap();
+        assert_eq!(fs::read(&f).unwrap(), b"done");
+        assert_eq!(pending_recoveries(&rec).len(), 0);
+        // Simulate a crash: take the copy and never finish.
+        let copy = make_recovery_copy(&f, &rec).unwrap();
+        let pending = pending_recoveries(&rec);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].copy, copy);
+        assert_eq!(pending[0].original, f);
+        assert_eq!(pending[0].contents().unwrap(), b"done");
+        fs::write(&f, b"tru").unwrap();
+        pending[0].restore().unwrap();
+        assert_eq!(fs::read(&f).unwrap(), b"done");
+        assert_eq!(pending_recoveries(&rec).len(), 0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_removes_copy_and_keeps_file() {
+        let dir = scratch("discard");
+        let rec = dir.join("rec");
+        let f = dir.join("f.txt");
+        fs::write(&f, b"x").unwrap();
+        make_recovery_copy(&f, &rec).unwrap();
+        fs::write(&f, b"y").unwrap();
+        pending_recoveries(&rec)[0].discard().unwrap();
+        assert_eq!(fs::read(&f).unwrap(), b"y");
+        assert_eq!(pending_recoveries(&rec).len(), 0);
         let _ = fs::remove_dir_all(&dir);
     }
 

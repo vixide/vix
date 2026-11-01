@@ -7915,7 +7915,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `EditorBehaviorSettings`, matched by a new `vix_fileops::PathPatterns`
     (`globset`, already in the lockfile through `ignore`). A matched tab
     sets `Tab::path_access` to `PathAccess::Protected` and shows the lock until unlocked.
-- [ ] **T663 — Saving keeps hard links and ownership, and an interrupted
+- [x] **T663 — Saving keeps hard links and ownership, and an interrupted
   save can be recovered.**
   - **Problem.** `write_atomic` (`crates/vix-fileops/src/lib.rs:187`)
     renames a temp file over the target. That silently splits a hard
@@ -7930,6 +7930,10 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Order.** Share the recovery directory and prompt with T629 (hot
     exit), and land this after it.
   - From Fresh (editing.md "Interrupted Saves"). **S–M.**
+  - **Done 2026-10-31** (`feat/t663-safe-save`), partly: link-count and
+    owner checks, in-place write with a recovery copy, `pending_recoveries`
+    / `Recovery::{restore,discard}`, and a startup status notice. The
+    Restore / Diff / Discard prompt waits for T629's shared prompt.
 - [x] **T664 — Choose what the change gutter compares against.**
   - **Vix today.** The gutter diffs the buffer against HEAD only
     (`crates/vix-git/spec/index.md:9`).

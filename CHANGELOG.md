@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
+### Added
+
+- **Safe saving (T663).** Saving a file with several hard links, or one owned by another user, now writes in place instead of renaming a temp file over it, so the links and the owner survive. Every in-place save first copies the original to the recovery directory (`~/.local/state/vix/recovery`) and removes the copy once the write is flushed; a copy left behind by an interrupted save is reported at the next start. (The Restore / Diff / Discard prompt is not built yet.)
+
 ### Breaking
 
 - **Multiple carets** (T622): `vix_editor_core::multicursor::CaretMove` is `#[non_exhaustive]` and gains `WordLeft`, `WordRight`, `LineStart`, `LineEnd`, `TextStart`, `Home`, `BufferStart` and `BufferEnd`. Carets now keep their add order — the primary is always the newest caret — so `add_caret_at`, `add_caret_above`, `add_caret_below` and `column_select` make the new caret primary instead of keeping the old one, and edits no longer make the lowest caret primary.

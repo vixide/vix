@@ -759,3 +759,4 @@ relocalize
 wezterm
 # T632 (problem matchers)
 mypy
+vixrecover
