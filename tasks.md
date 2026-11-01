@@ -7072,6 +7072,13 @@ new action.
     vix-base64-tool, vix-calculator-tool, vix-db (session.rs),
     vix-edit-value, vix-format-tool, vix-http-client (rest.rs), vix-jwt-tool,
     vix-mcp-server, vix-script (catalog.rs), vix-url-tool, gui/vix-slint.
+  - **Slice 3 done 2026-11-01** (`refactor/t610-typed-errors-tools`):
+    vix-base-tool (`BaseError`), vix-base64-tool (`Base64Error`),
+    vix-calculator-tool (`CalcError`), vix-format-tool (`FormatError`),
+    vix-jwt-tool (`JwtError`), vix-url-tool (`UrlError`), vix-edit-value
+    (`ParseError`) and vix-script's `Catalog::insert_toml` (`CatalogError`).
+    **Still `Result<_, String>`:** vix-db (session.rs), vix-http-client
+    (rest.rs), vix-mcp-server, gui/vix-slint.
 - [x] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
   lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
