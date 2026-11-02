@@ -49,7 +49,7 @@ impl Host for ShellHost {
 /// `(object, kind, column, type)` rows into tables.
 #[cfg(feature = "sql")]
 fn sqlite_schema(path: &Path) -> Result<Vec<Table>, String> {
-    crate::db::catalog::read_sqlite_schema(path).map(|rows| {
+    crate::db::catalog::read_sqlite_schema(path).map_err(|e| e.to_string()).map(|rows| {
         let mut tables: Vec<Table> = Vec::new();
         for (name, kind, column, data_type) in rows {
             if tables

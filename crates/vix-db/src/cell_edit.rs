@@ -71,7 +71,7 @@ impl Browser {
                 self.focus = Pane::Results;
                 self.set_editable(&schema, &table, kind);
             }
-            Err(e) => self.message = Some(e),
+            Err(e) => self.message = Some(e.to_string()),
         }
     }
 
@@ -172,7 +172,7 @@ impl Browser {
                 self.last_table = Some(parent);
                 self.set_uneditable();
             }
-            Err(e) => self.message = Some(e),
+            Err(e) => self.message = Some(e.to_string()),
         }
     }
 
@@ -336,7 +336,7 @@ impl Browser {
                     }
                 }
                 Err(e) => {
-                    self.message = Some(e);
+                    self.message = Some(e.to_string());
                     return None;
                 }
             }
@@ -360,14 +360,14 @@ impl Browser {
             if let Err(e) = self.run_sql(sql) {
                 let _ = self.run_sql("ROLLBACK");
                 self.tx = TxState::None;
-                self.message = Some(e);
+                self.message = Some(e.to_string());
                 return false;
             }
         }
         if let Err(e) = self.run_sql("COMMIT") {
             let _ = self.run_sql("ROLLBACK");
             self.tx = TxState::None;
-            self.message = Some(e);
+            self.message = Some(e.to_string());
             return false;
         }
         self.tx = TxState::None;
@@ -402,7 +402,7 @@ impl Browser {
                 self.focus = Pane::Results;
                 self.set_uneditable();
             }
-            Err(e) => self.message = Some(e),
+            Err(e) => self.message = Some(e.to_string()),
         }
     }
 
@@ -437,7 +437,7 @@ impl Browser {
                 self.view_scroll = 0;
                 self.view = View::Cell;
             }
-            Err(e) => self.message = Some(e),
+            Err(e) => self.message = Some(e.to_string()),
         }
     }
 

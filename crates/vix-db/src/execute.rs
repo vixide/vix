@@ -52,7 +52,7 @@ pub(crate) struct PendingReconnect {
     /// The eventual reconnect result: the fresh session, or the reconnect's
     /// own error (in which case the workbench gives up and disconnects,
     /// exactly like the old synchronous path did).
-    rx: std::sync::mpsc::Receiver<Result<session::Session, String>>,
+    rx: std::sync::mpsc::Receiver<Result<session::Session, session::SessionError>>,
 }
 
 impl Browser {
@@ -62,7 +62,7 @@ impl Browser {
     ///
     /// The driver's error, or a not-connected message when no session is
     /// open.
-    pub(super) fn run_sql(&mut self, sql: &str) -> Result<session::Table, String> {
+    pub(super) fn run_sql(&mut self, sql: &str) -> Result<session::Table, session::SessionError> {
         self.run_traced(sql, store::Origin::User)
     }
 
@@ -72,17 +72,17 @@ impl Browser {
     /// # Errors
     ///
     /// The driver's error, or a not-connected message when no session is open.
-    pub(super) fn run_catalog(&mut self, sql: &str) -> Result<session::Table, String> {
+    pub(super) fn run_catalog(&mut self, sql: &str) -> Result<session::Table, session::SessionError> {
         self.run_traced(sql, store::Origin::App)
     }
 
     /// Run `sql`, record its duration and outcome in the query log, and return
     /// the result unchanged.
-    fn run_traced(&mut self, sql: &str, origin: store::Origin) -> Result<session::Table, String> {
+    fn run_traced(&mut self, sql: &str, origin: store::Origin) -> Result<session::Table, session::SessionError> {
         let start = std::time::Instant::now();
         let result = match self.session.as_mut() {
             Some(session) => session.run(sql),
-            None => Err(t!("msg.db_not_connected").to_string()),
+            None => Err(session::SessionError::NotConnected),
         };
         self.log.push(store::LogEntry {
             sql: sql.trim().to_string(),
@@ -292,7 +292,7 @@ impl Browser {
             return;
         };
         if let Err(e) = session.send(&sql) {
-            self.message = Some(e);
+            self.message = Some(e.to_string());
             return;
         }
         self.message = Some(t!("msg.db_running").to_string());
@@ -378,7 +378,7 @@ impl Browser {
             Ok(result) => result,
             Err(std::sync::mpsc::TryRecvError::Empty) => return,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                Err(t!("msg.db_not_connected").to_string())
+                Err(session::SessionError::NotConnected)
             }
         };
         self.pending_reconnect = None;
@@ -388,7 +388,7 @@ impl Browser {
                 self.message = Some(t!("msg.db_cancelled").to_string());
             }
             Err(e) => {
-                self.message = Some(e);
+                self.message = Some(e.to_string());
                 self.disconnect();
             }
         }
@@ -503,7 +503,7 @@ impl Browser {
             }
             Err(e) => {
                 self.note_tx(sql, false);
-                self.message = Some(e);
+                self.message = Some(e.to_string());
             }
         }
     }
@@ -544,7 +544,7 @@ impl Browser {
                     last = table;
                 }
                 Err(e) => {
-                    self.last_error = Some((stmt.clone(), e.clone()));
+                    self.last_error = Some((stmt.clone(), e.to_string()));
                     self.note_tx(stmt, false);
                     self.message = Some(format!("{}/{}: {e}", i + 1, stmts.len()));
                     return;
@@ -571,7 +571,7 @@ impl Browser {
         if let Some(sql) = connect::read_only_sql(kind, !want_writable)
             && let Err(e) = self.run_sql(&sql)
         {
-            self.message = Some(e);
+            self.message = Some(e.to_string());
             return;
         }
         self.write_enabled = want_writable;

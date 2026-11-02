@@ -93,6 +93,52 @@ pub enum QueryErrorKind {
     Other,
 }
 
+/// Why a [`Session`] could not connect, send or run a statement (T610).
+///
+/// `Display` text matches the earlier `String` errors; the not-connected
+/// message is translated (`msg.db_not_connected`).
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SessionError {
+    /// The worker thread could not be started.
+    Spawn(std::io::Error),
+    /// The connection could not be opened (credentials already redacted), or
+    /// the worker exited before reporting readiness.
+    Connect {
+        /// Display-ready driver message.
+        message: String,
+    },
+    /// A setup statement (e.g. a read-only pragma) failed.
+    Setup {
+        /// Display-ready driver message.
+        message: String,
+    },
+    /// The worker is gone, or no session is open.
+    NotConnected,
+    /// The statement failed.
+    Query(QueryError),
+}
+
+impl std::fmt::Display for SessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spawn(e) => e.fmt(f),
+            Self::Connect { message } | Self::Setup { message } => f.write_str(message),
+            Self::NotConnected => f.write_str(&t!("msg.db_not_connected")),
+            Self::Query(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for SessionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Spawn(e) => Some(e),
+            Self::Connect { .. } | Self::Setup { .. } | Self::NotConnected | Self::Query(_) => None,
+        }
+    }
+}
+
 impl std::fmt::Display for QueryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
@@ -168,14 +214,14 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns the driver's connect error (bad credentials, unreachable
-    /// host, unreadable file, …) or a failing setup statement as a
-    /// display-ready string.
-    pub fn connect(url: &str, setup: &[String]) -> Result<Session, String> {
+    /// Returns [`SessionError::Connect`] for the driver's connect error (bad
+    /// credentials, unreachable host, unreadable file, …) or
+    /// [`SessionError::Setup`] for a failing setup statement.
+    pub fn connect(url: &str, setup: &[String]) -> Result<Session, SessionError> {
         DRIVERS.call_once(sqlx::any::install_default_drivers);
         let (req_tx, req_rx) = mpsc::channel::<Request>();
         let (reply_tx, reply_rx) = mpsc::channel::<Chunk>();
-        let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<(), SessionError>>();
         let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
         let url = url.to_string();
         let setup = setup.to_vec();
@@ -192,8 +238,10 @@ impl Session {
                     cancel_rx,
                 );
             })
-            .map_err(|e| e.to_string())?;
-        ready_rx.recv().map_err(|e| e.to_string())??;
+            .map_err(SessionError::Spawn)?;
+        ready_rx.recv().map_err(|e| SessionError::Connect {
+            message: e.to_string(),
+        })??;
         Ok(Session {
             req_tx,
             reply_rx,
@@ -227,12 +275,11 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns a disconnected message if the worker died.
-    pub fn send(&self, sql: &str) -> Result<(), String> {
-        let lost = || t!("msg.db_not_connected").to_string();
+    /// Returns [`SessionError::NotConnected`] if the worker died.
+    pub fn send(&self, sql: &str) -> Result<(), SessionError> {
         self.req_tx
             .send(Request::Run(sql.to_string()))
-            .map_err(|_| lost())
+            .map_err(|_| SessionError::NotConnected)
     }
 
     /// The next streamed [`Chunk`] from a [`send`](Session::send), or `None`
@@ -260,7 +307,7 @@ impl Session {
     /// # Errors
     ///
     /// Returns the reconnect error if the new connection cannot be opened.
-    pub fn restart(&mut self) -> Result<(), String> {
+    pub fn restart(&mut self) -> Result<(), SessionError> {
         self.cancel();
         let (url, setup) = (self.url.clone(), self.setup.clone());
         *self = Session::connect(&url, &setup)?;
@@ -272,19 +319,18 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns the database error as a display-ready string, or a
-    /// disconnected message if the worker died.
-    pub fn run(&mut self, sql: &str) -> Result<Table, String> {
-        let lost = || t!("msg.db_not_connected").to_string();
+    /// Returns [`SessionError::Query`] for the database error, or
+    /// [`SessionError::NotConnected`] if the worker died.
+    pub fn run(&mut self, sql: &str) -> Result<Table, SessionError> {
         self.send(sql)?;
         let mut headers = Vec::new();
         let mut rows = Vec::new();
         loop {
-            match self.reply_rx.recv().map_err(|_| lost())? {
+            match self.reply_rx.recv().map_err(|_| SessionError::NotConnected)? {
                 Chunk::Head(h) => headers = h,
                 Chunk::Rows(mut batch) => rows.append(&mut batch),
                 Chunk::Done(_) => return Ok((headers, rows)),
-                Chunk::Err(e) => return Err(e.to_string()),
+                Chunk::Err(e) => return Err(SessionError::Query(e)),
             }
         }
     }
@@ -295,7 +341,7 @@ impl Session {
 fn worker(
     url: &str,
     setup: &[String],
-    ready_tx: &mpsc::Sender<Result<(), String>>,
+    ready_tx: &mpsc::Sender<Result<(), SessionError>>,
     req_rx: &mpsc::Receiver<Request>,
     reply_tx: &mpsc::Sender<Chunk>,
     mut cancel_rx: tokio::sync::watch::Receiver<bool>,
@@ -306,20 +352,22 @@ fn worker(
     {
         Ok(rt) => rt,
         Err(e) => {
-            let _ = ready_tx.send(Err(e.to_string()));
+            let _ = ready_tx.send(Err(SessionError::Spawn(e)));
             return;
         }
     };
     let mut conn = match rt.block_on(<sqlx::AnyConnection as sqlx::Connection>::connect(url)) {
         Ok(conn) => conn,
         Err(e) => {
-            let _ = ready_tx.send(Err(redact_url_secret(&e.to_string(), url)));
+            let _ = ready_tx.send(Err(SessionError::Connect {
+                message: redact_url_secret(&e.to_string(), url),
+            }));
             return;
         }
     };
     for stmt in setup {
         if let Err(e) = rt.block_on(exec_one(&mut conn, stmt)) {
-            let _ = ready_tx.send(Err(e));
+            let _ = ready_tx.send(Err(SessionError::Setup { message: e }));
             let _ = rt.block_on(sqlx::Connection::close(conn));
             return;
         }
@@ -556,10 +604,14 @@ mod tests {
     }
 
     #[test]
-    fn errors_come_back_as_strings_and_the_session_survives() {
+    fn errors_come_back_typed_and_the_session_survives() {
         let mut s = memory();
         let err = s.run("SELECT * FROM nope").unwrap_err();
-        assert!(err.contains("nope"), "driver error is surfaced: {err}");
+        assert!(matches!(err, SessionError::Query(_)), "{err:?}");
+        assert!(
+            err.to_string().contains("nope"),
+            "driver error is surfaced: {err}"
+        );
         assert!(
             s.run("SELECT 1").is_ok(),
             "an error does not kill the session"
@@ -569,8 +621,29 @@ mod tests {
     #[test]
     fn connect_failure_is_reported() {
         let err = Session::connect("sqlite:/definitely/missing/dir/x.db", &[]).unwrap_err();
-        assert_ne!(err, "");
+        assert!(matches!(err, SessionError::Connect { .. }), "{err:?}");
+        assert!(!err.to_string().is_empty());
     }
+
+    #[test]
+    fn display_matches_the_old_string_text() {
+        let query = SessionError::Query(QueryError::other("boom"));
+        assert_eq!(query.to_string(), "boom");
+        let connect = SessionError::Connect {
+            message: "refused".into(),
+        };
+        assert_eq!(connect.to_string(), "refused");
+        let setup = SessionError::Setup {
+            message: "bad pragma".into(),
+        };
+        assert_eq!(setup.to_string(), "bad pragma");
+        let spawn = SessionError::Spawn(std::io::Error::other("no threads"));
+        assert_eq!(spawn.to_string(), "no threads");
+        assert!(std::error::Error::source(&spawn).is_some());
+        assert!(std::error::Error::source(&connect).is_none());
+        assert!(!SessionError::NotConnected.to_string().is_empty());
+    }
+
 
     #[test]
     fn setup_pragma_makes_the_session_read_only() {
@@ -578,7 +651,7 @@ mod tests {
         let mut s = Session::connect("sqlite::memory:", &setup).expect("connects read-only");
         let err = s.run("CREATE TABLE t (a INTEGER)").unwrap_err();
         assert!(
-            !err.is_empty(),
+            matches!(err, SessionError::Query(_)),
             "a write is rejected at the database level: {err}"
         );
         assert!(s.run("SELECT 1").is_ok(), "reads still work read-only");
@@ -675,8 +748,8 @@ mod tests {
     fn a_failing_setup_statement_fails_the_connect() {
         let err = Session::connect("sqlite::memory:", &["NOT VALID SQL".to_string()]).unwrap_err();
         assert!(
-            !err.is_empty(),
-            "a bad setup statement surfaces as a connect error"
+            matches!(err, SessionError::Setup { .. }),
+            "a bad setup statement surfaces as a setup error: {err}"
         );
     }
 

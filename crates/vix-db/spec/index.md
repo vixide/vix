@@ -232,3 +232,22 @@ written), applies `PRAGMA query_only = ON`, and runs
 No credentials are involved. The `vix --mcp` server's `db_schema` tool uses
 it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)); server engines
 are deliberately not offered there, since they need a password.
+
+## Errors (T610)
+
+`session::SessionError`; `Session::connect`, `send`, `restart` and `run`, and
+`catalog::read_sqlite_schema`, return it instead of `String`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Spawn(io::Error)` | the worker thread could not be started |
+| `Connect { message }` | the connection could not be opened (credentials redacted), or the worker exited before reporting ready |
+| `Setup { message }` | a setup statement (such as the read-only pragma) failed |
+| `NotConnected` | the worker is gone, or no session is open; `Display` is the translated `msg.db_not_connected` |
+| `Query(QueryError)` | the statement failed; keeps the classified `QueryError` |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
+`thiserror`). `Display` is the same text the earlier `String` errors carried,
+so the workbench status lines are unchanged. `Browser::run_sql` and
+`run_catalog` return it too; the workbench turns it into text only at the
+point it shows a message.

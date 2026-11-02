@@ -692,7 +692,7 @@ pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
 /// Returns the driver's error when the file cannot be opened or queried.
 pub fn read_sqlite_schema(
     path: &std::path::Path,
-) -> Result<Vec<(String, String, String, String)>, String> {
+) -> Result<Vec<(String, String, String, String)>, crate::session::SessionError> {
     let setup: Vec<String> = crate::connect::read_only_sql(Kind::Sqlite, true)
         .into_iter()
         .collect();

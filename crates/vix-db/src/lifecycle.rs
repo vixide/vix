@@ -305,7 +305,7 @@ impl Browser {
             }
             Err(e) => {
                 self.session = None;
-                self.message = Some(e);
+                self.message = Some(e.to_string());
                 self.view = View::Connections;
             }
         }
@@ -380,7 +380,7 @@ impl Browser {
                 self.tree = catalog::Tree::from_objects(&object_triples(rows));
                 self.load_columns(kind);
             }
-            Err(e) => self.message = Some(e),
+            Err(e) => self.message = Some(e.to_string()),
         }
     }
 }
@@ -424,6 +424,6 @@ fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> Connect
     };
     match session::Session::connect(&url, &setup) {
         Ok(session) => ConnectOutcome::Connected { session, tunnel },
-        Err(e) => ConnectOutcome::Failed(e),
+        Err(e) => ConnectOutcome::Failed(e.to_string()),
     }
 }

@@ -66,7 +66,7 @@ impl Browser {
         }
         for sql in &statements {
             if let Err(e) = self.run_sql(sql) {
-                self.message = Some(e);
+                self.message = Some(e.to_string());
                 return;
             }
         }
