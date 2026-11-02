@@ -1492,3 +1492,92 @@ fn git_rebase_edit_continue_abort_and_cherry_pick() {
     assert_eq!(t633_subjects(&dir), ["one", "init"]);
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
+
+/// `git diff` of `dir` with the prefixes Review expects.
+fn t665_diff(dir: &Path) -> String {
+    t665_run(dir, &["diff", "--src-prefix=a/", "--dst-prefix=b/"])
+}
+
+/// `git diff --cached` of `dir`.
+fn t665_cached(dir: &Path) -> String {
+    t665_run(dir, &["diff", "--cached"])
+}
+
+/// Stdout of `git <args>` in `dir`, with the user's git config ignored.
+fn t665_run(dir: &Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git")
+        .current_dir(dir)
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .args(args)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// T665 follow-up: with the cursor in a hunk of the review, Stage Review Hunk
+/// puts exactly that hunk in the index, and Discard Review Hunk asks first and
+/// then undoes it in the working tree. Outside a hunk both only say so.
+#[test]
+fn review_stages_and_discards_the_hunk_under_the_cursor() {
+    let dir = t634_repo("t665hunk");
+    let file = dir.join("a.txt");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(&file, "one\ntwo\n").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    let hunk_row = app.review.as_ref().unwrap().rendered.hunk_rows()[0];
+
+    // On the title row: refused, nothing is asked or staged.
+    app.editor.goto(1, None, app.layout.editor);
+    app.run_action("git.review_stage_hunk");
+    app.run_action("git.review_discard_hunk");
+    assert!(app.confirm.is_none());
+    assert!(!t665_cached(&dir).contains("+two"));
+
+    // Stage the hunk.
+    app.editor.goto(hunk_row + 2, None, app.layout.editor);
+    app.run_action("git.review_stage_hunk");
+    assert!(t665_cached(&dir).contains("+two"));
+
+    // Discard asks; `n` keeps the change, `y` undoes it.
+    app.run_action("git.review_discard_hunk");
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(vix::app::ConfirmKind::GitReviewDiscard)
+    );
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
+    app.run_action("git.review_discard_hunk");
+    app.on_key(key('y'));
+    assert!(app.confirm.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "one\n");
+
+    // The hunk no longer applies: git's reason is reported, nothing changes.
+    app.run_action("git.review_discard_hunk");
+    app.on_key(key('y'));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "one\n");
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// T665 follow-up: `r` in the stash chooser reviews the highlighted stash.
+#[test]
+fn stash_chooser_r_opens_the_stash_in_review() {
+    let dir = t634_repo("t665stash");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    app.run_action("git.stash");
+    app.run_action("git.stash_list");
+    app.on_key(key('r'));
+    assert!(app.stash_chooser.is_none());
+    let state = app.review.as_ref().expect("the stash opens in review");
+    assert_eq!(state.review.range, "stash@{0}");
+    assert_eq!(state.review.files[0].path, "a.txt");
+    assert!(app.editor.active_tab().unwrap().text().contains("+two"));
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}

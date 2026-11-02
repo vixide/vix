@@ -978,6 +978,35 @@ pub fn discard(dir: &Path, rel_path: &str) -> Result<(), GitError> {
     }
 }
 
+/// Where [`apply_patch`] puts a patch.
+#[cfg(feature = "process")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyTarget {
+    /// Into the index only (`git apply --cached`): stage the patch.
+    Index,
+    /// Out of the working tree (`git apply --reverse`): undo the patch.
+    RevertWorktree,
+}
+
+#[cfg(feature = "process")]
+/// Apply one patch from review (T665): stage it ([`ApplyTarget::Index`]) or
+/// undo it in the working tree ([`ApplyTarget::RevertWorktree`]). The patch
+/// goes to `git apply` on stdin, so nothing but git's own check decides
+/// whether it still fits.
+///
+/// # Errors
+///
+/// git's own stderr when the patch no longer applies.
+pub fn apply_patch(dir: &Path, patch: &str, target: ApplyTarget) -> Result<(), GitError> {
+    let mut args = vec!["apply", "--whitespace=nowarn"];
+    match target {
+        ApplyTarget::Index => args.push("--cached"),
+        ApplyTarget::RevertWorktree => args.push("--reverse"),
+    }
+    args.push("-");
+    git_stdin(dir, &args, patch).map(|_| ())
+}
+
 #[cfg(feature = "process")]
 /// Unstage a path (`git restore --staged -- <path>`).
 ///
@@ -1376,7 +1405,9 @@ pub fn review_diff(dir: &Path, range: &str) -> Option<String> {
     let mut args: Vec<&str> = if range.contains("..") {
         vec!["diff"]
     } else {
-        vec!["show", "--format="]
+        // `-m --first-parent`: a stash (and any merge) is diffed against its
+        // first parent instead of showing nothing as a combined diff.
+        vec!["show", "--format=", "-m", "--first-parent"]
     };
     args.extend(common);
     args.push("--end-of-options");

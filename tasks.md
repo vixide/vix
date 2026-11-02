@@ -8071,6 +8071,12 @@ widgets, and a markup-hiding Markdown "compose" mode.
     added under `tui/src/ui/`, and it parses git's own unified diff
     rather than using `vix-diff-view` (which diffs two texts). T664's
     `rev_blob` was not needed.
+  - **Follow-ups done** (`feat/t665-review-followups`): Git → Stage Review
+    Hunk and Discard Review Hunk… (`git apply --cached` / `--reverse` of the
+    cursor's hunk; discard confirms), and `r` in the Stash List chooser
+    opens the stash in a review. **Still not done:** re-diffing the buffer
+    after a stage/discard, and `\ No newline` markers (the parser drops
+    them, so git may refuse such a hunk).
 - [x] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632
@@ -9621,8 +9627,8 @@ complete. What is open, by run:
   install docs) wait for the next release.
 - **Run O:** T659-T667 and T671 are done, three of them in part. T663: the
   Restore / Diff / Discard prompt for an interrupted save is not built (the
-  copy is kept and a startup notice counts it). T665: stage/discard from the
-  review buffer and a stash chooser are not built. T667: user-defined
+  copy is kept and a startup notice counts it). T665: stage/discard and the
+  stash-chooser review are built; the review is not re-diffed afterwards. T667: user-defined
   detectors are not built, and `.envrc`/mise config alone does not raise the
   trust prompt. T668 is done. The late findings T669 (apt/dnf repositories)
   and T670 (the musl release build crashes) are open: T670's fix (static

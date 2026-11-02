@@ -3,13 +3,16 @@
 //! buffer. Line comments are saved per repository in
 //! `.vix/review/<range>.json` and can be exported as Markdown. The model, the
 //! rendering and the export live in `vix-review`; the diff comes from
-//! `vix-git`; this file only wires them to the editor.
+//! `vix-git`; this file only wires them to the editor. Stage and discard act
+//! on the hunk under the cursor by handing its patch to `git apply` (T665
+//! follow-up); the stash chooser opens a stash here with `r`.
 
 use std::path::PathBuf;
 
 use vix_review::{Rendered, Review, Side, Target};
 
-use super::{App, Prompt, PromptKind};
+use super::git::git_error_text;
+use super::{App, Confirm, ConfirmKind, Prompt, PromptKind};
 
 /// The review shown in the editor, if any.
 pub struct ReviewState {
@@ -21,6 +24,8 @@ pub struct ReviewState {
     pub tab_path: PathBuf,
     /// The diff line a comment prompt is open for: file index, side, line.
     pub pending: Option<(usize, Side, usize)>,
+    /// The hunk a discard confirmation is open for: file index, hunk index.
+    pub pending_hunk: Option<(usize, usize)>,
 }
 
 impl App {
@@ -32,6 +37,8 @@ impl App {
             "git.review_export" => self.export_review(),
             "git.review_next" => self.review_goto_hunk(true),
             "git.review_prev" => self.review_goto_hunk(false),
+            "git.review_stage_hunk" => self.review_stage_hunk(),
+            "git.review_discard_hunk" => self.begin_review_discard_hunk(),
             _ => return false,
         }
         true
@@ -89,6 +96,7 @@ impl App {
             rendered,
             tab_path,
             pending: None,
+            pending_hunk: None,
         });
     }
 
@@ -249,6 +257,88 @@ impl App {
         };
         if let Some(r) = target {
             self.editor.goto(r + 1, None, self.layout.editor);
+        }
+    }
+
+    /// The hunk under the cursor of the active review: `(file, hunk, file_name,
+    /// diff_text)`. Says why in the status line when there is none.
+    fn review_hunk_under_cursor(&mut self) -> Option<(usize, usize, String, String)> {
+        let row = self.editor.cursor_line();
+        let Some(state) = self.active_review() else {
+            self.status = t!("status.git_review_none").to_string();
+            return None;
+        };
+        let Some((file, hunk)) = state.rendered.hunk_at(row) else {
+            self.status = t!("status.git_review_no_hunk").to_string();
+            return None;
+        };
+        let diff_text = state.review.hunk_patch(file, hunk)?;
+        let file_name = state.review.files.get(file)?.path.clone();
+        Some((file, hunk, file_name, diff_text))
+    }
+
+    /// **Git → Stage Review Hunk**: stage the hunk under the cursor.
+    fn review_stage_hunk(&mut self) {
+        let Some((_, _, file_name, diff_text)) = self.review_hunk_under_cursor() else {
+            return;
+        };
+        match crate::git::apply_patch(&self.root, &diff_text, crate::git::ApplyTarget::Index) {
+            Ok(()) => {
+                self.status = t!("status.git_review_staged", path = file_name).to_string();
+                self.refresh_git();
+                self.refresh_git_gutter();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
+        }
+    }
+
+    /// **Git → Discard Review Hunk…**: ask before undoing the hunk under the
+    /// cursor in the working tree.
+    fn begin_review_discard_hunk(&mut self) {
+        let Some((file, hunk, file_name, _)) = self.review_hunk_under_cursor() else {
+            return;
+        };
+        if let Some(s) = self.review.as_mut() {
+            s.pending_hunk = Some((file, hunk));
+        }
+        self.confirm = Some(Confirm {
+            message: t!("confirm.git_review_discard", path = file_name.as_str()).to_string(),
+            paths: vec![PathBuf::from(file_name)],
+            kind: ConfirmKind::GitReviewDiscard,
+        });
+    }
+
+    /// The answer to [`ConfirmKind::GitReviewDiscard`]: undo the pending hunk
+    /// on yes (git refuses when it no longer applies).
+    pub(super) fn review_discard_answered(&mut self, yes: bool) {
+        let pending = self.review.as_mut().and_then(|s| s.pending_hunk.take());
+        let (true, Some((file, hunk))) = (yes, pending) else {
+            return;
+        };
+        let Some((diff_text, file_name)) = self.review.as_ref().and_then(|s| {
+            Some((
+                s.review.hunk_patch(file, hunk)?,
+                s.review.files.get(file)?.path.clone(),
+            ))
+        }) else {
+            return;
+        };
+        match crate::git::apply_patch(
+            &self.root,
+            &diff_text,
+            crate::git::ApplyTarget::RevertWorktree,
+        ) {
+            Ok(()) => {
+                self.status = t!("status.git_review_discarded", path = file_name).to_string();
+                self.reload_clean_buffers();
+                self.refresh_git();
+                self.refresh_git_gutter();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
         }
     }
 }

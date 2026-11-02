@@ -1648,6 +1648,16 @@ impl App {
     /// A key in a git confirm: `y` discards the file (T657) or stages
     /// everything and commits (smart commit); `n`/`Esc` cancels.
     pub(super) fn git_confirm_key(&mut self, kind: ConfirmKind, key: KeyEvent) {
+        if kind == ConfirmKind::GitReviewDiscard {
+            let yes = match key.code {
+                KeyCode::Char('y' | 'Y') => true,
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => false,
+                _ => return,
+            };
+            self.confirm = None;
+            self.review_discard_answered(yes);
+            return;
+        }
         if matches!(
             kind,
             ConfirmKind::GitStashDrop | ConfirmKind::GitWorktreeRemove

@@ -3,15 +3,17 @@
 Review a branch, a commit range, a commit or a stash as one multi-file diff,
 with line comments that are saved per repository and exported as Markdown.
 
-**Status:** Partly shipped (improvement plan T665). Shipped: the multi-file
-buffer, hunk navigation, saved line comments and the Markdown/JSON export.
-Not shipped: stage/discard from the review buffer (a hunk can still be staged
-from the file itself with `git.stage_hunk`) and the two-pane view (T660's model
-could be added later).
+**Status:** Mostly shipped (improvement plan T665). Shipped: the multi-file
+buffer, hunk navigation, saved line comments, the Markdown/JSON export,
+stage/discard of the hunk under the cursor, and `r` in the stash chooser.
+Not shipped: the two-pane view (T660's model could be added later); the review
+buffer is not re-diffed after a stage or discard; a hunk that depends on a
+"No newline at end of file" marker is refused by git because the parser does
+not keep the marker; a whole stash is not staged or discarded as one.
 
 ## Actions
 
-All five are in **Git** and in the command palette.
+All seven are in **Git** and in the command palette.
 
 | Action | Menu item | Does |
 | --- | --- | --- |
@@ -20,8 +22,10 @@ All five are in **Git** and in the command palette.
 | `git.review_next` | Next Review Hunk | Moves to the next `@@` header, wrapping to the first. |
 | `git.review_prev` | Previous Review Hunk | Moves to the previous `@@` header, wrapping to the last. |
 | `git.review_export` | Export Review Comments | Writes the open review's comments to `.vix/review/<range>.md` and `.json`. |
+| `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor: `Review::hunk_patch` rebuilds a one-hunk patch (file headers use `/dev/null` for a new or deleted file) and `vix_git::apply_patch(.., ApplyTarget::Index)` feeds it to `git apply --cached`. A binary file, or a cursor outside a hunk, only says so in the status line. |
+| `git.review_discard_hunk` | Discard Review Hunk… | Same patch, after a yes/no (`ConfirmKind::GitReviewDiscard`), through `git apply --reverse` on the working tree. |
 
-The next, previous, comment and export actions work only in the review tab
+The next, previous, comment, export, stage and discard actions work only in the review tab
 (they say so in the status line elsewhere).
 
 ## Ranges
@@ -31,7 +35,8 @@ whitespace or control characters) and passed after `--end-of-options`.
 
 - `a..b` and `a...b` run `git diff`.
 - A single revision (a commit, a tag, `stash@{0}`) runs `git show` without the
-  commit header, so it shows what that revision changed.
+  commit header (with `-m --first-parent`, so a stash or merge is diffed
+  against its first parent), so it shows what that revision changed.
 
 Prefixes are forced to `a/` and `b/` (`vix_git::review_diff`) so the output
 parses whatever the user's git config says about diff prefixes. An empty diff opens nothing.
@@ -79,8 +84,9 @@ the same shape as the storage file.
 - `crates/vix-review/src/lib.rs`: `parse` (unified diff to `FileDiff`/`Hunk`/
   `DiffLine`), `Review` (`render`, `set_comment`, `comment_text`,
   `line_text`, `to_markdown`, `to_json`, `load_json`), `Rendered`
-  (`next_hunk`, `prev_hunk`), `store_name`. Pure; no I/O.
-- `crates/vix-git/src/lib.rs`: `review_diff`.
+  (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`, `store_name`. Pure; no I/O.
+- `crates/vix-git/src/lib.rs`: `review_diff`, `apply_patch`/`ApplyTarget`.
+- Stash chooser: `r` closes it and reviews `stash@{N}` (`tui/src/app/git_stash_worktree.rs`). Both git calls go through the workspace authority like every other `vix-git` runner.
 - `tui/src/app/git_review.rs`: the five actions, the `PromptKind::GitReview`
   and `GitReviewComment` handlers, and the `ReviewState` kept in `App::review`.
 - Tests: the unit tests in `vix-review`, and `tui/tests/integration/git.rs`

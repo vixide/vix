@@ -881,6 +881,9 @@ pub enum ConfirmKind {
     GitStashDrop,
     /// Remove a linked worktree (T634); [`Confirm::paths`] holds its path.
     GitWorktreeRemove,
+    /// Undo one hunk of the open review in the working tree (T665);
+    /// [`Confirm::paths`] holds its file.
+    GitReviewDiscard,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -8371,6 +8374,7 @@ impl App {
                     | ConfirmKind::StageAllAndCommit
                     | ConfirmKind::GitStashDrop
                     | ConfirmKind::GitWorktreeRemove
+                    | ConfirmKind::GitReviewDiscard
             )
         }) {
             self.git_confirm_key(kind, key);

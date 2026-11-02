@@ -15,8 +15,14 @@ All five are in the **Git** menu and the command palette.
 | `git.review_next` | Next Review Hunk | Next `@@` header, wrapping around. |
 | `git.review_prev` | Previous Review Hunk | Previous `@@` header, wrapping around. |
 | `git.review_export` | Export Review Comments | Writes `.vix/review/<range>.md` and `.json`. |
+| `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor (`git apply --cached`). |
+| `git.review_discard_hunk` | Discard Review Hunk… | After a yes/no, undoes the hunk under the cursor in the working tree (`git apply --reverse`). |
 
-The last four work only in the review tab.
+The last six work only in the review tab. Stage and discard hand the hunk's
+patch to `git apply`, so they work when the hunk still fits the index or the
+working tree (for example a review of the working-tree diff); otherwise git's
+reason is shown and nothing changes. In **Git → Stash List…**, `r` opens the
+highlighted stash in a review.
 
 ## Ranges
 

@@ -68,6 +68,7 @@ impl App {
                 }
             }
             KeyCode::Enter => self.show_selected_stash(),
+            KeyCode::Char('r') => self.review_selected_stash(),
             KeyCode::Char('a') => self.apply_selected_stash(false),
             KeyCode::Char('p') => self.apply_selected_stash(true),
             KeyCode::Char('d') | KeyCode::Delete => self.confirm_drop_selected_stash(),
@@ -100,6 +101,15 @@ impl App {
         };
         self.stash_chooser = None;
         self.open_readonly_text_tab(&name, &patch);
+    }
+
+    /// `r`: open the highlighted stash in Review (T665), as `stash@{N}`.
+    fn review_selected_stash(&mut self) {
+        let Some((index, _)) = self.selected_stash() else {
+            return;
+        };
+        self.stash_chooser = None;
+        self.open_review(&crate::git::stash_ref(index));
     }
 
     /// `a` applies the highlighted stash and keeps it; `p` pops it.

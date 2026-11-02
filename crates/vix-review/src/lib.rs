@@ -126,6 +126,22 @@ impl Rendered {
             .collect()
     }
 
+    /// The `(file, hunk)` indexes of the hunk that `row` is in: its header
+    /// row or any diff or comment row under it. `None` on a title, blank or
+    /// file-heading row, and on rows before the first hunk of a file.
+    #[must_use]
+    pub fn hunk_at(&self, row: usize) -> Option<(usize, usize)> {
+        let upto = row.min(self.targets.len().checked_sub(1)?);
+        for target in self.targets[..=upto].iter().rev() {
+            match target {
+                Target::Hunk(f, h) => return Some((*f, *h)),
+                Target::File(_) => return None,
+                _ => {}
+            }
+        }
+        None
+    }
+
     /// The first hunk header after `row` (wrapping to the first), if any.
     #[must_use]
     pub fn next_hunk(&self, row: usize) -> Option<usize> {
@@ -284,6 +300,45 @@ impl Review {
             }
         }
         Rendered { text, targets }
+    }
+
+    /// A one-hunk unified patch for `git apply`: file headers, the hunk header
+    /// and its lines. A hunk that starts at `-0,0` is a new file
+    /// (`--- /dev/null`) and one that ends at `+0,0` a deletion
+    /// (`+++ /dev/null`). `None` for a binary file or an index out of range.
+    /// A `\ No newline at end of file` marker is not kept by [`parse`], so a
+    /// hunk that depends on one may be refused by `git apply`.
+    #[must_use]
+    pub fn hunk_patch(&self, file: usize, hunk: usize) -> Option<String> {
+        let f = self.files.get(file)?;
+        if f.binary {
+            return None;
+        }
+        let h = f.hunks.get(hunk)?;
+        let words: Vec<&str> = h.header.split_whitespace().collect();
+        let is_new = words.get(1).is_some_and(|w| w.starts_with("-0,0"));
+        let is_gone = words.get(2).is_some_and(|w| w.starts_with("+0,0"));
+        let old = if is_new {
+            "/dev/null".to_string()
+        } else {
+            format!("a/{}", f.path)
+        };
+        let new = if is_gone {
+            "/dev/null".to_string()
+        } else {
+            format!("b/{}", f.path)
+        };
+        let mut out = format!("--- {old}\n+++ {new}\n{}\n", h.header);
+        for l in &h.lines {
+            out.push(match l.kind {
+                LineKind::Context => ' ',
+                LineKind::Added => '+',
+                LineKind::Removed => '-',
+            });
+            out.push_str(&l.text);
+            out.push('\n');
+        }
+        Some(out)
     }
 
     /// The code text of a [`Target::Line`], for storing with a comment.
@@ -548,5 +603,37 @@ mod tests {
         assert_eq!(store_name("stash@{0}"), "stash__0_");
         assert_eq!(store_name("../.."), "_..");
         assert_eq!(store_name(""), "review");
+    }
+
+    #[test]
+    fn hunk_at_finds_the_enclosing_hunk() {
+        let r = Review::new("a..b", DIFF).render();
+        let rows = r.hunk_rows();
+        assert_eq!(r.hunk_at(rows[0]), Some((0, 0)));
+        assert_eq!(r.hunk_at(rows[0] + 2), Some((0, 0)));
+        assert_eq!(r.hunk_at(rows[1] + 1), Some((0, 1)));
+        assert_eq!(r.hunk_at(0), None);
+        assert_eq!(r.hunk_at(rows[0] - 1), None, "the file heading is no hunk");
+    }
+
+    #[test]
+    fn hunk_patch_rebuilds_a_one_hunk_patch() {
+        let review = Review::new("a..b", DIFF);
+        assert_eq!(
+            review.hunk_patch(0, 1).unwrap(),
+            "--- a/src/a.rs\n+++ b/src/a.rs\n@@ -10,1 +10,2 @@\n ctx\n+more\n"
+        );
+        assert!(review.hunk_patch(1, 0).is_none(), "binary file");
+        assert!(review.hunk_patch(0, 5).is_none(), "no such hunk");
+        let new_file = Review::new(
+            "a..b",
+            "diff --git a/n.txt b/n.txt\nnew file mode 100644\n--- /dev/null\n+++ b/n.txt\n@@ -0,0 +1,1 @@\n+hi\n",
+        );
+        assert!(
+            new_file
+                .hunk_patch(0, 0)
+                .unwrap()
+                .starts_with("--- /dev/null\n+++ b/n.txt\n")
+        );
     }
 }

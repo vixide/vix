@@ -1725,6 +1725,16 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.review_next", "git.review_next", ""),
     Item::leaf("menu.item.git.review_prev", "git.review_prev", ""),
     Item::leaf("menu.item.git.review_export", "git.review_export", ""),
+    Item::leaf(
+        "menu.item.git.review_stage_hunk",
+        "git.review_stage_hunk",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.git.review_discard_hunk",
+        "git.review_discard_hunk",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
     Item::leaf("menu.item.git.conflict_list", "git.conflict_list", ""),
