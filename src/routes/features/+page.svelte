@@ -73,7 +73,9 @@
     out yet. The features under <a href="#new">New in 2.0</a> are not in the
     current 1.8 release; the
     <a href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">changelog</a>
-    has the details.
+    has the details. The generated reference lists every one of the 801
+    <a href={`${docs}reference/actions.html`}>actions</a> and 101
+    <a href={`${docs}reference/settings.html`}>settings</a>.
   </p>
   <nav class="toc" aria-label="On this page">
     <ul>
@@ -98,9 +100,13 @@
       <li><strong>Large File Viewer</strong> — <strong>File → Open in Large File Viewer…</strong> views a multi-gigabyte file read-only without loading it, with go to line, percentage or byte offset and background search. On an Apple M4 Max with a warm cache, a 4 GiB log opens to its first screen in under a millisecond and is fully indexed in about half a second, in under 5 MiB of memory (<a href={`${docs}performance/index.html#large-file-viewer-t733`}>measured</a>).</li>
       <li><strong><a href={`${docs}oc/index.html`}>OC menu</a></strong> — containers, images, volumes, networks and Podman pods on Docker, Podman or nerdctl, with Compose and image builds; every removing or running command shows its exact command first, and <code>oc_mode = "read-only"</code> limits it to viewing.</li>
       <li><strong><a href={`${docs}mcp-server/index.html`}>MCP server</a></strong> — <code>vix --mcp</code> lets an AI agent read a workspace as Vix sees it (open buffers, symbols, outline, SQLite schemas) over the Model Context Protocol. Read-only.</li>
+      <li><strong>Inline ghost-text completion</strong> — a dimmed suggestion after the cursor from a language server or an AI fill-in-the-middle prompt (<code>inline_completion = "off" | "lsp" | "ai"</code>, off by default). <kbd>Tab</kbd> accepts it, <kbd>Ctrl+Right</kbd> accepts one word, <kbd>Esc</kbd> dismisses it.</li>
+      <li><strong>Safe saving</strong> — a file with several hard links, or one owned by another user, is written in place so the links and the owner survive, and every in-place save first copies the original to a recovery directory.</li>
+      <li><strong>Project environments</strong> — Vix detects a <code>.venv</code>, direnv or mise environment and applies it to language servers, tasks and the integrated terminal; direnv and mise run only in a workspace you have trusted.</li>
+      <li><strong>Terminal to editor</strong> — <kbd>Ctrl</kbd>+click a <code>path:line:col</code> in terminal output to open it in the editor.</li>
       <li><strong>AI is optional</strong> — <code>ai = "off"</code> in the settings hides the AI menu and refuses every AI request, with no rebuild.</li>
       <li><strong>Language servers</strong> — indexing and build progress in the status bar, and <strong>View → LSP Status…</strong> to see and restart each server.</li>
-      <li><strong>Git</strong> — an <a href={`${docs}git-graph/index.html`}>interactive commit graph</a> (<strong>Git → Log → Graph…</strong>), opening and discarding changes from the Git panel, and diff with HEAD or the index.</li>
+      <li><strong>Git</strong> — an <a href={`${docs}git-graph/index.html`}>interactive commit graph</a> (<strong>Git → Log → Graph…</strong>), opening and discarding changes from the Git panel, and diff with HEAD or the index. Also new: a choosable change-gutter base (HEAD, the index, the file on disk or a branch), a read-only multi-file review of a branch or commit range with line comments you can export, and an interactive rebase and cherry-pick editor.</li>
       <li><strong>Compare files side by side</strong> — <strong>Tools → Compare → Compare With File…</strong> and <code>vix --diff OLD NEW</code> open both files as editable tabs that scroll together, with copy-change-across.</li>
       <li><strong>REST client</strong> — many requests per <code>.http</code> file, variables, environments, response chaining, and Copy as curl.</li>
       <li><strong>More tools</strong> — a <a href={`${docs}todo-tree/index.html`}>Todo Tree</a>, format with your project's own <a href={`${docs}prettier/index.html`}>Prettier</a>, a <a href={`${docs}fhir-client/index.html`}>FHIR client</a>, an <a href={`${docs}hl7/index.html`}>HL7 v2 view and MLLP send</a>, and piping the selection through a shell command.</li>
@@ -169,7 +175,7 @@
   <div class="prose centered">
     <ul>
       <li><strong>Language Server Protocol</strong> — diagnostics, hover, completion, go to definition, references, call hierarchy, rename, code actions, code lens and inlay hints, configured per language.</li>
-      <li><strong>Debugger</strong> — a Debug Adapter Protocol client with breakpoints, stepping, call stack, variables, watches and an evaluate REPL.</li>
+      <li><strong>Debugger</strong> — a Debug Adapter Protocol client with breakpoints, stepping, call stack, variables, watches and an evaluate REPL. New in 2.0: conditional, hit-count and log-message breakpoints, exception breakpoints and an attach mode.</li>
       <li><strong>Git</strong> — status, diff and blame; stage, unstage or revert one hunk at a time; branch switch and merge, stash, amend, log and file history, and a merge-conflict resolver.</li>
       <li><strong>Jujutsu</strong> — a JJ menu for status, diff, log and operation log, bookmarks, new, describe, commit, squash, abandon, restore, rebase, undo, and <code>jj git push</code>/<code>fetch</code>.</li>
       <li><strong>Test runner</strong> — turns <code>cargo test</code> or pytest-style output into a pass/fail panel with jump-to-failure.</li>
