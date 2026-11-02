@@ -15,7 +15,7 @@ shipping it.
 
 A keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE") built
 on `ratatui`, organized as a **Cargo workspace** (edition 2024): a thin App
-shell (package `vix-tui` in `tui/`, `tui/src/`) over 141 focused `vix-*` member crates
+shell (package `vix-tui` in `tui/`, `tui/src/`) over 145 focused `vix-*` member crates
 under `crates/`. `tui/src/lib.rs` re-exports each member crate under a short
 module name (`pub use vix_git as git;`), so `crate::git`, `crate::menu`, etc.
 still name them. The App shell itself is two large files with submodules:
@@ -53,10 +53,12 @@ leave the drift for later.
    assert on state or i18n keys.
 6. **Run the local gate**: `scripts/check` (or `make check`) — fmt, build,
    `clippy --workspace --all-targets -- -D warnings` (pedantic, no blanket
-   `#[allow]`), `cargo test --workspace`, `cargo doc` with warnings denied,
-   then `scripts/check-docs`. **Run the whole thing, not an assembled subset**
-   — `cargo doc` with denied warnings and `check-docs` only run as part of
-   the full script, and a change that doesn't look docs-related can still
+   `#[allow]`), `cargo test --workspace`, the feature combinations, the headless
+   examples, `cargo doc` with warnings denied, the generated reference docs and
+   man page being current, semver checks, `scripts/check-docs` (with CSpell) and
+   the per-binary license check. It ends with `OK: … all passed`. **Run the
+   whole thing, not an assembled subset** — `cargo doc` with denied warnings,
+   the reference-docs diff and `check-docs` only run as part of the full script, and a change that doesn't look docs-related can still
    trip `rustdoc::private_intra_doc_links` or a spec/description drift. Fix
    everything before moving on; CI on all three forges only ever confirms
    what this said.
@@ -66,14 +68,19 @@ leave the drift for later.
 
 ### Hard rules enforced by the build
 
-- `#![forbid(unsafe_code)]` and `#![deny(missing_docs)]` on every crate —
-  no `unsafe`, and every public item needs a doc comment.
-- `#![warn(clippy::pedantic)]` at the crate root and repeated in every module
-  file. No blanket `#![allow(clippy::pedantic)]`, no `#![allow(missing_docs)]`
-  — fix findings in code. Sanctioned allows are only a few targeted ones
-  (`#[allow(clippy::struct_excessive_bools)]` on genuine state structs,
-  a handful of `#[allow(clippy::too_many_lines)]`/`too_many_arguments` on
-  functions that resist further extraction).
+- The root `Cargo.toml` `[workspace.lints]` sets `unsafe_code = "forbid"`,
+  `missing_docs = "deny"` and `clippy::pedantic`; every crate opts in with
+  `[lints] workspace = true` (a new crate must too). So: no `unsafe`, every
+  public item needs a doc comment, and every `#[allow(..)]` needs a
+  `reason = ".."`. `unwrap_used`/`expect_used` are on (tests exempt). No
+  blanket `#![allow(clippy::pedantic)]`, no `#![allow(missing_docs)]` — fix
+  findings in code. Sanctioned allows are only a handful of targeted
+  `#[allow(clippy::too_many_lines)]`/`too_many_arguments` on functions that
+  resist further extraction; bool-cluster structs use a `bitflags` `Flags`
+  field instead of `#[allow(clippy::struct_excessive_bools)]` (T149).
+- Library crates return typed error enums, not `Result<_, String>` (T610;
+  `agents/conventions.md`). A new modal overlay is a row in the `OVERLAYS`
+  table (`tui/src/app/overlays.rs`, `spec/overlay-priority`).
 - **One `ratatui` version** — the whole widget stack agrees on one
   `ratatui`/`crossterm` pair; don't add a widget crate on a different one.
 - Built-in themes are monochrome (one fg, one bg; emphasis via dim/full
@@ -103,7 +110,10 @@ leave the drift for later.
   gate the site copies, so nothing else catches their drift).
 - **New crate**: `scripts/check-docs` fails if it has no `spec/index.md`, or
   if it's missing from `agents/share/crate-map.md`. Add both in the same
-  change. It also checks that each crate's Cargo.toml `description` is a
+  change, and update the crate count (`ls crates | wc -l`) wherever it is
+  stated (`CLAUDE.md`, `AGENTS.md`, `index.md`, `spec/index/index.md`,
+  `agents/share/crate-map.md`, `llms.txt`/`llms.json`, both skills).
+  `scripts/docs-coverage` lists user-facing crates with no `docs/` page. It also checks that each crate's Cargo.toml `description` is a
   prefix of its spec's opening prose — keep the two in sync when either
   changes.
 - Before claiming a check passes, actually run it — `scripts/check-docs`
@@ -126,6 +136,9 @@ leave the drift for later.
 | Change keyboard navigation styles | `crates/vix-keymap-model/` + dispatch in `tui/src/app/keymap.rs` |
 | Change git status/diff/staging | `crates/vix-git/` + wiring in `tui/src/app/git.rs`/`tui/src/ui/choosers.rs` |
 | Change find/replace | `crates/vix-find-panel/` |
+| Add or reorder a modal overlay | `OVERLAYS` in `tui/src/app/overlays.rs` + `ui::draw_overlay` |
+| Change branch review / rebase editor | `crates/vix-review/` + `tui/src/app/git_review.rs`; `crates/vix-git/` + `tui/src/app/git_rebase.rs` |
+| Change the terminal / project env / ghost text | `crates/vix-terminal/`, `crates/vix-project-env/`, `crates/vix-lsp/` + `tui/src/app/{terminal,project_env,ghost}.rs` |
 | Change LSP support | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
 | Change the database workbench | `crates/vix-db/` |
 | Add a benchmark or fuzz target | `tui/benches/`, `fuzz/fuzz_targets/` |
@@ -143,18 +156,17 @@ below) — never edit the sibling `../vixide.github.io` repo directly.
 
 ### One feature branch per change
 
-1. `git checkout -b <short-kebab-name>` off `main` — in your own git worktree when other agents share the checkout (merge big branches in a separate worktree too, never by switching the shared checkout's branch).
+1. Branch `<short-kebab-name>` off `main` **before editing anything** — in your own git worktree (`.claude/worktrees/<name>`) when other agents share the checkout (merge big branches in a separate worktree too, never by switching the shared checkout's branch).
 2. Implement (Part 1 above), and confirm `scripts/check` is green **before**
    committing — don't commit red and fix in a follow-up.
 3. Commit with a trailer identifying the assisting agent, e.g.
    `Co-Authored-By: <agent name> <noreply@anthropic.com>`.
-   - If commits are GPG/SSH-signed, the *first* commit in a session can hang
-     for up to ~2 minutes waiting on the SSH key's passphrase prompt — if
-     `git commit` seems to hang, that's likely why; retry with a longer
-     timeout rather than assuming it's broken. Verify with
-     `git log --show-signature -1` if in doubt.
-4. `git checkout main && git merge --no-ff <branch> -m "Merge branch '<branch>'"`
-   — always `--no-ff`, even for a single commit, so the feature boundary
+   - Commits are SSH-signed (`commit.gpgsign`). The *first* commit in a session
+     can hang for up to ~2 minutes waiting on the SSH key's passphrase — run
+     `timeout 90 git commit …`, and if it hangs stop and ask; never disable
+     signing. Verify with `git log --show-signature -1` if in doubt.
+4. Merge into `main` (from a worktree that has `main` checked out):
+   `git merge --no-ff <branch> -m "Merge branch '<branch>'"` — always `--no-ff`, even for a single commit, so the feature boundary
    stays visible in history.
 5. `git branch -d <branch>` — delete it once merged; branches are
    disposable, `main` is the record.

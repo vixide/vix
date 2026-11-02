@@ -120,14 +120,30 @@ specifics you're not sure of:
 - **Edit surfaces** (Edit → Mode) — view/edit the buffer as a CSV/TSV table,
   a folding outline, a JSON/YAML tree, a hex byte dump, or SQL statements.
 - **Git** (Git menu) — status/diff/blame, stage/unstage/revert per hunk,
-  branch switch & merge, stash, amend, merge-conflict resolver.
+  branch switch & merge, stash, amend, merge-conflict resolver; Change Gutter
+  Base (compare the gutter with HEAD, the index, disk or a branch), Review
+  Range (a branch/commit as one diff with saved line comments), Interactive
+  Rebase and Cherry-Pick (`docs/gutter-base`, `docs/branch-review`,
+  `docs/interactive-rebase`).
 - **DB workbench** (DB menu) — connect to SQLite/PostgreSQL/MySQL, browse
   schema, run queries with autocomplete, natural-language-to-SQL assistant.
 - **Org mode** (Org menu) — headline/TODO/checkbox editing, table editor with
   `TBLFM`, Column View, Org-roam nodes/dailies/backlinks.
 - **Project / tasks** (Run, Tools menus) — per-project-type lifecycle
   commands, discovered npm/Make/Rake/etc. tasks, test-at-point, integrated
-  terminal, debugger (DAP).
+  terminal (several tabs, Ctrl+click an output path to open it, Send
+  Selection to Terminal), debugger (DAP: breakpoint conditions, exception
+  filters, attach, a thread/stack/variables panel), and a project's
+  direnv/mise/`.venv` environment applied to servers, tasks and terminals
+  once the workspace is trusted (`docs/terminal`, `docs/debugger`,
+  `docs/project-environment`).
+- **Inline suggestions** — dimmed ghost text after the cursor, from an LSP
+  server or the AI provider; off by default (`inline_completion` setting;
+  Tab accepts, Ctrl+Right takes a word, Esc dismisses; `docs/ghost-text`).
+- **Saving and encodings** — saves are atomic and keep hard links and
+  ownership (`docs/safe-save`); files open in their detected encoding and are
+  saved back the same way (File → Reopen/Save with Encoding…,
+  `docs/encoding`).
 - **LSP** — diagnostics, hover, completion, go-to, configured via
   `lsp_servers` (empty by default; point it at any language server binary);
   progress in the status bar and **View → LSP Status…**.
