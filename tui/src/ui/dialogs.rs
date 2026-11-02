@@ -107,7 +107,14 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
             t!("ui.workspace_trust_settings_also")
         ),
         (true, false) => t!("ui.script_trust_message", count = p.count).to_string(),
-        (false, _) => t!("ui.workspace_trust_settings_message").to_string(),
+        (false, true) => t!("ui.workspace_trust_settings_message").to_string(),
+        (false, false) => t!("ui.workspace_trust_env_message").to_string(),
+    };
+    // T667: an environment source (`.envrc`, mise, `.vix/env.toml`) too.
+    let message = if p.env && (p.count > 0 || p.settings) {
+        format!("{message} {}", t!("ui.workspace_trust_env_also"))
+    } else {
+        message
     };
     frame.render_widget(Paragraph::new(message).wrap(Wrap { trim: true }), chunks[0]);
     let hint = Line::from(Span::styled(
