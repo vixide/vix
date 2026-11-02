@@ -626,7 +626,7 @@ mod tests {
     fn connect_failure_is_reported() {
         let err = Session::connect("sqlite:/definitely/missing/dir/x.db", &[]).unwrap_err();
         assert!(matches!(err, SessionError::Connect { .. }), "{err:?}");
-        assert!(!err.to_string().is_empty());
+        assert_ne!(err.to_string(), "");
     }
 
     #[test]
@@ -645,7 +645,7 @@ mod tests {
         assert_eq!(spawn.to_string(), "no threads");
         assert!(std::error::Error::source(&spawn).is_some());
         assert!(std::error::Error::source(&connect).is_none());
-        assert!(!SessionError::NotConnected.to_string().is_empty());
+        assert_ne!(SessionError::NotConnected.to_string(), "");
     }
 
     #[test]
