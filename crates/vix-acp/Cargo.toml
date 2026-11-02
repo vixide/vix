@@ -1,0 +1,23 @@
+[package]
+name = "vix-acp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "An Agent Client Protocol (ACP) client for Vix (T635)"
+
+[features]
+default = []
+# Spawn the agent process. Off, the crate is pure: no processes, no threads.
+process = []
+
+[dependencies]
+serde_json = { workspace = true }
+
+[[test]]
+name = "fake_agent"
+required-features = ["process"]
+
+[lints]
+workspace = true

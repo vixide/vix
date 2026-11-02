@@ -1,0 +1,89 @@
+# Agent Client Protocol client (`vix-acp`)
+
+An Agent Client Protocol (ACP) client for Vix (T635). ACP is the JSON-RPC
+protocol Zed defined so an editor can drive a coding agent (Claude Code,
+Gemini CLI, Codex, ...) that runs as a child process. Actions:
+`ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Agent Prompt…),
+`ai.agent_stop` (AI → Stop Agent). The agents come from the `ai_agents`
+setting.
+
+The crate is split so the protocol is pure and the process is optional:
+
+| Module    | Needs `process`? | Contents |
+| --------- | ---------------- | -------- |
+| `wire`    | no | Newline-delimited JSON framing, JSON-RPC builders, `Incoming` parsing |
+| `client`  | no | `Client`, a state machine: no IO, no clock, no threads |
+| `policy`  | no | Path containment, and picking a rejecting permission option |
+| `process` | yes | `AgentProcess`: spawn, stdin writer, stdout reader thread |
+
+## Framing
+
+ACP over stdio is **one JSON object per line** (`\n`-terminated, no embedded
+newlines), not the `Content-Length` envelope LSP uses, so `vix-lsp-core`'s
+framer is not reused; only the JSON-RPC 2.0 message shapes are alike. A line
+over 16 MiB is dropped (the decoder resynchronizes at the next newline), and
+a line that is not JSON is skipped and counted, never fatal.
+
+## Conversation
+
+1. `Client::start` produces `initialize` (protocol version 1; we advertise
+   `fs.readTextFile` and `fs.writeTextFile`).
+2. The initialize response makes the client send `session/new` with the
+   workspace root as `cwd` and no MCP servers.
+3. The session response yields `Event::Ready`; `Client::prompt` then sends
+   `session/prompt` and the turn ends with `Event::TurnEnded(stop_reason)`.
+4. While a turn runs the agent streams `session/update` notifications:
+   `agent_message_chunk`, `agent_thought_chunk`, `tool_call`,
+   `tool_call_update`, `plan`. They surface as events. An update whose
+   `sessionId` is not ours is ignored.
+5. The agent may call back: `session/request_permission`,
+   `fs/read_text_file`, `fs/write_text_file`. They surface as events that the
+   host must answer (`answer_permission`, `answer_read`, `answer_write`). Any
+   other agent request is answered `-32601` (method not found) by the client
+   itself, so an unknown method never hangs the agent.
+6. `Client::cancel` sends `session/cancel`.
+
+## Trust model
+
+Agents can write files and run commands, so:
+
+- **An agent is only ever spawned in a trusted workspace**
+  (`App::workspace_trusted`, T132/T627; a remote workspace also needs its own
+  trust). An untrusted workspace gets a status message and no process.
+- The command comes only from the user's `ai_agents` setting. It is split on
+  whitespace and executed as argv with no shell.
+- The spawn site (`process.rs`) is behind the `process` feature, which only
+  the root `ai` feature enables, and is listed in `tui/tests/spawn_sites.rs`.
+- **Nothing the agent asks for is applied silently.**
+  - A permission request opens a prompt; only `y`/`yes` selects an allow
+    option. Anything else, Esc, a closed prompt, or the agent stopping
+    answers with a reject option (or `cancelled`). The default is deny.
+  - `fs/write_text_file` never touches the disk. The new content opens as a
+    pending `vix-ai-diff` review on the target buffer; hunks are applied only
+    when the user accepts them. The file must already exist, and the agent is
+    told the write succeeded once it is queued (ACP has no "pending" reply).
+  - Paths must be absolute and lexically inside the workspace root (no `..`),
+    and on disk must also canonicalize inside it, so a symlink cannot lead out.
+    Reads prefer the open buffer's unsaved text.
+- The agent's stderr is discarded. Dropping or stopping the agent kills the
+  process.
+
+## Settings
+
+`ai_agents` (list of strings, default empty): each entry is a command line,
+for example `"gemini --experimental-acp"`. The first entry is started by
+`ai.agent_start`.
+
+## Not yet done
+
+Choosing among several agents (only the first is started), creating new files
+from an agent write, the plan and tool calls in a dedicated pane (they are
+transcript lines in the AI panel for now), resuming sessions, and terminal
+capabilities.
+
+## Implemented by
+
+`crates/vix-acp/src/{wire,client,policy,process}.rs`; the host is
+`tui/src/app/acp.rs`. Tests: unit tests in each module,
+`crates/vix-acp/tests/fake_agent.rs` (a scripted fake agent over real pipes),
+and `tui/tests/integration/acp.rs`.

@@ -11,6 +11,8 @@
 )]
 
 #[cfg(feature = "ai")]
+mod acp;
+#[cfg(feature = "ai")]
 mod ai;
 mod big_buffer;
 mod catalog;
