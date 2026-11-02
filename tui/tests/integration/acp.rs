@@ -257,3 +257,154 @@ fn an_agent_read_is_answered_from_the_unsaved_buffer() {
     app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn several_agents_ask_which_to_start() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-choose");
+    let (mut app, log_a) = agent_app(&dir, true);
+    let log_b = dir.join("agent-b.log");
+    app.settings.ai_agents.push(fake_agent_command(&log_b));
+    app.run_action("ai.agent_start");
+    assert!(!app.acp_running(), "nothing starts before a choice");
+    assert!(
+        app.prompt
+            .as_ref()
+            .is_some_and(|p| p.kind == PromptKind::AcpAgent)
+    );
+    // A number outside the list starts nothing.
+    type_str(&mut app, "9");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(!app.acp_running());
+    // The second entry runs, and the first never does.
+    app.run_action("ai.agent_start");
+    type_str(&mut app, "2");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.acp_running());
+    tick_until(&mut app, |_| log_text(&log_b).contains("initialize"));
+    assert!(!log_a.exists(), "the first agent was not spawned");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn choosing_an_agent_in_an_untrusted_workspace_opens_nothing() {
+    let dir = unique_dir("acp-choose-untrusted");
+    let (mut app, log) = agent_app(&dir, false);
+    app.settings.ai_agents.push("never-run".to_string());
+    app.run_action("ai.agent_start");
+    assert!(app.prompt.is_none(), "no chooser before trust");
+    assert!(!app.acp_running());
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!log.exists());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_agent_write_can_create_a_new_file_but_only_in_memory() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-create");
+    let file = dir.join("fresh.txt");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    send_prompt(&mut app, &format!("write {} NEW", file.display()));
+    tick_until(&mut app, |a| a.ai_diff_review().is_some());
+    assert!(!file.exists(), "nothing on disk before review and save");
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.path.as_deref(), Some(file.as_path()));
+    // Accepting fills the buffer; the disk is still untouched until a save.
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "NEW");
+    assert!(!file.exists());
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_new_file_needs_an_existing_parent_directory() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-create-parent");
+    let file = dir.join("no-such-dir").join("x.txt");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    send_prompt(&mut app, &format!("write {} NEW", file.display()));
+    tick_until(&mut app, |_| log_text(&log).contains("WRITE"));
+    assert!(log_text(&log).contains("WRITE error"));
+    assert!(app.ai_diff_review().is_none());
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_plan_opens_in_its_own_read_only_tab() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-plan");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    send_prompt(&mut app, "plain");
+    tick_until(&mut app, |a| transcript(a).contains("step one"));
+    app.run_action("ai.agent_plan");
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.read_only);
+    assert_eq!(tab.path.as_deref(), Some(Path::new("*agent plan*")));
+    let text = tab.text();
+    assert!(
+        text.contains("step one") && text.contains("Reading"),
+        "{text}"
+    );
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_plan_action_without_an_agent_opens_nothing() {
+    let dir = unique_dir("acp-plan-none");
+    let (mut app, _log) = agent_app(&dir, true);
+    let before = app.editor.tabs.len();
+    app.run_action("ai.agent_plan");
+    assert_eq!(app.editor.tabs.len(), before);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_stopped_agent_can_be_resumed_into_its_session() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-resume");
+    let (mut app, log) = agent_app(&dir, true);
+    app.run_action("ai.agent_resume");
+    assert!(!app.acp_running(), "nothing to resume yet");
+    start(&mut app, &log);
+    app.run_action("ai.agent_stop");
+    app.run_action("ai.agent_resume");
+    assert!(app.acp_running());
+    tick_until(&mut app, |_| log_text(&log).contains("session/load"));
+    assert!(log_text(&log).contains("\"sessionId\":\"S1\""));
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn resume_requires_a_still_configured_agent() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-resume-gates");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    app.run_action("ai.agent_stop");
+    // The command was removed from settings: it may not run again.
+    app.settings.ai_agents.clear();
+    app.run_action("ai.agent_resume");
+    assert!(!app.acp_running());
+    fs::remove_dir_all(&dir).ok();
+}

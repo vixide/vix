@@ -4,7 +4,8 @@ An Agent Client Protocol (ACP) client for Vix (T635). ACP is the JSON-RPC
 protocol Zed defined so an editor can drive a coding agent (Claude Code,
 Gemini CLI, Codex, ...) that runs as a child process. Actions:
 `ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Agent Prompt…),
-`ai.agent_stop` (AI → Stop Agent). The agents come from the `ai_agents`
+`ai.agent_stop` (AI → Stop Agent), `ai.agent_resume` (AI → Resume Agent),
+`ai.agent_plan` (AI → Agent Plan). The agents come from the `ai_agents`
 setting.
 
 The crate is split so the protocol is pure and the process is optional:
@@ -30,6 +31,12 @@ a line that is not JSON is skipped and counted, never fatal.
    `fs.readTextFile` and `fs.writeTextFile`).
 2. The initialize response makes the client send `session/new` with the
    workspace root as `cwd` and no MCP servers.
+   With a session to resume (`Client::resuming`) and an agent that advertised
+   `agentCapabilities.loadSession`, it sends `session/load` (with the old
+   `sessionId`) instead; the agent replays history as `session/update`s and the
+   reply yields `Event::Ready` with `Client::resumed()` true. An agent without
+   the capability, or one that refuses the id, gets `session/new` instead: a
+   resume never fails, it degrades to a fresh session.
 3. The session response yields `Event::Ready`; `Client::prompt` then sends
    `session/prompt` and the turn ends with `Event::TurnEnded(stop_reason)`.
 4. While a turn runs the agent streams `session/update` notifications:
@@ -60,8 +67,12 @@ Agents can write files and run commands, so:
     answers with a reject option (or `cancelled`). The default is deny.
   - `fs/write_text_file` never touches the disk. The new content opens as a
     pending `vix-ai-diff` review on the target buffer; hunks are applied only
-    when the user accepts them. The file must already exist, and the agent is
-    told the write succeeded once it is queued (ACP has no "pending" reply).
+    when the user accepts them. The agent is told the write succeeded once it
+    is queued (ACP has no "pending" reply). A path that does not exist yet is
+    allowed when its parent directory exists and the path passes the same
+    containment checks: it opens an empty tab that carries the path, the diff
+    adds the content, and the file exists on disk only when the user accepts
+    and saves. A directory, or a missing parent, is refused.
   - Paths must be absolute and lexically inside the workspace root (no `..`),
     and on disk must also canonicalize inside it, so a symlink cannot lead out.
     Reads prefer the open buffer's unsaved text.
@@ -71,15 +82,31 @@ Agents can write files and run commands, so:
 ## Settings
 
 `ai_agents` (list of strings, default empty): each entry is a command line,
-for example `"gemini --experimental-acp"`. The first entry is started by
-`ai.agent_start`.
+for example `"gemini --experimental-acp"`. With one entry `ai.agent_start`
+starts it; with several it opens a prompt listing them numbered and starts the
+one picked (empty input means the first, anything unlisted starts nothing).
+The trust check runs before the prompt opens and again immediately before the
+spawn, so no route reaches a process without it.
+
+## Plan pane
+
+`ai.agent_plan` opens a read-only tab (synthetic path `*agent plan*`) holding
+the agent's latest plan and every tool call with its status (updates merge by
+tool-call id). While the tab is open it is rewritten as events arrive. The AI
+panel still gets the transcript lines.
+
+## Resume
+
+The host remembers the last started command and its session id for the
+running Vix process. `ai.agent_resume` starts that command again (only if it is
+still an entry of `ai_agents`, and only in a trusted workspace) via
+`Client::resuming`.
 
 ## Not yet done
 
-Choosing among several agents (only the first is started), creating new files
-from an agent write, the plan and tool calls in a dedicated pane (they are
-transcript lines in the AI panel for now), resuming sessions, and terminal
-capabilities.
+The session id is not persisted across Vix restarts (it lives in memory, so
+Resume works only after a Stop in the same run), the plan is a tab rather than
+a docked pane, and ACP terminal capabilities are not offered.
 
 ## Implemented by
 

@@ -286,6 +286,9 @@ pub enum PromptKind {
     AiInstruction,
     /// Enter a prompt to send the running ACP agent (**AI → Prompt Agent…**, T635).
     AcpPrompt,
+    /// Pick which configured agent **AI → Start Agent** runs (T635): a
+    /// 1-based number into `ai_agents`.
+    AcpAgent,
     /// Answer an ACP agent's permission request: `y` allows once, anything
     /// else (or Esc) denies (T635).
     AcpPermission,
@@ -2306,6 +2309,8 @@ pub struct App {
     acp: Option<AcpHost>,
     /// The AI chat panel, set aside while an ACP prompt is open (T635).
     acp_parked_panel: Option<crate::ai_panel::Panel>,
+    /// The last agent command and its session id, for **AI → Resume Agent**.
+    acp_last_session: Option<(String, String)>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -3087,6 +3092,7 @@ impl App {
             ai_diff: None,
             acp: None,
             acp_parked_panel: None,
+            acp_last_session: None,
             theme_preview: None,
             hbar_active: None,
             editor_hmax: 0,
@@ -13723,8 +13729,10 @@ impl App {
             PromptKind::AcpPrompt => self.submit_acp_prompt(&prompt.input),
             #[cfg(feature = "ai")]
             PromptKind::AcpPermission => self.submit_acp_permission(&prompt.input),
+            #[cfg(feature = "ai")]
+            PromptKind::AcpAgent => self.submit_acp_agent(&prompt.input),
             #[cfg(not(feature = "ai"))]
-            PromptKind::AcpPrompt | PromptKind::AcpPermission => {}
+            PromptKind::AcpPrompt | PromptKind::AcpPermission | PromptKind::AcpAgent => {}
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

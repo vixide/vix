@@ -123,6 +123,7 @@ pub enum Phase {
 enum Pending {
     Initialize,
     NewSession,
+    LoadSession,
     Prompt,
 }
 
@@ -133,6 +134,10 @@ pub struct Client {
     pending: HashMap<u64, Pending>,
     session_id: Option<String>,
     cwd: String,
+    /// A session to load instead of creating one (T635 resume).
+    resume: Option<String>,
+    /// Whether the session we are in was loaded rather than created.
+    resumed: bool,
 }
 
 /// What [`Client::handle`] produced: events for the host, messages to send.
@@ -154,7 +159,26 @@ impl Client {
             pending: HashMap::new(),
             session_id: None,
             cwd: cwd.to_string(),
+            resume: None,
+            resumed: false,
         }
+    }
+
+    /// A client that tries to resume `session_id` (`session/load`) when the
+    /// agent advertises `loadSession`, and otherwise (or if the agent
+    /// refuses the id) starts a fresh session.
+    #[must_use]
+    pub fn resuming(cwd: &str, session_id: &str) -> Self {
+        let mut c = Self::new(cwd);
+        c.resume = Some(session_id.to_string());
+        c
+    }
+
+    /// Whether the current session was loaded from an earlier one rather than
+    /// created new. Meaningful once [`Event::Ready`] has been seen.
+    #[must_use]
+    pub fn resumed(&self) -> bool {
+        self.resumed
     }
 
     /// The conversation phase.
@@ -270,6 +294,15 @@ impl Client {
         };
         let value = match result {
             Ok(v) => v,
+            Err(_) if matches!(kind, Pending::LoadSession) => {
+                // The agent no longer knows that session: start a fresh one.
+                self.session_id = None;
+                self.resume = None;
+                let params = json!({"cwd": self.cwd, "mcpServers": []});
+                step.out
+                    .push(self.send("session/new", &params, Pending::NewSession));
+                return;
+            }
             Err(e) => {
                 if matches!(kind, Pending::Prompt) {
                     self.phase = Phase::Ready;
@@ -281,9 +314,32 @@ impl Client {
         match kind {
             Pending::Initialize => {
                 self.phase = Phase::CreatingSession;
+                let can_load = value
+                    .pointer("/agentCapabilities/loadSession")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 let params = json!({"cwd": self.cwd, "mcpServers": []});
-                step.out
-                    .push(self.send("session/new", &params, Pending::NewSession));
+                match self.resume.clone().filter(|_| can_load) {
+                    Some(sid) => {
+                        // Set before the reply: the agent replays history as
+                        // `session/update`s first, and those carry this id.
+                        self.session_id = Some(sid.clone());
+                        let params = json!({
+                            "sessionId": sid, "cwd": self.cwd, "mcpServers": []
+                        });
+                        step.out
+                            .push(self.send("session/load", &params, Pending::LoadSession));
+                    }
+                    None => step
+                        .out
+                        .push(self.send("session/new", &params, Pending::NewSession)),
+                }
+            }
+            Pending::LoadSession => {
+                self.resumed = true;
+                self.phase = Phase::Ready;
+                let sid = self.session_id.clone().unwrap_or_default();
+                step.events.push(Event::Ready { session_id: sid });
             }
             Pending::NewSession => {
                 if let Some(sid) = value.get("sessionId").and_then(Value::as_str) {
@@ -490,6 +546,48 @@ mod tests {
         );
         assert_eq!(c.phase(), Phase::Ready);
         c
+    }
+
+    #[test]
+    fn resume_loads_the_session_when_the_agent_can() {
+        let mut c = Client::resuming("/w", "OLD");
+        c.start();
+        let s = c.handle(&json!({"id":1,"result":{"agentCapabilities":{"loadSession":true}}}));
+        assert_eq!(s.out[0]["method"], "session/load");
+        assert_eq!(s.out[0]["params"]["sessionId"], "OLD");
+        let s = c.handle(&json!({"id":2,"result":null}));
+        assert_eq!(
+            s.events,
+            vec![Event::Ready {
+                session_id: "OLD".into()
+            }]
+        );
+        assert!(c.resumed());
+        assert_eq!(c.phase(), Phase::Ready);
+    }
+
+    #[test]
+    fn resume_without_the_capability_starts_a_new_session() {
+        let mut c = Client::resuming("/w", "OLD");
+        c.start();
+        let s = c.handle(&json!({"id":1,"result":{"protocolVersion":1}}));
+        assert_eq!(s.out[0]["method"], "session/new");
+        c.handle(&json!({"id":2,"result":{"sessionId":"NEW"}}));
+        assert!(!c.resumed());
+        assert_eq!(c.session_id(), Some("NEW"));
+    }
+
+    #[test]
+    fn a_refused_load_falls_back_to_a_new_session() {
+        let mut c = Client::resuming("/w", "OLD");
+        c.start();
+        c.handle(&json!({"id":1,"result":{"agentCapabilities":{"loadSession":true}}}));
+        let s = c.handle(&json!({"id":2,"error":{"code":-32602,"message":"unknown"}}));
+        assert_eq!(s.events.len(), 0);
+        assert_eq!(s.out[0]["method"], "session/new");
+        c.handle(&json!({"id":3,"result":{"sessionId":"NEW"}}));
+        assert!(!c.resumed());
+        assert_eq!(c.session_id(), Some("NEW"));
     }
 
     fn update(u: &Value) -> Value {

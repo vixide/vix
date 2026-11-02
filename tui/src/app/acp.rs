@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 
 use serde_json::Value;
 use vix_acp::process::AgentProcess;
-use vix_acp::{Client, Event, PermOption, policy};
+use vix_acp::{Client, Event, PermOption, PlanEntry, policy};
 
 use super::{AiTarget, App, Prompt, PromptKind};
 use crate::ai_panel::Role;
@@ -18,8 +18,17 @@ use crate::ai_panel::Role;
 /// The largest file the agent may read in one go (8 MiB).
 const MAX_READ: u64 = 8 * 1024 * 1024;
 
+/// The synthetic path (so title) of the read-only plan tab.
+const PLAN_TAB: &str = "*agent plan*";
+
 /// A running agent and the conversation state around it.
 pub(super) struct AcpHost {
+    /// The command line it was started from (an entry of `ai_agents`).
+    command: String,
+    /// The agent's latest plan.
+    plan: Vec<PlanEntry>,
+    /// Tool calls so far as `(id, title, status)`, in first-seen order.
+    tools: Vec<(String, String, String)>,
     /// The child process.
     proc: AgentProcess,
     /// The protocol state machine.
@@ -62,6 +71,8 @@ impl App {
     pub(super) fn run_acp_action(&mut self, action: &str) -> bool {
         match action {
             "ai.agent_start" => self.acp_start(),
+            "ai.agent_resume" => self.acp_resume(),
+            "ai.agent_plan" => self.acp_show_plan(),
             "ai.agent_prompt" => self.acp_begin_prompt(),
             "ai.agent_stop" => self.acp_stop(),
             _ => return false,
@@ -75,7 +86,8 @@ impl App {
         self.acp.is_some()
     }
 
-    /// Start the first configured agent, if the workspace is trusted.
+    /// Start a configured agent, if the workspace is trusted. One entry in
+    /// `ai_agents` starts it directly; several ask which (a number).
     fn acp_start(&mut self) {
         if self.acp.is_some() {
             return;
@@ -86,10 +98,73 @@ impl App {
             self.status = t!("status.acp_untrusted").to_string();
             return;
         }
-        let Some(command) = self.settings.ai_agents.first().cloned() else {
-            self.status = t!("status.acp_no_agent").to_string();
+        match self.settings.ai_agents.len() {
+            0 => self.status = t!("status.acp_no_agent").to_string(),
+            1 => {
+                let command = self.settings.ai_agents[0].clone();
+                self.acp_spawn(&command, None);
+            }
+            _ => {
+                let list: Vec<String> = self
+                    .settings
+                    .ai_agents
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("{}) {c}", i + 1))
+                    .collect();
+                self.prompt = Some(Prompt::new(
+                    PromptKind::AcpAgent,
+                    t!("prompt.acp_agent", agents = list.join("  ")).to_string(),
+                ));
+            }
+        }
+    }
+
+    /// The agent chooser was submitted: a 1-based number into `ai_agents`
+    /// (empty means the first). Anything else starts nothing.
+    pub(super) fn submit_acp_agent(&mut self, input: &str) {
+        let input = input.trim();
+        let index = if input.is_empty() {
+            Some(0)
+        } else {
+            input.parse::<usize>().ok().and_then(|n| n.checked_sub(1))
+        };
+        match index.and_then(|i| self.settings.ai_agents.get(i).cloned()) {
+            Some(command) => self.acp_spawn(&command, None),
+            None => self.status = t!("status.acp_bad_choice").to_string(),
+        }
+    }
+
+    /// Start the agent that ran last, asking it to load its previous session.
+    fn acp_resume(&mut self) {
+        if self.acp.is_some() {
+            return;
+        }
+        if !self.workspace_trusted() {
+            self.status = t!("status.acp_untrusted").to_string();
+            return;
+        }
+        let Some((command, session)) = self.acp_last_session.clone() else {
+            self.status = t!("status.acp_no_session").to_string();
             return;
         };
+        // The command must still be one the user configured: a remembered
+        // session never widens what may be executed.
+        if !self.settings.ai_agents.contains(&command) {
+            self.status = t!("status.acp_no_session").to_string();
+            return;
+        }
+        self.acp_spawn(&command, Some(&session));
+    }
+
+    /// Spawn `command` (split on whitespace, no shell) in the workspace root.
+    /// Callers have already checked [`App::workspace_trusted`]; it is checked
+    /// again here so no path can reach the spawn without it.
+    fn acp_spawn(&mut self, command: &str, resume: Option<&str>) {
+        if !self.workspace_trusted() {
+            self.status = t!("status.acp_untrusted").to_string();
+            return;
+        }
         let argv: Vec<String> = command.split_whitespace().map(str::to_string).collect();
         let Some(name) = argv.first().cloned() else {
             self.status = t!("status.acp_no_agent").to_string();
@@ -102,11 +177,18 @@ impl App {
                 return;
             }
         };
-        let mut client = Client::new(&self.root.display().to_string());
+        let cwd = self.root.display().to_string();
+        let mut client = match resume {
+            Some(sid) => Client::resuming(&cwd, sid),
+            None => Client::new(&cwd),
+        };
         for m in client.start() {
             let _ = proc.send(&m);
         }
         self.acp = Some(AcpHost {
+            command: command.to_string(),
+            plan: Vec::new(),
+            tools: Vec::new(),
             proc,
             client,
             reply: String::new(),
@@ -115,6 +197,59 @@ impl App {
         });
         self.open_ai_panel();
         self.status = t!("status.acp_started", name = name).to_string();
+    }
+
+    /// The agent's plan and tool calls as the text of the plan tab.
+    fn acp_plan_text(host: &AcpHost) -> String {
+        let mut lines = vec![t!("ui.acp_plan_heading").to_string()];
+        lines.extend(
+            host.plan
+                .iter()
+                .map(|e| format!("- [{}] {}", e.status, e.content)),
+        );
+        lines.push(String::new());
+        lines.push(t!("ui.acp_tools_heading").to_string());
+        lines.extend(
+            host.tools
+                .iter()
+                .map(|(_, title, status)| format!("- [{status}] {title}")),
+        );
+        lines.push(String::new());
+        lines.join("\n")
+    }
+
+    /// Open (or refresh) the read-only plan tab: the plan and every tool call.
+    fn acp_show_plan(&mut self) {
+        let Some(host) = self.acp.as_ref() else {
+            self.status = t!("status.acp_not_running").to_string();
+            return;
+        };
+        let text = Self::acp_plan_text(host);
+        if let Some(i) = self.acp_plan_tab() {
+            self.editor.active = i;
+            self.acp_refresh_plan_tab(&text);
+            self.focus = super::Focus::Editor;
+        } else {
+            self.open_readonly_text_tab(PLAN_TAB, &text);
+        }
+    }
+
+    /// The plan tab's index, if open.
+    fn acp_plan_tab(&self) -> Option<usize> {
+        self.editor
+            .tabs
+            .iter()
+            .position(|t| t.path.as_deref() == Some(std::path::Path::new(PLAN_TAB)))
+    }
+
+    /// Replace the plan tab's text (it is read-only to the user, not to us).
+    fn acp_refresh_plan_tab(&mut self, text: &str) {
+        if let Some(i) = self.acp_plan_tab()
+            && let Some(tab) = self.editor.tabs.get_mut(i)
+        {
+            tab.editor.set_content(text);
+            tab.dirty = false;
+        }
     }
 
     /// Stop the agent (its process is killed on drop).
@@ -259,13 +394,46 @@ impl App {
         self.acp = Some(host);
     }
 
+    /// Record a tool call, merging an update into the call it names (an empty
+    /// title or status on an update means "unchanged").
+    fn acp_track_tool(host: &mut AcpHost, id: &str, title: &str, status: &str) {
+        if let Some(t) = host.tools.iter_mut().find(|t| t.0 == id) {
+            if !title.is_empty() {
+                title.clone_into(&mut t.1);
+            }
+            if !status.is_empty() {
+                status.clone_into(&mut t.2);
+            }
+        } else {
+            host.tools
+                .push((id.to_string(), title.to_string(), status.to_string()));
+        }
+    }
+
+    /// Keep an open plan tab current as the agent works.
+    fn acp_sync_plan_tab(&mut self, host: &AcpHost) {
+        if self.acp_plan_tab().is_some() {
+            let text = Self::acp_plan_text(host);
+            self.acp_refresh_plan_tab(&text);
+        }
+    }
+
     /// React to one protocol event.
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
         match event {
-            Event::Ready { .. } => self.status = t!("status.acp_ready").to_string(),
+            Event::Ready { session_id } => {
+                self.acp_last_session = Some((host.command.clone(), session_id));
+                self.status = if host.client.resumed() {
+                    t!("status.acp_resumed").to_string()
+                } else {
+                    t!("status.acp_ready").to_string()
+                };
+            }
             Event::AgentText(t) => host.reply.push_str(&t),
             Event::Thought(_) => {}
-            Event::ToolCall { title, status, .. } => {
+            Event::ToolCall { id, title, status } => {
+                Self::acp_track_tool(host, &id, &title, &status);
+                self.acp_sync_plan_tab(host);
                 if !title.is_empty() {
                     self.acp_flush_reply(host);
                     let line = t!("ui.acp_tool_call", title = title, status = status).to_string();
@@ -273,6 +441,8 @@ impl App {
                 }
             }
             Event::Plan(entries) => {
+                host.plan.clone_from(&entries);
+                self.acp_sync_plan_tab(host);
                 self.acp_flush_reply(host);
                 let steps: Vec<String> = entries
                     .iter()
@@ -371,13 +541,27 @@ impl App {
             self.status = t!("status.acp_refused", path = path).to_string();
             return Some("path is outside the workspace".into());
         };
-        if !p.is_file() {
-            return Some("only existing files can be edited".into());
+        let exists = p.exists();
+        if exists && !p.is_file() {
+            return Some("only files can be edited".into());
+        }
+        if !exists && !p.parent().is_some_and(std::path::Path::is_dir) {
+            return Some("the parent directory does not exist".into());
         }
         if self.ai_diff.is_some() {
             return Some("another edit is awaiting review".into());
         }
-        if self.acp_tab_index(&p).is_none() {
+        if !exists && self.acp_tab_index(&p).is_none() {
+            // A new file: an empty tab that carries the path but exists only in
+            // memory. The content arrives as a pending review, and nothing is
+            // on disk until the user accepts it and saves.
+            let name = p.file_name().and_then(|n| n.to_str()).map(str::to_string);
+            self.editor.new_tab_with_content_as("", name.as_deref());
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.path = Some(p.clone());
+                t.dirty = false;
+            }
+        } else if self.acp_tab_index(&p).is_none() {
             self.open_path(&p, false);
         }
         let Some(idx) = self.acp_tab_index(&p) else {

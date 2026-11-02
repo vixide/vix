@@ -7534,6 +7534,15 @@ new action.
   calls, session resume/load, the terminal capability, and Windows coverage of
   the fake-agent tests. The write reply says "ok" once the diff is queued, not
   once it is accepted (ACP has no pending reply).
+  **Follow-ups 2026-11-02 (`feat/t635-acp-followups`):** done: choosing among
+  several `ai_agents` (numbered prompt, trust checked before and at spawn);
+  creating new files from an agent write (in-memory tab plus pending diff,
+  parent must exist); the plan and tool calls in a live read-only tab
+  (`ai.agent_plan`); session resume (`Client::resuming`, `session/load` when
+  the agent advertises `loadSession`, else `session/new`; `ai.agent_resume`).
+  Still open (so T635 stays `[ ]`): persisting the session id across Vix
+  restarts, a docked (non-tab) plan pane, the terminal capability, and
+  Windows coverage of the fake-agent tests.
 - [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a
