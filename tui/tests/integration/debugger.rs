@@ -104,6 +104,24 @@ fn exception_filters_and_the_panel_need_a_session() {
     fs::remove_dir_all(&dir).ok();
 }
 
+#[test]
+fn function_breakpoint_prompt_toggles_a_named_function() {
+    let (mut app, dir, _) = app_with_file("t617-func", Settings::default());
+    app.run_action("run.function_breakpoint");
+    assert!(app.prompt.is_some());
+    answer(&mut app, "parse");
+    assert_eq!(app.dap.function_breakpoints().len(), 1);
+    assert_eq!(app.dap.function_breakpoints()[0].name, "parse");
+    // An empty answer changes nothing; the same name again removes it.
+    app.run_action("run.function_breakpoint");
+    answer(&mut app, "");
+    assert_eq!(app.dap.function_breakpoints().len(), 1);
+    app.run_action("run.function_breakpoint");
+    answer(&mut app, "parse");
+    assert_eq!(app.dap.function_breakpoints(), []);
+    fs::remove_dir_all(&dir).ok();
+}
+
 mod with_adapter {
     use super::*;
     use vix::dap::view::RowKind;

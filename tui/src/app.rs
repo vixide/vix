@@ -365,6 +365,8 @@ pub enum PromptKind {
     DebugBreakpointLog,
     /// A new value for the Debug panel's highlighted variable (T617).
     DebugSetVariable,
+    /// Run → Function Breakpoint… (T617): the function name to toggle.
+    DebugFunctionBreakpoint,
     /// Answer one step of an in-progress Org-capture wizard: a `%^{}` field
     /// prompt, or (once every field is answered) the tag prompt.
     OrgCaptureField,
@@ -13793,7 +13795,8 @@ impl App {
             | PromptKind::DebugBreakpointCondition
             | PromptKind::DebugBreakpointHit
             | PromptKind::DebugBreakpointLog
-            | PromptKind::DebugSetVariable => {
+            | PromptKind::DebugSetVariable
+            | PromptKind::DebugFunctionBreakpoint => {
                 self.accept_debug_prompt(prompt.kind, prompt.input.trim());
             }
         }

@@ -7251,8 +7251,12 @@ new action.
   selected frame; inline values on the stopped line via T614's virtual
   text (`VirtualTextLayer::DebugValues`). Mock-adapter tests in
   `crates/vix-dap/tests/mock_adapter.rs` and
-  `tui/tests/integration/debugger.rs`. Not done: function/data
-  breakpoints, breakpoint persistence, keeping tree expansion across steps.
+  `tui/tests/integration/debugger.rs`. Leftovers
+  landed later (`feat/t617-dap-leftovers`): function breakpoints (Run →
+  Function Breakpoint…, `setFunctionBreakpoints`) and keeping tree expansion
+  across steps. Still not done: data breakpoints (`dataBreakpointInfo`,
+  needs a Debug panel key), instruction breakpoints, and breakpoint
+  persistence across runs of Vix.
 - [x] **T618 — Inline ghost-text completion.** A grep for
   `inlineCompletion` or `ghost` finds nothing. Neovim 0.12 supports
   `textDocument/inlineCompletion`, and Zed has Edit Predictions. Fix:

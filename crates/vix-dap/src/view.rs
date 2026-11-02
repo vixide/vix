@@ -135,6 +135,42 @@ impl Node {
         }
     }
 
+    /// Record the name paths of the expanded nodes under (and including) this
+    /// one; `prefix` is the path of its parent.
+    fn collect_expanded(
+        &self,
+        prefix: &mut Vec<String>,
+        out: &mut std::collections::HashSet<Vec<String>>,
+    ) {
+        prefix.push(self.name.clone());
+        if self.expanded {
+            out.insert(prefix.clone());
+        }
+        for child in &self.children {
+            child.collect_expanded(prefix, out);
+        }
+        prefix.pop();
+    }
+
+    /// When the node with `reference` is this one or below it, leave in
+    /// `path` the names from this node down to it and return `true`.
+    fn path_to(&self, reference: i64, path: &mut Vec<String>) -> bool {
+        path.clear();
+        self.path_inner(reference, path)
+    }
+
+    fn path_inner(&self, reference: i64, path: &mut Vec<String>) -> bool {
+        path.push(self.name.clone());
+        if self.reference == reference {
+            return true;
+        }
+        if self.children.iter().any(|c| c.path_inner(reference, path)) {
+            return true;
+        }
+        path.pop();
+        false
+    }
+
     /// The first node (depth-first, this one included) with `reference`.
     fn find_mut(&mut self, reference: i64) -> Option<&mut Node> {
         if self.reference == reference {
@@ -165,6 +201,9 @@ pub struct DebugView {
     scopes: Vec<Node>,
     /// The scope expanded automatically (its variables feed inline values).
     auto_scope: Option<usize>,
+    /// Name paths (scope name, then variable names) of the nodes that were
+    /// expanded when the tree was last discarded, so a step re-expands them.
+    remembered: std::collections::HashSet<Vec<String>>,
 }
 
 impl DebugView {
@@ -209,23 +248,58 @@ impl DebugView {
     }
 
     /// A `scopes` reply; ignored unless it is for the selected frame.
-    pub fn set_scopes(&mut self, frame_id: i64, scopes: &[Scope]) {
+    /// Returns the references the host must fetch with `variables`: scopes
+    /// that were expanded before the last step (the auto-expanded scope is
+    /// fetched by the client itself).
+    pub fn set_scopes(&mut self, frame_id: i64, scopes: &[Scope]) -> Vec<i64> {
         if self.frame_id != Some(frame_id) {
-            return;
+            return Vec::new();
         }
         self.scopes = scopes.iter().map(Node::scope).collect();
         self.auto_scope = auto_expand_scope(scopes);
         if let Some(node) = self.auto_scope.and_then(|i| self.scopes.get_mut(i)) {
             node.expanded = true;
         }
+        let mut load = Vec::new();
+        for (i, node) in self.scopes.iter_mut().enumerate() {
+            if self.remembered.contains(std::slice::from_ref(&node.name)) && node.reference != 0 {
+                node.expanded = true;
+                if self.auto_scope != Some(i) {
+                    load.push(node.reference);
+                }
+            }
+        }
+        load
     }
 
-    /// A `variables` reply: the children of `reference`.
-    pub fn set_variables(&mut self, reference: i64, variables: &[Variable]) {
-        if let Some(node) = self.scopes.iter_mut().find_map(|n| n.find_mut(reference)) {
-            node.children = variables.iter().map(Node::variable).collect();
-            node.loaded = true;
+    /// A `variables` reply: the children of `reference`. Returns the
+    /// references of children that were expanded before the last step, for
+    /// the host to fetch in turn.
+    pub fn set_variables(&mut self, reference: i64, variables: &[Variable]) -> Vec<i64> {
+        let remembered = &self.remembered;
+        let mut prefix = Vec::new();
+        let Some(i) = self
+            .scopes
+            .iter()
+            .position(|n| n.path_to(reference, &mut prefix))
+        else {
+            return Vec::new();
+        };
+        let Some(node) = self.scopes[i].find_mut(reference) else {
+            return Vec::new();
+        };
+        node.children = variables.iter().map(Node::variable).collect();
+        node.loaded = true;
+        let mut load = Vec::new();
+        for child in &mut node.children {
+            let mut path = prefix.clone();
+            path.push(child.name.clone());
+            if child.reference != 0 && remembered.contains(&path) {
+                child.expanded = true;
+                load.push(child.reference);
+            }
         }
+        load
     }
 
     /// A `setVariable` reply: `name` under `reference` is now `value`.
@@ -243,7 +317,16 @@ impl DebugView {
         self.frames.iter().find(|f| Some(f.id) == self.frame_id)
     }
 
+    /// Discard the tree, remembering which nodes were expanded (an empty
+    /// tree, as between a stop and its scopes, keeps the earlier memory).
     fn reset_tree(&mut self) {
+        if !self.scopes.is_empty() {
+            let mut paths = std::collections::HashSet::new();
+            for scope in &self.scopes {
+                scope.collect_expanded(&mut Vec::new(), &mut paths);
+            }
+            self.remembered = paths;
+        }
         self.scopes.clear();
         self.auto_scope = None;
     }
@@ -556,6 +639,38 @@ mod tests {
         assert!(!rows[10].expanded, "an expensive scope is not");
         assert_eq!((rows[8].depth, rows[8].detail.as_str()), (1, "1"));
         assert!(!rows[8].expandable && rows[9].expandable);
+    }
+
+    #[test]
+    fn expansion_is_kept_across_a_step_by_name() {
+        let mut v = stopped_view();
+        v.selected = 9; // p
+        assert_eq!(v.activate(), Activation::Load(7));
+        v.set_variables(7, &[Variable::new("y", "4").with_reference(8)]);
+        // Step: a fresh stop with new references for the same names.
+        v.stopped(1);
+        v.set_stack(vec![Frame::new(12, "inner", Some("/src/a.py".into()), 4)]);
+        let load = v.set_scopes(12, &[Scope::new("Locals", 15)]);
+        assert!(load.is_empty(), "the auto scope is fetched by the client");
+        let load = v.set_variables(
+            15,
+            &[
+                Variable::new("x", "2"),
+                Variable::new("p", "Point").with_reference(17),
+            ],
+        );
+        assert_eq!(load, vec![17], "p was expanded before the step");
+        let load = v.set_variables(17, &[Variable::new("y", "5").with_reference(18)]);
+        assert!(load.is_empty(), "y was never expanded");
+        assert!(v.rows().iter().any(|r| r.detail == "5"));
+        // A non-auto scope that was open is re-requested.
+        let mut w = stopped_view();
+        w.selected = 10; // Globals
+        assert_eq!(w.activate(), Activation::Load(6));
+        w.stopped(1);
+        w.set_stack(vec![Frame::new(12, "inner", None, 4)]);
+        let load = w.set_scopes(12, &[Scope::new("Locals", 15), Scope::new("Globals", 16)]);
+        assert_eq!(load, vec![16]);
     }
 
     #[test]

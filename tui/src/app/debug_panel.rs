@@ -41,7 +41,9 @@ impl App {
             DapEvent::Threads(threads) => self.dap_view.set_threads(threads),
             DapEvent::Stack(frames) => self.dap_stack_arrived(frames),
             DapEvent::Scopes { frame_id, scopes } => {
-                self.dap_view.set_scopes(frame_id, &scopes);
+                for reference in self.dap_view.set_scopes(frame_id, &scopes) {
+                    self.dap.variables(reference);
+                }
                 // The frame is known now, so watches evaluate in it.
                 self.evaluate_watches();
             }
@@ -49,7 +51,9 @@ impl App {
                 reference,
                 variables,
             } => {
-                self.dap_view.set_variables(reference, &variables);
+                for child in self.dap_view.set_variables(reference, &variables) {
+                    self.dap.variables(child);
+                }
                 self.refresh_debug_markers();
             }
             DapEvent::VariableSet {
@@ -323,6 +327,41 @@ impl App {
         self.push_breakpoints(&path);
         self.refresh_debug_markers();
         self.status = t!("status.debug_breakpoint_edited", line = line).to_string();
+    }
+
+    // ----- function breakpoints -----------------------------------------------
+
+    /// Run → Function Breakpoint…: ask for a function name to toggle.
+    pub(super) fn begin_function_breakpoint(&mut self) {
+        self.prompt = Some(Prompt::new(
+            PromptKind::DebugFunctionBreakpoint,
+            t!("prompt.debug_function_breakpoint").to_string(),
+        ));
+    }
+
+    /// The function-name prompt was answered: add the breakpoint, or remove
+    /// it if that function already has one. An empty answer does nothing.
+    pub(super) fn accept_function_breakpoint(&mut self, name: &str) {
+        if name.is_empty() {
+            return;
+        }
+        let mut list = self.dap.function_breakpoints().to_vec();
+        let message = if let Some(i) = list.iter().position(|b| b.name == name) {
+            list.remove(i);
+            t!("status.debug_function_breakpoint_removed", name = name)
+        } else {
+            list.push(crate::dap::FunctionBreakpoint::new(name));
+            t!("status.debug_function_breakpoint_added", name = name)
+        };
+        self.dap.set_function_breakpoints(list);
+        self.status = message.to_string();
+        if self
+            .dap
+            .capabilities()
+            .is_some_and(|c| !c.supports_function_breakpoints)
+        {
+            self.status = t!("status.debug_function_breakpoint_unsupported").to_string();
+        }
     }
 
     // ----- exception filters --------------------------------------------------

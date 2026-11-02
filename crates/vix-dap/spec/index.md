@@ -54,6 +54,13 @@ numeric ids and ports. `launch` values stay strings.
   again on every change) and is kept for later sessions of this run of Vix.
   Without an active session, or when the adapter offers no filters, it reports
   that in the status line.
+- **Function Breakpoint…** (`run.function_breakpoint`, T617) — a prompt for a
+  function name; Enter adds a function breakpoint on it, or removes the one
+  already there (an empty answer does nothing). They are sent as
+  `setFunctionBreakpoints` (during configuration and again on every change),
+  only to an adapter that advertised `supportsFunctionBreakpoints`; the status
+  line says so when it did not. They are kept for later sessions of this run
+  of Vix, like the exception choice.
 - **Continue**, **Step Over**, **Step Into**, **Step Out**, **Pause**.
 - **Add Watch…** — evaluate an expression each time execution stops.
 - **Evaluate…** — a one-off expression (REPL); the result prints to the bottom
@@ -81,7 +88,11 @@ Other chords fall through to the keymap, as for the IM panel. A variable whose
 `variablesReference` is non-zero is expandable; its children are fetched with
 `variables` the first time it is expanded (lazy, to any depth) and kept while
 the program stays stopped. The first non-`expensive` scope is expanded
-automatically. A new stop resets the tree.
+automatically. A new stop rebuilds the tree, but the nodes that were expanded
+are remembered by name path (scope, then variable names) and re-expanded as
+the new stop's `variables` replies arrive (`DebugView::set_scopes` and
+`set_variables` return the references the host must fetch for them), so
+stepping through a function keeps the structures you opened open.
 
 ## Inline values (T617)
 
@@ -141,10 +152,12 @@ supported anywhere yet; remotely it would also need a forwarded port.
 ## Limitations
 
 - A single debug session at a time.
-- The variable tree is rebuilt on every stop, so expansion is not kept across
-  steps.
-- Breakpoints are line breakpoints only (no function, data or instruction
-  breakpoints) and are not persisted across runs of Vix.
+- Breakpoints are line and function breakpoints only (no data or instruction
+  breakpoints: data breakpoints need `dataBreakpointInfo` from a selected
+  variable and a Debug panel key, left for a later change) and none are
+  persisted across runs of Vix.
+- A remembered expansion is matched by names, so two sibling variables with
+  the same name share it.
 
 ## Cargo features
 

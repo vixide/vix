@@ -2684,6 +2684,11 @@ const RUN: &[Item] = &[
         "run.exception_filters",
         "",
     ),
+    Item::leaf(
+        "menu.item.run.function_breakpoint",
+        "run.function_breakpoint",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.run.continue", "run.continue", ""),
     Item::leaf("menu.item.run.step_over", "run.step_over", ""),

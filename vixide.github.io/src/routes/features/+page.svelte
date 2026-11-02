@@ -175,7 +175,7 @@
   <div class="prose centered">
     <ul>
       <li><strong>Language Server Protocol</strong> — diagnostics, hover, completion, go to definition, references, call hierarchy, rename, code actions, code lens and inlay hints, configured per language.</li>
-      <li><strong>Debugger</strong> — a Debug Adapter Protocol client with breakpoints, stepping, call stack, variables, watches and an evaluate REPL. New in 2.0: conditional, hit-count and log-message breakpoints, exception breakpoints and an attach mode.</li>
+      <li><strong>Debugger</strong> — a Debug Adapter Protocol client with breakpoints, stepping, call stack, variables, watches and an evaluate REPL. New in 2.0: conditional, hit-count and log-message breakpoints, function and exception breakpoints, an attach mode (Run → Attach, driven by a <code>debug_adapters.attach</code> table) and variable expansion that survives stepping.</li>
       <li><strong>Git</strong> — status, diff and blame; stage, unstage or revert one hunk at a time; branch switch and merge, stash, amend, log and file history, and a merge-conflict resolver.</li>
       <li><strong>Jujutsu</strong> — a JJ menu for status, diff, log and operation log, bookmarks, new, describe, commit, squash, abandon, restore, rebase, undo, and <code>jj git push</code>/<code>fetch</code>.</li>
       <li><strong>Test runner</strong> — turns <code>cargo test</code> or pytest-style output into a pass/fail panel with jump-to-failure.</li>

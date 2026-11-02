@@ -185,6 +185,11 @@ pre-filled with the current value (an empty answer clears it):
 exception filters debugpy offers ("Raised Exceptions", "Uncaught
 Exceptions", …) with the adapter's defaults ticked; Enter toggles one.
 
+**Run → Function Breakpoint…** (`run.function_breakpoint`) asks for a function
+name and toggles a breakpoint that stops when that function is entered, for
+adapters that support them. The Debug panel keeps the variables you expanded
+open as you step.
+
 ## Attaching to a running program
 
 Add an `[debug_adapters.attach]` table to the adapter entry, and **Run →

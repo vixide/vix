@@ -196,6 +196,37 @@ impl SourceBreakpoint {
     }
 }
 
+/// A function breakpoint (T617): stop when the named function is entered.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FunctionBreakpoint {
+    /// The function's name, as the adapter resolves it.
+    pub name: String,
+    /// Expression; the adapter stops only when it is true.
+    pub condition: Option<String>,
+}
+
+impl FunctionBreakpoint {
+    /// A breakpoint on function `name`.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        FunctionBreakpoint {
+            name: name.into(),
+            condition: None,
+        }
+    }
+
+    /// The `FunctionBreakpoint` JSON object for `setFunctionBreakpoints`.
+    fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("name".to_string(), Value::String(self.name.clone()));
+        if let Some(c) = &self.condition {
+            map.insert("condition".to_string(), Value::String(c.clone()));
+        }
+        Value::Object(map)
+    }
+}
+
 /// One exception filter an adapter advertises in `initialize`
 /// (`exceptionBreakpointFilters`, T617).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -229,6 +260,8 @@ pub struct Capabilities {
     pub exception_filters: Vec<ExceptionFilter>,
     /// `supportsSetVariable`.
     pub supports_set_variable: bool,
+    /// `supportsFunctionBreakpoints`.
+    pub supports_function_breakpoints: bool,
 }
 
 impl Capabilities {
@@ -253,6 +286,10 @@ impl Capabilities {
             exception_filters,
             supports_set_variable: body
                 .get("supportsSetVariable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            supports_function_breakpoints: body
+                .get("supportsFunctionBreakpoints")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         }
@@ -390,6 +427,8 @@ struct Session {
     start_request: (&'static str, Value),
     /// Breakpoints to set on `initialized`: path → breakpoints.
     breakpoints: HashMap<String, Vec<SourceBreakpoint>>,
+    /// Function breakpoints to set on `initialized`.
+    function_breakpoints: Vec<FunctionBreakpoint>,
     /// Whether we have sent the launch (after the `initialized` event).
     configured: bool,
     /// The selected thread: the most recent stopped one unless the user
@@ -412,6 +451,8 @@ pub struct Dap {
     /// The exception filters the user chose (T617); `None` until they
     /// choose, meaning the adapter's defaults. Kept across sessions.
     exception_choice: Option<Vec<String>>,
+    /// The function breakpoints (T617); kept across sessions.
+    function_breakpoints: Vec<FunctionBreakpoint>,
 }
 
 impl Default for Dap {
@@ -428,6 +469,7 @@ impl Dap {
             session: None,
             workdir: None,
             exception_choice: None,
+            function_breakpoints: Vec::new(),
         }
     }
 
@@ -492,6 +534,7 @@ impl Dap {
             pending: HashMap::new(),
             start_request,
             breakpoints,
+            function_breakpoints: self.function_breakpoints.clone(),
             configured: false,
             thread_id: None,
             frame_id: None,
@@ -570,6 +613,25 @@ impl Dap {
             s.breakpoints.insert(path.to_string(), breakpoints.to_vec());
             if s.configured {
                 s.send_breakpoints(path, breakpoints);
+            }
+        }
+    }
+
+    /// The function breakpoints (T617).
+    #[must_use]
+    pub fn function_breakpoints(&self) -> &[FunctionBreakpoint] {
+        &self.function_breakpoints
+    }
+
+    /// Replace the function breakpoints (T617); sent at once to a configured
+    /// session whose adapter supports them, and kept for later sessions.
+    pub fn set_function_breakpoints(&mut self, breakpoints: Vec<FunctionBreakpoint>) {
+        self.function_breakpoints = breakpoints;
+        if let Some(s) = self.session.as_mut() {
+            s.function_breakpoints
+                .clone_from(&self.function_breakpoints);
+            if s.configured {
+                s.send_function_breakpoints();
             }
         }
     }
@@ -887,6 +949,7 @@ impl Session {
             self.send_breakpoints(&path, &bps);
         }
         self.send_exception_filters(filters);
+        self.send_function_breakpoints();
         self.configured = true;
         let (command, args) = self.start_request.clone();
         self.request(command, &args, Pending::Other(command.to_string()));
@@ -918,6 +981,24 @@ impl Session {
             "setExceptionBreakpoints",
             &args,
             Pending::Other("setExceptionBreakpoints".to_string()),
+        );
+    }
+
+    /// Send `setFunctionBreakpoints` — only to an adapter that advertised
+    /// `supportsFunctionBreakpoints` (others may reject the request).
+    fn send_function_breakpoints(&mut self) {
+        if !self.capabilities.supports_function_breakpoints {
+            return;
+        }
+        let bps: Vec<Value> = self
+            .function_breakpoints
+            .iter()
+            .map(FunctionBreakpoint::to_json)
+            .collect();
+        self.request(
+            "setFunctionBreakpoints",
+            &json!({ "breakpoints": bps }),
+            Pending::Other("setFunctionBreakpoints".to_string()),
         );
     }
 

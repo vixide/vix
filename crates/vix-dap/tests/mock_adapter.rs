@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use vix_dap::{Dap, DapEvent, DebugAdapter, SourceBreakpoint, StartMode};
+use vix_dap::{Dap, DapEvent, DebugAdapter, FunctionBreakpoint, SourceBreakpoint, StartMode};
 
 const MOCK_ADAPTER: &str = r"
 import sys, json
@@ -49,7 +49,7 @@ while True:
     log.write(json.dumps(req) + '\n')
     log.flush()
     if cmd == 'initialize':
-        ok(req, {'supportsSetVariable': True,
+        ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
                  'exceptionBreakpointFilters': [
                      {'filter':'raised','label':'Raised Exceptions','default':False},
                      {'filter':'uncaught','label':'Uncaught Exceptions','default':True}]})
@@ -434,6 +434,29 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
         serde_json::json!({ "filters": ["raised"] })
     );
     assert_eq!(dap.exception_filters(), ["raised", "bogus"]);
+
+    // Function breakpoints: sent during configuration (none yet), then at
+    // once on change.
+    assert_eq!(
+        logged_args(&log, "setFunctionBreakpoints"),
+        vec![serde_json::json!({ "breakpoints": [] })]
+    );
+    assert!(caps.supports_function_breakpoints);
+    let mut conditional = FunctionBreakpoint::new("parse");
+    conditional.condition = Some("n > 2".into());
+    dap.set_function_breakpoints(vec![FunctionBreakpoint::new("main"), conditional]);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while logged_args(&log, "setFunctionBreakpoints").len() < 2 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        logged_args(&log, "setFunctionBreakpoints")[1],
+        serde_json::json!({ "breakpoints": [
+            { "name": "main" },
+            { "name": "parse", "condition": "n > 2" },
+        ] })
+    );
+    assert_eq!(dap.function_breakpoints().len(), 2);
 
     check_threads_frames_and_nested_variables(&mut dap);
     check_set_variable_and_evaluate_frame(&mut dap, &log);
