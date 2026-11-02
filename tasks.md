@@ -9596,7 +9596,7 @@ scratch each time they come up.
 Runs A–L, N, O (except the two late findings), P and Q (except T718) are
 complete. What is open, by run:
 
-- **Run M:** T621, T635 and T644 are open (T623 and T624 done 2026-11-02). T608 is half done (the
+- **Run M:** T635 and T644 are open (T621, T623 and T624 done 2026-11-02; T621 leaves the optional colorPresentation write-back). T608 is half done (the
   DAP mock-adapter tests exist; the `vix-editor` unit-test half remains).
   T610 (typed errors) is done in four slices: no public function in `crates/`,
   `gui/` or `tui/src` returns `Result<_, String>` any more. T611 is ticked for
