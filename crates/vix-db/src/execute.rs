@@ -72,13 +72,20 @@ impl Browser {
     /// # Errors
     ///
     /// The driver's error, or a not-connected message when no session is open.
-    pub(super) fn run_catalog(&mut self, sql: &str) -> Result<session::Table, session::SessionError> {
+    pub(super) fn run_catalog(
+        &mut self,
+        sql: &str,
+    ) -> Result<session::Table, session::SessionError> {
         self.run_traced(sql, store::Origin::App)
     }
 
     /// Run `sql`, record its duration and outcome in the query log, and return
     /// the result unchanged.
-    fn run_traced(&mut self, sql: &str, origin: store::Origin) -> Result<session::Table, session::SessionError> {
+    fn run_traced(
+        &mut self,
+        sql: &str,
+        origin: store::Origin,
+    ) -> Result<session::Table, session::SessionError> {
         let start = std::time::Instant::now();
         let result = match self.session.as_mut() {
             Some(session) => session.run(sql),

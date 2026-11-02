@@ -326,7 +326,11 @@ impl Session {
         let mut headers = Vec::new();
         let mut rows = Vec::new();
         loop {
-            match self.reply_rx.recv().map_err(|_| SessionError::NotConnected)? {
+            match self
+                .reply_rx
+                .recv()
+                .map_err(|_| SessionError::NotConnected)?
+            {
                 Chunk::Head(h) => headers = h,
                 Chunk::Rows(mut batch) => rows.append(&mut batch),
                 Chunk::Done(_) => return Ok((headers, rows)),
@@ -643,7 +647,6 @@ mod tests {
         assert!(std::error::Error::source(&connect).is_none());
         assert!(!SessionError::NotConnected.to_string().is_empty());
     }
-
 
     #[test]
     fn setup_pragma_makes_the_session_read_only() {
