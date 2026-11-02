@@ -23,4 +23,15 @@ Several requests per buffer, separated by `###` lines; the action sends the one 
 
 Not yet: `$aadToken` blocks the UI thread for the CLI call (about a second); there is no `$aadV2Token`, token caching, or full XPath (functions, axes, unions).
 
+## Errors (T610)
+
+`rest::BodyFileError`; `load_body_file` returns `Result<(), BodyFileError>`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Outside { path }` | the `< path` body file is empty, absolute or contains `..` |
+| `Read { path, source }` | the file inside the folder could not be read (`io::Error`) |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `msg.http_error` line is unchanged.
+
 See `spec/index/index.md` for the project overview and `crates/vix-editor-core/spec/index.md` for the full action catalog.

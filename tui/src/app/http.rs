@@ -78,7 +78,7 @@ impl App {
         };
         if let Err(e) = rest::load_body_file(&mut req, &base) {
             self.messages
-                .error(t!("msg.http_error", error = e).to_string());
+                .error(t!("msg.http_error", error = e.to_string()).to_string());
             return None;
         }
         rest::encode_basic_auth(&mut req);

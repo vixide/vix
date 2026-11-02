@@ -415,6 +415,46 @@ fn rfc1123(ms: i64) -> String {
     )
 }
 
+/// Why a `< path` body file could not be loaded.
+///
+/// `Display` text matches the earlier `String` errors.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum BodyFileError {
+    /// The path is empty, absolute or contains `..`.
+    Outside {
+        /// The path as written in the `.http` file.
+        path: String,
+    },
+    /// The file could not be read.
+    Read {
+        /// The resolved file path.
+        path: PathBuf,
+        /// The underlying I/O error.
+        source: std::io::Error,
+    },
+}
+
+impl std::fmt::Display for BodyFileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Outside { path } => {
+                write!(f, "body file must be inside the .http file's folder: {path}")
+            }
+            Self::Read { path, source } => write!(f, "{}: {source}", path.display()),
+        }
+    }
+}
+
+impl std::error::Error for BodyFileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Read { source, .. } => Some(source),
+            Self::Outside { .. } => None,
+        }
+    }
+}
+
 /// Replace a body that is a single `< path` line (with the space) with the file's contents.
 ///
 /// The path must stay inside `base` (relative, no `..`): a `.http` file can
@@ -422,8 +462,8 @@ fn rfc1123(ms: i64) -> String {
 /// local file such as an SSH key to its own URL.
 ///
 /// # Errors
-/// A message when the path escapes `base` or the file cannot be read.
-pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), String> {
+/// A [`BodyFileError`] when the path escapes `base` or the file cannot be read.
+pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), BodyFileError> {
     let body = req.body.trim();
     let Some(rel) = body.strip_prefix("< ").filter(|_| !body.contains('\n')) else {
         return Ok(());
@@ -434,14 +474,14 @@ pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), String> {
         || path.is_absolute()
         || path.components().any(|c| matches!(c, Component::ParentDir))
     {
-        return Err(format!(
-            "body file must be inside the .http file's folder: {rel}"
-        ));
+        return Err(BodyFileError::Outside {
+            path: rel.to_string(),
+        });
     }
     let full: PathBuf = base.join(path);
     req.body = vix_authority::current()
         .read_to_string(&full)
-        .map_err(|e| format!("{}: {e}", full.display()))?;
+        .map_err(|source| BodyFileError::Read { path: full, source })?;
     Ok(())
 }
 
@@ -732,8 +772,23 @@ mod tests {
         let mut ok = mk("< ./b.json");
         load_body_file(&mut ok, &dir).unwrap();
         assert_eq!(ok.body, "{\"a\":1}");
-        assert!(load_body_file(&mut mk("< ../secret"), &dir).is_err());
-        assert!(load_body_file(&mut mk("< /etc/passwd"), &dir).is_err());
+        assert!(matches!(
+            load_body_file(&mut mk("< ../secret"), &dir),
+            Err(BodyFileError::Outside { .. })
+        ));
+        assert!(matches!(
+            load_body_file(&mut mk("< /etc/passwd"), &dir),
+            Err(BodyFileError::Outside { .. })
+        ));
+        let missing = load_body_file(&mut mk("< nope.json"), &dir).unwrap_err();
+        assert!(matches!(missing, BodyFileError::Read { .. }));
+        assert!(std::error::Error::source(&missing).is_some());
+        assert!(missing.to_string().contains("nope.json"));
+        let outside = load_body_file(&mut mk("< ../x"), &dir).unwrap_err();
+        assert_eq!(
+            outside.to_string(),
+            "body file must be inside the .http file's folder: ../x"
+        );
         let mut plain = mk("hello <b>");
         load_body_file(&mut plain, &dir).unwrap();
         assert_eq!(plain.body, "hello <b>");
