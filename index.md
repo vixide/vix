@@ -30,7 +30,7 @@ pnpm check     # svelte-check
 
 - `/` — home
 - `/features/` — the full feature list
-- `/install/` — build and run from source
+- `/install/` — install a prebuilt binary (Homebrew, npm, installer, packages) or build from source
 
 ## License
 
