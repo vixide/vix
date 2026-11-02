@@ -1,0 +1,142 @@
+//! What an agent may touch: workspace path containment and permission choice.
+
+use std::path::{Component, Path, PathBuf};
+
+use crate::client::{OptionKind, PermOption};
+
+/// Why a path the agent named was refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathError {
+    /// Not an absolute path.
+    NotAbsolute,
+    /// Contains a `..` component or a NUL byte.
+    Traversal,
+    /// Outside the workspace root.
+    Outside,
+}
+
+/// Lexically check that `requested` is an absolute path inside `root`, with no
+/// `..`. Pure: touches no file system. See [`contain_on_disk`] for symlinks.
+///
+/// # Errors
+/// [`PathError`] naming the first rule the path breaks.
+pub fn contain(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
+    if requested.contains('\0') {
+        return Err(PathError::Traversal);
+    }
+    let path = Path::new(requested);
+    if !path.is_absolute() {
+        return Err(PathError::NotAbsolute);
+    }
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err(PathError::Traversal);
+    }
+    if path.starts_with(root) {
+        Ok(path.to_path_buf())
+    } else {
+        Err(PathError::Outside)
+    }
+}
+
+/// [`contain`], and additionally the real path (symlinks resolved) must stay
+/// inside the real root. A path that does not exist yet is judged by its
+/// nearest existing ancestor.
+///
+/// # Errors
+/// [`PathError`] as for [`contain`], or [`PathError::Outside`] when a symlink
+/// leads out of the root.
+pub fn contain_on_disk(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
+    let path = contain(root, requested)?;
+    let real_root = root.canonicalize().map_err(|_| PathError::Outside)?;
+    let mut probe = path.as_path();
+    loop {
+        if let Ok(real) = probe.canonicalize() {
+            return if real.starts_with(&real_root) {
+                Ok(path)
+            } else {
+                Err(PathError::Outside)
+            };
+        }
+        match probe.parent() {
+            Some(p) => probe = p,
+            None => return Err(PathError::Outside),
+        }
+    }
+}
+
+/// The option id that rejects a permission request: `reject_once` first, then
+/// `reject_always`. `None` means answer `cancelled`.
+#[must_use]
+pub fn reject_option(options: &[PermOption]) -> Option<&str> {
+    [OptionKind::RejectOnce, OptionKind::RejectAlways]
+        .iter()
+        .find_map(|k| options.iter().find(|o| o.kind == *k))
+        .map(|o| o.id.as_str())
+}
+
+/// The option id that allows a request exactly once. Never `allow_always`: a
+/// standing grant is not something one `y` should give.
+#[must_use]
+pub fn allow_once_option(options: &[PermOption]) -> Option<&str> {
+    options
+        .iter()
+        .find(|o| o.kind == OptionKind::AllowOnce)
+        .map(|o| o.id.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opt(id: &str, kind: OptionKind) -> PermOption {
+        PermOption {
+            id: id.into(),
+            name: id.into(),
+            kind,
+        }
+    }
+
+    #[test]
+    fn contains_only_absolute_paths_under_root() {
+        let root = Path::new("/w/proj");
+        assert!(contain(root, "/w/proj/a/b.rs").is_ok());
+        assert_eq!(contain(root, "a/b.rs"), Err(PathError::NotAbsolute));
+        assert_eq!(contain(root, "/w/proj/../x"), Err(PathError::Traversal));
+        assert_eq!(contain(root, "/w/other/x"), Err(PathError::Outside));
+        assert_eq!(contain(root, "/w/proj2/x"), Err(PathError::Outside));
+        assert_eq!(contain(root, "/w/proj/a\0b"), Err(PathError::Traversal));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_out_of_root_is_refused() {
+        let base = std::env::temp_dir().join(format!("vix-acp-policy-{}", std::process::id()));
+        let root = base.join("root");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret"), "s").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        std::fs::write(root.join("ok"), "o").unwrap();
+        let real_root = root.canonicalize().unwrap();
+        let link = format!("{}/link/secret", real_root.display());
+        assert_eq!(contain_on_disk(&real_root, &link), Err(PathError::Outside));
+        let ok = format!("{}/ok", real_root.display());
+        assert!(contain_on_disk(&real_root, &ok).is_ok());
+        let fresh = format!("{}/new/file", real_root.display());
+        assert!(contain_on_disk(&real_root, &fresh).is_ok());
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn rejection_prefers_reject_once_and_never_allows() {
+        let opts = [
+            opt("a", OptionKind::AllowAlways),
+            opt("ra", OptionKind::RejectAlways),
+            opt("ro", OptionKind::RejectOnce),
+        ];
+        assert_eq!(reject_option(&opts), Some("ro"));
+        assert_eq!(reject_option(&opts[..1]), None);
+        assert_eq!(allow_once_option(&opts), None);
+    }
+}

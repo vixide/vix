@@ -89,6 +89,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `tasks`",
     ),
     (
+        "crates/vix-acp/src/process.rs",
+        "the ACP coding agent (T635), started only for a trusted workspace from the user's `ai_agents` setting (argv, no shell)",
+        "`process` feature, enabled only by root `ai`",
+    ),
+    (
         "crates/vix-lsp/src/lib.rs",
         "language-server process",
         "`process` feature, enabled only by root `lsp`",

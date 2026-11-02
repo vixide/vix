@@ -159,6 +159,7 @@ snow = "0.10"
 zeromq = { version = "0.7", default-features = false, features = ["tokio-runtime", "tcp-transport"] }
 
 # Internal crates, declared once (T601): members say `vix-x.workspace = true`.
+vix-acp = { path = "crates/vix-acp", version = "2.0.0" }
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "2.0.0" }
 vix-affix = { path = "crates/vix-affix", version = "2.0.0" }
 vix-ai-core = { path = "crates/vix-ai-core", version = "2.0.0" }
