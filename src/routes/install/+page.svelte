@@ -1,23 +1,54 @@
 <svelte:head>
-  <meta name="description" content="How to build and run Vix from source." />
+  <meta name="description" content="How to install Vix with Homebrew, npm, an installer script, native packages, or from source." />
 </svelte:head>
 
 <section class="section prose" style="margin: 0 auto;">
   <h1>Install</h1>
 
   <p>
-    Vix isn't packaged for a registry yet — build it from source with a Rust
-    toolchain. It's one crate in a Cargo workspace, so there's nothing else to
-    install first.
+    The command is <code>vix</code> however you install it. Pick whichever
+    suits your platform; prebuilt binaries need no Rust toolchain.
+  </p>
+
+  <h2>Install a prebuilt binary</h2>
+  <pre><code
+    >{`# macOS or Linux, Homebrew
+brew install vixide/homebrew-tap/vix-tui
+
+# macOS or Linux, installer script
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-tui-installer.sh | sh
+
+# Any platform with npm
+npm install -g @vixide/vix
+
+# Any platform with a Rust toolchain (1.97+)
+cargo install vix-tui`}</code
+  ></pre>
+  <p>
+    On Windows, use PowerShell:
+  </p>
+  <pre><code
+    >{`powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-tui-installer.ps1 | iex"`}</code
+  ></pre>
+  <p>
+    On Linux, every release also has native packages (<code>.deb</code>,
+    <code>.rpm</code>, Arch <code>.pkg.tar.zst</code>) for x86_64 and aarch64
+    on the
+    <a href="https://github.com/vixide/vix/releases/latest">latest release</a>
+    page. Prebuilt archives (<code>.tar.xz</code>, <code>.zip</code>,
+    <code>.msi</code>) are attached to every
+    <a href="https://github.com/vixide/vix/releases">GitHub Release</a>,
+    along with a <strong>minimal build</strong> (<code>vix-minimal-&lt;target&gt;</code>)
+    that leaves out every network, shell and external-program feature.
   </p>
 
   <h2>Requirements</h2>
   <ul>
-    <li>A Rust toolchain, <strong>1.96 or newer</strong> (the MSRV is the current stable release minus two).</li>
-    <li>A <a href="https://www.nerdfonts.com/">Nerd Font</a>, for best results — it supplies the file/folder/clock glyphs.</li>
+    <li>To build from source: a Rust toolchain, <strong>1.97 or newer</strong>.</li>
+    <li>A <a href="https://www.nerdfonts.com/">Nerd Font</a>, for best results — it supplies the file/folder/clock glyphs (Vix falls back to plain characters without one).</li>
   </ul>
 
-  <h2>Build and run</h2>
+  <h2>Build from source</h2>
   <pre><code
     >{`git clone https://github.com/vixide/vix
 cd vix
