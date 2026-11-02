@@ -954,6 +954,88 @@ impl App {
         self.status = t!("status.renamed_in", n = files).to_string();
     }
 
+    /// How long a file rename waits for language servers' `willRenameFiles`
+    /// answers before renaming anyway (T623).
+    const RENAME_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+    /// A server answered `willRenameFiles` (T623): apply its edits, and once
+    /// every server has answered, do the rename that was waiting.
+    pub(super) fn on_will_rename_reply(&mut self, edits: &[crate::lsp::FileEdits], last: bool) {
+        if self.pending_rename.is_none() {
+            return;
+        }
+        if !edits.is_empty() {
+            self.apply_workspace_edit(edits);
+        }
+        if last {
+            self.run_pending_rename();
+        }
+    }
+
+    /// Rename anyway when servers have not answered within [`Self::RENAME_WAIT`].
+    pub(super) fn expire_pending_rename(&mut self) {
+        if self
+            .pending_rename
+            .as_ref()
+            .is_some_and(|(_, _, since)| since.elapsed() >= Self::RENAME_WAIT)
+        {
+            self.run_pending_rename();
+        }
+    }
+
+    /// Carry out the rename that was waiting on language servers.
+    fn run_pending_rename(&mut self) {
+        if let Some((old, new, _)) = self.pending_rename.take() {
+            self.finish_rename(&old, &new);
+        }
+    }
+
+    /// Tell language servers about workspace manifests and open files that
+    /// changed on disk (T623, `workspace/didChangeWatchedFiles`). `changed`
+    /// holds open files whose mtime moved; manifests are stat'ed here whether
+    /// or not they are open, so a server notices an edit to `Cargo.toml` or
+    /// `package.json` made outside Vix. Does nothing unless a server registered
+    /// watchers.
+    pub(super) fn forward_watched_files(&mut self, changed: Vec<PathBuf>) {
+        const MANIFESTS: [&str; 8] = [
+            "Cargo.toml",
+            "Cargo.lock",
+            "package.json",
+            "tsconfig.json",
+            "pyproject.toml",
+            "go.mod",
+            "go.sum",
+            "deno.json",
+        ];
+        if !self.lsp.watches_files() {
+            return;
+        }
+        let mut events: Vec<(PathBuf, crate::lsp_core::file_ops::FileChangeType)> = changed
+            .into_iter()
+            .map(|p| (p, crate::lsp_core::file_ops::FileChangeType::Changed))
+            .collect();
+        for name in MANIFESTS {
+            let path = self.root.join(name);
+            let now = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+            // The first sighting only records the state.
+            let Some(previous) = self.manifest_mtimes.insert(path.clone(), now) else {
+                continue;
+            };
+            let kind = match (previous, now) {
+                (None, Some(_)) => crate::lsp_core::file_ops::FileChangeType::Created,
+                (Some(_), None) => crate::lsp_core::file_ops::FileChangeType::Deleted,
+                (Some(a), Some(b)) if a != b => crate::lsp_core::file_ops::FileChangeType::Changed,
+                _ => continue,
+            };
+            if !events.iter().any(|(p, _)| *p == path) {
+                events.push((path, kind));
+            }
+        }
+        if !events.is_empty() {
+            self.lsp.did_change_watched_files(&events);
+        }
+    }
+
     /// Request signature help at the cursor (LSP).
     pub(super) fn lsp_signature_help(&mut self) {
         if let Some(path) = self.active_path()

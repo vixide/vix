@@ -2418,6 +2418,12 @@ pub struct App {
     /// Last-seen on-disk modification time per open file path, for detecting
     /// external changes (auto-reload). Seeded lazily on first poll.
     disk_mtimes: std::collections::HashMap<PathBuf, std::time::SystemTime>,
+    /// Last-seen mtime of the workspace manifests language servers watch
+    /// (`Cargo.toml`, `package.json`, …) whether or not they are open (T623).
+    manifest_mtimes: std::collections::HashMap<PathBuf, Option<std::time::SystemTime>>,
+    /// A file rename waiting for language servers' `willRenameFiles` edits
+    /// (T623): `(old, new, when asked)`.
+    pending_rename: Option<(PathBuf, PathBuf, std::time::Instant)>,
     /// The open remote workspace and any background connect (T713, T714).
     pub(crate) remote: remote_session::RemoteState,
     /// Throttle anchor for the external-change poll; `None` until the first poll.
@@ -2997,6 +3003,8 @@ impl App {
             pomodoro: None,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
+            manifest_mtimes: std::collections::HashMap::new(),
+            pending_rename: None,
             remote: remote_session::RemoteState::default(),
             last_disk_poll: None,
             format_save_pending: None,
@@ -5883,6 +5891,7 @@ impl App {
 
         let mut reload_clean = false;
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
+        let mut changed_on_disk: Vec<PathBuf> = Vec::new();
         let mut lost = None;
         let auth = crate::authority::current();
         // One batch for every open file: a single round trip under a remote
@@ -5911,6 +5920,7 @@ impl App {
             let previous = self.disk_mtimes.insert((*path).clone(), mtime);
             // Only act on a *change* (the first sighting just records the mtime).
             if previous.is_some_and(|p| p != mtime) {
+                changed_on_disk.push((*path).clone());
                 if *dirty {
                     dirty_changed.push((*path).clone());
                 } else {
@@ -5923,6 +5933,8 @@ impl App {
         {
             return;
         }
+        // T623: servers that registered watchers hear about outside edits.
+        self.forward_watched_files(changed_on_disk);
         if reload_clean {
             let n = self.reload_clean_buffers();
             if n > 0 {
@@ -7741,6 +7753,7 @@ impl App {
     /// Drain language-server messages and act on them (diagnostics, hover,
     /// definition jumps, completion). Called once per event-loop iteration.
     pub fn poll_lsp(&mut self) {
+        self.expire_pending_rename();
         if !self.lsp.is_active() {
             self.completion_due = None;
             return;
@@ -7788,6 +7801,9 @@ impl App {
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
+                crate::lsp::LspEvent::WillRenameFiles { edits, last } => {
+                    self.on_will_rename_reply(&edits, last);
+                }
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
                 crate::lsp::LspEvent::DocumentColors { path, colors } => {
@@ -13959,11 +13975,32 @@ impl App {
             self.status = t!("status.rename_exists", name = new_path.display()).to_string();
             return;
         }
-        match auth.rename(&cur, &new_path) {
+        // T623: servers may want to rewrite imports first; the rename itself
+        // happens once they answer (or `RENAME_WAIT` runs out).
+        if self.pending_rename.is_none() && self.lsp.will_rename_files(&cur, &new_path) {
+            self.pending_rename = Some((cur, new_path, std::time::Instant::now()));
+            return;
+        }
+        self.finish_rename(&cur, &new_path);
+    }
+
+    /// Perform the on-disk rename of `cur` to `new_path`, repoint the tab that
+    /// has it open, and tell language servers (T623: `didRenameFiles`).
+    fn finish_rename(&mut self, cur: &Path, new_path: &Path) {
+        let auth = crate::authority::current();
+        match auth.rename(cur, new_path) {
             Ok(()) => {
-                if let Some(t) = self.editor.active_tab_mut() {
-                    t.path = Some(new_path.clone());
+                if let Some(t) = self
+                    .editor
+                    .tabs
+                    .iter_mut()
+                    .find(|t| t.path.as_deref() == Some(cur))
+                {
+                    t.path = Some(new_path.to_path_buf());
                 }
+                self.lsp.did_close(cur);
+                self.lsp_synced.remove(cur);
+                self.lsp.did_rename_files(cur, new_path);
                 self.status = t!("status.renamed", path = new_path.display()).to_string();
                 self.explorer.rebuild();
                 self.refresh_git();

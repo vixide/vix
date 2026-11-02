@@ -7308,7 +7308,8 @@ new action.
   skip and remove-last-caret. Distribute pasted lines one per caret.
   Tests: unit tests per operation, and make `tui/tests/integration/catalog.rs`
   assert real behavior. **Medium.**
-- [ ] **T623 — File-rename and watched-file notifications.** Vix has no
+- [x] **T623 — File-rename and watched-file notifications.**
+  *Done 2026-11-02: new `vix_lsp_core::file_ops` (filters, registrations, watchers, params); `Lsp::{will_rename_files, did_rename_files, did_change_watched_files, watches_files}` and `LspEvent::WillRenameFiles`; `File → Rename` holds the rename for servers' import edits (3 s cap) then sends `didRenameFiles`; the 1 s external-change poll forwards open-file changes plus root manifests (`Cargo.toml`, `package.json`, …) to servers whose registered watchers match. Not done: explorer/directory renames, create/delete (`willCreateFiles`, `willDeleteFiles`), recursive watching. Test: `tui/tests/lsp_file_ops.rs`.* Vix has no
   `willRenameFiles`, `didRenameFiles`, or `didChangeWatchedFiles`. On an
   explorer rename (`vix-fileops`), send `willRenameFiles`, apply the
   returned WorkspaceEdit (imports update), then send `didRenameFiles`.
@@ -9595,7 +9596,7 @@ scratch each time they come up.
 Runs A–L, N, O (except the two late findings), P and Q (except T718) are
 complete. What is open, by run:
 
-- **Run M:** T621, T623, T635 and T644 are open (T624 done 2026-11-02). T608 is half done (the
+- **Run M:** T621, T635 and T644 are open (T623 and T624 done 2026-11-02). T608 is half done (the
   DAP mock-adapter tests exist; the `vix-editor` unit-test half remains).
   T610 (typed errors) is done in four slices: no public function in `crates/`,
   `gui/` or `tui/src` returns `Result<_, String>` any more. T611 is ticked for

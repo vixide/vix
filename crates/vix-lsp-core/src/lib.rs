@@ -14,6 +14,7 @@
 #![recursion_limit = "256"]
 
 pub mod document_extras;
+pub mod file_ops;
 pub mod frame;
 pub mod inline_completion;
 pub mod message;

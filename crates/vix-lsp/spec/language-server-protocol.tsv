@@ -26,4 +26,7 @@ textDocument/rename	Rename symbol across files via workspace edits
 textDocument/selectionRange	Smart expand/shrink selection
 textDocument/signatureHelp	Parameter hints on ( and ,
 textDocument/typeDefinition	Jump to type definition
+workspace/didChangeWatchedFiles	Outside edits to open files and workspace manifests, for servers that registered watchers
+workspace/didRenameFiles	Told after File > Rename succeeds
 workspace/symbol	Search symbols across the project
+workspace/willRenameFiles	Import updates applied before File > Rename moves the file

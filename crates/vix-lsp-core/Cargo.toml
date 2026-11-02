@@ -8,6 +8,7 @@ repository.workspace = true
 description = "A pure LSP client core: JSON-RPC framing, message builders, parsers, positions."
 
 [dependencies]
+globset = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
