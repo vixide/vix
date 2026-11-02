@@ -165,7 +165,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 145 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 146 `vix-*` workspace member crates (each with its own `spec/`).|
 | `crates/vix-editor-core/langs/` | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded. |
 | `crates/vix-i18n/locales/` | rust-i18n translations, one YAML file per key namespace (`action`, `menu`, `msg`, `ui`, …); English is the fallback. |
 | `/dictionaries/` | Hunspell dictionaries — fetched separately, gitignored, absent from a fresh clone; see `crates/vix-spellcheck/spec/dictionaries`. |

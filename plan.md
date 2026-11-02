@@ -32,7 +32,7 @@ CI, docs depth, onboarding — has not kept pace. The highest-leverage work is
 now in that platform.
 
 **Status (2026-11-02).** The baseline above is historical. Phases 0–5 and
-Runs A–L, N and P are done; the workspace has 145 crates and is versioned
+Runs A–L, N and P are done; the workspace has 146 crates and is versioned
 2.0.0 (unreleased; 1.8.0 is the latest release). `tasks.md` has 308 tasks
 ticked, 16 open and one half done (T608). Run M and Run O are now done except
 the open items listed in `tasks.md` § "Suggested execution order". Of the
