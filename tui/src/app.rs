@@ -7750,6 +7750,19 @@ impl App {
         (u32::try_from(line).unwrap_or(0), character)
     }
 
+    /// Route a document-colors or document-links reply to its handler.
+    fn on_document_extras_event(&mut self, event: crate::lsp::LspEvent) {
+        match event {
+            crate::lsp::LspEvent::DocumentColors { path, colors } => {
+                self.on_document_colors(&path, colors);
+            }
+            crate::lsp::LspEvent::DocumentLinks { path, links } => {
+                self.on_document_links(&path, links);
+            }
+            _ => {}
+        }
+    }
+
     /// Drain language-server messages and act on them (diagnostics, hover,
     /// definition jumps, completion). Called once per event-loop iteration.
     pub fn poll_lsp(&mut self) {
@@ -7806,12 +7819,8 @@ impl App {
                 }
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
-                crate::lsp::LspEvent::DocumentColors { path, colors } => {
-                    self.on_document_colors(&path, colors);
-                }
-                crate::lsp::LspEvent::DocumentLinks { path, links } => {
-                    self.on_document_links(&path, links);
-                }
+                ev @ (crate::lsp::LspEvent::DocumentColors { .. }
+                | crate::lsp::LspEvent::DocumentLinks { .. }) => self.on_document_extras_event(ev),
                 ev @ (crate::lsp::LspEvent::CodeLensUpdate { .. }
                 | crate::lsp::LspEvent::CodeLensResolved { .. }
                 | crate::lsp::LspEvent::CodeLensRefresh) => self.on_code_lens_event(ev),
