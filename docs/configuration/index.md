@@ -86,6 +86,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_minimap`  | bool   | `false`  | Show the code-overview minimap column at the right of the editor. |
 | `sticky_scroll` | bool   | `true`   | Pin the enclosing scope's header line at the top while scrolling. |
 | `code_lens`     | bool   | `true`   | Draw code lenses (Run, Debug, references, local Run test) as dimmed rows above their lines. |
+| `document_colors` | bool | `true`   | Draw a swatch for each color a language server reports. |
 | `rainbow_brackets` | bool | `false` | Color matching brackets by nesting depth. |
 | `highlight_word` | bool  | `false`  | Passively highlight every occurrence of the word under the cursor. |
 | `sticky_search_highlight` | bool | `true` | Keep search-match highlights after the Find box closes, until toggled off. |

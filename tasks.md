@@ -7287,7 +7287,7 @@ new action.
   direction toggle in the call-hierarchy view and `lsp.type_hierarchy_*`
   actions. Tag each item with the server it came from, which also fixes
   T123b's documented multi-server limit. **Small–medium.**
-- [ ] **T621 — Document colors and document links.** Vix has no
+- [x] **T621 — Document colors and document links.** Vix has no
   `documentColor`, `colorPresentation`, or `documentLink`. Helix 25.07,
   Neovim 0.12, and VS Code all have them. Request them on open and on a
   debounced change. Draw a `■` swatch before each color (T614's virtual
@@ -7295,6 +7295,7 @@ new action.
   (using the existing URL opener). Optional: send a color chosen in
   `vix-x11-color-picker` back to the server via `colorPresentation`.
   **Small.**
+  *Done 2026-11-02: `documentColor` swatches on a new `ColorSwatches` end-of-line layer (at the line's end, since T614's primitive draws after the content), `documentLink` links via `lsp.open_link` and Ctrl/Cmd+click (`file:` opens at `#L`, `http(s):`/`mailto:` go to a new platform opener -- there was no existing URL opener -- other schemes refused), `document_colors` setting. `colorPresentation` write-back left open. Spec: `crates/vix-lsp/spec/index.md` § Document colors and links.*
 - [x] **T622 — Multi-cursor depth.** `CaretMove`
   *Done 2026-10-31: `CaretMove` gains Word/Line/TextStart/Home/Buffer motions (named motions, Ctrl+←/→, Home/End route through `multi_move`); carets keep add order (primary = newest); `skip_occurrence`, `remove_last_caret`, `split_selection_into_lines`, `select_matches_in_selection` (`edit.split_selection_into_lines`, `edit.select_regex_in_selection` + prompt); line-per-caret paste and joined multi-caret copy/cut; undo/redo collapse to the primary; completion/snippets explicitly single-caret; the dispatch moved to `tui/src/app/multi_cursor.rs`; `catalog.rs` asserts real behavior. Spec: `crates/vix-editor-core/spec/index.md` § Multiple carets.*
   (`crates/vix-editor-core/src/multicursor.rs:42-51`) has only

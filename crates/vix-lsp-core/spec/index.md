@@ -79,3 +79,15 @@ report as one line. `message::parse_capability_names` lists the
 capabilities in an `initialize` result: every key of `capabilities` whose
 value is present and not `false`, with a trailing `Provider` dropped
 (`hoverProvider` → `hover`), sorted.
+
+## Document colors and links (T621)
+
+`document_extras::parse_colors` reads a `textDocument/documentColor` result
+(`ColorInformation[]`, channels as 0.0-1.0 floats) into `DocColor { range,
+rgb }` with `rgb` clamped to bytes; `parse_links` reads a
+`textDocument/documentLink` result into `DocLink { range, target }`, dropping
+links with no `target`; `target_kind` classifies a target as a file (with an
+optional line), an external URL, or unsupported. `initialize_params` declares
+`textDocument.colorProvider` and `textDocument.documentLink`. How the host
+draws and opens them is in the
+[lsp spec](../../vix-lsp/spec/index.md#document-colors-and-links-t621).

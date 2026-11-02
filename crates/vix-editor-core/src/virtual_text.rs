@@ -28,6 +28,8 @@ pub enum VirtualTextLayer {
     TaskProblems,
     /// The debugger's variable values on the stopped line (T617).
     DebugValues,
+    /// A `■` in each document color's own color (T621).
+    ColorSwatches,
 }
 
 /// One piece of end-of-line virtual text.
@@ -207,6 +209,19 @@ mod tests {
         let mut buf = Buffer::empty(area);
         ed.render(area, &mut buf);
         buf
+    }
+
+    #[test]
+    fn color_swatches_draw_after_diagnostics_and_are_independent() {
+        let mut ed = editor("abc\n");
+        ed.set_eol_texts(
+            VirtualTextLayer::ColorSwatches,
+            vec![EolText::new(0, "\u{25a0}")],
+        );
+        ed.set_eol_texts(VirtualTextLayer::Diagnostics, vec![EolText::new(0, "err")]);
+        assert_eq!(row(&render(&ed, 20), 0), "abc  err  \u{25a0}");
+        ed.clear_eol_texts(VirtualTextLayer::Diagnostics);
+        assert_eq!(ed.eol_texts(VirtualTextLayer::ColorSwatches).len(), 1);
     }
 
     #[test]

@@ -100,6 +100,21 @@ fn lsp_navigation_actions_report_inactive_without_server() {
 }
 
 #[test]
+#[cfg(feature = "lsp")]
+fn open_link_without_a_link_says_so() {
+    // T621: with no language server there are no links; the action reports
+    // that rather than doing nothing silently.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "https://example.com\n");
+    app.run_action("lsp.open_link");
+    assert!(
+        app.status.contains(&*t!("status.link_none")),
+        "status: {}",
+        app.status
+    );
+}
+
+#[test]
 fn goto_definition_single_jumps() {
     let dir = unique_dir("gotodef");
     fs::write(dir.join("lib.rs"), "fn target() {}\n").unwrap();

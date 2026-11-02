@@ -56,6 +56,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
 | Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). A server that offers `diagnosticProvider` is also asked per document (`textDocument/diagnostic`, T619, § Pull diagnostics), so a pull-only server (such as Roslyn) underlines too. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
+| Document colors and links | automatic; `lsp.open_link`, Ctrl+click | `textDocument/documentColor` swatches and `textDocument/documentLink` links (T621, § Document colors and links). |
 | Progress | automatic | `$/progress` work-done reports (T123d, T732) are tracked per server and token: `begin` adds a task, `report` updates its message/percentage, `end` removes it. While any task is in flight the status bar shows the newest one (`Lsp::progress_line`, e.g. `"rust: Indexing: 3/10 crates (30%) +1"`) and clears it on `end`; `LspEvent::Progress` is still emitted for `begin`/`report`. |
 | LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
@@ -300,6 +301,45 @@ the suggestion state and word splitting in `vix_lsp::ghost`, and the prompt
 and reply clean-up in `vix_ai_core::fim`. The host is
 `tui/src/app/ghost.rs`; `tui/tests/lsp_smoke.rs` drives a mock server end to
 end and `tui/tests/integration/ghost.rs` the AI source with a fake command.
+
+## Document colors and links (T621)
+
+A server that offers `colorProvider` is asked for `textDocument/documentColor`,
+and one that offers `documentLinkProvider` for `textDocument/documentLink`.
+Both are ambient: a server without them is never asked, and an error reply is
+silent.
+
+- **When it asks.** When a file is first seen, after the buffer has been still
+  for the debounce (500 ms) following an edit, and after a save. A reply
+  computed against an older document version is dropped. A request that could
+  not be sent yet (the server is still starting) is retried a bounded number
+  of times.
+- **Color swatches.** Each color is drawn as a `■` in the color itself on the
+  `ColorSwatches` end-of-line virtual-text layer (T614,
+  `crates/vix-editor-core/spec/index.md`). The swatch sits at the end of the
+  color's line, one per color in source order, because the primitive draws
+  after a line's content and never inside it. The `document_colors`
+  setting (default on) turns the swatches off. The color's alpha is ignored:
+  the swatch shows the opaque RGB.
+- **Links.** Links with a `target` are kept per file. `lsp.open_link` (Tools →
+  Language Server → Open Link) opens the link under the cursor, or, with the
+  cursor on no link, the only link on the cursor's line when there is exactly
+  one. Ctrl+click (Cmd+click on macOS terminals that report Super) on a link
+  does the same. A `file:` target opens in the editor (a `#L12` or `#12`
+  fragment jumps to that line); an `http(s):` or `mailto:` target is handed to
+  the system opener (`open`, `xdg-open` or `cmd /c start`); any other scheme
+  is refused with a message. A link with no `target` is dropped
+  (`documentLink/resolve` is not used).
+- **Not done.** `textDocument/colorPresentation`, to write a color picked in
+  the color picker back into the buffer in the server's notation, is left
+  open.
+- **Protocol.** The client declares `textDocument.colorProvider` and
+  `textDocument.documentLink`. Pure parsing lives in
+  `vix_lsp_core::document_extras` (`parse_colors`, `parse_links`,
+  `target_kind`); the requests are `Lsp::refresh_document_extras`, with
+  replies as `LspEvent::DocumentColors` and `LspEvent::DocumentLinks`. The
+  host is `tui/src/app/doc_links.rs`; `tui/tests/lsp_smoke.rs` drives a mock
+  server end to end.
 
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 

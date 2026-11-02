@@ -66,6 +66,10 @@ enum Pending {
     CodeLensResolve,
     /// `textDocument/inlineCompletion` (T618): silent on error, routed by path.
     InlineCompletion,
+    /// `textDocument/documentColor` (T621): silent on error, routed by path.
+    DocumentColor,
+    /// `textDocument/documentLink` (T621): silent on error, routed by path.
+    DocumentLink,
     PrepareCallHierarchy,
     IncomingCalls,
     /// `callHierarchy/outgoingCalls` (T620).
@@ -103,6 +107,8 @@ impl Pending {
                 | Pending::CodeLensAuto
                 | Pending::CodeLensResolve
                 | Pending::InlineCompletion
+                | Pending::DocumentColor
+                | Pending::DocumentLink
         )
     }
 }
@@ -230,6 +236,23 @@ pub enum LspEvent {
         path: PathBuf,
         /// The suggested insertions, best first.
         items: Vec<String>,
+    },
+    /// A `textDocument/documentColor` reply for `path` (T621); empty means
+    /// "no colors now". Only a reply for the document version the server still
+    /// holds is delivered.
+    DocumentColors {
+        /// The file the colors belong to, as the host passed it in.
+        path: PathBuf,
+        /// The colors, in server order.
+        colors: Vec<vix_lsp_core::document_extras::DocColor>,
+    },
+    /// A `textDocument/documentLink` reply for `path` (T621); empty means "no
+    /// links now". Links without a `target` are dropped.
+    DocumentLinks {
+        /// The file the links belong to, as the host passed it in.
+        path: PathBuf,
+        /// The links, in server order.
+        links: Vec<vix_lsp_core::document_extras::DocLink>,
     },
     /// The server asked the client to re-request every code lens
     /// (`workspace/codeLens/refresh`, T726).
@@ -1188,6 +1211,62 @@ impl Lsp {
         sent
     }
 
+    /// Ask every server handling `path` that offers `colorProvider` or
+    /// `documentLinkProvider` for its colors and links (T621); the replies
+    /// arrive as [`LspEvent::DocumentColors`] and [`LspEvent::DocumentLinks`].
+    /// Errors are silent. Returns whether any request was sent (no server,
+    /// document not open yet, or no such capability: `false`).
+    pub fn refresh_document_extras(&mut self, path: &Path) -> bool {
+        let uri = path_to_uri(path);
+        let mut sent = false;
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            // Before `initialize` finishes the capabilities are unknown, so
+            // nothing is asked (the host retries).
+            if !server.ready {
+                continue;
+            }
+            for (cap, kind, method) in [
+                (
+                    "color",
+                    Pending::DocumentColor,
+                    "textDocument/documentColor",
+                ),
+                (
+                    "documentLink",
+                    Pending::DocumentLink,
+                    "textDocument/documentLink",
+                ),
+            ] {
+                if !server.capabilities.iter().any(|n| n == cap) {
+                    continue;
+                }
+                let id = server.alloc_id();
+                server.pending.insert(id, kind);
+                server.targets.insert(
+                    id,
+                    Target {
+                        path: path.to_path_buf(),
+                        uri: uri.clone(),
+                        version,
+                    },
+                );
+                server.send(message::request(
+                    id,
+                    method,
+                    &message::text_document_params(&uri),
+                ));
+                sent = true;
+            }
+        }
+        sent
+    }
+
     /// Whether a server handling `path` resolves code lenses lazily
     /// (`codeLens/resolve`, T726).
     #[must_use]
@@ -1895,7 +1974,11 @@ impl Lsp {
         // means "no lenses") and dropped once that document has moved on.
         if matches!(
             kind,
-            Pending::CodeLensAuto | Pending::CodeLensResolve | Pending::InlineCompletion
+            Pending::CodeLensAuto
+                | Pending::CodeLensResolve
+                | Pending::InlineCompletion
+                | Pending::DocumentColor
+                | Pending::DocumentLink
         ) {
             if let Some((target, true)) = target {
                 Self::lens_reply(kind, target.path, result, events);
@@ -2020,6 +2103,16 @@ impl Lsp {
     /// Turn a current background-lens, lens-resolve or inline-completion (T618,
     /// dropped silently once stale) reply into its event.
     fn lens_reply(kind: Pending, path: PathBuf, result: &Value, events: &mut Vec<LspEvent>) {
+        if matches!(kind, Pending::DocumentColor) {
+            let colors = vix_lsp_core::document_extras::parse_colors(result);
+            events.push(LspEvent::DocumentColors { path, colors });
+            return;
+        }
+        if matches!(kind, Pending::DocumentLink) {
+            let links = vix_lsp_core::document_extras::parse_links(result);
+            events.push(LspEvent::DocumentLinks { path, links });
+            return;
+        }
         if matches!(kind, Pending::InlineCompletion) {
             Self::inline_completion_reply(path, result, events);
             return;

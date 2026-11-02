@@ -385,7 +385,8 @@ the shared primitive behind inline diagnostics (T614), and the one inline values
   `Diagnostics` (LSP, T614), `TaskProblems` (problems matched in task
   output, T632; `crates/vix-tasks/spec/index.md`) and `DebugValues` (the
   debugger's inline variable values on the stopped line, T617;
-  `crates/vix-dap/spec/index.md`).
+  `crates/vix-dap/spec/index.md`) and `ColorSwatches` (a `■` in each
+  document color's own color, T621; `crates/vix-lsp/spec/index.md`).
 - Each text is drawn two columns after the line's last glyph (after any inline
   hints, the inline-blame note, or a folded line's `...`), **dimmed**, in its
   `color` when one is given. Several texts on one line are drawn in layer order,

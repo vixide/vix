@@ -333,6 +333,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.highlight` | Highlight Occurrences | Menu |
 | `lsp.hover` | Hover | Menu |
 | `lsp.linked_edit` | Edit Linked Ranges… | Menu |
+| `lsp.open_link` | Open Link | Menu |
 | `lsp.organize_imports` | Organize Imports | Menu |
 | `lsp.refactor` | Refactor… | Menu |
 | `lsp.references` | Go to References | Menu |
@@ -808,4 +809,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**801 actions.**
+**802 actions.**
