@@ -145,7 +145,11 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // T123f: Vix understands `workspaceFolders` and will send
                 // `workspace/didChangeWorkspaceFolders` when the server's own
                 // response asks for it (`changeNotifications`).
-                "workspaceFolders": true
+                "workspaceFolders": true,
+                // T623: rename notifications, and watcher registration
+                // (`client/registerCapability`) for `didChangeWatchedFiles`.
+                "fileOperations": { "willRename": true, "didRename": true },
+                "didChangeWatchedFiles": { "dynamicRegistration": true }
             },
             // T123d: `$/progress` (e.g. an initial index build) is only
             // sent to clients that declare support for it.

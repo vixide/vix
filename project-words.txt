@@ -563,6 +563,7 @@ unindexed
 unmigrated
 unparseable
 unpromoted
+unregistrations
 unreviewed
 unshifted
 unstaging

@@ -572,6 +572,10 @@ name = "lsp_smoke"
 path = "tests/lsp_smoke.rs"
 
 [[test]]
+name = "lsp_file_ops"
+path = "tests/lsp_file_ops.rs"
+
+[[test]]
 name = "mcp_stdio"
 path = "tests/mcp_stdio.rs"
 

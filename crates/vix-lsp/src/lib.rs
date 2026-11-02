@@ -33,6 +33,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
+use vix_lsp_core::file_ops::{self, FileChangeType};
 use vix_lsp_core::sync::{self, SyncKind};
 use vix_lsp_core::{Diagnostic, Encoding, Range, frame, message};
 use vix_settings::LspServer as ServerConfig;
@@ -77,6 +78,9 @@ enum Pending {
     /// `typeHierarchy/subtypes` (T620).
     Subtypes,
     PrepareRename,
+    /// `workspace/willRenameFiles` (T623): always answered with a
+    /// [`LspEvent::WillRenameFiles`], even on error or an empty reply.
+    WillRenameFiles,
     WorkspaceDiagnostics,
     /// `textDocument/diagnostic` (T619): silent on error, routed by its target.
     DocumentDiagnostics,
@@ -178,6 +182,15 @@ pub enum LspEvent {
     SignatureHelp(String),
     /// A rename response: per-file edits to apply.
     WorkspaceEdit(Vec<FileEdits>),
+    /// One server's answer to `workspace/willRenameFiles` (T623): the edits
+    /// (e.g. import updates) to apply before the rename, empty when it had
+    /// none or failed. `last` is true once no other server is still owed.
+    WillRenameFiles {
+        /// Per-file edits to apply before touching the file system.
+        edits: Vec<FileEdits>,
+        /// Whether every server asked has now answered.
+        last: bool,
+    },
     /// A code-action response: each offered action with its edit.
     CodeActions(Vec<CodeAction>),
     /// A selection-range response: the chain of ranges (innermost first) for the
@@ -479,6 +492,13 @@ struct Server {
     /// Per document, the `resultId` of its last pull-diagnostic report
     /// (T619), sent back as `previousResultId`.
     diagnostic_result_ids: HashMap<String, String>,
+    /// Which renames it wants `willRenameFiles` for (T623); `None` when it
+    /// does not offer the operation.
+    will_rename: Option<file_ops::FileOpFilters>,
+    /// Which renames it wants `didRenameFiles` for (T623).
+    did_rename: Option<file_ops::FileOpFilters>,
+    /// File watchers it registered dynamically (T623), by registration id.
+    watchers: HashMap<String, Vec<file_ops::Watcher>>,
     /// Whether `initialize` has completed and `initialized` been sent.
     ready: bool,
     /// Messages deferred until the server is `ready`.
@@ -561,6 +581,8 @@ pub struct Lsp {
     /// Debounced pull-diagnostic requests (T619): `(language, uri)` and when
     /// the pull is due, sent by [`Lsp::poll`].
     pull_due: HashMap<(String, String), Instant>,
+    /// How many servers still owe a `willRenameFiles` reply (T623).
+    rename_waiting: usize,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -591,6 +613,7 @@ impl Lsp {
             last_errors: HashMap::new(),
             failed: HashSet::new(),
             pull_due: HashMap::new(),
+            rename_waiting: 0,
         }
     }
 
@@ -1399,6 +1422,94 @@ impl Lsp {
         );
     }
 
+    /// Ask every running server that wants it for the edits a rename of
+    /// `old` to `new` implies (T623, `workspace/willRenameFiles`). Returns
+    /// whether any request was sent; if so, one [`LspEvent::WillRenameFiles`]
+    /// per server follows, the last carrying `last: true`. The host applies
+    /// the edits and only then renames, then calls [`Lsp::did_rename_files`].
+    pub fn will_rename_files(&mut self, old: &Path, new: &Path) -> bool {
+        self.rename_waiting = 0;
+        let is_dir = old.is_dir();
+        let params = file_ops::rename_files_params(&path_to_uri(old), &path_to_uri(new));
+        let roots = self.folders.clone();
+        let mut sent = 0;
+        for server in self.servers.values_mut() {
+            let wanted = server.ready
+                && server
+                    .will_rename
+                    .as_ref()
+                    .is_some_and(|f| f.matches(old, is_dir, &roots));
+            if wanted {
+                let id = server.alloc_id();
+                server.pending.insert(id, Pending::WillRenameFiles);
+                server.send(message::request(id, "workspace/willRenameFiles", &params));
+                sent += 1;
+            }
+        }
+        self.rename_waiting = sent;
+        sent > 0
+    }
+
+    /// Tell every server that wants it a rename happened (T623,
+    /// `workspace/didRenameFiles`). A rename also counts as a watched-file
+    /// delete and create for servers that registered watchers.
+    pub fn did_rename_files(&mut self, old: &Path, new: &Path) {
+        let is_dir = new.is_dir();
+        let params = file_ops::rename_files_params(&path_to_uri(old), &path_to_uri(new));
+        let roots = self.folders.clone();
+        for server in self.servers.values_mut() {
+            let wanted = server.ready
+                && server
+                    .did_rename
+                    .as_ref()
+                    .is_some_and(|f| f.matches(new, is_dir, &roots));
+            if wanted {
+                server.send(message::notification("workspace/didRenameFiles", &params));
+            }
+        }
+        self.did_change_watched_files(&[
+            (old.to_path_buf(), FileChangeType::Deleted),
+            (new.to_path_buf(), FileChangeType::Created),
+        ]);
+    }
+
+    /// Forward file changes to every server whose registered watchers
+    /// (`client/registerCapability`) match them (T623,
+    /// `workspace/didChangeWatchedFiles`). A server that registered nothing
+    /// is sent nothing.
+    pub fn did_change_watched_files(&mut self, changes: &[(PathBuf, FileChangeType)]) {
+        let roots = self.folders.clone();
+        for server in self.servers.values_mut() {
+            if !server.ready || server.watchers.is_empty() {
+                continue;
+            }
+            let matched: Vec<(String, FileChangeType)> = changes
+                .iter()
+                .filter(|(path, change)| {
+                    server
+                        .watchers
+                        .values()
+                        .flatten()
+                        .any(|w| w.wants(path, *change, &roots))
+                })
+                .map(|(path, change)| (path_to_uri(path), *change))
+                .collect();
+            if !matched.is_empty() {
+                server.send(message::notification(
+                    "workspace/didChangeWatchedFiles",
+                    &file_ops::watched_files_params(&matched),
+                ));
+            }
+        }
+    }
+
+    /// Whether any running server has registered file watchers (T623), so the
+    /// host knows forwarding file changes is worthwhile.
+    #[must_use]
+    pub fn watches_files(&self) -> bool {
+        self.servers.values().any(|s| !s.watchers.is_empty())
+    }
+
     /// Pull a full workspace diagnostic report from every running server
     /// (T123d): unlike push (`publishDiagnostics`), this reflects a
     /// server's whole-project analysis, not just files that have actually
@@ -1849,6 +1960,14 @@ impl Lsp {
             events.push(LspEvent::RenamePrepared(outcome));
             return;
         }
+        if matches!(kind, Pending::WillRenameFiles) {
+            let edits = message::parse_workspace_edit(result)
+                .into_iter()
+                .map(|(uri, e)| (uri_to_path(&uri), e))
+                .collect();
+            self.finish_will_rename(edits, events);
+            return;
+        }
         // T123d: merges straight into `self.diagnostics`, the same map push
         // (`publishDiagnostics`) fills — needs `&mut self`, unlike every
         // other response kind, so it can't go through the self-less
@@ -1945,6 +2064,11 @@ impl Lsp {
         // seed instead of surfacing a scary error for an optional step.
         if matches!(kind, Pending::PrepareRename) {
             events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
+            return;
+        }
+        // T623: a failed `willRenameFiles` must not block the rename itself.
+        if matches!(kind, Pending::WillRenameFiles) {
+            self.finish_will_rename(Vec::new(), events);
             return;
         }
         // T123d: pull diagnostics (`workspace/diagnostic`) is a newer
@@ -2223,6 +2347,8 @@ impl Lsp {
             server.execute_commands = message::parse_execute_commands(result);
             server.diagnostic_provider = message::parse_diagnostic_provider(result);
             server.capabilities = message::parse_capability_names(result);
+            server.will_rename = file_ops::parse_file_operation(result, "willRename");
+            server.did_rename = file_ops::parse_file_operation(result, "didRename");
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -2237,12 +2363,36 @@ impl Lsp {
         }
     }
 
-    /// Reply to a server-initiated request so it does not stall. We accept no
-    /// dynamic capabilities and supply empty configuration.
+    /// Record one `willRenameFiles` answer and say whether it was the last.
+    fn finish_will_rename(&mut self, edits: Vec<FileEdits>, events: &mut Vec<LspEvent>) {
+        self.rename_waiting = self.rename_waiting.saturating_sub(1);
+        events.push(LspEvent::WillRenameFiles {
+            edits,
+            last: self.rename_waiting == 0,
+        });
+    }
+
+    /// Reply to a server-initiated request so it does not stall. Dynamic
+    /// `didChangeWatchedFiles` registrations are kept (T623); every other
+    /// dynamic capability is accepted and ignored. Configuration is empty.
     fn reply_to_server_request(&mut self, lang: &str, msg: &Value, method: &str) {
         let Some(server) = self.servers.get_mut(lang) else {
             return;
         };
+        let params = msg.get("params").unwrap_or(&Value::Null);
+        if method == "client/registerCapability" {
+            for reg in file_ops::parse_registrations(params) {
+                if reg.method == "workspace/didChangeWatchedFiles" {
+                    server
+                        .watchers
+                        .insert(reg.id, file_ops::parse_watchers(&reg.options));
+                }
+            }
+        } else if method == "client/unregisterCapability" {
+            for id in file_ops::parse_unregistrations(params) {
+                server.watchers.remove(&id);
+            }
+        }
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
         let result = if method == "workspace/configuration" {
             let n = msg
@@ -2471,6 +2621,9 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         execute_commands: Vec::new(),
         diagnostic_provider: false,
         diagnostic_result_ids: HashMap::new(),
+        will_rename: None,
+        did_rename: None,
+        watchers: HashMap::new(),
         ready: false,
         queue: Vec::new(),
         ready_since: None,

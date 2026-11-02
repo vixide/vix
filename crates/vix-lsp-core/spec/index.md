@@ -57,6 +57,20 @@ How the host uses them is in the
 `${1:name}` becomes `name`). Items with empty text are dropped. The client
 capability `textDocument.inlineCompletion` is declared in `initialize`.
 
+## File operations and watchers (T623)
+
+`file_ops` holds the pure side of `workspace/willRenameFiles`,
+`workspace/didRenameFiles` and `workspace/didChangeWatchedFiles`:
+`parse_file_operation` reads `capabilities.workspace.fileOperations.willRename`
+or `.didRename` into `FileOpFilters` (glob filters with `matches` file/folder,
+`ignoreCase`, `scheme` other than `file` skipped; no filters means every path),
+`parse_registrations`/`parse_unregistrations`/`parse_watchers` decode
+`client/registerCapability` and `client/unregisterCapability`, and
+`rename_files_params`/`watched_files_params` build the params. Globs use
+`globset` with `*` not crossing `/`. `initialize` declares
+`workspace.fileOperations.{willRename,didRename}` and
+`workspace.didChangeWatchedFiles.dynamicRegistration`.
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

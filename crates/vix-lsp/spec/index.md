@@ -301,6 +301,23 @@ and reply clean-up in `vix_ai_core::fim`. The host is
 `tui/src/app/ghost.rs`; `tui/tests/lsp_smoke.rs` drives a mock server end to
 end and `tui/tests/integration/ghost.rs` the AI source with a fake command.
 
+## File renames and watched files (T623)
+
+| Event | What Vix does |
+|---|---|
+| File → Rename (`file.rename`) of a file a server wants (`capabilities.workspace.fileOperations.willRename`, glob-filtered) | sends `workspace/willRenameFiles` and holds the rename; each server's returned `WorkspaceEdit` (import updates) is applied through the usual workspace-edit path ([`LspEvent::WillRenameFiles`]); once every asked server has answered, or 3 seconds pass, the file is renamed. A server error or empty reply never blocks the rename. |
+| the rename succeeds | the old document is closed on the servers and the tab reopens under its new path; servers with `didRename` filters that match get `workspace/didRenameFiles` |
+| `client/registerCapability` for `workspace/didChangeWatchedFiles` | the watchers (glob, optional `WatchKind`) are kept per registration id; `client/unregisterCapability` drops them. Other dynamic registrations are acknowledged and ignored. |
+| a file changes on disk | the existing once-a-second external-change poll forwards `workspace/didChangeWatchedFiles` to servers whose watchers match: open files whose mtime moved, plus the workspace-root manifests `Cargo.toml`, `Cargo.lock`, `package.json`, `tsconfig.json`, `pyproject.toml`, `go.mod`, `go.sum` and `deno.json` (created, changed or deleted), whether or not they are open. A rename is also sent as a delete and a create. A server that registered no watchers is sent nothing. |
+
+Limits: only the file rename Vix itself performs is announced (not creates or
+deletes, `willCreateFiles`/`willDeleteFiles`); directory renames from the
+explorer are not wired; there is no recursive watcher, so a watcher glob for
+other files only fires for open files and the manifests above. Pattern
+`RelativePattern` bases are ignored (the glob is matched against absolute and
+workspace-relative paths). `tui/tests/lsp_file_ops.rs` drives a mock server end
+to end.
+
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 
 A full method-by-method diff against LSP 3.17 (not just the features this
