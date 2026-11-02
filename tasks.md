@@ -7086,7 +7086,7 @@ new action.
     for `Host::sqlite_schema`) and gui/vix-slint (`window::WindowError`).
     No public function in `crates/`, `gui/` or `tui/src` returns
     `Result<_, String>` any more, so T610 is done. (Private helpers and the
-    stringly `Browser` message fields keep `String` on purpose.)
+    string-typed `Browser` message fields keep `String` on purpose.)
 - [x] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
   lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
