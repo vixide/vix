@@ -11486,6 +11486,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "vix-acp"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "vix-action-catalog"
 version = "2.0.0"
 
@@ -12578,6 +12585,7 @@ dependencies = [
  "serde_norway",
  "toml 1.1.8+spec-1.1.0",
  "unicode-width",
+ "vix-acp",
  "vix-action-catalog",
  "vix-affix",
  "vix-ai-core",

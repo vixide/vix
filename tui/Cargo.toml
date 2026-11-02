@@ -90,7 +90,7 @@ image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client", "vix-hl7/net", "vix-fhir/net"]
-ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
+ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel", "dep:vix-acp", "vix-acp/process"]
 git = ["tasks", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git", "vix-script?/plugins"]
 jj = ["tasks"]
 # The OC menu (T700-T708): runs the Docker/Podman/nerdctl CLI. Streamed output
@@ -213,6 +213,7 @@ vix-action-catalog = { workspace = true }
 vix-affix = { workspace = true }
 # Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
 # plus keyring-backed API-key resolution.
+vix-acp = { workspace = true, optional = true }
 vix-ai-core = { workspace = true, optional = true }
 # Reviewable diff for AI text transforms (Annotate / Improve).
 vix-ai-diff = { workspace = true, optional = true }
