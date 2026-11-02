@@ -571,7 +571,11 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `roam.node_random` | Random Node | Menu |
 | `roam.ref_add` | Add Ref… | Menu |
 | `roam.tag_add` | Add Tag… | Menu |
+| `run.attach` | Attach | Menu |
 | `run.continue` | Continue | Menu |
+| `run.edit_breakpoint` | Edit Breakpoint… | Menu |
+| `run.exception_filters` | Exception Breakpoints… | Menu |
+| `run.focus_panel` | Focus Debug Panel | Menu |
 | `run.panel` | Toggle Debug Panel | Menu |
 | `run.pause` | Pause | Menu |
 | `run.repl` | Evaluate… | Menu |
@@ -797,4 +801,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**790 actions.**
+**794 actions.**

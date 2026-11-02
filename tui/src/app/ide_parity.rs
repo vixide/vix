@@ -54,6 +54,12 @@ pub(crate) enum ChoicePurpose {
         /// The recent names, for rows 1 and on.
         names: Vec<String>,
     },
+    /// **Run → Exception Breakpoints…** (T617): one adapter exception filter
+    /// per row; Enter toggles it and the list stays open.
+    ExceptionFilters {
+        /// The filter id per row.
+        ids: Vec<String>,
+    },
     /// **Run → Jupyter → Start Kernel…** (T734c): one kernelspec per row.
     #[cfg(feature = "jupyter")]
     Jupyter(super::jupyter::Pick),
@@ -194,6 +200,11 @@ impl App {
             ChoicePurpose::RecentRemote { names } => {
                 if matches!(action, ChoiceAction::Primary) {
                     self.choose_recent_remote(&names, row);
+                }
+            }
+            ChoicePurpose::ExceptionFilters { ids } => {
+                if matches!(action, ChoiceAction::Primary) {
+                    self.toggle_exception_filter(&ids, row);
                 }
             }
             #[cfg(feature = "jupyter")]

@@ -51,6 +51,7 @@ const UNTRUSTED_BLOCKED: &[&str] = &[
     "project.subproject.run",
     "project.subproject.test",
     "run.start",
+    "run.attach",
     "lsp.code_lens_run",
     "lsp.restart",
     "script.run",

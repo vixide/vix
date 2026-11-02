@@ -73,7 +73,8 @@ features (`syntax-common` by default, `syntax-all` for everything).
 
 `tui/src/app/*.rs` (T141) holds most of `App`'s actual logic, one file per feature
 area: `keymap.rs` (`on_key` + the ten keymap dispatchers), `git.rs` (git/jj),
-`scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `completion.rs`
+`scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `debug_panel.rs`
+(the Debug panel keys, Edit Breakpoint, exception filters — T617), `completion.rs`
 (the completion popup: filter, accept, auto-trigger — T612), `roam.rs`,
 `org_table.rs`, `org.rs`, `insert_tools.rs`, `picker_panels.rs`,
 `info_panels.rs`. `tui/src/ui/*.rs` (T142, done) holds `ui.rs`'s draw functions,
@@ -98,7 +99,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | ----------- | ----------------------------------------------------------------------------- |
 | Editor      | `vix-editor` (the `CodeEditor` host wrapper), `vix-editor-core` (the widget, above). |
 | MCP         | `vix-mcp-server` (T731: the read-only Model Context Protocol core behind `vix --mcp` — newline-delimited JSON-RPC 2.0 over stdio, `initialize`/`tools/*`/`resources/*`, six read-only tools over open buffers, offline symbols and outline, merge-conflict diagnostics and SQLite schemas; the workspace boundary and secret filter; a `Host` trait the App shell implements in `tui/src/mcp.rs`). |
-| LSP / DAP   | `vix-lsp` (process IO + host wiring), `vix-lsp-core` (JSON-RPC framing, builders, parsers, positions); `vix-dap` (Debug Adapter Protocol client, reuses `lsp_core::frame`). |
+| LSP / DAP   | `vix-lsp` (process IO + host wiring), `vix-lsp-core` (JSON-RPC framing, builders, parsers, positions); `vix-dap` (Debug Adapter Protocol client, reuses `lsp_core::frame`; its `view` module is the Debug panel tree model, T617). |
 | Git         | `vix-git` (status/diff/staging via the git CLI), `vix-git-graph` (T681: the interactive commit graph — pure lane assignment from parent links, `%D` ref decorations, paged `git log`, checkout/branch/cherry-pick), `vix-review` (T665: the multi-file review model for a revision range, saved line comments, Markdown/JSON export), `vix-conflict-tool` (merge-marker parser). |
 | OC          | `vix-oci` (T700: drive an OCI engine — Docker/Podman/nerdctl — via its CLI: detection, argv builders, NDJSON/array parsers, the `process`-gated runner; T718: `devcontainer` reads `devcontainer.json` (JSONC) and `devcontainer up`'s result), `vix-oci-panel` (T702–T704: the containers/images/volumes/networks/pods list panel with confirm and input modes). |
 | IM          | `vix-im` (T750: the pure core of the IM menu — conversations, messages, presence, `@nick` mentions under IRC case mapping, unread tracking, slash commands, `path:line` code references with workspace-root resolution, the received-text sanitizer, anchored threads with re-anchoring, JSONL history), `vix-im-panel` (T750: the IM dock panel state — conversation cycling, message list, input line, Enter-to-open references). |

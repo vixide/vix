@@ -511,6 +511,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.cowork_permissions", "cowork.permissions"),
     ("cmd.cowork_leave", "cowork.leave"),
     ("cmd.run_config", "project.run_config"),
+    ("cmd.run_attach", "run.attach"),
+    ("cmd.run_edit_breakpoint", "run.edit_breakpoint"),
+    ("cmd.run_exception_filters", "run.exception_filters"),
+    ("cmd.run_focus_panel", "run.focus_panel"),
     ("cmd.run_config_edit", "project.run_config_edit"),
 ];
 

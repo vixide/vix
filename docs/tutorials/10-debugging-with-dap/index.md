@@ -121,8 +121,16 @@ The Debug panel now shows two sections:
   every value straight out of `csv.DictReader` is a `str`, so any arithmetic
   on `row["score"]` needs an explicit `int()` first.
 
-(Variable trees in Vix are one level deep — the top frame's first scope —
-so nested structures show their `repr()` rather than expanding further.)
+A **Threads** section above them lists the program's threads. To explore,
+open **Run → Focus Debug Panel** (`run.focus_panel`): Up/Down move the
+highlight, Enter on a structured variable (marked `▸`) fetches and shows
+its children — as deep as you like — and Left collapses it again. Enter on
+another frame shows *its* variables and moves the editor there; Enter on
+another thread shows its stack. `e` on a variable sets its value (debugpy
+supports this), and Esc gives the keyboard back to the editor.
+
+While stopped, the stopped line itself also shows the values of the
+variables it mentions, dimmed after the code — on line 21, `row = {…}`.
 
 ## Step through execution
 
@@ -162,13 +170,37 @@ Program `print()` output streams to the bottom dock the same way, as
 `output` events arrive — you already saw this with the `4 rows in
 sample.csv` line at the top of the session.
 
-## No conditional or logpoint breakpoints
+## Conditional breakpoints and logpoints
 
-Vix's breakpoints are a plain per-line toggle — set or cleared, nothing
-else. There's no condition expression, no hit count, and no logpoint
-(print-without-stopping) variant; if you want to stop only on Dave's row,
-step or continue to it by hand, or temporarily edit the script's condition
-directly. This is a documented limitation, not a step you're missing.
+To stop only on Dave's row, put the cursor on line 21 and open **Run →
+Edit Breakpoint…** (`run.edit_breakpoint`). Three prompts follow, each
+pre-filled with the current value (an empty answer clears it):
+
+1. **Condition** — `row['name'] == 'Dave'` stops only when it is true.
+2. **Hit count** — e.g. `3` stops on the third hit (debugpy's syntax).
+3. **Log message** — `score is {row['score']}` turns the breakpoint into a
+   *logpoint*: it prints to the bottom dock instead of stopping.
+
+**Run → Exception Breakpoints…** (`run.exception_filters`) lists the
+exception filters debugpy offers ("Raised Exceptions", "Uncaught
+Exceptions", …) with the adapter's defaults ticked; Enter toggles one.
+
+## Attaching to a running program
+
+Add an `[debug_adapters.attach]` table to the adapter entry, and **Run →
+Attach** (`run.attach`) sends it as the DAP `attach` request instead of
+`launch` — for example, for a program started with
+`python -m debugpy --listen 5678 hello.py`:
+
+```toml
+[debug_adapters.attach]
+connect = '{ "host": "localhost", "port": 5678 }'
+```
+
+A value that reads as JSON (a number, `true`/`false`, an object or an
+array) is sent as that JSON, so `connect` above goes out as an object and
+`processId = "4242"` as a number; anything else is a string. Check your
+adapter's documentation for the keys it attaches by.
 
 ## Stop
 
@@ -197,8 +229,8 @@ program = "{program}"
 source file, so run `cargo build` in `rust-app/` first and open the crate
 from its `target/debug/` binary path (or point `program` at a fixed path
 rather than relying on `{program}`) before hitting **Run → Start**. Every
-other command in this tutorial — Toggle Breakpoint, Continue, the stepping
-trio, Watches, Evaluate — works identically once the session is running;
+other command in this tutorial — breakpoints, Continue, the stepping
+trio, the Debug panel, Watches, Evaluate — works identically once the session is running;
 only adapter configuration and what counts as "the program" differ between
 the two.
 

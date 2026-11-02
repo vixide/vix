@@ -22,6 +22,8 @@ mod cowork;
 #[cfg(feature = "sql")]
 mod db;
 mod dir_edit;
+#[cfg(feature = "dap")]
+mod debugger;
 mod editing;
 #[cfg(feature = "http")]
 mod fhir;

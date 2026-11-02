@@ -2636,11 +2636,18 @@ fn time_zone_submenu() -> &'static [Item] {
 /// Debugger commands (DAP), grouped under the top-level Run menu.
 const RUN: &[Item] = &[
     Item::leaf("menu.item.run.start", "run.start", ""),
+    Item::leaf("menu.item.run.attach", "run.attach", ""),
     Item::leaf("menu.item.run.stop", "run.stop", ""),
     SEP,
     Item::leaf(
         "menu.item.run.toggle_breakpoint",
         "run.toggle_breakpoint",
+        "",
+    ),
+    Item::leaf("menu.item.run.edit_breakpoint", "run.edit_breakpoint", ""),
+    Item::leaf(
+        "menu.item.run.exception_filters",
+        "run.exception_filters",
         "",
     ),
     SEP,
@@ -2653,6 +2660,7 @@ const RUN: &[Item] = &[
     Item::leaf("menu.item.run.watch", "run.watch", ""),
     Item::leaf("menu.item.run.repl", "run.repl", ""),
     Item::leaf("menu.item.run.panel", "run.panel", ""),
+    Item::leaf("menu.item.run.focus_panel", "run.focus_panel", ""),
     SEP,
     Item::sub("menu.item.run.jupyter", RUN_JUPYTER),
 ];
