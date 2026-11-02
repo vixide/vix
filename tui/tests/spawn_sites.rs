@@ -14,6 +14,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` / `git` / `jj` features (runtime-filtered by `src/capability.rs`)",
     ),
     (
+        "tui/src/app/doc_links.rs",
+        "`open`/`xdg-open` for an LSP document link to a web or mail URL (T621; argv only, no shell)",
+        "`tasks` feature (without it external links report that they could not be opened)",
+    ),
+    (
         "tui/src/app/remote_search.rs",
         "`rg`/`grep` for project-wide search under a non-local authority (T715; argv only, no shell)",
         "`tasks` feature (without it the scan stays in-process)",

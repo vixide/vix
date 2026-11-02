@@ -1468,6 +1468,172 @@ fn code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// T621: advertises `colorProvider` and `documentLinkProvider`; one red color
+/// on line 0, a file link on line 1 (to `argv[2]/b.rs#L2`) and an unsupported
+/// `command:` link on line 2. Every request's method is appended to `argv[1]`.
+const MOCK_SERVER_DOC_EXTRAS: &str = r"
+import sys, json
+
+LOG = sys.argv[1]
+ROOT = sys.argv[2]
+
+def log(text):
+    with open(LOG, 'a') as f:
+        f.write(text + '\n')
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def rng(line, a, b):
+    return {'start':{'line':line,'character':a},'end':{'line':line,'character':b}}
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method:
+        log(method)
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
+            'positionEncoding':'utf-16',
+            'colorProvider':True,
+            'documentLinkProvider':{}}}})
+    elif method == 'textDocument/documentColor':
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'range':rng(0,7,14),'color':{'red':1.0,'green':0.0,'blue':0.0,'alpha':1.0}}]})
+    elif method == 'textDocument/documentLink':
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'range':rng(1,4,8),'target':'file://' + ROOT + '/b.rs#L2'},
+            {'range':rng(2,0,3),'target':'command:evil'},
+            {'range':rng(2,4,6)}]})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+";
+
+/// T621 end to end through a real `App`: a color becomes a `■` swatch in the
+/// color's own color, `lsp.open_link` refuses an unsupported scheme, and
+/// Ctrl+click on a file link opens it at its line.
+#[test]
+fn document_colors_and_links_are_drawn_and_opened_in_a_live_app() {
+    use ratatui::style::Color;
+    use vix::editor_core::virtual_text::VirtualTextLayer;
+    use vix_input::{MouseButton, MouseEvent, MouseEventKind};
+
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-docx-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_DOC_EXTRAS).unwrap();
+    let log = root.join("requests.log");
+    let file = root.join("a.rs");
+    std::fs::write(&file, "color: #ff0000\nsee link here\nrun me now\n").unwrap();
+    let target = root.join("b.rs");
+    std::fs::write(&target, "one\ntwo\nthree\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            log.to_string_lossy().into_owned(),
+            root.to_string_lossy().into_owned(),
+        ],
+    });
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+
+    let logged = |n: &str| {
+        std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .any(|l| l == n)
+    };
+    let active_file = |app: &App| app.editor.active_tab().and_then(|t| t.path.clone());
+    let swatches = |app: &App| {
+        app.editor.active_tab().map_or(0, |t| {
+            t.editor.eol_texts(VirtualTextLayer::ColorSwatches).len()
+        })
+    };
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && !(swatches(&app) == 1 && logged("textDocument/documentLink"))
+    {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Give the link reply a few more ticks to be applied.
+    for _ in 0..10 {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let tab = app.editor.active_tab().unwrap();
+    let swatch = &tab.editor.eol_texts(VirtualTextLayer::ColorSwatches)[0];
+    assert_eq!(swatch.line, 0);
+    assert_eq!(swatch.color, Some(Color::Rgb(255, 0, 0)));
+
+    // No link on the cursor's line (0): nothing opens.
+    app.run_action("lsp.open_link");
+    assert_eq!(active_file(&app).as_deref(), Some(file.as_path()));
+
+    // Line 2's covering link is `command:`: refused, nothing opens.
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.run_action("lsp.open_link");
+    assert!(
+        app.status.contains("command:evil"),
+        "refused: {}",
+        app.status
+    );
+    assert_eq!(active_file(&app).as_deref(), Some(file.as_path()));
+
+    // Ctrl+click on line 1's link (columns vary with the gutter width, so
+    // sweep the row) opens `b.rs` at line 2.
+    for column in 0..40 {
+        app.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column,
+            row: 1,
+            modifiers: KeyModifiers::CONTROL,
+        });
+        if active_file(&app).as_deref() == Some(target.as_path()) {
+            break;
+        }
+    }
+    assert_eq!(active_file(&app).as_deref(), Some(target.as_path()));
+    assert_eq!(app.editor.cursor_1based().0, 2, "jumped to #L2");
+
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// T732: a live app shows the mock server's `$/progress` task in the status
 /// bar, and View → LSP Status lists the server as running with the
 /// capabilities it advertised; `r` in the panel restarts it.

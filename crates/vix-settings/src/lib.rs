@@ -498,11 +498,17 @@ pub struct LanguageFeatureSettings {
     /// Draw code lenses -- a language server's "Run | Debug | 3 references"
     /// and local "Run test" -- as dimmed rows above their lines.
     pub code_lens: bool,
+    /// Draw a `■` swatch for each color a language server reports
+    /// (`textDocument/documentColor`, T621).
+    pub document_colors: bool,
 }
 
 impl Default for LanguageFeatureSettings {
     fn default() -> Self {
-        LanguageFeatureSettings { code_lens: true }
+        LanguageFeatureSettings {
+            code_lens: true,
+            document_colors: true,
+        }
     }
 }
 

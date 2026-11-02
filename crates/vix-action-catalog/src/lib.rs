@@ -780,6 +780,7 @@ pub mod dispatch_scan {
         ("tui/src/app/http.rs", "run_http_action"),
         ("tui/src/app/ide_parity.rs", "run_ide_parity_action"),
         ("tui/src/app/code_lens.rs", "run_code_lens_action"),
+        ("tui/src/app/doc_links.rs", "run_doc_link_action"),
         ("tui/src/app/hl7.rs", "run_hl7_action"),
         ("tui/src/app/fhir.rs", "run_fhir_action"),
         ("tui/src/app/cowork.rs", "run_cowork_action"),

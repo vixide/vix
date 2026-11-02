@@ -327,6 +327,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_refactor", "lsp.refactor"),
     ("cmd.lsp_organize_imports", "lsp.organize_imports"),
     ("cmd.lsp_code_lens", "lsp.code_lens"),
+    ("cmd.lsp_open_link", "lsp.open_link"),
     ("cmd.lsp_code_lens_run", "lsp.code_lens_run"),
     ("cmd.lsp_highlight", "lsp.highlight"),
     ("cmd.inlay_hints", "view.inlay_hints"),

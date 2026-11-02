@@ -101,6 +101,9 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // T620: supertypes / subtypes.
                 "typeHierarchy": {},
                 "inlayHint": {},
+                // T621: color swatches and openable links.
+                "colorProvider": {},
+                "documentLink": {},
                 // T618: ghost-text suggestions (LSP 3.18).
                 "inlineCompletion": {},
                 "publishDiagnostics": { "relatedInformation": true },

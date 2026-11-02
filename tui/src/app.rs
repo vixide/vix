@@ -21,6 +21,7 @@ mod db;
 mod db_off;
 mod diff_tool;
 mod dir_edit;
+mod doc_links;
 mod event_loop;
 mod fhir;
 #[cfg(feature = "http")]
@@ -2407,6 +2408,8 @@ pub struct App {
     /// Code lenses per file (T726): server and local lenses, refresh
     /// debounce and pending resolves. See `app/code_lens.rs`.
     pub(crate) code_lenses: code_lens::LensMap,
+    /// Document colors and links per file (T621). See `app/doc_links.rs`.
+    pub(crate) doc_extras: doc_links::DocExtrasMap,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Visible::POMODORO`].
     pub(crate) pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -2990,6 +2993,7 @@ impl App {
             regex_tester: None,
             code_actions: None,
             code_lenses: code_lens::LensMap::new(),
+            doc_extras: doc_links::DocExtrasMap::new(),
             pomodoro: None,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
@@ -3970,6 +3974,7 @@ impl App {
             a if self.run_http_action(a) => {}
             a if self.run_ide_parity_action(a) => {}
             a if self.run_code_lens_action(a) => {}
+            a if self.run_doc_link_action(a) => {}
             a if self.run_hl7_action(a) => {}
             a if self.run_fhir_action(a) => {}
             a if self.run_cowork_action(a) => {}
@@ -4581,6 +4586,7 @@ impl App {
                     self.lsp.did_save(&p, &text);
                 }
                 self.code_lens_saved(&p);
+                self.doc_extras_saved(&p);
                 // Persist the undo tree alongside the saved content.
                 if self.settings.editor_behavior.persistent_undo
                     && let Some(tab) = self.editor.active_tab()
@@ -7784,6 +7790,12 @@ impl App {
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
+                crate::lsp::LspEvent::DocumentColors { path, colors } => {
+                    self.on_document_colors(&path, colors);
+                }
+                crate::lsp::LspEvent::DocumentLinks { path, links } => {
+                    self.on_document_links(&path, links);
+                }
                 ev @ (crate::lsp::LspEvent::CodeLensUpdate { .. }
                 | crate::lsp::LspEvent::CodeLensResolved { .. }
                 | crate::lsp::LspEvent::CodeLensRefresh) => self.on_code_lens_event(ev),
@@ -9844,6 +9856,13 @@ impl App {
         let alt = mouse.modifiers.contains(vix_input::KeyModifiers::ALT);
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             // Alt+click adds an extra caret; a plain click collapses to one.
+            // Ctrl/Cmd+click on a document link opens it (T621).
+            let open_mod = mouse
+                .modifiers
+                .intersects(vix_input::KeyModifiers::CONTROL | vix_input::KeyModifiers::SUPER);
+            if open_mod && self.open_link_at_mouse(mouse.column, mouse.row) {
+                return;
+            }
             if alt {
                 if let Some(t) = self.editor.active_tab_mut()
                     && let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area)

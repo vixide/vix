@@ -13,6 +13,7 @@
 // over) — a compile-time-only ceiling, unrelated to any runtime recursion.
 #![recursion_limit = "256"]
 
+pub mod document_extras;
 pub mod frame;
 pub mod inline_completion;
 pub mod message;
