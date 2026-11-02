@@ -904,6 +904,10 @@ pub struct ScriptTrustPrompt {
     /// Whether `.vix/settings.toml` is waiting too, unapplied until this
     /// prompt is answered (T627).
     pub settings: bool,
+    /// Whether an `.envrc`, a mise config or a `.vix/env.toml` detector is
+    /// waiting too: `direnv`/`mise`/the detector's command stay unrun until
+    /// this prompt is answered (T667).
+    pub env: bool,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):

@@ -33,6 +33,8 @@ pub enum Source {
     Direnv,
     /// `mise env --json`; runs mise (which may run project-defined hooks).
     Mise,
+    /// A user-defined detector from `.vix/env.toml`; runs its own command.
+    Custom,
 }
 
 impl Source {
@@ -43,6 +45,7 @@ impl Source {
             Source::Venv => "venv",
             Source::Direnv => "direnv",
             Source::Mise => "mise",
+            Source::Custom => "custom",
         }
     }
 
@@ -76,6 +79,85 @@ pub struct Resolved {
 /// Runs an external program in a directory and returns its stdout. A seam so
 /// tests can prove nothing is executed for an untrusted workspace.
 pub type Runner<'a> = &'a dyn Fn(&str, &[&str], &Path) -> Option<String>;
+
+/// The most detectors one `.vix/env.toml` may define.
+pub const MAX_DETECTORS: usize = 16;
+
+/// A user-defined environment detector (`[[detector]]` in `.vix/env.toml`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct Detector {
+    /// A label for the detector (at most 64 characters).
+    pub name: String,
+    /// The detector applies when any of these paths (relative to the
+    /// workspace root) exists.
+    pub detect: Vec<String>,
+    /// Program and arguments, run directly (no shell) in the root; prints the
+    /// same JSON object as `direnv export json`.
+    pub command: Vec<String>,
+}
+
+/// The `.vix/env.toml` file shape.
+#[derive(serde::Deserialize)]
+struct DetectorFile {
+    #[serde(default)]
+    detector: Vec<Detector>,
+}
+
+impl Detector {
+    /// Whether the detector is well-formed and safe to evaluate.
+    fn valid(&self) -> bool {
+        let rel_ok = |p: &String| {
+            let path = Path::new(p);
+            !p.is_empty()
+                && !p.contains('\0')
+                && path.is_relative()
+                && !path
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+        };
+        !self.name.is_empty()
+            && self.name.chars().count() <= 64
+            && !self.detect.is_empty()
+            && self.detect.iter().all(rel_ok)
+            && !self.command.is_empty()
+            && self.command.iter().all(|a| !a.contains('\0'))
+            && !self.command[0].is_empty()
+    }
+
+    /// Whether any of the detector's files exists under `root`.
+    fn applies(&self, root: &Path) -> bool {
+        self.detect.iter().any(|f| root.join(f).exists())
+    }
+}
+
+/// Parse the text of a `.vix/env.toml`. Any problem (bad TOML, too many
+/// detectors, an invalid detector) rejects the whole file: `None`.
+#[must_use]
+pub fn parse_detectors(text: &str) -> Option<Vec<Detector>> {
+    let file: DetectorFile = toml::from_str(text).ok()?;
+    if file.detector.len() > MAX_DETECTORS || !file.detector.iter().all(Detector::valid) {
+        return None;
+    }
+    Some(file.detector)
+}
+
+/// The workspace's valid user-defined detectors (empty when there is no
+/// `.vix/env.toml`, or it is invalid).
+#[must_use]
+pub fn load_detectors(root: &Path) -> Vec<Detector> {
+    std::fs::read_to_string(root.join(".vix").join("env.toml"))
+        .ok()
+        .and_then(|t| parse_detectors(&t))
+        .unwrap_or_default()
+}
+
+/// Whether the workspace has any config that makes a code-running source
+/// applicable (so deserves a trust prompt): an `.envrc`, a mise config, or a
+/// valid user detector whose files exist.
+#[must_use]
+pub fn needs_trust(root: &Path) -> bool {
+    detect_code_source(root).is_some() || load_detectors(root).iter().any(|d| d.applies(root))
+}
 
 /// Which code-running source a workspace has config for, by file presence.
 #[must_use]
@@ -180,6 +262,23 @@ pub fn resolve_with(
     current_path: Option<&OsString>,
 ) -> Resolved {
     let mut out = Resolved::default();
+    if let Some(d) = load_detectors(root).into_iter().find(|d| d.applies(root)) {
+        if trusted {
+            let args: Vec<&str> = d.command[1..].iter().map(String::as_str).collect();
+            if let Some(vars) = runner(&d.command[0], &args, root)
+                .and_then(|t| parse_env_json(&t))
+                .filter(|v| !v.is_empty())
+            {
+                out.env = Some(ProjectEnv {
+                    source: Source::Custom,
+                    vars,
+                });
+                return out;
+            }
+        } else {
+            out.blocked = Some(Source::Custom);
+        }
+    }
     if let Some(source) = detect_code_source(root) {
         if trusted {
             let text = match source {
@@ -194,7 +293,7 @@ pub fn resolve_with(
                 out.env = Some(ProjectEnv { source, vars });
                 return out;
             }
-        } else {
+        } else if out.blocked.is_none() {
             out.blocked = Some(source);
         }
     }
@@ -369,6 +468,76 @@ mod tests {
         fs::write(dir.path().join(".envrc"), "x").unwrap();
         let r = resolve_with(dir.path(), true, &|_, _, _| None, None);
         assert!(r.env.is_none() && r.blocked.is_none());
+    }
+
+    fn write_detectors(root: &Path, text: &str) {
+        fs::create_dir_all(root.join(".vix")).unwrap();
+        fs::write(root.join(".vix/env.toml"), text).unwrap();
+    }
+
+    const NIX: &str = "[[detector]]\nname = \"nix\"\ndetect = [\"flake.nix\"]\ncommand = [\"nix-env-json\", \"--all\"]\n";
+
+    #[test]
+    fn user_detector_runs_when_trusted_and_its_files_exist() {
+        let dir = Dir::new("custom");
+        write_detectors(dir.path(), NIX);
+        fs::write(dir.path().join(".envrc"), "x").unwrap();
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        let runner = |p: &str, a: &[&str], _: &Path| {
+            assert_eq!((p, a), ("nix-env-json", &["--all"][..]));
+            Some(r#"{"NIXY":"1"}"#.to_string())
+        };
+        let env = resolve_with(dir.path(), true, &runner, None).env.unwrap();
+        assert_eq!(env.source, Source::Custom, "custom wins over direnv");
+        assert_eq!(env.vars["NIXY"].as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn user_detector_never_runs_untrusted_or_without_its_files() {
+        let dir = Dir::new("custom-untrusted");
+        write_detectors(dir.path(), NIX);
+        let runner =
+            |_: &str, _: &[&str], _: &Path| -> Option<String> { panic!("must not run anything") };
+        // No flake.nix: not applicable, even trusted.
+        assert_eq!(
+            resolve_with(dir.path(), true, &runner, None),
+            Resolved::default()
+        );
+        assert!(!needs_trust(dir.path()));
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        assert!(needs_trust(dir.path()));
+        let r = resolve_with(dir.path(), false, &runner, None);
+        assert!(r.env.is_none());
+        assert_eq!(r.blocked, Some(Source::Custom));
+    }
+
+    #[test]
+    fn failed_user_detector_falls_through_to_the_built_in_sources() {
+        let dir = Dir::new("custom-fail");
+        write_detectors(dir.path(), NIX);
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        make_venv(dir.path());
+        let r = resolve_with(dir.path(), true, &|_, _, _| None, None);
+        assert_eq!(r.env.unwrap().source, Source::Venv);
+    }
+
+    #[test]
+    fn invalid_detector_files_are_rejected_whole() {
+        assert_eq!(parse_detectors(NIX).unwrap().len(), 1);
+        assert_eq!(parse_detectors("").unwrap().len(), 0);
+        for bad in [
+            "not = [toml",
+            "[[detector]]\nname=\"\"\ndetect=[\"a\"]\ncommand=[\"x\"]",
+            "[[detector]]\nname=\"n\"\ndetect=[]\ncommand=[\"x\"]",
+            "[[detector]]\nname=\"n\"\ndetect=[\"a\"]\ncommand=[]",
+            "[[detector]]\nname=\"n\"\ndetect=[\"/etc/passwd\"]\ncommand=[\"x\"]",
+            "[[detector]]\nname=\"n\"\ndetect=[\"../x\"]\ncommand=[\"x\"]",
+            "[[detector]]\nname=\"n\"\ndetect=[\"a\"]\ncommand=[\"x\\u0000\"]",
+        ] {
+            assert!(parse_detectors(bad).is_none(), "{bad}");
+        }
+        let many = NIX.repeat(MAX_DETECTORS + 1);
+        assert!(parse_detectors(&many).is_none());
     }
 
     #[test]

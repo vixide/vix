@@ -62,8 +62,13 @@ impl App {
         }
         let count = self.project_script_count();
         let settings = vix_settings::project_settings_path(&self.root).is_file();
-        if count > 0 || settings {
-            self.script_trust = Some(ScriptTrustPrompt { count, settings });
+        let env = vix_project_env::needs_trust(&self.root);
+        if count > 0 || settings || env {
+            self.script_trust = Some(ScriptTrustPrompt {
+                count,
+                settings,
+                env,
+            });
             self.script_trust_opened_at = Some(std::time::Instant::now());
         }
     }

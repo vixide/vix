@@ -10,7 +10,7 @@ Python and Node tooling finds the wrong interpreter and packages.
 
 ## Sources
 
-Tried in this order; the first that yields variables wins.
+Tried in this order; the first that yields variables wins. User-defined detectors (below) come first, so a project can override the built-in ones.
 
 | Source | Detected by | How it resolves | Runs project code? |
 | ------ | ----------- | --------------- | ------------------ |
@@ -18,7 +18,31 @@ Tried in this order; the first that yields variables wins.
 | mise   | `.mise.toml`, `mise.toml`, `.tool-versions` | `mise env --json` in the root | yes |
 | venv   | `.venv/pyvenv.cfg` or `venv/pyvenv.cfg` | `VIRTUAL_ENV` set, `<venv>/bin` (`Scripts` on Windows) prefixed onto `PATH`, `PYTHONHOME` removed | no, reads files only |
 
-JSON from `direnv`/`mise` must be an object of string values (`null` means
+| custom | a `[[detector]]` in `.vix/env.toml` | its own `command`, no shell | yes |
+
+## User-defined detectors
+
+A project adds its own sources in `.vix/env.toml`:
+
+```toml
+[[detector]]
+name = "nix"                 # shown in diagnostics, at most 64 characters
+detect = ["flake.nix"]       # the detector applies when ANY of these exists in the root
+command = ["nix-env-json"]   # program and arguments, run directly (no shell) in the root
+```
+
+The command prints the same JSON object `direnv export json` does (string
+values, `null` = unset). Detectors are tried in file order; the first whose
+files exist and whose command yields a non-empty object wins and reports as
+`custom` in the status bar. At most 16 detectors; a detector with an empty
+name, no `detect` entries, an empty or NUL-containing `command`, or a `detect`
+entry that is absolute or contains `..` makes the whole file invalid and it is
+ignored (never partially applied). A detector runs project-controlled code, so
+it is gated exactly like `direnv`/`mise`: only for a trusted workspace;
+otherwise it is reported in `Resolved::blocked` as `Source::Custom` and
+nothing runs.
+
+JSON from `direnv`/`mise`/custom detectors must be an object of string values (`null` means
 "unset"); anything else, including keys with `=` or NUL bytes, is rejected
 whole. Each tool is killed after 5 seconds, and its stdin is closed.
 
@@ -32,9 +56,9 @@ a status message) and falls back to the `.venv` source, which only reads
 files. The app passes the workspace-trust decision (T132/T627, stored in
 `vix-session` as `scripts_trusted`, and also requiring a trusted remote
 workspace: `App::workspace_trusted`). Accepting the trust prompt re-resolves
-the environment. The prompt is raised only for `.vix/scripts/` or project
-settings, so a workspace with just an `.envrc` stays untrusted until trusted
-that way. Commands that run on a remote authority are not given the local
+the environment. The trust prompt is also raised for a workspace that has an `.envrc`, a
+mise config or `.vix/env.toml` (`ScriptTrustPrompt::env`), so such a
+workspace no longer stays untrusted silently. Commands that run on a remote authority are not given the local
 environment (local paths mean nothing there).
 
 ## Applying it
@@ -50,4 +74,10 @@ processes are unaffected; `project.reload_env` re-resolves for later spawns
 
 `crates/vix-project-env/src/lib.rs`: `resolve`, `resolve_with` (injectable
 `Runner`, used by the tests to prove nothing runs when untrusted),
-`set_active`/`apply_to`/`active_vars`; `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
+`set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`needs_trust` (user detectors); `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
+
+## Not built
+
+The status bar shows `custom` rather than the detector's own `name`; no
+user-level (outside the project) detector file; no per-detector timeout or
+extra environment.

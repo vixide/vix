@@ -58,3 +58,44 @@ fn untrusted_envrc_falls_back_to_the_file_only_venv() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn envrc_alone_raises_the_trust_prompt_and_an_empty_workspace_does_not() {
+    let empty = unique_dir("env-prompt-none");
+    let mut app =
+        App::new(empty.clone(), Settings::default()).with_session_path(isolated_session_path());
+    app.maybe_prompt_script_trust();
+    assert!(app.script_trust.is_none());
+    fs::remove_dir_all(&empty).ok();
+
+    let dir = unique_dir("env-prompt-envrc");
+    fs::write(dir.join(".envrc"), "export EVIL=1\n").unwrap();
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(isolated_session_path());
+    app.maybe_prompt_script_trust();
+    let prompt = app.script_trust.as_ref().expect("prompt raised");
+    assert!(prompt.env && prompt.count == 0 && !prompt.settings);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn user_detector_is_blocked_until_trusted_and_raises_the_prompt() {
+    let dir = unique_dir("env-custom");
+    fs::create_dir_all(dir.join(".vix")).unwrap();
+    fs::write(
+        dir.join(".vix/env.toml"),
+        "[[detector]]\nname = \"x\"\ndetect = [\"marker\"]\ncommand = [\"/nonexistent/should-not-run\"]\n",
+    )
+    .unwrap();
+    fs::write(dir.join("marker"), "").unwrap();
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(isolated_session_path());
+    app.maybe_prompt_script_trust();
+    assert!(app.script_trust.as_ref().is_some_and(|p| p.env));
+    app.run_action("project.reload_env");
+    assert_eq!(
+        app.project_env_source, None,
+        "an untrusted workspace never runs the detector"
+    );
+    fs::remove_dir_all(&dir).ok();
+}

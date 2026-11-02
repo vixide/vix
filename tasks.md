@@ -8108,9 +8108,11 @@ widgets, and a markup-hiding Markdown "compose" mode.
   `vix-lsp`, the shell/task runner and `vix-terminal` build their command
   (local authority only), the status-bar segment, `project.reload_env`, and
   the trust gate on T627's workspace-trust decision (`direnv`/`mise` never
-  run for an untrusted workspace; tested at crate and app level). Not done:
-  user-defined detectors, and `.envrc`/`mise` config alone does not raise
-  the trust prompt (trust is asked only for scripts/project settings).
+  run for an untrusted workspace; tested at crate and app level). Follow-up
+  done 2026-11-02 (`feat/t667-user-detectors`): user-defined detectors in
+  `.vix/env.toml` (trust-gated like `direnv`), and `.envrc`/mise/detector
+  config now raises the trust prompt. Still not done: the status bar shows
+  `custom` instead of the detector's name; no user-level detector file.
   - **Problem.** Python and Node language servers, tasks and the
     terminal start with Vix's own environment. A project's `.venv`,
     direnv `.envrc`, mise/asdf, pipenv or poetry environment is ignored,
@@ -9623,8 +9625,8 @@ complete. What is open, by run:
   Restore / Diff / Discard prompt for an interrupted save is not built (the
   copy is kept and a startup notice counts it). T665: stage/discard from the
   review buffer and a stash chooser are not built. T667: user-defined
-  detectors are not built, and `.envrc`/mise config alone does not raise the
-  trust prompt. T668 is done. The late findings T669 (apt/dnf repositories)
+  detectors and the `.envrc`/mise trust prompt are now done; the detector's
+  own name is not yet shown in the status bar. T668 is done. The late findings T669 (apt/dnf repositories)
   and T670 (the musl release build crashes) are open: T670's fix (static
   non-PIE rustflags in `.cargo/config.toml` and `scripts/check-static-binary`
   in CI) is written but unverified until a release build runs.
