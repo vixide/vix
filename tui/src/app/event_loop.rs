@@ -80,6 +80,7 @@ impl App {
         self.refresh_task_problem_texts();
         self.poll_editor_drag();
         self.poll_ai_replace();
+        self.poll_acp();
         self.poll_dashboard();
         self.poll_pomodoro();
         self.poll_terminal();

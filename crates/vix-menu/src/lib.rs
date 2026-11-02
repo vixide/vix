@@ -1602,6 +1602,10 @@ const AI: &[Item] = &[
         "ai.generate_doc_comment",
         "",
     ),
+    SEP,
+    Item::leaf("menu.item.ai.agent_start", "ai.agent_start", ""),
+    Item::leaf("menu.item.ai.agent_prompt", "ai.agent_prompt", ""),
+    Item::leaf("menu.item.ai.agent_stop", "ai.agent_stop", ""),
 ];
 
 /// Database workbench (the `vix-db` crate spec): connection management, schema browsing,
