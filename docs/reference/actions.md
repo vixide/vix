@@ -196,6 +196,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.blame_inline` | Toggle Inline Blame | Menu |
 | `git.browse_log` | Browse Log… | Menu |
 | `git.changes` | Changes… | Menu |
+| `git.cherry_pick` | Cherry-Pick… | Menu |
 | `git.clone` | Clone… | Menu |
 | `git.conflict_both` | Keep Both | Menu |
 | `git.conflict_list` | List Conflicts… | Menu |
@@ -227,6 +228,9 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.pull_rebase` | Rebase | Menu |
 | `git.pull_squash` | Merge Squash | Menu |
 | `git.push` | Push | Menu |
+| `git.rebase_abort` | Abort Rebase | Menu |
+| `git.rebase_continue` | Continue Rebase | Menu |
+| `git.rebase_interactive` | Interactive Rebase… | Menu |
 | `git.revert_hunk` | Revert Hunk | Menu |
 | `git.review` | Review Range… | Menu |
 | `git.review_comment` | Comment on Review Line… | Menu |
@@ -801,4 +805,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**794 actions.**
+**798 actions.**

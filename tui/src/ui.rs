@@ -51,7 +51,7 @@ use choosers::{
     draw_diff_view, draw_encoding_chooser, draw_git_log, draw_git_panel, draw_http_env_chooser,
     draw_location_chooser, draw_macro_chooser, draw_recent_chooser, draw_refile_chooser,
     draw_spell_suggest, draw_stash_chooser, draw_task_chooser, draw_workspace_chooser,
-    draw_worktree_chooser,
+    draw_git_rebase, draw_worktree_chooser,
 };
 #[cfg(feature = "script")]
 use choosers::{draw_plugin_chooser, draw_script_chooser};
@@ -432,6 +432,7 @@ fn draw_overlay(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect, id
         OverlayId::Palette => draw_palette(app, frame, area),
         OverlayId::WorkspaceSearch => draw_workspace_search(app, frame, area),
         OverlayId::KeybindingEditor => draw_keybinding_editor(app, frame, area),
+        OverlayId::GitRebase => draw_git_rebase(app, frame, area),
         OverlayId::Prompt => draw_prompt(app, frame, area),
         OverlayId::QueryReplace => draw_query_replace(app, frame, area),
         OverlayId::Confirm => draw_confirm(app, frame, area),

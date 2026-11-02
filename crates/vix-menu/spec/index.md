@@ -375,6 +375,7 @@ The database workbench; see [`crates/vix-db/spec/index.md`](../../vix-db/spec/in
 | Stash / Stash Pop | `git stash push` / `git stash pop`                          |
 | Stash List…     | Choose a stash to show, apply, pop, or drop (drop confirms; T634) |
 | Worktree ▸      | Submenu of worktree commands (below; T634)                    |
+| Rebase ▸        | Submenu of interactive rebase and cherry-pick commands (below; T633) |
 | *— separator —* |                                                               |
 | Pull            | `git pull` (streamed to the bottom dock)                      |
 | Push            | `git push` (streamed to the bottom dock)                      |
@@ -400,6 +401,15 @@ The **Worktree** submenu (T634; `crates/vix-git/spec/index.md`):
 | Add…     | Prompt for a folder and `git worktree add` it on a new branch named after it (`git.worktree_add`) |
 | List…    | Choose a worktree to switch the workspace to; `d` removes one after a confirmation (`git.worktree_list`) |
 | Remove…  | Choose a linked worktree to remove, after a confirmation (`git.worktree_remove`) |
+
+The **Rebase** submenu (T633; `crates/vix-git/spec/index.md`):
+
+| Item                | Action                                                       |
+| ------------------- | ------------------------------------------------------------ |
+| Interactive Rebase… | Prompt for a base, then edit the todo list (pick, reword, edit, squash, fixup, drop, reorder) and run `git rebase -i` (`git.rebase_interactive`) |
+| Continue Rebase     | `git rebase --continue` (`git.rebase_continue`)              |
+| Abort Rebase        | `git rebase --abort` (`git.rebase_abort`)                    |
+| Cherry-Pick…        | Prompt for a branch, then choose one of its commits the current branch lacks and `git cherry-pick` it (`git.cherry_pick`) |
 
 ## IM menu
 

@@ -1655,6 +1655,18 @@ const GIT_WORKTREE: &[Item] = &[
     Item::leaf("menu.item.git.worktree_remove", "git.worktree_remove", ""),
 ];
 
+/// Rebase and cherry-pick (T633), grouped under Git → Rebase.
+const GIT_REBASE: &[Item] = &[
+    Item::leaf(
+        "menu.item.git.rebase_interactive",
+        "git.rebase_interactive",
+        "",
+    ),
+    Item::leaf("menu.item.git.rebase_continue", "git.rebase_continue", ""),
+    Item::leaf("menu.item.git.rebase_abort", "git.rebase_abort", ""),
+    Item::leaf("menu.item.git.cherry_pick", "git.cherry_pick", ""),
+];
+
 /// Pull strategies, grouped under Git → Pull.
 const GIT_PULL: &[Item] = &[
     Item::leaf("menu.item.git.pull_ff", "git.pull_ff", ""),
@@ -1700,6 +1712,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.stash_pop", "git.stash_pop", ""),
     Item::leaf("menu.item.git.stash_list", "git.stash_list", ""),
     Item::sub("menu.item.git.worktree", GIT_WORKTREE),
+    Item::sub("menu.item.git.rebase", GIT_REBASE),
     SEP,
     Item::sub("menu.item.git.pull", GIT_PULL),
     Item::leaf("menu.item.git.push", "git.push", ""),

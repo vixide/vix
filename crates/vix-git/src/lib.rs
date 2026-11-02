@@ -13,9 +13,24 @@
 //! - **Stash and worktrees** (T634): [`parse_stash_list`] and
 //!   [`parse_worktree_list`] (pure), with runners to list, apply, pop, drop and
 //!   show a stash, and to list, add and remove a worktree.
+//! - **Interactive rebase and cherry-pick** (T633): [`parse_todo`] and
+//!   [`serialize_todo`] (pure) read and write git's rebase todo list, a
+//!   [`RebaseTodo`] edits one, and runners start, continue, and abort a rebase
+//!   and cherry-pick a commit.
 
+mod rebase;
 mod stash;
 mod worktree;
+
+pub use rebase::{
+    RebaseAction, RebasePlan, RebaseTodo, TodoCommit, TodoItem, TodoProblem, check_todo,
+    parse_todo, plan, serialize_todo,
+};
+#[cfg(feature = "process")]
+pub use rebase::{
+    RebaseState, cherry_pick, cherry_pick_candidates, rebase_abort, rebase_commits,
+    rebase_continue, rebase_in_progress, rebase_interactive,
+};
 
 pub use stash::{StashEntry, parse_stash_list, stash_ref};
 #[cfg(feature = "process")]
@@ -619,6 +634,14 @@ impl GitError {
 /// The `git` command for `args` in `dir`, built by the workspace authority
 /// (T710) so a remote workspace runs git where its files are.
 fn git_command(dir: &Path, args: &[&str]) -> std::io::Result<Command> {
+    git_command_env(dir, args, &[])
+}
+
+#[cfg(feature = "process")]
+/// [`git_command`] with extra environment variables, set on this one
+/// process only (T633: the rebase editors). The spec carries them, so a
+/// remote authority sets them where git runs.
+fn git_command_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> std::io::Result<Command> {
     let auth = vix_authority::current();
     // The cached path is this machine's `git`. Any other authority runs the
     // bare name, which its own side resolves on its `PATH` (T712): a remote
@@ -629,14 +652,16 @@ fn git_command(dir: &Path, args: &[&str]) -> std::io::Result<Command> {
     } else {
         OsString::from("git")
     };
-    auth.command(
-        &vix_authority::ProcessSpec::new(program)
-            .current_dir(dir)
-            // T651: every path Vix hands git is a literal file name, never a
-            // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.
-            .env("GIT_LITERAL_PATHSPECS", "1")
-            .args(args),
-    )
+    let mut spec = vix_authority::ProcessSpec::new(program)
+        .current_dir(dir)
+        // T651: every path Vix hands git is a literal file name, never a
+        // pattern -- without this, staging `app/[id]/p` also stages `app/i/p`.
+        .env("GIT_LITERAL_PATHSPECS", "1")
+        .args(args);
+    for (k, v) in env {
+        spec = spec.env(k, v);
+    }
+    auth.command(&spec)
 }
 
 #[cfg(feature = "process")]
@@ -1146,6 +1171,7 @@ pub struct LogEntry {
 /// Where a [`LogPanel`]'s entries came from, and what its Enter should diff
 /// against.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LogScope {
     /// The whole repository's history (**Git → Log**).
     Repo,
@@ -1153,6 +1179,10 @@ pub enum LogScope {
     /// workspace-relative path -- so Enter can pass it to [`show_commit`]
     /// and diff just that file, not the whole commit.
     File(String),
+    /// The commits on a revision that `HEAD` doesn't have yet (**Git →
+    /// Rebase → Cherry-Pick…**, T633), by the revision as typed; `c`
+    /// cherry-picks the highlighted one.
+    Pick(String),
 }
 
 /// A commit-list overlay: [`log`]/[`file_log`] entries, a highlighted row,

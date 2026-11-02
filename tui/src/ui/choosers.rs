@@ -98,6 +98,80 @@ pub(super) fn draw_worktree_chooser(app: &mut App, frame: &mut Frame, area: Rect
         draw_list_chooser_sized(frame, area, (&title, &hint), &labels, c.selected, 80);
 }
 
+/// **Git → Rebase → Interactive Rebase…** (T633): the todo list, oldest
+/// commit first, one `action  abbrev  subject` row per commit (a typed
+/// reword message shown after an arrow), and the key hint.
+pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(n) = app.git_rebase.as_ref().map(|t| t.commits.len()) else {
+        return;
+    };
+    let width = 90u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let base = app
+        .git_rebase
+        .as_ref()
+        .map(|t| t.base_label.clone())
+        .unwrap_or_default();
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(
+            " {} {} ",
+            icon::BRANCH,
+            t!("ui.git_rebase", base = base)
+        ));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    let Some(t) = app.git_rebase.as_mut() else {
+        return;
+    };
+    t.ensure_visible(view_h);
+    let lines: Vec<Line> = t
+        .commits
+        .iter()
+        .enumerate()
+        .skip(t.scroll)
+        .take(view_h)
+        .map(|(idx, c)| {
+            let mut text = format!("  {:<7} {:<8} {}", c.action.word(), c.abbrev(), c.subject);
+            if let Some(m) = &c.message {
+                text.push_str("  → ");
+                text.push_str(m);
+            }
+            if idx == t.selected {
+                Line::from(Span::styled(text, theme::selected()))
+            } else if c.action == crate::git::RebaseAction::Drop {
+                Line::from(Span::styled(text, theme::dim()))
+            } else {
+                Line::from(text)
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    let hint = Line::from(Span::styled(
+        t!("ui.git_rebase_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    app.layout.chooser = chunks[0];
+}
+
 pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::diff_view::Kind;
     let Some(d) = app.diff_view.as_ref() else {
@@ -401,13 +475,23 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(Clear, rect);
     let title = match &scope {
-        crate::git::LogScope::Repo => format!(" {} {} ", icon::BRANCH, t!("ui.git_log")),
         crate::git::LogScope::File(p) => {
             let name = std::path::Path::new(p)
                 .file_name()
                 .map_or_else(|| p.clone(), |n| n.to_string_lossy().into_owned());
             format!(" {} {} — {name} ", icon::BRANCH, t!("ui.git_file_history"))
         }
+        crate::git::LogScope::Pick(rev) => format!(
+            " {} {} ",
+            icon::BRANCH,
+            t!("ui.git_cherry_pick_from", rev = rev)
+        ),
+        _ => format!(" {} {} ", icon::BRANCH, t!("ui.git_log")),
+    };
+    let hint_text = if matches!(scope, crate::git::LogScope::Pick(_)) {
+        t!("ui.git_cherry_pick_hint")
+    } else {
+        t!("ui.git_log_hint")
     };
     let block = Block::default()
         .style(theme::base())
@@ -448,10 +532,7 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let hint = Line::from(Span::styled(
-        t!("ui.git_log_hint").to_string(),
-        theme::dim(),
-    ));
+    let hint = Line::from(Span::styled(hint_text.to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.git_log = chunks[0];

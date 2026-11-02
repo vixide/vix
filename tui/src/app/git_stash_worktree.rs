@@ -172,7 +172,7 @@ impl App {
     }
 
     /// Refresh git state and clean buffers after a stash changed the tree.
-    fn after_tree_change(&mut self) {
+    pub(super) fn after_tree_change(&mut self) {
         self.reload_clean_buffers();
         self.refresh_git();
         self.refresh_git_gutter();

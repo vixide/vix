@@ -32,6 +32,8 @@ pub(crate) enum OverlayId {
     WorkspaceSearch,
     /// The `KeybindingEditor` layer.
     KeybindingEditor,
+    /// The `GitRebase` layer (below `Prompt`: its reword prompt opens over it).
+    GitRebase,
     /// The `Prompt` layer.
     Prompt,
     /// The `QueryReplace` layer.
@@ -294,6 +296,9 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(Palette, palette, palette_key),
     unit!(WorkspaceSearch, workspace_search, ps_key),
     unit!(KeybindingEditor, keybinding_editor, keybinding_editor_key),
+    // Below `Prompt`: `r` opens a reword prompt over the rebase overlay, and the
+    // prompt has to win the key.
+    unit!(GitRebase, git_rebase, git_rebase_key),
     unit!(Prompt, prompt, prompt_key),
     unit!(QueryReplace, query_replace, qr_key),
     unit!(Confirm, confirm, confirm_key),
