@@ -19,11 +19,11 @@ hooks. The header's light/dark toggle and share button are Lily's
 ## Develop
 
 ```sh
-npm install
-npm run dev       # http://localhost:5173
-npm run build     # prerenders to build/
-npm run preview   # serve the prerendered build locally
-npm run check     # svelte-check
+pnpm install
+pnpm dev       # http://localhost:5173
+pnpm build     # prerenders to build/
+pnpm preview   # serve the prerendered build locally
+pnpm check     # svelte-check
 ```
 
 ## Routes

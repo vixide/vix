@@ -50,10 +50,10 @@ editor — see [index.md](index.md) for scope.
   paraphrases it, not the other way round; when `vix`'s feature list changes,
   update `src/routes/features/+page.svelte` and the home page's card grid to
   match.
-- `npm run build` must prerender cleanly (`strict: true` in
-  `svelte.config.js` fails the build on an unreachable route or broken link)
+- `pnpm build` must prerender cleanly (`strict: true` in
+  `vite.config.ts` (the adapter is configured inline in the `sveltekit()` plugin options; SvelteKit 3 has no `svelte.config.js`) fails the build on an unreachable route or broken link)
   before pushing to `main` — that's also what the deploy workflow runs.
-- Run `npm run check` (svelte-check) before committing changes to `src/`.
+- Run `pnpm check` (svelte-check) before committing changes to `src/`.
 
 ---
 
