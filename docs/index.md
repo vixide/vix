@@ -18,8 +18,9 @@ Highlights:
   · [Keymaps](keymaps/index.md) · [Menus](menus/index.md)
 - [Language Server Protocol](language-server-protocol/index.md) — diagnostics,
   hover, go-to-definition, completion.
-- [Debugger](debugger/index.md) — Debug Adapter Protocol: breakpoints, stepping,
-  call stack, variables, watches.
+- [Debugger](debugger/index.md) — Debug Adapter Protocol: breakpoints with
+  conditions, exception filters, attach, stepping, a call stack and variables
+  tree, watches, inline values.
 - Panels & tools: [Command Palette](command-palette/index.md),
   [File Explorer](file-explorer/index.md), [Find Panel](find/index.md),
   [Outline](outline-panel/index.md), [Git Panel](git-panel/index.md),
@@ -67,6 +68,15 @@ Highlights:
   [Switch Project](switch-project/index.md) (re-root at a recent workspace) ·
   [Test Runner](test-runner/index.md) (pass/fail panel) ·
   [Coverage Gutter](coverage/index.md) (visualize an LCOV/Cobertura report).
+- Git depth: [Change Gutter Base](gutter-base/index.md) (compare the gutter
+  with HEAD, the index, disk or a branch) · [Branch Review](branch-review/index.md)
+  (a range as one diff, with saved line comments) ·
+  [Interactive Rebase](interactive-rebase/index.md) (and cherry-pick).
+- Safety and environment: [Safe Save](safe-save/index.md) (hard links,
+  ownership, interrupted saves) · [Project Environment](project-environment/index.md)
+  (direnv, mise, venv, gated by trust) · [File Encodings](encoding/index.md).
+- [Inline Suggestions](ghost-text/index.md) (dimmed ghost text from an LSP or
+  AI source, off by default).
 - Markup: [Org](org/index.md) (Org-mode basics — headlines, TODO, export).
 - Reference: [Media Types](media-types/index.md) (MIME picker by type/extension).
 
