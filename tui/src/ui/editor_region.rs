@@ -6,6 +6,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 
+use super::ghost::draw_ghost;
 use super::scroll_markers;
 use super::{RULER_COLUMN, draw_hscrollbar, draw_minimap, draw_scrollbar_marked};
 use crate::app::App;
@@ -157,6 +158,9 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
         frame.render_widget(&tab.editor, text);
+        if tab_index == app.editor.active {
+            draw_ghost(app, frame, text);
+        }
         if app.visible.contains(crate::app::Visible::RULER) {
             tint_ruler(frame, text, &tab.editor);
         }
@@ -255,6 +259,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
             scrollbar
         };
         frame.render_widget(&tab.editor, editor_area);
+        draw_ghost(app, frame, editor_area);
 
         if vsb.width > 0 {
             let total = app.editor.active_line_count().max(1);

@@ -62,6 +62,7 @@ clipboard_provider = "auto"
 # Which lines show their language-server diagnostic as dimmed end-of-line
 # text: "off", "cursor-line" (default -- the cursor's line only), or "all".
 inline_diagnostics = "cursor-line"
+inline_completion = "off"
 # Show the message drawer on startup.
 show_messages = true
 # Show the bottom status bar.

@@ -97,6 +97,8 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 "linkedEditingRange": {},
                 "callHierarchy": {},
                 "inlayHint": {},
+                // T618: ghost-text suggestions (LSP 3.18).
+                "inlineCompletion": {},
                 "publishDiagnostics": { "relatedInformation": true },
                 // T123d: opts into pull-based `textDocument/diagnostic` /
                 // `workspace/diagnostic`, alongside push

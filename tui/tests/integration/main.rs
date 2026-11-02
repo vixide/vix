@@ -26,6 +26,8 @@ mod editing;
 #[cfg(feature = "http")]
 mod fhir;
 mod find;
+#[cfg(feature = "ai")]
+mod ghost;
 #[cfg(feature = "git")]
 mod git;
 mod hl7;

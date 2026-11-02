@@ -14,6 +14,7 @@
 #![recursion_limit = "256"]
 
 pub mod frame;
+pub mod inline_completion;
 pub mod message;
 pub mod position;
 pub mod sync;

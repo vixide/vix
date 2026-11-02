@@ -17,6 +17,7 @@ mod editor_region;
 mod explorer;
 mod fhir;
 mod file_browser;
+mod ghost;
 mod git_graph;
 mod help;
 mod hints;

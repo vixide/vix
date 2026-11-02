@@ -214,6 +214,10 @@ impl App {
         if self.completion.is_some() && self.completion_key(key) {
             return;
         }
+        // Inline ghost text (T618): Tab / Ctrl+Right accept, Esc dismisses.
+        if self.ghost_key(key) {
+            return;
+        }
         // A hover tooltip is dismissed by the next keypress (Esc just dismisses).
         if self.hover.is_some() {
             self.hover = None;

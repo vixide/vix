@@ -29,6 +29,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `oc_mode` | string | `"full"` | `"full"`, or `"read-only"` to let the OC menu list, inspect and show logs only. Any other value behaves as `"read-only"`. |
 | `clipboard_provider` | string | `"auto"` | How copy/paste reach the clipboard: `"auto"` (OSC 52 over SSH — `SSH_TTY`/`SSH_CONNECTION` set — or when the system clipboard fails; the system clipboard otherwise), `"system"` (system clipboard only) or `"osc52"` (always write the terminal's OSC 52 escape, wrapped in tmux passthrough under `TMUX`; tmux needs `allow-passthrough on`). Under OSC 52, paste reads Vix's own last copy. Any other value behaves as `"auto"`. |
 | `inline_diagnostics` | string | `"cursor-line"` | Which lines show their language-server diagnostic as dimmed text at the end of the line: `"off"`, `"cursor-line"` (the cursor's line only) or `"all"`. Any other value behaves as `"cursor-line"`. The status bar shows the cursor's diagnostic whatever this is set to. |
+| `inline_completion` | string | `"off"` | Where dimmed inline ghost-text suggestions come from: `"off"`, `"lsp"` (a language server that offers `textDocument/inlineCompletion`) or `"ai"` (a fill-in-the-middle prompt to the configured AI provider; the text around the cursor is sent to it). Tab accepts, Ctrl+Right accepts one word, Esc dismisses. Any other value behaves as `"off"`. |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
@@ -124,6 +125,7 @@ oc_engine = "auto"
 oc_mode = "full"
 clipboard_provider = "auto"
 inline_diagnostics = "cursor-line"
+inline_completion = "off"
 show_messages = true
 show_status_bar = true
 show_scrollbar = true

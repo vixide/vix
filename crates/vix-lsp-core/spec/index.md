@@ -47,6 +47,16 @@ previous data; and `decode_semantic_tokens` decodes data against the legend.
 How the host uses them is in the
 [lsp spec](../../vix-lsp/spec/index.md#semantic-token-requests-t615).
 
+## Inline completion (T618)
+
+`inline_completion` builds the `textDocument/inlineCompletion` params
+(`inline_completion::params`) and parses its reply
+(`inline_completion::parse`): a bare `InlineCompletionItem[]` or an
+`InlineCompletionList` with `items`. Each item's `insertText` is a string or a
+`StringValue`; a snippet value is flattened to plain text (`$1`, `${1}` removed,
+`${1:name}` becomes `name`). Items with empty text are dropped. The client
+capability `textDocument.inlineCompletion` is declared in `initialize`.
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

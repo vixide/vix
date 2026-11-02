@@ -286,6 +286,34 @@ impl App {
         self.spawn_ai_cmd(prompt, text)
     }
 
+    /// Start a fill-in-the-middle request for ghost text (T618) around the
+    /// cursor (`before` and `after` it; `line_prefix` is the cursor line's text
+    /// before it), through the same provider dispatch as every other AI
+    /// request. The receiver yields the cleaned suggestion once (`None` when
+    /// the request failed or the model said nothing). `None` back from this
+    /// call means it could not start (the reason has been reported).
+    pub(super) fn spawn_ghost_ai(
+        &mut self,
+        before: &str,
+        after: &str,
+        line_prefix: &str,
+    ) -> Option<std::sync::mpsc::Receiver<Option<String>>> {
+        let input = vix_ai_core::fim::input(before, after);
+        let rx = self.spawn_ai_cmd(vix_ai_core::fim::INSTRUCTION, &input)?;
+        let line_prefix = line_prefix.to_string();
+        let (tx, out) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let reply = match rx.recv() {
+                Ok(AiMsg::Done(text)) => {
+                    Some(vix_ai_core::fim::clean(&text, &line_prefix)).filter(|t| !t.is_empty())
+                }
+                _ => None,
+            };
+            let _ = tx.send(reply);
+        });
+        Some(out)
+    }
+
     /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: dispatch
     /// on [`Settings::ai_provider`] (T124) to either the original CLI shell-out
     /// ([`Self::spawn_ai_cli`], the `"cli"` default — every existing call site

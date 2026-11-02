@@ -171,6 +171,53 @@ The selection rules are pure and unit-tested in `vix_lsp::inline`
 the editor in `App::refresh_inline_diagnostics` and `App::show_cursor_diagnostic`
 (`tui/src/app/inline_diagnostics.rs`).
 
+## Inline (ghost-text) completion (T618)
+
+A suggestion drawn dimmed after the cursor, accepted without opening a popup.
+The `inline_completion` setting picks where suggestions come from:
+
+| Value | Source |
+| ----- | ------ |
+| `"off"` (default) | none; nothing is requested and nothing is drawn |
+| `"lsp"` | `textDocument/inlineCompletion` (LSP 3.18) from a server that advertises `inlineCompletionProvider`, such as copilot-language-server |
+| `"ai"` | a fill-in-the-middle prompt (`vix_ai_core::fim`) sent through the configured AI provider; this sends the text around the cursor to that provider, so it is opt-in and obeys `ai = "off"` |
+
+Any other value behaves as `"off"`.
+
+- **When it asks.** After the buffer or cursor has been still for the idle
+  debounce, with an editor focused, no completion popup, selection or extra
+  carets, the document in sync with the server (LSP source), and only the
+  rest of the line after the cursor blank. Merely opening a file or moving
+  between tabs requests nothing; only a change after that does. The
+  `inline_completion.trigger` action asks at once.
+- **Staleness.** A suggestion records the buffer revision and cursor it was
+  computed for. A reply for another revision or cursor, or one the server
+  computed against an older document version, is dropped silently. Any edit
+  or cursor move discards a visible suggestion. At most one request per
+  source is in flight.
+- **Drawing.** The first line of the suggestion is drawn dimmed after the
+  cursor in `tui/src/ui/ghost.rs` (rendering stays in `tui/src/ui*`), cut at
+  the view's edge, with `…` when more lines follow. Soft-wrapped views draw
+  none (the suggestion can still be accepted).
+- **Keys.** Tab accepts the whole suggestion, Ctrl+Right accepts one word
+  (leading blanks plus a run of word characters, or a run of punctuation) and
+  keeps the rest as a new suggestion, Esc dismisses. These are the actions
+  `inline_completion.accept`, `inline_completion.accept_word` and
+  `inline_completion.dismiss`; the keys run the same code. With no suggestion
+  visible the keys behave as before.
+- **Protocol.** The client declares `textDocument.inlineCompletion`. The
+  request carries `context.triggerKind` 2 (automatic) or 1 (invoked); the
+  reply is `InlineCompletionItem[]` or `{ items }`, whose `insertText` is a
+  string or a snippet `StringValue` (tabstops are stripped to their
+  placeholder text). Only the first item is used. A server that does not
+  advertise the capability is never asked. Errors are silent.
+
+The pure parts are unit-tested: reply parsing in `vix_lsp_core::inline_completion`,
+the suggestion state and word splitting in `vix_lsp::ghost`, and the prompt
+and reply clean-up in `vix_ai_core::fim`. The host is
+`tui/src/app/ghost.rs`; `tui/tests/lsp_smoke.rs` drives a mock server end to
+end and `tui/tests/integration/ghost.rs` the AI source with a fake command.
+
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 
 A full method-by-method diff against LSP 3.17 (not just the features this

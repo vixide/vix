@@ -26,6 +26,7 @@ mod fhir_http;
 #[cfg(not(feature = "http"))]
 mod fhir_http_off;
 mod focus;
+mod ghost;
 #[cfg(feature = "cowork")]
 use cowork as cowork_state;
 #[cfg(not(feature = "cowork"))]
@@ -2335,6 +2336,8 @@ pub struct App {
     /// A debounced auto-completion request (T612): when to send it, and the
     /// trigger character that scheduled it (`None` for a word character).
     pub(crate) completion_due: Option<(std::time::Instant, Option<char>)>,
+    /// Inline ghost-text completion state (T618).
+    pub(crate) ghost: ghost::GhostState,
     /// When a debounced semantic-tokens request is due (T615).
     pub(crate) semantic_due: Option<std::time::Instant>,
     /// What the last semantic-tokens request was for (T615), so tokens are
@@ -2927,6 +2930,7 @@ impl App {
             hover: None,
             completion: None,
             completion_due: None,
+            ghost: ghost::GhostState::default(),
             semantic_due: None,
             semantic_requested: None,
             dialog: None,
@@ -3887,6 +3891,14 @@ impl App {
             "lsp.show_log" => self.lsp_show_log(),
             "lsp.status" => self.open_lsp_status(),
             "lsp.complete" => self.lsp_complete(),
+            "inline_completion.trigger" => self.ghost_trigger(),
+            "inline_completion.accept" => {
+                self.ghost_accept(false);
+            }
+            "inline_completion.accept_word" => {
+                self.ghost_accept(true);
+            }
+            "inline_completion.dismiss" => self.ghost_dismiss(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),
             "tools.todo_tree" => self.open_todo_tree(),
@@ -7758,6 +7770,9 @@ impl App {
                 }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
+                crate::lsp::LspEvent::InlineCompletion { path, items } => {
+                    self.on_ghost_lsp(&path, items);
+                }
                 crate::lsp::LspEvent::FoldingRanges(ranges) => self.apply_folding_ranges(&ranges),
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();

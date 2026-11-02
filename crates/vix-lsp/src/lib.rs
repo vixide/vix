@@ -13,6 +13,7 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
+pub mod ghost;
 pub mod inline;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -59,6 +60,8 @@ enum Pending {
     CodeLensAuto,
     /// `codeLens/resolve` for one lens (T726): silent on error, routed by path.
     CodeLensResolve,
+    /// `textDocument/inlineCompletion` (T618): silent on error, routed by path.
+    InlineCompletion,
     PrepareCallHierarchy,
     IncomingCalls,
     PrepareRename,
@@ -69,6 +72,24 @@ enum Pending {
     SemanticTokensDelta,
     /// `semanticTokens/range` (T615): the viewport only, never a delta base.
     SemanticTokensRange,
+}
+
+impl Pending {
+    /// Requests the host makes on its own, whose failure is not worth telling
+    /// the user about (a newer-LSP method the server lacks, a background
+    /// refresh, a ghost-text suggestion).
+    fn is_ambient(self) -> bool {
+        matches!(
+            self,
+            Pending::WorkspaceDiagnostics
+                | Pending::SemanticTokens
+                | Pending::SemanticTokensDelta
+                | Pending::SemanticTokensRange
+                | Pending::CodeLensAuto
+                | Pending::CodeLensResolve
+                | Pending::InlineCompletion
+        )
+    }
 }
 
 /// The document an edit-returning request (formatting, linked editing) was
@@ -171,6 +192,16 @@ pub enum LspEvent {
         lens: vix_lsp_core::message::CodeLens,
         /// The lens's `range` exactly as the server sent it.
         range: Value,
+    },
+    /// A `textDocument/inlineCompletion` reply for `path` (T618): the
+    /// suggested texts in server order. Only a reply computed against the
+    /// version of the document the server still holds is delivered; an
+    /// older one is dropped.
+    InlineCompletion {
+        /// The file the suggestions are for, as the host passed it in.
+        path: PathBuf,
+        /// The suggested insertions, best first.
+        items: Vec<String>,
     },
     /// The server asked the client to re-request every code lens
     /// (`workspace/codeLens/refresh`, T726).
@@ -1235,6 +1266,60 @@ impl Lsp {
         });
     }
 
+    /// Whether a ready server handling `path` advertises
+    /// `inlineCompletionProvider` (T618).
+    #[must_use]
+    pub fn supports_inline_completion(&self, path: &Path) -> bool {
+        self.enabled
+            && self.configs_for(path).iter().any(|c| {
+                self.servers.get(&c.language_id).is_some_and(|s| {
+                    s.ready && s.capabilities.iter().any(|n| n == "inlineCompletion")
+                })
+            })
+    }
+
+    /// Ask the ready servers handling `path` that advertise
+    /// `inlineCompletionProvider` for ghost-text suggestions at
+    /// `(line, character)` (T618). `automatic` marks a request made on an
+    /// idle pause rather than by the user. The reply arrives from
+    /// [`Lsp::poll`] as [`LspEvent::InlineCompletion`] unless the document
+    /// changed meanwhile.
+    pub fn request_inline_completion(
+        &mut self,
+        path: &Path,
+        line: u32,
+        character: u32,
+        automatic: bool,
+    ) {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            if !server.ready || !server.capabilities.iter().any(|n| n == "inlineCompletion") {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::InlineCompletion);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            server.send(message::request(
+                id,
+                "textDocument/inlineCompletion",
+                &vix_lsp_core::inline_completion::params(&uri, line, character, automatic),
+            ));
+        }
+    }
+
     /// Request the foldable line ranges for `path`.
     pub fn request_folding_range(&mut self, path: &Path) {
         self.send_request(
@@ -1741,15 +1826,7 @@ impl Lsp {
             // the baseline, so a server without support (or a transient
             // failure) shouldn't interrupt the user with an error.
             // T726: background lens refreshes and resolves are ambient too.
-            if matches!(
-                kind,
-                Pending::WorkspaceDiagnostics
-                    | Pending::SemanticTokens
-                    | Pending::SemanticTokensDelta
-                    | Pending::SemanticTokensRange
-                    | Pending::CodeLensAuto
-                    | Pending::CodeLensResolve
-            ) {
+            if kind.is_ambient() {
                 return;
             }
             if let Some(error) = msg.get("error") {
@@ -1808,7 +1885,10 @@ impl Lsp {
         }
         // T726: lens replies are routed to their document (a `null` refresh
         // means "no lenses") and dropped once that document has moved on.
-        if matches!(kind, Pending::CodeLensAuto | Pending::CodeLensResolve) {
+        if matches!(
+            kind,
+            Pending::CodeLensAuto | Pending::CodeLensResolve | Pending::InlineCompletion
+        ) {
             if let Some((target, true)) = target {
                 Self::lens_reply(kind, target.path, result, events);
             }
@@ -1830,6 +1910,15 @@ impl Lsp {
             return;
         }
         Self::response_to_events(kind, result, events);
+    }
+
+    /// Turn a current inline-completion reply into its event (T618), if it
+    /// carries any suggestion.
+    fn inline_completion_reply(path: PathBuf, result: &Value, events: &mut Vec<LspEvent>) {
+        let items = vix_lsp_core::inline_completion::parse(result);
+        if !items.is_empty() {
+            events.push(LspEvent::InlineCompletion { path, items });
+        }
     }
 
     /// The encoded token data a semantic-tokens reply stands for (T615),
@@ -1877,8 +1966,13 @@ impl Lsp {
         Some(data)
     }
 
-    /// Turn a current background-lens or lens-resolve reply into its event.
+    /// Turn a current background-lens, lens-resolve or inline-completion (T618,
+    /// dropped silently once stale) reply into its event.
     fn lens_reply(kind: Pending, path: PathBuf, result: &Value, events: &mut Vec<LspEvent>) {
+        if matches!(kind, Pending::InlineCompletion) {
+            Self::inline_completion_reply(path, result, events);
+            return;
+        }
         if matches!(kind, Pending::CodeLensAuto) {
             let (lenses, unresolved) = message::parse_code_lens_list(result);
             events.push(LspEvent::CodeLensUpdate {

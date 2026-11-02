@@ -36,6 +36,17 @@ impl App {
         false
     }
 
+    /// No AI provider in this build, so there is no ghost-text source.
+    pub(super) fn spawn_ghost_ai(
+        &mut self,
+        _before: &str,
+        _after: &str,
+        _line_prefix: &str,
+    ) -> Option<std::sync::mpsc::Receiver<Option<String>>> {
+        debug_assert!(self.ai_panel.is_none());
+        None
+    }
+
     /// No diff review is ever open.
     #[must_use]
     pub fn ai_diff_review(&self) -> Option<&crate::ai_diff::Review> {

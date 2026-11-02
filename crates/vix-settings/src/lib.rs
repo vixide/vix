@@ -143,6 +143,13 @@ pub struct Settings {
     /// `"all"`. Any other value behaves as `"cursor-line"`. The status line
     /// shows the cursor's diagnostic whatever this is set to.
     pub inline_diagnostics: String,
+    /// Where inline ghost-text suggestions come from (T618): `"off"`
+    /// (default), `"lsp"` (`textDocument/inlineCompletion` from a language
+    /// server) or `"ai"` (a fill-in-the-middle prompt to the configured AI
+    /// provider, which sends the text around the cursor to it). Tab accepts,
+    /// Ctrl+Right takes one word, Esc dismisses. Any other value behaves as
+    /// `"off"`.
+    pub inline_completion: String,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
@@ -875,6 +882,7 @@ impl Default for Settings {
             oc_mode: "full".to_string(),
             clipboard_provider: "auto".to_string(),
             inline_diagnostics: "cursor-line".to_string(),
+            inline_completion: "off".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
             terminal_scrollback: 2000,

@@ -240,6 +240,22 @@ pub const CATALOG: &[Action] = &[
         title: "action.indent_selection",
     },
     Action {
+        id: "inline_completion.accept",
+        title: "action.inline_completion_accept",
+    },
+    Action {
+        id: "inline_completion.accept_word",
+        title: "action.inline_completion_accept_word",
+    },
+    Action {
+        id: "inline_completion.dismiss",
+        title: "action.inline_completion_dismiss",
+    },
+    Action {
+        id: "inline_completion.trigger",
+        title: "action.inline_completion_trigger",
+    },
+    Action {
         id: "insert_newline",
         title: "action.insert_newline",
     },

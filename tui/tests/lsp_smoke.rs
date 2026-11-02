@@ -2032,3 +2032,166 @@ fn app_requests_ranged_semantic_tokens_for_the_view() {
         report.range
     );
 }
+
+/// T618: a mock server offering `textDocument/inlineCompletion`. The first
+/// request is answered (after `argv[1]` seconds) with `STALE`, every later one
+/// with `eet(${1:name}) now`; each request touches the marker file `argv[2]`.
+const MOCK_SERVER_INLINE: &str = r"
+import sys, json, time
+
+DELAY = float(sys.argv[1])
+MARKER = sys.argv[2]
+count = 0
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
+            'positionEncoding':'utf-16','inlineCompletionProvider':True}}})
+    elif method == 'textDocument/inlineCompletion':
+        count += 1
+        open(MARKER, 'a').write('x')
+        if count == 1:
+            time.sleep(DELAY)
+            text = 'STALE'
+        else:
+            text = {'kind':'snippet','value':'eet(${1:name}) now'}
+        send({'jsonrpc':'2.0','id':mid,'result':[{'insertText': text}]})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+";
+
+/// The rendered screen as one string.
+fn screen_text(app: &mut App) -> String {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(100, 20)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    term.backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect()
+}
+
+fn buffer_text(app: &App) -> String {
+    app.editor
+        .active_tab()
+        .map(|t| t.editor.get_content())
+        .unwrap_or_default()
+}
+
+/// T618: ghost text from a language server is drawn after the cursor, a reply
+/// computed for an older edit is dropped, Ctrl+Right takes a word, Tab takes
+/// the rest and Esc dismisses.
+#[test]
+fn lsp_ghost_text_is_drawn_dropped_when_stale_and_accepted() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-ghost-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_INLINE).unwrap();
+    let marker = root.join("requests");
+    let file = root.join("a.rs");
+    std::fs::write(&file, "").unwrap();
+
+    let mut settings = Settings::default();
+    assert_eq!(settings.inline_completion, "off", "the default");
+    settings.inline_completion = "lsp".into();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            "1.5".into(),
+            marker.to_string_lossy().into_owned(),
+        ],
+    });
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 100, 20);
+    app.open_initial(&file);
+    let key = |app: &mut App, code, mods| app.on_key(KeyEvent::new(code, mods));
+    let wait = |app: &mut App, what: &str, done: &mut dyn FnMut(&mut App) -> bool| {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline && !done(app) {
+            app.tick();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(done(app), "timed out waiting for {what}");
+    };
+    // Let the document reach the server before typing.
+    for _ in 0..50 {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    for c in "gre".chars() {
+        key(&mut app, KeyCode::Char(c), KeyModifiers::NONE);
+    }
+    // The first request goes out after the debounce; its reply is slow.
+    wait(&mut app, "the first request", &mut |_| marker.exists());
+    // Typing meanwhile makes that reply stale: `STALE` must never show.
+    key(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
+    assert_eq!(buffer_text(&app), "gree");
+    let mut seen_stale = false;
+    wait(&mut app, "the fresh suggestion", &mut |app| {
+        let screen = screen_text(app);
+        seen_stale |= screen.contains("STALE");
+        screen.contains("greeeet(name) now")
+    });
+    assert!(!seen_stale, "a stale reply was drawn");
+
+    // Ctrl+Right takes one word ("eet"), leaving the rest as the suggestion.
+    key(&mut app, KeyCode::Right, KeyModifiers::CONTROL);
+    assert_eq!(buffer_text(&app), "greeeet");
+    assert!(screen_text(&mut app).contains("greeeet(name) now"));
+    // Tab takes the rest.
+    key(&mut app, KeyCode::Tab, KeyModifiers::NONE);
+    assert_eq!(buffer_text(&app), "greeeet(name) now");
+
+    // A requested suggestion is dismissed by Esc.
+    app.run_action("inline_completion.trigger");
+    wait(&mut app, "a triggered suggestion", &mut |app| {
+        screen_text(app).contains("noweet(name) now")
+    });
+    key(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    assert!(!screen_text(&mut app).contains("noweet(name) now"));
+    assert_eq!(
+        buffer_text(&app),
+        "greeeet(name) now",
+        "Esc inserts nothing"
+    );
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}

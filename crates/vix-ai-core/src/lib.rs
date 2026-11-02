@@ -19,6 +19,7 @@
 //! [`Settings::ai_command`]: https://docs.rs/vix-settings (see `crates/vix-settings/src/lib.rs`)
 
 pub mod anthropic;
+pub mod fim;
 pub mod ollama;
 pub mod openai;
 pub mod secret;

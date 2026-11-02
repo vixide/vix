@@ -273,6 +273,10 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `im.status_busy` | Busy | Menu |
 | `indent_line` | Indent Line | Catalog |
 | `indent_selection` | Indent Selection | Catalog |
+| `inline_completion.accept` | Accept Inline Suggestion | Catalog |
+| `inline_completion.accept_word` | Accept Next Word of Suggestion | Catalog |
+| `inline_completion.dismiss` | Dismiss Inline Suggestion | Catalog |
+| `inline_completion.trigger` | Suggest Inline Completion | Catalog |
 | `insert_newline` | Insert Newline | Catalog |
 | `insert_tab` | Insert Tab | Catalog |
 | `jj.abandon` | Abandon | Menu |
@@ -793,4 +797,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**786 actions.**
+**790 actions.**

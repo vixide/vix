@@ -90,6 +90,8 @@ impl App {
         // Drain language-server messages (diagnostics, hover/definition/completion
         // responses) and sync the active document.
         self.poll_lsp();
+        // Inline ghost text (T618): debounce, request and collect.
+        self.poll_ghost();
         // Code lenses (T726): notice edits, refresh when due, resolve visible.
         self.poll_code_lens();
         self.poll_dap();

@@ -7239,7 +7239,7 @@ new action.
   - Optionally, inline values using T614's virtual text.
 
   Needs T608 first. **Medium–large.**
-- [ ] **T618 — Inline ghost-text completion.** A grep for
+- [x] **T618 — Inline ghost-text completion.** A grep for
   `inlineCompletion` or `ghost` finds nothing. Neovim 0.12 supports
   `textDocument/inlineCompletion`, and Zed has Edit Predictions. Fix:
   - Add the LSP `inlineCompletion` request and capability, which also
@@ -7251,6 +7251,12 @@ new action.
   - Drop stale suggestions when the revision changes.
 
   Write the spec first. **Large.**
+
+  Done, with limits (spec: `crates/vix-lsp/spec/index.md` § Inline
+  (ghost-text) completion). Not done: only the first line of a suggestion is
+  drawn (all of it is inserted on accept); soft-wrapped views draw none; an
+  LSP item's `range` and `command` are ignored (it is inserted at the
+  cursor); only one suggestion is used, with no cycling.
 - [ ] **T619 — Per-document pull diagnostics.** Vix has no
   `textDocument/diagnostic`. It pulls only `workspace/diagnostic`, and
   only when Problems opens. Pull-only servers such as Roslyn therefore

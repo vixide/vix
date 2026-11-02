@@ -78,3 +78,14 @@ a separate CLI tool being installed. The host (`app.rs`'s `spawn_ai_cmd`)
 branches on `ai_provider` and dispatches to whichever path is configured;
 every call site above is unaffected either way, since both paths return the
 same "reply text or a failure" shape.
+
+## Fill-in-the-middle prompts (T618)
+
+`fim` builds the request for ghost-text completion (`inline_completion = "ai"`)
+and cleans the reply, with no I/O. `fim::INSTRUCTION` tells the model to reply
+with only the text to insert; `fim::input` joins the text before the cursor
+(its last 2000 characters) and after it (its next 500) around a `<CURSOR>`
+marker. The same `complete` call carries it, so every provider works.
+`fim::clean` strips a Markdown fence, drops an echo of the already-typed
+line prefix, trims leading newlines and trailing blanks, and keeps at most 8
+lines and 400 characters; a reply that is empty after that is no suggestion.
