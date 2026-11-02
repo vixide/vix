@@ -30,7 +30,7 @@ on top.
   `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
   extract helpers for `too_many_lines`, context structs for `too_many_arguments`,
   add `# Errors`/`# Panics`, etc.). `editor_core`'s modules are held to the same
-  plain `#![warn(clippy::pedantic)]` as everywhere else — there is no blanket
+  workspace `clippy::pedantic` as everywhere else — there is no blanket
   `#[allow(clippy::all, clippy::pedantic)]` anywhere in the crate.
 - Sanctioned exceptions are only a handful of **targeted** `too_many_lines` /
   `too_many_arguments` allows on specific functions that resist further

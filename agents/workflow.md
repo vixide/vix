@@ -101,6 +101,9 @@ reading job:
   the target locale, so it can never be a placeholder name.)
 - Check that every menu item has a `<label>.help` tooltip key; `show_menu_tooltips`
   is on by default, so a missing one is a blank hover.
+- Run `scripts/docs-coverage` after adding a user-facing crate: it lists crates
+  with no `docs/` page (`docs/coverage.md`); give the crate a page or add a
+  reasoned `EXCLUDE` entry.
 - Watch for counts and versions in prose (crate count, keymap count, language
   count, toolchain floor) — they are the first thing to go stale.
 

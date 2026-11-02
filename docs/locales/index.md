@@ -28,9 +28,12 @@ vix --locale fr
 
 ## Coverage and Fallback
 
-Translation coverage varies by language. English, Spanish, French, German, and
-Welsh are the fullest. Any key that is not translated for the active language
-**falls back to English**, so the interface is always fully usable.
+Translation coverage varies. The first fifteen (English through Japanese in the
+table below) have every UI string translated; Italian, Korean, Turkish, Dutch,
+Vietnamese, Indonesian, Thai, Persian, Ukrainian and Greek have only a handful
+of keys so far, and Klingon and Sindarin a few more. Any key that is not
+translated for the active language **falls back to English**, so the interface
+is always fully usable.
 
 ## Adding a Language
 
@@ -39,54 +42,37 @@ files and listing it in `locale_model`. See also `../internationalization/index.
 
 ## Available Languages
 
-| ISO 639-1 code | Endonym          | English equivalent |
-| -------------- | ---------------- | ------------------ |
-| ar             | العربية          | Arabic             |
-| bg             | Български        | Bulgarian          |
-| bh             | भोजपुरी          | Bhojpuri           |
-| bn             | বাংলা            | Bengali            |
-| cs             | Čeština          | Czech              |
-| cy             | Cymraeg          | Welsh              |
-| da             | Dansk            | Danish             |
-| de             | Deutsch          | German             |
-| el             | Ελληνικά         | Greek              |
-| en             | English          | English            |
-| es             | Español          | Spanish            |
-| et             | Eesti            | Estonian           |
-| eu             | Euskara          | Basque             |
-| fa             | فارسی            | Persian            |
-| fi             | Suomi            | Finnish            |
-| fr             | Français         | French             |
-| ga             | Gaeilge          | Irish              |
-| gu             | ગુજરાતી          | Gujarati           |
-| ha             | Harshen Hausa    | Hausa              |
-| hi             | हिन्दी           | Hindi              |
-| hr             | Hrvatski         | Croatian           |
-| hu             | Magyar           | Hungarian          |
-| id             | Bahasa Indonesia | Indonesian         |
-| it             | Italiano         | Italian            |
-| ja             | 日本語           | Japanese           |
-| jv             | Basa Jawa        | Javanese           |
-| ko             | 한국어           | Korean             |
-| lt             | Lietuvių         | Lithuanian         |
-| lv             | Latviešu         | Latvian            |
-| mr             | मराठी            | Marathi            |
-| mt             | Malti            | Maltese            |
-| nl             | Nederlands       | Dutch              |
-| pa             | ਪੰਜਾਬੀ           | Punjabi            |
-| pl             | Polski           | Polish             |
-| pt             | Português        | Portuguese         |
-| ro             | Română           | Romanian           |
-| ru             | Русский          | Russian            |
-| sk             | Slovenčina       | Slovak             |
-| sl             | Slovenščina      | Slovenian          |
-| sv             | Svenska          | Swedish            |
-| ta             | தமிழ்            | Tamil              |
-| te             | తెలుగు           | Telugu             |
-| tr             | Türkçe           | Turkish            |
-| ur             | اردو             | Urdu               |
-| vi             | Tiếng Việt       | Vietnamese         |
-| zh             | 普通话           | Mandarin           |
+The list is `LOCALES` in `crates/vix-locale-model`, in this order.
+
+| Code | Endonym | English equivalent |
+| ---- | ------- | ------------------ |
+| en | English | English |
+| es | Español | Spanish |
+| fr | Français | French |
+| de | Deutsch | German |
+| cy | Cymraeg | Welsh |
+| ga | Gaeilge | Irish |
+| gd | Gàidhlig | Scottish Gaelic |
+| pl | Polski | Polish |
+| pt | Português | Portuguese |
+| ru | Русский | Russian |
+| ar | العربية | Arabic |
+| hi | हिन्दी | Hindi |
+| bn | বাংলা | Bengali |
+| zh | 中文 | Chinese |
+| ja | 日本語 | Japanese |
+| it | Italiano | Italian |
+| ko | 한국어 | Korean |
+| tr | Türkçe | Turkish |
+| nl | Nederlands | Dutch |
+| vi | Tiếng Việt | Vietnamese |
+| id | Bahasa Indonesia | Indonesian |
+| th | ไทย | Thai |
+| fa | فارسی | Persian |
+| uk | Українська | Ukrainian |
+| el | Ελληνικά | Greek |
+| tlh | tlhIngan Hol | Klingon (constructed) |
+| sjn | Edhellen | Sindarin (constructed) |
 
 ---
 

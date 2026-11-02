@@ -43,8 +43,8 @@ leave the drift for later.
 3. **Internationalize new user-facing text.** Add the key to the right
    `crates/vix-i18n/locales/*.yml` namespace file across every language it already carries,
    render with `t!`. Never hard-code a display string.
-4. **Document every new public item.** `#![deny(missing_docs)]` is on at
-   every crate root; an undocumented `pub fn`/`struct`/field fails the build.
+4. **Document every new public item.** `missing_docs = "deny"` is set in the
+   workspace lints every crate inherits; an undocumented `pub fn`/`struct`/field fails the build.
 5. **Add/extend tests** — `tui/tests/integration/main.rs` (split by topic into
    `tui/tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
    tests. Prefer terminal-independent tests (build an `App`, feed

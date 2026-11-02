@@ -32,7 +32,7 @@ struct whose bools are independent, freely-combinable toggles.
 ## `vix-editor-core` — the code-editor widget (`crates/vix-editor-core/src/`)
 
 The fully-custom terminal code-editor crate. Every module — reused engine and
-Vix-owned alike — is held to the same plain `#![warn(clippy::pedantic)]` as
+Vix-owned alike — is held to the same workspace `clippy::pedantic` as
 every other crate; there is no blanket `#[allow(clippy::all, clippy::pedantic)]`
 anywhere in it. Reached from the host via `vix-editor`'s `CodeEditor` (a
 re-export of
