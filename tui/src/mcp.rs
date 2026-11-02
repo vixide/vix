@@ -31,10 +31,10 @@ impl Host for ShellHost {
             .unwrap_or_default()
     }
 
-    fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, String>> {
+    fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, vix_mcp_server::HostError>> {
         #[cfg(feature = "sql")]
         {
-            Some(sqlite_schema(path))
+            Some(sqlite_schema(path).map_err(Into::into))
         }
         // Without the `sql` capability there is no database reader.
         #[cfg(not(feature = "sql"))]
@@ -48,8 +48,8 @@ impl Host for ShellHost {
 /// Read one `SQLite` file's schema through `vix-db`, grouping its
 /// `(object, kind, column, type)` rows into tables.
 #[cfg(feature = "sql")]
-fn sqlite_schema(path: &Path) -> Result<Vec<Table>, String> {
-    crate::db::catalog::read_sqlite_schema(path).map_err(|e| e.to_string()).map(|rows| {
+fn sqlite_schema(path: &Path) -> Result<Vec<Table>, crate::db::session::SessionError> {
+    crate::db::catalog::read_sqlite_schema(path).map(|rows| {
         let mut tables: Vec<Table> = Vec::new();
         for (name, kind, column, data_type) in rows {
             if tables

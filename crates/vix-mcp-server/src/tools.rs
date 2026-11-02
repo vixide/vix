@@ -2,7 +2,7 @@
 //! implementations over the workspace and the [`Host`].
 
 use crate::Host;
-use crate::workspace::{self, read_text, relative};
+use crate::workspace::{self, WorkspaceError, read_text, relative};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -71,14 +71,62 @@ pub fn list() -> Value {
     ]})
 }
 
+/// Why a tool call failed (T610).
+///
+/// `Display` text matches the earlier `String` errors; it becomes the MCP
+/// result's error text.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ToolError {
+    /// No tool has this name.
+    UnknownTool(String),
+    /// A required `path` argument is absent or not a string.
+    MissingPath,
+    /// An optional `path` argument is present but not a string.
+    PathNotString,
+    /// The workspace boundary refused the path, or the file could not be read.
+    Workspace(WorkspaceError),
+}
+
+impl std::fmt::Display for ToolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownTool(name) => write!(f, "unknown tool: {name}"),
+            Self::MissingPath => f.write_str("missing string argument: path"),
+            Self::PathNotString => f.write_str("argument path must be a string"),
+            Self::Workspace(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ToolError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Workspace(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<WorkspaceError> for ToolError {
+    fn from(e: WorkspaceError) -> Self {
+        Self::Workspace(e)
+    }
+}
+
 /// Run tool `name` with `args`, returning its structured result or a
-/// tool-level failure message.
+/// tool-level failure.
 ///
 /// # Errors
 ///
-/// Returns a message for an unknown tool, a missing `path`, or anything the
-/// workspace boundary refuses.
-pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<Value, String> {
+/// Returns a [`ToolError`] for an unknown tool, a missing `path`, or anything
+/// the workspace boundary refuses.
+pub fn call<H: Host>(
+    root: &Path,
+    host: &H,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
     match name {
         LIST_OPEN_BUFFERS => Ok(json!({
             "root": root.to_string_lossy(),
@@ -106,15 +154,15 @@ pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<
         }
         DIAGNOSTICS => diagnostics(root, host, args),
         DB_SCHEMA => Ok(db_schema(root, host)),
-        other => Err(format!("unknown tool: {other}")),
+        other => Err(ToolError::UnknownTool(other.to_string())),
     }
 }
 
 /// The `path` argument, required.
-fn required_path(args: &Value) -> Result<&str, String> {
+fn required_path(args: &Value) -> Result<&str, ToolError> {
     args.get("path")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing string argument: path".to_string())
+        .ok_or(ToolError::MissingPath)
 }
 
 /// The host's open buffers, canonicalized, deduplicated, and filtered to
@@ -187,14 +235,14 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
 
 /// The `diagnostics` tool: merge-conflict blocks in one file, or in every
 /// open buffer when `path` is absent.
-fn diagnostics<H: Host>(root: &Path, host: &H, args: &Value) -> Result<Value, String> {
+fn diagnostics<H: Host>(root: &Path, host: &H, args: &Value) -> Result<Value, ToolError> {
     let requests: Vec<String> = match args.get("path") {
         Some(Value::String(p)) => vec![p.clone()],
         Some(Value::Null) | None => open_buffers(root, host)
             .iter()
             .map(|p| relative(root, p))
             .collect(),
-        Some(_) => return Err("argument path must be a string".into()),
+        Some(_) => return Err(ToolError::PathNotString),
     };
     let explicit = matches!(args.get("path"), Some(Value::String(_)));
     let mut found = Vec::new();
@@ -203,7 +251,7 @@ fn diagnostics<H: Host>(root: &Path, host: &H, args: &Value) -> Result<Value, St
         // error; an open buffer that became unreadable is just skipped.
         let (path, text) = match read_text(root, request) {
             Ok(read) => read,
-            Err(e) if explicit => return Err(e),
+            Err(e) if explicit => return Err(e.into()),
             Err(_) => continue,
         };
         for conflict in vix_conflict_tool::find_all(&text) {
@@ -248,7 +296,9 @@ fn db_schema<H: Host>(root: &Path, host: &H) -> Value {
                     .collect();
                 databases.push(json!({"path": rel, "tables": tables}));
             }
-            Some(Err(error)) => databases.push(json!({"path": rel, "error": error})),
+            Some(Err(error)) => {
+                databases.push(json!({"path": rel, "error": error.to_string()}));
+            }
         }
     }
     json!({"databases": databases})

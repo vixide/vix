@@ -29,6 +29,91 @@ const SKIP_DIRS: &[&str] = &["target", "node_modules"];
 /// File extensions a SQLite database candidate may carry.
 const DB_EXTENSIONS: &[&str] = &["db", "db3", "sqlite", "sqlite3"];
 
+/// Why a workspace path could not be resolved or read (T610).
+///
+/// `Display` text matches the earlier `String` errors, which reach the MCP
+/// client as the tool's error text.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum WorkspaceError {
+    /// The requested path is empty.
+    EmptyPath,
+    /// The path leaves the workspace root.
+    OutsideRoot {
+        /// The path as requested.
+        request: String,
+    },
+    /// The path does not exist in the workspace.
+    NotFound {
+        /// The path as requested.
+        request: String,
+    },
+    /// The path is not a regular file.
+    NotRegular {
+        /// The path as requested.
+        request: String,
+    },
+    /// The path names a file that may hold secrets (see [`is_secret`]).
+    Secret {
+        /// The path as requested.
+        request: String,
+    },
+    /// The file is over [`MAX_FILE_BYTES`].
+    TooLarge {
+        /// The workspace-relative path.
+        path: String,
+        /// The file's size in bytes.
+        size: u64,
+    },
+    /// The file could not be read.
+    Io {
+        /// The workspace-relative path.
+        path: String,
+        /// The underlying I/O error.
+        source: std::io::Error,
+    },
+    /// The file holds a NUL byte.
+    Binary {
+        /// The workspace-relative path.
+        path: String,
+    },
+    /// The file is not valid UTF-8.
+    NotUtf8 {
+        /// The workspace-relative path.
+        path: String,
+    },
+}
+
+impl std::fmt::Display for WorkspaceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyPath => f.write_str("path is empty"),
+            Self::OutsideRoot { request } => write!(f, "{request}: outside the workspace root"),
+            Self::NotFound { request } => write!(f, "{request}: no such file in the workspace"),
+            Self::NotRegular { request } => write!(f, "{request}: not a regular file"),
+            Self::Secret { request } => {
+                write!(f, "{request}: refused, the file may hold secrets")
+            }
+            Self::TooLarge { path, size } => write!(
+                f,
+                "{path}: {size} bytes is over the {MAX_FILE_BYTES}-byte limit"
+            ),
+            Self::Io { path, source } => write!(f, "{path}: {source}"),
+            Self::Binary { path } => write!(f, "{path}: binary file"),
+            Self::NotUtf8 { path } => write!(f, "{path}: not UTF-8 text"),
+        }
+    }
+}
+
+impl std::error::Error for WorkspaceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
 /// Resolve `request` (workspace-relative, or absolute) to a canonical path of
 /// an existing regular file inside `root`.
 ///
@@ -38,26 +123,39 @@ const DB_EXTENSIONS: &[&str] = &["db", "db3", "sqlite", "sqlite3"];
 ///
 /// # Errors
 ///
-/// Returns a message for a path that is empty, leaves the root, does not
-/// exist, is not a regular file, or names a secret (see [`is_secret`]).
-pub fn resolve(root: &Path, request: &str) -> Result<PathBuf, String> {
+/// Returns a [`WorkspaceError`] for a path that is empty, leaves the root,
+/// does not exist, is not a regular file, or names a secret (see
+/// [`is_secret`]).
+pub fn resolve(root: &Path, request: &str) -> Result<PathBuf, WorkspaceError> {
+    let request_owned = || request.to_string();
     if request.trim().is_empty() {
-        return Err("path is empty".into());
+        return Err(WorkspaceError::EmptyPath);
     }
-    let lexical = lexical_join(root, Path::new(request))
-        .ok_or_else(|| format!("{request}: outside the workspace root"))?;
+    let lexical = lexical_join(root, Path::new(request)).ok_or_else(|| {
+        WorkspaceError::OutsideRoot {
+            request: request_owned(),
+        }
+    })?;
     let canonical = lexical
         .canonicalize()
-        .map_err(|_| format!("{request}: no such file in the workspace"))?;
+        .map_err(|_| WorkspaceError::NotFound {
+            request: request_owned(),
+        })?;
     if !canonical.starts_with(root) || canonical == root {
-        return Err(format!("{request}: outside the workspace root"));
+        return Err(WorkspaceError::OutsideRoot {
+            request: request_owned(),
+        });
     }
     if !canonical.is_file() {
-        return Err(format!("{request}: not a regular file"));
+        return Err(WorkspaceError::NotRegular {
+            request: request_owned(),
+        });
     }
     let rel = canonical.strip_prefix(root).unwrap_or(&canonical);
     if is_secret(rel) {
-        return Err(format!("{request}: refused, the file may hold secrets"));
+        return Err(WorkspaceError::Secret {
+            request: request_owned(),
+        });
     }
     Ok(canonical)
 }
@@ -139,22 +237,23 @@ pub fn relative(root: &Path, abs: &Path) -> String {
 ///
 /// Everything [`resolve`] refuses, plus a file over [`MAX_FILE_BYTES`], a
 /// binary file (one holding a NUL byte), or invalid UTF-8.
-pub fn read_text(root: &Path, request: &str) -> Result<(String, String), String> {
+pub fn read_text(root: &Path, request: &str) -> Result<(String, String), WorkspaceError> {
     let path = resolve(root, request)?;
     let rel = relative(root, &path);
-    let size = fs::metadata(&path)
-        .map_err(|e| format!("{rel}: {e}"))?
-        .len();
+    let io_error = |source| WorkspaceError::Io {
+        path: rel.clone(),
+        source,
+    };
+    let size = fs::metadata(&path).map_err(io_error)?.len();
     if size > MAX_FILE_BYTES {
-        return Err(format!(
-            "{rel}: {size} bytes is over the {MAX_FILE_BYTES}-byte limit"
-        ));
+        return Err(WorkspaceError::TooLarge { path: rel, size });
     }
-    let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
+    let bytes = fs::read(&path).map_err(io_error)?;
     if bytes.contains(&0) {
-        return Err(format!("{rel}: binary file"));
+        return Err(WorkspaceError::Binary { path: rel });
     }
-    let text = String::from_utf8(bytes).map_err(|_| format!("{rel}: not UTF-8 text"))?;
+    let text =
+        String::from_utf8(bytes).map_err(|_| WorkspaceError::NotUtf8 { path: rel.clone() })?;
     Ok((rel, text))
 }
 
@@ -259,6 +358,51 @@ mod tests {
         assert!(resolve(&root, "").is_err());
         assert!(resolve(&root, ".").is_err());
         assert!(resolve(&root, "missing.txt").is_err());
+    }
+
+    #[test]
+    fn every_workspace_error_variant_is_reachable_with_its_text() {
+        let root = scratch("variants");
+        fs::create_dir_all(root.join("dir")).unwrap();
+        fs::write(root.join(".env"), "TOKEN=x").unwrap();
+        fs::write(root.join("bin.dat"), [0u8, 1, 2]).unwrap();
+        fs::write(root.join("latin.txt"), [0xffu8, 0xfe, b'a']).unwrap();
+        let big = fs::File::create(root.join("big.txt")).unwrap();
+        big.set_len(MAX_FILE_BYTES + 1).unwrap();
+
+        let err = resolve(&root, " ").unwrap_err();
+        assert!(matches!(err, WorkspaceError::EmptyPath));
+        assert_eq!(err.to_string(), "path is empty");
+        let err = resolve(&root, "../a").unwrap_err();
+        assert!(matches!(err, WorkspaceError::OutsideRoot { .. }));
+        assert_eq!(err.to_string(), "../a: outside the workspace root");
+        let err = resolve(&root, "missing").unwrap_err();
+        assert!(matches!(err, WorkspaceError::NotFound { .. }));
+        assert_eq!(err.to_string(), "missing: no such file in the workspace");
+        let err = resolve(&root, "dir").unwrap_err();
+        assert!(matches!(err, WorkspaceError::NotRegular { .. }));
+        assert_eq!(err.to_string(), "dir: not a regular file");
+        let err = resolve(&root, ".env").unwrap_err();
+        assert!(matches!(err, WorkspaceError::Secret { .. }));
+        assert_eq!(err.to_string(), ".env: refused, the file may hold secrets");
+
+        let err = read_text(&root, "big.txt").unwrap_err();
+        assert!(matches!(err, WorkspaceError::TooLarge { .. }));
+        assert!(err.to_string().starts_with("big.txt: 2097153 bytes is over"));
+        let err = read_text(&root, "bin.dat").unwrap_err();
+        assert!(matches!(err, WorkspaceError::Binary { .. }));
+        assert_eq!(err.to_string(), "bin.dat: binary file");
+        let err = read_text(&root, "latin.txt").unwrap_err();
+        assert!(matches!(err, WorkspaceError::NotUtf8 { .. }));
+        assert_eq!(err.to_string(), "latin.txt: not UTF-8 text");
+
+        let io = WorkspaceError::Io {
+            path: "x".into(),
+            source: std::io::Error::other("denied"),
+        };
+        assert_eq!(io.to_string(), "x: denied");
+        assert!(std::error::Error::source(&io).is_some());
+        assert!(std::error::Error::source(&WorkspaceError::EmptyPath).is_none());
     }
 
     #[cfg(unix)]

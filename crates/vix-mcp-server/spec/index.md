@@ -45,6 +45,33 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
 - `file_uri` / `uri_path` convert between absolute paths and `file://` URIs
   for `resources/list` and `resources/read`.
 
+## Errors (T610)
+
+`workspace::WorkspaceError` (returned by `resolve` and `read_text`) and
+`tools::ToolError` (returned by `tools::call`):
+
+| Type | Variant | Meaning |
+| --- | --- | --- |
+| `WorkspaceError` | `EmptyPath` | the requested path is empty |
+| | `OutsideRoot { request }` | the path leaves the workspace root |
+| | `NotFound { request }` | the path does not exist |
+| | `NotRegular { request }` | the path is not a regular file |
+| | `Secret { request }` | the path names a file that may hold secrets |
+| | `TooLarge { path, size }` | the file is over `MAX_FILE_BYTES` |
+| | `Io { path, source }` | the file could not be read |
+| | `Binary { path }` | the file holds a NUL byte |
+| | `NotUtf8 { path }` | the file is not valid UTF-8 |
+| `ToolError` | `UnknownTool(name)` | no tool has this name |
+| | `MissingPath` | a required `path` argument is absent |
+| | `PathNotString` | an optional `path` argument is not a string |
+| | `Workspace(WorkspaceError)` | the workspace boundary refused the path |
+
+`Host::sqlite_schema` reports failures as `HostError`
+(`Box<dyn Error + Send + Sync>`); only its `Display` text reaches the client.
+Every type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
+`thiserror`). `Display` is the same text the earlier `String` errors carried,
+so the `isError` tool results are unchanged.
+
 ## Tests
 
 Unit tests run every method against a fake `Host` over a scratch

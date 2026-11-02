@@ -19,6 +19,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Breaking
 
+- **Typed MCP server errors** (T610, sixth slice): `vix_mcp_server::workspace::{resolve, read_text}` return the `#[non_exhaustive]` `WorkspaceError`, `tools::call` returns `ToolError`, and `Host::sqlite_schema` reports a `HostError` (a boxed error) instead of `String`. `Display` text is unchanged.
 - **Typed database session errors** (T610, fifth slice): `vix_db::session::Session::{connect, send, restart, run}` and `vix_db::catalog::read_sqlite_schema` return the `#[non_exhaustive]` `SessionError` (`Spawn`, `Connect`, `Setup`, `NotConnected`, `Query`) instead of `String`. `Display` text is unchanged.
 - **Typed REST body-file errors** (T610, fourth slice): `vix_http_client::rest::load_body_file` returns the `#[non_exhaustive]` `BodyFileError` (`Outside`, `Read`) instead of `String`. `Display` text is unchanged.
 - **Typed tool errors** (T610, third slice): the small tool crates return `#[non_exhaustive]` error enums instead of `String` — `vix_base_tool::BaseError`, `vix_base64_tool::Base64Error`, `vix_url_tool::UrlError`, `vix_calculator_tool::CalcError` (also carried by `Outcome::Err`), `vix_format_tool::FormatError`, `vix_jwt_tool::JwtError`, `vix_edit_value::ParseError` (`Tree::from_text`) and `vix_script::CatalogError` (`Catalog::insert_toml`). `Display` text is unchanged. `vix-db`, `vix-http-client`, `vix-mcp-server` and `gui/vix-slint` are still to convert.

@@ -55,6 +55,9 @@ pub struct Table {
     pub columns: Vec<Column>,
 }
 
+/// An error the [`Host`] reports; only its `Display` text reaches the client.
+pub type HostError = Box<dyn std::error::Error + Send + Sync>;
+
 /// What the App shell supplies to the protocol core.
 pub trait Host {
     /// The files Vix last had open in the workspace at canonical `root`
@@ -63,7 +66,12 @@ pub trait Host {
 
     /// The tables and views of the `SQLite` database at `path`, opened
     /// read-only. `None` when this build cannot read databases at all.
-    fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, String>>;
+    ///
+    /// # Errors
+    ///
+    /// Any error whose `Display` text is shown to the client as the
+    /// database's error.
+    fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, HostError>>;
 }
 
 /// The protocol state for one stdio session.
@@ -210,8 +218,8 @@ impl<H: Host> Server<H> {
                 "structuredContent": result,
                 "isError": false,
             }),
-            Err(message) => json!({
-                "content": [{"type": "text", "text": message}],
+            Err(error) => json!({
+                "content": [{"type": "text", "text": error.to_string()}],
                 "isError": true,
             }),
         })
@@ -239,7 +247,7 @@ impl<H: Host> Server<H> {
             .and_then(Value::as_str)
             .ok_or((INVALID_PARAMS, "missing uri".to_string()))?;
         let path = uri_path(uri).ok_or((INVALID_PARAMS, format!("not a file:// URI: {uri}")))?;
-        let (_, text) = workspace::read_text(&self.root, &path).map_err(|e| (INVALID_PARAMS, e))?;
+        let (_, text) = workspace::read_text(&self.root, &path).map_err(|e| (INVALID_PARAMS, e.to_string()))?;
         Ok(json!({"contents": [{"uri": uri, "mimeType": "text/plain", "text": text}]}))
     }
 }

@@ -16,7 +16,7 @@ impl Host for FakeHost {
         self.buffers.clone()
     }
 
-    fn sqlite_schema(&self, _path: &Path) -> Option<Result<Vec<Table>, String>> {
+    fn sqlite_schema(&self, _path: &Path) -> Option<Result<Vec<Table>, crate::HostError>> {
         self.schema.clone().map(Ok)
     }
 }
@@ -81,6 +81,29 @@ fn call(server: &mut Server<FakeHost>, tool: &str, args: &Value) -> Value {
         &json!({"name": tool, "arguments": args}),
     )["result"]
         .clone()
+}
+
+#[test]
+fn tool_errors_keep_their_text() {
+    use crate::tools::{ToolError, call as tool_call};
+    let root = workspace("tool-errors");
+    let host = FakeHost {
+        buffers: vec![],
+        schema: None,
+    };
+    let err = tool_call(&root, &host, "nope", &json!({})).unwrap_err();
+    assert!(matches!(err, ToolError::UnknownTool(_)));
+    assert_eq!(err.to_string(), "unknown tool: nope");
+    let err = tool_call(&root, &host, "read_buffer", &json!({})).unwrap_err();
+    assert!(matches!(err, ToolError::MissingPath));
+    assert_eq!(err.to_string(), "missing string argument: path");
+    let err = tool_call(&root, &host, "diagnostics", &json!({"path": 3})).unwrap_err();
+    assert!(matches!(err, ToolError::PathNotString));
+    assert_eq!(err.to_string(), "argument path must be a string");
+    let err = tool_call(&root, &host, "read_buffer", &json!({"path": ".env"})).unwrap_err();
+    assert!(matches!(err, ToolError::Workspace(_)));
+    assert_eq!(err.to_string(), ".env: refused, the file may hold secrets");
+    assert!(std::error::Error::source(&err).is_some());
 }
 
 #[test]
