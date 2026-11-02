@@ -9,7 +9,12 @@
     reachable from the menu bar, the command palette (<code>Ctrl+P</code>),
     or a keybinding. See the
     <a href="https://github.com/vixide/vix/blob/main/index.md">full README</a>
-    on GitHub for the complete, exact wording.
+    on GitHub for the complete, exact wording. The reference lists every
+    action (801) and setting (101) as generated from the code.
+  </p>
+  <p>
+    Items marked <em>(2.0)</em> are merged for the next release, 2.0, which is
+    not out yet; the latest release is 1.8.0.
   </p>
 </section>
 
@@ -21,8 +26,9 @@
   <div class="prose" style="margin: 0 auto;">
     <ul>
       <li><strong>Editor</strong> — tabs, undo/redo, tree-sitter syntax highlighting, soft wrap, bracket matching, absolute or relative line numbers, visible whitespace, indent guides, rainbow brackets, sticky scroll, a code-overview minimap, a read-only lock, and configurable indentation.</li>
-      <li><strong>Editing comforts</strong> — Smart Home, comment toggle and comment banners, surround selection with brackets/quotes, align lines on a delimiter, increment/decrement and toggle the value under the cursor, delete or transpose a character/word/sentence/paragraph/section, wrap (fill) to a column, Emmet expansion, find next/previous occurrence of the selection, live go-to-line preview, and on-save trim-trailing-whitespace / ensure-final-newline / format-on-save / auto-save / auto-reload. On macOS, <code>Command</code> drives the same bindings as <code>Control</code>.</li>
+      <li><strong>Editing comforts</strong> — Smart Home, comment toggle and comment banners, surround selection with brackets/quotes, align lines on a delimiter, increment/decrement and toggle the value under the cursor, delete or transpose a character/word/sentence/paragraph/section, wrap (fill) to a column, Emmet expansion, find next/previous occurrence of the selection, live go-to-line preview, and on-save trim-trailing-whitespace / ensure-final-newline / format-on-save / auto-save / auto-reload. Saves are safe by design (2.0): files with several hard links or another owner are written in place, and the original is copied to a recovery directory first. On macOS, <code>Command</code> drives the same bindings as <code>Control</code>.</li>
       <li><strong>Line &amp; text transforms</strong> — sort, dedupe, shuffle, reverse, squeeze blank lines, convert line endings (LF/CRLF), case conversions, and ROT13.</li>
+      <li><strong>Inline ghost-text completion (2.0)</strong> — a dimmed suggestion after the cursor from a language server or an AI fill-in-the-middle prompt (<code>inline_completion = "off" | "lsp" | "ai"</code>, off by default); <code>Tab</code> accepts, <code>Ctrl+Right</code> accepts one word, <code>Esc</code> dismisses.</li>
       <li><strong>Clipboard history</strong> — a kill-ring of recent copies/cuts with a paste-from-history picker.</li>
       <li><strong>Persistent undo</strong> — the branch-preserving undo tree is saved per file and restored on reopen.</li>
       <li><strong>Multi-cursor &amp; column editing</strong> — a caret on every match of the selection, or a rectangular block.</li>
@@ -56,8 +62,9 @@
   <div class="prose" style="margin: 0 auto;">
     <ul>
       <li><strong>File explorer</strong> — a directory tree with ephemeral preview tabs, copy/cut/paste with conflict prompts, multi-select, and delete; open buffers follow file moves.</li>
+      <li><strong>Project environments (2.0)</strong> — Vix detects a <code>.venv</code>, direnv, or mise environment and applies it to language servers, tasks, and the terminal; direnv and mise run only in a workspace you trusted.</li>
       <li><strong>Project menu</strong> — per-project-type lifecycle commands (configure, compile, test, install, package, run), tasks discovered from npm/yarn/pnpm/bun, Deno, Composer, just, go-task, Rake, and Make, test-at-point, and a monorepo subproject family.</li>
-      <li><strong>Integrated terminal &amp; tasks</strong> — a shell in a panel, plus named <code>tasks.toml</code> commands and a compare-with-file diff.</li>
+      <li><strong>Integrated terminal &amp; tasks</strong> — a shell in a panel, plus named <code>tasks.toml</code> commands and a compare-with-file diff. Ctrl+click a <code>path:line:col</code> in terminal output to open it in the editor (2.0).</li>
       <li><strong>Split panes</strong> — nested horizontal/vertical splits up to a 2×2 grid.</li>
       <li><strong>Scratch buffer</strong> — a throwaway, unsaved buffer for quick notes.</li>
     </ul>
@@ -71,9 +78,9 @@
   </header>
   <div class="prose" style="margin: 0 auto;">
     <ul>
-      <li><strong>Git</strong> — status/diff/blame, stage/unstage/revert per hunk, diff navigation, branch switch &amp; merge, stash, amend, and a merge-conflict resolver.</li>
+      <li><strong>Git</strong> — status/diff/blame, stage/unstage/revert per hunk, diff navigation, branch switch &amp; merge, stash, amend, and a merge-conflict resolver. Newer (2.0): a choosable change-gutter base (HEAD, index, disk, or a branch), a read-only multi-file branch/commit-range review with line comments you can export, and an interactive rebase and cherry-pick editor.</li>
       <li><strong>Language Server Protocol</strong> — diagnostics, hover, completion, go-to, references, call hierarchy, rename, code actions/lens, and inlay hints, configured per language.</li>
-      <li><strong>Debugger</strong> — a DAP client: breakpoints, stepping, call stack, variables, watches, and an evaluate REPL.</li>
+      <li><strong>Debugger</strong> — a DAP client: breakpoints, stepping, call stack, variables, watches, and an evaluate REPL; 2.0 adds conditional, hit-count, and log-message breakpoints and more.</li>
       <li><strong>Test runner</strong> — parses <code>cargo test</code>/pytest-style output into a pass/fail panel with jump-to-failure.</li>
       <li><strong>TODO finder</strong> — scan the project for TODO/FIXME/HACK/XXX/BUG/NOTE comment tags into a jump-list.</li>
     </ul>

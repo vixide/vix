@@ -50,14 +50,15 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5`}</code
   <div class="card-grid">
     <Card heading="A real Cargo workspace" href="https://github.com/vixide/vix">
       <p class="card-description">
-        A thin App shell over more than 100 focused <code>vix-*</code> member
-        crates — one crate, one job, each with its own spec.
+        A thin App shell over 145 focused <code>vix-*</code> member crates, plus
+        desktop GUIs — one crate, one job, each with its own spec.
       </p>
     </Card>
     <Card heading="Ten keymaps" href="/features/">
       <p class="card-description">
         Apple, VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ
-        (macOS/Windows), Eclipse, and Sublime Text — switch anytime.
+        (macOS/Windows), Eclipse, and Sublime Text — switch anytime. Plus 21
+        themes and a UI translated into 15 languages.
       </p>
     </Card>
     <Card heading="LSP, DAP, and Git" href="/features/">
@@ -95,12 +96,15 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5`}</code
   </header>
 
   <div class="prose" style="margin: 0 auto;">
-    <p>Requires a Rust toolchain (1.96+):</p>
+    <p>Install a prebuilt binary, then run <code>vix</code>:</p>
     <pre><code
-      >{`cargo run                  # open the editor rooted at the current directory
-cargo run -- src/main.rs   # open one or more files on launch
-cargo build --release      # optimized binary at target/release/vix`}</code
+      >{`brew install vixide/homebrew-tap/vix-tui   # or: npm install -g @vixide/vix
+vix                                        # open the current directory`}</code
     ></pre>
+    <p>
+      Press <code>Ctrl+P</code> to find a file, <code>F1</code> to see every
+      shortcut, and <code>Ctrl+Q</code> to quit.
+    </p>
     <p style="text-align: center; margin-top: 2rem;">
       <a class="button button-primary" href="/install/">Full install instructions →</a>
     </p>
@@ -114,7 +118,8 @@ cargo build --release      # optimized binary at target/release/vix`}</code
   </header>
   <p>
     Vix is licensed under your choice of Apache-2.0, BSD-3-Clause, MIT,
-    GPL-2.0, or GPL-3.0. Development is
+    GPL-2.0, or GPL-3.0. The latest release is 1.8.0; 2.0, still in
+    development, is the next. Development is
     specification-driven: every crate owns a spec at
     <code>crates/&lt;crate&gt;/spec/index.md</code>, and the code implements it.
   </p>
