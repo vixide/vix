@@ -280,6 +280,12 @@ pub struct Settings {
     /// for `ai_provider = "cli"`; optional for `"ollama"` (a local server
     /// needs no key by default).
     pub ai_api_key_command: String,
+    /// Agent Client Protocol coding agents (T635): each entry is a command
+    /// line (split on whitespace, run without a shell), e.g.
+    /// `"gemini --experimental-acp"`. **AI → Start Agent** starts the first
+    /// one, and only in a trusted workspace. Empty by default. See
+    /// `crates/vix-acp/spec/index.md`.
+    pub ai_agents: Vec<String>,
     /// Configured debug adapters (DAP), matched to files by extension. Empty by
     /// default — add the adapters you have installed.
     pub debug_adapters: Vec<DebugAdapter>,
@@ -922,6 +928,7 @@ impl Default for Settings {
             ai_endpoint: String::new(),
             ai_model: String::new(),
             ai_api_key_command: String::new(),
+            ai_agents: Vec::new(),
             debug_adapters: Vec::new(),
             test_command: "cargo test".to_string(),
             test_width: 40,

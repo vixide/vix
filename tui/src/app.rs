@@ -1,6 +1,8 @@
 //! Application state and event handling.
 
 #[cfg(feature = "ai")]
+mod acp;
+#[cfg(feature = "ai")]
 mod ai;
 #[cfg(not(feature = "ai"))]
 mod ai_off;
@@ -267,6 +269,11 @@ pub enum PromptKind {
     /// (T125's "Edit selection with instruction") — the target range was
     /// captured in `ai_instruction_target` when this prompt was opened.
     AiInstruction,
+    /// Enter a prompt to send the running ACP agent (**AI → Prompt Agent…**, T635).
+    AcpPrompt,
+    /// Answer an ACP agent's permission request: `y` allows once, anything
+    /// else (or Esc) denies (T635).
+    AcpPermission,
     /// Enter the new name for the symbol under the cursor (LSP rename).
     LspRename,
     /// Enter replacement text for the cursor's linked-editing ranges (LSP).
@@ -746,6 +753,12 @@ impl AiDest {
         }
     }
 }
+
+#[cfg(feature = "ai")]
+use acp::AcpHost;
+/// Stand-in for `AcpHost` in a build without the `ai` feature; never constructed.
+#[cfg(not(feature = "ai"))]
+enum AcpHost {}
 
 /// Stand-in for `AiDiffState` in a build without the `ai` feature; never constructed.
 #[cfg(not(feature = "ai"))]
@@ -2258,6 +2271,10 @@ pub struct App {
     pub(crate) terminals: crate::terminal::Tabs<crate::terminal::Terminal>,
     /// AI diff-review overlay (accept/reject an Annotate/Improve transform), when open.
     ai_diff: Option<AiDiffState>,
+    /// The running ACP coding agent (T635), when started.
+    acp: Option<AcpHost>,
+    /// The AI chat panel, set aside while an ACP prompt is open (T635).
+    acp_parked_panel: Option<crate::ai_panel::Panel>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -3023,6 +3040,8 @@ impl App {
             ai_panel: None,
             terminals: crate::terminal::Tabs::default(),
             ai_diff: None,
+            acp: None,
+            acp_parked_panel: None,
             theme_preview: None,
             hbar_active: None,
             editor_hmax: 0,
@@ -13657,6 +13676,12 @@ impl App {
             PromptKind::AiInstruction => self.submit_ai_instruction(&prompt.input),
             #[cfg(not(feature = "ai"))]
             PromptKind::AiInstruction => {}
+            #[cfg(feature = "ai")]
+            PromptKind::AcpPrompt => self.submit_acp_prompt(&prompt.input),
+            #[cfg(feature = "ai")]
+            PromptKind::AcpPermission => self.submit_acp_permission(&prompt.input),
+            #[cfg(not(feature = "ai"))]
+            PromptKind::AcpPrompt | PromptKind::AcpPermission => {}
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

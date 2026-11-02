@@ -188,6 +188,9 @@ sticky_search_highlight = true
 # replaced with the action's instruction; {file}, if present, is
 # replaced with a temp file path (otherwise stdin carries the text).
 ai_command = "claude -p {prompt}"
+# Agent Client Protocol coding agents (command lines, run without a shell).
+# AI -> Start Agent starts the first, only in a trusted workspace.
+ai_agents = []
 # Review AI replace transforms (Annotate / Improve) as an accept/reject
 # diff before applying, instead of overwriting the text immediately.
 ai_diff_review = true

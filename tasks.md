@@ -7493,6 +7493,20 @@ new action.
   trust model first, since agents can write files. Tests: a mock agent
   binary under `tui/examples/`, a denied permission writes nothing, and edits
   land as a pending diff. **Large.**
+  **Status: first slice done, not complete (left `[ ]`).** Done: the
+  `vix-acp` crate (NDJSON framing, pure session state machine, path policy,
+  process transport behind `process`); `ai_agents`; `ai.agent_start`,
+  `ai.agent_prompt`, `ai.agent_stop`; trust-gated spawn (untrusted workspaces
+  never spawn, tested); deny-by-default permission prompt; agent writes land as
+  a pending `vix-ai-diff` review; reads answered from open buffers; tool calls
+  and plan shown as AI-panel transcript lines; scripted fake agent
+  (`crates/vix-acp/tests/fake_agent.py`, python3, Unix only) instead of a Rust
+  binary under `tui/examples/`. Framing is NDJSON, not `vix-lsp-core`'s
+  `Content-Length`. Remaining: pick among several `ai_agents` (only the first is
+  started), create new files from an agent write, a real pane for plan/tool
+  calls, session resume/load, the terminal capability, and Windows coverage of
+  the fake-agent tests. The write reply says "ok" once the diff is queued, not
+  once it is accepted (ACP has no pending reply).
 - [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a

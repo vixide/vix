@@ -68,6 +68,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `ai_endpoint`   | string | `""`     | HTTP provider endpoint override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
 | `ai_model`      | string | `""`     | HTTP provider model id override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
 | `ai_api_key_command` | string | `""` | Command whose stdout is the HTTP provider's API key, tried before the OS keyring (same shape as the DB workbench's `password_command`). Ignored when `ai_provider` is `"cli"`. |
+| `ai_agents`     | list   | `[]`     | Agent Client Protocol coding agents (T635): each entry is a command line, e.g. `"gemini --experimental-acp"`, run without a shell. **AI → Start Agent** starts the first one, only in a trusted workspace. See `crates/vix-acp/spec/index.md`. |
 | `ai_diff_review`| bool   | `true`   | Review AI replace transforms (Annotate / Improve) as an accept/reject diff before applying, instead of overwriting immediately. |
 | `editorconfig`  | bool   | `true`   | Apply `.editorconfig` rules (indent style/size, trim trailing whitespace, final newline) per opened file, overriding the global settings. |
 | `auto_pair`     | bool   | `true`   | Auto-insert the matching closer when typing `(` `[` `{` `"` `'` `` ` `` (wrap a selection; step over a closer; Backspace deletes an empty pair). Toggle via **View → Editor → Auto-Pair Brackets**. |
@@ -160,6 +161,10 @@ ai_command = "claude -p \"{prompt}\""
 # ai_provider = "anthropic"
 # ai_model = "claude-sonnet-5"
 # ai_api_key_command = "pass show anthropic-api-key"
+
+# Coding agents that speak the Agent Client Protocol (AI -> Start Agent runs the
+# first, only in a trusted workspace; see crates/vix-acp/spec/index.md):
+# ai_agents = ["gemini --experimental-acp"]
 
 # One [[lsp_servers]] block per language server you have installed:
 [[lsp_servers]]

@@ -10,6 +10,9 @@ use super::{
 impl App {
     /// Dispatch an `ai.*` action (the AI menu / palette). Returns `true` if handled.
     pub(super) fn run_ai_action(&mut self, action: &str) -> bool {
+        if self.run_acp_action(action) {
+            return true;
+        }
         match action {
             "ai.chat" => self.open_ai_panel(),
             "ai.summarize" => self.ai_summarize(),
@@ -668,6 +671,16 @@ impl App {
     /// conversation supplied as stdin context, and mark the panel busy until the
     /// reply lands in [`Self::poll_ai_replace`].
     pub(super) fn ai_panel_send(&mut self) {
+        // With an ACP agent running, the panel talks to it (T635).
+        if self.acp.is_some() {
+            let text = self
+                .ai_panel
+                .as_mut()
+                .map(|p| std::mem::take(&mut p.input))
+                .unwrap_or_default();
+            self.acp_send_prompt(&text);
+            return;
+        }
         if self.ai_replace.is_some() {
             self.status = t!("status.ai_busy").to_string();
             return;
