@@ -106,11 +106,16 @@ on top.
 
 ## State and modals
 
-- `App` holds all state. Overlays are `Option<…>` fields; an open overlay is a
-  modal handled near the top of `App::on_key` (strict priority order).
-- `App::overlay_capturing_keys` mirrors that dispatch chain for callers that must
-  ask "would a keypress reach the editor?" without dispatching one (the paste
-  router does). Add an overlay to the chain and to that predicate together.
+- `App` holds all state. Overlays are `Option<…>` fields; every modal layer has
+  one row in the `OVERLAYS` table in `tui/src/app/overlays.rs`, ordered
+  bottom to top (see [`spec/overlay-priority`](../spec/overlay-priority/index.md)).
+  The frame draws the open rows in table order (`ui::draw_overlays`); keys are
+  offered to them in reverse order (`App::route_overlay_key`), so the layer
+  drawn on top gets the keys. `App::overlay_capturing_keys` is derived from the
+  same table (the paste router and ghost text ask it whether a keypress would
+  reach the editor). To add an overlay: add its row, its `OverlayId` variant
+  (enum order is table order) and its arm in `ui::draw_overlay`; a layer with no
+  key policy does not compile.
 - The chooser/model modules expose `open()/up()/down()/selected_*()`; the app
   wires keys and applies the result.
 
@@ -119,6 +124,14 @@ on top.
 - No `unsafe`. Avoid `unwrap`/`expect` on fallible runtime paths; prefer
   reporting to the message drawer (`self.messages.error(…)`) or status line.
 - `expect` is acceptable for genuinely-infallible invariants, with a message.
+- **Library crates return typed errors, not `Result<_, String>`** (T610; no
+  public function in `crates/`, `gui/` or `tui/src` does any more). Define a
+  small `#[non_exhaustive]` enum per fallible operation (`BaseError`,
+  `ConvertError`, `SessionError`, ...), implement `Display` and
+  `std::error::Error` by hand (the tree does not use `thiserror`), keep `Display`
+  text equal to the message a caller already showed, and wrap the cause
+  (`io::Error`, `ParseIntError`) in a variant so callers can match on it. Private
+  helpers may keep `String`.
 
 ## Tests
 

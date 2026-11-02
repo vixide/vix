@@ -18,14 +18,18 @@ Shared terms used across the code, specs, and docs.
 - **Choice (theme)** — one entry in the theme chooser: a built-in mode or a
   custom theme.
 - **Locale** — a UI language, identified by a code (`en`, `es`, `fr`, `de`, `cy`,
-  `ga`, `gd`, `pl`, `pt`, `ru`, `ar`, `hi`, `bn`, `zh`, `ja`) and shown by its
-  endonym (its name in itself).
+  `ga`, `gd`, `pl`, `pt`, `ru`, `ar`, `hi`, `bn`, `zh`, `ja` fully translated;
+  `it`, `ko`, `tr`, `nl`, `vi`, `id`, `th`, `fa`, `uk`, `el`, `tlh`, `sjn`
+  selectable with partial coverage: 27 in all, `crates/vix-locale-model`) and
+  shown by its endonym (its name in itself).
 - **Endonym** — a language's name in that language (e.g. "Deutsch" for German).
 - **i18n key** — a dotted name (e.g. `status.saved`) resolved to translated text
   by `t!` against `crates/vix-i18n/locales/`.
 - **Fallback locale** — English (`en`); used for any key a language lacks.
 - **Modal / overlay** — a UI layer that consumes all input while open (help,
-  prompt, palette, search, choosers, …), handled in priority order in `on_key`.
+  prompt, palette, search, choosers, …). Each has one row in the `OVERLAYS`
+  table (`tui/src/app/overlays.rs`, `spec/overlay-priority`), which orders both
+  drawing and key routing.
 - **Mark** — a non-selection highlight in the editor, on separate channels:
   **search marks** (other search hits / document-highlight occurrences,
   underline), **spell marks** (misspelled words in comments/strings, red
@@ -94,3 +98,9 @@ Shared terms used across the code, specs, and docs.
 - **Zen mode** — a focus mode that hides the docks and status bar
   (`view.zen`); **breadcrumbs** — an optional `file ▸ symbol` bar above the editor
   (`view.breadcrumbs`).
+- **Ghost text** — a dimmed inline completion drawn after the cursor, from an LSP
+  server or an AI provider (`inline_completion` setting, T618).
+- **Gutter base** — what the change gutter compares the buffer against: `head`,
+  `index`, `disk` or `branch:<name>` (`git_gutter_base` setting, T664).
+- **Authority** — the one trait that owns workspace file access and process
+  spawning (local, SSH, container, fake); `crates/vix-authority`.
