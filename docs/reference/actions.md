@@ -758,6 +758,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `view.final_newline_on_save` | Final Newline on Save | Menu |
 | `view.focus_other_pane` | Other Pane | Menu |
 | `view.format_on_save` | Format on Save | Menu |
+| `view.format_on_type` | Format on Type | Menu |
 | `view.highlight_word` | Highlight Word Occurrences | Menu |
 | `view.inlay_hints` | Inlay Hints | Menu |
 | `view.left_dock` | Show/Hide Left Dock | Menu |
@@ -808,4 +809,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**801 actions.**
+**802 actions.**

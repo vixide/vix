@@ -16,6 +16,8 @@
 
 use std::path::{Path, PathBuf};
 
+use vix_input::{KeyCode, KeyEvent};
+
 use super::{
     App, Focus, Prompt, PromptKind, apply_edits_to_text, char_to_lsp_pos, lsp_pos_to_char,
     severity_color,
@@ -702,6 +704,35 @@ impl App {
                 .request_range_formatting(&path, start, end, tab_size),
             None => self.lsp.request_formatting(&path, tab_size),
         }
+    }
+
+    /// After an editor key (T624): with `format_on_type` on, a typed
+    /// character (or Enter, as `\n`) that the file's language server lists in
+    /// `documentOnTypeFormattingProvider` sends `textDocument/onTypeFormatting`
+    /// for the caret. The reply is applied like a formatting reply, and
+    /// dropped as stale if the buffer changes first. Single-caret only.
+    pub(super) fn on_type_formatting_after_key(&mut self, key: KeyEvent) {
+        if !self.settings.completion.format_on_type || self.multi_caret_active() {
+            return;
+        }
+        let ch = match key.code {
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => c,
+            KeyCode::Enter => '\n',
+            _ => return,
+        };
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        if !self.lsp.handles(&path) || !self.lsp.is_on_type_trigger(&path, ch) {
+            return;
+        }
+        // Sync first so the server formats the text with the typed character
+        // in it, and the reply's version check passes.
+        self.lsp_sync_active();
+        let tab_size = u32::try_from(self.buffer_settings().tab_width).unwrap_or(4);
+        let (line, character) = self.cursor_lsp_position(&path);
+        self.lsp
+            .request_on_type_formatting(&path, line, character, ch, tab_size);
     }
 
     /// Install a folding-range reply's `(start_line, end_line)` ranges on the

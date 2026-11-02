@@ -738,6 +738,7 @@ const VIEW_EDITOR: &[Item] = &[
         "",
     ),
     Item::leaf("menu.item.view.format_on_save", "view.format_on_save", ""),
+    Item::leaf("menu.item.view.format_on_type", "view.format_on_type", ""),
     Item::leaf("menu.item.view.auto_save", "view.auto_save", ""),
     SEP,
     Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),

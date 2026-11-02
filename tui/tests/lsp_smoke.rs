@@ -1043,7 +1043,8 @@ while True:
     method = msg.get('method')
     mid = msg.get('id')
     if method == 'initialize':
-        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16',
+            'documentOnTypeFormattingProvider':{'firstTriggerCharacter':';'}}}})
     elif method == 'textDocument/didOpen':
         uri = msg['params']['textDocument']['uri']
         send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
@@ -1051,6 +1052,10 @@ while True:
             'diagnostics': [{'range':{'start':{'line':0,'character':0},
                                       'end':{'line':0,'character':1}},
                              'severity':1,'message':'mock'}]}})
+    elif method == 'textDocument/onTypeFormatting':
+        pos = {'line':0,'character':0}
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'range':{'start':pos,'end':pos},'newText':'// ot:' + msg['params']['ch'] + '\n'}]})
     elif method == 'textDocument/formatting':
         pos = {'line':0,'character':0}
         send({'jsonrpc':'2.0','id':mid,'result':[
@@ -1194,6 +1199,52 @@ fn format_on_save_then_tab_switch_formats_and_saves_the_saved_file() {
         "b.rs stays the active tab"
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T624: with `format_on_type` on, typing a trigger character the server
+/// listed asks it for on-type formatting and applies the returned edits.
+#[test]
+fn typing_a_trigger_character_formats_on_type() {
+    let Some((mut app, root)) = formatting_app("on-type", |s| s.completion.format_on_type = true)
+    else {
+        return;
+    };
+    let a = root.join("a.rs");
+    app.on_key(KeyEvent::new(KeyCode::Char(';'), KeyModifiers::NONE));
+    settle(&mut app, |app| tab_text(app, &a).starts_with("// ot:;"));
+    app.lsp.shutdown();
+    assert!(
+        tab_text(&app, &a).starts_with("// ot:;\n"),
+        "on-type edits applied: {:?}",
+        tab_text(&app, &a)
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T624: nothing is requested for a non-trigger character, nor with the
+/// setting off (the default), even for a trigger character.
+#[test]
+fn on_type_formatting_stays_quiet_without_setting_or_trigger() {
+    for (tag, on, ch) in [("ot-nontrig", true, 'x'), ("ot-off", false, ';')] {
+        let Some((mut app, root)) = formatting_app(tag, |s| s.completion.format_on_type = on)
+        else {
+            return;
+        };
+        let a = root.join("a.rs");
+        app.on_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+        let deadline = Instant::now() + Duration::from_millis(1000);
+        while Instant::now() < deadline {
+            app.poll_lsp();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        app.lsp.shutdown();
+        assert!(
+            !tab_text(&app, &a).contains("// ot"),
+            "{tag}: no on-type edits: {:?}",
+            tab_text(&app, &a)
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
 
 /// T652, at the client layer: a formatting reply is handed back by

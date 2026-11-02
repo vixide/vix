@@ -93,6 +93,7 @@ field is absent.
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations. Empty = autodetect only. |
 | `lsp_enabled` | boolean | `true` | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers are launched. |
 | `lsp_auto_complete` | boolean | `true` | Request LSP completion automatically while typing an identifier or a server trigger character (debounced), instead of only on `Ctrl+Space`. |
+| `format_on_type` | boolean | `false` | Ask the language server to format as you type (T624): after a character the server lists in `documentOnTypeFormattingProvider` (such as `;`, `}` or Enter), send `textDocument/onTypeFormatting` and apply the returned edits. Toggled by **View → Format on Type** (`view.format_on_type`). |
 | `lsp_servers` | array of tables | `[]` | Configured language servers, matched to files by extension (see below). |
 | `debug_adapters` | array of tables | `[]` | Configured debug adapters (DAP), matched to files by extension: `adapter_id`, `extensions`, `command`, and optional `launch` and `attach` string tables (`attach` is what **Run → Attach** sends, T617). See [`crates/vix-dap/spec/index.md`](../../vix-dap/spec/index.md). |
 | `show_welcome_dialog` | boolean | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves as soon as the dialog has been shown once, so it appears on the first run only; set it back to `true` to see it again. |

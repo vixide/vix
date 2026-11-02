@@ -88,6 +88,8 @@ trim_trailing_whitespace = true
 ensure_final_newline = true
 # On save, run the language server's formatter (when the file has one).
 format_on_save = false
+# Ask the language server to format as you type (after its trigger characters).
+format_on_type = false
 # Languages formatted with your own Prettier (Format Document and
 # format-on-save) instead of the language server, e.g. ["typescript", "css"].
 prettier_languages = []

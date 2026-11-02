@@ -839,12 +839,18 @@ pub struct CompletionSettings {
     /// server trigger character (debounced), instead of only on `Ctrl+Space`.
     /// On by default.
     pub lsp_auto_complete: bool,
+    /// Ask the language server to format as you type (T624): after a
+    /// character the server lists in `documentOnTypeFormattingProvider`
+    /// (such as `;`, `}` or Enter), send `textDocument/onTypeFormatting` and
+    /// apply the returned edits. Off by default.
+    pub format_on_type: bool,
 }
 
 impl Default for CompletionSettings {
     fn default() -> Self {
         CompletionSettings {
             lsp_auto_complete: true,
+            format_on_type: false,
         }
     }
 }
@@ -1538,6 +1544,7 @@ theme = "light"
             s.completion.lsp_auto_complete,
             CompletionSettings::default().lsp_auto_complete
         );
+        assert!(!s.completion.format_on_type);
     }
 
     #[test]

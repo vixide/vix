@@ -3501,6 +3501,14 @@ impl App {
                 )
                 .to_string();
             }
+            "view.format_on_type" => {
+                self.settings.completion.format_on_type = !self.settings.completion.format_on_type;
+                self.status = t!(
+                    "status.format_on_type",
+                    on = self.settings.completion.format_on_type
+                )
+                .to_string();
+            }
             "view.auto_save" => {
                 // Off turns on the interval mode; any mode (interval or
                 // focus-lost, T628) turns off.
@@ -7134,6 +7142,7 @@ impl App {
             }
         }
         self.maybe_auto_signature_help(key.code);
+        self.on_type_formatting_after_key(key);
         self.completion_after_key(key);
     }
 

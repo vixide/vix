@@ -7314,7 +7314,9 @@ new action.
   Handle `client/registerCapability` watchers, and forward the existing
   auto-reload file-watch events, so servers notice outside edits to
   `Cargo.toml` and `package.json`. **Small–medium.**
-- [ ] **T624 — On-type formatting.** Vix has no `onTypeFormatting`. Read
+- [x] **T624 — On-type formatting.**
+  *Done 2026-11-02: `format_on_type` setting (`CompletionSettings`, default off) and `view.format_on_type` toggle; `vix-lsp-core` `parse_on_type_formatting_triggers`/`on_type_formatting_params`; `Lsp::is_on_type_trigger`/`request_on_type_formatting` reuse the T652 document-tied formatting reply; host hook `App::on_type_formatting_after_key`; mock-server tests in `tui/tests/lsp_smoke.rs`.*
+  Vix has no `onTypeFormatting`. Read
   `documentOnTypeFormattingProvider` trigger chars, then request and
   apply edits after a matching insert, behind a `format_on_type` setting.
   **Small.**
@@ -9592,7 +9594,7 @@ scratch each time they come up.
 Runs A–L, N, O (except the two late findings), P and Q (except T718) are
 complete. What is open, by run:
 
-- **Run M:** T621, T623, T624, T635 and T644 are open. T608 is half done (the
+- **Run M:** T621, T623, T635 and T644 are open (T624 done 2026-11-02). T608 is half done (the
   DAP mock-adapter tests exist; the `vix-editor` unit-test half remains).
   T610 (typed errors) is done in four slices: no public function in `crates/`,
   `gui/` or `tui/src` returns `Result<_, String>` any more. T611 is ticked for

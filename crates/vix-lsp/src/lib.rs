@@ -462,6 +462,9 @@ struct Server {
     /// This server's completion trigger characters, read at `initialize`
     /// (T612, `capabilities.completionProvider.triggerCharacters`).
     completion_triggers: Vec<String>,
+    /// This server's on-type formatting trigger characters (T624,
+    /// `capabilities.documentOnTypeFormattingProvider`).
+    on_type_triggers: Vec<String>,
     /// Whether this server's `initialize` response asked to be told about
     /// workspace-folder changes (T123f) — see
     /// `message::parse_workspace_folders_change_support`.
@@ -1019,6 +1022,68 @@ impl Lsp {
                         .any(|t| t.chars().eq(std::iter::once(ch)))
                 })
             })
+    }
+
+    /// Whether `ch` is an on-type formatting trigger character for any
+    /// server handling `path` (T624) — the union of every matching server's
+    /// `documentOnTypeFormattingProvider` characters.
+    #[must_use]
+    pub fn is_on_type_trigger(&self, path: &Path, ch: char) -> bool {
+        self.enabled
+            && self.configs_for(path).iter().any(|c| {
+                self.servers.get(&c.language_id).is_some_and(|s| {
+                    s.on_type_triggers
+                        .iter()
+                        .any(|t| t.chars().eq(std::iter::once(ch)))
+                })
+            })
+    }
+
+    /// Request on-type formatting after `ch` was typed, the caret now at
+    /// `(line, character)` (T624). The reply arrives as an
+    /// [`EditReplyKind::Edits`] like a formatting reply, and is dropped as
+    /// stale if the document moves on first. Only servers that listed `ch`
+    /// as a trigger are asked.
+    pub fn request_on_type_formatting(
+        &mut self,
+        path: &Path,
+        line: u32,
+        character: u32,
+        ch: char,
+        tab_size: u32,
+    ) {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            if !server
+                .on_type_triggers
+                .iter()
+                .any(|t| t.chars().eq(std::iter::once(ch)))
+            {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::Formatting);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            let params = message::on_type_formatting_params(&uri, line, character, ch, tab_size);
+            server.send(message::request(
+                id,
+                "textDocument/onTypeFormatting",
+                &params,
+            ));
+        }
     }
 
     /// Request the implementation location(s) at `(line, character)` (jumps to
@@ -2213,6 +2278,7 @@ impl Lsp {
             server.semantic_support = message::parse_semantic_tokens_support(result);
             server.sync = SyncKind::from_initialize(result);
             server.completion_triggers = message::parse_completion_trigger_characters(result);
+            server.on_type_triggers = message::parse_on_type_formatting_triggers(result);
             server.workspace_folders_change_support =
                 message::parse_workspace_folders_change_support(result);
             server.code_lens = match message::parse_code_lens_provider(result) {
@@ -2466,6 +2532,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),
         completion_triggers: Vec::new(),
+        on_type_triggers: Vec::new(),
         workspace_folders_change_support: false,
         code_lens: LensSupport::None,
         execute_commands: Vec::new(),

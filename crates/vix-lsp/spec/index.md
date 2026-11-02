@@ -66,6 +66,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Rename | `lsp.rename` | Sends `textDocument/prepareRename` first (T134): a server-validated "not renameable here" shows a status message instead of opening a prompt that would only fail, and a server-supplied placeholder seeds the prompt when one is given. A server with no `prepareRename` support falls back to the pre-T134 behavior (host's own word-under-cursor guess) rather than erroring. Applies the resulting `workspace/applyEdit` across every affected file. |
 | Code Actions | `lsp.code_action` | Quick-fixes and refactors offered at the cursor/selection; a command-only action executes via `workspace/executeCommand`. |
 | Code Lens | automatic; `lsp.code_lens_run` runs the cursor line's lens, `lsp.code_lens` lists them all | T726. Drawn by the host as a dimmed virtual row above the line. `Lsp::refresh_code_lens` re-requests a file's lenses in the background (only from servers that advertise `codeLensProvider`; an error is silent) and the reply comes back as `LspEvent::CodeLensUpdate` naming the file, dropped if the document changed meanwhile. A lens sent without a command is resolved on demand with `Lsp::resolve_code_lens` (`codeLens/resolve`, when `resolveProvider` is set) as `LspEvent::CodeLensResolved`. The client declares `workspace.codeLens.refreshSupport`; a server's `workspace/codeLens/refresh` request is acknowledged and surfaced as `LspEvent::CodeLensRefresh`. `Lsp::executes_command` says whether a server advertised a command in `executeCommandProvider.commands`, so the host sends only those back as `workspace/executeCommand` and maps or refuses client-side ones (e.g. rust-analyzer's `runSingle`). |
+| On-type formatting (T624) | typing a trigger character, with `format_on_type` on | `textDocument/onTypeFormatting` after a character the server lists in `documentOnTypeFormattingProvider` (`firstTriggerCharacter` plus `moreTriggerCharacter`; Enter counts as `\n`). See § On-type formatting. |
 | Formatting / Range Formatting | `lsp.format`, and format-on-save | Whole-document when there's no selection, `textDocument/rangeFormatting` when there is. Unrelated to `vix-format-tool` (that's data-format normalization — JSON/YAML/TOML — not source-code style). |
 | Document Symbols / Workspace Symbols | `lsp.document_symbols` / `lsp.workspace_symbols` | Hierarchical (nested `children`) document symbols. Distinct from `vix-outline-panel`'s own Tree-sitter-based outline — the two are independent sources, not merged. |
 | Document Highlight | automatic, cursor-follow | Highlights every occurrence of the symbol under the cursor in the active file. |
@@ -141,6 +142,22 @@ none) is inserted verbatim, `$` and all.
 T123b); trigger characters are the union across every server handling the
 file.
 
+
+## On-type formatting (T624)
+
+The client declares `textDocument.onTypeFormatting` and reads each server's
+trigger characters from `initialize`
+(`parse_on_type_formatting_triggers`: `firstTriggerCharacter` plus every
+`moreTriggerCharacter`). With the `format_on_type` setting on (default off;
+**View → Format on Type**, `view.format_on_type`), typing one of them in a
+single-caret buffer syncs the document and sends
+`textDocument/onTypeFormatting` (`Lsp::request_on_type_formatting`, with the
+caret after the character, `ch` and the tab size). Only servers that listed
+the character are asked, and Enter is sent as `\n`. The reply is a
+`TextEdit[]` and travels the same path as formatting (T652): it is applied to
+the tab it was requested for, or dropped as `Stale` if that document changed
+or closed first. `Lsp::is_on_type_trigger` tells the host whether a typed
+character is a trigger. Silent when no server handles the file.
 
 ## Pull diagnostics (T619)
 

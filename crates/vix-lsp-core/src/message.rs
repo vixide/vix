@@ -91,6 +91,8 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 "codeLens": {},
                 "formatting": {},
                 "rangeFormatting": {},
+                // T624: format as you type.
+                "onTypeFormatting": {},
                 "rename": { "prepareSupport": true },
                 "foldingRange": {},
                 "selectionRange": {},
@@ -278,6 +280,50 @@ pub fn range_formatting_params(
         },
         "options": { "tabSize": tab_size, "insertSpaces": true }
     })
+}
+
+/// A `DocumentOnTypeFormattingParams` body (T624): `ch` is the character
+/// just typed, `(line, character)` the caret after it.
+#[must_use]
+pub fn on_type_formatting_params(
+    uri: &str,
+    line: u32,
+    character: u32,
+    ch: char,
+    tab_size: u32,
+) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "position": { "line": line, "character": character },
+        "ch": ch.to_string(),
+        "options": { "tabSize": tab_size, "insertSpaces": true }
+    })
+}
+
+/// The characters that trigger on-type formatting, read from an `initialize`
+/// result (`capabilities.documentOnTypeFormattingProvider`, T624): the
+/// `firstTriggerCharacter` followed by every `moreTriggerCharacter`. Empty
+/// when the server has no such provider.
+#[must_use]
+pub fn parse_on_type_formatting_triggers(result: &Value) -> Vec<String> {
+    let Some(p) = result
+        .get("capabilities")
+        .and_then(|c| c.get("documentOnTypeFormattingProvider"))
+    else {
+        return Vec::new();
+    };
+    let first = p
+        .get("firstTriggerCharacter")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let more = p
+        .get("moreTriggerCharacter")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().filter(|s| !s.is_empty()).map(str::to_string));
+    first.into_iter().chain(more).collect()
 }
 
 /// A `DocumentSymbolParams` / text-document-only params body (also used for
@@ -2532,6 +2578,25 @@ mod tests {
             (false, false)
         );
         assert_eq!(parse_execute_commands(&plain), Vec::<String>::new());
+    }
+
+    #[test]
+    fn on_type_formatting_triggers_and_params() {
+        let init = json!({ "capabilities": { "documentOnTypeFormattingProvider": {
+            "firstTriggerCharacter": "}", "moreTriggerCharacter": [";", "\n"]
+        } } });
+        assert_eq!(
+            parse_on_type_formatting_triggers(&init),
+            vec!["}", ";", "\n"]
+        );
+        assert_eq!(
+            parse_on_type_formatting_triggers(&json!({ "capabilities": {} })).len(),
+            0
+        );
+        let p = on_type_formatting_params("u", 3, 7, ';', 4);
+        assert_eq!(p["ch"], json!(";"));
+        assert_eq!(p["position"], json!({ "line": 3, "character": 7 }));
+        assert_eq!(p["options"]["tabSize"], json!(4));
     }
 
     #[test]
