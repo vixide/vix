@@ -136,7 +136,7 @@ plus selection state, and is wired into the host via a Tools-menu action:
   `x11_key`, `html_key`) and mouse events (`nerd_mouse`, `ascii_mouse`,
   `x11_mouse`, `html_mouse`) to it before the editor sees them.
 - Insertion goes through `insert_selected_glyph`, `insert_selected_ascii`,
-  `insert_selected_x11`, and `insert_selected_html`, which call the editor's
+  `use_selected_x11`, and the HTML picker's equivalent, which call the editor's
   `insert_str` and update the status line (`status.ascii_inserted`,
   `status.x11_inserted`, `status.html_inserted`) only when something was inserted.
 - The Nerd Font grid is 8 columns wide; navigation and the mouse hit-test share

@@ -10,7 +10,7 @@ is [`vix-oci`](../../vix-oci/spec/index.md).
 
 `Panel` is pure state; it never starts a process. `Panel::key(key, page)`
 returns a `Request` for the App to carry out: `Reload`, `Inspect`, `Logs`,
-`Shell`, `OpenWorkspace`, `OpenPort`, `Exec(Pending)`, `Close`, `ReadOnly`, `Invalid`, or
+`Shell`, `OpenWorkspace`, `PortUrl(port)`, `Exec(Pending)`, `Close`, `ReadOnly`, `Invalid`, or
 `None`. One panel holds all five lists and a `kind`; `Tab` / `Shift+Tab`
 cycle `Container`, `Image`, `Volume`, `Network` and (only when
 `Engine::has_pods`) `Pod`.

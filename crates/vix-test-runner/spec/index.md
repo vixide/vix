@@ -28,6 +28,6 @@ test_width = 40                # test panel width
 
 The `test_runner` module parses output into `TestResult { name, status, location }`
 (unit tested) with a `tally` helper. The host runs the command with capture
-(`run_tests` sets `test_capture`; `poll_command` buffers lines and calls
+(`run_tests` sets the `AppFlags::TEST_CAPTURE` flag; `poll_command` buffers lines and calls
 `finish_test_run` on exit), renders the panel with `ui::draw_test_panel`, and
 routes row clicks to `jump_to_test`.

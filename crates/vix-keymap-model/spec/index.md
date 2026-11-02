@@ -216,11 +216,14 @@ The host wiring lives in `tui/src/app.rs`:
   and Vi.
 - `set_keymap` — handles `view.keymap:<id>`: validates against the model,
   persists `settings.keymap`, calls `reset_keymap_modes`, and sets the status.
-- `reset_keymap_modes` — clears `emacs_prefix`, `vim_insert`, and `vim_cmd` so a
-  newly chosen keymap starts clean (Vi in Normal mode).
-- `emacs_key` (with the `emacs_prefix` flag) and `vim_key` / `vim_cmd_key` /
-  `run_vim_command` (with the `vim_insert` and `vim_cmd` fields) implement the
-  chords and modes above.
+- `reset_keymap_modes` — clears the Emacs chord (`emacs_chord` back to
+  `EmacsChord::None`), the Vi `MODAL_INSERT` flag and `vim_cmd`, and resets the
+  modal engine's mode, count, pending operator/find/text object and active
+  register, so a newly chosen keymap starts clean (Vi in Normal mode).
+- `emacs_key` (with the `emacs_chord` field) and `vim_key` / `vim_cmd_key` /
+  `run_vim_command` (with the `MODAL_INSERT` flag and `vim_cmd` field)
+  implement the chords and modes above; `vim_key` offers the key to
+  `App::modal_key` (`tui/src/app/modal.rs`, the `vix-modal` engine) first.
 - `mode_indicator` — the status-bar string: Vi's `:`-line / Insert / Normal, or
   Emacs's pending `C-x-` prefix; `None` for keymaps with nothing to show.
 

@@ -14,7 +14,7 @@ make them match — edit the spec when intent changes, edit the code when it
 drifted.
 
 Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (package `vix-tui`,
-`tui/src/`, building the `vix` command) over 141 `vix-*` member crates under `crates/`. Each member crate
+`tui/src/`, building the `vix` command) over 145 `vix-*` member crates under `crates/`. Each member crate
 owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
@@ -218,12 +218,12 @@ anything still in design.
 | ---- | ----- |
 | Editing core | Tabs, undo **tree** (branch-preserving, persisted per file), soft wrap, bracket matching, indent guides, rainbow brackets, sticky scroll, minimap, multiple cursors, column selection, structural selection, read-only lock |
 | Text transforms | Case, sort/dedupe/shuffle/reverse, squeeze blanks, line endings, ROT13, align, surround, transpose, delete-by-unit, wrap/fill, increment/toggle values, Emmet |
-| Files & explorer | Tree, preview tabs, copy/cut/paste with conflict prompts, multi-select, delete, buffers that follow moves, File → Open browser, recent files, sessions and workspaces |
+| Files & explorer | Tree, preview tabs, copy/cut/paste with conflict prompts, multi-select, delete, edit a directory as text, atomic saves that keep hard links and ownership, encoding detection, buffers that follow moves, File → Open browser, recent files, sessions and workspaces |
 | Search | Incremental find, find/replace with regex + capture groups, smart case, workspace-wide search/replace, interactive query-replace, TODO finder |
 | Navigation | Position history, go-to definition/symbol/line/percent/byte, jump labels, matching tag, breadcrumbs, outline panel |
-| Language support | Tree-sitter highlighting (feature-gated grammars), LSP (diagnostics, hover, completion, references, call hierarchy, rename, code actions/lens, inlay hints), DAP debugging |
-| Version control | Git status/diff/blame, per-hunk stage/unstage/revert, branch/stash/amend, stash list, worktrees, interactive rebase, cherry-pick, merge-conflict resolver, diff gutter, word-level diff |
-| Data & tools | Database workbench (SQLite/Postgres/MySQL), HTTP client, test runner, task runner, integrated terminal, converters, generators, pickers, info panels |
+| Language support | Tree-sitter highlighting (feature-gated grammars), LSP (diagnostics incl. per-document pull diagnostics, hover, completion, inline ghost-text completion, references, call and type hierarchy, rename, code actions/lens, inlay hints), DAP debugging (breakpoint conditions, exception filters, attach, a thread/stack/variables panel, inline values) |
+| Version control | Git status/diff/blame, per-hunk stage/unstage/revert, branch/stash/amend, stash list, worktrees, interactive rebase, cherry-pick, branch review with saved line comments, merge-conflict resolver, diff gutter with a selectable base, word-level diff |
+| Data & tools | Database workbench (SQLite/Postgres/MySQL), HTTP client, test runner, task runner, integrated terminal (tabs, scrollback, open-from-output, send selection), a project's direnv/mise/venv environment (trust-gated), converters, generators, pickers, info panels |
 | Org mode | Headlines, TODO/checkbox cookies, agenda, capture, refile, footnotes, id links, tables (`TBLFM`), column view, Org-roam, dailies, backlinks, export |
 | Presentation | Monochrome bundled themes plus custom JSON themes, base16 palettes, Zen mode, split panes (up to 2×2), 27 UI languages, ten keymaps |
 | Terminal integration | Mouse (click/drag/wheel/hover), in-terminal images, bracketed paste, macOS `Command` folded to `Control`, suspend/resume, synchronized output, focus events, color-depth fallback, OSC 8 hyperlinks |
@@ -231,7 +231,8 @@ anything still in design.
 ### Quality gates
 
 - `cargo clippy --workspace --all-targets -- -D warnings`, at `clippy::pedantic`,
-  with `#![forbid(unsafe_code)]` and `#![deny(missing_docs)]` in every crate
+  with `unsafe_code = "forbid"` and `missing_docs = "deny"` set once in the root
+  `[workspace.lints]` and inherited by every crate
   ([`spec/rust-clippy-pedantic/index.md`](../rust-clippy-pedantic/index.md)).
 - `cargo test` — unit, integration, and doc tests, none of which need a TTY.
 - `cargo fuzz` targets over the pure text/parse cores, and `cargo bench`
