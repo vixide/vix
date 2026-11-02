@@ -196,7 +196,7 @@ module (`instruction` / `context` / `optimize_context` / `extract_sql`). The
 `Running`) and hands the host an `AiRequest` (command-line prompt plus stdin
 context) through `take_ai_request`, mirroring the `take_dirty_*` stores; the
 host spawns it as `AiDest::Db` and routes the reply back through
-`apply_ai_sql`. `tui/tests/db_smoke.rs` drives the whole Ask → brief → reply →
+`Browser::apply_ai_reply`. `tui/tests/db_smoke.rs` drives the whole Ask → brief → reply →
 editor flow on a `SQLite` file and asserts that seeded row data never reaches
 the brief.
 

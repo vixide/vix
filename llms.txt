@@ -2,7 +2,7 @@
 
 > Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
 > IDE") built on ratatui: a thin App shell (package `vix-tui` in `tui/`,
-> building the `vix` command) over 141 focused `vix-*` member crates in a
+> building the `vix` command) over 145 focused `vix-*` member crates in a
 > Cargo workspace (edition 2024), with desktop GUIs in `gui/`.
 
 Development is specification-driven: each crate owns a spec at
@@ -41,8 +41,9 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   its title and menu path, generated from the real catalog
 - [Language Server Protocol](docs/language-server-protocol/index.md):
   diagnostics, hover, go-to-definition, completion, progress
-- [Debugger](docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
-  stepping, call stack, variables, watches
+- [Debugger](docs/debugger/index.md): Debug Adapter Protocol — breakpoints
+  with conditions, exception filters, attach, stepping, call stack, variables
+  tree, watches, inline values
 - [IDE parity features](docs/ide-parity/index.md): Local History, Search
   Everywhere, Refactor… and Organize Imports, run configurations, peek
   definition, CodeLens, postfix completion
@@ -62,6 +63,20 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   Org-roam, export
 - [Git Panel](docs/git-panel/index.md): status, diff, blame, stage/unstage/
   revert per hunk
+- [Branch review](docs/branch-review/index.md): a branch or commit range as
+  one diff, with saved line comments exported as Markdown
+- [Change gutter base](docs/gutter-base/index.md): compare the change gutter
+  with HEAD, the index, the saved file or a branch
+- [Interactive rebase](docs/interactive-rebase/index.md): reorder, reword,
+  squash, drop and cherry-pick without an external editor
+- [Inline suggestions](docs/ghost-text/index.md): dimmed ghost-text completion
+  from an LSP server or an AI provider (off by default)
+- [Safe save](docs/safe-save/index.md): atomic saves that keep hard links and
+  ownership, and what an interrupted save leaves behind
+- [Project environment](docs/project-environment/index.md): direnv, mise and
+  `.venv` applied to servers, tasks and terminals, gated by workspace trust
+- [Terminal](docs/terminal/index.md): several shells, scrollback, Ctrl+click
+  to open output paths, send selection, restart
 - [Scripting](docs/scripting/index.md): Rhai `.rhai` scripts — new palette
   commands, key bindings, buffer transforms, no rebuild
 - [Performance](docs/performance/index.md): measured numbers, with the
@@ -77,6 +92,8 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   [Cowork](spec/cowork/index.md), [IM](spec/instant-message/index.md),
   [MCP server](spec/mcp-server/index.md), [Jupyter](spec/jupyter/index.md)
   (spike done, not implemented)
+- [Overlay priority](spec/overlay-priority/index.md): one table orders
+  overlay drawing and key routing
 - [Navigation](spec/navigation/index.md), [Tools menu](spec/tools/index.md),
   [Comparisons](spec/comparisons/index.md), [Test strategy](spec/test/index.md)
 - [agents/share/crate-map.md](agents/share/crate-map.md): every crate, module,

@@ -31,9 +31,12 @@ editor, but the *platform around it* — extensibility, performance evidence,
 CI, docs depth, onboarding — has not kept pace. The highest-leverage work is
 now in that platform.
 
-**Status (2026-10-30).** The baseline above is historical. Phases 0–5 and
-Runs A–L, N and P are done; the workspace has 140 crates and is versioned
-2.0.0 (unreleased; 1.8.0 is the latest release). Of the 2026-10-28 plans,
+**Status (2026-11-02).** The baseline above is historical. Phases 0–5 and
+Runs A–L, N and P are done; the workspace has 145 crates and is versioned
+2.0.0 (unreleased; 1.8.0 is the latest release). `tasks.md` has 308 tasks
+ticked, 16 open and one half done (T608). Run M and Run O are now done except
+the open items listed in `tasks.md` § "Suggested execution order". Of the
+2026-10-28 plans,
 Cowork, OC and IDE parity are implemented, and remote editing is done
 except T718 (other authorities). Of Run R, the AI-off switch, MCP server,
 LSP status, Large File Viewer, social cards and theme gallery are done;
@@ -45,9 +48,10 @@ The live list is `tasks.md` § "Suggested execution order".
 
 These come from `AGENTS.md` / `CLAUDE.md` and are non-negotiable:
 
-- `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`,
-  `#![warn(clippy::pedantic)]` in every crate; clippy kept at zero warnings
-  with `cargo clippy --workspace --all-targets -- -D warnings`. No blanket
+- `unsafe_code = "forbid"`, `missing_docs = "deny"` and `clippy::pedantic`
+  from the root `[workspace.lints]`, which every crate inherits with
+  `[lints] workspace = true`; clippy kept at zero warnings with
+  `cargo clippy --workspace --all-targets -- -D warnings`. No blanket
   `allow`s.
 - Every user-facing string goes through `t!` with keys in `locales/`
   for all 15 languages (en es fr de cy ga gd pl pt ru ar hi bn zh ja).

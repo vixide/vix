@@ -1,7 +1,7 @@
 {
   "$schema": "https://llmstxt.org/llms.json",
   "name": "Vix",
-  "summary": "Vix is a keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell (package vix-tui in tui/, building the vix command) over 141 focused vix-* member crates in a Cargo workspace (edition 2024), with desktop GUIs in gui/.",
+  "summary": "Vix is a keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell (package vix-tui in tui/, building the vix command) over 145 focused vix-* member crates in a Cargo workspace (edition 2024), with desktop GUIs in gui/.",
   "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors — read it first. The workspace version is 2.0.0 (unreleased; the latest published release is 1.8.0).",
   "repository": "https://github.com/vixide/vix",
   "version": "2.0.0",
@@ -88,7 +88,7 @@
         {
           "title": "Debugger",
           "url": "docs/debugger/index.md",
-          "notes": "Debug Adapter Protocol — breakpoints, stepping, call stack, variables, watches"
+          "notes": "Debug Adapter Protocol — breakpoints with conditions, exception filters, attach, stepping, call stack, variables tree, watches, inline values"
         },
         {
           "title": "IDE parity features",
@@ -138,7 +138,42 @@
         {
           "title": "Git Panel",
           "url": "docs/git-panel/index.md",
-          "notes": "status, diff, blame, stage/unstage/ revert per hunk"
+          "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        },
+        {
+          "title": "Branch review",
+          "url": "docs/branch-review/index.md",
+          "notes": "a branch or commit range as one diff, with saved line comments exported as Markdown"
+        },
+        {
+          "title": "Change gutter base",
+          "url": "docs/gutter-base/index.md",
+          "notes": "compare the change gutter with HEAD, the index, the saved file or a branch"
+        },
+        {
+          "title": "Interactive rebase",
+          "url": "docs/interactive-rebase/index.md",
+          "notes": "reorder, reword, squash, drop and cherry-pick without an external editor"
+        },
+        {
+          "title": "Inline suggestions",
+          "url": "docs/ghost-text/index.md",
+          "notes": "dimmed ghost-text completion from an LSP server or an AI provider (off by default)"
+        },
+        {
+          "title": "Safe save",
+          "url": "docs/safe-save/index.md",
+          "notes": "atomic saves that keep hard links and ownership, and what an interrupted save leaves behind"
+        },
+        {
+          "title": "Project environment",
+          "url": "docs/project-environment/index.md",
+          "notes": "direnv, mise and .venv applied to servers, tasks and terminals, gated by workspace trust"
+        },
+        {
+          "title": "Terminal",
+          "url": "docs/terminal/index.md",
+          "notes": "several shells, scrollback, Ctrl+click to open output paths, send selection, restart"
         },
         {
           "title": "Scripting",
@@ -189,6 +224,11 @@
           "title": "Jupyter",
           "url": "spec/jupyter/index.md",
           "notes": ""
+        },
+        {
+          "title": "Overlay priority",
+          "url": "spec/overlay-priority/index.md",
+          "notes": "one table orders overlay drawing and key routing"
         },
         {
           "title": "Navigation",

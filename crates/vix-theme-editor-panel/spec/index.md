@@ -39,11 +39,11 @@ choosing any other theme from the View → Theme submenu).
 - In `tui/src/app.rs`: `open_theme_editor` snapshots the active theme;
   `theme_editor_key`'s `Enter` opens the X11 picker with a new
   `theme_editor_picking: bool` flag set, so the X11 panel's own `Enter`
-  handler (`insert_selected_x11`, otherwise used by Tools → X11 Colors)
+  handler (`use_selected_x11`, otherwise used by Tools → X11 Colors)
   applies the chosen color to the editor's highlighted slot instead of
   inserting it into a buffer, then closes the picker and returns to the
   editor — the same "one overlay reused for two purposes via a flag"
   pattern the workspace-search panel's `static_results` already
-  establishes for go-to-definition. `theme_editor_save` prompts for a name,
+  establishes for go-to-definition. `PromptKind::ThemeSaveAs` prompts for a name; `save_theme_as`,
   writes the JSON, and calls the same theme-setting path `set_theme_by_name`
   uses (persisted + `editor.refresh_theme()`).

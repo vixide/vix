@@ -48,6 +48,13 @@ EXCLUDE = {
     "vix-vcard-parser": "parsing engine behind the Contacts/vCard panels; docs/contacts covers the feature",
     "vix-vcard-panel": "the single-vCard view opened from Contacts; docs/contacts covers the feature",
     "vix-modal": "design-only per its own spec (T111); no shipped feature yet (tracked as T112-T115)",
+    "vix-authority": "the file-access/process slot behind remote editing; docs/remote-editing covers the feature",
+    "vix-capped-stack": "push-with-eviction helper for capped history lists, no UI of its own",
+    "vix-choice-list": "presentation state for the small pick-one list overlays (Local History, run configurations); documented under docs/ide-parity",
+    "vix-civil-date": "epoch-day to calendar-date arithmetic, no UI of its own",
+    "vix-greedy-wrap": "greedy paragraph word-wrap algorithm, no UI of its own",
+    "vix-hex-rgb": "lenient hex-string to RGB parsing, no UI of its own",
+    "vix-input": "backend-neutral key/mouse event types, internal plumbing",
     "vix-time-zone-model": "backing data for the Calendar/Clock panels' timezone lists, not a feature itself",
 }
 

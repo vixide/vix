@@ -32,7 +32,7 @@ struct whose bools are independent, freely-combinable toggles.
 ## `vix-editor-core` — the code-editor widget (`crates/vix-editor-core/src/`)
 
 The fully-custom terminal code-editor crate. Every module — reused engine and
-Vix-owned alike — is held to the same plain `#![warn(clippy::pedantic)]` as
+Vix-owned alike — is held to the same workspace `clippy::pedantic` as
 every other crate; there is no blanket `#[allow(clippy::all, clippy::pedantic)]`
 anywhere in it. Reached from the host via `vix-editor`'s `CodeEditor` (a
 re-export of
@@ -72,20 +72,31 @@ features (`syntax-common` by default, `syntax-all` for everything).
 | `ui.rs`               | All rendering: frame layout — dispatches most per-pane/overlay draw functions into `tui/src/ui/*.rs` (below). |
 
 `tui/src/app/*.rs` (T141) holds most of `App`'s actual logic, one file per feature
-area: `keymap.rs` (`on_key` + the ten keymap dispatchers), `git.rs` (git/jj),
-`scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `debug_panel.rs`
-(the Debug panel keys, Edit Breakpoint, exception filters — T617), `completion.rs`
-(the completion popup: filter, accept, auto-trigger — T612), `roam.rs`,
-`org_table.rs`, `org.rs`, `insert_tools.rs`, `picker_panels.rs`,
-`info_panels.rs`. `tui/src/ui/*.rs` (T142, done) holds `ui.rs`'s draw functions,
-one file per overlay/panel family, across 22 submodules (`ui.rs` itself down
-to 713 lines: the dispatch chain plus shared rendering primitives).
+area (75 entries today, `ls tui/src/app`): `keymap.rs` (`on_key` + the ten keymap
+dispatchers), `overlays.rs` (the `OVERLAYS` table that orders drawing and key
+routing, T611; see `spec/overlay-priority`), `git.rs` (git/jj), `git_review.rs`
+(branch review, T665), `git_rebase.rs` (interactive rebase, T633), `scripts.rs`,
+`command_palette.rs`, `session.rs`, `lsp_dap.rs`, `debug_panel.rs` (the Debug
+panel keys, Edit Breakpoint, exception filters, T617), `completion.rs` (T612),
+`ghost.rs` (inline ghost-text completion, T618), `terminal.rs` (terminal
+overlay and the editor bridge, T666), `project_env.rs` (T667), `dir_edit.rs`
+(Edit Directory, T636), `compare.rs` (Compare Files and filler rows, T660/T671),
+`roam.rs`, `org_table.rs`, `org.rs`, `insert_tools.rs`, `picker_panels.rs`,
+`info_panels.rs`; features that can be compiled out come with a `*_off.rs` twin.
+`tui/src/ui/*.rs` (T142) holds `ui.rs`'s draw functions, one file per
+overlay/panel family (36 entries today, `ls tui/src/ui`; `ui.rs` itself is under
+900 lines: the dispatch chain plus shared rendering primitives).
+
+Besides `app.rs` and `ui.rs`, `tui/src/` holds `main.rs`, `lib.rs`, `cli.rs`
+(the shared `clap` definition), `capability.rs` (build-time features),
+`remote.rs` (`vix ssh://...`), `mcp.rs` (`vix --mcp`), `plugin_cli.rs` and
+`term_caps.rs`.
 
 Everything else the shell used to own now lives in a member crate, reached
 through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 `vix-palette`, `vix-find-panel`, `vix-session`, `vix-settings`,
-`vix-theme`, `vix-fileops`, `vix-case`) — `tui/src/` is down to exactly
-`main.rs`/`lib.rs`/`app.rs`/`ui.rs` now (T152, done): `explorer`/
+`vix-theme`, `vix-fileops`, `vix-case`) — T152 (done) moved the rest out:
+`explorer`/
 `messages`/`search` are thin `pub use` aliases in `lib.rs` for
 `vix-left-dock`/`vix-right-dock`/`vix-find-panel`, and
 `workspace_search`/`edit_outline`/`edit_table`/`column_view` alias four new
@@ -154,7 +165,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 141 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 145 `vix-*` workspace member crates (each with its own `spec/`).|
 | `crates/vix-editor-core/langs/` | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded. |
 | `crates/vix-i18n/locales/` | rust-i18n translations, one YAML file per key namespace (`action`, `menu`, `msg`, `ui`, …); English is the fallback. |
 | `/dictionaries/` | Hunspell dictionaries — fetched separately, gitignored, absent from a fresh clone; see `crates/vix-spellcheck/spec/dictionaries`. |

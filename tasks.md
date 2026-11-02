@@ -6,9 +6,10 @@ merged `--no-ff`, branch deleted.
 
 **Every task must follow the standard recipe** (from `AGENTS.md`):
 
-- New crate → `crates/vix-<name>/` with `#![forbid(unsafe_code)]`,
-  `#![deny(missing_docs)]`, `#![warn(clippy::pedantic)]`, and a
-  `spec/index.md`.
+- New crate → `crates/vix-<name>/` with `[lints] workspace = true` (the root
+  `[workspace.lints]` forbids `unsafe`, denies missing docs and enables
+  `clippy::pedantic`), a `spec/index.md`, and an entry in
+  `agents/share/crate-map.md`.
 - New user-facing feature → one action id + one `run_action` arm, a menu
   item, a palette command, a keybinding if a free combo exists.
 - All user-facing text via `t!` with keys added to the right `locales/*.yml`
@@ -7606,7 +7607,8 @@ new action.
   forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
   `tui/` and `gui/*` packages). **Done.**
 - [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
-  release).** (1) ~~Publish the new crates in dependency order: `vix-input`
+  release).** *Status 2026-11-02: item (1) is done; items (2)-(6) wait for the
+  next release.* (1) ~~Publish the new crates in dependency order: `vix-input`
   first (new in T640), then the members, then `vix-tui`; drop
   `--exclude vix-input --exclude vix-tui` from the semver step afterwards.~~
   Done: all 125 crates published at 1.8.0 (2026-10-25), excludes dropped. (2) The moment the
@@ -8133,6 +8135,13 @@ widgets, and a markup-hiding Markdown "compose" mode.
     scrolling becomes a plain shared row offset.
   - **Tests.** Render snapshots of an aligned pair; a click on a filler row
     lands on the next real line; the cursor never enters a filler row. **L.**
+  - **Done 2026-11-01** (`feat/t671-filler-rows`): `Editor::set_filler_rows`
+    / `clear_filler_rows` / `filler_before` / `display_row` in
+    `vix-editor-core` (spec: "Filler rows"), `compare::fillers` in
+    `vix-diff-view`, wired in `tui/src/app/compare.rs`. Unwrapped views only;
+    soft wrap ignores fillers. Locked scrolling still maps the other pane's
+    top *line*, so the rows can differ when the top line sits strictly inside
+    a change whose two sides differ in length.
 - [x] **T672 — 2.0: version bump and API cleanups.** Workspace version
   1.8.0 → 2.0.0 (every internal pin). `#[non_exhaustive]` on the types that
   keep growing (`PromptKind` grew 59 → 74 variants and `App` 174 → 194
@@ -9565,27 +9574,38 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-10-30.** Runs A–L, N and P are complete, and so is
-everything in Q except T718. What is open, by run:
+**Status as of 2026-11-02** (308 tasks ticked, 16 open, T608 half done).
+Runs A–L, N, O (except the two late findings), P and Q (except T718) are
+complete. What is open, by run:
 
-- **Run M:** T611, T621, T623, T624, T635 and T644 are
-  open; T612–T620, T622, T625–T634 and T636–T638 are done
-  (2026-10-31). T610 is partly done (the `*-tool` converters and
-  `vix-db`'s `Session` still return `Result<_, String>`); T608 is half
-  done (the DAP mock-adapter tests exist; the `vix-editor` unit-test half
-  remains).
-- **Run O:** T663, T664, T665, T666, T667 and T671 are open (T659–T662 and
-  T668 are done), plus the late findings T669 (apt/dnf repositories) and
-  T670 (the musl release build crashes).
+- **Run M:** T621, T623, T624, T635 and T644 are open. T608 is half done (the
+  DAP mock-adapter tests exist; the `vix-editor` unit-test half remains).
+  T610 (typed errors) is done in four slices: no public function in `crates/`,
+  `gui/` or `tui/src` returns `Result<_, String>` any more. T611 is ticked for
+  step 1 only (the `OVERLAYS` table, `spec/overlay-priority`); step 2 (an
+  `Overlay` enum for mutually exclusive modals) is not done. T617 is done
+  except function/data breakpoints, breakpoint persistence and keeping the
+  variables tree expanded across steps. T644: the crates were published at
+  1.8.0 (item 1); items 2-6 (installer names, Homebrew rename map, GUI
+  install docs) wait for the next release.
+- **Run O:** T659-T667 and T671 are done, three of them in part. T663: the
+  Restore / Diff / Discard prompt for an interrupted save is not built (the
+  copy is kept and a startup notice counts it). T665: stage/discard from the
+  review buffer and a stash chooser are not built. T667: user-defined
+  detectors are not built, and `.envrc`/mise config alone does not raise the
+  trust prompt. T668 is done. The late findings T669 (apt/dnf repositories)
+  and T670 (the musl release build crashes) are open: T670's fix (static
+  non-PIE rustflags in `.cargo/config.toml` and `scripts/check-static-binary`
+  in CI) is written but unverified until a release build runs.
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730–T735, T740, T741, T744 and T749 are done (T734's `jupyter`
+- **Run R:** T730-T735, T740, T741, T744 and T749 are done (T734's `jupyter`
   feature is still opt-in; whether it joins `full` is the user's call).
   T742 and T743 have their files
   (templates and a container image) but no channel is verified or
-  published, so neither is done. T745–T748 are open; T746 and T747 need the
+  published, so neither is done. T745-T748 are open; T746 and T747 need the
   user's decisions.
-- **Run S:** T750–T756 and T759 are done; T757 (docs, site and demo) and
+- **Run S:** T750-T756 and T759 are done; T757 (docs, site and demo) and
   T758 (Matrix, spike first) are open.
 
 The recommended next order is in items 13–19 below.

@@ -180,8 +180,8 @@ editor.
   (`Message` rows with a `Level`, selection, `push`/`info`/`advice`/`warn`/`error`,
   `close_selected`). `bottom_dock` owns `BottomDock` (a capped `Vec<String>`
   line buffer with `scroll`, a `follow` flag, and a `DEFAULT_SCROLLBACK` of
-  `1000`). All three are pure logic with no rendering; each `#![forbid(unsafe_code)]`,
-  `#![deny(missing_docs)]`, and `#![warn(clippy::pedantic)]`.
+  `1000`). All three are pure logic with no rendering; each inherits the workspace lints
+  (`unsafe_code = "forbid"`, `missing_docs = "deny"`, `clippy::pedantic`).
 - **Host wiring** lives in `tui/src/app.rs`: `show_explorer`, `show_messages`,
   `show_bottom_dock`, and `show_status_bar` track visibility (mirrored into
   `Settings`); `toggle_left_dock`, `toggle_right_dock`, `toggle_bottom_dock`, and

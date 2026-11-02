@@ -307,7 +307,7 @@ puts them after the last line); `clear_filler_rows`, `filler_rows`,
 `filler_before(line)` and `display_row(line)` (a line's row within the view,
 counting fillers and skipping folded lines) complete the API. Fillers are not
 text: no caret, selection, syntax, mark or indent guide is ever drawn on one
-(`row_info` tells the layers which rows are fillers), `cursor_from_mouse` maps a
+(`view_rows` yields a `ViewRow::Filler` for each, which the layers skip), `cursor_from_mouse` maps a
 click on one to the next real line, and `focus` scrolls until the caret's
 display row fits. Soft wrap ignores them. Used by side-by-side Compare Files
 (`crates/vix-diff-view/spec/index.md`).

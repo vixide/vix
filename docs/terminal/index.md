@@ -51,6 +51,29 @@ afterwards.
 - **Programs that use the mouse** (`htop`, `vim` with `mouse=a`, `tmux`) get your
   clicks, drags and wheel. Hold `Shift` to select text in Vix instead.
 
+## Terminal and editor together
+
+- **Open from output.** `Ctrl+click` on a path in the terminal (including
+  scrollback) opens it in the editor and hides the terminal. `path`,
+  `path:line` and `path:line:col` work, resolved against the terminal's own
+  directory and then the workspace root. If the word is not a file, the whole
+  row is read like [task](../tasks/index.md) output, so compiler errors,
+  Python tracebacks and similar lines jump to their location. Nothing found:
+  the click does nothing.
+- **Working directory.** If your shell announces its directory (OSC 7,
+  which zsh, bash and fish integrations send from the prompt), relative paths
+  resolve against it. Without that, they resolve against the directory the
+  terminal started in.
+- **Send Selection to Terminal** (`terminal.send_selection`) runs the editor's
+  selection, or its current line, in the active terminal and presses Enter. It
+  opens a terminal if none is open.
+- **Restart Terminal** (`terminal.restart`) starts the same command again in
+  place, keeping the screen and scrollback.
+- **Toggle Terminal Key Capture** (`terminal.toggle_capture`, or `Ctrl+\`)
+  chooses whether `Ctrl` and `Alt` chords go to the shell (the default) or fall
+  through to the editor while the terminal stays open; the title says
+  `editor keys` while capture is off.
+
 ## Notes
 
 - In a remote workspace every terminal is a shell on the remote machine; see

@@ -69,7 +69,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Formatting / Range Formatting | `lsp.format`, and format-on-save | Whole-document when there's no selection, `textDocument/rangeFormatting` when there is. Unrelated to `vix-format-tool` (that's data-format normalization — JSON/YAML/TOML — not source-code style). |
 | Document Symbols / Workspace Symbols | `lsp.document_symbols` / `lsp.workspace_symbols` | Hierarchical (nested `children`) document symbols. Distinct from `vix-outline-panel`'s own Tree-sitter-based outline — the two are independent sources, not merged. |
 | Document Highlight | automatic, cursor-follow | Highlights every occurrence of the symbol under the cursor in the active file. |
-| Inlay Hints | automatic, toggled by `show_inlay_hints` | Inline type/parameter-name annotations. |
+| Inlay Hints | automatic; toggled by the `view.inlay_hints` action (View menu) | Inline type/parameter-name annotations. |
 | Folding Ranges | automatic, on open | Feeds the editor's own code-folding. |
 | Selection Range | expand/shrink selection | Walks the server's `parent` chain of enclosing ranges around the cursor. |
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |

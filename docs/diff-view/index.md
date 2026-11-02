@@ -17,6 +17,10 @@ Both sides are real, editable buffers.
 - The gutter marks each side's changes: yellow for a changed line, green for a
   line only on that side, red where lines exist only on the other side.
 - The two panes scroll together: the other pane follows the one you're in.
+- Where one side has fewer lines than the other in a change, it shows blank
+  hatched filler rows, so both panes stay row for row aligned below every
+  change. Fillers are not text (the cursor skips them) and are not drawn with
+  soft wrap on.
 - **Next Difference** and **Previous Difference** move the cursor between changes.
 - **Copy Change to Left** and **Copy Change to Right** copy the change at the
   cursor to the other side, as one undo step there (like vimdiff `do`/`dp`).

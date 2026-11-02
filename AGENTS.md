@@ -24,7 +24,7 @@ it privately, not as a public issue.
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
 shell** (package `vix-tui` in `tui/`, which builds the `vix` command; sources in `tui/src/`) — CLI, event loop, `App` state, rendering,
-explorer — over **141 focused `vix-*` member crates** under `crates/`, including
+explorer — over **145 focused `vix-*` member crates** under `crates/`, including
 the custom editor widget `vix-editor-core`. `tui/src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
 `crate::menu`, `crate::db` still name them. The App shell's two largest files
@@ -40,9 +40,9 @@ Specs are the **specification and the source of truth**, and development is
 specification-driven. Each member crate owns its spec at
 `crates/<crate>/spec/index.md` (multi-topic crates add `spec/<topic>/index.md`);
 the repo-root `spec/` holds only cross-cutting / app-level and build/meta specs
-(`index`, `navigation`, `tools`, `test`, `ci`, `comparisons`, `emacs-menus`,
-`license`, `trademarks`, `rust-msrv-n-minus-2`, `rust-clippy-pedantic`,
-`dependabot`, …).
+(`index`, `navigation`, `overlay-priority`, `tools`, `test`, `ci`,
+`comparisons`, `emacs-menus`, `license`, `trademarks`, `rust-msrv-n-minus-2`,
+`rust-clippy-pedantic`, `dependabot`, …).
 When behavior and spec disagree, decide which is correct, then make them match —
 update the spec when intent changes, update the code when the code drifted. Keep
 specs and implementation in sync.
@@ -138,6 +138,9 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 
 | You want to…                         | Go to…                                                       |
 | ------------------------------------ | ------------------------------------------------------------ |
+| Add or reorder a modal overlay       | the `OVERLAYS` table in `tui/src/app/overlays.rs` (+ `ui::draw_overlay`); see `spec/overlay-priority/index.md` |
+| Return an error from a library fn    | a small `#[non_exhaustive]` error enum, not `Result<_, String>` (`agents/conventions.md`, T610) |
+| Spawn a child process                | list the site in `tui/tests/spawn_sites.rs` (T595) and gate it behind a capability feature |
 | Add/route a command                  | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering                     | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
 | Add/translate UI text                | `crates/vix-i18n/locales/*.yml` (+ `t!` at the call site)                  |
@@ -152,6 +155,10 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 | Change git status/diff/staging       | `crates/vix-git/` + wiring in `tui/src/app/git.rs` / `tui/src/ui/choosers.rs` |
 | Change the find/replace engine       | `crates/vix-find-panel/` (matches/replace_all/unescape/PathFilter) |
 | Change LSP support                   | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
+| Change branch review / rebase editor | `crates/vix-review/` + `tui/src/app/git_review.rs`; `crates/vix-git/` + `tui/src/app/git_rebase.rs` |
+| Change the integrated terminal       | `crates/vix-terminal/` + `tui/src/app/terminal.rs`         |
+| Change project env (direnv/mise/venv) | `crates/vix-project-env/` + `tui/src/app/project_env.rs`  |
+| Change ghost-text completion         | `crates/vix-lsp/` (`ghost`) + `crates/vix-ai-core/` (`fim`) + `tui/src/app/ghost.rs`, `tui/src/ui/ghost.rs` |
 | Change the database workbench        | `crates/vix-db/` (module tree + `crates/vix-db/spec`)      |
 | Change clipboard access              | `crates/vix-clipboard/` (opt-in platform pasteboard)       |
 | Change terminal input (paste, modifiers) | `tui/src/main.rs` (terminal modes) + `App::on_paste` / `App::on_key` |
