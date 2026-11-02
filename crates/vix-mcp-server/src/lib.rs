@@ -247,7 +247,8 @@ impl<H: Host> Server<H> {
             .and_then(Value::as_str)
             .ok_or((INVALID_PARAMS, "missing uri".to_string()))?;
         let path = uri_path(uri).ok_or((INVALID_PARAMS, format!("not a file:// URI: {uri}")))?;
-        let (_, text) = workspace::read_text(&self.root, &path).map_err(|e| (INVALID_PARAMS, e.to_string()))?;
+        let (_, text) =
+            workspace::read_text(&self.root, &path).map_err(|e| (INVALID_PARAMS, e.to_string()))?;
         Ok(json!({"contents": [{"uri": uri, "mimeType": "text/plain", "text": text}]}))
     }
 }

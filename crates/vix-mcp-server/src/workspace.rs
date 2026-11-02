@@ -131,11 +131,10 @@ pub fn resolve(root: &Path, request: &str) -> Result<PathBuf, WorkspaceError> {
     if request.trim().is_empty() {
         return Err(WorkspaceError::EmptyPath);
     }
-    let lexical = lexical_join(root, Path::new(request)).ok_or_else(|| {
-        WorkspaceError::OutsideRoot {
+    let lexical =
+        lexical_join(root, Path::new(request)).ok_or_else(|| WorkspaceError::OutsideRoot {
             request: request_owned(),
-        }
-    })?;
+        })?;
     let canonical = lexical
         .canonicalize()
         .map_err(|_| WorkspaceError::NotFound {
@@ -388,7 +387,10 @@ mod tests {
 
         let err = read_text(&root, "big.txt").unwrap_err();
         assert!(matches!(err, WorkspaceError::TooLarge { .. }));
-        assert!(err.to_string().starts_with("big.txt: 2097153 bytes is over"));
+        assert!(
+            err.to_string()
+                .starts_with("big.txt: 2097153 bytes is over")
+        );
         let err = read_text(&root, "bin.dat").unwrap_err();
         assert!(matches!(err, WorkspaceError::Binary { .. }));
         assert_eq!(err.to_string(), "bin.dat: binary file");

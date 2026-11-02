@@ -121,12 +121,7 @@ impl From<WorkspaceError> for ToolError {
 ///
 /// Returns a [`ToolError`] for an unknown tool, a missing `path`, or anything
 /// the workspace boundary refuses.
-pub fn call<H: Host>(
-    root: &Path,
-    host: &H,
-    name: &str,
-    args: &Value,
-) -> Result<Value, ToolError> {
+pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<Value, ToolError> {
     match name {
         LIST_OPEN_BUFFERS => Ok(json!({
             "root": root.to_string_lossy(),
