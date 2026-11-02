@@ -48,10 +48,10 @@ use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choice_list::draw_choice_list;
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
-    draw_diff_view, draw_encoding_chooser, draw_git_log, draw_git_panel, draw_http_env_chooser,
-    draw_location_chooser, draw_macro_chooser, draw_recent_chooser, draw_refile_chooser,
-    draw_spell_suggest, draw_stash_chooser, draw_task_chooser, draw_workspace_chooser,
-    draw_git_rebase, draw_worktree_chooser,
+    draw_diff_view, draw_encoding_chooser, draw_git_log, draw_git_panel, draw_git_rebase,
+    draw_http_env_chooser, draw_location_chooser, draw_macro_chooser, draw_recent_chooser,
+    draw_refile_chooser, draw_spell_suggest, draw_stash_chooser, draw_task_chooser,
+    draw_workspace_chooser, draw_worktree_chooser,
 };
 #[cfg(feature = "script")]
 use choosers::{draw_plugin_chooser, draw_script_chooser};

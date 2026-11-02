@@ -38,9 +38,9 @@ mod git_graph;
 #[cfg(not(feature = "git"))]
 mod git_off;
 #[cfg(feature = "git")]
-mod git_review;
-#[cfg(feature = "git")]
 mod git_rebase;
+#[cfg(feature = "git")]
+mod git_review;
 #[cfg(feature = "git")]
 mod git_stash_worktree;
 mod hierarchy;
