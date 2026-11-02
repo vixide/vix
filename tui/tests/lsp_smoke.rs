@@ -2195,3 +2195,387 @@ fn lsp_ghost_text_is_drawn_dropped_when_stale_and_accepted() {
     app.lsp.shutdown();
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// T619: a pull-only server -- it offers `diagnosticProvider` and never
+/// sends `publishDiagnostics`. Each `textDocument/diagnostic` is logged to
+/// `argv[1]` with its `previousResultId`; the first pull gets a full report
+/// (`r1`, one error), a pull carrying `r1` gets `unchanged` (`r2`), and any
+/// later one a full, empty report (`r3`). A hover request makes it send
+/// `workspace/diagnostic/refresh` first.
+const MOCK_SERVER_PULL_ONLY: &str = r"
+import sys, json
+
+LOG = sys.argv[1]
+
+def log(line):
+    with open(LOG, 'a') as f:
+        f.write(line + '\n')
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+DIAG = {'range': {'start': {'line': 0, 'character': 0}, 'end': {'line': 0, 'character': 3}},
+        'severity': 1, 'message': 'pulled error'}
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'capabilities': {
+            'positionEncoding': 'utf-16',
+            'diagnosticProvider': {'interFileDependencies': False,
+                                   'workspaceDiagnostics': False}}}})
+    elif method == 'textDocument/diagnostic':
+        prev = msg['params'].get('previousResultId')
+        log('pull prev=%s' % prev)
+        if prev is None:
+            send({'jsonrpc': '2.0', 'id': mid, 'result': {
+                'kind': 'full', 'resultId': 'r1', 'items': [DIAG]}})
+        elif prev == 'r1':
+            send({'jsonrpc': '2.0', 'id': mid, 'result': {
+                'kind': 'unchanged', 'resultId': 'r2'}})
+        else:
+            send({'jsonrpc': '2.0', 'id': mid, 'result': {
+                'kind': 'full', 'resultId': 'r3', 'items': []}})
+    elif method == 'textDocument/hover':
+        send({'jsonrpc': '2.0', 'id': 9000, 'method': 'workspace/diagnostic/refresh',
+              'params': None})
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {
+            'contents': {'kind': 'plaintext', 'value': 'refresh sent'}}})
+    elif method == 'shutdown':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': None})
+    elif method == 'exit':
+        break
+";
+
+/// A temp dir holding the pull-only mock and `a.rs`, and its server config
+/// (logging to `pulls.log`), or `None` without `python3`.
+fn pull_fixture(tag: &str) -> Option<(PathBuf, LspServer)> {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return None;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-pull-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).ok()?;
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_PULL_ONLY).ok()?;
+    std::fs::write(root.join("a.rs"), "abc\n").ok()?;
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            root.join("pulls.log").to_string_lossy().into_owned(),
+        ],
+    };
+    Some((root, cfg))
+}
+
+/// The pulls the mock has logged so far, one `pull prev=...` line each.
+fn pull_log(root: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(root.join("pulls.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+/// T619: a server that only answers pull requests still gets its
+/// diagnostics underlined in a live `App` -- pulled after `didOpen`, merged
+/// into the same map push fills, drawn by the same per-tick refresh.
+#[test]
+fn pull_only_server_diagnostics_are_underlined_in_a_live_app() {
+    let Some((root, cfg)) = pull_fixture("app") else {
+        return;
+    };
+    let file = root.join("a.rs");
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(cfg);
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && app.lsp.diagnostics_for(&file).is_empty() {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let diags = app.lsp.diagnostics_for(&file);
+    let marks = app
+        .editor
+        .active_tab()
+        .and_then(|t| t.editor.diagnostic_marks().cloned())
+        .unwrap_or_default();
+    app.lsp.shutdown();
+    let pulls = pull_log(&root);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(pulls.first().map(String::as_str), Some("pull prev=None"));
+    assert_eq!(diags.len(), 1, "the pulled report reached the client");
+    assert_eq!(diags[0].message, "pulled error");
+    assert_eq!(
+        marks.iter().map(|(s, e, _)| (*s, *e)).collect::<Vec<_>>(),
+        [(0, 3)],
+        "the pulled diagnostic is underlined"
+    );
+}
+
+/// Poll `lsp` until `done` holds and nothing is in flight or due, or 15 s
+/// pass. Returns every event seen.
+fn poll_until(lsp: &mut Lsp, mut done: impl FnMut(&Lsp) -> bool) -> Vec<LspEvent> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut events = Vec::new();
+    while Instant::now() < deadline {
+        events.extend(lsp.poll());
+        if done(lsp) && !lsp.busy() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    events
+}
+
+/// T619: a debounced pull after `didChange` carries the last `resultId`, an
+/// `unchanged` reply keeps the diagnostics, and `workspace/diagnostic/refresh`
+/// re-pulls (here getting a full, empty report that clears them).
+#[test]
+fn pull_diagnostics_track_result_ids_unchanged_reports_and_refresh() {
+    let Some((root, cfg)) = pull_fixture("ids") else {
+        return;
+    };
+    let file = root.join("a.rs");
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
+    lsp.did_open(&file, "abc\n");
+    poll_until(&mut lsp, |l| !l.diagnostics_for(&file).is_empty());
+    assert_eq!(lsp.diagnostics_for(&file).len(), 1, "first pull: full");
+
+    // A burst of changes sends one pull, after the debounce.
+    lsp.did_change(&file, "abcd\n");
+    lsp.did_change(&file, "abcde\n");
+    assert!(lsp.busy(), "a pull is due");
+    poll_until(&mut lsp, |_| pull_log(&root).len() >= 2);
+    let after_change = lsp.diagnostics_for(&file).len();
+
+    // Hover makes the mock ask for a refresh; the client re-pulls with `r2`.
+    lsp.request_hover(&file, 0, 0);
+    let events = poll_until(&mut lsp, |l| l.diagnostics_for(&file).is_empty());
+    lsp.shutdown();
+    let pulls = pull_log(&root);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        pulls,
+        ["pull prev=None", "pull prev=r1", "pull prev=r2"],
+        "one pull per change burst, each carrying the last resultId"
+    );
+    assert_eq!(after_change, 1, "an unchanged report keeps the diagnostics");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, LspEvent::Hover(t) if t == "refresh sent")),
+        "the hover still answered"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, LspEvent::Diagnostics(p) if p.ends_with("a.rs"))),
+        "the refreshed report was announced"
+    );
+}
+
+/// T620: like the integration test's hierarchy mock, but a follow-up request
+/// carrying another server's item answers from `wrong.rs`, so a test can
+/// tell each request reached the server that prepared its item. `argv[1]`
+/// is the server's tag.
+const MOCK_SERVER_HIERARCHY_ROUTING: &str = r"
+import sys, json
+
+TAG = sys.argv[1]
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def rng(line, ch):
+    return {'start': {'line': line, 'character': ch}, 'end': {'line': line, 'character': ch + 1}}
+
+def item(name, uri, line):
+    return {'name': name, 'kind': 12, 'uri': uri, 'data': TAG,
+            'range': rng(line, 0), 'selectionRange': rng(line, 3)}
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    params = msg.get('params') or {}
+    mine = (params.get('item') or {}).get('data') == TAG
+    def at(name):
+        return 'file:///%s/%s.rs' % (TAG, name if mine else 'wrong')
+    if method == 'initialize':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'capabilities': {
+            'positionEncoding': 'utf-16'}}})
+    elif method in ('textDocument/prepareCallHierarchy', 'textDocument/prepareTypeHierarchy'):
+        uri = params['textDocument']['uri']
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [item('f', uri, 0)]})
+    elif method == 'callHierarchy/incomingCalls':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [
+            {'from': item('caller', at('caller'), 5), 'fromRanges': [rng(6, 2)]}]})
+    elif method == 'callHierarchy/outgoingCalls':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [
+            {'to': item('callee', at('callee'), 3), 'fromRanges': [rng(1, 4)]}]})
+    elif method == 'typeHierarchy/supertypes':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [item('Base', at('base'), 7)]})
+    elif method == 'typeHierarchy/subtypes':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [item('Derived', at('derived'), 9)]})
+    elif method == 'shutdown':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': None})
+    elif method == 'exit':
+        break
+";
+
+/// T620 (and T123b's call-hierarchy limit): two servers handle one file and
+/// both answer prepare; each prepared item names its server, and every
+/// follow-up -- incoming, outgoing, supertypes, subtypes -- reaches only the
+/// server that prepared it.
+#[test]
+fn hierarchy_follow_ups_reach_the_server_that_prepared_each_item() {
+    use vix::lsp::HierarchyDirection;
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-hierarchy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_HIERARCHY_ROUTING).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "fn f() {}\n").unwrap();
+    let server = |tag: &str| LspServer {
+        language_id: tag.into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            tag.into(),
+        ],
+    };
+    let mut lsp = Lsp::new(
+        true,
+        vec![server("alpha"), server("beta")],
+        std::slice::from_ref(&root),
+    );
+    lsp.did_open(&file, "fn f() {}\n");
+    lsp.request_prepare_call_hierarchy(&file, 0, 3);
+    lsp.request_prepare_type_hierarchy(&file, 0, 3);
+
+    let mut prepared = Vec::new();
+    let mut results = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && results.len() < 8 {
+        for ev in lsp.poll() {
+            match ev {
+                LspEvent::CallHierarchyPrepared(item) => {
+                    lsp.request_incoming_calls(&item);
+                    lsp.request_outgoing_calls(&item);
+                    prepared.push(item.server.clone());
+                }
+                LspEvent::TypeHierarchyPrepared(item) => {
+                    lsp.request_supertypes(&item);
+                    lsp.request_subtypes(&item);
+                    prepared.push(item.server.clone());
+                }
+                LspEvent::Hierarchy {
+                    direction,
+                    locations,
+                } => results.push((direction, locations)),
+                _ => {}
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    prepared.sort();
+    assert_eq!(prepared, ["alpha", "alpha", "beta", "beta"]);
+    let mut got: Vec<(HierarchyDirection, String, u32, u32)> = results
+        .into_iter()
+        .flat_map(|(d, locs)| {
+            locs.into_iter()
+                .map(move |(p, l, c)| (d, p.to_string_lossy().into_owned(), l, c))
+        })
+        .collect();
+    got.sort_by(|a, b| a.1.cmp(&b.1));
+    let expected: Vec<(HierarchyDirection, String, u32, u32)> = ["alpha", "beta"]
+        .iter()
+        .flat_map(|tag| {
+            [
+                (
+                    HierarchyDirection::Supertypes,
+                    format!("/{tag}/base.rs"),
+                    7,
+                    3,
+                ),
+                (
+                    HierarchyDirection::Outgoing,
+                    format!("/{tag}/callee.rs"),
+                    3,
+                    3,
+                ),
+                (
+                    HierarchyDirection::Incoming,
+                    format!("/{tag}/caller.rs"),
+                    6,
+                    2,
+                ),
+                (
+                    HierarchyDirection::Subtypes,
+                    format!("/{tag}/derived.rs"),
+                    9,
+                    3,
+                ),
+            ]
+        })
+        .collect();
+    assert_eq!(got, expected, "no follow-up reached the other server");
+}

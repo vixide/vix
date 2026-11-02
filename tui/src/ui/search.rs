@@ -146,7 +146,9 @@ pub(super) fn draw_workspace_search(app: &mut App, frame: &mut Frame, area: Rect
     let rect = centered(area, 80, 80);
     frame.render_widget(Clear, rect);
     let replacing = ps.flags.contains(WorkspaceFlags::REPLACING);
-    let title = if ps.flags.contains(WorkspaceFlags::STATIC_RESULTS) {
+    let title = if let Some(own) = &ps.title {
+        format!(" {} {own} ", icon::SEARCH)
+    } else if ps.flags.contains(WorkspaceFlags::STATIC_RESULTS) {
         format!(" {} {} ", icon::SEARCH, t!("ui.goto_definition"))
     } else if replacing {
         format!(" {} {} ", icon::SEARCH, t!("ui.search_replace_workspace"))

@@ -764,3 +764,5 @@ vixrecover
 # T667 (project environment)
 pyvenv
 PYTHONHOME
+# T620 (call hierarchy)
+callees

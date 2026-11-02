@@ -294,7 +294,7 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     },
     unit!(Search, search, search_key),
     unit!(Palette, palette, palette_key),
-    unit!(WorkspaceSearch, workspace_search, ps_key),
+    unit!(WorkspaceSearch, workspace_search, workspace_search_key),
     unit!(KeybindingEditor, keybinding_editor, keybinding_editor_key),
     // Below `Prompt`: `r` opens a reword prompt over the rebase overlay, and the
     // prompt has to win the key.

@@ -321,6 +321,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `last_split` | Last Split | Catalog |
 | `last_tab` | Last Tab | Catalog |
 | `lsp.call_hierarchy` | Call Hierarchy (Callers) | Menu |
+| `lsp.call_hierarchy_outgoing` | Call Hierarchy (Callees) | Menu |
 | `lsp.code_action` | Code Action… | Menu |
 | `lsp.code_lens` | Code Lens… | Menu |
 | `lsp.code_lens_run` | Run Code Lens on Line | Menu |
@@ -341,6 +342,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.shrink_selection` | Shrink Selection | Menu |
 | `lsp.signature_help` | Signature Help | Menu |
 | `lsp.status` | LSP Status… | Menu |
+| `lsp.type_hierarchy_subtypes` | Type Hierarchy (Subtypes) | Menu |
+| `lsp.type_hierarchy_supertypes` | Type Hierarchy (Supertypes) | Menu |
 | `lsp.workspace_symbols` | Workspace Symbols… | Menu |
 | `macro.play` | Play | Menu |
 | `macro.play_saved` | Play Saved… | Menu |
@@ -805,4 +808,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**798 actions.**
+**801 actions.**

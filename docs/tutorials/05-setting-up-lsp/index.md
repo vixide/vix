@@ -194,7 +194,7 @@ keymap.
 
 | Feature | Menu item | Key | Action id | LSP method(s) |
 | --- | --- | --- | --- | --- |
-| Diagnostics | **Tools → Language Server → Diagnostics…** | — | `lsp.diagnostics` | `publishDiagnostics` |
+| Diagnostics | **Tools → Language Server → Diagnostics…** | — | `lsp.diagnostics` | `publishDiagnostics`, `textDocument/diagnostic`, `workspace/diagnostic` |
 | Restart Server | **Tools → Language Server → Restart Server** | — | `lsp.restart` | `shutdown` / `initialize` |
 | Show Server Log | **Tools → Language Server → Show Server Log** | — | `lsp.show_log` | (server stderr) |
 | Hover | **Tools → Language Server → Hover** | — | `lsp.hover` | `hover` |
@@ -202,7 +202,10 @@ keymap.
 | Go to Implementation | **Tools → Language Server → Go to Implementation** | — | `nav.goto_implementation` | `implementation` |
 | Go to Type Definition | **Tools → Language Server → Go to Type Definition** | — | `nav.goto_type_definition` | `typeDefinition` |
 | Find References | **Tools → Language Server → Find References** | — | `lsp.references` | `references` |
-| Call Hierarchy | **Tools → Language Server → Call Hierarchy (Callers)** | — | `lsp.call_hierarchy` | — |
+| Call Hierarchy (callers) | **Tools → Language Server → Call Hierarchy (Callers)** | `Alt+D` in the list flips | `lsp.call_hierarchy` | `prepareCallHierarchy`, `callHierarchy/incomingCalls` |
+| Call Hierarchy (callees) | **Tools → Language Server → Call Hierarchy (Callees)** | `Alt+D` in the list flips | `lsp.call_hierarchy_outgoing` | `prepareCallHierarchy`, `callHierarchy/outgoingCalls` |
+| Type Hierarchy (supertypes) | **Tools → Language Server → Type Hierarchy (Supertypes)** | `Alt+D` in the list flips | `lsp.type_hierarchy_supertypes` | `prepareTypeHierarchy`, `typeHierarchy/supertypes` |
+| Type Hierarchy (subtypes) | **Tools → Language Server → Type Hierarchy (Subtypes)** | `Alt+D` in the list flips | `lsp.type_hierarchy_subtypes` | `prepareTypeHierarchy`, `typeHierarchy/subtypes` |
 | Rename Symbol | **Tools → Language Server → Rename Symbol** | `F2` | `lsp.rename` | `rename` |
 | Code Action… | **Tools → Language Server → Code Action…** | — | `lsp.code_action` | `codeAction` |
 | Code Lens… | **Tools → Language Server → Code Lens…** | — | `lsp.code_lens` | `codeLens`, `workspace/executeCommand`, `workspace/applyEdit` |

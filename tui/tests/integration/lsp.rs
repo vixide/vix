@@ -78,6 +78,10 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         "lsp.highlight",
         "lsp.linked_edit",
         "lsp.code_lens",
+        "lsp.call_hierarchy",
+        "lsp.call_hierarchy_outgoing",
+        "lsp.type_hierarchy_supertypes",
+        "lsp.type_hierarchy_subtypes",
     ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");
@@ -243,4 +247,191 @@ fn lsp_status_panel_lists_servers_and_closes() {
     assert_eq!(app.lsp.statuses()[0].state, ServerState::Failed);
     app.on_key(esc());
     assert!(app.lsp_status.is_none(), "Esc closes");
+}
+
+/// T620: a mock language server for call and type hierarchy. `argv[1]` is a
+/// tag the server stamps into every item it prepares (`data`) and into the
+/// paths of its results (`file:///<tag>/...`). It has no subtypes.
+#[cfg(feature = "lsp")]
+const MOCK_HIERARCHY_SERVER: &str = r"
+import sys, json
+
+TAG = sys.argv[1]
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+def rng(line, ch):
+    return {'start': {'line': line, 'character': ch}, 'end': {'line': line, 'character': ch + 1}}
+
+def item(name, uri, line):
+    return {'name': name, 'kind': 12, 'uri': uri, 'data': TAG,
+            'range': rng(line, 0), 'selectionRange': rng(line, 3)}
+
+def at(name):
+    return 'file:///%s/%s.rs' % (TAG, name)
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    params = msg.get('params') or {}
+    if method == 'initialize':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'capabilities': {
+            'positionEncoding': 'utf-16', 'callHierarchyProvider': True,
+            'typeHierarchyProvider': True}}})
+    elif method in ('textDocument/prepareCallHierarchy', 'textDocument/prepareTypeHierarchy'):
+        uri = params['textDocument']['uri']
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [item('f', uri, 0)]})
+    elif method == 'callHierarchy/incomingCalls':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [
+            {'from': item('caller', at('caller'), 5), 'fromRanges': [rng(6, 2)]}]})
+    elif method == 'callHierarchy/outgoingCalls':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [
+            {'to': item('callee', at('callee'), 3), 'fromRanges': [rng(1, 4)]}]})
+    elif method == 'typeHierarchy/supertypes':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': [item('Base', at('base'), 7)]})
+    elif method == 'typeHierarchy/subtypes':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': []})
+    elif method == 'shutdown':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': None})
+    elif method == 'exit':
+        break
+";
+
+/// The open result list's title and the paths of its hits.
+#[cfg(feature = "lsp")]
+fn hierarchy_list(app: &App) -> Option<(String, Vec<PathBuf>)> {
+    let ps = app.workspace_search.as_ref()?;
+    Some((
+        ps.title.clone()?,
+        ps.hits.iter().map(|h| h.path.clone()).collect(),
+    ))
+}
+
+/// T620: the call- and type-hierarchy actions in a live `App` against a mock
+/// server: the result list is titled by direction, `Alt+D` flips callers and
+/// callees against the same prepared item, an empty reply says so instead of
+/// opening a list (and a flip with no results keeps the list it had), and
+/// closing the list forgets the hierarchy.
+#[test]
+#[cfg(feature = "lsp")]
+fn hierarchy_actions_list_results_and_alt_d_flips_the_direction() {
+    let has_python = std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_python {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = unique_dir("lsp-hierarchy");
+    let mock = root.join("mock_hierarchy.py");
+    fs::write(&mock, MOCK_HIERARCHY_SERVER).unwrap();
+    let file = root.join("a.rs");
+    fs::write(&file, "fn f() {}\n").unwrap();
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(vix::settings::LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            "alpha".into(),
+        ],
+    });
+    let mut app = app_at_with(&root, settings);
+    app.open_initial(&file);
+    app.poll_lsp(); // spawns the server and opens the document
+
+    let timeout = Duration::from_secs(15);
+    app.run_action("lsp.call_hierarchy");
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| hierarchy_list(a).is_some(),
+        timeout,
+    );
+    let (title, paths) = hierarchy_list(&app).unwrap();
+    assert_eq!(title, "Callers");
+    assert_eq!(paths, [PathBuf::from("/alpha/caller.rs")]);
+    let panel_status = &app.workspace_search.as_ref().unwrap().status;
+    assert!(panel_status.contains("Alt+D"), "status: {panel_status}");
+
+    app.on_key(alt(KeyCode::Char('d')));
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| hierarchy_list(a).is_some_and(|(t, _)| t == "Callees"),
+        timeout,
+    );
+    assert_eq!(
+        hierarchy_list(&app).unwrap().1,
+        [PathBuf::from("/alpha/callee.rs")],
+        "the callee itself, from the same server"
+    );
+    app.on_key(alt(KeyCode::Char('d')));
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| hierarchy_list(a).is_some_and(|(t, _)| t == "Callers"),
+        timeout,
+    );
+    app.on_key(esc());
+    assert!(app.workspace_search.is_none());
+
+    // Type hierarchy: no subtypes, so a status line instead of a list.
+    app.run_action("lsp.type_hierarchy_subtypes");
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| a.status.contains("Subtypes"),
+        timeout,
+    );
+    assert!(
+        app.workspace_search.is_none(),
+        "an empty reply opens no list"
+    );
+    app.run_action("lsp.type_hierarchy_supertypes");
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| hierarchy_list(a).is_some(),
+        timeout,
+    );
+    let (title, paths) = hierarchy_list(&app).unwrap();
+    assert_eq!(title, "Supertypes");
+    assert_eq!(paths, [PathBuf::from("/alpha/base.rs")]);
+    // Alt+D asks for subtypes; there are none, so the supertypes list stays.
+    app.status.clear();
+    app.on_key(alt(KeyCode::Char('d')));
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| a.status.contains("Subtypes"),
+        timeout,
+    );
+    assert_eq!(hierarchy_list(&app).unwrap().0, "Supertypes");
+
+    app.lsp.shutdown();
+    let _ = fs::remove_dir_all(&root);
 }
