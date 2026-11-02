@@ -282,8 +282,8 @@ pub struct Settings {
     pub ai_api_key_command: String,
     /// Agent Client Protocol coding agents (T635): each entry is a command
     /// line (split on whitespace, run without a shell), e.g.
-    /// `"gemini --experimental-acp"`. **AI → Start Agent** starts the first
-    /// one, and only in a trusted workspace. Empty by default. See
+    /// `"gemini --experimental-acp"`. **AI → Start Agent** starts it (or
+    /// asks which, when several are listed), and only in a trusted workspace. Empty by default. See
     /// `crates/vix-acp/spec/index.md`.
     pub ai_agents: Vec<String>,
     /// Configured debug adapters (DAP), matched to files by extension, each

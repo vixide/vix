@@ -48,7 +48,11 @@ for line in sys.stdin:
     msg = json.loads(line)
     method = msg.get("method")
     if method == "initialize":
-        send({"jsonrpc": "2.0", "id": msg["id"], "result": {"protocolVersion": 1}})
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": {
+            "protocolVersion": 1, "agentCapabilities": {"loadSession": True}}})
+    elif method == "session/load":
+        sid = msg["params"]["sessionId"]
+        send({"jsonrpc": "2.0", "id": msg["id"], "result": None})
     elif method == "session/new":
         send({"jsonrpc": "2.0", "id": msg["id"], "result": {"sessionId": sid}})
     elif method == "session/prompt":

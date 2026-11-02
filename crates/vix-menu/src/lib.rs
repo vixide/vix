@@ -1607,6 +1607,8 @@ const AI: &[Item] = &[
     SEP,
     Item::leaf("menu.item.ai.agent_start", "ai.agent_start", ""),
     Item::leaf("menu.item.ai.agent_prompt", "ai.agent_prompt", ""),
+    Item::leaf("menu.item.ai.agent_resume", "ai.agent_resume", ""),
+    Item::leaf("menu.item.ai.agent_plan", "ai.agent_plan", ""),
     Item::leaf("menu.item.ai.agent_stop", "ai.agent_stop", ""),
 ];
 

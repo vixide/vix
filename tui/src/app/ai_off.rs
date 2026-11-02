@@ -32,7 +32,11 @@ impl App {
 
     /// No ACP agent in this build.
     pub fn poll_acp(&mut self) {
-        debug_assert!(self.acp.is_none() && self.acp_parked_panel.is_none());
+        debug_assert!(
+            self.acp.is_none()
+                && self.acp_parked_panel.is_none()
+                && self.acp_last_session.is_none()
+        );
     }
 
     /// Never running.
