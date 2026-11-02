@@ -439,7 +439,10 @@ impl std::fmt::Display for BodyFileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Outside { path } => {
-                write!(f, "body file must be inside the .http file's folder: {path}")
+                write!(
+                    f,
+                    "body file must be inside the .http file's folder: {path}"
+                )
             }
             Self::Read { path, source } => write!(f, "{}: {source}", path.display()),
         }
