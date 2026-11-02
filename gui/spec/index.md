@@ -134,6 +134,22 @@ Clipboard keys (`Cmd/Ctrl+X/C/V`) arrive as plain keys in every build
 reads the clipboard itself. In every build the in-grid Vix menu bar works
 too.
 
+## Errors (T610)
+
+`vix-slint`'s `window::compile` and `window::create` return
+`window::WindowError` instead of `String`:
+
+| Variant | Meaning |
+| --- | --- |
+| `Compile { diagnostics }` | the `.slint` markup has compiler errors (one per line) |
+| `MissingComponent` | the markup compiled but does not export the window component |
+| `Create(PlatformError)` | the platform failed to create the window |
+| `Property { name, source }` | an initial property could not be set |
+
+The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
+`thiserror`). `Display` is the same text the earlier `String` errors carried,
+so the `vix-slint: …` line printed on startup failure is unchanged.
+
 ## Known limitations (Phase 1)
 
 - `Option`-typed characters (`ß`, `€`) are unavailable on macOS because

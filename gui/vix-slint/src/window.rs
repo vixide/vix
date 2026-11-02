@@ -42,12 +42,58 @@ pub fn source(menubar: &str) -> String {
     TEMPLATE.replace(MARKER, menubar)
 }
 
+/// Why the window could not be built (T610).
+///
+/// `Display` text matches the earlier `String` errors.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum WindowError {
+    /// The markup has compiler errors.
+    Compile {
+        /// The compiler's error diagnostics, one per line.
+        diagnostics: String,
+    },
+    /// The markup compiled but does not export the window component.
+    MissingComponent,
+    /// The platform failed to create the window.
+    Create(slint_interpreter::PlatformError),
+    /// Setting an initial property on the window failed.
+    Property {
+        /// The property name.
+        name: String,
+        /// Slint's reason.
+        source: slint_interpreter::SetPropertyError,
+    },
+}
+
+impl std::fmt::Display for WindowError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Compile { diagnostics } => f.write_str(diagnostics),
+            Self::MissingComponent => write!(f, "window.slint does not export {COMPONENT}"),
+            Self::Create(e) => e.fmt(f),
+            Self::Property { name, source } => write!(f, "{name}: {source}"),
+        }
+    }
+}
+
+impl std::error::Error for WindowError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Create(e) => Some(e),
+            Self::Property { source, .. } => Some(source),
+            Self::Compile { .. } | Self::MissingComponent => None,
+        }
+    }
+}
+
 /// Compile `source` and return the window component, or the compiler's
 /// errors.
 ///
 /// # Errors
-/// The compiler's error diagnostics, one per line.
-pub fn compile(source: String) -> Result<slint_interpreter::ComponentDefinition, String> {
+/// [`WindowError::Compile`] with the compiler's error diagnostics, one per
+/// line, or [`WindowError::MissingComponent`].
+pub fn compile(source: String) -> Result<slint_interpreter::ComponentDefinition, WindowError> {
     let result =
         block_on(Compiler::default().build_from_source(source, PathBuf::from("window.slint")));
     let errors: Vec<String> = result
@@ -56,23 +102,29 @@ pub fn compile(source: String) -> Result<slint_interpreter::ComponentDefinition,
         .map(|d| d.to_string())
         .collect();
     if !errors.is_empty() {
-        return Err(errors.join("\n"));
+        return Err(WindowError::Compile {
+            diagnostics: errors.join("\n"),
+        });
     }
     result
         .component(COMPONENT)
-        .ok_or_else(|| format!("window.slint does not export {COMPONENT}"))
+        .ok_or(WindowError::MissingComponent)
 }
 
 /// Create the window, titled `title`, with its menu bar and font set up.
 ///
 /// # Errors
-/// Compiler errors in the markup, or the platform failing to create a window.
-pub fn create(title: &str) -> Result<ComponentInstance, String> {
+/// A [`WindowError`]: compiler errors in the markup, the platform failing to
+/// create a window, or a property that cannot be set.
+pub fn create(title: &str) -> Result<ComponentInstance, WindowError> {
     let definition = compile(source(&crate::menus::markup()))?;
-    let ui = definition.create().map_err(|e| e.to_string())?;
+    let ui = definition.create().map_err(WindowError::Create)?;
     let set = |name: &str, value: Value| {
         ui.set_property(name, value)
-            .map_err(|e| format!("{name}: {e}"))
+            .map_err(|source| WindowError::Property {
+                name: name.to_string(),
+                source,
+            })
     };
     set("window-title", Value::String(title.into()))?;
     set("family", Value::String(primary_family().into()))?;
@@ -85,6 +137,24 @@ pub fn create(title: &str) -> Result<ComponentInstance, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_errors_keep_their_text() {
+        let Err(err) = compile("this is not slint".to_string()) else {
+            panic!("expected a compile error");
+        };
+        assert!(matches!(err, WindowError::Compile { .. }), "{err:?}");
+        assert!(!err.to_string().is_empty());
+        let Err(err) = compile("export component Other inherits Window {}".to_string()) else {
+            panic!("expected a compile error");
+        };
+        assert!(matches!(err, WindowError::MissingComponent), "{err:?}");
+        assert_eq!(
+            err.to_string(),
+            format!("window.slint does not export {COMPONENT}")
+        );
+        assert!(std::error::Error::source(&err).is_none());
+    }
 
     #[test]
     fn the_window_and_its_generated_menu_bar_compile() {

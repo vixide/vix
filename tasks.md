@@ -7056,7 +7056,7 @@ new action.
   insta snapshot per family: DB workbench, AI diff, edit-value, edit-bytes,
   edit-outline, choosers, info panels, calculator/converters, and the
   merge-conflict overlay. **Medium.**
-- [ ] **T610 — Typed errors in the library crates.** (vix-git,
+- [x] **T610 — Typed errors in the library crates.** (vix-git,
   vix-http-client and vix-ai-core are done as T673, and the vix-db SSH tunnel as
   T610; the `*-tool` converters and `vix-db`'s `Session` remain.) 45 public fns in 31
   files return `Result<_, String>`. vix-git alone has 10 of them
@@ -7079,6 +7079,14 @@ new action.
     (`ParseError`) and vix-script's `Catalog::insert_toml` (`CatalogError`).
     **Still `Result<_, String>`:** vix-db (session.rs), vix-http-client
     (rest.rs), vix-mcp-server, gui/vix-slint.
+  - **Slice 4 done 2026-11-02** (`refactor/t610-typed-errors-final`), one
+    commit per crate: vix-http-client (`rest::BodyFileError`), vix-db
+    (`session::SessionError`, also returned by `read_sqlite_schema`),
+    vix-mcp-server (`WorkspaceError`, `ToolError`, and a boxed `HostError`
+    for `Host::sqlite_schema`) and gui/vix-slint (`window::WindowError`).
+    No public function in `crates/`, `gui/` or `tui/src` returns
+    `Result<_, String>` any more, so T610 is done. (Private helpers and the
+    stringly `Browser` message fields keep `String` on purpose.)
 - [x] **T611 — One overlay priority table for drawing and key routing.**
   `App` has 194 fields, 131 of them `Option<_>`, and `App::new` is 217
   lines (`tui/src/app.rs:2315`). Draw stacking is a cascade of 66 `is_some()`
