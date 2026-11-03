@@ -75,6 +75,7 @@ pub(crate) struct RemoteSession {
 }
 
 impl RemoteSession {
+    /// A fresh, connected, not-yet-asked session for `target`.
     fn new(target: RemoteTarget) -> Self {
         let label = target.label();
         Self {
@@ -543,6 +544,8 @@ impl App {
         self.remote.session.as_ref().map(|s| s.name_of(path))
     }
 
+    /// The identity of the open remote workspace (its root as the session names it), or `None`
+    /// for a local workspace. Trust decisions are stored under it.
     pub(super) fn remote_session_key(&self) -> Option<String> {
         self.remote.session.as_ref().map(|s| s.name_of(&self.root))
     }

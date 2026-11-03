@@ -71,6 +71,7 @@ pub(crate) enum PreviewSource {
 pub(crate) type PreviewCache = (PreviewSource, usize, Option<Preview>);
 
 impl App {
+    /// Open the command palette empty, in its default (files) mode.
     pub(super) fn open_palette(&mut self) {
         self.open_palette_seeded("");
     }
@@ -140,6 +141,8 @@ impl App {
     /// always pruned (some projects don't ignore them), depth is bounded, and the
     /// index is capped to keep startup and matching responsive.
     pub(super) fn build_file_index(&mut self) {
+        // Hard cap on indexed files so startup and per-keystroke matching stay responsive in
+        // huge trees.
         const CAP: usize = 5000;
         let auth = crate::authority::current();
         let mut out = Vec::new();
@@ -252,6 +255,9 @@ impl App {
         scored
     }
 
+    /// Recompute the palette entries for its current mode and query (the "everywhere" scope
+    /// applies only in file mode) and clamp the selection into the new list. Called after every
+    /// edit of the query.
     pub(super) fn recompute_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;
@@ -358,7 +364,9 @@ impl App {
     /// line. An empty query returns nothing (the workspace is too large to list
     /// every symbol); results and files scanned are capped to stay responsive.
     fn workspace_symbol_entries(&self, query: &str) -> Vec<Entry> {
+        // Cap on symbol hits returned so a broad query stays responsive.
         const MAX_RESULTS: usize = 200;
+        // Files larger than this are skipped by the symbol scan (generated or minified files).
         const MAX_FILE_BYTES: u64 = 512 * 1024;
         let mut entries = Vec::new();
         if query.trim().is_empty() {
@@ -400,6 +408,10 @@ impl App {
         entries
     }
 
+    /// Handle a key while the palette is open. Up/Down first step through query history (when
+    /// applicable) and otherwise move the selection; Tab accepts the first entry; Enter accepts
+    /// the selection; typing/Backspace edit the query, recompute entries and live-preview go-
+    /// to-line; Esc cancels and reverts the preview.
     pub(super) fn palette_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
@@ -455,6 +467,7 @@ impl App {
     /// Record `action` as the most-recently-run palette command (deduped,
     /// most-recent first, capped).
     fn record_command_recent(&mut self, action: &str) {
+        // How many recently run commands are remembered (and persisted in settings).
         const MAX_RECENTS: usize = 12;
         self.command_recents.retain(|a| a != action);
         self.command_recents.insert(0, action.to_string());
@@ -466,6 +479,10 @@ impl App {
         self.store_settings_or_warn();
     }
 
+    /// Run the selected entry: close the palette, record the query in its history, undo any
+    /// live go-to-line preview (so jumps start from the true origin), then open the file
+    /// (remote paths go through the Cowork open request), run the command (recorded as a
+    /// recent), switch buffer, or go to the line. A no-op when nothing is selected.
     fn accept_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;

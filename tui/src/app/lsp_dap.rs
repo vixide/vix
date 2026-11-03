@@ -998,6 +998,8 @@ impl App {
     /// `package.json` made outside Vix. Does nothing unless a server registered
     /// watchers.
     pub(super) fn forward_watched_files(&mut self, changed: Vec<PathBuf>) {
+        // Project manifest/lock files stat'ed on every watched-files poll, whether or not they
+        // are open.
         const MANIFESTS: [&str; 8] = [
             "Cargo.toml",
             "Cargo.lock",

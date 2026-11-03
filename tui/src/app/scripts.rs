@@ -158,6 +158,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the plugin chooser: Up/Down move (wrapping), Enter toggles the plugin's
+    /// enabled state, Esc closes.
     pub(super) fn plugin_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -177,6 +179,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the plugin chooser: clicking a row toggles that plugin.
     pub(super) fn plugin_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.plugin_mut()
@@ -280,6 +283,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the script-command chooser: Up/Down move (wrapping), Enter runs the
+    /// command, Esc closes.
     pub(super) fn script_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -299,6 +304,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the script-command chooser: clicking a row runs that command.
     pub(super) fn script_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.script_mut()

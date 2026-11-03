@@ -689,6 +689,9 @@ enum AgendaKind {
     Search(String),
 }
 
+/// The Org agenda currently shown in the (read-only) agenda buffer: which view it is and the
+/// maps that tie each rendered line back to its source headline, so `t` and Enter can act on
+/// the right item.
 struct AgendaView {
     /// Which view this is, so `t` rebuilds the same one.
     kind: AgendaKind,
@@ -703,6 +706,8 @@ struct AgendaView {
     rendered: String,
 }
 
+/// A shell command started from Run Command that is still executing in the background: where
+/// its output arrives, how to kill it, and its label for the completion message.
 struct RunningCommand {
     /// Receiver for the reader thread's output.
     rx: std::sync::mpsc::Receiver<CmdMsg>,
@@ -4304,6 +4309,9 @@ impl App {
         true
     }
 
+    /// Dispatch the editor-level actions (cursor motion, selection, edits, folding, shell mode,
+    /// suspend and similar) that are small enough to be one-liners over the active tab. Returns
+    /// `false` for ids it does not own so the caller falls through to the next dispatcher.
     fn run_named_action(&mut self, id: &str) -> bool {
         let view_h = self.editor_view().height as usize;
         // Editor motion/selection (no buffer change).
@@ -4394,6 +4402,12 @@ impl App {
         true
     }
 
+    /// Save the active tab, in order of precedence: a Cowork shared-in buffer asks the host to
+    /// save; wgrep-results and directory-edit buffers go to their apply-confirm instead of the
+    /// disk; images and read-only buffers refuse; a buffer without a path becomes Save As; a
+    /// file the user cannot write offers Save As; otherwise write it, live-reload settings
+    /// files, then format on save through Prettier or the language server (a second save lands
+    /// when the formatting edits arrive).
     fn save(&mut self) {
         // A buffer shared in from a Cowork host is saved by the host.
         if self.cowork_intercept_save() {
@@ -5092,6 +5106,8 @@ impl App {
     // `org_rewrite_line`/`org_move_subtree`, reporting
     // `status.org_table_no_table` on a miss.
 
+    /// Toggle the fold at the cursor line; reports "nothing to fold" when no foldable range
+    /// starts there.
     fn toggle_fold_at_cursor(&mut self) {
         if let Some(t) = self.editor.active_tab_mut() {
             let line = {
@@ -5610,6 +5626,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the spelling-suggestion popup: Up/Down move, Enter replaces the word,
+    /// `a` adds it to the dictionary, `i` ignores it for the session, Esc closes.
     fn spell_suggest_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -5632,6 +5650,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the spelling popup: a left click on a suggestion applies it.
     fn spell_suggest_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -5702,6 +5721,8 @@ impl App {
         self.context_menu = Some(ContextMenu { selected, x, y });
     }
 
+    /// Handle a key in the right-click context menu: Up/Down skip separator rows, Enter runs
+    /// the item, Esc closes.
     fn context_menu_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => self.context_move(false),
@@ -5728,6 +5749,8 @@ impl App {
         cm.selected = i;
     }
 
+    /// Handle a mouse event in the context menu: a click outside dismisses it, a click on an
+    /// item runs it (separators are inert).
     fn context_menu_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -5955,6 +5978,8 @@ impl App {
         self.chooser.open_task(TaskChooser { tasks, selected: 0 });
     }
 
+    /// Handle a key in the task chooser: Up/Down move (wrapping), Enter runs the task, Esc
+    /// closes.
     fn tasks_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -5974,6 +5999,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the task chooser: clicking a row runs that task.
     fn tasks_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.task_mut()
@@ -6440,6 +6466,8 @@ impl App {
     /// unparseable TOML both fall through to an all-`None` override,
     /// matching `crate::tasks::load`'s "missing/bad file → empty" convention.
     fn load_project_override(&self) -> crate::tasks::lifecycle::LifecycleCommands {
+        // Shape of `.vix/project.toml`: one optional command per lifecycle stage; unset stages
+        // fall back to the detected project type's defaults.
         #[derive(serde::Deserialize, Default)]
         struct ProjectOverrideFile {
             configure: Option<String>,
@@ -7228,6 +7256,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the clipboard-history chooser: Up/Down move (wrapping), Enter pastes the
+    /// entry, Esc closes.
     fn clipboard_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -7247,6 +7277,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the clipboard-history chooser: clicking a row pastes it.
     fn clipboard_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.clipboard_mut()
@@ -7274,6 +7305,7 @@ impl App {
         self.focus = Focus::Editor;
     }
 
+    /// Open the saved-macro chooser; with no saved macros only a status message is shown.
     fn open_macro_chooser(&mut self) {
         let macros = Settings::macros_path()
             .map(|p| crate::macros::load(&p))
@@ -7288,6 +7320,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the macro chooser: Up/Down move (wrapping), Enter plays the macro, Esc
+    /// closes.
     fn macro_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -7307,6 +7341,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the macro chooser: clicking a row plays that macro.
     fn macro_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.macros_mut()
@@ -7331,6 +7366,8 @@ impl App {
 
     // ----- Encodings (T661) -----------------------------------------------
 
+    /// Open the encoding chooser for `action` (reopen the file in an encoding, or save it in
+    /// one), preselecting the buffer's current encoding. Needs a saved, non-image file.
     fn open_encoding_chooser(&mut self, action: EncodingAction) {
         let Some(tab) = self
             .editor
@@ -7349,6 +7386,8 @@ impl App {
             .open_encoding(EncodingChooser { action, selected });
     }
 
+    /// Handle a key in the encoding chooser: Up/Down move (wrapping), Enter applies, Esc
+    /// closes.
     fn encoding_key(&mut self, key: KeyEvent) {
         let n = crate::encoding::CHOICES.len();
         match key.code {
@@ -7368,6 +7407,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the encoding chooser: clicking a row applies that encoding.
     fn encoding_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.encoding_mut()
@@ -7395,6 +7435,9 @@ impl App {
         }
     }
 
+    /// Re-decode the active file from disk with `encoding`. Reports whether the decode was
+    /// lossy, and that unsaved changes block the reopen; other I/O errors are shown as an error
+    /// message.
     fn reopen_with_encoding(&mut self, encoding: crate::encoding::TextEncoding) {
         let name = encoding.to_string();
         match self.editor.reopen_active_with_encoding(encoding) {
@@ -7681,6 +7724,9 @@ impl App {
         }
     }
 
+    /// Whether `key` would modify the buffer (typing, Enter/Backspace/Tab, and the Ctrl chords
+    /// for paste, cut, undo/redo, kill-line and delete). Alt chords and everything else count
+    /// as non-editing.
     fn is_edit_key(key: &KeyEvent) -> bool {
         if Self::alt(key) {
             return false;
@@ -7698,6 +7744,7 @@ impl App {
         )
     }
 
+    /// Flag the active tab as modified and promote it from a preview tab to a regular one.
     fn mark_active_dirty(&mut self) {
         if let Some(t) = self.editor.active_tab_mut() {
             t.dirty = true;
@@ -7901,6 +7948,10 @@ impl App {
         self.open_node_link_completion();
     }
 
+    /// Handle a key while the explorer has focus: Ctrl+C/X/V copy, cut and paste files;
+    /// Shift+Up/Down extend the multi-selection; plain arrows move and preview; Enter/Right
+    /// open or expand; Left collapses or goes to the parent; Delete asks to delete; Esc cancels
+    /// a pending cut, then clears marks, then returns focus to the editor.
     fn explorer_key(&mut self, key: KeyEvent) {
         if Self::ctrl(&key) {
             match key.code {
@@ -7949,6 +8000,8 @@ impl App {
 
     // ----- explorer clipboard --------------------------------------------
 
+    /// Put the selected paths on the explorer clipboard, as a cut when `cut` (the sources are
+    /// removed when pasted).
     fn explorer_copy(&mut self, cut: bool) {
         let paths = self.explorer.selected_paths();
         if paths.is_empty() {
@@ -7965,6 +8018,9 @@ impl App {
         .to_string();
     }
 
+    /// Start pasting the explorer clipboard into the selected directory (the parent of a
+    /// selected file, else the project root); name conflicts are resolved one by one by
+    /// `process_paste`.
     fn explorer_paste(&mut self) {
         if self.clip.is_empty() {
             return;
@@ -8048,6 +8104,9 @@ impl App {
         }
     }
 
+    /// Copy (or, for a cut, move) `src` to `dest`. After a successful move, open buffers that
+    /// pointed at the source (or beneath it) are re-pointed at the destination; failures are
+    /// reported as an error message.
     fn perform_paste_one(&mut self, src: &Path, dest: &Path, cut: bool) {
         // Capture the canonical source before moving (it won't exist after).
         let auth = crate::authority::current();
@@ -8070,6 +8129,9 @@ impl App {
         }
     }
 
+    /// Handle a key in the paste-conflict prompt for the file at the head of the queue: `o`
+    /// overwrites this one, `O` overwrites all remaining, `s` skips this one, `S` skips all
+    /// conflicting ones, `c`/Esc cancels the whole paste. Each choice resumes `process_paste`.
     fn paste_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('o') => {
@@ -8191,6 +8253,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the unsaved-changes prompt: `s` saves, `d` discards, `c`/Esc keeps the
+    /// buffer open.
     fn unsaved_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('s' | 'S') => self.unsaved_save(),
@@ -8253,6 +8317,8 @@ impl App {
         self.settings.explorer_delete != "hard"
     }
 
+    /// Ask for confirmation before deleting the explorer selection; the wording depends on
+    /// whether the delete goes to the OS trash or is permanent.
     fn explorer_delete_request(&mut self) {
         let paths = self.explorer.selected_paths();
         if paths.is_empty() {
@@ -8270,6 +8336,10 @@ impl App {
         });
     }
 
+    /// Handle a key for the generic yes/no confirmation. Feature-specific confirmations
+    /// (remote, Jupyter, hot exit, open large/binary file, Save As overwrite, destructive Git
+    /// operations) are routed to their own handlers first; the rest are the explorer delete
+    /// confirmation.
     fn confirm_key(&mut self, key: KeyEvent) {
         if self.remote_confirm_key(key)
             || self.jupyter_confirm_key(key)
@@ -8430,6 +8500,8 @@ impl App {
         }
     }
 
+    /// Enter on the explorer selection: toggle a directory, or open a file in the editor
+    /// (recorded as a jump) and focus the editor.
     fn open_or_expand_selected(&mut self) {
         if let Some(node) = self.explorer.selected_node() {
             if node.is_dir {
@@ -8463,6 +8535,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the messages dock: Up/Down move, `x`/Delete/Enter dismiss the selected
+    /// message, Esc returns focus to the editor.
     fn messages_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => self.messages.up(),
@@ -8473,6 +8547,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the bottom dock (command output): arrows, paging and Home/End scroll,
+    /// Esc returns focus to the editor.
     fn bottomdock_key(&mut self, key: KeyEvent) {
         // A page is the dock's visible height (minus its top border).
         let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
@@ -8488,6 +8564,8 @@ impl App {
         }
     }
 
+    /// Open `path` in a tab; with `preview` it uses the ephemeral preview tab. The size and
+    /// binary checks live in `open_path_with`, which this calls without bypassing them.
     fn open_path(&mut self, path: &Path, preview: bool) {
         self.open_path_with(path, preview, false);
     }
@@ -8854,6 +8932,8 @@ impl App {
 
     // ----- position history (Alt+Left / Alt+Right) -----------------------
 
+    /// The active file's cursor as a navigation-history/bookmark location, or `None` for a
+    /// buffer without a path.
     fn current_location(&self) -> Option<Location> {
         let tab = self.editor.active_tab()?;
         let path = tab.path.clone()?;
@@ -8948,6 +9028,7 @@ impl App {
         self.nav_idx = self.nav_history.len().saturating_sub(1);
     }
 
+    /// Go to the previous entry in the position history (Alt+Left).
     fn nav_back(&mut self) {
         if self.nav_history.is_empty() || self.nav_idx == 0 {
             self.status = t!("status.no_earlier").into();
@@ -8958,6 +9039,7 @@ impl App {
         self.navigate_to(&loc);
     }
 
+    /// Go to the next entry in the position history (Alt+Right).
     fn nav_forward(&mut self) {
         if self.nav_idx + 1 >= self.nav_history.len() {
             self.status = t!("status.no_later").into();
@@ -8977,6 +9059,9 @@ impl App {
         self.status = format!("{}:{}", loc.path.display(), loc.line);
     }
 
+    /// Decode and show an image file in an image tab. The terminal graphics probe is deferred
+    /// until the first image is opened, since querying the terminal at startup is slow and may
+    /// print stray output.
     #[cfg(feature = "image")]
     fn open_image(&mut self, path: &Path) {
         // The terminal is asked about graphics on first use, not at startup.
@@ -9144,6 +9229,9 @@ impl App {
         false
     }
 
+    /// Offer a mouse event to the open overlays, topmost first: modal and tool dialogs, then
+    /// each list/panel overlay in turn. Returns `true` when an overlay consumed it, so the
+    /// event does not also reach the panes underneath.
     fn try_overlay_mouse(&mut self, mouse: MouseEvent) -> bool {
         if self.try_modal_mouse(mouse) {
             return true;
@@ -9747,6 +9835,7 @@ impl App {
     /// Resize the dock currently being dragged so its edge follows column `col`,
     /// keeping at least a minimum dock width and leaving room for the editor.
     fn resize_dock(&mut self, col: u16) {
+        // Narrowest a side dock may be dragged to, and the width always kept for the editor.
         const MIN_DOCK: u16 = 12;
         const MIN_EDITOR: u16 = 20;
         let full = self.layout.menu.width; // the menu bar spans the full width
@@ -9788,6 +9877,8 @@ impl App {
     /// Resize the bottom dock so its top edge follows `row`, keeping at least a
     /// minimum dock height and a minimum body above it.
     fn resize_bottom_dock(&mut self, row: u16) {
+        // Shortest the bottom dock may be dragged to, and the rows always kept for the body
+        // above it.
         const MIN_DOCK: u16 = 3;
         const MIN_BODY: u16 = 3;
         let bottom = self.layout.bottom_dock.bottom(); // boundary above the status bar
@@ -9838,6 +9929,9 @@ impl App {
         }
     }
 
+    /// Handle a mouse event over the editor: focuses it; Ctrl/Cmd+click follows a document
+    /// link; Alt+click adds a caret; a plain press collapses extra carets and promotes a
+    /// preview tab; everything else is passed to the editor core (selection, drag, wheel).
     fn editor_mouse(&mut self, mouse: MouseEvent) {
         self.focus = Focus::Editor;
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
@@ -9872,6 +9966,9 @@ impl App {
         }
     }
 
+    /// Handle a mouse event over the explorer: the scrollbar column scrolls by moving the
+    /// selection; wheel moves the selection; a click selects, toggles a directory, previews a
+    /// file, and a second click on an already selected file opens it for real.
     fn explorer_mouse(&mut self, mouse: MouseEvent) {
         let a = self.layout.explorer;
         let inner_top = a.y + 1; // inside the border
@@ -9932,6 +10029,9 @@ impl App {
         }
     }
 
+    /// Handle a mouse event over the messages dock: the scrollbar column scrolls, the wheel
+    /// moves the selection, a click selects a message and a click near the right edge dismisses
+    /// it.
     fn messages_mouse(&mut self, mouse: MouseEvent) {
         let area = self.layout.messages;
         let inner_top = area.y + 1;
@@ -9978,6 +10078,8 @@ impl App {
         }
     }
 
+    /// Activate the tab under screen column `col` of the tab strip (promoting a preview tab); a
+    /// click on a divider or beyond the last tab does nothing.
     fn tab_click(&mut self, col: u16) {
         let mut x = crate::ui::tabs_origin(self, self.layout.tabs);
         for (i, tab) in self.editor.tabs.iter().enumerate() {
@@ -10075,6 +10177,8 @@ impl App {
         self.close_menu();
     }
 
+    /// Handle a left click at column `col` of the menu bar: the right-aligned dock toggles
+    /// first, otherwise open or switch to the menu title under the pointer.
     fn menu_click(&mut self, col: u16) {
         // Right-aligned dock toggles take priority over menu hit-testing.
         let (left_dock, right_dock) =
@@ -10232,6 +10336,9 @@ impl App {
 
     // ----- menu -----------------------------------------------------------
 
+    /// Handle a key while a menu is open: arrows navigate (previewing themes as the cursor
+    /// passes them), Enter runs the item and closes the menu, Esc backs out one submenu level
+    /// at a time.
     fn menu_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Left => self.menu.left(),
@@ -10327,6 +10434,8 @@ impl App {
         )
     }
 
+    /// Apply the theme named by the `theme` setting, scanning the custom-themes directory; see
+    /// [`Self::apply_saved_theme_from`].
     fn apply_saved_theme(value: &str) {
         Self::apply_saved_theme_from(value, &Self::available_custom_themes());
     }
@@ -10557,6 +10666,7 @@ impl App {
     /// item runs it, else its [`vix_action_catalog`] title (T147), else the
     /// raw id itself (matching what the which-key popup shows).
     fn action_title(action: &str) -> String {
+        // Depth-first search of the menu tree for the item that runs `action`.
         fn find(items: &[crate::menu::Item], action: &str) -> Option<String> {
             for it in items {
                 if let Some(sub) = it.submenu {
@@ -10719,6 +10829,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event over the file browser panel: the wheel moves the selection and a
+    /// left click selects the row and opens it.
     fn file_browser_mouse(&mut self, mouse: MouseEvent) {
         match mouse.kind {
             MouseEventKind::ScrollUp => {
@@ -10753,6 +10865,9 @@ impl App {
         }
     }
 
+    /// Open the recent-files chooser over the persisted list, dropping files that no longer
+    /// exist and attaching size and timestamps; with nothing left only a status message is
+    /// shown.
     fn open_recent_chooser(&mut self) {
         let auth = crate::authority::current();
         let entries: Vec<RecentEntry> = self
@@ -10782,6 +10897,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the recent-files chooser: Up/Down move (wrapping), Enter opens the file,
+    /// Esc closes.
     fn recent_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -10815,6 +10932,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the recent-files chooser: a click selects the row and opens it.
     fn recent_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(rc) = self.chooser.recent_mut()
@@ -10846,6 +10964,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the location (bookmark) chooser: Up/Down move (wrapping), Enter jumps
+    /// there, Esc closes.
     fn location_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -10876,6 +10996,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the location chooser: a click selects the row and jumps there.
     fn location_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(lc) = self.chooser.location_mut()
@@ -11207,10 +11328,13 @@ impl App {
 
     // ----- HTML character palette -----------------------------------------
 
+    /// Open the HTML character-entity palette.
     pub(super) fn open_html_panel(&mut self) {
         self.html_panel = Some(HtmlPanel::open());
     }
 
+    /// Handle a key in the HTML entity palette: navigation keys move, Enter inserts the
+    /// highlighted entity's glyph (palette stays open), Esc closes.
     fn html_key(&mut self, key: KeyEvent) {
         let page = (self.layout.html_panel.height as usize).max(1);
         match key.code {
@@ -11252,6 +11376,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the HTML palette: a click inserts the text of the cell under the
+    /// pointer (the glyph, the name, or the numeric code).
     fn html_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -11293,6 +11419,7 @@ impl App {
 
     // ----- Welcome panel --------------------------------------------------
 
+    /// Open the welcome panel with the localized welcome text.
     fn open_welcome(&mut self) {
         self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
     }
@@ -11346,6 +11473,8 @@ impl App {
             .collect()
     }
 
+    /// Handle a key in the welcome panel: navigation keys scroll; Esc, Enter, F1 or `q` close
+    /// it.
     fn welcome_key(&mut self, key: KeyEvent) {
         let page = (self.layout.welcome.height as usize).max(1);
         match key.code {
@@ -11386,6 +11515,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the welcome panel: the wheel scrolls it.
     fn welcome_mouse(&mut self, mouse: MouseEvent) {
         let page = (self.layout.welcome.height as usize).max(1);
         match mouse.kind {
@@ -11500,6 +11630,7 @@ impl App {
         self.dashboard_rx = Some(rx);
     }
 
+    /// Close the dashboard and drop its pending metrics channel so late results are discarded.
     fn close_dashboard(&mut self) {
         self.dashboard = None;
         self.dashboard_rx = None;
@@ -11566,6 +11697,8 @@ impl App {
         self.outline = Some(outline);
     }
 
+    /// Handle a key in the document outline: navigation keys move, Enter jumps to the
+    /// heading/symbol in the buffer, Esc closes.
     fn outline_key(&mut self, key: KeyEvent) {
         let page = (self.layout.outline.height as usize).max(1);
         match key.code {
@@ -11605,6 +11738,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the outline: a click selects a row and jumps to it.
     fn outline_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -11720,6 +11854,7 @@ impl App {
 
     // ----- search / replace ----------------------------------------------
 
+    /// Open the Find box, in Find-and-Replace mode when `replacing`.
     fn start_search(&mut self, replacing: bool) {
         self.search = Some(SearchBar::new(replacing));
     }
@@ -11895,12 +12030,15 @@ impl App {
         (target_idx + 1, matches.len())
     }
 
+    /// Remove the search-match highlights from the active buffer.
     fn clear_marks(&mut self) {
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.remove_marks();
         }
     }
 
+    /// Close the Find box. Match highlights are kept when `sticky_search_highlight` is on,
+    /// otherwise cleared.
     fn end_search(&mut self) {
         // Sticky highlights stay visible after the Find box closes; otherwise
         // clear them. Either way the search bar itself goes away.
@@ -11955,6 +12093,11 @@ impl App {
         matches.len()
     }
 
+    /// Handle a key in the Find box: Esc closes; F3/Shift+F3 step; Tab switches between the
+    /// find and replace fields; Enter steps, replaces all (replace mode, on the replace field
+    /// or with Alt) or starts interactive query-replace; Alt+C/S/W/R/H toggle case, smart case,
+    /// whole word, regex and replace mode, Alt+I widens the scope; other keys edit the active
+    /// field, live-previewing the match.
     fn search_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.end_search(),
@@ -12240,6 +12383,9 @@ impl App {
         }
     }
 
+    /// Replace every match of the Find box's pattern in the active buffer in one step (the
+    /// replacement may use capture groups when regex mode is on) and report the count in the
+    /// Find box. A bad regex is reported there instead.
     fn replace_all(&mut self) {
         let Some(sb) = self.search.as_ref() else {
             return;
@@ -12616,6 +12762,9 @@ impl App {
         self.workspace_search = Some(ps);
     }
 
+    /// Go to the definition of the symbol under the cursor: ask the language server when one
+    /// handles the file, otherwise fall back to a keyword-based text search of the indexed
+    /// workspace. One hit jumps straight there; several open a static result list.
     fn goto_definition(&mut self) {
         if let Some(path) = self.active_path()
             && self.lsp.handles(&path)
@@ -12743,6 +12892,10 @@ impl App {
         ok.then_some(sym)
     }
 
+    /// Heuristic definition search for `symbol` across the workspace index and open buffers:
+    /// matches a definition-introducing keyword of a common language (`fn`, `def`, `class`,
+    /// `struct`, ...) or a C `#define` followed by the symbol, capped at 200 hits. Used when no
+    /// language server answers.
     fn find_definitions(&self, symbol: &str) -> Vec<Hit> {
         let esc = regex::escape(symbol);
         // Definition-introducing keywords across common languages.
@@ -12778,6 +12931,8 @@ impl App {
         hits
     }
 
+    /// Open the project-wide search panel (in replace mode when `replacing`), refreshing the
+    /// file index and running the (empty) search first.
     fn open_workspace_search(&mut self, replacing: bool) {
         self.picker_preview_cache = None;
         self.build_file_index();
@@ -12807,6 +12962,9 @@ impl App {
         auth.read_to_string_guarded(path).ok()
     }
 
+    /// Re-run the project search for the panel's current pattern and replace its hits. Static
+    /// result lists (definitions, references) are never re-searched; an empty or invalid
+    /// pattern clears the hits and sets a status line.
     fn run_workspace_search(&mut self) {
         // Static result lists (e.g. go-to-definition) are not re-searched.
         if self
@@ -12887,6 +13045,9 @@ impl App {
         }
     }
 
+    /// Plan a project-wide replace for every file with hits: compute the new text of each file
+    /// but write nothing, then open the confirmation overlay listing the files and counts.
+    /// Nothing touches disk until the user confirms (see `apply_replace_confirm`).
     fn workspace_replace_all(&mut self) {
         let Some(ps) = self.workspace_search.as_ref() else {
             return;
@@ -13235,6 +13396,9 @@ impl App {
         }
     }
 
+    /// Handle a key in the project-search panel: Esc closes (remembering the query); Up/Down
+    /// move; Tab switches fields; Enter opens the hit, or in replace mode plans the replace;
+    /// other keys edit the active field and re-run the search.
     fn ps_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
@@ -13343,6 +13507,8 @@ impl App {
         }
     }
 
+    /// Close the project-search panel and jump to the selected hit, recorded as a navigation
+    /// jump.
     fn open_selected_hit(&mut self) {
         let target = self
             .workspace_search
@@ -13363,6 +13529,9 @@ impl App {
 
     // ----- interactive query-replace -------------------------------------
 
+    /// Start interactive query-replace (y/n/!/q) from the Find box: compile the pattern, close
+    /// the Find box and highlight the first match at or after the cursor, or report that there
+    /// is none.
     fn begin_query_replace(&mut self) {
         let Some(sb) = self.search.as_ref() else {
             return;
@@ -13421,6 +13590,8 @@ impl App {
         }
     }
 
+    /// Map a key in the query-replace session to its decision: `y`/Space replaces, `n`/Delete
+    /// skips, `!` replaces all remaining, `q`/Esc/Enter quits. Other keys are ignored.
     fn qr_key(&mut self, key: KeyEvent) {
         let decision = match key.code {
             KeyCode::Char('y' | 'Y' | ' ') => Decision::Replace,
@@ -13432,6 +13603,8 @@ impl App {
         self.qr_apply(decision);
     }
 
+    /// Apply one query-replace `decision` to the highlighted match and advance to the next;
+    /// ends the session (with a count) when no match remains or the user quit.
     fn qr_apply(&mut self, decision: Decision) {
         let area = self.editor_view();
         let Some(qr) = self.query_replace.as_ref() else {
@@ -13467,6 +13640,8 @@ impl App {
                 }
                 Decision::ReplaceRest => {
                     let mut cur = (cs, ce);
+                    // Safety valve: a pattern that matches the empty string must not loop
+                    // forever; real buffers never come near a million replacements.
                     let mut guard = 0usize;
                     loop {
                         let resume = do_replace(t, &re, regex, &template, cur);
@@ -13476,6 +13651,9 @@ impl App {
                             break;
                         }
                         match next_match_from(t, &re, resume) {
+                            // Only continue when the next match starts at or after where the
+                            // previous replacement ended; otherwise (an overlapping or
+                            // backwards match) stop rather than replace the same text twice.
                             Some(m) if m.0 >= resume => cur = m,
                             _ => break,
                         }
@@ -13506,6 +13684,9 @@ impl App {
 
     // ----- prompt (Open / Save As) ---------------------------------------
 
+    /// Handle a key in the single-line text prompt used by Open, Save As, rename and many other
+    /// actions: Esc cancels, Enter submits (Alt+Enter inserts a newline in the multi-line
+    /// prompts), other keys edit the input.
     fn prompt_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
@@ -14273,6 +14454,8 @@ impl App {
         }
     }
 
+    /// Resolve a user-typed path: absolute paths as given, relative ones against the project
+    /// root.
     fn resolve(&self, input: &str) -> PathBuf {
         let p = PathBuf::from(input);
         if p.is_absolute() {
@@ -14315,6 +14498,7 @@ impl App {
     }
 }
 
+/// Whether the terminal cell `(col, row)` lies inside `r`.
 fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
@@ -14323,6 +14507,8 @@ impl App {
     /// Whether an `edit.*` action handled by `run_edit_action` changes the buffer.
     /// Default-deny: only copy/search/navigation/pure-selection are read-only-safe.
     fn edit_action_mutates(action: &str) -> bool {
+        // Edit actions that never modify the buffer and so stay allowed in a read-only tab.
+        // Anything not listed is treated as mutating (default-deny).
         const READ_ONLY_SAFE: &[&str] = &[
             "edit.copy",
             "edit.find",
@@ -14537,6 +14723,8 @@ fn run_shell_filter(
     timeout: std::time::Duration,
 ) -> std::io::Result<FilterOutput> {
     use std::io::{Read, Write};
+    // Read a child's pipe to the end on its own thread, so a full stdout or stderr pipe can
+    // never block the child while the other is waited on.
     fn drain<R: Read + Send + 'static>(r: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
         std::thread::spawn(move || {
             let mut buf = Vec::new();
@@ -14970,6 +15158,7 @@ fn repo_commit_count(_root: &Path) -> u64 {
     0
 }
 
+/// The gutter color, as a hex string, for a line's git change mark (added, modified, deleted).
 #[cfg(feature = "git")]
 fn gutter_hex(mark: crate::git::LineMark) -> &'static str {
     match mark {

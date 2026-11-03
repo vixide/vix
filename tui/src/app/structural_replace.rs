@@ -112,6 +112,9 @@ impl App {
         self.status = t!("status.sr_keys").into();
     }
 
+    /// Handle a key in the structural-replace confirm flow, using the query-replace vocabulary:
+    /// `y`/Space replaces, `n`/Delete skips, `!` replaces all remaining, `q`/Esc/Enter quits.
+    /// Other keys are ignored.
     pub(super) fn sr_key(&mut self, key: KeyEvent) {
         let decision = match key.code {
             KeyCode::Char('y' | 'Y' | ' ') => Decision::Replace,
@@ -123,6 +126,10 @@ impl App {
         self.sr_apply(decision);
     }
 
+    /// Apply one confirm-flow `decision` to the highlighted match: Quit clears the marks and
+    /// ends; Skip moves to the next match; Replace rewrites this match (shifting the search
+    /// bounds by the size change) then moves on; ReplaceRest rewrites every remaining match.
+    /// Ends the session with a count status when no further match remains.
     fn sr_apply(&mut self, decision: Decision) {
         let area = self.editor_view();
         let Some(sr) = self.structural_replace.as_ref() else {

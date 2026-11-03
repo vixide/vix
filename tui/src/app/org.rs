@@ -441,6 +441,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the refile target chooser: Up/Down move (wrapping), Enter refiles under
+    /// the highlighted headline, Esc closes.
     pub(super) fn refile_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -462,6 +464,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the refile chooser: clicking a target refiles there.
     pub(super) fn refile_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.refile_mut()
@@ -1743,6 +1746,8 @@ impl App {
         true
     }
 
+    /// Handle a key in the capture-template chooser: Up/Down move (wrapping), Enter starts
+    /// capturing with the template, Esc closes.
     pub(super) fn capture_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -1778,6 +1783,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the capture-template chooser: clicking a template starts
+    /// capturing with it.
     pub(super) fn capture_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(cc) = self.chooser.capture_mut()

@@ -30,6 +30,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the contacts browser: Up/Down/PageUp/PageDown/Home/End move, Enter opens
+    /// the selected contact's vCard, Esc closes.
     pub(super) fn contacts_key(&mut self, key: KeyEvent) {
         let page = (self.layout.contacts.height as usize).max(1);
         match key.code {
@@ -69,6 +71,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the contacts browser: a left click on a row opens that contact's
+    /// vCard.
     pub(super) fn contacts_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -87,6 +91,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the vCard detail panel: movement keys scroll the selection, Enter
+    /// inserts the highlighted value into the editor, Esc closes the panel.
     pub(super) fn vcard_key(&mut self, key: KeyEvent) {
         let page = (self.layout.vcard.height as usize).max(1);
         match key.code {
@@ -127,6 +133,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the vCard panel: a left click on a row inserts that value into
+    /// the editor.
     pub(super) fn vcard_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -158,6 +166,8 @@ impl App {
         }
     }
 
+    /// Open the file-information panel for the active tab (name, path, size, timestamps and
+    /// similar).
     pub(super) fn open_file_info(&mut self) {
         let info = self.gather_file_info();
         self.file_info = Some(FileInfoPanel::open(&info));
@@ -198,6 +208,8 @@ impl App {
         info
     }
 
+    /// Handle a key in the file-information panel: movement keys select, Enter inserts the
+    /// highlighted value into the editor (panel stays open), Esc closes.
     pub(super) fn file_info_key(&mut self, key: KeyEvent) {
         let page = (self.layout.file_info.height as usize).max(1);
         match key.code {
@@ -237,6 +249,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the file-information panel: a left click on a row inserts its
+    /// value.
     pub(super) fn file_info_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -293,6 +307,8 @@ impl App {
         self.text_info = Some(TextInfoPanel::open(&stats));
     }
 
+    /// Handle a key in the text-statistics panel: Up/Down select, Enter inserts the highlighted
+    /// value, Esc closes.
     pub(super) fn text_info_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -311,6 +327,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the text-statistics panel: a left click on a row inserts its
+    /// value. The panel is short, so rows are not scrolled.
     pub(super) fn text_info_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -359,6 +377,8 @@ impl App {
         self.markdown_preview = Some(panel);
     }
 
+    /// Handle a key in the Markdown preview: arrows and paging scroll, `t` opens the table of
+    /// contents (T206), Esc/`q` closes the preview.
     pub(super) fn markdown_preview_key(&mut self, key: KeyEvent) {
         let page = (self.layout.editor.height as usize)
             .max(1)
@@ -411,6 +431,8 @@ impl App {
         self.markdown_toc = Some(toc);
     }
 
+    /// Handle a key in the Markdown table of contents: movement keys select a heading, Enter
+    /// scrolls the preview to it, Esc closes the list.
     pub(super) fn markdown_toc_key(&mut self, key: KeyEvent) {
         let page = (self.layout.editor.height as usize)
             .max(1)
@@ -547,6 +569,8 @@ impl App {
         self.status = t!("status.snippet_saved", name = prefix).to_string();
     }
 
+    /// Handle a key in the snippet picker: arrows and paging move, typing filters by prefix
+    /// (Backspace edits), Enter inserts the snippet, Esc closes.
     pub(super) fn snippets_key(&mut self, key: KeyEvent) {
         let page = (self.layout.snippets.height as usize).max(1);
         let lib = &self.snippet_library;
@@ -587,6 +611,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the snippet picker: a left click on a row inserts that snippet.
     pub(super) fn snippets_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -785,10 +810,13 @@ impl App {
         self.snippet_session.is_some()
     }
 
+    /// Open the system-information panel (OS, terminal, Vix version and similar).
     pub(super) fn open_system_info(&mut self) {
         self.system_info = Some(SystemInfoPanel::open());
     }
 
+    /// Handle a key in the system-information panel: movement keys select, Enter inserts the
+    /// highlighted value (panel stays open), Esc closes.
     pub(super) fn system_info_key(&mut self, key: KeyEvent) {
         let page = (self.layout.system_info.height as usize).max(1);
         match key.code {
@@ -829,6 +857,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the system-information panel: a left click on a row inserts its
+    /// value.
     pub(super) fn system_info_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;

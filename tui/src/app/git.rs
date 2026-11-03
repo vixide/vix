@@ -430,6 +430,9 @@ impl App {
         self.conflict_list = Some(crate::conflict_tool::List::new(entries));
     }
 
+    /// Handle a key in the merge-conflict list: Up/Down/PageUp/PageDown/Home/End move the
+    /// selection, Enter jumps to the conflict, `o`/`t`/`b` resolve it with ours/theirs/both,
+    /// Esc closes.
     pub(super) fn conflict_list_key(&mut self, key: KeyEvent) {
         let page = (self.layout.conflict_list.height as usize).max(1);
         match key.code {
@@ -478,6 +481,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the conflict list: a left click on a row selects it and jumps to
+    /// the conflict; clicks outside the list are ignored.
     pub(super) fn conflict_list_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -725,6 +730,9 @@ impl App {
         self.git_panel = Some(GitPanel { selected: 0 });
     }
 
+    /// Handle a key in the Git status panel: Up/Down move; Space toggles, `s` stages, `u`
+    /// unstages, `c` begins a commit, Enter opens the diff against HEAD, `d` asks to discard,
+    /// `g` generates a commit message (AI builds only), `r` refreshes, Esc closes.
     pub(super) fn git_panel_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -762,6 +770,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the Git status panel: a left click on a file row selects it and
+    /// toggles its staged state.
     pub(super) fn git_panel_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -785,6 +795,7 @@ impl App {
         self.git_status.get(idx).map(|s| s.path.clone())
     }
 
+    /// Keep the panel selection inside the (possibly shrunk) status list after a refresh.
     fn clamp_git_selection(&mut self) {
         if let Some(p) = self.git_panel.as_mut() {
             p.selected = p.selected.min(self.git_status.len().saturating_sub(1));
@@ -1049,6 +1060,8 @@ impl App {
         ));
     }
 
+    /// Handle a key in the Git log view: Up/Down/PageUp/PageDown move, Enter opens the commit
+    /// diff, `c` cherry-picks (only in the pick-a-commit scope), Esc closes.
     pub(super) fn git_log_key(&mut self, key: KeyEvent) {
         let page = (self.layout.editor.height as usize)
             .max(1)
@@ -1428,6 +1441,8 @@ impl App {
         self.run_command(cmd);
     }
 
+    /// Open the branch chooser in checkout mode (see `open_branch_chooser_mode` for merge
+    /// mode).
     fn open_branch_chooser(&mut self) {
         self.open_branch_chooser_mode(false);
     }
@@ -1451,6 +1466,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the branch chooser: Up/Down move (wrapping), Enter checks the branch
+    /// out, Esc closes.
     pub(super) fn branch_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -1470,6 +1487,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the branch chooser: clicking a branch row checks it out.
     pub(super) fn branch_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.branch_mut()
