@@ -24,7 +24,7 @@
 //!   reply of another.
 //! - **Text-only results.** Every cell is decoded to a `String`; `NULL`
 //!   becomes the empty string (see the private `cell`).
-//! - **Bounded memory.** Rows stream in [`BATCH`]-sized chunks and stop at
+//! - **Bounded memory.** Rows stream in `BATCH`-sized chunks and stop at
 //!   [`MAX_ROWS`], reported through `Chunk::Done(true)`.
 //! - **No secrets in errors.** Connect failures are passed through
 //!   `redact_url_secret` before reaching the UI.

@@ -16,7 +16,7 @@
 //!
 //! The stateful side (when a request is queued, in flight, or finished) is in
 //! [`crate::ai_features`]; this module only builds prompts and parses replies.
-//! All briefs share one shape: an `Engine:` line, a [`schema_block`]-style
+//! All briefs share one shape: an `Engine:` line, a `schema_block`-style
 //! `Tables:` / `Foreign keys:` summary, then a task-specific tail. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 

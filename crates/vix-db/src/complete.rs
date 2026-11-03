@@ -67,8 +67,8 @@ impl Completer {
     /// The "identifier" is the run of ASCII alphanumerics, `_` and `.` ending at
     /// `col`. Resolution order: (1) a `table.partial` token completes that
     /// table's columns; (2) after a `JOIN` keyword, foreign-key `table ON …`
-    /// clauses; (3) otherwise, once the token reaches [`MIN_PREFIX`] chars, table
-    /// names followed by uppercased keywords, capped at [`MAX_SUGGESTIONS`].
+    /// clauses; (3) otherwise, once the token reaches `MIN_PREFIX` chars, table
+    /// names followed by uppercased keywords, capped at `MAX_SUGGESTIONS`.
     ///
     /// # Examples
     ///
