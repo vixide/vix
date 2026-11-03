@@ -1,5 +1,12 @@
 //! [`ProcessSpec`]: what to run, described as data, so an authority can decide
 //! *where* it runs (here, over SSH, in a container) before a `Command` exists.
+//!
+//! A [`std::process::Command`] cannot be inspected or rewritten after it is
+//! built, so a remote authority could not re-target it. `ProcessSpec` is the
+//! plain-data form call sites build instead; [`crate::Authority::command`]
+//! turns it into a `Command` (locally via `ProcessSpec::to_local_command`, or
+//! wrapped in `ssh`/`docker exec`/… by the remote authorities). Owning spec:
+//! `crates/vix-authority/spec/index.md`.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -21,15 +28,28 @@ pub enum Arg {
 /// [`crate::Authority::command`] builds from this.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcessSpec {
+    /// The executable, as given (looked up on the authority's `PATH` if bare).
     program: OsString,
+    /// Arguments in command-line order, each plain or raw.
     args: Vec<Arg>,
+    /// Working directory, in the authority's own path space; `None` inherits.
     cwd: Option<PathBuf>,
+    /// Environment edits applied in order: `Some(v)` sets, `None` removes.
     env: Vec<(OsString, Option<OsString>)>,
 }
 
 impl ProcessSpec {
     /// A spec that runs `program` with no arguments, in the inherited working
     /// directory and environment.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::ProcessSpec;
+    /// let spec = ProcessSpec::new("git").arg("status").args(["--short"]);
+    /// assert_eq!(spec.program(), "git");
+    /// assert_eq!(spec.get_args().len(), 2);
+    /// assert!(spec.cwd().is_none());
+    /// ```
     pub fn new(program: impl AsRef<OsStr>) -> Self {
         Self {
             program: program.as_ref().to_owned(),
@@ -119,7 +139,8 @@ impl ProcessSpec {
     }
 
     /// The `Command` that runs this spec on the local machine: exactly what
-    /// the call sites built by hand before T710.
+    /// the call sites built by hand before T710. Only built with the `process`
+    /// feature (T595); without it no `Command` is ever constructed.
     #[cfg(feature = "process")]
     #[must_use]
     pub fn to_local_command(&self) -> std::process::Command {
@@ -130,6 +151,8 @@ impl ProcessSpec {
                     cmd.arg(a);
                 }
                 Arg::Raw(a) => {
+                    // `raw_arg` exists only on Windows; elsewhere a raw
+                    // argument is just a plain one.
                     #[cfg(windows)]
                     {
                         use std::os::windows::process::CommandExt as _;

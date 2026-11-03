@@ -8,6 +8,10 @@
 //! active editor. This module is pure data — the table is bundled as a TSV and
 //! parsed once on first use — plus a [`Panel`] holding the query, highlighted
 //! row, and scroll offset over the *filtered* rows.
+//!
+//! The table lives in `spec/media-types.tsv` (the single source of truth,
+//! embedded with `include_str!`); list navigation delegates to `vix_list_state`.
+//! Spec: `crates/vix-media-type/spec/index.md`.
 
 use std::sync::OnceLock;
 
@@ -35,8 +39,15 @@ impl MediaType {
 
 /// The media-type table, parsed once from the bundled TSV (the header row is
 /// skipped). Never empty in practice.
+///
+/// # Examples
+/// ```
+/// assert!(vix_media_type::all().iter().any(|m| m.media_type == "image/png"));
+/// ```
 #[must_use]
 pub fn all() -> &'static [MediaType] {
+    // Parsed lazily and at most once per process; rows borrow from the
+    // `'static` embedded TSV, so no allocation per string.
     static TABLE: OnceLock<Vec<MediaType>> = OnceLock::new();
     TABLE.get_or_init(|| {
         // The spec TSV is the single source of truth (see this crate's spec/).
@@ -73,7 +84,13 @@ fn norm_ext(ext: &str) -> String {
 }
 
 /// The first media type whose extension list contains `ext` (with or without a
-/// leading dot, case-insensitive). `None` if unknown.
+/// leading dot, case-insensitive). `None` if unknown or `ext` is empty.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_media_type::for_extension(".PNG").unwrap().media_type, "image/png");
+/// assert!(vix_media_type::for_extension("").is_none());
+/// ```
 #[must_use]
 pub fn for_extension(ext: &str) -> Option<&'static MediaType> {
     let want = norm_ext(ext);
@@ -96,6 +113,18 @@ fn row_matches(m: &MediaType, query: &str) -> bool {
 
 /// Query + selection + scroll state for the Media Types overlay. `selected` and
 /// `scroll` index into the *filtered* row list (see [`Panel::matches`]).
+///
+/// Changing the query resets `selected` and `scroll` to the top, so they can
+/// never point past the end of the new, usually shorter, filtered list.
+///
+/// # Examples
+/// ```
+/// let mut p = vix_media_type::Panel::open();
+/// for c in "svg".chars() {
+///     p.push(c);
+/// }
+/// assert_eq!(p.selected_entry().unwrap().media_type, "image/svg+xml");
+/// ```
 pub struct Panel {
     /// The current filter text (matched case-insensitively).
     pub query: String,
@@ -123,6 +152,9 @@ impl Panel {
     }
 
     /// Open the panel pre-selected to the media type for `ext`, if known.
+    ///
+    /// The scroll offset is left at 0; call [`Panel::ensure_visible`] once the
+    /// viewport height is known.
     #[must_use]
     pub fn open_for_extension(ext: &str) -> Self {
         let mut p = Panel::open();
@@ -136,6 +168,9 @@ impl Panel {
     }
 
     /// Indices into [`all`] of the rows matching the current query.
+    ///
+    /// Recomputed on every call (the table is small), so `len`, `down` and
+    /// `selected_entry` each rescan it.
     #[must_use]
     pub fn matches(&self) -> Vec<usize> {
         let q = self.query.to_ascii_lowercase();
@@ -183,12 +218,12 @@ impl Panel {
         self.selected = vix_list_state::down(self.selected, self.len());
     }
 
-    /// Move the highlight up one page, stopping at the top.
+    /// Move the highlight up one page (`page` rows), stopping at the top.
     pub fn page_up(&mut self, page: usize) {
         self.selected = vix_list_state::page_up(self.selected, page);
     }
 
-    /// Move the highlight down one page, stopping at the bottom.
+    /// Move the highlight down one page (`page` rows), stopping at the bottom.
     pub fn page_down(&mut self, page: usize) {
         self.selected = vix_list_state::page_down(self.selected, page, self.len());
     }
@@ -215,6 +250,7 @@ impl Panel {
     /// The highlighted media type, or `None` when the filter matches nothing.
     #[must_use]
     pub fn selected_entry(&self) -> Option<&'static MediaType> {
+        // `selected` indexes the filtered list; map it back to a table row.
         let idx = *self.matches().get(self.selected)?;
         all().get(idx)
     }

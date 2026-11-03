@@ -1,4 +1,4 @@
-//! A real modal-editing engine: mode state machine, operator × motion
+//! A real modal-editing engine (crate spec: `spec/index.md`): mode state machine, operator × motion
 //! composition, counts, registers, text objects, dot-repeat — the pieces
 //! the Vi/Spacemacs keymaps' ad hoc `vim_normal_key` binding table (in the
 //! App shell) does not have.
@@ -11,7 +11,7 @@
 //! wired into Normal mode. T114: [`operator`]'s `d`/`c`/`y` composition with
 //! any T113 motion (via [`motion::MotionKind`]), `x` as sugar for `d` + one
 //! right motion, `p`/`P` reading a register, and [`register`]'s named `a`-`z`
-//! map. T115 (this slice): [`text_object`]'s `iw aw i( a( i" a"` (+
+//! map. T115: [`text_object`]'s `iw aw i( a( i" a"` (+
 //! bracket/quote siblings) pure functions, composing with `d`/`c`/`y` the
 //! same way a motion does; dot-repeat (keystroke replay of the last change)
 //! lives in the host (`tui/src/app/modal.rs`), not here — there's no pure
@@ -19,6 +19,7 @@
 //! went through this same dispatch". Everything behind the same
 //! `Settings::modal_engine` flag, default off.
 
+// Each module documents itself with an inner `//!` block.
 pub mod count;
 pub mod mode;
 pub mod motion;

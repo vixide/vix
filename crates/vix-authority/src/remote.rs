@@ -2,6 +2,12 @@
 //! host ([`SshTarget`]) or a container ([`ContainerTarget`]) — so the App's
 //! Open Remote dialog, `vix <name>`, the status bar, the session key and the
 //! trust decision handle all of them the same way.
+//!
+//! This module is name handling only (parse, canonical URL, labels); building
+//! the authority is `RemoteTarget::connect`, present when the `ssh` feature
+//! is on. The per-kind grammars live in [`crate::ssh`] and
+//! [`crate::container`]. Owning spec: `spec/remote-editing/index.md` at the
+//! repo root.
 
 use crate::container::ContainerTarget;
 use crate::ssh::{SshTarget, TargetError};
@@ -25,7 +31,18 @@ impl RemoteTarget {
         SshTarget::is_remote(name) || ContainerTarget::is_container(name)
     }
 
-    /// Parse any remote form.
+    /// Parse any remote form. Container schemes are tried first; anything
+    /// else goes to the SSH parser, which reports
+    /// [`TargetError::NotRemote`] for a plain local path.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::remote::RemoteTarget;
+    /// let t = RemoteTarget::parse("docker://web/srv").unwrap();
+    /// assert_eq!(t.path(), "/srv");
+    /// assert_eq!(t.label(), "docker:web");
+    /// assert!(RemoteTarget::parse("src/main.rs").is_err());
+    /// ```
     ///
     /// # Errors
     /// A [`TargetError`] naming the bad part, or
@@ -47,7 +64,7 @@ impl RemoteTarget {
         }
     }
 
-    /// The path on the remote side.
+    /// The path on the remote side, exactly as parsed (it may be `~`).
     #[must_use]
     pub fn path(&self) -> &str {
         match self {

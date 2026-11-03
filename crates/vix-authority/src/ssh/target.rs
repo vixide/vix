@@ -1,5 +1,13 @@
 //! Remote path names (T712): `ssh://user@host:port/path` and the TRAMP-style
 //! alias `/ssh:user@host#port:/path`, parsed into an [`SshTarget`].
+//!
+//! Pure string handling, always compiled. Validation is the point: a host or
+//! user that starts with `-`, or holds whitespace or control characters,
+//! could be read by `ssh` as an option, so it is rejected here and never
+//! reaches a command line. The path must be absolute or home-relative
+//! (`~`, `~/…`). Container names are the sibling grammar in
+//! [`crate::container`]; [`crate::remote::RemoteTarget`] unifies both. Owning
+//! spec: `crates/vix-authority/spec/ssh/index.md`.
 
 /// Where a remote path lives: the SSH login and the path on that machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,6 +161,8 @@ impl SshTarget {
         Err(TargetError::NotRemote)
     }
 
+    /// Assemble a target from already-split parts, validating each; an
+    /// empty user (`ssh://@host/…`) counts as none.
     fn build(
         user: Option<&str>,
         host: &str,
@@ -238,10 +248,14 @@ fn split_host_port(text: &str, sep: char) -> Result<(&str, Option<u16>), TargetE
     Ok((host, port))
 }
 
+/// Whitespace and control characters never appear in a host, user or path
+/// of a target: they would split an argument or hide in a message.
 fn bad_char(c: char) -> bool {
     c.is_whitespace() || c.is_control()
 }
 
+/// A host is non-empty, not option-shaped (`-…`), and free of `/`, `@` and
+/// [`bad_char`]s.
 fn check_host(host: &str) -> Result<(), TargetError> {
     if host.is_empty() {
         return Err(TargetError::MissingHost);
@@ -252,6 +266,8 @@ fn check_host(host: &str) -> Result<(), TargetError> {
     Ok(())
 }
 
+/// A user is non-empty, not option-shaped, and free of `:` and
+/// [`bad_char`]s.
 fn check_user(user: &str) -> Result<(), TargetError> {
     if user.is_empty() || user.starts_with('-') || user.chars().any(|c| bad_char(c) || c == ':') {
         return Err(TargetError::BadUser);
@@ -259,6 +275,9 @@ fn check_user(user: &str) -> Result<(), TargetError> {
     Ok(())
 }
 
+/// Validate a remote path: empty means the home directory (`~`); otherwise
+/// it must be absolute or start with `~`/`~/`, and hold no NUL. A relative
+/// path is refused because the remote working directory is unknowable.
 pub(crate) fn check_path(path: &str) -> Result<String, TargetError> {
     if path.is_empty() {
         return Ok("~".into());

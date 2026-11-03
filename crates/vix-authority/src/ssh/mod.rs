@@ -12,6 +12,9 @@
 //! shared with the container authorities in [`crate::container`], which run
 //! the same scripts through `docker exec`, `podman exec`, `kubectl exec` or
 //! `wsl.exe` instead.
+//!
+//! Owning spec: `crates/vix-authority/spec/ssh/index.md`; the cross-cutting
+//! design is `spec/remote-editing/index.md` at the repo root.
 
 #[cfg(feature = "ssh")]
 mod agent_boot;

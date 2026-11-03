@@ -147,6 +147,7 @@ const PENDING_Y: &[Binding] = &[Binding {
     action_id: "copy_line",
 }];
 
+/// The Vi chord contexts: top-level Normal mode (`""`) plus the pending `g`, `d` and `y` operator contexts, wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[
     ChordContext {
         name: "",

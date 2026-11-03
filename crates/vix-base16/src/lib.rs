@@ -3,12 +3,16 @@
 //!
 //! A base16 scheme is 16 colors (`base00`–`base0F`): `base00`–`base07` run dark
 //! to light (backgrounds → foregrounds), `base08`–`base0F` are accents. From that
-//! compact data a whole [`CustomTheme`] falls out, so this module ships a dozen
+//! compact data a whole [`CustomTheme`] falls out, so this crate ships ten
 //! well-known schemes from a small table rather than a JSON file each. The themes
 //! are merged into the bundled set, so they appear in View → Theme automatically.
 //!
 //! Names are prefixed `Base16 …` to avoid colliding with the hand-authored JSON
 //! themes in `tui/themes/`.
+//!
+//! Flow: [`themes`] → each `Palette` is rendered to theme JSON by `to_json`
+//! (hex via `rgb`, backed by `vix-hex-rgb`) → parsed by
+//! [`vix_theme_model::parse_theme`]. Spec: `crates/vix-base16/spec/index.md`.
 
 use vix_theme_model::{CustomTheme, parse_theme};
 
@@ -107,7 +111,9 @@ fn rgb(hex: &str) -> String {
 /// `base01` chrome background, `base03` comments, `base0B` strings, `base0D`
 /// cursor, `base0E` keywords.
 fn to_json(p: &Palette) -> String {
+    // `c(i)` is the JSON `[r, g, b]` for slot `baseNN` with NN = i (decimal).
     let c = |i: usize| rgb(p.colors[i]);
+    // Chrome regions use (foreground slot, background slot).
     let region =
         |fg: usize, bg: usize| format!("{{\"foreground\": {}, \"background\": {}}}", c(fg), c(bg));
     format!(
@@ -127,6 +133,16 @@ fn to_json(p: &Palette) -> String {
 }
 
 /// All base16-derived themes, ready to merge into the bundled theme set.
+///
+/// One theme per bundled palette, in table order; a palette whose generated JSON
+/// failed to parse would be silently skipped (a unit test asserts none do).
+///
+/// # Examples
+/// ```
+/// let themes = vix_base16::themes();
+/// assert!(!themes.is_empty());
+/// assert!(themes.iter().all(|t| t.name.starts_with("Base16 ")));
+/// ```
 #[must_use]
 pub fn themes() -> Vec<CustomTheme> {
     PALETTES

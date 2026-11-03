@@ -15,6 +15,21 @@
 //! through it — they always live on the machine running the UI. See
 //! `crates/vix-authority/spec/index.md` for the full list.
 //!
+//! # Layout
+//!
+//! - [`types`](crate::FileStat): owned data the trait returns ([`FileStat`],
+//!   [`DirEntry`], [`WalkOptions`]).
+//! - [`ProcessSpec`]: a process described as data, turned into a
+//!   [`std::process::Command`] by [`Authority::command`].
+//! - [`LocalAuthority`]: the default; [`FakeAuthority`]: a temp-dir-backed
+//!   stand-in for tests.
+//! - [`ssh`], [`agent`] and [`container`]: the remote authorities (SSH, the
+//!   `vix --remote-agent` protocol, and `docker`/`podman`/`kubectl`/`wsl`
+//!   exec). [`remote`] holds what they share; [`conformance`] is the test
+//!   suite every implementation must pass.
+//!
+//! Cross-cutting design: `spec/remote-editing/index.md` at the repo root.
+//!
 
 pub mod agent;
 pub mod conformance;
@@ -320,6 +335,18 @@ pub trait Authority: Send + Sync + std::fmt::Debug {
 /// The refusal inside the `io::Error` from
 /// [`Authority::write_atomic_if_unchanged`]: the file changed since the
 /// caller read it.
+///
+/// It travels as the *source* of an `io::Error` (kind `Other`) so the trait
+/// keeps returning plain `io::Result`; test for it with [`WriteConflict::is`]
+/// rather than matching on the error kind.
+///
+/// # Examples
+/// ```
+/// use vix_authority::WriteConflict;
+/// let e = WriteConflict::error();
+/// assert!(WriteConflict::is(&e));
+/// assert!(!WriteConflict::is(&std::io::Error::other("something else")));
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct WriteConflict;
@@ -366,6 +393,19 @@ pub fn can_run(auth: &dyn Authority, program: &str) -> bool {
 /// Whether a file is still the version `expected` describes: both missing,
 /// or both present with the same length and the same modification time in
 /// whole seconds (a missing time on either side compares equal).
+///
+/// Whole seconds because that is all a remote `stat` reports; comparing
+/// sub-second parts would make every remote save look like a conflict.
+///
+/// # Examples
+/// ```
+/// use vix_authority::{same_version, FileKind, FileStat};
+/// let a = FileStat::new(FileKind::File, 10);
+/// assert!(same_version(Some(&a), Some(&a)));
+/// assert!(same_version(None, None));
+/// assert!(!same_version(Some(&a), None));
+/// assert!(!same_version(Some(&a), Some(&FileStat::new(FileKind::File, 11))));
+/// ```
 #[must_use]
 pub fn same_version(expected: Option<&FileStat>, now: Option<&FileStat>) -> bool {
     match (expected, now) {
@@ -396,10 +436,13 @@ pub(crate) fn process_disabled() -> io::Error {
     )
 }
 
-/// The installed authority, if [`install`] was ever called.
+/// The installed authority, if [`install`] was ever called. `None` means
+/// "use [`local()`]". A `RwLock` because reads (every file operation) vastly
+/// outnumber the one or two installs per process.
 static SLOT: RwLock<Option<Arc<dyn Authority>>> = RwLock::new(None);
 
-/// The shared local authority returned while the slot is empty.
+/// The shared local authority returned while the slot is empty. One lazily
+/// created instance, so repeated [`current`] calls hand out the same `Arc`.
 fn local() -> Arc<dyn Authority> {
     static LOCAL: OnceLock<Arc<dyn Authority>> = OnceLock::new();
     Arc::clone(LOCAL.get_or_init(|| Arc::new(LocalAuthority)))
@@ -409,6 +452,8 @@ fn local() -> Arc<dyn Authority> {
 /// slot, or [`LocalAuthority`] if nothing has.
 #[must_use]
 pub fn current() -> Arc<dyn Authority> {
+    // A poisoned lock still holds a valid `Option<Arc<..>>`: a panic elsewhere
+    // cannot leave it half-written, so recover rather than propagate.
     let installed = SLOT
         .read()
         .unwrap_or_else(PoisonError::into_inner)
@@ -418,8 +463,10 @@ pub fn current() -> Arc<dyn Authority> {
 }
 
 /// Put `authority` in the process-wide slot and return the one it replaces
-/// (the local authority if the slot was empty). Nothing in Vix calls this yet;
-/// it is the hook T712's remote authorities plug into.
+/// (the local authority if the slot was empty). The App calls this when a
+/// remote workspace is opened (`vix ssh://…`, **File → Open Remote…**, the OC
+/// menu) and to put the previous authority back afterwards; see
+/// `spec/remote-editing/index.md`.
 pub fn install(authority: Arc<dyn Authority>) -> Arc<dyn Authority> {
     let mut slot = SLOT.write().unwrap_or_else(PoisonError::into_inner);
     slot.replace(authority).unwrap_or_else(local)

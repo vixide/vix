@@ -1,5 +1,12 @@
 //! [`Search`]: a substring search streamed through the file on a background
 //! thread, with progress and cancel.
+//!
+//! The file is scanned in [`SEARCH_CHUNK`]-sized steps; each window is read
+//! `needle.len() - 1` bytes past its end so a match straddling two steps is
+//! still seen. Matching is ASCII "smart case" over raw bytes (no UTF-8
+//! decoding), using `memchr`'s `memmem` finders. [`find`] is the synchronous
+//! core; [`Search`] wraps it in a thread. Spec:
+//! `crates/vix-large-file/spec/index.md`.
 
 use std::fs::File;
 use std::io;
@@ -68,6 +75,8 @@ pub fn find(
     } else {
         needle.to_vec()
     };
+    // Windows reach this far past their end so a straddling match is found.
+    // (`needle` is non-empty here, so the subtraction cannot underflow.)
     let overlap = needle.len() as u64 - 1;
     let step = SEARCH_CHUNK as u64;
     let mut reader = Windows {
@@ -86,6 +95,8 @@ pub fn find(
                     return Ok(Found::Cancelled);
                 }
                 let end = pos.saturating_add(step).min(len);
+                // A hit inside the overlap tail is still the earliest match:
+                // any earlier start would have been found in a previous window.
                 if let Some(i) = finder.find(reader.window(pos, end)?) {
                     return Ok(Found::At(pos + i as u64));
                 }
@@ -101,6 +112,9 @@ pub fn find(
                     return Ok(Found::Cancelled);
                 }
                 let begin = end.saturating_sub(step);
+                // The overlap tail cannot hold a match *starting* at or after
+                // `end` (it is one byte too short), so `rfind` honours "starts
+                // before the offset".
                 if let Some(i) = finder.rfind(reader.window(begin, end)?) {
                     return Ok(Found::At(begin + i as u64));
                 }
@@ -112,7 +126,8 @@ pub fn find(
     Ok(Found::NotFound)
 }
 
-/// Reads the overlapping windows a search scans.
+/// Reads the overlapping windows a search scans. Keeps one reusable buffer so
+/// a multi-gigabyte scan allocates once.
 struct Windows<'f> {
     file: &'f File,
     len: u64,
@@ -141,8 +156,11 @@ impl Windows<'_> {
 /// State shared with the search thread.
 #[derive(Debug, Default)]
 struct Shared {
+    /// Bytes scanned so far (monotonic); drives the progress percentage.
     progress: AtomicU64,
+    /// Set by [`Search::cancel`] / `Drop`; checked once per step.
     cancel: AtomicBool,
+    /// The outcome, written once by the thread, taken by [`Search::poll`].
     result: Mutex<Option<Found>>,
 }
 
@@ -152,6 +170,7 @@ pub struct Search {
     shared: Arc<Shared>,
     /// Bytes it may have to scan, for the progress percentage.
     span: u64,
+    /// Needle length in bytes, so the viewer can highlight the match.
     needle_len: u64,
     direction: Direction,
 }
@@ -247,6 +266,8 @@ impl Search {
 }
 
 impl Drop for Search {
+    /// Cancel on drop so an abandoned search (viewer closed, new search
+    /// started) stops reading the file at its next step.
     fn drop(&mut self) {
         self.cancel();
     }

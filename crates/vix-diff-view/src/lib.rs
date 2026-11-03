@@ -4,8 +4,10 @@
 //!
 //! Built on `similar`'s line diff with a small context radius, grouped into
 //! hunks. Pure data (no IO, no terminal) so the layout is unit-testable; the host
-//! owns scrolling and `ui` renders the colored lines.
+//! owns scrolling and `ui` renders the colored lines. Spec:
+//! `crates/vix-diff-view/spec/index.md`.
 
+// `compare` documents itself with an inner `//!` block (T660).
 pub mod compare;
 
 /// The kind of a rendered diff line, selecting its color/prefix.
@@ -33,13 +35,28 @@ pub struct Line {
     pub emphasis: Vec<(usize, usize)>,
 }
 
-/// Build a unified diff (3 lines of context) from `old` to `new`. Returns a
-/// single context-free note line when the texts are identical. Changed lines
-/// carry char-range `emphasis` marking the words that differ (word-level diff).
+/// Build a unified diff (3 lines of context) from `old` to `new`. Returns an
+/// empty vector when the texts are identical (the host shows its own "no
+/// differences" message). Non-adjacent hunks are separated by one
+/// [`Kind::Sep`] line. Changed lines carry char-range `emphasis` marking the
+/// words that differ (word-level diff).
+///
+/// # Examples
+///
+/// ```
+/// use vix_diff_view::{Kind, build};
+///
+/// let lines = build("a\nb\n", "a\nB\n");
+/// assert!(lines.iter().any(|l| l.kind == Kind::Del && l.text == "b"));
+/// assert!(lines.iter().any(|l| l.kind == Kind::Add && l.text == "B"));
+/// assert!(build("same\n", "same\n").is_empty());
+/// ```
 #[must_use]
 pub fn build(old: &str, new: &str) -> Vec<Line> {
     use similar::{ChangeTag, TextDiff};
     let diff = TextDiff::from_lines(old, new);
+    // `grouped_ops(3)` merges nearby changes and keeps 3 context lines either
+    // side, like `diff -U3`; it is empty exactly when the texts are equal.
     let groups = diff.grouped_ops(3);
     if groups.is_empty() {
         return Vec::new();
@@ -62,12 +79,17 @@ pub fn build(old: &str, new: &str) -> Vec<Line> {
                     ChangeTag::Insert => Kind::Add,
                     ChangeTag::Equal => Kind::Context,
                 };
+                // Emphasis ranges are in *chars* (not bytes) of the final
+                // `text`, so the renderer can slice by column.
                 let mut text = String::new();
                 let mut emphasis = Vec::new();
                 for (emph, value) in change.iter_strings_lossy() {
+                    // Only the trailing newline is trimmed; the renderer owns
+                    // the prefix and line breaks.
                     let seg = value.trim_end_matches('\n');
                     let start = text.chars().count();
                     text.push_str(seg);
+                    // Context lines never carry emphasis (nothing differs).
                     if emph && kind != Kind::Context {
                         emphasis.push((start, text.chars().count()));
                     }

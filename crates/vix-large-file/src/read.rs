@@ -4,6 +4,11 @@
 use std::fs::File;
 use std::io;
 
+/// One positioned read (may be short). Platform split: `pread`-style
+/// `read_at` on Unix, `seek_read` on Windows (which does move that handle's
+/// cursor, but no code here relies on the cursor), and a seek+read fallback
+/// elsewhere that is only safe because every reader owns its own handle.
+///
 /// Read into `buf` at `offset`, returning how many bytes were read (0 at EOF).
 fn read_once(file: &File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
     #[cfg(unix)]
@@ -32,6 +37,8 @@ fn read_once(file: &File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
 /// The underlying read error.
 pub(crate) fn read_full(file: &File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
     let mut got = 0;
+    // `read_at` may return short counts, so loop until the buffer is full or
+    // EOF (`Ok(0)`); `Interrupted` (EINTR) is retried, never surfaced.
     while got < buf.len() {
         match read_once(file, &mut buf[got..], offset + got as u64) {
             Ok(0) => break,

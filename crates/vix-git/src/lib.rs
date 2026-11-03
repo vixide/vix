@@ -18,6 +18,11 @@
 //!   [`RebaseTodo`] edits one, and runners start, continue, and abort a rebase
 //!   and cherry-pick a commit.
 
+// Interactive rebase / cherry-pick (T633), stash (T634) and worktree (T634)
+// helpers live in their own files; their public items are re-exported flat
+// below so callers use `vix_git::<name>` regardless of which file defines it.
+// The `process`-gated runners are re-exported only when that feature is on,
+// leaving the pure parsers usable without spawning `git`.
 mod rebase;
 mod stash;
 mod worktree;

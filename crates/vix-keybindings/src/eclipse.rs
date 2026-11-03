@@ -19,6 +19,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// Eclipse's single-key bindings (its only context), Ctrl/Alt rows with Shift encoded explicitly in the token.
 const NORMAL: &[Binding] = &[
     Binding {
         key_token: "A-/",
@@ -118,6 +119,7 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
+/// Eclipse's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: NORMAL,

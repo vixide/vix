@@ -1,6 +1,10 @@
 //! Plain data an [`crate::Authority`] hands back: file metadata, directory
 //! entries, and walk options. Owned values rather than `std::fs` types, so a
 //! remote authority can build them from a `stat` reply.
+//!
+//! All the public structs are `#[non_exhaustive]`: build them with the
+//! constructors and `with_*` builders so new fields can be added without
+//! breaking callers. Owning spec: `crates/vix-authority/spec/index.md`.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -21,7 +25,8 @@ pub enum FileKind {
 }
 
 impl FileKind {
-    /// The kind of a local `std::fs::FileType`.
+    /// The kind of a local `std::fs::FileType`. Anything that is not a link,
+    /// directory or regular file (FIFO, socket, device) is [`FileKind::Other`].
     #[must_use]
     pub fn from_std(t: std::fs::FileType) -> Self {
         if t.is_symlink() {
@@ -57,6 +62,13 @@ pub struct FileStat {
 impl FileStat {
     /// A stat of `kind` and `len` with no times and not read-only; chain
     /// [`FileStat::with_modified`] and friends to fill in the rest.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::{FileKind, FileStat};
+    /// let s = FileStat::new(FileKind::File, 3).with_readonly(true);
+    /// assert!(s.is_file() && s.readonly && s.len == 3);
+    /// ```
     #[must_use]
     pub fn new(kind: FileKind, len: u64) -> Self {
         Self {
@@ -97,7 +109,15 @@ impl FileStat {
         self
     }
 
-    /// The stat of a local `std::fs::Metadata`.
+    /// The stat of a local `std::fs::Metadata`. Times the platform cannot
+    /// report become `None`; `mode` is `None` off Unix.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::FileStat;
+    /// let m = std::fs::metadata(std::env::temp_dir()).unwrap();
+    /// assert!(FileStat::from_std(&m).is_dir());
+    /// ```
     #[must_use]
     pub fn from_std(m: &std::fs::Metadata) -> Self {
         #[cfg(unix)]
@@ -199,6 +219,13 @@ impl WalkOptions {
     /// The fuzzy file finder's walk: depth 12, hidden files skipped, ignore
     /// files honored, `target` and `node_modules` pruned, at most `limit`
     /// files.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::WalkOptions;
+    /// let o = WalkOptions::file_index(500);
+    /// assert_eq!((o.max_depth, o.limit), (Some(12), 500));
+    /// ```
     #[must_use]
     pub fn file_index(limit: usize) -> Self {
         Self {

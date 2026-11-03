@@ -3,6 +3,9 @@
 //!
 //! Every runner names a stash as `stash@{N}`, built here from a `usize`, so
 //! no caller-supplied text ever reaches git's argument list.
+//!
+//! Re-exported from the crate root; parsers are pure, runners need the
+//! `process` feature. See `crates/vix-git/spec/index.md`.
 
 #[cfg(feature = "process")]
 use std::path::Path;

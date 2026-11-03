@@ -5,6 +5,9 @@
 //! [`Calculator`] type holds the dialog's formula text, the focused control, and
 //! the last result or error: the host types into it, calls [`Calculator::run`]
 //! to evaluate, and inserts the result into the editor.
+//!
+//! Everything here is pure state and string logic; the host owns key handling
+//! and rendering. Spec: `crates/vix-calculator-tool/spec/index.md`.
 
 use evalexpr::Value;
 
@@ -23,6 +26,7 @@ pub enum CalcError {
     },
 }
 
+/// Writes the evaluator's message verbatim.
 impl std::fmt::Display for CalcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -34,6 +38,18 @@ impl std::fmt::Display for CalcError {
 impl std::error::Error for CalcError {}
 
 /// Evaluate `formula` and render the result.
+///
+/// Integer operands use integer arithmetic (`10 / 4` is `"2"`); use a float
+/// literal for a real quotient (`10.0 / 4.0` is `"2.5"`). Strings render
+/// unquoted, an empty result renders as `""`, and tuples use `evalexpr`'s own
+/// display form.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_calculator_tool::eval("2 * (3 + 4)").unwrap(), "14");
+/// assert_eq!(vix_calculator_tool::eval("1 > 0").unwrap(), "true");
+/// assert!(vix_calculator_tool::eval("2 +").is_err());
+/// ```
 ///
 /// # Errors
 /// Returns a [`CalcError`] carrying the evaluator's message when the formula is malformed or
@@ -74,6 +90,20 @@ pub enum Outcome {
 }
 
 /// The Calculator dialog's editing state.
+///
+/// Editing ([`push`](Self::push), [`backspace`](Self::backspace)) always
+/// discards `outcome`, so a displayed result is never stale relative to the
+/// formula text.
+///
+/// # Examples
+/// ```
+/// let mut c = vix_calculator_tool::Calculator::new();
+/// for ch in "3*3".chars() {
+///     c.push(ch);
+/// }
+/// c.run();
+/// assert_eq!(c.result(), Some("9"));
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Calculator {
     /// The formula the user is typing.
@@ -104,7 +134,11 @@ impl Calculator {
     }
 
     /// Evaluate the current formula, storing the outcome.
+    ///
+    /// A blank (whitespace-only) formula clears the outcome instead of
+    /// reporting an evaluator error.
     pub fn run(&mut self) {
+        // Nothing to evaluate: leave no result or error on screen.
         if self.input.trim().is_empty() {
             self.outcome = None;
             return;
