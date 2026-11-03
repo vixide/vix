@@ -16,6 +16,17 @@
 //! everything after the blank line is the request body. Lines starting with `#`
 //! or `//` are comments. Parsing is pure and unit-tested; [`send`] performs the
 //! (blocking) request and is meant to be called from a background thread.
+//!
+//! Also parsed (see [`parse_request`]): `@name = value` variable-definition
+//! lines before the request line are skipped here (substitution is handled by
+//! [`mod@env`]), a trailing `HTTP/x.y` token on the request line is dropped, and
+//! `?a=1` / `&b=2` continuation lines extend the URL's query.
+//!
+//! Submodules: [`mod@env`] (environment files and `{{var}}` substitution), [`aad`]
+//! (Azure AD token acquisition) and [`rest`] (the REST-client workbench model).
+//! Only `http`/`https` URLs are ever sent, see [`send_response`].
+//!
+//! Owning spec: `crates/vix-http-client/spec/index.md`.
 
 pub mod aad;
 pub mod env;
@@ -37,6 +48,22 @@ pub struct Request {
 
 /// Parse a `.http`-style buffer into a [`Request`]. Returns `None` if there is no
 /// request line with a URL.
+///
+/// The URL must be absolute (contain `://`); this keeps stray prose from being
+/// mistaken for a request. Header lines without a `:` are silently ignored.
+///
+/// # Examples
+///
+/// ```
+/// let req = vix_http_client::parse_request(
+///     "POST https://e.com/x\nAccept: */*\n\n{\"a\":1}\n",
+/// ).unwrap();
+/// assert_eq!(req.method, "POST");
+/// assert_eq!(req.headers, vec![("Accept".to_string(), "*/*".to_string())]);
+/// assert_eq!(req.body, "{\"a\":1}");
+/// // The method is optional and defaults to GET.
+/// assert_eq!(vix_http_client::parse_request("https://e.com").unwrap().method, "GET");
+/// ```
 #[must_use]
 pub fn parse_request(text: &str) -> Option<Request> {
     let mut lines = text.lines().peekable();
@@ -45,6 +72,8 @@ pub fn parse_request(text: &str) -> Option<Request> {
     let mut request_line = None;
     for line in lines.by_ref() {
         let t = line.trim();
+        // `@name = value` lines define variables; they precede the request
+        // line in the `.http` convention and are not part of the request.
         if t.is_empty() || t.starts_with('#') || t.starts_with("//") || t.starts_with('@') {
             continue;
         }
@@ -59,8 +88,9 @@ pub fn parse_request(text: &str) -> Option<Request> {
     };
     let mut parts = request_line.split_whitespace();
     let first = parts.next()?;
-    // If the first token looks like a URL (has "://" or starts with "/"), the
-    // method was omitted; otherwise it's the method and the next token is the URL.
+    // If the first token looks like a URL (it contains "://"), the method was
+    // omitted; otherwise it's the method and the next token is the URL. (A
+    // leading "/" does NOT count: only absolute URLs are accepted below.)
     let (method, mut url) = if first.contains("://") {
         ("GET".to_string(), first.to_string())
     } else {
@@ -97,7 +127,8 @@ pub fn parse_request(text: &str) -> Option<Request> {
         }
     }
 
-    // Everything remaining is the body.
+    // Everything remaining is the body, kept verbatim (including `#`/`//`
+    // lines, which are comments only before the blank line).
     let body = lines.collect::<Vec<_>>().join("\n");
     Some(Request {
         method,
@@ -194,6 +225,8 @@ pub fn send_response(req: &Request) -> Result<Response, HttpError> {
     }
     // An HTTP error *status* carries a response worth showing, so it must not
     // surface as an `Err`.
+    // No explicit timeouts are set: ureq's defaults apply, and callers run this
+    // on a background thread so a slow server never blocks the UI.
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .build()
@@ -222,14 +255,19 @@ fn scheme_is_http(url: &str) -> bool {
 /// Read a `ureq` response into a [`Response`]. Consumes `resp` to read its body.
 fn read_response(resp: ureq::http::Response<ureq::Body>) -> Response {
     let status = resp.status();
+    // `Debug` of `http::Version` renders as `HTTP/1.1`, the status-line form.
     let version = format!("{:?}", resp.version());
     let headers = resp
         .headers()
         .iter()
+        // Header values that are not valid UTF-8 text are dropped rather than
+        // lossily converted.
         .filter_map(|(n, v)| Some((n.to_string(), v.to_str().ok()?.to_string())))
         .collect();
     let body = match resp.into_body().read_to_string() {
         Ok(body) => body,
+        // A body read failure (bad encoding, truncated stream) still yields the
+        // status and headers; the failure is shown in place of the body.
         Err(e) => format!("<failed to read body: {e}>"),
     };
     Response {

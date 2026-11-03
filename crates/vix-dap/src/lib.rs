@@ -10,6 +10,27 @@
 //!
 //! One debug session is active at a time. The host owns breakpoints, the UI, and
 //! how `DapEvent`s are applied.
+//!
+//! # Session flow
+//!
+//! [`Dap::start`] spawns the adapter and sends `initialize`. When the adapter
+//! emits `initialized`, `Dap::configure` (private) sends the breakpoints,
+//! exception filters and function breakpoints, then `launch`/`attach`, then
+//! `configurationDone` -- the order DAP requires. A `stopped` event triggers
+//! `threads` + `stackTrace`; the stack response chains into `scopes`, whose
+//! response chains into `variables` for the first cheap scope, so the host gets
+//! a full snapshot from one event. Every request is tracked in a private
+//! `Pending` map keyed by `seq` so its response can be interpreted.
+//!
+//! Threading: a reader thread decodes stdout into a channel and a writer
+//! thread drains an outgoing channel into stdin, so the UI thread never blocks
+//! on a slow adapter in either direction. Stderr is discarded.
+//!
+//! The `process` feature gates actually spawning an adapter (without it
+//! [`Dap::start`] always returns `false`), keeping the crate testable without
+//! a child process. [`view`] holds the pure panel model built from the events.
+//!
+//! Owning spec: `crates/vix-dap/spec/index.md`.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -382,7 +403,9 @@ pub enum DapEvent {
 
 /// Messages from the reader thread.
 enum Incoming {
+    /// One decoded DAP message (response or event).
     Message(Value),
+    /// The adapter's stdout closed (it exited or crashed).
     Exited,
 }
 
@@ -415,12 +438,17 @@ enum Pending {
 
 /// One active debug session.
 struct Session {
+    /// The adapter process, killed and reaped by [`Dap::stop`].
     child: Child,
     /// Framed messages to write to the adapter's stdin, drained by a dedicated
     /// writer thread so a stalled adapter can never block the UI thread.
     writer: Sender<Vec<u8>>,
+    /// Decoded messages from the reader thread, drained by [`Dap::poll`].
     rx: Receiver<Incoming>,
+    /// Next request sequence number (DAP `seq`, starts at 1).
     seq: i64,
+    /// In-flight requests by `seq`, so a response (`request_seq`) can be
+    /// matched to what it answers.
     pending: HashMap<i64, Pending>,
     /// The request (`launch` or `attach`) and its arguments, sent once the
     /// adapter emits `initialized`.
@@ -444,6 +472,7 @@ struct Session {
 
 /// The DAP client: at most one active `Session` (private).
 pub struct Dap {
+    /// The active session, `None` when idle or after the adapter exited.
     session: Option<Session>,
     /// Where the adapter starts under a non-local authority (T716): the
     /// workspace root, rather than the remote home directory.
@@ -559,6 +588,9 @@ impl Dap {
     /// Terminate the active session (if any).
     pub fn stop(&mut self) {
         if let Some(mut s) = self.session.take() {
+            // Best-effort polite `disconnect`; the writer thread may not get to
+            // flush it before the kill below, which is fine -- the kill is the
+            // guarantee.
             s.request(
                 "disconnect",
                 &json!({ "terminateDebuggee": true }),
@@ -594,10 +626,13 @@ impl Dap {
         self.thread_command("pause");
     }
 
+    /// Send a thread-scoped execution command (`continue`, `next`, ...) for the
+    /// selected thread. A no-op with no session or no selected thread.
     fn thread_command(&mut self, command: &str) {
         if let Some(s) = self.session.as_mut()
             && let Some(tid) = s.thread_id
         {
+            // Optimistically mark running; the next `stopped` event flips it back.
             s.stopped = false;
             s.request(
                 command,
@@ -771,6 +806,9 @@ impl Dap {
         events
     }
 
+    /// Dispatch one adapter message by its DAP `type`. Reverse requests from
+    /// the adapter (e.g. `runInTerminal`) are ignored: we advertise
+    /// `supportsRunInTerminalRequest: false`.
     fn handle(&mut self, msg: &Value, events: &mut Vec<DapEvent>) {
         match msg.get("type").and_then(Value::as_str) {
             Some("event") => self.handle_event(msg, events),
@@ -779,6 +817,7 @@ impl Dap {
         }
     }
 
+    /// React to an adapter event (`initialized`, `stopped`, `output`, ...).
     fn handle_event(&mut self, msg: &Value, events: &mut Vec<DapEvent>) {
         let Some(event) = msg.get("event").and_then(Value::as_str) else {
             return;
@@ -798,6 +837,8 @@ impl Dap {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string();
+                // Some adapters omit `threadId` (all-threads-stopped); 0 is then
+                // a placeholder rather than a real id.
                 let tid = body.get("threadId").and_then(Value::as_i64).unwrap_or(0);
                 if let Some(s) = self.session.as_mut() {
                     s.thread_id = Some(tid);
@@ -821,6 +862,7 @@ impl Dap {
                 }
             }
             "terminated" | "exited" => {
+                // `stop` also kills the adapter so no process outlives its session.
                 self.stop();
                 events.push(DapEvent::Terminated);
             }
@@ -828,7 +870,11 @@ impl Dap {
         }
     }
 
+    /// Match a response to its `Pending` request and turn it into events,
+    /// chaining the follow-up requests (stack -> scopes -> variables).
     fn handle_response(&mut self, msg: &Value, events: &mut Vec<DapEvent>) {
+        // -1 never matches a real `seq` (they start at 1), so a malformed
+        // response is simply dropped below.
         let id = msg.get("request_seq").and_then(Value::as_i64).unwrap_or(-1);
         let body = msg.get("body").cloned().unwrap_or(Value::Null);
         let success = msg.get("success").and_then(Value::as_bool).unwrap_or(false);
@@ -1029,6 +1075,9 @@ fn build_launch_args(adapter: &DebugAdapter, program_path: &str) -> Value {
         Value::String(program_path.to_string()),
     );
     map.insert("stopOnEntry".to_string(), Value::Bool(false));
+    // The adapter's own table is applied last so it can override both defaults
+    // above (`program`, `stopOnEntry`). Values are always strings here; only
+    // `attach` coerces types (see `typed_value`).
     for (k, v) in &adapter.launch {
         map.insert(
             k.clone(),

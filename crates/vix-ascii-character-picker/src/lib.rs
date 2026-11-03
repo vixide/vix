@@ -8,6 +8,10 @@
 //! editor. This crate is pure data — it owns the table accessors and tracks the
 //! highlighted row and the scroll offset. The host renders the rows, maps clicks
 //! to rows, and inserts the chosen character.
+//!
+//! Selection movement and scroll clamping are delegated to [`vix_list_state`],
+//! the shared pure list helpers used by every list-style panel.
+//! Owning spec: `crates/vix-ascii-character-picker/spec/index.md`.
 
 /// Number of ASCII codes in the table (`0..=127`).
 pub const LEN: usize = 128;
@@ -27,6 +31,13 @@ pub fn dec(code: u8) -> u8 {
 }
 
 /// Two-digit uppercase hexadecimal for a code, e.g. `0F`, `7F`.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_ascii_character_picker::hex(15), "0F");
+/// assert_eq!(vix_ascii_character_picker::hex(127), "7F");
+/// ```
 #[must_use]
 pub fn hex(code: u8) -> String {
     format!("{code:02X}")
@@ -34,9 +45,22 @@ pub fn hex(code: u8) -> String {
 
 /// The character representation shown in the table's `Char` column: a control
 /// mnemonic (`NUL`, `ESC`, `DEL`), the word `space` for 32, or the literal glyph.
+///
+/// Codes above 127 are not part of the table; they fall through to the literal
+/// Latin-1 glyph rather than panicking.
+///
+/// # Examples
+///
+/// ```
+/// use vix_ascii_character_picker::label;
+/// assert_eq!(label(27), "ESC");
+/// assert_eq!(label(32), "space");
+/// assert_eq!(label(b'A'), "A");
+/// ```
 #[must_use]
 pub fn label(code: u8) -> String {
     match code {
+        // Indexing is safe: the arm bounds `code` to the array's 32 entries.
         0..=31 => CONTROL[code as usize].to_string(),
         32 => "space".to_string(),
         127 => "DEL".to_string(),
@@ -48,6 +72,7 @@ pub fn label(code: u8) -> String {
 /// the editor when a row is chosen.
 #[must_use]
 pub fn ch(code: u8) -> char {
+    // `u8 as char` maps 0..=255 to U+0000..=U+00FF, i.e. exactly Latin-1.
     code as char
 }
 
@@ -135,6 +160,8 @@ impl Panel {
     /// The highlighted ASCII code.
     #[must_use]
     pub fn selected_code(&self) -> u8 {
+        // `selected < LEN = 128` always fits; the fallback is unreachable
+        // defence against a caller poking the public field.
         u8::try_from(self.selected).unwrap_or(u8::MAX)
     }
 

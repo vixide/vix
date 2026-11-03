@@ -5,6 +5,10 @@
 //! (which is not part of the theme model), and the color-depth fallback
 //! ([`color_depth`]: detect how many colors the terminal shows, and
 //! downsample RGB to 256 or 16 colors, T628).
+//!
+//! Callers throughout the workspace depend on `vix_theme::*` rather than on
+//! `vix-theme-model` directly, so the split is invisible to them. Owning spec:
+//! `crates/vix-theme/spec/index.md`.
 
 pub mod color_depth;
 
@@ -59,8 +63,21 @@ pub mod icon {
 }
 
 /// Pick a file icon from a path's extension.
+///
+/// Only the text after the *last* `.` is considered and the match is
+/// case-sensitive; unknown or missing extensions get the generic [`icon::FILE`].
+///
+/// # Examples
+///
+/// ```
+/// use vix_theme::{file_icon, icon};
+/// assert_eq!(file_icon("main.rs"), icon::RUST);
+/// assert_eq!(file_icon("Makefile"), icon::FILE);
+/// ```
 #[must_use]
 pub fn file_icon(name: &str) -> &'static str {
+    // `rsplit` always yields at least one item; for a name with no dot the
+    // whole name is "the extension" and simply matches nothing below.
     match name.rsplit('.').next().unwrap_or("") {
         "rs" => icon::RUST,
         "md" | "markdown" => icon::MARKDOWN,

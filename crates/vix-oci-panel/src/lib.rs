@@ -9,6 +9,18 @@
 //! long-running ones sit in [`Mode::Confirm`] first, so the user always sees
 //! what will run. In read-only mode every mutating key is refused with
 //! [`Request::ReadOnly`] before a command exists.
+//!
+//! Safety design: every command line is assembled by the typed builders in
+//! `vix_oci::argv` (an argv vector, never a shell string), and user-typed
+//! prompt text is parsed word-by-word into those builders, which validate each
+//! argument. The panel only ever *requests* work; the host runs it, so this
+//! crate is testable with no engine installed.
+//!
+//! Key map is split by mode: [`Mode::Browse`] keys (list navigation, `d`
+//! remove, `D` prune, per-kind letters), [`Mode::Confirm`] (y/Enter runs, any
+//! other key cancels) and [`Mode::Input`] (text prompts).
+//!
+//! Owning spec: `crates/vix-oci-panel/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_oci::argv::{self, ComposeOp, ContainerOp, Kind, RunOptions};
@@ -205,6 +217,8 @@ impl Panel {
                     m.tag,
                     m.size,
                     m.created,
+                    // Image ids are ASCII (`sha256:` + hex), so byte slicing
+                    // is char-safe; 19 shows the prefix plus a short digest.
                     &m.id[..m.id.len().min(19)]
                 )
             }),
@@ -327,10 +341,13 @@ impl Panel {
         };
     }
 
+    /// The engine's executable name (`docker` or `podman`).
     fn binary(&self) -> &'static str {
         self.engine.binary()
     }
 
+    /// Enter [`Mode::Confirm`] for built `args` (so the user sees the exact
+    /// command first), or turn a builder error into [`Request::Invalid`].
     fn confirm(&mut self, args: Result<Vec<String>, OciError>, stream: bool) -> Request {
         match args {
             Ok(args) => {
@@ -341,6 +358,7 @@ impl Panel {
         }
     }
 
+    /// Run built `args` immediately (for non-destructive operations).
     fn now(&self, args: Result<Vec<String>, OciError>) -> Request {
         match args {
             Ok(args) => Request::Exec(Pending::new(self.binary(), args, false)),
@@ -353,6 +371,8 @@ impl Panel {
         match self.mode.clone() {
             Mode::Browse => self.browse_key(key, page),
             Mode::Confirm(pending) => {
+                // Leaving confirm happens on *any* key, so a stray keypress
+                // can never leave a destructive command armed.
                 self.mode = Mode::Browse;
                 if matches!(key.code, KeyCode::Char('y' | 'Y') | KeyCode::Enter) {
                     Request::Exec(pending)
@@ -368,6 +388,8 @@ impl Panel {
         }
     }
 
+    /// Keys in [`Mode::Browse`]. Ctrl chords are ignored so the host's own
+    /// global chords are never half-handled here.
     fn browse_key(&mut self, key: KeyEvent, page: usize) -> Request {
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             return Request::None;
@@ -394,15 +416,18 @@ impl Panel {
         Request::None
     }
 
+    /// `inspect` the highlighted object, if there is one.
     fn inspect(&self) -> Request {
         self.selected_ref()
             .map_or(Request::None, |id| Request::Inspect(self.kind, id))
     }
 
+    /// `Some(ReadOnly)` when read-only mode forbids a mutating key.
     fn guard(&self) -> Option<Request> {
         self.read_only.then_some(Request::ReadOnly)
     }
 
+    /// Start removal of the highlighted object, behind a confirm.
     fn remove(&mut self) -> Request {
         if let Some(r) = self.guard() {
             return r;
@@ -420,6 +445,7 @@ impl Panel {
         self.confirm(args, false)
     }
 
+    /// Letter keys: those common to every kind first, then per-kind ones.
     fn char_key(&mut self, c: char) -> Request {
         match c {
             'r' => return Request::Reload,
@@ -441,6 +467,8 @@ impl Panel {
         }
     }
 
+    /// Container-only keys. Non-mutating ones (logs, shell, port URL, show-all)
+    /// return before the read-only `guard`; lifecycle ops pass through it.
     fn container_key(&mut self, c: char) -> Request {
         let Some(ctr) = self.selected_container().cloned() else {
             return Request::None;
@@ -479,6 +507,7 @@ impl Panel {
             's' => ContainerOp::Start,
             'x' => ContainerOp::Stop,
             't' => ContainerOp::Restart,
+            // `p` toggles pause/unpause depending on the container's state.
             'p' if ctr.is_paused() => ContainerOp::Unpause,
             'p' => ContainerOp::Pause,
             _ => return Request::None,
@@ -489,6 +518,8 @@ impl Panel {
         self.now(argv::container_op(op, &ctr.id))
     }
 
+    /// Image-only keys. `p` (pull) works with no image highlighted so an empty
+    /// list can still pull its first image.
     fn image_key(&mut self, c: char) -> Request {
         let Some(image) = self.images.get(self.selected).cloned() else {
             return if c == 'p' {
@@ -524,6 +555,7 @@ impl Panel {
         }
     }
 
+    /// Open the pull prompt (refused in read-only mode).
     fn pull_prompt(&mut self, prefill: &str) -> Request {
         if let Some(r) = self.guard() {
             return r;
@@ -532,6 +564,8 @@ impl Panel {
         Request::None
     }
 
+    /// Keys in [`Mode::Input`]: edit the line, Enter submits, Esc cancels. The
+    /// mode value is rebuilt on each edit because `key` cloned it out.
     fn input_key(
         &mut self,
         key: KeyEvent,
@@ -570,6 +604,8 @@ impl Panel {
         }
     }
 
+    /// Turn a finished prompt into a command. `Tag` runs at once (cheap and
+    /// reversible); the rest go through a confirm, and pulls/runs/builds stream.
     fn submit(&mut self, purpose: Purpose, text: &str, subject: &str) -> Request {
         if self.read_only {
             return Request::ReadOnly;

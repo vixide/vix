@@ -7,10 +7,21 @@
 //! string — 64 characters for SHA-256, 128 for SHA-512, 32 for MD5, 8 for
 //! CRC-32. MD5 and CRC-32 are here for compatibility with legacy tooling that
 //! still expects them, not because either is cryptographically sound.
+//!
+//! Owning spec: `crates/vix-checksum-tool/spec/index.md`.
 
 use sha2::{Digest, Sha256, Sha512};
 
 /// SHA-256 digest of `text` (UTF-8 bytes) as a 64-character lowercase hex string.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     vix_checksum_tool::sha256_hex("abc"),
+///     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+/// );
+/// ```
 #[must_use]
 pub fn sha256_hex(text: &str) -> String {
     to_hex(&Sha256::digest(text.as_bytes()))
@@ -25,11 +36,14 @@ pub fn sha512_hex(text: &str) -> String {
 /// MD5 digest of `text` (UTF-8 bytes) as a 32-character lowercase hex string.
 #[must_use]
 pub fn md5_hex(text: &str) -> String {
+    // Imported locally: MD5 is the odd one out and kept visibly separate.
     use md5::Md5;
     to_hex(&Md5::digest(text.as_bytes()))
 }
 
 /// CRC-32 (IEEE) checksum of `text` (UTF-8 bytes) as an 8-character lowercase hex.
+///
+/// Zero-padded to 8 characters, so small checksums keep their leading zeros.
 #[must_use]
 pub fn crc32_hex(text: &str) -> String {
     let mut h = crc32fast::Hasher::new();

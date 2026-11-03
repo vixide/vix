@@ -10,6 +10,14 @@
 //! name = "wrap-parens"
 //! keys = ["(", "Right", "Right"]
 //! ```
+//!
+//! The text form is the on-disk contract: tokens must stay stable across
+//! versions so an old `macros.toml` still replays. Decoding is lenient (unknown
+//! tokens are dropped) so a hand-edited or newer file never aborts a replay.
+//! Writes go through `vix_fileops::write_atomic_private` because a macro can
+//! contain typed secrets.
+//!
+//! Owning spec: `crates/vix-macros/spec/index.md`.
 
 use std::path::Path;
 
@@ -28,11 +36,25 @@ pub struct Macro {
 /// The `macros.toml` schema: a list of `[[macro]]` tables.
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct MacrosFile {
+    /// The `[[macro]]` array of tables; `default` lets an empty file parse.
     #[serde(default, rename = "macro")]
     macros: Vec<Macro>,
 }
 
 /// Encode a key event to a token (`C-`/`A-`/`S-` prefixes + key name).
+///
+/// Prefix order is always `C-`, `A-`, `S-`. A key code with no token (e.g. a
+/// media key) encodes with an empty name; [`encode`] filters those out.
+///
+/// # Examples
+///
+/// ```
+/// use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+/// use vix_macros::{decode_key, encode_key};
+/// let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+/// assert_eq!(encode_key(key), "C-c");
+/// assert_eq!(decode_key("C-c"), Some(key));
+/// ```
 #[must_use]
 pub fn encode_key(key: KeyEvent) -> String {
     let mut s = String::new();
@@ -72,6 +94,9 @@ fn encode_code(code: KeyCode) -> String {
         KeyCode::PageDown => "PageDown".to_string(),
         KeyCode::Insert => "Insert".to_string(),
         KeyCode::F(n) => format!("F{n}"),
+        // Unmapped codes encode to "" so callers can drop them; a modifier
+        // prefix may still precede the empty name (e.g. "C-"), which
+        // `decode_key` then rejects.
         _ => String::new(),
     }
 }
@@ -81,6 +106,8 @@ fn encode_code(code: KeyCode) -> String {
 pub fn decode_key(token: &str) -> Option<KeyEvent> {
     let mut rest = token;
     let mut mods = KeyModifiers::NONE;
+    // Peel modifier prefixes in any order. A literal `C`, `A` or `S` key is
+    // safe: it has no trailing `-`, so it is never mistaken for a prefix.
     loop {
         if let Some(r) = rest.strip_prefix("C-") {
             mods |= KeyModifiers::CONTROL;
@@ -119,6 +146,8 @@ fn decode_code(name: &str) -> Option<KeyCode> {
         "PageUp" => KeyCode::PageUp,
         "PageDown" => KeyCode::PageDown,
         "Insert" => KeyCode::Insert,
+        // `F` followed by digits is a function key; a lone `F` falls through to
+        // the single-character case below.
         f if f.starts_with('F') && f.len() > 1 => {
             let n: u8 = f[1..].parse().ok()?;
             KeyCode::F(n)
@@ -136,6 +165,8 @@ fn decode_code(name: &str) -> Option<KeyCode> {
 }
 
 /// Tokenize a recorded key sequence (dropping any unencodable events).
+///
+/// Round-trips with [`decode`] for every event [`encode_key`] can name.
 #[must_use]
 pub fn encode(keys: &[KeyEvent]) -> Vec<String> {
     keys.iter()
@@ -151,6 +182,10 @@ pub fn decode(tokens: &[String]) -> Vec<KeyEvent> {
 }
 
 /// Load all saved macros from `path` (empty when missing or unparseable).
+///
+/// Errors are swallowed deliberately: a corrupt `macros.toml` just shows no
+/// macros. Note that a later [`upsert`] then rewrites the file from that empty
+/// list, discarding the unparseable content.
 #[must_use]
 pub fn load(path: &Path) -> Vec<Macro> {
     std::fs::read_to_string(path)
@@ -165,6 +200,8 @@ pub fn load(path: &Path) -> Vec<Macro> {
 /// # Errors
 /// Returns an error if the file cannot be written or serialized.
 pub fn upsert(path: &Path, mac: Macro) -> std::io::Result<()> {
+    // Read-modify-write: replace by name so re-recording a macro under the
+    // same name updates it in place (keeping its position in the list).
     let mut macros = load(path);
     if let Some(existing) = macros.iter_mut().find(|m| m.name == mac.name) {
         *existing = mac;

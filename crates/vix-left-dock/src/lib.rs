@@ -3,6 +3,15 @@
 //!
 //! Pure logic over `std::fs` — the host (the `vix` app) renders the tree and
 //! routes keys/clicks/file operations; this crate owns the tree state.
+//!
+//! The tree is *flattened*: [`Explorer::nodes`] is the list of rows currently
+//! visible (a depth-first walk that only descends into expanded directories),
+//! rebuilt from disk by [`Explorer::rebuild`]. The expansion set and the
+//! multi-selection are stored as paths rather than indexes so they survive a
+//! rebuild. All directory reads go through `vix_authority`, so the same code
+//! lists a remote workspace. Dotfiles are always hidden.
+//!
+//! Owning spec: `crates/vix-left-dock/spec/index.md`.
 
 use std::path::{Path, PathBuf};
 
@@ -36,9 +45,11 @@ pub struct Explorer {
     /// Multi-selection (paths, so it survives a rebuild). Empty means "just the
     /// cursor row".
     pub marked: std::collections::HashSet<PathBuf>,
-    /// Anchor row for Shift+Up/Down range selection.
+    /// Anchor row for Shift+Up/Down range selection. A row *index*, so it is
+    /// only meaningful until the next [`Explorer::rebuild`].
     anchor: usize,
-    /// Directories the user has expanded.
+    /// Directories the user has expanded (by path, so it survives rebuilds;
+    /// seeded with the root so the top level is open).
     expanded: std::collections::HashSet<PathBuf>,
     /// Original "include" filter text (kept so the prompt can show/reseed it).
     pub include_filter: String,
@@ -109,6 +120,8 @@ impl Explorer {
             self.anchor.min(self.selected),
             self.anchor.max(self.selected),
         );
+        // Rebuilt from scratch each time so shrinking the range back toward the
+        // anchor un-marks rows.
         self.marked.clear();
         for i in lo..=hi {
             if let Some(n) = self.nodes.get(i) {
@@ -142,6 +155,8 @@ impl Explorer {
     pub fn set_filter(&mut self, include: &str, exclude: &str) {
         self.include_filter = include.to_string();
         self.exclude_filter = exclude.to_string();
+        // An invalid regex compiles to `None` (== no filter) on purpose: the
+        // user is typing it live, and a half-typed pattern must not blank the tree.
         let compile = |p: &str| (!p.is_empty()).then(|| regex::Regex::new(p).ok()).flatten();
         self.include = compile(include);
         self.exclude = compile(exclude);
@@ -179,6 +194,8 @@ impl Explorer {
         true
     }
 
+    /// Depth-first append of `dir`'s visible entries to `out`, recursing only
+    /// into expanded directories.
     fn walk(&self, dir: &Path, depth: usize, out: &mut Vec<Node>) {
         // Through the authority slot (T710). Each entry is stat-ed once, while
         // listing, so the sort key below can't change mid-sort (an entry
@@ -297,12 +314,16 @@ impl Explorer {
 
     /// Expand every ancestor directory of `path` and select that row, so a file
     /// opened elsewhere is revealed in the tree.
+    ///
+    /// A path outside the root expands nothing and leaves the selection alone;
+    /// a path hidden by a filter or dotfile rule is not found, so is not selected.
     pub fn reveal(&mut self, path: &Path) {
         let mut cur = path.parent();
         while let Some(dir) = cur {
             if dir.starts_with(&self.root) || dir == self.root {
                 self.expanded.insert(dir.to_path_buf());
             }
+            // Stop at the root rather than walking up to `/`.
             if dir == self.root {
                 break;
             }

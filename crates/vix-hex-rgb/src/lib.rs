@@ -7,13 +7,29 @@
 //! replacement for `vix-color-converter-tool::from_hex`, a deliberately
 //! *stricter* public-facing API that rejects malformed input instead of
 //! zero-filling it.
+//!
+//! Owning spec: `crates/vix-hex-rgb/spec/index.md`.
 
 /// Parse a `#RRGGBB` (or `RRGGBB`) hex string into an `(r, g, b)` triple.
 ///
-/// Any component that is missing or invalid is treated as `0`.
+/// Any component that is missing or invalid is treated as `0`, so this never
+/// fails and never panics (all slicing goes through `str::get`, which returns
+/// `None` rather than panicking on short input or a non-char boundary).
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_hex_rgb::rgb("#F0F8FF"), (0xF0, 0xF8, 0xFF));
+/// // Short or malformed input zero-fills instead of erroring.
+/// assert_eq!(vix_hex_rgb::rgb("#12"), (0x12, 0, 0));
+/// ```
 #[must_use]
 pub fn rgb(hex: &str) -> (u8, u8, u8) {
+    // `trim_start_matches` strips *every* leading `#`, which is harmless here:
+    // `##fff` simply parses as `fff`.
     let hex = hex.trim_start_matches('#');
+    // `get` (not indexing) so a short string or a split multi-byte char yields
+    // `None` -> 0 rather than a panic.
     let component = |range: std::ops::Range<usize>| {
         hex.get(range)
             .and_then(|s| u8::from_str_radix(s, 16).ok())

@@ -3,6 +3,15 @@
 //! Open buffers are searched in their current (possibly unsaved) state; other
 //! files are read from disk. `App` owns the buffers, so it drives the actual
 //! scanning; this crate just holds the panel state.
+//!
+//! Besides the panel state ([`WorkspaceSearch`], [`Hit`]) the crate carries the
+//! pure helpers behind two features: *editable search results* (T211/T653:
+//! [`parse_result_line`], [`WgrepBaseline`], [`rewrite_lines`], which write
+//! edited result lines back to their files while refusing to touch a line that
+//! changed since the search), and the external-tool prefilter in [`tool`]
+//! (`rg`/`grep` for remote workspaces, T715).
+//!
+//! Owning spec: `crates/vix-workspace-search/spec/index.md`.
 
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
@@ -61,6 +70,8 @@ pub struct WgrepBaseline {
 /// format, not something this function tries to work around.
 #[must_use]
 pub fn parse_result_line(line: &str) -> Option<(&str, usize, &str)> {
+    // First `:` ends the path; first `": "` after it ends the line number.
+    // Text after that may contain anything, including more `: `.
     let (rel, rest) = line.split_once(':')?;
     let (num, text) = rest.split_once(": ")?;
     let n: usize = num.trim().parse().ok()?;
@@ -77,6 +88,7 @@ pub const CLIP_CHARS: usize = 120;
 /// stale-line check (T653) and the scan can never disagree on the shape.
 #[must_use]
 pub fn clip(line: &str) -> String {
+    // `chars()` (not bytes) so a multi-byte character is never split.
     line.trim_start().chars().take(CLIP_CHARS).collect()
 }
 
@@ -113,6 +125,8 @@ pub struct LineRewrite {
 /// final-newline state, so a CRLF file stays CRLF.
 #[must_use]
 pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
+    // Split into (body, terminator) pairs so each line's own `\r\n`/`\n` (or
+    // none, for an unterminated last line) is reinserted byte-for-byte.
     let mut segments: Vec<(String, &str)> = content
         .split_inclusive('\n')
         .map(|seg| {
@@ -129,6 +143,8 @@ pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
     let mut applied = Vec::new();
     let mut drifted = Vec::new();
     for edit in edits {
+        // `checked_sub` turns a (bogus) line 0 into a drift instead of an
+        // underflow panic.
         let Some((body, _)) = edit.line.checked_sub(1).and_then(|i| segments.get_mut(i)) else {
             drifted.push(edit.line);
             continue;
@@ -137,6 +153,9 @@ pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
             drifted.push(edit.line);
             continue;
         }
+        // The visible text in the results buffer was `clip`ped (left-trimmed
+        // and cut at CLIP_CHARS); splice only that part, keeping the original
+        // indent and any text beyond the cut.
         let trimmed = body.trim_start();
         let indent = &body[..body.len() - trimmed.len()];
         let tail = trimmed
@@ -255,6 +274,9 @@ impl WorkspaceSearch {
     }
 
     /// Effective regex pattern from the query and toggles (no whole-word here).
+    ///
+    /// `None` until the query has at least two bytes: a one-character search
+    /// would match nearly every file and is not worth running on each keystroke.
     #[must_use]
     pub fn pattern(&self) -> Option<String> {
         if self.query.len() < 2 {
@@ -277,6 +299,7 @@ impl WorkspaceSearch {
 
     /// Move the selection down one hit.
     pub fn down(&mut self) {
+        // Clamp at the last hit (no wrap-around).
         if self.selected + 1 < self.hits.len() {
             self.selected += 1;
         }

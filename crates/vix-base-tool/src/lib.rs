@@ -5,6 +5,11 @@
 //! whitespace, an optional leading sign, and `_` digit separators. Each function
 //! re-renders it in one base (with the conventional prefix). Used by Tools →
 //! Convert → Number via `App::transform_selection_or_buffer_try`.
+//!
+//! Values are held as `i128`, so anything wider overflows into
+//! [`BaseError::Invalid`]. Negative numbers are rendered as sign + magnitude
+//! (`-0xff`), never two's complement. Owning spec:
+//! `crates/vix-base-tool/spec/index.md`.
 
 /// Why a number could not be converted.
 ///
@@ -39,7 +44,10 @@ impl std::error::Error for BaseError {
 
 /// Parse `s` as an integer with an auto-detected radix.
 fn parse(s: &str) -> Result<i128, BaseError> {
+    // `_` separators are stripped anywhere (even `1__0`), a deliberately
+    // lenient choice for pasted values like `0xDEAD_BEEF`.
     let t = s.trim().replace('_', "");
+    // Sign comes before the radix prefix (`-0x10`), as in Rust literals.
     let (neg, body) = match t.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, t.strip_prefix('+').unwrap_or(&t)),
@@ -57,6 +65,8 @@ fn parse(s: &str) -> Result<i128, BaseError> {
     if digits.is_empty() {
         return Err(BaseError::NoNumber);
     }
+    // Parsing the magnitude then negating means `i128::MIN` itself overflows
+    // here (reported as invalid): an accepted edge case.
     let n = i128::from_str_radix(digits, radix).map_err(BaseError::Invalid)?;
     Ok(if neg { -n } else { n })
 }
@@ -69,6 +79,15 @@ fn render(n: i128, prefix: &str, f: impl Fn(u128) -> String) -> String {
 }
 
 /// To decimal.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_base_tool::to_dec("0xFF").unwrap(), "255");
+/// assert_eq!(vix_base_tool::to_hex("255").unwrap(), "0xff");
+/// assert_eq!(vix_base_tool::to_bin("-5").unwrap(), "-0b101");
+/// assert!(vix_base_tool::to_oct("nope").is_err());
+/// ```
 ///
 /// # Errors
 /// Returns a [`BaseError`] when `input` is not a valid integer in any supported base.
