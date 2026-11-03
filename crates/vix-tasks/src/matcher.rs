@@ -272,14 +272,14 @@ static TSC_PAREN: LazyLock<Regex> =
 static TSC_PRETTY: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?):(\d+):(\d+) - (error|warning) (TS\d+): (.+)$"));
 
-/// ESLint "stylish" row, which lacks the file name (it was printed on an
+/// `ESLint` "stylish" row, which lacks the file name (it was printed on an
 /// earlier header line, tracked in `state.eslint_file`): `  3:7  error  msg  rule`.
 static ESLINT_ROW: LazyLock<Regex> =
     LazyLock::new(|| re(r"^\s+(\d+):(\d+)\s+(error|warning)\s+(.+?)(?:\s{2,}(\S+))?\s*$"));
-/// ESLint `--format compact`: `file: line 3, col 7, Error - message`.
+/// `ESLint` `--format compact`: `file: line 3, col 7, Error - message`.
 static ESLINT_COMPACT: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?): line (\d+), col (\d+), (Error|Warning) - (.+)$"));
-/// ESLint `--format unix`: `file:3:7: message [Error/rule]`.
+/// `ESLint` `--format unix`: `file:3:7: message [Error/rule]`.
 static ESLINT_UNIX: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?):(\d+):(\d+): (.+) \[(Error|Warning)(?:/(\S+))?\]$"));
 
@@ -569,7 +569,7 @@ impl Scanner {
         true
     }
 
-    /// Try the ESLint output in stylish, compact or unix form recognizer on `line`. Returns `true` when the line was consumed
+    /// Try the `ESLint` recognizer (stylish, compact and unix formats) on `line`. Returns `true` when the line was consumed
     /// (matched, or continued a multi-line construct) so later recognizers are
     /// skipped; returns `false` immediately when this matcher is not enabled in
     /// the spec.

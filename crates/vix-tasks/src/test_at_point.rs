@@ -96,7 +96,7 @@ static JS_TEST_CALL: LazyLock<Regex> = LazyLock::new(|| {
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
-/// An RSpec `it`/`describe` call with a quoted description (two quote styles; see the note above on why there is no backreference).
+/// An `RSpec` `it`/`describe` call with a quoted description (two quote styles; see the note above on why there is no backreference).
 static RUBY_RSPEC_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\b(?:it|describe)\s+(?:'([^']*)'|"([^"]*)")"#).unwrap());
 #[expect(
@@ -110,7 +110,7 @@ static RUBY_MINITEST_DEF: LazyLock<Regex> =
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
-/// An ExUnit `test "name" do` block.
+/// An `ExUnit` `test "name" do` block.
 static ELIXIR_TEST_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^\s*test\s+"([^"]+)"\s+do\b"#).unwrap());
 
@@ -199,7 +199,7 @@ fn js_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<Te
     })
 }
 
-/// Ruby: Minitest `def test_` when the framework hint says so, otherwise RSpec
+/// Ruby: Minitest `def test_` when the framework hint says so, otherwise `RSpec`
 /// `it`/`describe` (see the in-function note on the default).
 fn ruby_test_at_point(
     path: &str,
@@ -227,7 +227,7 @@ fn ruby_test_at_point(
     }
 }
 
-/// Elixir: nearest ExUnit `test "..." do` at or above the cursor; the command
+/// Elixir: nearest `ExUnit` `test "..." do` at or above the cursor; the command
 /// targets the file and the 1-based line of that test.
 fn elixir_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (line_idx, caps) = scan_upward(lines, cursor_line, &ELIXIR_TEST_CALL)?;
