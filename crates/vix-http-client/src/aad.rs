@@ -4,6 +4,9 @@
 //! array (never a shell, so a crafted `.http` file cannot inject a command).
 //! It is held in memory only: never cached, logged or written to disk, and
 //! errors deliberately carry nothing the CLI printed.
+//!
+//! Called by [`crate::rest`] when expanding `{{$aadToken ...}}` in a request.
+//! Owning spec: `crates/vix-http-client/spec/index.md`.
 
 use std::process::{Command, Stdio};
 
@@ -56,9 +59,13 @@ pub fn token_with(program: &str, args: &[&str]) -> Result<String, AadError> {
     let out = Command::new(program)
         .args(&command_line)
         .stdin(Stdio::null())
+        // Discarded on purpose: `az` can print account details or hints that
+        // must never leak into an error shown in the UI.
         .stderr(Stdio::null())
         .output()
         .map_err(|e| {
+            // Distinguishing "not installed" lets the UI suggest installing
+            // `az`; every other spawn failure collapses to `Failed`.
             if e.kind() == std::io::ErrorKind::NotFound {
                 AadError::CliMissing
             } else {
@@ -68,6 +75,7 @@ pub fn token_with(program: &str, args: &[&str]) -> Result<String, AadError> {
     if !out.status.success() {
         return Err(AadError::Failed);
     }
+    // `--output tsv --query accessToken` prints the bare token plus a newline.
     let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if token.is_empty() {
         Err(AadError::Failed)
@@ -76,7 +84,8 @@ pub fn token_with(program: &str, args: &[&str]) -> Result<String, AadError> {
     }
 }
 
-/// The `az` argument vector for `args`.
+/// The `az` argument vector for `args`. Each user-supplied word is validated
+/// by [`checked`] so it can only ever be a value, never an extra option.
 fn build_args(args: &[&str]) -> Result<Vec<String>, AadError> {
     let mut resource = DEFAULT_RESOURCE.to_string();
     let mut tenant = None;
@@ -103,7 +112,9 @@ fn build_args(args: &[&str]) -> Result<Vec<String>, AadError> {
 }
 
 /// `s` if it is a plain id/URL: no leading `-` (an option), no whitespace.
-fn checked(s: &str) -> Result<String, AadError> {
+/// The allowed set (`alphanumerics` and `-._:/@`) covers URLs, GUIDs and
+/// `api://` ids but rejects shell metacharacters as defence in depth, even
+/// though no shell is involved. checked(s: &str) -> Result<String, AadError> {
     let ok = !s.is_empty()
         && !s.starts_with('-')
         && s.chars()

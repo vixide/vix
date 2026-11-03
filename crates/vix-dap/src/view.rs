@@ -7,6 +7,15 @@
 //! ([`crate::Dap::select_thread`], [`crate::Dap::select_frame`],
 //! [`crate::Dap::variables`]). Labels are data from the adapter; section
 //! headings are named by [`Section`] and translated by the host.
+//!
+//! Key design point: the variable tree is *lazy* and survives stepping. DAP
+//! variables are fetched one level at a time by `variablesReference`, and
+//! references are only valid until the program resumes. So when the tree is
+//! discarded (a step, a frame switch) [`DebugView`] remembers the *name paths*
+//! of the expanded nodes and re-expands matching nodes as the new replies
+//! arrive, handing the host the references it must fetch in turn.
+//!
+//! Owning spec: `crates/vix-dap/spec/index.md`.
 
 use crate::{Frame, Scope, Thread, Variable, auto_expand_scope};
 
@@ -104,11 +113,17 @@ pub enum Activation {
 /// A scope or variable in the tree.
 #[derive(Clone, Debug)]
 struct Node {
+    /// Scope or variable name; also the key used by the expanded-path memory.
     name: String,
+    /// Rendered value (empty for scopes).
     value: String,
+    /// `variablesReference` for fetching children; 0 means a leaf.
     reference: i64,
+    /// Whether the user (or auto-expand/memory) has it open.
     expanded: bool,
+    /// Whether `children` has been fetched, so re-expanding does not refetch.
     loaded: bool,
+    /// Fetched children, empty until `loaded`.
     children: Vec<Node>,
 }
 
@@ -159,6 +174,8 @@ impl Node {
         self.path_inner(reference, path)
     }
 
+    /// Depth-first helper for [`Node::path_to`]: pushes this node's name and
+    /// backtracks (pops) when the target is not at or below it.
     fn path_inner(&self, reference: i64, path: &mut Vec<String>) -> bool {
         path.push(self.name.clone());
         if self.reference == reference {
@@ -244,6 +261,7 @@ impl DebugView {
     pub fn set_stack(&mut self, frames: Vec<Frame>) {
         self.frame_id = frames.first().map(|f| f.id);
         self.frames = frames;
+        // New frame => old scopes are invalid; their expansion is remembered.
         self.reset_tree();
     }
 
@@ -277,6 +295,8 @@ impl DebugView {
     /// the host to fetch in turn.
     pub fn set_variables(&mut self, reference: i64, variables: &[Variable]) -> Vec<i64> {
         let remembered = &self.remembered;
+        // `prefix` ends up holding the name path from the scope down to the
+        // node owning `reference`; children extend it to look up the memory.
         let mut prefix = Vec::new();
         let Some(i) = self
             .scopes
@@ -331,6 +351,7 @@ impl DebugView {
         self.auto_scope = None;
     }
 
+    /// The node at `path` (child indexes starting from the scope list).
     fn node(&self, path: &[usize]) -> Option<&Node> {
         let (first, rest) = path.split_first()?;
         let mut node = self.scopes.get(*first)?;
@@ -340,6 +361,7 @@ impl DebugView {
         Some(node)
     }
 
+    /// Mutable variant of [`DebugView::node`].
     fn node_mut(&mut self, path: &[usize]) -> Option<&mut Node> {
         let (first, rest) = path.split_first()?;
         let mut node = self.scopes.get_mut(*first)?;
@@ -416,7 +438,8 @@ impl DebugView {
             self.selected = 0;
             return;
         };
-        // Where the highlight is now among the selectable rows: the first one
+        // `rows()` is rebuilt on each call, so `selected` can be stale after
+        // the tree changed. Where the highlight is now among the selectable rows: the first one
         // at or after it (it may sit on a heading after the rows changed).
         let at = selectable
             .iter()
@@ -491,6 +514,8 @@ impl DebugView {
         }
     }
 
+    /// Expand or collapse the node at `path`; returns [`Activation::Load`] only
+    /// when expanding a node whose children have not been fetched yet.
     fn toggle(&mut self, path: &[usize], expand: bool) -> Activation {
         let Some(node) = self.node_mut(path) else {
             return Activation::None;
@@ -559,7 +584,9 @@ fn push_node(rows: &mut Vec<Row>, node: &Node, path: &[usize]) {
     }
 }
 
-/// The identifiers in `text` (runs of alphanumerics, `_` and `$`).
+/// The identifiers in `text` (runs of alphanumerics, `_` and `$`). A rough
+/// lexical split (no language awareness), so names inside string literals or
+/// comments also match -- acceptable for a hint display.
 fn identifiers(text: &str) -> Vec<&str> {
     text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
         .filter(|s| !s.is_empty())
@@ -572,6 +599,8 @@ fn shorten(value: &str) -> String {
     if first.chars().count() <= INLINE_VALUE_MAX {
         return first.to_string();
     }
+    // Count chars, not bytes, so a multi-byte value is never cut mid-codepoint;
+    // one slot is reserved for the ellipsis.
     let mut out: String = first.chars().take(INLINE_VALUE_MAX - 1).collect();
     out.push('…');
     out

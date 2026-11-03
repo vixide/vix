@@ -1,5 +1,19 @@
 //! The ACP session state machine. No IO: feed it the agent's messages, send
 //! whatever it returns.
+//!
+//! The flow is `initialize` -> `session/new` (or `session/load` when resuming)
+//! -> any number of `session/prompt` turns. Each call to [`Client::handle`]
+//! returns a [`Step`]: [`Event`]s for the host UI plus JSON-RPC messages for
+//! the host to write to the agent (see [`crate::process`]). Because the machine
+//! does no IO it can be driven entirely by canned messages in tests.
+//!
+//! Security note: the client never touches the file system. Agent requests to
+//! read or write files, and permission prompts, are surfaced as events that the
+//! host answers after consulting [`crate::policy`]; unknown methods and
+//! requests for a session other than ours are rejected here, before the host
+//! sees them.
+//!
+//! Owning spec: `crates/vix-acp/spec/index.md`.
 
 use std::collections::HashMap;
 
@@ -119,21 +133,30 @@ pub enum Phase {
     Prompting,
 }
 
+/// Which of our outstanding requests a response id belongs to.
 #[derive(Clone, Copy)]
 enum Pending {
+    /// The `initialize` handshake.
     Initialize,
+    /// `session/new`.
     NewSession,
+    /// `session/load` (resume); on error we fall back to `session/new`.
     LoadSession,
+    /// A `session/prompt` turn.
     Prompt,
 }
 
 /// The ACP client state machine.
 pub struct Client {
+    /// Next JSON-RPC request id; ids are never reused within a client.
     next_id: u64,
+    /// Where the conversation stands.
     phase: Phase,
+    /// Requests awaiting a response, keyed by id.
     pending: HashMap<u64, Pending>,
+    /// The active session id; set early on resume (see `on_response`).
     session_id: Option<String>,
-    cwd: String,
+    /// Workspace root sent as the session's `cwd`.
     /// A session to load instead of creating one (T635 resume).
     resume: Option<String>,
     /// Whether the session we are in was loaded rather than created.
@@ -193,6 +216,7 @@ impl Client {
         self.session_id.as_deref()
     }
 
+    /// Allocate an id, remember what it is for, and build the request.
     fn send(&mut self, method: &str, params: &Value, kind: Pending) -> Value {
         let id = self.next_id;
         self.next_id += 1;
@@ -201,6 +225,10 @@ impl Client {
     }
 
     /// Begin: the `initialize` request to write first.
+    ///
+    /// Advertises only the `fs` read/write capabilities (no terminal), so the
+    /// agent cannot ask the client to run commands. Returns nothing if already
+    /// started.
     pub fn start(&mut self) -> Vec<Value> {
         if self.phase != Phase::Idle {
             return Vec::new();
@@ -214,6 +242,9 @@ impl Client {
     }
 
     /// Send a prompt, or `None` unless a session is ready and idle.
+    ///
+    /// Moves the phase to [`Phase::Prompting`] until the matching response
+    /// arrives as [`Event::TurnEnded`] (or [`Event::Failed`]).
     pub fn prompt(&mut self, text: &str) -> Option<Value> {
         if self.phase != Phase::Ready {
             return None;
@@ -271,6 +302,9 @@ impl Client {
     }
 
     /// Feed one decoded message from the agent.
+    ///
+    /// Messages that are not JSON-RPC, responses to ids we never issued, and
+    /// unknown notifications are ignored (an empty [`Step`]).
     pub fn handle(&mut self, msg: &Value) -> Step {
         let mut step = Step::default();
         match wire::parse_incoming(msg) {
@@ -288,12 +322,15 @@ impl Client {
         step
     }
 
+    /// Advance the state machine on a response to request `id`.
     fn on_response(&mut self, id: u64, result: Result<Value, RpcError>, step: &mut Step) {
         let Some(kind) = self.pending.remove(&id) else {
             return;
         };
         let value = match result {
             Ok(v) => v,
+            // Any error to `session/load` (not just "not found") falls back to
+            // a fresh session so a stale saved id never strands the user.
             Err(_) if matches!(kind, Pending::LoadSession) => {
                 // The agent no longer knows that session: start a fresh one.
                 self.session_id = None;
@@ -304,6 +341,8 @@ impl Client {
                 return;
             }
             Err(e) => {
+                // A failed prompt must free the turn, else the UI would wait
+                // forever for a `TurnEnded` that will not come.
                 if matches!(kind, Pending::Prompt) {
                     self.phase = Phase::Ready;
                 }
@@ -336,6 +375,7 @@ impl Client {
                 }
             }
             Pending::LoadSession => {
+                // The session id was already set when `session/load` was sent.
                 self.resumed = true;
                 self.phase = Phase::Ready;
                 let sid = self.session_id.clone().unwrap_or_default();
@@ -358,6 +398,7 @@ impl Client {
                 let stop_reason = value
                     .get("stopReason")
                     .and_then(Value::as_str)
+                    // ACP requires `stopReason`; tolerate an agent that omits it.
                     .unwrap_or("end_turn")
                     .to_string();
                 step.events.push(Event::TurnEnded { stop_reason });
@@ -365,6 +406,8 @@ impl Client {
         }
     }
 
+    /// Whether `params.sessionId` names our session. Anything else (including
+    /// no session yet) is untrusted and must not produce events.
     fn session_matches(&self, params: &Value) -> bool {
         match (
             &self.session_id,
@@ -375,6 +418,9 @@ impl Client {
         }
     }
 
+    /// Translate a `session/update` notification into an [`Event`].
+    /// Unrecognised `sessionUpdate` kinds are skipped, so newer agents that add
+    /// kinds do not break older clients.
     fn on_update(&self, params: &Value, step: &mut Step) {
         if !self.session_matches(params) {
             return;
@@ -431,6 +477,9 @@ impl Client {
         }
     }
 
+    /// Handle a request from the agent. Unsupported methods get `-32601`,
+    /// foreign sessions and malformed params `-32602`; valid ones become events
+    /// the host must answer via the `answer_*` functions.
     fn on_request(&self, id: &Value, method: &str, params: &Value, step: &mut Step) {
         let known = matches!(
             method,
@@ -484,6 +533,9 @@ impl Client {
     }
 }
 
+/// Parse the `options` array of a permission request, dropping entries with an
+/// unknown `kind` or missing `optionId` so the host never offers a choice it
+/// cannot classify.
 fn parse_options(params: &Value) -> Vec<PermOption> {
     params
         .get("options")
@@ -514,6 +566,17 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
 }
 
 /// Apply ACP's `line`/`limit` (1-based first line, max line count) to `text`.
+///
+/// Lines keep their terminators (`split_inclusive`). Absent both parameters the
+/// text is returned whole; a `line` of `0` is treated like `1`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_acp::client::slice_lines;
+/// assert_eq!(slice_lines("a\nb\nc\n", Some(2), Some(1)), "b\n");
+/// assert_eq!(slice_lines("a\nb\n", None, None), "a\nb\n");
+/// ```
 #[must_use]
 pub fn slice_lines(text: &str, line: Option<u64>, limit: Option<u64>) -> String {
     if line.is_none() && limit.is_none() {

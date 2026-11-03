@@ -13,6 +13,9 @@
 //! which override `$shared` (see [`Environments::variables`]). A secret should
 //! not be written into this file: reference it with `{{$processEnv NAME}}`,
 //! and keep the file out of version control.
+//!
+//! All file access goes through [`vix_authority::current`] so it works on a
+//! remote workspace too. Owning spec: `crates/vix-http-client/spec/index.md`.
 
 use std::path::{Path, PathBuf};
 
@@ -70,6 +73,8 @@ pub fn parse(text: &str) -> Result<Environments, EnvError> {
         return Err(EnvError::NotAnObject("$".into()));
     };
     let mut out = Environments::default();
+    // Sections are visited in the JSON object's own order; `named` is sorted
+    // afterwards so the picker order is stable regardless of file order.
     for (name, section) in top {
         let serde_json::Value::Object(map) = section else {
             return Err(EnvError::NotAnObject(name));
@@ -80,6 +85,7 @@ pub fn parse(text: &str) -> Result<Environments, EnvError> {
                 serde_json::Value::String(s) => Some((k, s)),
                 serde_json::Value::Number(n) => Some((k, n.to_string())),
                 serde_json::Value::Bool(b) => Some((k, b.to_string())),
+                // null, arrays and nested objects have no sensible string form.
                 _ => None,
             })
             .collect();
@@ -106,6 +112,8 @@ impl Environments {
     /// file, then the environment. An unknown `active` adds nothing.
     #[must_use]
     pub fn variables(&self, active: Option<&str>, file: &[(String, String)]) -> Vars {
+        // Last definition wins downstream, so the order here *is* the
+        // precedence: lowest first.
         let mut out = self.shared.clone();
         out.extend_from_slice(file);
         if let Some((_, vars)) = active.and_then(|a| self.named.iter().find(|(n, _)| n == a)) {
@@ -123,6 +131,7 @@ pub fn load(root: &Path) -> Result<Option<Environments>, EnvError> {
     let path: PathBuf = root.join(ENV_FILE);
     match vix_authority::current().read_to_string(&path) {
         Ok(text) => parse(&text).map(Some),
+        // A missing file just means "no environments configured".
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(EnvError::Read(e.to_string())),
     }
@@ -152,6 +161,7 @@ pub fn write_active(root: &Path, name: Option<&str>) -> std::io::Result<()> {
             }
             auth.write(&path, n.as_bytes())
         }
+        // Forgetting an already-absent choice is not an error.
         None => match auth.remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
             _ => Ok(()),

@@ -1,4 +1,15 @@
 //! Newline-delimited JSON framing and JSON-RPC 2.0 message shapes.
+//!
+//! This is the bottom layer of the ACP client: it turns raw agent stdout bytes
+//! into [`serde_json::Value`]s ([`LineDecoder`]) and builds the outgoing
+//! request/notification/response envelopes. It does no IO and holds no
+//! protocol state -- [`crate::client::Client`] sits on top and owns the
+//! request-id bookkeeping and session phases.
+//!
+//! Invariant: every encoded message is exactly one line (compact JSON has no
+//! raw newlines; embedded ones are escaped), because ACP frames by `\n`.
+//!
+//! Owning spec: `crates/vix-acp/spec/index.md`.
 
 use serde_json::{Value, json};
 
@@ -6,6 +17,17 @@ use serde_json::{Value, json};
 pub const MAX_LINE: usize = 16 * 1024 * 1024;
 
 /// Serialize `value` as one line: compact JSON plus `\n`.
+///
+/// Serialization of a [`Value`] cannot realistically fail; on the impossible
+/// error an empty body (just the newline) is emitted rather than panicking, and
+/// the peer's decoder skips it as a blank line.
+///
+/// # Examples
+///
+/// ```
+/// let bytes = vix_acp::wire::encode_line(&serde_json::json!({"a": 1}));
+/// assert_eq!(bytes, b"{\"a\":1}\n");
+/// ```
 #[must_use]
 pub fn encode_line(value: &Value) -> Vec<u8> {
     let mut out = serde_json::to_vec(value).unwrap_or_default();
@@ -14,11 +36,17 @@ pub fn encode_line(value: &Value) -> Vec<u8> {
 }
 
 /// Incremental decoder for the agent's stdout.
+///
+/// Feed arbitrary byte chunks with [`push`](Self::push) (a chunk may end in
+/// the middle of a line) and drain whole messages with [`pop`](Self::pop).
+/// Memory is bounded by [`MAX_LINE`] so a misbehaving agent cannot exhaust it.
 #[derive(Default)]
 pub struct LineDecoder {
+    /// Bytes received but not yet consumed by [`LineDecoder::pop`].
     buf: Vec<u8>,
     /// Discarding bytes up to the next newline after an oversized line.
     skipping: bool,
+    /// Count of lines dropped as oversized or not valid JSON.
     malformed: usize,
 }
 
@@ -30,9 +58,16 @@ impl LineDecoder {
     }
 
     /// Append freshly-read bytes.
+    ///
+    /// A line longer than [`MAX_LINE`] is discarded whole (counted as
+    /// malformed) and the decoder resynchronises at the next newline, so one
+    /// oversized message never poisons the rest of the stream.
     pub fn push(&mut self, bytes: &[u8]) {
         for &b in bytes {
             if b == b'\n' {
+                // The newline ends an oversized line too (clearing `skipping`),
+                // but the buffer was already emptied, so a lone `\n` is left
+                // behind that `pop` treats as a blank line.
                 self.buf.push(b);
                 self.skipping = false;
             } else if self.skipping {
@@ -53,6 +88,7 @@ impl LineDecoder {
         loop {
             let end = self.buf.iter().position(|&b| b == b'\n')?;
             let line: Vec<u8> = self.buf.drain(..=end).collect();
+            // Strip the trailing newline; `end` is its index so `len >= 1`.
             let text = &line[..line.len() - 1];
             if text.iter().all(u8::is_ascii_whitespace) {
                 continue;
@@ -71,13 +107,13 @@ impl LineDecoder {
     }
 }
 
-/// A JSON-RPC request.
+/// A JSON-RPC request (expects a response carrying the same `id`).
 #[must_use]
 pub fn request(id: u64, method: &str, params: &Value) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 }
 
-/// A JSON-RPC notification.
+/// A JSON-RPC notification (no `id`, so no response is expected).
 #[must_use]
 pub fn notification(method: &str, params: &Value) -> Value {
     json!({"jsonrpc": "2.0", "method": method, "params": params})
@@ -137,6 +173,8 @@ pub enum Incoming {
 pub fn parse_incoming(value: &Value) -> Option<Incoming> {
     let obj = value.as_object()?;
     let method = obj.get("method").and_then(Value::as_str);
+    // A JSON `null` id is treated as absent, as JSON-RPC allows agents that
+    // send `"id": null` on notifications.
     let id = obj.get("id").filter(|v| !v.is_null());
     let params = obj.get("params").cloned().unwrap_or(Value::Null);
     match (method, id) {
@@ -150,9 +188,13 @@ pub fn parse_incoming(value: &Value) -> Option<Incoming> {
             params,
         }),
         (None, Some(id)) => {
+            // Our request ids are always `u64`; a response with any other id
+            // type cannot answer one of ours and is dropped (`None`).
             let id = id.as_u64()?;
             let result = if let Some(e) = obj.get("error") {
                 Err(RpcError {
+                    // -32000 is the JSON-RPC "server error" default for a
+                    // malformed error object.
                     code: e.get("code").and_then(Value::as_i64).unwrap_or(-32000),
                     message: e
                         .get("message")

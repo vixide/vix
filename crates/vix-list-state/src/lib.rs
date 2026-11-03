@@ -17,6 +17,26 @@
 //! position from a computed visible-node list. Free functions over plain
 //! `usize`s fit every one of these without changing any panel's public
 //! shape; only each panel's *method bodies* change.
+//!
+//! All functions are pure and total: none panics, including on an empty list
+//! (`len == 0`) or a zero-height viewport.
+//!
+//! Owning spec: `crates/vix-list-state/spec/index.md`.
+//!
+//! # Examples
+//!
+//! ```
+//! use vix_list_state::{down, ensure_visible, page_down};
+//! let mut selected = 0;
+//! let mut scroll = 0;
+//! for _ in 0..7 {
+//!     selected = down(selected, 20);
+//! }
+//! // A 5-row viewport scrolls just enough to keep row 7 on screen.
+//! scroll = ensure_visible(selected, scroll, 5, 20);
+//! assert_eq!((selected, scroll), (7, 3));
+//! assert_eq!(page_down(selected, 10, 20), 17);
+//! ```
 
 /// The highlighted row one step up, stopping at the top (row 0).
 #[must_use]
@@ -28,6 +48,7 @@ pub fn up(selected: usize) -> usize {
 /// `len == 0` leaves `selected` unchanged (there is nothing to move onto).
 #[must_use]
 pub fn down(selected: usize, len: usize) -> usize {
+    // `selected + 1 < len` (not `selected < len - 1`) avoids underflow at len 0.
     if selected + 1 < len {
         selected + 1
     } else {
@@ -67,6 +88,7 @@ pub fn select_index(idx: usize, len: usize) -> Option<usize> {
 #[must_use]
 pub fn ensure_visible(selected: usize, scroll: usize, height: usize, len: usize) -> usize {
     let height = height.max(1);
+    // Minimal scrolling: only move the window when the selection has left it.
     let scroll = if selected < scroll {
         selected
     } else if selected >= scroll + height {
@@ -74,6 +96,8 @@ pub fn ensure_visible(selected: usize, scroll: usize, height: usize, len: usize)
     } else {
         scroll
     };
+    // Final clamp: after the list shrinks (filter, deletion) a stale offset
+    // must not leave blank rows below the last item.
     scroll.min(len.saturating_sub(height))
 }
 
