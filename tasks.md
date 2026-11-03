@@ -9211,6 +9211,25 @@ editor by completion, diagnostics and never losing work first.
     - **mise:** commands documented, no file needed. Not run.
     - **Left:** verify each channel on a real machine or runner, then
       submit or publish it, then move it into the main install list.
+  - **Progress 2026-11-03** (`feat/t742-install-channels`): tooling, CI and
+    docs, still nothing published. New `scripts/packaging` (`check` is in
+    `scripts/check`; `render <version>` regenerates the winget, Scoop and AUR
+    files from a release's `.sha256` files and adds Windows ARM when it
+    exists; the render was tried offline on fake sums for 2.0.0), spec
+    [`spec/packaging`](spec/packaging/index.md), and
+    `.github/workflows/packaging.yml` (check; render after the Release
+    workflow; `nix build`, `winget validate` and `makepkg` verify jobs;
+    publish jobs for winget-pkgs, a Scoop bucket and the AUR gated on the
+    variable `PACKAGING_PUBLISH=true` plus placeholder secrets
+    `WINGET_PKGS_TOKEN`, `SCOOP_BUCKET_TOKEN`, `AUR_SSH_PRIVATE_KEY`). README,
+    getting started and the site's install page list the channels as not yet
+    published. **Unverified:** the workflow has never run (no actionlint here;
+    the YAML parses) and Nix, winget, Scoop and Arch are not installed here.
+    **Still manual:** run the verify jobs once and fix what they find; commit
+    `flake.lock`; create `vixide/scoop-bucket`, the AUR account/package and the
+    three secrets; submit the first winget-pkgs PR by hand; publish `vix-tui`
+    to crates.io for binstall; nixpkgs and mise-registry submissions; then
+    move each verified channel into the main install lists. T742 stays open.
 - [ ] **T743 — Try without installing.** `nix run` (from T742) and a
   container image (`ghcr.io/vixide/vix`) so `docker run -it` opens Vix on
   a demo workspace; list both on the README and site. **Small–Medium.**

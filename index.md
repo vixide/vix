@@ -147,6 +147,10 @@ On Windows, use PowerShell:
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-tui-installer.ps1 | iex"
 ```
 
+More channels (winget, Scoop, the AUR, a Nix flake, `cargo binstall`, mise
+and a container image) are prepared in [`packaging/`](packaging/index.md) but
+**not published yet**; use one of the commands above until they are.
+
 Prebuilt archives (`.tar.xz`, `.zip`, `.msi`) are attached to every
 [GitHub Release](https://github.com/vixide/vix/releases), along with a
 **minimal build** (`vix-minimal-<target>`): no DB workbench, scripting,

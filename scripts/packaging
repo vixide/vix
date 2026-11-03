@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Check and render Vix's in-repo packaging templates (T742, spec/packaging).
+
+  scripts/packaging check [--root DIR]
+      Static, offline consistency check of packaging/, flake.nix and the
+      cargo-binstall metadata. Run by scripts/check and CI.
+
+  scripts/packaging render VERSION [--sums FILE] [--date YYYY-MM-DD] [--root DIR]
+      Rewrite the winget, Scoop and AUR templates for release VERSION. Sums come
+      from FILE (sha256sum output) or from the release's <asset>.sha256 files.
+      Nothing is published.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = "https://github.com/vixide/vix"
+WIN = {"x64": "x86_64-pc-windows-msvc", "arm64": "aarch64-pc-windows-msvc"}
+LINUX = {"x86_64": "x86_64-unknown-linux-gnu", "aarch64": "aarch64-unknown-linux-gnu"}
+HEX = re.compile(r"^[0-9a-fA-F]{64}$")
+PKGBUILD = os.path.join("packaging", "aur", "vix-tui-bin", "PKGBUILD")
+
+
+def read(root, *parts):
+    with open(os.path.join(root, *parts), encoding="utf-8") as f:
+        return f.read()
+
+
+def write(root, text, *parts):
+    with open(os.path.join(root, *parts), "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def asset(target, ext):
+    return f"vix-tui-{target}.{ext}"
+
+
+def url(version, name):
+    return f"{REPO}/releases/download/{version}/{name}"
+
+
+def check(root):
+    errors = []
+    err = errors.append
+
+    dist = read(root, "dist-workspace.toml")
+    targets = set(re.findall(r'"([a-z0-9_]+-[a-z0-9_]+-[a-z0-9_-]+)"', dist))
+
+    # Scoop
+    scoop = json.loads(read(root, "packaging", "scoop", "vix-tui.json"))
+    version = scoop["version"]
+    sums = {}
+    for arch, info in scoop["architecture"].items():
+        target = WIN["x64" if arch == "64bit" else arch]
+        name = asset(target, "zip")
+        if info["url"] != url(version, name):
+            err(f"scoop {arch}: url should be {url(version, name)}")
+        if not HEX.match(info["hash"]):
+            err(f"scoop {arch}: hash is not 64 hex digits")
+        sums[name] = info["hash"].lower()
+        if target not in targets:
+            err(f"scoop {arch}: {target} is not a dist target")
+    if scoop.get("bin") != "vix.exe":
+        err("scoop: bin should be vix.exe")
+    auto = scoop.get("autoupdate", {}).get("architecture", {})
+    for arch, key in (("64bit", "x64"), ("arm64", "arm64")):
+        want = url("$version", asset(WIN[key], "zip"))
+        if auto.get(arch, {}).get("url") != want:
+            err(f"scoop autoupdate {arch}: url should be {want}")
+
+    # winget
+    wdir = os.path.join(root, "packaging", "winget")
+    ids = set()
+    versions = {version}
+    for f in sorted(os.listdir(wdir)):
+        text = read(root, "packaging", "winget", f)
+        m = re.search(r"^PackageVersion: (\S+)$", text, re.M)
+        if m:
+            versions.add(m.group(1))
+        else:
+            err(f"winget {f}: no PackageVersion")
+        ids.update(re.findall(r"^PackageIdentifier: (\S+)$", text, re.M))
+        if "ManifestVersion: 1.9.0" not in text:
+            err(f"winget {f}: ManifestVersion should be 1.9.0")
+        if f.endswith("installer.yaml"):
+            if "InstallerType: zip" not in text or "PortableCommandAlias: vix" not in text:
+                err("winget installer: expected a zip with PortableCommandAlias: vix")
+            pairs = re.findall(
+                r"Architecture: (\w+)\n\s+InstallerUrl: (\S+)\n\s+InstallerSha256: (\S+)", text
+            )
+            if not pairs:
+                err("winget installer: no installers")
+            for arch, u, h in pairs:
+                name = asset(WIN.get(arch, "?"), "zip")
+                if u != url(version, name):
+                    err(f"winget {arch}: url should be {url(version, name)}")
+                if not HEX.match(h):
+                    err(f"winget {arch}: hash is not 64 hex digits")
+                elif name not in sums:
+                    err(f"winget {arch}: scoop has no {name}")
+                elif sums[name] != h.lower():
+                    err(f"winget {arch}: hash differs from scoop's for {name}")
+    if ids != {"vixide.vix-tui"}:
+        err(f"winget: PackageIdentifier should be vixide.vix-tui everywhere, got {sorted(ids)}")
+    try:
+        import yaml
+
+        for f in sorted(os.listdir(wdir)):
+            yaml.safe_load(read(root, "packaging", "winget", f))
+    except ImportError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        err(f"winget YAML does not parse: {e}")
+
+    # AUR
+    pkgb = read(root, PKGBUILD)
+    m = re.search(r"^pkgver=(\S+)$", pkgb, re.M)
+    if m:
+        versions.add(m.group(1))
+    else:
+        err("PKGBUILD: no pkgver")
+    for arch, target in LINUX.items():
+        if target not in targets:
+            err(f"PKGBUILD: {target} is not a dist target")
+        if f"vix-tui-{target}.tar.xz" not in pkgb:
+            err(f"PKGBUILD: no source for {target}")
+        m = re.search(rf"^sha256sums_{arch}=\('([^']*)'\)$", pkgb, re.M)
+        if not m or not HEX.match(m.group(1)):
+            err(f"PKGBUILD: sha256sums_{arch} is not 64 hex digits")
+    r = subprocess.run(["bash", "-n", os.path.join(root, PKGBUILD)], capture_output=True, text=True)
+    if r.returncode:
+        err(f"PKGBUILD: bash -n failed: {r.stderr.strip()}")
+
+    if len(versions) != 1:
+        err(f"packaging versions disagree: {sorted(versions)}")
+
+    # cargo binstall
+    tui = read(root, "tui", "Cargo.toml")
+    if "[package.metadata.binstall]" not in tui or "pkg-url" not in tui:
+        err("tui/Cargo.toml: [package.metadata.binstall] missing")
+    for t in WIN.values():
+        if f"[package.metadata.binstall.overrides.{t}]" not in tui:
+            err(f"tui/Cargo.toml: binstall override for {t} missing")
+
+    # Nix flake
+    flake = read(root, "flake.nix")
+    for needle in ('mainProgram = "vix"', "buildRustPackage", "cargoLock.lockFile",
+                   "packages =", "apps =", '"vix-tui"'):
+        if needle not in flake:
+            err(f"flake.nix: expected {needle!r}")
+    for a, b in ("{}", "[]", "()"):
+        if flake.count(a) != flake.count(b):
+            err(f"flake.nix: unbalanced {a}{b}")
+
+    if errors:
+        print(f"FAIL: {len(errors)} packaging problem(s)")
+        for e in errors:
+            print("  " + e)
+        return 1
+    print(f"OK: packaging templates consistent (version {version})")
+    return 0
+
+
+def fetch_sum(version, name):
+    try:
+        with urllib.request.urlopen(url(version, name) + ".sha256", timeout=30) as r:
+            return r.read().decode().split()[0].lower()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def render(root, version, sums_file, date):
+    given = {}
+    if sums_file:
+        with open(sums_file, encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    given[os.path.basename(parts[1].lstrip("*"))] = parts[0].lower()
+
+    def sum_of(name, required):
+        h = given.get(name) if sums_file else fetch_sum(version, name)
+        if h is None and required:
+            sys.exit(f"error: no SHA-256 for required asset {name}")
+        return h
+
+    win = {}
+    for a, t in WIN.items():
+        name = asset(t, "zip")
+        h = sum_of(name, a == "x64")
+        if h:
+            win[a] = (name, h)
+    lin = {a: sum_of(asset(t, "tar.xz"), True) for a, t in LINUX.items()}
+
+    scoop = json.loads(read(root, "packaging", "scoop", "vix-tui.json"))
+    scoop["version"] = version
+    arch = {}
+    for key, name in (("x64", "64bit"), ("arm64", "arm64")):
+        if key in win:
+            arch[name] = {"url": url(version, win[key][0]), "hash": win[key][1]}
+    scoop["architecture"] = arch
+    write(root, json.dumps(scoop, indent=4) + "\n", "packaging", "scoop", "vix-tui.json")
+
+    entries = "".join(
+        f"  - Architecture: {a}\n    InstallerUrl: {url(version, n)}\n"
+        f"    InstallerSha256: {h.upper()}\n"
+        for a, (n, h) in win.items()
+    )
+    iname = "vixide.vix-tui.installer.yaml"
+    inst = read(root, "packaging", "winget", iname)
+    inst = re.sub(r"^PackageVersion: .*$", f"PackageVersion: {version}", inst, flags=re.M)
+    if date:
+        inst = re.sub(r"^ReleaseDate: .*$", f"ReleaseDate: {date}", inst, flags=re.M)
+    inst = re.sub(r"(?s)Installers:\n.*?(?=ManifestType:)", lambda _: "Installers:\n" + entries, inst)
+    write(root, inst, "packaging", "winget", iname)
+    for f in ("vixide.vix-tui.yaml", "vixide.vix-tui.locale.en-US.yaml"):
+        t = read(root, "packaging", "winget", f)
+        t = re.sub(r"^PackageVersion: .*$", f"PackageVersion: {version}", t, flags=re.M)
+        t = re.sub(r"(releases/tag/)\S+", lambda m: m.group(1) + version, t)
+        write(root, t, "packaging", "winget", f)
+
+    t = read(root, PKGBUILD)
+    t = re.sub(r"^pkgver=.*$", f"pkgver={version}", t, flags=re.M)
+    t = re.sub(r"^pkgrel=.*$", "pkgrel=1", t, flags=re.M)
+    for a, h in lin.items():
+        t = re.sub(rf"^sha256sums_{a}=.*$", f"sha256sums_{a}=('{h}')", t, flags=re.M)
+    write(root, t, PKGBUILD)
+    print(f"rendered packaging templates for {version}"
+          + ("" if "arm64" in win else " (no Windows ARM asset)"))
+    return check(root)
+
+
+def main(argv):
+    opts = {}
+    rest = argv[2:] if argv[:1] == ["render"] else argv[1:]
+    while rest:
+        k = rest.pop(0)
+        if k in ("--sums", "--date", "--root") and rest:
+            opts[k] = rest.pop(0)
+        else:
+            sys.exit(__doc__)
+    root = opts.get("--root", ROOT)
+    if argv[:1] == ["check"]:
+        return check(root)
+    if argv[:1] == ["render"] and len(argv) >= 2:
+        return render(root, argv[1], opts.get("--sums"), opts.get("--date"))
+    sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
