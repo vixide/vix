@@ -11,6 +11,19 @@
 //! `trim_trailing_whitespace`, `insert_final_newline`. The glob matcher supports
 //! the common forms (`*`, `**`, `?`, `[...]`, `{a,b}`, `{s1,s2}` extension lists);
 //! exotic patterns (`{num1..num2}`) are not handled.
+//!
+//! `.editorconfig` files are read through the active `vix_authority` slot (T710)
+//! so remote workspaces resolve their config on the remote side. Malformed lines,
+//! unknown keys and unparsable values are skipped silently, never an error: a
+//! broken config must not stop a file from opening. Spec:
+//! `crates/vix-editorconfig/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_editorconfig::Resolved;
+//! let r = Resolved { indent_is_tab: Some(false), indent_size: Some(2), ..Resolved::default() };
+//! assert_eq!(r.indent_string().as_deref(), Some("  "));
+//! ```
 
 use std::path::Path;
 
@@ -33,6 +46,10 @@ pub struct Resolved {
 impl Resolved {
     /// The indent string Tab should insert per this config, if it specifies one:
     /// a tab for `indent_style = tab`, else `indent_size`/`tab_width` spaces.
+    ///
+    /// Returns `None` when `indent_style` is unset, even if a size is known: the
+    /// style decides whether the config speaks about indentation at all. The size
+    /// falls back to 4 and is clamped to at least 1.
     #[must_use]
     pub fn indent_string(&self) -> Option<String> {
         if self.indent_is_tab? {
@@ -49,6 +66,7 @@ impl Resolved {
 /// are no applicable files.
 #[must_use]
 pub fn resolve(path: &Path) -> Resolved {
+    // (directory, file text) pairs, nearest directory first as discovered.
     let mut chain: Vec<(std::path::PathBuf, String)> = Vec::new();
     let mut dir = path.parent();
     // The workspace's files, so through the authority slot (T710).
@@ -99,6 +117,8 @@ fn apply_file(out: &mut Resolved, base: &Path, text: &str, path: &Path) {
             continue;
         }
         if let Some(pat) = line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            // A section header resets matching; keys before any header (the
+            // preamble) never apply because `matching` starts false.
             matching = glob_matches(pat, &rel);
             continue;
         }
@@ -168,6 +188,7 @@ fn glob_matches(pat: &str, rel: &str) -> bool {
     } else {
         rel.rsplit('/').next().unwrap_or(rel).to_string()
     };
+    // An invalid translated pattern just fails to compile and matches nothing.
     let re = format!("^{}$", glob_to_regex(pat));
     regex::Regex::new(&re).is_ok_and(|r| r.is_match(&subject))
 }

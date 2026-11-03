@@ -29,6 +29,9 @@ pub fn discover_composer_scripts(composer_json: &str) -> Vec<NamedTask> {
         .collect()
 }
 
+/// Composer allows a script to be a string or an array of strings (a list of
+/// commands/callbacks); anything else (objects, numbers) is not a runnable
+/// script and is ignored.
 fn script_is_recognized(cmd: &serde_json::Value) -> bool {
     cmd.as_str().is_some()
         || cmd

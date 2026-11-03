@@ -211,6 +211,9 @@ impl HostSession {
         }
     }
 
+    /// Build a [`Message::TerminalScreen`], clamping the dimensions to the wire
+    /// limits so a huge terminal cannot produce an oversized (refusable) message.
+    /// `input` tells the guest whether the host allows typing into it.
     fn terminal_screen(share: TerminalShare, rows: u16, cols: u16, screen: &[u8]) -> Message {
         Message::TerminalScreen {
             rows: rows.clamp(1, crate::wire::MAX_TERMINAL_ROWS),
@@ -351,6 +354,8 @@ impl HostSession {
         self.revert(path, false)
     }
 
+    /// Shared body of `undo` / `redo`: an unshared `path` is reported as a bad
+    /// path (the document map is the authority on what is shared).
     fn revert(&mut self, path: &SharedPath, undo: bool) -> Result<Option<HostRevert>, CoworkError> {
         let doc = self
             .docs
@@ -403,6 +408,8 @@ impl HostSession {
         self.docs.keys().filter(|p| !p.is_session_notes())
     }
 
+    /// One [`Outbound`] per connected peer, optionally skipping `except` (the
+    /// originator of a relayed message, who already has it).
     fn to_all(&self, except: Option<PeerId>, msg: &Message) -> Vec<Outbound> {
         self.peers
             .keys()
@@ -583,6 +590,8 @@ impl HostSession {
         }]
     }
 
+    /// A refusal addressed to one peer. Refusals are replies, never broadcasts, so
+    /// a misbehaving guest does not disturb the others.
     fn refuse(to: PeerId, code: ErrorCode) -> Outbound {
         Outbound {
             to,
@@ -678,6 +687,11 @@ impl HostSession {
         h.chat.push(stamped);
     }
 
+    /// Apply a guest's CRDT update to the authoritative replica and relay it to
+    /// the other peers. A denied write is refused but the guest stays connected;
+    /// any other failure (malformed/forged/oversized update) refuses and then
+    /// removes the guest, since its replica can no longer be trusted. Outcomes are
+    /// appended to `h` rather than returned because the session keeps running.
     fn on_update(&mut self, peer: &Peer, path: &SharedPath, bytes: &[u8], h: &mut Handled) {
         let from = peer.id;
         let Some(doc) = self.docs.get_mut(path) else {
@@ -1069,6 +1083,8 @@ impl GuestSession {
         self.revert(path, false)
     }
 
+    /// Shared body of the guest's `undo` / `redo`: returns the update message to
+    /// send to the host plus the edits to mirror into the local buffer.
     fn revert(
         &mut self,
         path: &SharedPath,

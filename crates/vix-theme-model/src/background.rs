@@ -3,6 +3,19 @@
 //! The terminal I/O lives in the binary; this module is the pure part: parsing
 //! an OSC 11 reply or `COLORFGBG`, classifying the colour, remembering the
 //! answer for the session, and turning `"auto"` into a concrete theme name.
+//!
+//! Detection order is decided by the host: an OSC 11 query reply
+//! ([`parse_osc11_reply`] + [`classify`]) when the terminal answers, else the
+//! `COLORFGBG` environment hint ([`from_colorfgbg`]), else unknown, in which
+//! case [`resolve_theme`] picks the dark theme. Spec:
+//! `crates/vix-theme-model/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_theme_model::background::{Background, classify, parse_osc11_reply};
+//! let rgb = parse_osc11_reply("\x1b]11;rgb:ffff/ffff/ffff\x07").unwrap();
+//! assert_eq!(classify(rgb), Background::Light);
+//! ```
 
 use std::sync::OnceLock;
 
@@ -18,6 +31,9 @@ pub enum Background {
 /// The `theme` setting value that means "follow the terminal".
 pub const AUTO: &str = "auto";
 
+/// Session-wide detection result. A `OnceLock` because the terminal is probed
+/// once at startup; the inner `Option` distinguishes "ran, found nothing" from
+/// "never ran" (which `get` reports as unset).
 static DETECTED: OnceLock<Option<Background>> = OnceLock::new();
 
 /// Remember the detected background for this session (first call wins; `None`
@@ -56,6 +72,8 @@ pub fn resolve_theme(
 /// scaled to a byte.
 #[must_use]
 pub fn parse_osc11_reply(reply: &str) -> Option<(u8, u8, u8)> {
+    // Everything before `rgb:` (the OSC introducer) and after the third
+    // component (the BEL / ST terminator) is ignored, so both terminator styles work.
     let rest = &reply[reply.find("rgb:")? + 4..];
     let mut parts = rest.split('/');
     let mut component = |last: bool| -> Option<u8> {
@@ -66,6 +84,8 @@ pub fn parse_osc11_reply(reply: &str) -> Option<(u8, u8, u8)> {
             return None;
         }
         let value = u32::from_str_radix(&digits, 16).ok()?;
+        // Scale an n-digit hex value onto 0..=255 with round-to-nearest
+        // (the `max / 2` term), so `f` -> 255 and `ffff` -> 255 alike.
         let max = 16u32.pow(u32::try_from(digits.len()).ok()?) - 1;
         u8::try_from((value * 255 + max / 2) / max).ok()
     };
@@ -76,6 +96,8 @@ pub fn parse_osc11_reply(reply: &str) -> Option<(u8, u8, u8)> {
 #[must_use]
 pub fn classify(rgb: (u8, u8, u8)) -> Background {
     let (r, g, b) = rgb;
+    // Weights favour green because the eye is most sensitive to it; the 127.5
+    // midpoint splits the 0..=255 range in half.
     let luma = 0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b);
     if luma > 127.5 {
         Background::Light
@@ -88,6 +110,8 @@ pub fn classify(rgb: (u8, u8, u8)) -> Background {
 /// the last field is the background's ANSI colour index.
 #[must_use]
 pub fn from_colorfgbg(value: &str) -> Option<Background> {
+    // Index 7 and 9..=15 are the light ANSI colours; the non-numeric
+    // `default` field makes the parse fail, which yields `None`.
     let index: u8 = value.rsplit(';').next()?.trim().parse().ok()?;
     Some(if index == 7 || (9..=15).contains(&index) {
         Background::Light

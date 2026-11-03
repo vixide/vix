@@ -5,6 +5,19 @@
 //! The panel owns only presentation state (rows, selection, scroll); what a
 //! chosen row *means* is the host's business, so one overlay serves several
 //! features. Titles, hints and rows arrive already translated.
+//!
+//! All cursor/scroll arithmetic is delegated to `vix_list_state` so every
+//! list panel clamps identically (T144). Spec: `crates/vix-choice-list/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_choice_list::Panel;
+//! let mut p = Panel::new("T".into(), "h".into(), vec!["a".into(), "b".into()]);
+//! p.down();
+//! assert_eq!(p.selected, 1);
+//! p.down(); // clamps at the last row
+//! assert_eq!(p.selected, 1);
+//! ```
 
 /// A pick-one list overlay's state.
 #[derive(Debug, Clone, Default)]

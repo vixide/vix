@@ -12,6 +12,19 @@
 //! (`Panel::toc`) for a jump list -- reusing `vix_outline_panel::Entry`/
 //! `Outline` exactly as the source-file outline does, just pointed at
 //! *preview* lines instead of source lines.
+//!
+//! The renderer is a single left-to-right fold over `pulldown-cmark` events
+//! ([`render_full`] drives a private `RenderState`); there is no intermediate
+//! tree. Output is purely textual: no styling or wrapping happens here, the host
+//! wraps and scrolls. Spec: `crates/vix-markdown-preview/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! let lines = vix_markdown_preview::render("# Title\n\n- one\n- two\n");
+//! assert_eq!(lines[0], "Title");
+//! assert_eq!(lines[1], "=====");
+//! assert!(lines.contains(&"• one".to_string()));
+//! ```
 
 use std::fmt::Write;
 
@@ -50,7 +63,9 @@ pub fn render_full(markdown: &str) -> Rendered {
         st.handle(ev);
     }
     st.flush();
-    // Drop a trailing run of blank lines.
+    // Drop a trailing run of blank lines (every block pushes a separator line,
+    // so the last block would otherwise leave dangling blanks). `source_lines`
+    // must be popped in lockstep to stay parallel to `out`.
     while st.out.last().is_some_and(String::is_empty) {
         st.out.pop();
         st.source_lines.pop();
@@ -77,6 +92,8 @@ fn line_start_offsets(text: &str) -> Vec<usize> {
 
 /// The 1-based source line containing byte `offset`.
 fn line_for_offset(line_starts: &[usize], offset: usize) -> usize {
+    // `starts` is sorted, so the count of starts at or before `offset` is
+    // exactly the 1-based number of the line holding it (binary search).
     line_starts.partition_point(|&s| s <= offset)
 }
 
@@ -143,6 +160,8 @@ impl RenderState {
                 self.heading = Some(level);
             }
             Event::End(TagEnd::Heading(_)) => {
+                // Emit the heading as `text`, an underline rule (`=` for H1, `-`
+                // for the rest, as in setext Markdown) and a blank separator.
                 let text = std::mem::take(&mut self.cur);
                 let level = self.heading.unwrap_or(HeadingLevel::H1);
                 let rule_ch = if matches!(level, HeadingLevel::H1) {
@@ -154,6 +173,8 @@ impl RenderState {
                 self.toc.push(Entry {
                     kind: heading_marker(level).to_string(),
                     name: text.clone(),
+                    // 1-based row of the heading text itself, i.e. the line pushed
+                    // just below (the rule and blank follow it).
                     line: self.out.len() + 1,
                 });
                 self.push_line(text);
@@ -210,6 +231,9 @@ impl RenderState {
                 }
             }
             Event::Text(t) => {
+                // Code is emitted line-by-line with a 4-space indent (a code
+                // block's text arrives as one multi-line event); quote text
+                // gets the rail prefix; everything else accumulates in `cur`.
                 if self.in_code {
                     for line in t.lines() {
                         self.push_line(format!("    {line}"));

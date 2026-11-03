@@ -8,6 +8,9 @@
 use crate::Zone;
 
 /// Every IANA canonical zone (419 of them), sorted by name.
+///
+/// Sorted order is an invariant (a test in `lib.rs` checks it) that the chooser
+/// UI relies on for display; offsets are *standard* time, never DST-adjusted.
 pub const ZONES: &[Zone] = &[
     Zone {
         name: "Africa/Abidjan",

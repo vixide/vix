@@ -53,6 +53,8 @@ impl CustomTheme {
             (self.right_dock.foreground, self.right_dock.background),
             (self.editor.foreground, self.editor.background),
         ];
+        // Every region must set both colors (no theme fallbacks), and all five
+        // pairs must equal the first; otherwise the theme is multi-color.
         let (Some(fg), Some(bg)) = pairs[0] else {
             return None;
         };
@@ -82,6 +84,8 @@ pub fn flatten(buf: &mut Buffer, fg: Color, bg: Color) {
     let bg_rgb = approx_rgb(bg).unwrap_or((0, 0, 0));
     let is_bg = |c: Color| approx_rgb(c).is_some_and(|c| distance(c, bg_rgb) <= NEAR_BACKGROUND);
     for cell in &mut buf.content {
+        // "Lit" means drawn in the foreground color; anything near the
+        // background (or the terminal default) is treated as unlit.
         let lit_bg = cell.bg != Color::Reset && !is_bg(cell.bg);
         let lit_fg = cell.fg == Color::Reset || !is_bg(cell.fg);
         cell.bg = if lit_bg { fg } else { bg };

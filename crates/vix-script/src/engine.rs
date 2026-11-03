@@ -71,6 +71,7 @@ pub struct LoadError {
     pub message: String,
 }
 
+/// One line naming the script (by file stem) and the underlying Rhai message.
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "script '{}' failed to load: {}", self.stem, self.message)
@@ -319,6 +320,7 @@ pub struct Runtime {
     i18n: Rc<RefCell<I18nState>>,
 }
 
+/// Same as [`Runtime::new`].
 impl Default for Runtime {
     fn default() -> Self {
         Self::new()

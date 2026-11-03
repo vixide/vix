@@ -10,6 +10,14 @@
 //!
 //! Theme names are plain strings (also the value persisted in settings), so this
 //! crate stays free of any localization dependency.
+//!
+//! The active theme lives in a process-global `RwLock` (`CUSTOM`), so the style
+//! helpers are free functions callable from any render path with no handle to
+//! thread through. Every color accessor degrades to a built-in dark fallback
+//! when no theme is active or a slot is unset, so rendering never fails.
+//! Submodules: [`background`] (the background-picker model) and
+//! [`single_color`] (the single-color picker model). Spec:
+//! `crates/vix-theme-model/spec/index.md`.
 
 pub mod background;
 pub mod single_color;
@@ -22,7 +30,9 @@ use serde::{Deserialize, Serialize};
 
 // Ultimate fallbacks used only before a theme is loaded, or for a theme that
 // leaves the editor foreground/background unset. They match the bundled `Dark`.
+/// Fallback editor foreground (light gray, as in the bundled `Dark` theme).
 const FALLBACK_FG: Color = Color::Rgb(215, 215, 215);
+/// Fallback editor background (dark gray, as in the bundled `Dark` theme).
 const FALLBACK_BG: Color = Color::Rgb(40, 40, 40);
 
 /// Read-lock [`CUSTOM`], recovering from poisoning instead of panicking (Run
@@ -235,7 +245,9 @@ pub struct CustomTheme {
 }
 
 impl CustomTheme {
-    /// The foreground/background for `region`.
+    /// The colors and font attributes for `region`. The editor lives in its own
+    /// [`EditorColors`] struct (it also carries the cursor), so it is projected
+    /// into a [`RegionColors`] here to give all regions one shape.
     fn region_colors(&self, region: Region) -> RegionColors {
         match region {
             Region::MenuBar => self.menu_bar.clone(),
@@ -266,8 +278,9 @@ impl RegionColors {
     }
 }
 
-// The active theme. Always `Some` after the host applies one at startup; the
-// fallbacks above cover the brief window before that.
+/// The active theme. Always `Some` after the host applies one at startup; the
+/// fallbacks above cover the brief window before that. Accessed only through
+/// `read`/`write` so a poisoned lock is recovered rather than panicking.
 static CUSTOM: RwLock<Option<CustomTheme>> = RwLock::new(None);
 
 /// Set (or clear) the active theme.
@@ -281,6 +294,7 @@ pub fn custom_name() -> Option<String> {
     read().as_ref().map(|c| c.name.clone())
 }
 
+/// Convert a theme `[R, G, B]` triple into a ratatui truecolor.
 fn rgb(c: Rgb) -> Color {
     Color::Rgb(c[0], c[1], c[2])
 }
@@ -379,10 +393,10 @@ pub fn parse_theme(json: &str) -> Option<CustomTheme> {
 /// (T202's theme editor Save As). Pretty-printed so a saved file is easy to
 /// hand-edit afterward, matching every bundled theme's own formatting.
 ///
-/// # Panics
-/// Never, in practice: [`CustomTheme`] contains no type `serde_json` cannot
-/// represent (no floats, no non-string map keys). `serde_json::to_string`
-/// only fails for those cases, so this always succeeds for a real theme.
+/// Never panics. [`CustomTheme`] contains no type `serde_json` cannot
+/// represent (no floats, no non-string map keys), so serialization does not fail
+/// for a real theme; were it ever to, this returns an empty string rather than
+/// an error.
 #[must_use]
 pub fn to_json(theme: &CustomTheme) -> String {
     serde_json::to_string_pretty(theme).unwrap_or_default()

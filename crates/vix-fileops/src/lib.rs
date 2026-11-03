@@ -230,6 +230,8 @@ fn rename_would_change_identity(target: &Path, tmp: &fs::File) -> bool {
     old.nlink() > 1 || old.uid() != new.uid() || old.gid() != new.gid()
 }
 
+/// Non-Unix stub: there is no inode/owner model to preserve, so the atomic
+/// rename is always acceptable.
 #[cfg(not(unix))]
 fn rename_would_change_identity(_target: &Path, _tmp: &fs::File) -> bool {
     false
@@ -286,6 +288,12 @@ pub fn write_in_place_with_recovery(
     Ok(())
 }
 
+/// Write a pre-save copy of `target` into the recovery directory `dir`, so an
+/// interrupted in-place save can be repaired on the next launch. The copy holds
+/// the `RECOVERY_MAGIC` line, the original path, then the original bytes. Best
+/// effort: any failure yields `None` and the save proceeds without a copy.
+/// The file is created `0600` and `create_new` (never clobbers) with a
+/// process-id + sequence prefix so concurrent saves cannot collide.
 fn make_recovery_copy(target: &Path, dir: &Path) -> Option<PathBuf> {
     use std::io::Write as _;
     let original = fs::read(target).ok()?;
@@ -745,6 +753,8 @@ pub fn stream_text_guarded(
     sink: &mut dyn FnMut(&str),
 ) -> io::Result<TextStream> {
     use io::Read as _;
+    // Read granularity. A multi-byte character can straddle a block boundary;
+    // the trailing partial bytes are carried to the front of the next block.
     const BLOCK: usize = 64 * 1024;
     let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
     let meta = fs::metadata(path)?;
@@ -755,6 +765,8 @@ pub fn stream_text_guarded(
         return Err(refuse(TextReadError::TooLarge));
     }
     let whole = || read_text_guarded(path, max_bytes).map(TextStream::Whole);
+    // `take(max + 1)`: one byte over the cap lets us detect a file that grew
+    // after the metadata check without ever reading unbounded data.
     let mut file = fs::File::open(path)?.take(max_bytes + 1);
     let mut buf = vec![0u8; BLOCK];
     // Bytes of a character split across two blocks, kept at the front.

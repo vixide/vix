@@ -56,12 +56,14 @@ pub enum TestFrameworkHint {
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// A bare `#[test]` attribute line (the anchor for a Rust test).
 static RUST_TEST_ATTR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*#\[\s*test\s*\]\s*$").unwrap());
 #[expect(
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// The function name on a `fn` line, allowing `pub`/`async`; the test name is the first of these after the `#[test]` attribute (other attributes may sit between).
 static RUST_FN_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap()
 });
@@ -69,12 +71,14 @@ static RUST_FN_NAME: LazyLock<Regex> = LazyLock::new(|| {
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// A `def test_...(` definition (pytest/unittest naming convention).
 static PYTHON_TEST_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*def\s+(test_[A-Za-z0-9_]*)\s*\(").unwrap());
 #[expect(
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// A top-level `func TestXxx(` (the `go test` naming convention).
 static GO_TEST_FUNC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*func\s+(Test[A-Za-z0-9_]*)\s*\(").unwrap());
 // The Rust `regex` crate has no backreferences, so each quote style needs
@@ -83,6 +87,8 @@ static GO_TEST_FUNC: LazyLock<Regex> =
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// A Jest/Mocha/Vitest `it`/`test`/`describe` call with a quoted title (three
+/// quote styles, one capture group each).
 static JS_TEST_CALL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\b(?:it|test|describe)\s*\(\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)"#).unwrap()
 });
@@ -90,18 +96,21 @@ static JS_TEST_CALL: LazyLock<Regex> = LazyLock::new(|| {
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// An RSpec `it`/`describe` call with a quoted description (two quote styles; see the note above on why there is no backreference).
 static RUBY_RSPEC_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\b(?:it|describe)\s+(?:'([^']*)'|"([^"]*)")"#).unwrap());
 #[expect(
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// A Minitest `def test_...` method.
 static RUBY_MINITEST_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*def\s+(test_[A-Za-z0-9_]*)").unwrap());
 #[expect(
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// An ExUnit `test "name" do` block.
 static ELIXIR_TEST_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^\s*test\s+"([^"]+)"\s+do\b"#).unwrap());
 
@@ -133,6 +142,8 @@ fn first_group(caps: &Captures, indices: &[usize]) -> Option<String> {
         .map(|m| m.as_str().to_string())
 }
 
+/// The directory part of `path` (`.` for a bare file name or a root-level file);
+/// Go tests run per package directory (`go test ./dir`).
 fn dir_of(path: &str) -> &str {
     match path.rsplit_once('/') {
         Some(("", _)) | None => ".",
@@ -140,6 +151,8 @@ fn dir_of(path: &str) -> &str {
     }
 }
 
+/// Rust: find the nearest `#[test]` at or above the cursor, then the first `fn`
+/// after it; run exactly that test with `cargo test -- --exact`.
 fn rust_test_at_point(lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (attr_line, _) = scan_upward(lines, cursor_line, &RUST_TEST_ATTR)?;
     let name = lines[attr_line..]
@@ -154,6 +167,7 @@ fn rust_test_at_point(lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     })
 }
 
+/// Python: nearest `def test_...` at or above the cursor.
 fn python_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (_, caps) = scan_upward(lines, cursor_line, &PYTHON_TEST_DEF)?;
     let name = caps[1].to_string();
@@ -163,6 +177,7 @@ fn python_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Optio
     })
 }
 
+/// Go: nearest `func TestXxx` at or above the cursor.
 fn go_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (_, caps) = scan_upward(lines, cursor_line, &GO_TEST_FUNC)?;
     let name = caps[1].to_string();
@@ -173,6 +188,8 @@ fn go_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<Te
     })
 }
 
+/// JavaScript/TypeScript: nearest `it`/`test`/`describe` title at or above the
+/// cursor, run through `npx jest -t`.
 fn js_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (_, caps) = scan_upward(lines, cursor_line, &JS_TEST_CALL)?;
     let name = first_group(&caps, &[1, 2, 3])?;
@@ -182,6 +199,8 @@ fn js_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<Te
     })
 }
 
+/// Ruby: Minitest `def test_` when the framework hint says so, otherwise RSpec
+/// `it`/`describe` (see the in-function note on the default).
 fn ruby_test_at_point(
     path: &str,
     lines: &[&str],
@@ -208,6 +227,8 @@ fn ruby_test_at_point(
     }
 }
 
+/// Elixir: nearest ExUnit `test "..." do` at or above the cursor; the command
+/// targets the file and the 1-based line of that test.
 fn elixir_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (line_idx, caps) = scan_upward(lines, cursor_line, &ELIXIR_TEST_CALL)?;
     let name = caps[1].to_string();

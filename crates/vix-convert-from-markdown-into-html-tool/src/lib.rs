@@ -1,10 +1,22 @@
 //! Convert Markdown into HTML (Tools → Convert → Markdown → HTML).
 //!
 //! Parses `CommonMark` with `pulldown-cmark` and renders the HTML fragment.
+//!
+//! Output is a bare fragment (no `<html>`/`<body>` wrapper) and is not
+//! sanitized: raw HTML in the input passes through verbatim, which is what a
+//! text-conversion tool should do. The return type reuses
+//! [`vix_convert_tabular::ConvertError`] so every Convert tool shares one
+//! signature. Spec: `crates/vix-convert-from-markdown-into-html-tool/spec/index.md`.
 
 use pulldown_cmark::{Parser, html};
 
 /// Convert Markdown `input` to an HTML fragment.
+///
+/// # Examples
+/// ```
+/// let html = vix_convert_from_markdown_into_html_tool::convert("# Title").unwrap();
+/// assert_eq!(html, "<h1>Title</h1>\n");
+/// ```
 ///
 /// # Errors
 /// Never fails; returns `Result` for a uniform tool interface.

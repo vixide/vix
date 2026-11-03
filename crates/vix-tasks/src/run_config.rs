@@ -165,6 +165,12 @@ pub fn plan(configs: &[RunConfig], tasks: &[Task], name: &str) -> Result<Plan, R
     Ok(plan)
 }
 
+/// Depth-first expansion of `name` and its `before` dependencies into `plan`
+/// stages, dependencies first. `done` memoizes finished names (diamond
+/// dependencies run once); `stack` is the current path, so revisiting a name on
+/// it is a [`RunConfigError::Cycle`]. `referrer` is the config that named
+/// `name` (None for the root), used for error messages and to allow a plain
+/// discovered task as a `before` entry.
 fn expand(
     configs: &[RunConfig],
     tasks: &[Task],
@@ -242,6 +248,8 @@ fn expand(
     Ok(())
 }
 
+/// The runnable [`Step`] for one configuration; a config without a `command`
+/// (a pure grouping of `before` entries) becomes an empty command.
 fn step_of(c: &RunConfig) -> Step {
     Step {
         name: c.name.clone(),

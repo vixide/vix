@@ -8,6 +8,11 @@
 //! once on first use, and a [`Panel`] tracks the highlighted row and scroll
 //! offset. The host renders the rows, maps clicks to rows, and inserts the chosen
 //! reference.
+//!
+//! The TSV (`html-character-list.tsv`) is `name<TAB>U+code<TAB>glyph`, one
+//! entity per line; it is embedded with `include_str!` so the `&'static str`
+//! fields borrow straight from the binary with no per-row allocation. Spec:
+//! `crates/vix-html-character-picker/spec/index.md`.
 
 use std::sync::OnceLock;
 
@@ -35,6 +40,9 @@ impl Entity {
 /// in practice.
 #[must_use]
 pub fn entities() -> &'static [Entity] {
+    // `OnceLock`: parse on first use only, then share one immutable slice
+    // across all panels and threads.
+    /// The lazily-parsed table.
     static ENTITIES: OnceLock<Vec<Entity>> = OnceLock::new();
     ENTITIES.get_or_init(|| {
         include_str!("html-character-list.tsv")
@@ -50,6 +58,8 @@ fn parse_line(line: &'static str) -> Option<Entity> {
     let name = f.next()?;
     let code = f.next()?;
     let glyph = f.next()?;
+    // A blank name means a stray/blank line; the glyph column may be anything
+    // (even whitespace), so only the name is validated.
     if name.is_empty() {
         return None;
     }
@@ -66,6 +76,7 @@ pub struct Panel {
     pub scroll: usize,
 }
 
+/// Same as [`Panel::open`].
 impl Default for Panel {
     fn default() -> Self {
         Panel::open()
@@ -136,6 +147,7 @@ impl Panel {
     /// The highlighted entity.
     #[must_use]
     pub fn selected_entity(&self) -> &'static Entity {
+        // Clamp defensively: `selected` is a public field and could be set past the end.
         let i = self.selected.min(self.len().saturating_sub(1));
         &entities()[i]
     }
