@@ -8,6 +8,13 @@
 //!
 //! Everything that touches the disk lives on [`LocalHistory`]; the text
 //! transforms ([`unified_diff`], [`revert_range`]) are pure.
+//!
+//! Retention: at most [`MAX_SNAPSHOTS`] per file (configurable through
+//! [`LocalHistory::with_keep`]); pruning removes unlabelled snapshots before
+//! labelled ones, so a named milestone outlives routine saves. Files over
+//! [`MAX_SNAPSHOT_BYTES`] are skipped to bound disk use.
+//!
+//! Owning spec: `crates/vix-undo-store/spec/index.md`.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -63,7 +70,9 @@ pub struct Snapshot {
 /// A Local History store rooted at a directory.
 #[derive(Debug, Clone)]
 pub struct LocalHistory {
+    /// Directory containing one sub-directory per tracked file.
     root: PathBuf,
+    /// Maximum snapshots retained per file (always at least 1).
     keep: usize,
 }
 
@@ -115,6 +124,8 @@ impl LocalHistory {
         if content.len() > MAX_SNAPSHOT_BYTES {
             return Ok(None);
         }
+        // An empty label counts as none. Labelled snapshots are always taken,
+        // even when identical to the newest, because the label is the point.
         let label = label.filter(|l| !l.is_empty());
         if label.is_none()
             && let Some(newest) = self.list(file).first()
@@ -124,14 +135,19 @@ impl LocalHistory {
         }
         let dir = self.dir_for(file);
         std::fs::create_dir_all(&dir)?;
+        // Ids are millisecond timestamps; two saves in one millisecond bump
+        // the id instead of overwriting, preserving uniqueness and ordering.
         let mut id = now_ms();
         while dir.join(format!("{id}.snap")).exists() {
             id += 1;
         }
+        // Owner-only and atomic: snapshots can hold secrets and a crash must
+        // not leave a truncated `.snap` that later reads as real history.
         vix_fileops::write_atomic_private(&dir.join(format!("{id}.snap")), content.as_bytes())?;
         if let Some(l) = label {
             vix_fileops::write_atomic_private(&dir.join(format!("{id}.label")), l.as_bytes())?;
         }
+        // Prune after writing so the new snapshot counts toward the limit.
         self.prune(file);
         Ok(Some(Snapshot {
             id,
@@ -153,6 +169,7 @@ impl LocalHistory {
                 if path.extension()? != "snap" {
                     return None;
                 }
+                // Non-numeric stems (stray files) are ignored.
                 let id: u64 = path.file_stem()?.to_str()?.parse().ok()?;
                 let bytes = e.metadata().map_or(0, |m| m.len());
                 let label = std::fs::read_to_string(path.with_extension("label")).ok();
@@ -200,6 +217,9 @@ impl LocalHistory {
         }
         let excess = all.len() - self.keep;
         let dir = self.dir_for(file);
+        // `all` is newest-first, so `.rev()` yields oldest first: victims are
+        // the oldest unlabelled snapshots, then (only if still over) the oldest
+        // labelled ones.
         let mut victims: Vec<&Snapshot> = all.iter().rev().filter(|s| s.label.is_none()).collect();
         victims.extend(all.iter().rev().filter(|s| s.label.is_some()));
         for s in victims.into_iter().take(excess) {
@@ -219,6 +239,17 @@ fn now_ms() -> u64 {
 /// A unified-style line diff from `old` to `new`: ` ` context, `-` removed,
 /// `+` added, with a `@@ -a +b @@` marker before each change group. Empty when
 /// the texts are equal.
+///
+/// Three lines of context surround each change. Hunk headers carry only the
+/// start lines (no counts), so this is for display, not for `patch`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_undo_store::local_history::unified_diff;
+/// assert_eq!(unified_diff("a\n", "a\n"), "");
+/// assert_eq!(unified_diff("a\nb\n", "a\nB\n"), "@@ -1 +1 @@\n a\n-b\n+B\n");
+/// ```
 #[must_use]
 pub fn unified_diff(old: &str, new: &str) -> String {
     use std::fmt::Write as _;
@@ -254,6 +285,19 @@ pub fn unified_diff(old: &str, new: &str) -> String {
 /// Replace the 0-based lines `start..end` of `current` with what `snapshot`
 /// has there: every difference that touches the range is reverted, the rest of
 /// `current` is left alone.
+///
+/// `start..end` are 0-based line indexes into `current` (an `end` at or before
+/// `start` is widened to one line). Diffing runs snapshot -> current, so an
+/// `Equal` op never needs reverting; replaced/inserted/deleted ops that touch
+/// the range take their text from the snapshot.
+///
+/// # Examples
+///
+/// ```
+/// use vix_undo_store::local_history::revert_range;
+/// // Revert only the third line; the first edit is kept.
+/// assert_eq!(revert_range("A\nb\nC\nd\n", "a\nb\nc\nd\n", 2, 3), "A\nb\nc\nd\n");
+/// ```
 #[must_use]
 pub fn revert_range(current: &str, snapshot: &str, start: usize, end: usize) -> String {
     let diff = TextDiff::from_lines(snapshot, current);

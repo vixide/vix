@@ -9,6 +9,13 @@
 //! The [`local_history`] module adds timestamped whole-file snapshots on save
 //! (Local History), with labels, diffs and range revert, and the
 //! [`hot_exit`] module keeps backups of unsaved buffers for crash recovery.
+//!
+//! All three stores share conventions: they live under the user's config
+//! directory, are keyed by a SHA-256 of a path/identity, write atomically and
+//! owner-only (they may hold text no longer in the buffer), and treat every
+//! failure as non-fatal -- persistence is a convenience, never a blocker.
+//!
+//! Owning spec: `crates/vix-undo-store/spec/index.md`.
 
 pub mod hot_exit;
 pub mod local_history;
@@ -20,6 +27,7 @@ use sha2::{Digest, Sha256};
 use vix_editor_core::history::History;
 
 /// The directory where per-file undo histories live (`<config>/undo/`).
+/// `None` when the platform has no config directory (persistence is skipped).
 fn undo_dir() -> Option<PathBuf> {
     Some(
         vix_settings::Settings::config_path()?
@@ -31,6 +39,8 @@ fn undo_dir() -> Option<PathBuf> {
 /// Hex SHA-256 of `s`.
 pub(crate) fn sha(s: &str) -> String {
     use std::fmt::Write as _;
+    // Not a security boundary: the hash only names files and detects that
+    // a file changed since its history was saved.
     let mut h = Sha256::new();
     h.update(s.as_bytes());
     // digest 0.11's `Output` no longer implements `LowerHex` directly.
@@ -41,6 +51,8 @@ pub(crate) fn sha(s: &str) -> String {
 }
 
 /// The store path for `file` (named by a hash of its absolute path).
+/// Canonicalising first means a symlink and its target share one history; a
+/// file that does not exist yet falls back to the path as given.
 fn store_path(file: &Path) -> Option<PathBuf> {
     let canon = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     Some(undo_dir()?.join(format!("{}.json", sha(&canon.to_string_lossy()))))
@@ -49,14 +61,18 @@ fn store_path(file: &Path) -> Option<PathBuf> {
 /// Borrowed form written to disk (avoids cloning the history).
 #[derive(serde::Serialize)]
 struct StoredRef<'a> {
+    /// SHA-256 of the file content the history applies to.
     hash: &'a str,
+    /// The undo tree.
     history: &'a History,
 }
 
 /// Owned form read from disk.
 #[derive(serde::Deserialize)]
 struct Stored {
+    /// SHA-256 of the file content the history applies to.
     hash: String,
+    /// The undo tree.
     history: History,
 }
 

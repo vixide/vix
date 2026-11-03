@@ -157,6 +157,7 @@ pub struct Client {
     /// The active session id; set early on resume (see `on_response`).
     session_id: Option<String>,
     /// Workspace root sent as the session's `cwd`.
+    cwd: String,
     /// A session to load instead of creating one (T635 resume).
     resume: Option<String>,
     /// Whether the session we are in was loaded rather than created.

@@ -11,6 +11,8 @@
 //! The tool is only a **prefilter**: the App re-checks every reported line
 //! with its own Rust regex (the one the in-process search uses), so a tool may
 //! report more lines than match, and the results keep the local semantics.
+//!
+//! Owning spec: `crates/vix-workspace-search/spec/index.md`.
 
 use serde_json::Value;
 
@@ -36,6 +38,9 @@ impl ToolQuery {
     /// pattern [`crate::WorkspaceSearch::pattern`] builds).
     #[must_use]
     pub fn search(query: &str, regex: bool, case_sensitive: bool) -> Self {
+        // For a literal query the text is escaped so the same `regex` field
+        // works for `rg` regardless of mode; `fixed` carries the unescaped
+        // words for the `grep -F` fallback.
         let core = if regex {
             query.to_string()
         } else {
@@ -142,7 +147,8 @@ pub struct ToolLine {
 }
 
 /// `rg` arguments for `query`: JSON output, no user config file (it could
-/// change the output), no error messages, hidden files included.
+/// change the output), no error messages, hidden files included. `-e` plus
+/// `--` keep a pattern or path starting with `-` from being read as an option.
 fn rg_args(query: &ToolQuery) -> Vec<String> {
     let mut args: Vec<String> = ["--json", "--no-config", "--no-messages", "--hidden"]
         .iter()
@@ -159,6 +165,8 @@ fn rg_args(query: &ToolQuery) -> Vec<String> {
 /// `grep` arguments for `query`, or `None` when it has no fixed strings or
 /// would need a case fold `grep -i` does by locale (non-ASCII).
 fn grep_args(query: &ToolQuery) -> Option<Vec<String>> {
+    // A regex query has no `fixed` words: grep's regex dialects differ from
+    // Rust's, so only `rg` may run those.
     let words = query.fixed.as_ref()?;
     if words.is_empty() || (query.ignore_case && words.iter().any(|w| !w.is_ascii())) {
         return None;
@@ -170,6 +178,8 @@ fn grep_args(query: &ToolQuery) -> Option<Vec<String>> {
     if query.ignore_case {
         args.push("-i".into());
     }
+    // grep has no ignore-file support, so the common heavyweight directories
+    // are excluded by name; the App re-filters against its own file index.
     for dir in [".git", "node_modules", "target"] {
         args.push(format!("--exclude-dir={dir}"));
     }

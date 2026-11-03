@@ -114,7 +114,8 @@ fn build_args(args: &[&str]) -> Result<Vec<String>, AadError> {
 /// `s` if it is a plain id/URL: no leading `-` (an option), no whitespace.
 /// The allowed set (`alphanumerics` and `-._:/@`) covers URLs, GUIDs and
 /// `api://` ids but rejects shell metacharacters as defence in depth, even
-/// though no shell is involved. checked(s: &str) -> Result<String, AadError> {
+/// though no shell is involved.
+fn checked(s: &str) -> Result<String, AadError> {
     let ok = !s.is_empty()
         && !s.starts_with('-')
         && s.chars()

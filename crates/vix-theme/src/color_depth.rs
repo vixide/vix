@@ -8,6 +8,12 @@
 //! detection reads `COLORTERM`, `TERM` and `TERM_PROGRAM`, which the caller
 //! passes in as data ([`TermEnv`]): nothing here reads or changes the
 //! process environment, and nothing queries the terminal.
+//!
+//! Heuristic by design: there is no portable way to ask a terminal its depth,
+//! so unknown-but-modern terminals are assumed 256-color (a safe middle: RGB
+//! escapes on a 256-color terminal are the common failure) and only a short
+//! allow-list is promoted to truecolor. A user can still force truecolor with
+//! `COLORTERM`. Owning spec: `crates/vix-theme/spec/index.md`.
 
 use ratatui::buffer::Buffer;
 use ratatui::style::Color;
@@ -63,6 +69,15 @@ const TRUECOLOR_TERMS: &[&str] = &[
 
 /// Decide the terminal's color depth from its environment.
 ///
+/// # Examples
+///
+/// ```
+/// use vix_theme::color_depth::{detect, ColorDepth, TermEnv};
+/// let env = TermEnv { term: Some("xterm-256color"), ..TermEnv::default() };
+/// assert_eq!(detect(&env), ColorDepth::Ansi256);
+/// assert_eq!(detect(&TermEnv::default()), ColorDepth::TrueColor);
+/// ```
+///
 /// In order: `COLORTERM=truecolor|24bit` means truecolor;
 /// `TERM_PROGRAM=Apple_Terminal` means 256 colors (Terminal.app ignores RGB
 /// escapes); a known truecolor `TERM_PROGRAM` or `TERM`, or a `TERM` naming
@@ -71,17 +86,21 @@ const TRUECOLOR_TERMS: &[&str] = &[
 /// `TERM` means 256. No `TERM` at all (a Windows console) means truecolor.
 #[must_use]
 pub fn detect(env: &TermEnv<'_>) -> ColorDepth {
+    // Explicit user/terminal declaration beats every heuristic below.
     let colorterm = env.colorterm.unwrap_or("").trim().to_ascii_lowercase();
     if colorterm == "truecolor" || colorterm == "24bit" {
         return ColorDepth::TrueColor;
     }
     let program = env.term_program.unwrap_or("").trim();
+    // Checked before the generic `TERM` rules because Terminal.app sets
+    // `TERM=xterm-256color` yet mis-renders 24-bit escapes.
     if program == "Apple_Terminal" {
         return ColorDepth::Ansi256;
     }
     if TRUECOLOR_PROGRAMS.contains(&program) {
         return ColorDepth::TrueColor;
     }
+    // No `TERM` (e.g. a Windows console, which supports VT RGB) => truecolor.
     let Some(term) = env.term.map(str::trim).filter(|t| !t.is_empty()) else {
         return ColorDepth::TrueColor;
     };
@@ -104,6 +123,7 @@ pub fn detect(env: &TermEnv<'_>) -> ColorDepth {
     {
         return ColorDepth::Ansi16;
     }
+    // Unknown `TERM`: assume the common 256-color baseline.
     ColorDepth::Ansi256
 }
 
@@ -137,7 +157,9 @@ fn distance2(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
     d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)
 }
 
-/// The index (0–5) of the cube level nearest `v`.
+/// The index (0–5) of the cube level nearest `v`. The levels are uneven
+/// (a 95 step after 0, then 40s), so this compares against each rather than
+/// dividing.
 fn cube_index(v: u8) -> u8 {
     let mut best = 0u8;
     for (i, level) in (0u8..).zip(CUBE) {
@@ -161,6 +183,7 @@ fn indexed_rgb(i: u8) -> (u8, u8, u8) {
             )
         }
         _ => {
+            // The 24-step gray ramp: 8, 18, ..., 238.
             let v = 8 + (i - 232) * 10;
             (v, v, v)
         }
@@ -172,6 +195,8 @@ fn indexed_rgb(i: u8) -> (u8, u8, u8) {
 fn nearest_256(rgb: (u8, u8, u8)) -> u8 {
     let (r, g, b) = (cube_index(rgb.0), cube_index(rgb.1), cube_index(rgb.2));
     let cube = 16 + 36 * r + 6 * g + b;
+    // Compare the best cube cell with the best gray-ramp cell and keep the
+    // closer: near-grays are matched far better by the 24-step ramp.
     let avg = (u16::from(rgb.0) + u16::from(rgb.1) + u16::from(rgb.2)) / 3;
     // The gray ramp is 8, 18, …, 238 (24 steps).
     let step = u8::try_from((avg.saturating_sub(3) / 10).min(23)).unwrap_or(23);
@@ -188,6 +213,7 @@ fn nearest_16(rgb: (u8, u8, u8)) -> Color {
     ANSI16
         .iter()
         .min_by_key(|(_, c)| distance2(rgb, *c))
+        // `ANSI16` is never empty; `Reset` is only a total-function fallback.
         .map_or(Color::Reset, |(name, _)| *name)
 }
 
@@ -197,6 +223,19 @@ fn nearest_16(rgb: (u8, u8, u8)) -> Color {
 /// becomes the nearest xterm palette entry (`Color::Indexed`). At 16 colors
 /// an RGB or high indexed color becomes the nearest named ANSI color. Named
 /// colors and `Reset` are never changed.
+///
+/// Matching is nearest-neighbour in plain RGB space (squared Euclidean
+/// distance): cheap and good enough for a fallback, though not perceptually
+/// uniform.
+///
+/// # Examples
+///
+/// ```
+/// use ratatui::style::Color;
+/// use vix_theme::{downsample, ColorDepth};
+/// assert_eq!(downsample(Color::Rgb(255, 0, 0), ColorDepth::Ansi256), Color::Indexed(196));
+/// assert_eq!(downsample(Color::Cyan, ColorDepth::Ansi16), Color::Cyan);
+/// ```
 #[must_use]
 pub fn downsample(color: Color, depth: ColorDepth) -> Color {
     match (depth, color) {
@@ -214,6 +253,7 @@ pub fn downsample_buffer(buf: &mut Buffer, depth: ColorDepth) {
     if depth == ColorDepth::TrueColor {
         return;
     }
+    // Whole-frame pass after drawing, so widgets stay colour-depth agnostic.
     for cell in &mut buf.content {
         cell.fg = downsample(cell.fg, depth);
         cell.bg = downsample(cell.bg, depth);

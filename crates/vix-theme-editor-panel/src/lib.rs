@@ -7,6 +7,14 @@
 //! cancelled, and drives the actual color-picking UI (the existing
 //! `vix-x11-color-picker`, reused rather than duplicated — see
 //! `spec/index.md`).
+//!
+//! Lifecycle: [`Panel::open`] copies the active theme; each accepted color
+//! calls [`Panel::apply_color`] (which sets [`Panel::dirty`]); the host then
+//! either discards the draft (Esc, reverting the live preview) or writes it
+//! out via Save As. Nothing in this crate touches the file system or the
+//! global active theme.
+//!
+//! Owning spec: `crates/vix-theme-editor-panel/spec/index.md`.
 
 use vix_theme_model::{CustomTheme, Rgb};
 
@@ -48,7 +56,8 @@ pub enum Slot {
 }
 
 impl Slot {
-    /// Every slot, in the order the panel lists them.
+    /// Every slot, in the order the panel lists them. The row index in
+    /// [`Panel::selected`] indexes this array.
     pub const ALL: [Slot; 15] = [
         Slot::MenuBarFg,
         Slot::MenuBarBg,
@@ -92,6 +101,16 @@ impl Slot {
     /// This slot's current color in `theme` (`None` if unset — it then falls
     /// back to the primary editor color, same as everywhere else the theme
     /// model reads a region color).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_theme_editor_panel::Slot;
+    /// let mut theme = vix_theme_model::parse_theme(r#"{"name": "T"}"#).unwrap();
+    /// assert_eq!(Slot::EditorBg.get(&theme), None);
+    /// Slot::EditorBg.set(&mut theme, [1, 2, 3]);
+    /// assert_eq!(Slot::EditorBg.get(&theme), Some([1, 2, 3]));
+    /// ```
     #[must_use]
     pub fn get(self, theme: &CustomTheme) -> Option<Rgb> {
         match self {
@@ -115,6 +134,8 @@ impl Slot {
 
     /// Set this slot's color in `theme`.
     pub fn set(self, theme: &mut CustomTheme, rgb: Rgb) {
+        // Borrow the one field this slot names, then write through it: keeps
+        // the field mapping in a single match that mirrors [`Slot::get`].
         let slot = match self {
             Slot::MenuBarFg => &mut theme.menu_bar.foreground,
             Slot::MenuBarBg => &mut theme.menu_bar.background,
@@ -176,12 +197,18 @@ impl Panel {
     }
 
     /// The highlighted slot.
+    ///
+    /// # Panics
+    /// If the public [`selected`](Self::selected) field was set to
+    /// `Slot::ALL.len()` or more; the navigation methods never do.
     #[must_use]
     pub fn selected_slot(&self) -> Slot {
         Slot::ALL[self.selected]
     }
 
-    /// Apply `rgb` to the highlighted slot.
+    /// Apply `rgb` to the highlighted slot and mark the draft dirty. The host
+    /// calls this when the color picker confirms, then re-applies the theme
+    /// live.
     pub fn apply_color(&mut self, rgb: Rgb) {
         self.selected_slot().set(&mut self.theme, rgb);
         self.dirty = true;
