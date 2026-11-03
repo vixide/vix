@@ -54,6 +54,8 @@ fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
         .collect()
 }
 
+/// Draw the file explorer in the left dock. The left dock keeps only its top
+/// and right borders; the title shows the filter when one is active.
 pub(super) fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Explorer;
     let block = Block::default()

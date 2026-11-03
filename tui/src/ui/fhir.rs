@@ -40,6 +40,7 @@ fn info_line(b: &crate::fhir::Bundle) -> String {
     }
 }
 
+/// Draw the FHIR Bundle viewer overlay: one row per entry. No-op when none is open.
 pub(super) fn draw_fhir_bundle(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.fhir_bundle.is_none() {
         return;

@@ -53,6 +53,8 @@ impl GridBackend {
 impl Backend for GridBackend {
     type Error = Infallible;
 
+    /// Copy the changed cells ratatui hands us into the grid; cells outside the
+    /// grid's bounds are skipped rather than panicking.
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
         I: Iterator<Item = (u16, u16, &'a Cell)>,
@@ -66,30 +68,37 @@ impl Backend for GridBackend {
         Ok(())
     }
 
+    /// Record that the App does not want a text cursor this frame.
     fn hide_cursor(&mut self) -> Result<(), Self::Error> {
         self.cursor_visible = false;
         Ok(())
     }
 
+    /// Record that the App wants a text cursor this frame.
     fn show_cursor(&mut self) -> Result<(), Self::Error> {
         self.cursor_visible = true;
         Ok(())
     }
 
+    /// The last cursor cell the App set (visible or not).
     fn get_cursor_position(&mut self) -> Result<Position, Self::Error> {
         Ok(self.cursor)
     }
 
+    /// Remember where the App put the text cursor; the window paints it later.
     fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> Result<(), Self::Error> {
         self.cursor = position.into();
         Ok(())
     }
 
+    /// Reset every cell, as ratatui does after a resize.
     fn clear(&mut self) -> Result<(), Self::Error> {
         self.buffer.reset();
         Ok(())
     }
 
+    /// Reset the cells selected by `clear_type`, relative to the stored cursor
+    /// cell (`All` resets the whole grid).
     fn clear_region(&mut self, clear_type: ClearType) -> Result<(), Self::Error> {
         let area = self.buffer.area;
         let (cx, cy) = (self.cursor.x, self.cursor.y);
@@ -119,10 +128,13 @@ impl Backend for GridBackend {
         Ok(())
     }
 
+    /// The grid size in cells; ratatui compares it with its last frame to detect a resize.
     fn size(&self) -> Result<Size, Self::Error> {
         Ok(self.buffer.area.as_size())
     }
 
+    /// The grid size in cells, with no pixel size (the window paints the grid
+    /// itself, so the pixel size is unknown here).
     fn window_size(&mut self) -> Result<WindowSize, Self::Error> {
         Ok(WindowSize {
             columns_rows: self.buffer.area.as_size(),
@@ -130,6 +142,7 @@ impl Backend for GridBackend {
         })
     }
 
+    /// Nothing to flush: cells are written straight into the in-memory grid.
     fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -141,6 +154,7 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::widgets::Paragraph;
 
+    /// A frame's text and cursor request land in the grid.
     #[test]
     fn terminal_draws_into_the_grid_and_tracks_the_cursor() {
         let mut term = Terminal::new(GridBackend::new(10, 2)).unwrap();
@@ -160,6 +174,7 @@ mod tests {
         assert_eq!(term.backend().buffer()[(1, 0)].symbol(), " ");
     }
 
+    /// After `resize`, the next `Terminal::draw` sees the new area and redraws it.
     #[test]
     fn resize_is_picked_up_by_the_next_draw() {
         let mut term = Terminal::new(GridBackend::new(4, 1)).unwrap();

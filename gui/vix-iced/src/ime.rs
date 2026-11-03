@@ -27,10 +27,12 @@ impl ImeAnchor {
 }
 
 impl<Message, Theme, Renderer: renderer::Renderer> Widget<Message, Theme, Renderer> for ImeAnchor {
+    /// Zero-sized layout: the anchor draws nothing and only positions the IME window.
     fn size(&self) -> Size<Length> {
         Size::new(Length::Shrink, Length::Shrink)
     }
 
+    /// An empty node; this widget occupies no space.
     fn layout(
         &mut self,
         _tree: &mut Tree,
@@ -40,6 +42,7 @@ impl<Message, Theme, Renderer: renderer::Renderer> Widget<Message, Theme, Render
         layout::Node::new(Size::ZERO)
     }
 
+    /// Draws nothing.
     fn draw(
         &self,
         _tree: &Tree,
@@ -52,6 +55,8 @@ impl<Message, Theme, Renderer: renderer::Renderer> Widget<Message, Theme, Render
     ) {
     }
 
+    /// On each redraw request, ask the shell to enable the input method with its
+    /// candidate window anchored at `cursor` (so IME composition appears at the text cursor).
     fn update(
         &mut self,
         _tree: &mut Tree,
@@ -76,6 +81,7 @@ impl<Message, Theme, Renderer: renderer::Renderer> Widget<Message, Theme, Render
 impl<'a, Message, Theme, Renderer: renderer::Renderer + 'a> From<ImeAnchor>
     for Element<'a, Message, Theme, Renderer>
 {
+    /// Wrap the anchor as an iced `Element`.
     fn from(anchor: ImeAnchor) -> Self {
         Element::new(anchor)
     }

@@ -32,6 +32,9 @@ use vix::cli::Cli;
 
 use crate::view::VixView;
 
+/// Parse the command line, load settings and the initial files through
+/// `startup::load`, then run the gpui application, which opens the window
+/// holding the `App`.
 fn main() {
     let cli = Cli::parse();
     let loaded = startup::load(&cli);

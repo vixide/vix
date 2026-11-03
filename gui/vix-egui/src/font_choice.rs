@@ -54,6 +54,7 @@ pub fn nerd_fallbacks<S: AsRef<str>>(installed: &[S]) -> Vec<String> {
 mod tests {
     use super::*;
 
+    /// The dedicated Symbols Nerd Font is preferred over other installed Nerd Font Mono families.
     #[test]
     fn prefers_symbols_then_any_nerd_mono() {
         let installed = ["Menlo", "Hack Nerd Font Mono", "Symbols Nerd Font Mono"];

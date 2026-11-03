@@ -82,10 +82,12 @@ mod tests {
     const SHIFT: KeyModifiers = KeyModifiers::SHIFT;
     const CTRL: KeyModifiers = KeyModifiers::CONTROL;
 
+    /// Shorthand for the conversion under test, panicking on an ignored key.
     fn key(k: &str, c: Option<&str>, m: KeyModifiers) -> KeyEvent {
         key_event(k, c, m).unwrap()
     }
 
+    /// A printable key yields its typed character; SHIFT survives only for ASCII uppercase.
     #[test]
     fn plain_typing_uses_the_typed_character() {
         assert_eq!(
@@ -102,6 +104,7 @@ mod tests {
         assert_eq!(key("space", Some(" "), NONE).code, KeyCode::Char(' '));
     }
 
+    /// With Ctrl/Alt held the unmodified key is used, not the layout's typed character.
     #[test]
     fn chords_use_the_unmodified_key() {
         let c = key("c", None, CTRL);
@@ -115,6 +118,7 @@ mod tests {
         assert_eq!(cmd, KeyEvent::new(KeyCode::Char('s'), KeyModifiers::SUPER));
     }
 
+    /// Named keys (enter, escape, function keys, ...) map to their `KeyCode`.
     #[test]
     fn named_keys() {
         assert_eq!(key("enter", Some("\n"), NONE).code, KeyCode::Enter);
@@ -129,6 +133,7 @@ mod tests {
         assert_eq!(key("f", Some("f"), NONE).code, KeyCode::Char('f'));
     }
 
+    /// A multi-character key name that is not a known named key yields no event.
     #[test]
     fn unknown_multi_char_keys_are_ignored() {
         assert_eq!(key_event("back", None, NONE), None);

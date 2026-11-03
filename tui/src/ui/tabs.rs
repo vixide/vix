@@ -8,8 +8,8 @@ use ratatui::widgets::{Paragraph, Tabs};
 use crate::app::App;
 use crate::theme;
 
-// Split the center column into the tab bar, an optional breadcrumb bar, and the
-// editor cell. Returns (tabs, breadcrumb, editor).
+/// Split the center column into the tab bar, an optional breadcrumb bar, and the
+/// editor cell. Returns (tabs, breadcrumb, editor).
 pub(super) fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>, Rect) {
     let dir = Direction::Vertical;
     if breadcrumbs {
@@ -31,7 +31,7 @@ pub(super) fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>
     }
 }
 
-// Render the breadcrumb bar: the active file name and the enclosing symbol.
+/// Render the breadcrumb bar: the active file name and the enclosing symbol.
 pub(super) fn draw_breadcrumb(app: &App, frame: &mut Frame, area: Rect) {
     let line = Line::from(Span::styled(format!(" {}", app.breadcrumb()), theme::dim()));
     frame.render_widget(Paragraph::new(line).style(theme::base()), area);
@@ -56,6 +56,8 @@ pub fn tabs_origin(app: &App, area: Rect) -> u16 {
     area.right().saturating_sub(total) + 1
 }
 
+/// Draw the tab strip right-aligned at `tabs_origin`: one title per tab (preview
+/// tabs dimmed), separated by dividers, over a base-styled editor-region row.
 pub(super) fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
     let strip = Rect {
         x: tabs_origin(app, area) - 1,

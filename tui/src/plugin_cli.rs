@@ -15,11 +15,14 @@ pub struct Report {
 }
 
 impl Report {
+    /// A successful report carrying `lines` for standard output.
     #[cfg(feature = "script")]
     fn ok(lines: Vec<String>) -> Self {
         Self { lines, ok: true }
     }
 
+    /// A failed report with a single diagnostic `line` (printed on stderr, and
+    /// the binary then exits with status 1).
     fn failed(line: String) -> Self {
         Self {
             lines: vec![line],
@@ -94,6 +97,8 @@ fn short(commit: &str) -> &str {
     commit.get(..12).unwrap_or(commit)
 }
 
+/// `vix --plugin install <spec>`: clone and pin a plugin, reporting its name
+/// and short commit. This variant needs the `git` capability to clone.
 #[cfg(all(feature = "script", feature = "git"))]
 fn install(
     paths: &vix_script::plugins::PluginPaths,
@@ -110,6 +115,8 @@ fn install(
     ])
 }
 
+/// `install` without the `git` capability: always
+/// `PluginError::GitUnavailable`, since plugins are fetched by cloning.
 #[cfg(all(feature = "script", not(feature = "git")))]
 fn install(
     _paths: &vix_script::plugins::PluginPaths,
@@ -118,6 +125,9 @@ fn install(
     Err(vix_script::plugins::PluginError::GitUnavailable)
 }
 
+/// `vix --plugin update [name]`: fast-forward one plugin (or all of them) and
+/// print one line per plugin, plus a warning line when the update dropped the
+/// plugin's trust (a changed commit must be re-approved before it runs).
 #[cfg(all(feature = "script", feature = "git"))]
 fn update(
     paths: &vix_script::plugins::PluginPaths,
@@ -145,6 +155,8 @@ fn update(
     Ok(lines)
 }
 
+/// `update` without the `git` capability: always
+/// `PluginError::GitUnavailable`, since updating means fetching.
 #[cfg(all(feature = "script", not(feature = "git")))]
 fn update(
     _paths: &vix_script::plugins::PluginPaths,

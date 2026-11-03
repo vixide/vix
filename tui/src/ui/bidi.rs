@@ -27,6 +27,7 @@ pub(super) fn mirrored(setting: &str, locale: &str) -> bool {
     enabled(setting, locale)
 }
 
+/// Whether `c` is a box-drawing or block-element glyph (U+2500..=U+259F).
 fn is_border(c: char) -> bool {
     ('\u{2500}'..='\u{259F}').contains(&c)
 }

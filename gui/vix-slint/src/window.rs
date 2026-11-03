@@ -67,6 +67,8 @@ pub enum WindowError {
 }
 
 impl std::fmt::Display for WindowError {
+    /// Display the wrapped diagnostics, or a short message naming the failing
+    /// property or missing component.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Compile { diagnostics } => f.write_str(diagnostics),
@@ -78,6 +80,7 @@ impl std::fmt::Display for WindowError {
 }
 
 impl std::error::Error for WindowError {
+    /// The wrapped Slint error, for the variants that carry one.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Create(e) => Some(e),

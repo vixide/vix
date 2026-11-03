@@ -47,6 +47,9 @@ use crate::view::State;
 /// The running window's state and background timer, once the App started.
 type Started = Rc<RefCell<Option<(Rc<RefCell<State>>, Rc<slint::Timer>)>>>;
 
+/// Parse the command line, load settings and the initial files through
+/// `startup::load`, then create and run the Slint window; returns the process
+/// exit code.
 fn main() -> ExitCode {
     let cli = Cli::parse();
     // Settings and the locale first: the menu bar is translated as it is built.

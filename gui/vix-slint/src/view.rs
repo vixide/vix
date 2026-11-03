@@ -228,6 +228,8 @@ impl State {
         }
     }
 
+    /// Forward a mouse event at grid cell `cell` to the `App` (the same entry point
+    /// the terminal's `Event::Mouse` uses).
     fn mouse(&mut self, kind: MouseEventKind, cell: (u16, u16), mods: KeyModifiers) {
         self.app.on_mouse(MouseEvent {
             kind,

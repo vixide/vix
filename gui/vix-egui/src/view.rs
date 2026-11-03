@@ -113,6 +113,8 @@ impl VixEgui {
         )
     }
 
+    /// Forward a mouse event at grid cell `cell` to the `App` (the same entry point
+    /// the terminal's `Event::Mouse` uses).
     fn mouse(&mut self, kind: MouseEventKind, cell: (u16, u16), mods: KeyModifiers) {
         self.app.on_mouse(MouseEvent {
             kind,
@@ -282,6 +284,9 @@ fn cell_index(v: f32, len: u16) -> u16 {
 }
 
 impl eframe::App for VixEgui {
+    /// Per-frame background work: tick the `App` (streamed output, LSP, file
+    /// watching), handle clicks on the native macOS menu bar, and schedule the next
+    /// repaint after `App::poll_interval`.
     fn logic(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         // Background work (streamed output, LSP, file watching, …), exactly
         // as the terminal loop's `App::tick`.
@@ -306,6 +311,10 @@ impl eframe::App for VixEgui {
         ctx.request_repaint_after(self.app.poll_interval());
     }
 
+    /// Per-frame work: hand the frame's input events to the `App`, resize the cell
+    /// grid to the window, draw the `App` into it with `vix::ui::draw`, then paint
+    /// the grid. With the `screenshot` feature, scripted input is replayed first and
+    /// can close the window.
     fn ui(&mut self, ui: &mut Ui, _: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let rect = ui.max_rect();
@@ -337,6 +346,7 @@ impl eframe::App for VixEgui {
         self.paint(ui, rect, cell);
     }
 
+    /// Forward window shutdown to `App::on_exit`.
     fn on_exit(&mut self) {
         self.app.on_exit();
     }

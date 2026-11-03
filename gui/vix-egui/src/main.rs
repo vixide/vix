@@ -41,6 +41,10 @@ use vix::cli::Cli;
 
 use crate::view::VixEgui;
 
+/// Parse the command line, load settings and the initial files through
+/// `startup::load`, then run the egui window with the `App` inside `VixEgui`.
+///
+/// The working directory becomes the workspace root (falling back to `.`).
 fn main() -> eframe::Result {
     let cli = Cli::parse();
     let loaded = startup::load(&cli);

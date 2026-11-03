@@ -23,6 +23,10 @@
     about = "Vix: Simple Terminal Rust IDE",
     disable_version_flag = true
 )]
+/// The parsed `vix` command line. Each field is one flag or positional
+/// argument; `main` inspects the headless ones first ([`Cli::version`],
+/// [`Cli::mcp`], the plugin and settings-bundle commands) and passes the rest
+/// into the `App`.
 pub struct Cli {
     /// File(s) to open on startup; the last one is focused. A single `-`
     /// reads standard input into an unsaved scratch buffer instead of
