@@ -1,6 +1,6 @@
 //! A single `(action id -> i18n title key)` catalog for every
-//! [`App::run_action`](https://github.com/vixide/vix) id that has no menu
-//! leaf of its own.
+//! `App::run_action` id (in the root `vix` app crate; not linkable from here)
+//! that has no menu leaf of its own.
 //!
 //! Most action ids are already titled somewhere: by their `vix_menu::Item`
 //! leaf (the menu tree doubles as a title catalog for anything the menu bar
@@ -24,9 +24,17 @@
 //!   `tui/src/app/command_palette.rs`) appends every `CATALOG` entry whose id
 //!   isn't already in `palette::COMMANDS`.
 //!
-//! `vix_keybindings`' [`shortcuts_for`](https://github.com/vixide/vix)-based
-//! UI (none exists yet) can pair its `action_id` results with [`title_key`]
-//! the same way.
+//! `vix_keybindings::shortcuts_for`-based UIs can pair their `action_id`
+//! results with [`title_key`] the same way.
+//!
+//! Completeness is enforced from outside: `tui/tests/action_catalog.rs` uses
+//! the [`dispatch_scan`] module to list every id `run_action` can dispatch and
+//! fails if one is titled by none of the menu tree, [`CATALOG`], or the
+//! palette. The `action.*` i18n keys named here live in
+//! `crates/vix-i18n/locales/*.yml`; this crate holds only the key strings, so
+//! it has no translation dependency and no behavior beyond lookup.
+//!
+//! Spec: `crates/vix-action-catalog/spec/index.md`.
 
 /// One catalog entry: an action id and the i18n key for its title.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +46,12 @@ pub struct Action {
 }
 
 /// Every action id with no menu leaf, paired with its i18n title key.
+///
+/// Kept alphabetical by id (by convention, for reviewable diffs); ids must be
+/// unique (checked by a unit test). Lookup is a linear scan via [`title_key`],
+/// which is fine for a few hundred entries hit only when building help or
+/// palette rows. Add an entry here (and its `action.*` key in every locale
+/// file) when `tui/tests/action_catalog.rs` reports an untitled id.
 pub const CATALOG: &[Action] = &[
     Action {
         id: "add_tab",
@@ -701,7 +715,16 @@ pub const CATALOG: &[Action] = &[
 ///
 /// Returns `None` for an id titled some other way (typically a
 /// `vix_menu::Item` leaf) — this crate only covers the gap, not every
-/// action id in the app.
+/// action id in the app. The match is exact and case-sensitive.
+///
+/// # Examples
+///
+/// ```
+/// use vix_action_catalog::title_key;
+///
+/// assert_eq!(title_key("cursor_down"), Some("action.cursor_down"));
+/// assert_eq!(title_key("no.such.action"), None);
+/// ```
 #[must_use]
 pub fn title_key(action_id: &str) -> Option<&'static str> {
     CATALOG.iter().find(|a| a.id == action_id).map(|a| a.title)
@@ -794,7 +817,11 @@ pub mod dispatch_scan {
     ];
 
     /// Brace-balance `fn fn_name(...) ... { ... }` out of `text`, from its
-    /// first `fn fn_name(` to the matching close brace.
+    /// first `fn fn_name(` to the matching close brace. The scan counts raw
+    /// `{`/`}` bytes without parsing Rust, so a brace inside a string or char
+    /// literal would skew it; the dispatcher bodies listed in [`DISPATCHERS`]
+    /// are known not to contain unbalanced ones, and the panic below flags
+    /// drift loudly rather than returning a wrong slice.
     ///
     /// # Panics
     ///
@@ -812,6 +839,8 @@ pub mod dispatch_scan {
             || panic!("no open brace after `fn {fn_name}`"),
             |i| start + i,
         );
+        // Start on the opening brace so depth first becomes 1 there and the
+        // loop returns only when it falls back to 0 (the function's own close).
         let mut depth = 0i32;
         let mut i = body_start;
         loop {
@@ -859,6 +888,8 @@ pub mod dispatch_scan {
             if !trimmed.starts_with('"') {
                 continue;
             }
+            // Lines with no `=>` (a literal that starts a continuation line of a
+            // multi-line expression, say) are not arms.
             let Some(arrow) = trimmed.find("=>") else {
                 continue;
             };

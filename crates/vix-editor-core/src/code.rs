@@ -1,3 +1,18 @@
+//! The text buffer: a [`ropey::Rope`] plus the Tree-sitter parse tree, the
+//! highlight queries (with language injections) and the undo/redo [`History`].
+//!
+//! [`Code`] is the engine under [`crate::editor::Editor`]. Every mutation goes
+//! through [`Code::insert`] / [`Code::remove`] (or the batch/undo paths), which
+//! keep three things in lockstep: the rope, the Tree-sitter tree (via
+//! `InputEdit`), and the history. Small buffers reparse synchronously; buffers
+//! over a size threshold reparse on a background `vix-parse` thread and the
+//! host installs the result with [`Code::poll_parse`], using an edit generation
+//! counter so a superseded parse is never installed. Grammars are compiled in
+//! behind the `lang-*` Cargo features; highlight queries are embedded from
+//! `langs/`. Offsets in the public API are *character* offsets unless named
+//! `byte`. See `crates/vix-editor-core/spec/index.md` and
+//! `crates/vix-editor-core/spec/syntax-highlighting/`.
+
 use crate::history::History;
 use crate::selection::Selection;
 use crate::utils::{calculate_end_position, comment as lang_comment, count_indent_units, indent};
@@ -17,6 +32,8 @@ use tree_sitter::{Language, Node, ParseOptions, ParseState, Parser, Query, Tree}
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
+/// The bundled per-language `highlights.scm` queries (and injection data),
+/// embedded from the crate's `langs/` directory at build time.
 #[derive(RustEmbed)]
 #[folder = "langs/"]
 pub(crate) struct LangAssets;
@@ -61,6 +78,8 @@ thread_local! {
     static FULL_TEXT_SCANS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+/// Bump this thread's [`full_text_scans`] counter (called by the whole-buffer
+/// passes only).
 fn note_full_text_scan() {
     FULL_TEXT_SCANS.with(|n| n.set(n.get().wrapping_add(1)));
 }
@@ -100,6 +119,8 @@ struct HighlightCtx<'a, T> {
 }
 
 impl<T> Clone for HighlightCtx<'_, T> {
+    // Hand-written because `#[derive(Clone)]` would wrongly require `T: Clone`;
+    // only references to `T` are held, so a bitwise copy is always sound.
     fn clone(&self) -> Self {
         *self
     }
@@ -417,6 +438,8 @@ impl Code {
         Ok(code)
     }
 
+    /// The Tree-sitter [`Language`] for the grammar key `lang`, or `None` when
+    /// the key is unknown *or* the matching `lang-*` Cargo feature is off.
     pub(crate) fn get_language(lang: &str) -> Option<Language> {
         match lang {
             #[cfg(feature = "lang-rust")]
@@ -457,6 +480,11 @@ impl Code {
         }
     }
 
+    /// The highlight query source for `lang`: a host-supplied custom override
+    /// if present, otherwise the bundled `langs/<lang>/highlights.scm`.
+    ///
+    /// # Errors
+    /// No bundled query exists for `lang`, or it is not valid UTF-8.
     fn get_highlights(&self, lang: &str) -> anyhow::Result<String> {
         if let Some(highlights_map) = &self.custom_highlights
             && let Some(highlights) = highlights_map.get(lang)
@@ -471,6 +499,9 @@ impl Code {
         Ok(highlights.to_string())
     }
 
+    /// Build parsers and queries for every language the main query injects
+    /// (capture names of the form `injection.content.<lang>`), one per
+    /// distinct language and only for grammars compiled in.
     fn init_injections(&self, query: &Query) -> anyhow::Result<Injections> {
         let mut injection_parsers = HashMap::new();
         let mut injection_queries = HashMap::new();
@@ -812,6 +843,9 @@ impl Code {
         }
     }
 
+    /// Tell Tree-sitter about `edit` and schedule a reparse: synchronous below
+    /// `ASYNC_PARSE_THRESHOLD` bytes (or when no worker can be started),
+    /// otherwise on the background worker. Always bumps the edit generation.
     fn edit_tree(&mut self, edit: InputEdit) {
         // Apply the edit to the current tree, if one exists, so its byte
         // offsets stay aligned for any consumer reading it before the
@@ -935,6 +969,9 @@ impl Code {
             .is_some_and(|w| w.requested > w.installed)
     }
 
+    /// Synchronously reparse the whole buffer, feeding Tree-sitter rope chunks
+    /// directly (no `String` copy) and reusing the previous tree for
+    /// incremental parsing.
     fn reparse(&mut self) {
         if let Some(parser) = self.parser.as_mut() {
             let rope = &self.content;
@@ -991,6 +1028,9 @@ impl Code {
         };
         let mut results = Self::highlight(ctx, text, start, end, query, root_node);
 
+        // Longest span first; ties broken by the third tuple field (query
+        // capture index, descending). A painter applying spans in order then
+        // lets shorter, more specific spans overwrite the broader ones.
         results.sort_by(|a, b| {
             let len_a = a.1 - a.0;
             let len_b = b.1 - b.0;
@@ -1043,6 +1083,10 @@ impl Code {
         out
     }
 
+    /// Recursive core of [`Code::highlight_interval`]: run `query` over
+    /// `root_node` restricted to bytes `start_byte..end_byte`, recursing into
+    /// injected languages via `ctx`. Returns `(start, end, capture_index,
+    /// value)`, all offsets in bytes of `text`.
     fn highlight<T: Copy>(
         ctx: HighlightCtx<'_, T>,
         text: RopeSlice<'_>,
@@ -1499,6 +1543,7 @@ impl Code {
 /// An iterator over byte slices of Rope chunks.
 /// This is used to feed `tree-sitter` without allocating a full `String`.
 pub struct ChunksBytes<'a> {
+    /// The underlying rope chunk iterator (UTF-8 `&str` pieces).
     chunks: ropey::iter::Chunks<'a>,
 }
 
@@ -1535,10 +1580,16 @@ impl<'a> tree_sitter::TextProvider<&'a [u8]> for RopeProvider<'a> {
 
 /// An implementation of a graphemes iterator, for iterating over the graphemes of a `RopeSlice`.
 pub struct RopeGraphemes<'a> {
+    /// The slice being segmented.
     text: ropey::RopeSlice<'a>,
+    /// Remaining chunks after `cur_chunk`.
     chunks: ropey::iter::Chunks<'a>,
+    /// The chunk the cursor is currently inside.
     cur_chunk: &'a str,
+    /// Byte offset of `cur_chunk` within `text`.
     cur_chunk_start: usize,
+    /// Grapheme-boundary state machine; asked for more context when a cluster
+    /// straddles a chunk boundary.
     cursor: GraphemeCursor,
 }
 
@@ -1561,6 +1612,7 @@ impl RopeGraphemes<'_> {
 impl<'a> Iterator for RopeGraphemes<'a> {
     type Item = RopeSlice<'a>;
 
+    /// Yields the next grapheme cluster as a (possibly multi-chunk) rope slice.
     fn next(&mut self) -> Option<RopeSlice<'a>> {
         let a = self.cursor.cur_cursor();
         let b;

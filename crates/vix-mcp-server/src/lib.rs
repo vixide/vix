@@ -9,6 +9,39 @@
 //! session's open buffers and the read-only SQLite schema query — comes in
 //! through the [`Host`] trait, so this crate stays free of `confy`, `sqlx`
 //! and terminal I/O and is tested with a fake host.
+//!
+//! # Layout
+//!
+//! - this file: the JSON-RPC framing, method dispatch, `initialize` and
+//!   resources, and the `file://` URI helpers;
+//! - [`tools`]: the tool catalog (`tools/list`) and each tool's behavior;
+//! - [`workspace`]: the path-confinement and secret-file policy every read
+//!   goes through (the security boundary of the crate).
+//!
+//! The server is single-threaded and synchronous: it handles one line at a
+//! time and never writes anything except replies. Owning spec:
+//! `crates/vix-mcp-server/spec/index.md` and the repo-level
+//! `spec/mcp-server`.
+//!
+//! # Example
+//!
+//! ```
+//! use std::path::{Path, PathBuf};
+//! use vix_mcp_server::{Host, Server, Table, HostError};
+//!
+//! struct NoHost;
+//! impl Host for NoHost {
+//!     fn open_buffers(&self, _root: &Path) -> Vec<PathBuf> { Vec::new() }
+//!     fn sqlite_schema(&self, _p: &Path) -> Option<Result<Vec<Table>, HostError>> { None }
+//! }
+//!
+//! let dir = std::env::temp_dir();
+//! let mut server = Server::new(&dir, NoHost, "0.0.0").unwrap();
+//! let reply = server
+//!     .handle_line(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#)
+//!     .unwrap();
+//! assert!(reply.contains(r#""result":{}"#));
+//! ```
 
 use serde_json::{Value, json};
 use std::fmt::Write as _;
@@ -75,6 +108,10 @@ pub trait Host {
 }
 
 /// The protocol state for one stdio session.
+///
+/// The only mutable state is the `initialized` flag: per the MCP lifecycle,
+/// every method except `initialize` and `ping` is refused with
+/// [`NOT_INITIALIZED`] until `initialize` has been answered.
 #[derive(Debug)]
 pub struct Server<H: Host> {
     /// Canonical workspace root.
@@ -119,6 +156,9 @@ impl<H: Host> Server<H> {
 
     /// Handle one line of input, returning the line to write back (without
     /// its newline), or `None` for a notification or a blank line.
+    ///
+    /// Invalid JSON yields a [`PARSE_ERROR`] reply with a `null` id, as
+    /// JSON-RPC requires when the id cannot be recovered.
     pub fn handle_line(&mut self, line: &str) -> Option<String> {
         if line.trim().is_empty() {
             return None;
@@ -132,6 +172,8 @@ impl<H: Host> Server<H> {
 
     /// Handle one decoded message, returning the response, or `None` for a
     /// notification.
+    ///
+    /// Batches (JSON arrays) are not supported and get [`INVALID_REQUEST`].
     pub fn handle(&mut self, message: &Value) -> Option<Value> {
         let Some(object) = message.as_object() else {
             return Some(error(
@@ -140,8 +182,11 @@ impl<H: Host> Server<H> {
                 "expected a single JSON-RPC 2.0 object (batches are not supported)",
             ));
         };
+        // A message without an `id` is a notification by definition.
         let id = object.get("id").cloned();
         let method = object.get("method").and_then(Value::as_str);
+        // JSON-RPC ids may be strings or integers (null and fractions are
+        // rejected, since MCP forbids them).
         let valid = object.get("jsonrpc").and_then(Value::as_str) == Some("2.0")
             && method.is_some()
             && id
@@ -167,6 +212,7 @@ impl<H: Host> Server<H> {
         match method {
             "initialize" => Ok(self.initialize(params)),
             "ping" => Ok(json!({})),
+            // Guard arm: everything below needs a completed handshake.
             _ if !self.initialized => Err((NOT_INITIALIZED, "server not initialized".into())),
             "tools/list" => Ok(tools::list()),
             "tools/call" => self.call_tool(params),
@@ -180,6 +226,8 @@ impl<H: Host> Server<H> {
     fn initialize(&mut self, params: &Value) -> Value {
         self.initialized = true;
         let requested = params.get("protocolVersion").and_then(Value::as_str);
+        // Echo the client's version when we know it; otherwise offer our own
+        // and let the client decide whether to continue (MCP negotiation).
         let version = requested
             .filter(|v| SUPPORTED_VERSIONS.contains(v))
             .unwrap_or(PROTOCOL_VERSION);
@@ -202,6 +250,8 @@ impl<H: Host> Server<H> {
             .get("name")
             .and_then(Value::as_str)
             .ok_or((INVALID_PARAMS, "missing tool name".to_string()))?;
+        // Unknown tool names are protocol errors; a *known* tool failing is
+        // reported in-band as `isError`, so the model can see and react.
         if !tools::list()["tools"]
             .as_array()
             .is_some_and(|all| all.iter().any(|t| t["name"] == name))
@@ -215,6 +265,8 @@ impl<H: Host> Server<H> {
         Ok(match tools::call(&self.root, &self.host, name, &args) {
             Ok(result) => json!({
                 "content": [{"type": "text", "text": result.to_string()}],
+                // Both forms: text for clients that only show content,
+                // structured data for those that parse it.
                 "structuredContent": result,
                 "isError": false,
             }),
@@ -273,13 +325,23 @@ pub fn serve<H: Host, R: BufRead, W: Write>(
     Ok(())
 }
 
-/// A JSON-RPC error response.
+/// A JSON-RPC error response. `id` is `null` when the request id could not
+/// be determined.
 fn error(id: &Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
 /// `file://` URI for an absolute path, percent-encoding everything but
-/// unreserved characters and `/`.
+/// unreserved characters and `/`. Backslashes are treated as separators and
+/// a path without a leading `/` (a Windows drive) gets one.
+///
+/// ```
+/// use std::path::Path;
+/// assert_eq!(
+///     vix_mcp_server::file_uri(Path::new("/a b/c.rs")),
+///     "file:///a%20b/c.rs"
+/// );
+/// ```
 #[must_use]
 pub fn file_uri(path: &Path) -> String {
     let text = path.to_string_lossy().replace('\\', "/");
@@ -299,6 +361,17 @@ pub fn file_uri(path: &Path) -> String {
 
 /// The path a `file://` URI names, percent-decoded; `None` for another
 /// scheme, a remote host, or bad encoding.
+///
+/// The inverse of [`file_uri`]. The result is *not* confined to the
+/// workspace; callers must pass it through [`workspace`] before reading.
+///
+/// ```
+/// assert_eq!(
+///     vix_mcp_server::uri_path("file:///a%20b/c.rs").as_deref(),
+///     Some("/a b/c.rs")
+/// );
+/// assert_eq!(vix_mcp_server::uri_path("https://x/y"), None);
+/// ```
 #[must_use]
 pub fn uri_path(uri: &str) -> Option<String> {
     let rest = uri.strip_prefix("file://")?;
@@ -307,6 +380,8 @@ pub fn uri_path(uri: &str) -> Option<String> {
     if !rest.starts_with('/') {
         return None;
     }
+    // Decode bytewise, then validate UTF-8 once at the end, so a split
+    // multi-byte sequence (`%C3%A9`) is handled correctly.
     let bytes = rest.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;

@@ -3,6 +3,14 @@
 //!
 //! Pure data — the host (the `vix` app) renders the drawer and routes keys and
 //! clicks; this crate owns only the message list and selection logic.
+//!
+//! Invariant: `Messages::selected` is a valid index whenever `items` is
+//! non-empty (the navigation and dismiss methods clamp it); when `items` is
+//! empty it is `0` and points at nothing, so renderers must check emptiness
+//! before indexing. The list is unbounded; unlike the bottom dock there is no
+//! scrollback cap because messages are dismissed individually by the user.
+//!
+//! Spec: `crates/vix-right-dock/spec/index.md`.
 
 /// Severity of a message, which selects its icon.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,17 +76,21 @@ impl Messages {
         self.selected = self.selected.saturating_sub(1);
     }
 
-    /// Move the selection down one row.
+    /// Move the selection down one row, stopping at the last message.
     pub fn down(&mut self) {
         if self.selected + 1 < self.items.len() {
             self.selected += 1;
         }
     }
 
-    /// Dismiss the selected message (the "close x").
+    /// Dismiss the selected message (the "close x"). A no-op when `items` is
+    /// empty. Afterwards the selection stays on the same index (now the next
+    /// message), or moves to the new last message if the final one was closed.
     pub fn close_selected(&mut self) {
         if self.selected < self.items.len() {
             self.items.remove(self.selected);
+            // Removing the last row leaves `selected` one past the end; pull it
+            // back so the invariant (valid index or 0 when empty) holds.
             if self.selected >= self.items.len() {
                 self.selected = self.items.len().saturating_sub(1);
             }

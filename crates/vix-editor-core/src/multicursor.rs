@@ -12,6 +12,27 @@
 //!
 //! Edits run directly on the rope in one undo transaction, processing carets in
 //! ascending position order with a running offset so each edit stays valid.
+//! A caret that falls inside text another caret already replaced is merged
+//! into that caret instead of being applied at a stale offset (T575).
+//!
+//! The rest of the editor sees carets through `gather`/`scatter`: `gather`
+//! flattens primary + extras into `(pos, anchor)` pairs, and `scatter` writes
+//! them back (clamping to the buffer, merging carets that land on the same
+//! position). Named single-caret motions in [`crate::named`] first offer
+//! themselves to `Editor::multi_motion`. See `crates/vix-editor-core/spec/index.md`.
+//!
+//! # Examples
+//!
+//! ```
+//! use vix_editor_core::editor::Editor;
+//!
+//! let mut ed = Editor::new("text", "foo foo", Vec::new()).unwrap();
+//! ed.add_next_occurrence(); // selects the word under the cursor...
+//! ed.add_next_occurrence(); // ...and adds the next match as a second caret
+//! assert_eq!(ed.caret_count(), 2);
+//! ed.multi_insert("x"); // one undo step, edits every caret
+//! assert_eq!(ed.get_content(), "x x");
+//! ```
 
 use std::ops::Range;
 
@@ -46,7 +67,8 @@ fn signed(n: usize) -> isize {
     isize::try_from(n).expect("a buffer length fits in isize")
 }
 
-/// An extra caret beyond the primary cursor.
+/// An extra caret beyond the primary cursor. The primary lives in the
+/// [`Editor`]'s own `cursor`/`selection`; extras are stored oldest first.
 #[derive(Clone, Copy, Debug)]
 pub struct Caret {
     /// Cursor offset (character index).
@@ -147,6 +169,8 @@ impl Editor {
 
     /// The primary caret's selection anchor, when it has a non-empty selection.
     fn primary_anchor(&self) -> Option<usize> {
+        // The selection stores (start, end); the anchor is whichever end the
+        // cursor is *not* on.
         self.selection
             .filter(|s| !s.is_empty())
             .map(|s| if s.end == self.cursor { s.start } else { s.end })
@@ -165,11 +189,15 @@ impl Editor {
     /// the same position as an earlier one is merged into it.
     fn scatter(&mut self, carets: Vec<(usize, Option<usize>)>) {
         let len = self.code_ref().len_chars();
+        // Later carets on an already-seen position are dropped, so when carets
+        // collide the earliest one (and its anchor) wins.
         let mut seen = std::collections::HashSet::new();
         let mut kept = carets
             .into_iter()
             .map(|(p, a)| (p.min(len), a.map(|a| a.min(len))))
             .filter(|&(p, _)| seen.insert(p));
+        // `carets` is never empty in practice; the fallback only keeps the
+        // primary cursor valid if a caller hands in nothing.
         let (pos, anchor) = kept.next().unwrap_or((self.cursor.min(len), None));
         self.cursor = pos;
         self.goal_col = None;
@@ -199,9 +227,13 @@ impl Editor {
         order.sort_by_key(|&i| range_start(carets[i]));
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
+        // One transaction for all carets so a single Undo reverts the lot, and
+        // the undo state remembers the primary's cursor/selection.
         code.tx();
         code.set_state_before(primary.0, primary.1);
         let mut shift: isize = 0;
+        // Indexed by the caret's original slot so add order survives the
+        // position-sorted processing; merged-away carets stay `None`.
         let mut result: Vec<Option<(usize, Option<usize>)>> = vec![None; carets.len()];
         // End of the span the previous caret already replaced, in the original
         // text. A caret that starts inside it overlaps that edit: its text is
@@ -239,6 +271,8 @@ impl Editor {
     }
 
     /// Delete at every caret (each selection, else one char), as one undo step.
+    /// `forward` chooses Delete (the char at the caret) over Backspace (the one
+    /// before it) for carets with no selection.
     pub fn multi_delete(&mut self, forward: bool) {
         let len = self.code_ref().len_chars();
         let carets = self.gather();
@@ -256,6 +290,8 @@ impl Editor {
         for i in order {
             let (pos, anchor) = carets[i];
             let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
+            // Clamped at the buffer edges, so Backspace at 0 or Delete at the
+            // end is an empty range (a no-op for that caret).
             let (s, e) = match anchor.filter(|&a| a != pos) {
                 Some(a) => (a.min(pos), a.max(pos)),
                 None if forward => (pos, (pos + 1).min(len)),
@@ -295,6 +331,8 @@ impl Editor {
             .map(|l| l.strip_suffix('\r').unwrap_or(l))
             .collect();
         if n > 1 && lines.len() == n {
+            // Hand out lines by buffer order (not add order) so copy and paste
+            // round-trip: `caret_selection_texts` is also in buffer order.
             let carets = self.gather();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by_key(|&i| range_start(carets[i]));
@@ -316,6 +354,7 @@ impl Editor {
         if texts.is_empty() {
             return;
         }
+        // Clipboard first: if the removal below were to fail the text is not lost.
         self.copy_to_clipboard(&texts.join("\n"));
         let empty = vec![""; self.caret_count()];
         self.multi_replace(&empty);
@@ -343,7 +382,9 @@ impl Editor {
             dir,
             CaretMove::Left | CaretMove::Right | CaretMove::Up | CaretMove::Down
         ) {
-            // Drive the single-cursor arrow logic for this caret.
+            // Reuse the single-cursor arrow logic (selection collapse, goal
+            // column, line wrap) by temporarily making this caret the primary;
+            // `scatter` restores the real primary afterwards. Drive the single-cursor arrow logic for this caret.
             self.cursor = pos;
             self.selection = anchor.map(|a| Selection::from_anchor_and_cursor(a, pos));
             match dir {
@@ -372,6 +413,8 @@ impl Editor {
             CaretMove::LineEnd => self.line_end(pos),
             CaretMove::TextStart => self.line_first_text(pos),
             CaretMove::Home => {
+                // Smart Home: a line that is blank (or all indent) counts as
+                // indent 0, so Home goes to column 0 rather than toggling.
                 let start = self.line_start(pos);
                 let len = self.line_end(pos) - start;
                 let first = self.line_first_text(pos) - start;
@@ -419,6 +462,9 @@ impl Editor {
         let Some((s, e)) = self.ensure_word_selection() else {
             return;
         };
+        // Compared as `char` vectors (not bytes) so offsets are char indices,
+        // the unit every caret position uses. O(buffer) per call, fine for an
+        // interactive command.
         let needle: Vec<char> = self.get_content_slice(s, e).chars().collect();
         let hay: Vec<char> = self.get_content().chars().collect();
         // Furthest caret end, to search after.
@@ -429,10 +475,11 @@ impl Editor {
             .chain(self.caret_positions())
             .max()
             .unwrap_or(e);
+        // Search forward from the newest caret, wrapping to the buffer start.
         let found = find_from(&hay, &needle, from).or_else(|| find_from(&hay, &needle, 0));
         if let Some(start) = found {
             let end = start + needle.len();
-            // Skip if this exact range is already a caret.
+            // Wrapped all the way round onto an existing caret: nothing new.
             if self.caret_selections().contains(&(start, end)) {
                 return;
             }
@@ -463,6 +510,8 @@ impl Editor {
             .into_iter()
             .filter(|&st| !taken.contains(&(st, st + n)))
             .collect();
+        // `st >= e` / `st + n <= s`: strictly past the current match, so the
+        // current selection is never re-picked; the `or_else` arms wrap.
         let pick = if forward {
             starts
                 .iter()
@@ -689,6 +738,9 @@ impl Editor {
         }
     }
 
+    /// Shared body of [`Editor::add_caret_above`] / [`Editor::add_caret_below`]:
+    /// the new caret keeps the newest caret's column, clamped to the target
+    /// line's length. No-op at the first/last line.
     fn add_caret_vertical(&mut self, down: bool) {
         let pos = {
             let code = self.code_ref();
@@ -713,6 +765,9 @@ fn find_from(hay: &[char], needle: &[char], from: usize) -> Option<usize> {
     if needle.is_empty() || needle.len() > hay.len() {
         return None;
     }
+    // Naive scan: needles here are a selected word or short snippet. The
+    // `needle.len() > hay.len()` guard above keeps the range bound from
+    // underflowing.
     (from..=hay.len() - needle.len()).find(|&i| hay[i..i + needle.len()] == *needle)
 }
 

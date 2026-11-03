@@ -1,3 +1,14 @@
+//! Painting the editor into a ratatui [`Buffer`].
+//!
+//! `impl Widget for &Editor` is the entry point: it clips to the buffer, then
+//! dispatches to the no-wrap renderer here or the soft-wrap renderer in the
+//! private `wrap` module. Both draw in layers, back to front: gutter + text,
+//! indent guides, syntax colours, rainbow brackets, then selection / marks /
+//! diagnostics / carets and bracket matching. The renderer is read-only over
+//! the [`Editor`] (state such as the highlight cache lives behind `RefCell`s).
+//! The App shell (`src/ui.rs`) draws everything *around* the editor; the editor
+//! itself is drawn only here. See `crates/vix-editor-core/spec/index.md`.
+
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
 use crate::editor::{CommentMark, Editor, Flags};
 use ratatui_core::buffer::Buffer;
@@ -13,6 +24,11 @@ use ratatui_core::widgets::Widget;
 /// 3. The selection highlight is rendered above the syntax layer.
 /// 4. User marks are rendered as the final uppermost overlay.
 ///
+/// The text-only layers are the same in both modes; with
+/// the soft-wrap flag set the work is delegated to the soft-wrap renderer
+/// (wrapped rows, no horizontal scroll), otherwise to the classic one-row-per-
+/// line renderer.
+///
 /// # Arguments
 ///
 /// * `self` - The `Editor` instance (as reference) to render.
@@ -20,6 +36,8 @@ use ratatui_core::widgets::Widget;
 /// * `buf` - The ratatui `Buffer` that represents the screen cells to draw to.
 ///
 impl Widget for &Editor {
+    /// Draw the editor into `buf` inside `area` (clipped to `buf.area`; an empty
+    /// intersection draws nothing).
     fn render(self, area: Rect, buf: &mut Buffer) {
         // A caller's rect can overhang a tiny terminal; never paint outside the buffer.
         let area = area.intersection(buf.area);
@@ -635,9 +653,6 @@ impl Editor {
         }
     }
 
-    /// Overlay Tree-sitter syntax styles on the visible portion of each line.
-    /// Highlighting is limited to the visible columns so long off-screen lines are
-    /// not processed.
     /// Draw faint vertical indentation guides at each indent level on every
     /// visible line. Space-indented buffers only (the common case); tab- or
     /// mixed-indented buffers are skipped to avoid column-mapping ambiguity.
@@ -698,6 +713,7 @@ impl Editor {
         line_number_width_u16: u16,
         total_lines: usize,
     ) {
+        // Cycled by nesting depth modulo 6; closers re-use their opener's colour.
         const COLORS: [Color; 6] = [
             Color::Rgb(0xff, 0xd7, 0x00), // gold
             Color::Rgb(0xda, 0x70, 0xd6), // orchid
@@ -712,10 +728,13 @@ impl Editor {
             return;
         };
         let base = code.line_to_char(first);
+        // Past ~200k chars the from-start depth scan would cost too much per frame.
         if base > 200_000 {
             return; // bound the from-start scan on very large files
         }
         // Seed nesting depth from the document start to the first visible line.
+        // Seeding is by char count, not tokens, so a bracket inside a string or
+        // comment before the viewport shifts the colours (cosmetic only).
         let mut depth: usize = code
             .char_slice(0, base)
             .chars()
@@ -769,6 +788,10 @@ impl Editor {
         }
     }
 
+    /// Overlay Tree-sitter syntax styles on the visible portion of each line.
+    /// Highlighting is limited to the visible columns so long off-screen lines are
+    /// not processed. Semantic tokens from the language server are merged into
+    /// the same layer when the theme maps their type.
     fn draw_syntax_layer(
         &self,
         area: Rect,

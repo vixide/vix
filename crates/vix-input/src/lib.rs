@@ -13,6 +13,28 @@
 //! terminal conversion is a lossless field-by-field copy for every key Vix
 //! handles. Keys Vix has no use for (media keys, bare modifier presses) map
 //! to [`KeyCode::Null`].
+//!
+//! # Layout
+//!
+//! * [`KeyModifiers`], [`KeyEventState`], [`KeyEventKind`], [`KeyCode`] and
+//!   [`KeyEvent`] describe keyboard input.
+//! * [`MouseButton`], [`MouseEventKind`] and [`MouseEvent`] describe mouse
+//!   input, positioned in character cells.
+//! * A private `from_crossterm` module (only with the `crossterm` Cargo
+//!   feature) holds the `From` conversions, so GUI builds avoid a crossterm
+//!   dependency.
+//!
+//! Spec: `crates/vix-input/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+//!
+//! // `Shift+a` and `A` are the same key press.
+//! let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::SHIFT);
+//! let b = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE);
+//! assert_eq!(a, b);
+//! ```
 
 use std::hash::{Hash, Hasher};
 
@@ -147,6 +169,11 @@ impl KeyCode {
 /// Equality and hashing are case-normalized exactly as crossterm's are: an
 /// uppercase ASCII `Char` implies [`KeyModifiers::SHIFT`], and `Shift` plus a
 /// lowercase ASCII char compares equal to the uppercase char with `Shift`.
+///
+/// `PartialOrd` is derived and compares the raw fields, so it is *not*
+/// consistent with the normalized `PartialEq`; do not rely on ordering for
+/// `Shift`-variant equivalence. (Mirrors crossterm.) `Hash` is normalized the
+/// same way as `Eq`, so events are safe as `HashMap` keys for keymaps.
 #[derive(Debug, PartialOrd, Clone, Copy)]
 pub struct KeyEvent {
     /// The key.
@@ -206,7 +233,12 @@ impl KeyEvent {
         self.kind == KeyEventKind::Repeat
     }
 
-    /// Make `Shift` present iff an uppercase ASCII char is present.
+    /// Canonicalize the Shift/case pairing so `Eq` and `Hash` agree on it.
+    ///
+    /// Despite the name only ASCII letters are folded: an uppercase ASCII char
+    /// gains `SHIFT`, and `SHIFT` plus a lowercase ASCII char is uppercased.
+    /// Non-letters (`'1'`, `'!'`) and non-ASCII are left alone, as terminals
+    /// report those inconsistently.
     fn normalize_case(mut self) -> Self {
         let KeyCode::Char(c) = self.code else {
             return self;
@@ -247,6 +279,8 @@ impl Hash for KeyEvent {
 }
 
 /// A mouse button.
+///
+/// Only the three buttons Vix handles; crossterm has no others to map.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum MouseButton {
     /// Primary button.
@@ -268,7 +302,8 @@ pub enum MouseEventKind {
     Drag(MouseButton),
     /// The pointer moved with no button held.
     Moved,
-    /// Wheel scrolled down (content moves up).
+    /// Wheel scrolled down (content moves up). Terminals report wheel motion
+    /// as discrete events, not pixel deltas.
     ScrollDown,
     /// Wheel scrolled up.
     ScrollUp,
@@ -294,6 +329,11 @@ pub struct MouseEvent {
 #[cfg(feature = "crossterm")]
 mod from_crossterm {
     //! Lossless conversion from crossterm's event types (terminal front end).
+    //!
+    //! Modifier and key-state flags are copied bit for bit: the bit layouts of
+    //! [`KeyModifiers`] and [`KeyEventState`] deliberately match crossterm's,
+    //! and `from_bits_truncate` drops any bit this crate has no flag for. The
+    //! only lossy mapping is media and bare-modifier keys to [`KeyCode::Null`].
 
     use super::{
         KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, MouseButton, MouseEvent,

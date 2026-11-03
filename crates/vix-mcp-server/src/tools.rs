@@ -1,5 +1,13 @@
 //! The six read-only tools: their `tools/list` descriptions and their
 //! implementations over the workspace and the [`Host`].
+//!
+//! Every tool is read-only and advertises `readOnlyHint: true`; every file
+//! access goes through [`crate::workspace`], so confinement to the root and
+//! the secret-file refusal apply uniformly. [`list`] and [`call`] are kept
+//! in step by hand: a name added to one must be added to the other (the
+//! server's `tools/call` rejects names absent from [`list`] before [`call`]
+//! ever sees them). Owning spec: `crates/vix-mcp-server/spec/index.md` and
+//! the repo-level `spec/mcp-server`.
 
 use crate::Host;
 use crate::workspace::{self, WorkspaceError, read_text, relative};
@@ -23,6 +31,9 @@ pub const DB_SCHEMA: &str = "db_schema";
 /// annotations.
 #[must_use]
 pub fn list() -> Value {
+    // Builders for the repeated JSON Schema shapes. `additionalProperties:
+    // false` makes clients reject misspelled arguments instead of silently
+    // ignoring them.
     let path_arg = |required: bool| {
         let mut schema = json!({
             "type": "object",
@@ -153,7 +164,8 @@ pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<
     }
 }
 
-/// The `path` argument, required.
+/// The `path` argument, required: absent or non-string is
+/// [`ToolError::MissingPath`].
 fn required_path(args: &Value) -> Result<&str, ToolError> {
     args.get("path")
         .and_then(Value::as_str)
@@ -162,9 +174,14 @@ fn required_path(args: &Value) -> Result<&str, ToolError> {
 
 /// The host's open buffers, canonicalized, deduplicated, and filtered to
 /// readable non-secret files inside `root`, in the host's order.
+///
+/// The host is untrusted for confinement purposes: it may list stale paths
+/// or files outside the workspace, so each goes through
+/// [`workspace::resolve`]; ones it rejects are dropped silently.
 pub(crate) fn open_buffers<H: Host>(root: &Path, host: &H) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     for path in host.open_buffers(root) {
+        // Non-UTF-8 paths cannot be expressed as a JSON string anyway.
         let Some(request) = path.to_str() else {
             continue;
         };
@@ -178,7 +195,9 @@ pub(crate) fn open_buffers<H: Host>(root: &Path, host: &H) -> Vec<PathBuf> {
 }
 
 /// The outline of the file at workspace-relative `path`: its format name
-/// and `{level, title, line}` entries.
+/// and `{level, title, line}` entries. The format is chosen by extension:
+/// Markdown headings, Org headlines, otherwise the symbol scan. Lines in the
+/// result are always 1-based source lines.
 fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
     let extension = Path::new(path)
         .extension()
@@ -199,6 +218,8 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
                         .get(e.line.saturating_sub(1))
                         .copied()
                         .unwrap_or(e.line);
+                    // `kind` holds the heading marker (`#`, `##`, ...), so
+                    // its length is the heading level.
                     json!({"level": e.kind.len(), "title": e.name, "line": line})
                 })
                 .collect();
@@ -207,6 +228,7 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
         "org" => {
             let entries = vix_org::headlines(text)
                 .into_iter()
+                // `headlines` reports 0-based lines; the tool contract is 1-based.
                 .map(|(line, level, title)| json!({"level": level, "title": title, "line": line + 1}))
                 .collect();
             ("org", entries)
@@ -250,6 +272,8 @@ fn diagnostics<H: Host>(root: &Path, host: &H, args: &Value) -> Result<Value, To
             Err(_) => continue,
         };
         for conflict in vix_conflict_tool::find_all(&text) {
+            // `start` is a 0-based line (hence `+ 1`); `end` is already the
+            // 1-based line of the closing marker.
             found.push(json!({
                 "path": path,
                 "line": conflict.start + 1,
@@ -270,6 +294,8 @@ fn db_schema<H: Host>(root: &Path, host: &H) -> Value {
     for path in workspace::find_sqlite(root) {
         let rel = relative(root, &path);
         match host.sqlite_schema(&path) {
+            // The host has no SQL support at all: report once and stop,
+            // rather than one identical error per database.
             None => {
                 return json!({
                     "databases": [],

@@ -1,5 +1,15 @@
-//! Line operations: move the current line up or down. Vix-owned code, held to
-//! the crate's `clippy::pedantic`.
+//! Line operations on [`Editor`]: move the current line up or down (including
+//! collapsed folds as one unit), join lines, and the "lines in range" family
+//! (sort, reverse, shuffle, de-duplicate, trim trailing whitespace). Vix-owned
+//! code, held to the crate's `clippy::pedantic`.
+//!
+//! All operations share one strategy: read the whole buffer, split it into
+//! lines (setting aside a final newline so it stays last), transform the line
+//! vector, and write the whole text back as **one** undoable edit via
+//! `replace_all` / `move_line`. That is simple and keeps undo atomic at the cost
+//! of rewriting the buffer; these are explicit user commands, not a hot path.
+//! "Range" means the selection's line span, or the whole buffer when there is
+//! no selection. See `crates/vix-editor-core/spec/index.md`.
 
 use crate::editor::Editor;
 
@@ -20,9 +30,12 @@ impl Editor {
 
     /// Join the current line with the next, or — when the selection spans
     /// several lines — join all of them into one. Adjacent lines are merged with
-    /// a single space, trimming the trailing space of each line and the leading
-    /// space of the next. Records one undoable edit. No-op when there is nothing
-    /// to join (a single line with no line below it).
+    /// a single space: the first line's trailing whitespace and each following
+    /// line's leading whitespace are trimmed (a later line's own trailing
+    /// whitespace is kept), and no space is added next to an empty side.
+    /// Records one undoable edit and leaves the cursor at the seam after the
+    /// first line's content. No-op when there is nothing to join (a single line
+    /// with no line below it).
     pub fn join_lines(&mut self) {
         let text = {
             let code = self.code_ref();
@@ -75,6 +88,10 @@ impl Editor {
     /// Sort the selected lines ascending (byte order), or the whole buffer when
     /// nothing is selected. Records one undoable edit. No-op on fewer than two
     /// lines in range.
+    ///
+    /// Unlike the other range operations, an *empty* selection (a bare caret
+    /// that still counts as `Some`) is treated as a one-line range, so it does
+    /// nothing rather than sorting the whole buffer.
     pub fn sort_lines(&mut self) {
         let text = {
             let code = self.code_ref();
@@ -130,6 +147,7 @@ impl Editor {
     }
 
     /// Randomly reorder the lines in range (Fisher–Yates, seeded from the OS).
+    /// Not reproducible by design; the pure `shuffle` helper is what tests pin.
     pub fn shuffle_lines(&mut self) {
         let seed = random_seed();
         self.edit_line_range(|lines| shuffle(lines, seed));
@@ -153,6 +171,8 @@ impl Editor {
             let code = self.code_ref();
             code.slice(0, code.len_chars())
         };
+        // `split('\n')` yields a trailing empty piece for a final newline;
+        // drop it and restore the newline after the transform.
         let had_final_newline = text.ends_with('\n');
         let mut lines: Vec<&str> = text.split('\n').collect();
         if had_final_newline {
@@ -174,6 +194,8 @@ impl Editor {
         if had_final_newline {
             new_text.push('\n');
         }
+        // Char offset of the range start: each earlier line plus its `\n`
+        // (offsets are in chars, not bytes).
         let offset: usize = lines[..a].iter().map(|l| l.chars().count() + 1).sum();
         self.replace_all(&new_text, offset);
     }
@@ -202,7 +224,8 @@ impl Editor {
     }
 
     /// Replace the whole buffer with `new_text` and put the caret at `cursor`,
-    /// as one undoable edit that clears the selection.
+    /// as one undoable edit that clears the selection. The undo state records
+    /// the old cursor and selection so undo restores them exactly.
     fn replace_all(&mut self, new_text: &str, cursor: usize) {
         let old_cursor = self.cursor;
         let len = self.code_ref().len_chars();
@@ -219,6 +242,10 @@ impl Editor {
         self.reset_highlight_cache();
     }
 
+    /// Shared body of [`Editor::move_line_up`] / [`Editor::move_line_down`]:
+    /// swap the cursor's block (the line, or the whole collapsed fold it heads)
+    /// with the adjacent block, keeping the cursor column (clamped) and moving
+    /// other collapsed folds inside the swapped region along with their lines.
     fn move_line(&mut self, down: bool) {
         let cursor = self.cursor;
         let text = {
@@ -324,6 +351,7 @@ impl Editor {
 }
 
 /// A 64-bit seed from the OS RNG (falls back to a fixed seed if unavailable).
+/// A failing RNG must not make the command fail, only make it less random.
 fn random_seed() -> u64 {
     let mut buf = [0u8; 8];
     if getrandom::fill(&mut buf).is_err() {
@@ -336,6 +364,7 @@ fn random_seed() -> u64 {
 /// Pure (seed in, permutation out) so it is deterministic and unit-testable.
 fn shuffle(lines: &[&str], seed: u64) -> Vec<String> {
     let mut v: Vec<String> = lines.iter().map(|l| (*l).to_string()).collect();
+    // xorshift has an all-zero fixed point, so a zero seed would never move.
     let mut state = if seed == 0 {
         0x9E37_79B9_7F4A_7C15
     } else {
@@ -346,6 +375,8 @@ fn shuffle(lines: &[&str], seed: u64) -> Vec<String> {
         state ^= state << 13;
         state ^= state >> 7;
         state ^= state << 17;
+        // Modulo bias is negligible for line counts and irrelevant to a
+        // shuffle command.
         let j = usize::try_from(state % (i as u64 + 1)).unwrap_or(0);
         v.swap(i, j);
     }

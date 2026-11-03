@@ -1,4 +1,21 @@
+//! Small pure helpers shared by the editor: extension/shebang language
+//! detection, per-language indent and comment conventions, indent counting, hex
+//! colour parsing and end-position arithmetic. Language names here are the
+//! Tree-sitter grammar keys used by [`crate::code`]. See
+//! `crates/vix-editor-core/spec/index.md`.
+
 /// Return the language name inferred from a filename's extension, or `"unknown"`.
+///
+/// Only the final extension is consulted (case-sensitive); the names returned
+/// are grammar keys, e.g. `"c_sharp"` for `.cs`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::utils::get_lang;
+/// assert_eq!(get_lang("src/main.rs"), "rust");
+/// assert_eq!(get_lang("Makefile"), "unknown");
+/// ```
 #[must_use]
 pub fn get_lang(filename: &str) -> String {
     let extension = std::path::Path::new(filename)
@@ -30,6 +47,17 @@ pub fn get_lang(filename: &str) -> String {
 
 /// Like [`get_lang`], but a file with no extension falls back to its `#!` line,
 /// so `#!/usr/bin/env python3` reads as Python (T658).
+///
+/// A file with *any* extension never consults the shebang, even if the
+/// extension is unrecognized.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::utils::get_lang_for;
+/// assert_eq!(get_lang_for("run", "#!/usr/bin/env python3\n"), "python");
+/// assert_eq!(get_lang_for("notes.txt", "#!/bin/sh\n"), "unknown");
+/// ```
 #[must_use]
 pub fn get_lang_for(filename: &str, text: &str) -> String {
     let lang = get_lang(filename);
@@ -60,6 +88,18 @@ pub fn shebang_lang(first_line: &str) -> Option<&'static str> {
 }
 
 /// Return the default indentation string for a language (spaces or a tab).
+///
+/// Four spaces for the languages listed, a tab for Go and C#, two spaces
+/// otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::utils::indent;
+/// assert_eq!(indent("rust"), "    ");
+/// assert_eq!(indent("go"), "\t");
+/// assert_eq!(indent("yaml"), "  ");
+/// ```
 #[must_use]
 pub fn indent(lang: &str) -> String {
     match lang {
@@ -72,6 +112,17 @@ pub fn indent(lang: &str) -> String {
 }
 
 /// Return the line-comment prefix for a language (e.g. `"//"`, `"#"`, `"--"`).
+///
+/// Unknown languages fall back to `"//"`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::utils::comment;
+/// assert_eq!(comment("python"), "#");
+/// assert_eq!(comment("sql"), "--");
+/// assert_eq!(comment("rust"), "//");
+/// ```
 #[must_use]
 pub fn comment(lang: &str) -> &'static str {
     match lang {
@@ -82,6 +133,12 @@ pub fn comment(lang: &str) -> &'static str {
 }
 
 /// Count how many whole `indent_unit` strings prefix `line`, up to `max_col` columns.
+///
+/// Only *complete* units count: a partial trailing unit (e.g. three spaces
+/// with a four-space unit) is ignored. `max_col`, when given, stops counting
+/// once that many characters have been consumed (the check happens after each
+/// whole unit, so the result can overshoot `max_col` by less than one unit). An
+/// empty `indent_unit` yields `0`.
 #[must_use]
 pub fn count_indent_units(
     line: ropey::RopeSlice<'_>,
@@ -127,6 +184,17 @@ pub fn rgb(hex: &str) -> (u8, u8, u8) {
 
 /// Calculate end position by walking through the text
 /// Returns (`end_row`, `end_col`) starting from (`start_row`, `start_col`)
+///
+/// Columns count `char`s (not bytes or graphemes); each `'\n'` bumps the row
+/// and resets the column to 0.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::utils::calculate_end_position;
+/// assert_eq!(calculate_end_position(2, 4, "ab"), (2, 6));
+/// assert_eq!(calculate_end_position(2, 4, "ab\ncde"), (3, 3));
+/// ```
 #[must_use]
 pub fn calculate_end_position(start_row: usize, start_col: usize, text: &str) -> (usize, usize) {
     let mut end_row = start_row;

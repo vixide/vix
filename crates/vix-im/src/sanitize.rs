@@ -23,11 +23,23 @@
 //! The output never contains a control character (other than `'\n'` from
 //! [`sanitize_multiline`]), never contains `ESC`, never contains one of the
 //! listed bidi controls, and sanitizing it again changes nothing.
+//!
+//! [`crate::Message::sanitize`], [`crate::Conversation::new`],
+//! [`crate::Inbox::push`] and the history and thread decoders all call this
+//! module, so no received string reaches the App unfiltered.
+//!
+//! ```
+//! use vix_im::{sanitize, sanitize_multiline};
+//! assert_eq!(sanitize("a\u{1b}[31mred\u{1b}[0m\tb"), "ared    b");
+//! assert_eq!(sanitize_multiline("x\r\ny"), "x\ny");
+//! ```
 
 /// How many spaces a received tab becomes.
 pub const TAB_SPACES: usize = 4;
 
+/// The escape character that introduces most terminal control sequences.
 const ESC: char = '\u{1b}';
+/// Terminates an OSC string (the legacy alternative to `ST`).
 const BEL: char = '\u{07}';
 /// The C1 String Terminator.
 const ST: char = '\u{9c}';
@@ -40,6 +52,9 @@ pub fn is_bidi_control(c: char) -> bool {
 }
 
 /// Sanitize one line of received text: line breaks become a space.
+///
+/// Use this for nicks, topics, titles and message bodies; use
+/// [`sanitize_multiline`] only where line structure is meaningful.
 #[must_use]
 pub fn sanitize(text: &str) -> String {
     run(text, false)
@@ -61,6 +76,9 @@ enum StringKind {
     Control,
 }
 
+/// The one-pass filter behind [`sanitize`] and [`sanitize_multiline`]. It
+/// never fails: malformed or truncated escape sequences are consumed up to
+/// the end of input rather than leaked.
 fn run(text: &str, keep_newlines: bool) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
@@ -68,6 +86,7 @@ fn run(text: &str, keep_newlines: bool) -> String {
         match c {
             '\t' => out.extend(std::iter::repeat_n(' ', TAB_SPACES)),
             '\r' | '\n' => {
+                // Fold `\r\n` into one break, not two.
                 if c == '\r' && chars.peek() == Some(&'\n') {
                     chars.next();
                 }
@@ -79,6 +98,7 @@ fn run(text: &str, keep_newlines: bool) -> String {
             '\u{90}' | '\u{98}' | '\u{9e}' | '\u{9f}' => {
                 skip_string(&mut chars, StringKind::Control);
             }
+            // Drop every other control (C0/C1/DEL) and the bidi overrides.
             c if c.is_control() || is_bidi_control(c) => {}
             c => out.push(c),
         }
@@ -86,6 +106,7 @@ fn run(text: &str, keep_newlines: bool) -> String {
     out
 }
 
+/// The shared, peekable character stream the escape skippers consume.
 type Chars<'a> = std::iter::Peekable<std::str::Chars<'a>>;
 
 /// Skip what follows an `ESC` (already consumed).

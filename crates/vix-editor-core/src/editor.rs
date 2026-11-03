@@ -1,3 +1,17 @@
+//! The editor widget's state: [`Editor`] owns the [`Code`] buffer, the cursor
+//! and selection, scroll offsets, the syntax theme, and every decoration
+//! channel the host can feed it (search marks, spell/diagnostic underlines,
+//! gutter signs, folds, inlay hints, semantic tokens, filler rows, ...).
+//!
+//! This file is the state and the plain accessors/setters. Behaviour lives in
+//! sibling modules that add `impl Editor` blocks: [`crate::editor_input`] (keys
+//! and mouse), [`crate::named`] (named actions), [`crate::render`] and the
+//! private `wrap` module (drawing), the private `brackets` and `lines`
+//! modules, and [`crate::multicursor`]/[`crate::remote`]. Cursor, selection and
+//! all range arguments are *character* offsets into the rope. Rendering is
+//! `&self` only, so caches the renderer fills sit behind `Cell`/`RefCell`. See
+//! `crates/vix-editor-core/spec/index.md`.
+
 use crate::actions::Action;
 use crate::click::{ClickKind, ClickTracker};
 use crate::code::Code;
@@ -13,11 +27,13 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time::Duration;
 
-// keyword and ratatui style
+/// Syntax theme: tree-sitter capture name (keyword) to ratatui style.
 type Theme = HashMap<String, Style>;
-// start byte, end byte, style
+/// One highlighted span: start byte, end byte, style. (The identifier's
+/// spelling is historical.)
 type Hightlight = (usize, usize, Style);
-// start offset, end offset
+/// Memo of highlight results keyed by the `(start, end)` range queried, so a
+/// frame that re-asks for the same viewport does not re-run Tree-sitter.
 type HightlightCache = HashMap<(usize, usize), Vec<Hightlight>>;
 
 bitflags::bitflags! {
@@ -261,6 +277,9 @@ impl Editor {
         Ok(Self::with_code(code, theme))
     }
 
+    /// Shared constructor tail: wrap an already-built [`Code`] with default
+    /// editor state (cursor 0, no selection, 700 ms multi-click window, empty
+    /// decoration channels) and the converted theme.
     fn with_code(code: Code, theme: Vec<(&str, &str)>) -> Self {
         let theme = Self::build_theme(theme);
         let highlights_cache = RefCell::new(HashMap::new());
@@ -350,6 +369,8 @@ impl Editor {
         self.selection_style = style;
     }
 
+    /// Width in cells of the gutter: line-number digits (at least 5) plus the
+    /// left padding when line numbers are shown, otherwise just the padding.
     pub(crate) fn get_line_number_width(&self) -> usize {
         if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
             let total_lines = self.code.len_lines();
@@ -702,6 +723,8 @@ impl Editor {
         }
     }
 
+    /// Convert the host's `(capture name, "#RRGGBB")` pairs into foreground-only
+    /// ratatui styles; malformed hex degrades to black via [`utils::rgb`].
     fn build_theme(theme: Vec<(&str, &str)>) -> Theme {
         theme
             .into_iter()
@@ -1577,6 +1600,8 @@ mod tests {
         assert_eq!(e.get_content(), "ac");
     }
 
+    /// Time-travel is refused while a collaboration edit log is active, since
+    /// jumping history would desynchronize the log from the buffer.
     #[test]
     fn goto_undo_state_refuses_while_shared() {
         let mut e = Editor::new("text", "x", Vec::new()).unwrap();

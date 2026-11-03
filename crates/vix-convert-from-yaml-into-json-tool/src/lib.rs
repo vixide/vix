@@ -2,11 +2,26 @@
 //!
 //! The YAML document is parsed into a generic value and re-serialized as
 //! pretty-printed JSON, so scalars, sequences and mappings all carry over.
+//!
+//! Parsing goes through `serde_norway` (a maintained fork of `serde_yaml`)
+//! into a `serde_json::Value`, so anything JSON cannot express does not
+//! survive the trip. Errors use the shared
+//! [`vix_convert_tabular::ConvertError`] type so the host reports every
+//! converter's failures uniformly.
+//!
+//! Spec: `crates/vix-convert-from-yaml-into-json-tool/spec/index.md`.
 
-/// Convert YAML `input` to pretty-printed JSON.
+/// Convert YAML `input` to pretty-printed JSON (two-space indent, no trailing
+/// newline).
 ///
 /// # Errors
 /// Returns an error when the input is not valid YAML.
+///
+/// # Examples
+/// ```
+/// let json = vix_convert_from_yaml_into_json_tool::convert("- 1\n- 2\n").unwrap();
+/// assert_eq!(json, "[\n  1,\n  2\n]");
+/// ```
 pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     let value: serde_json::Value = serde_norway::from_str(input)
         .map_err(|e| vix_convert_tabular::ConvertError::parse("YAML", e))?;

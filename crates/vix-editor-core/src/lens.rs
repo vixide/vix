@@ -5,13 +5,22 @@
 //! row per lensed, visible line. That mapping lives here ([`Editor::view_rows`]
 //! for the classic no-wrap view, `wrap.rs`'s `visual_rows` for soft wrap) so
 //! every render layer, the cursor scroll and mouse hit-testing agree on it.
+//!
+//! The same no-wrap layout also carries the other virtual rows: folded-away
+//! lines are skipped and blank *filler* rows (T671, used to line up side-by-side
+//! diffs) are inserted; see [`ViewRow`]. Soft-wrap mode builds its own layout
+//! in `wrap.rs`, which handles lens rows but not fillers
+//! ([`Editor::filler_before`] is `0` there) and does not consult folds.
+//! See `crates/vix-editor-core/spec/index.md`.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 
 use crate::editor::{Editor, Flags};
 
-/// One screen row of the no-wrap view.
+/// One screen row of the no-wrap view. A view is a `Vec<ViewRow>` top to
+/// bottom; for a lensed line the order is filler rows, then its lens row, then
+/// its text row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ViewRow {
     /// The virtual lens row above logical line `.0`.
@@ -29,9 +38,12 @@ impl Editor {
     /// sorted by line. An empty list removes every lens row.
     pub fn set_code_lenses(&mut self, lenses: Vec<(usize, String)>) {
         let mut lenses = lenses;
+        // Stable sort: labels on one line keep the caller's order when merged
+        // below. The result stays sorted because `code_lens_at` binary-searches.
         lenses.sort_by_key(|l| l.0);
         let mut merged: Vec<(usize, String)> = Vec::with_capacity(lenses.len());
         for (line, label) in lenses {
+            // An empty label would draw an empty row; drop it.
             if label.is_empty() {
                 continue;
             }
@@ -73,8 +85,14 @@ impl Editor {
     /// The no-wrap layout: up to `max_rows` screen rows from the top of the
     /// view, skipping folded-away lines and inserting a lens row before each
     /// visible lensed line.
+    ///
+    /// Folding hides a fold's body lines but not the header, and fillers sit
+    /// before the line they precede even when that line is the first visible
+    /// one. `max_rows` caps the work to roughly one screenful.
     pub(crate) fn view_rows(&self, max_rows: usize) -> Vec<ViewRow> {
         let total = self.code.len_lines();
+        // At most one text row plus one lens row per line, so `2 * total`
+        // bounds the allocation when the view is taller than the buffer.
         let mut rows = Vec::with_capacity(max_rows.min(total.saturating_mul(2)));
         let mut line = self.offset_y;
         while line < total && rows.len() < max_rows {
@@ -131,6 +149,7 @@ impl Editor {
         if line < self.offset_y || line >= self.code.len_lines().max(1) {
             return None;
         }
+        // Fast path: with no virtual rows or folds, rows map 1:1 to lines.
         if !self.has_folds() && self.code_lenses.is_empty() && self.fillers.is_empty() {
             return Some(line - self.offset_y);
         }
@@ -143,6 +162,8 @@ impl Editor {
                 .map(|l| 1 + usize::from(self.lens_row_above(l)) + self.filler_before(l))
                 .sum()
         } else {
+            // Only lenses (sorted by line): count those in
+            // `[offset_y, line)` by binary search instead of walking lines.
             let lo = self.code_lenses.partition_point(|l| l.0 < self.offset_y);
             let hi = self.code_lenses.partition_point(|l| l.0 < line);
             (line - self.offset_y) + (hi - lo)
@@ -193,6 +214,7 @@ impl Editor {
             .chars()
             .take_while(|c| *c == ' ' || *c == '\t')
             .count();
+        // Follow horizontal scroll so the label stays above its line's text.
         let indent = indent.saturating_sub(self.offset_x);
         let x = text_x.saturating_add(u16::try_from(indent).unwrap_or(u16::MAX));
         if x >= right {

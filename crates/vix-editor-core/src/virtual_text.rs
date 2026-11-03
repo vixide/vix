@@ -6,6 +6,13 @@
 //! the view's right edge. Inline diagnostics (T614) are the first producer;
 //! inline debugger values (T617) and color swatches (T620) add layers of their
 //! own, so no producer ever clobbers another's text.
+//!
+//! Storage is `Editor::eol_texts`: a `Vec<(VirtualTextLayer, Vec<EolText>)>`
+//! kept sorted by layer (the derived `Ord` is declaration order), so drawing
+//! it front to back yields the documented left-to-right layer order. The text
+//! is never part of the rope, so it cannot be selected, searched or saved; the
+//! cursor never lands on it. Drawing happens from the line renderers in
+//! [`crate::render`]. See `crates/vix-editor-core/spec/index.md`.
 
 use crate::code::{RopeGraphemes, grapheme_width_and_chars_len};
 use crate::editor::Editor;
@@ -64,6 +71,20 @@ impl EolText {
 
 /// `text`'s first line with tabs as spaces and other control characters
 /// dropped, cut to at most `avail` display columns. A cut text ends in `…`.
+///
+/// Widths are terminal display columns, not chars: a wide glyph that would
+/// straddle the cut is dropped whole, and the `…` itself reserves one column.
+/// `avail == 0` yields an empty string.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::virtual_text::truncate_to_width;
+///
+/// assert_eq!(truncate_to_width("abc", 5), "abc");
+/// assert_eq!(truncate_to_width("abcdef", 4), "abc\u{2026}");
+/// assert_eq!(truncate_to_width("one\ntwo", 10), "one");
+/// ```
 #[must_use]
 pub fn truncate_to_width(text: &str, avail: usize) -> String {
     let clean: Vec<char> = text
@@ -98,7 +119,13 @@ pub fn truncate_to_width(text: &str, avail: usize) -> String {
 impl Editor {
     /// Set `layer`'s end-of-line virtual text, replacing what it had; an empty
     /// list removes the layer. Other layers are untouched.
+    ///
+    /// The layer vector stays sorted by [`VirtualTextLayer`] so the binary
+    /// search below is valid and draw order is deterministic regardless of
+    /// which producer reports first.
     pub fn set_eol_texts(&mut self, layer: VirtualTextLayer, texts: Vec<EolText>) {
+        // Empty lists never get stored: `has_eol_texts` and the draw loop can
+        // then treat "layer present" and "has text" alike.
         let at = self.eol_texts.binary_search_by_key(&layer, |(l, _)| *l);
         match (at, texts.is_empty()) {
             (Ok(i), true) => {
@@ -135,6 +162,8 @@ impl Editor {
     /// end (tabs count as drawn, one column).
     pub(crate) fn line_width_from(&self, line_idx: usize, from_col: usize) -> usize {
         let code = self.code_ref();
+        // `from_col` is clamped so a stale scroll offset past the line end
+        // yields width 0 instead of an out-of-range slice.
         let start = code.line_to_char(line_idx);
         let len = code.line_len(line_idx);
         let slice = code.char_slice(start + from_col.min(len), start + len);
@@ -163,17 +192,23 @@ impl Editor {
             .filter(|t| t.line == line_idx);
         for t in texts {
             x += GAP;
+            // Out of room: later texts on this line start even further right,
+            // so stop rather than skip.
             if x >= right {
                 return;
             }
             let shown = truncate_to_width(&t.text, right - x);
             if shown.is_empty() {
+                // Nothing drawable (e.g. all control chars): the gap is kept
+                // but no column is consumed by text.
                 continue;
             }
             let mut style = self.whitespace_style.add_modifier(Modifier::DIM);
             if let Some(color) = t.color {
                 style = style.fg(color);
             }
+            // Terminal columns are `u16`; a larger absolute column means the
+            // view is off-screen anyway.
             let Ok(x16) = u16::try_from(x) else {
                 return;
             };

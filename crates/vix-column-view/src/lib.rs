@@ -24,6 +24,18 @@
 //!   enforced — `e` can type any value, matching this codebase's general
 //!   "trust the user" convention for other free-text Org fields; `n`/`p`/
 //!   digit-select are the constrained-cycle affordances instead.
+//!
+//! Layering: this crate is pure state + key handling (no rendering, no I/O).
+//! The Org parsing and rewriting it leans on — resolving the `COLUMNS` format,
+//! building the summary table, applying a cell edit, moving subtrees — all live
+//! in `vix_org`; the overlay is drawn by `src/ui/` in the root app crate.
+//!
+//! Key invariant: every operation that rewrites the buffer text must call
+//! `relocate_anchor` *before* replacing `*text` and then `rebuild_rows`, so the
+//! view keeps pointing at the same subtree even when lines shift, and the
+//! selection is clamped to the rebuilt table.
+//!
+//! Spec: `crates/vix-column-view/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -38,8 +50,9 @@ use vix_org::{
 pub enum Outcome {
     /// The key was handled internally; nothing further for the host to do.
     Consumed,
-    /// The user asked to close the overlay (`q`/Esc, or `C-c C-c` off a
-    /// checkbox-shaped field).
+    /// The user asked to close the overlay (`q`/Esc, or `C-c C-c` on a field
+    /// that is *not* checkbox-shaped; on a checkbox field `C-c C-c` toggles it
+    /// and returns [`Outcome::Consumed`] instead).
     Close,
     /// `S-M-Right`: the host should open a text prompt for a property name,
     /// then call [`ColumnView::insert_column_before`] with the answer.
@@ -61,16 +74,28 @@ enum Mode {
 /// in-session — columns can be inserted/deleted/reordered/resized), the
 /// current display table, and the selected field.
 pub struct ColumnView {
+    /// The resolved column format; mutated in-session by insert/delete/move
+    /// column and by allowed-value edits (never written back as a `COLUMNS`
+    /// line).
     spec: ColumnsSpec,
+    /// The current display table, rebuilt from the buffer text after every edit.
     rows: Vec<ColumnRow>,
+    /// Selected data row (index into `rows`).
     row: usize,
+    /// Selected column (index into `spec.columns`).
     col: usize,
     /// Per-column signed width delta layered on top of [`ColumnDef::width`]
     /// (or the auto-width the renderer computes from content) for `<`/`>`.
     width_overrides: Vec<i32>,
+    /// Which key table is active (navigation vs. one of the two edit modes).
     mode: Mode,
+    /// Text being typed in [`Mode::Edit`] / [`Mode::EditAllowed`]; empty otherwise.
     edit_buf: String,
+    /// Today as `(year, month, day)`, passed in by the host so the crate stays
+    /// clock-free and deterministic; used for age and `CLOCKSUM_T` columns.
     today: (i32, u32, u32),
+    /// The buffer's file name, for the `%FILE` special property (`None` for an
+    /// unsaved buffer).
     file_name: Option<String>,
     /// The line originally governing the view's scope, re-resolved after
     /// every buffer edit (see [`ColumnView::relocate_anchor`]) so a property
@@ -310,6 +335,8 @@ impl ColumnView {
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
 
+        // `C-c C-c` is a two-key chord: the first `C-c` only arms
+        // `pending_ctrl_c`; any other key below disarms it.
         if ctrl && key.code == KeyCode::Char('c') {
             if self.pending_ctrl_c {
                 self.pending_ctrl_c = false;
@@ -320,6 +347,8 @@ impl ColumnView {
         }
         self.pending_ctrl_c = false;
 
+        // Arm order matters: the modified-arrow guards (alt+shift, alt, shift)
+        // must precede the plain-arrow arms or those would swallow them.
         match key.code {
             KeyCode::Left if alt && shift => self.delete_column(text),
             KeyCode::Right if alt && shift => return Outcome::NeedsColumnPrompt,
@@ -342,6 +371,7 @@ impl ColumnView {
                 }
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
+                // `0` selects the 10th entry, mirroring Org's `1`..`9`,`0`.
                 let n = c.to_digit(10).unwrap_or(0);
                 self.jump_allowed(text, if n == 0 { 10 } else { n as usize });
             }
@@ -375,6 +405,7 @@ impl ColumnView {
         if !looks_checkbox {
             return Outcome::Close;
         }
+        // Checked -> unchecked; unchecked, partial `[-]` or empty -> checked.
         let new_value = if raw.trim() == "[X]" { "[ ]" } else { "[X]" };
         self.commit_value(text, new_value);
         Outcome::Consumed
@@ -444,6 +475,8 @@ impl ColumnView {
         }
         let current = self.current_raw_value();
         let idx = list.iter().position(|v| *v == current);
+        // A current value not in the list starts the cycle at the first entry
+        // in either direction.
         let next = match idx {
             Some(i) if forward => (i + 1) % list.len(),
             Some(i) => (i + list.len() - 1) % list.len(),
@@ -697,6 +730,10 @@ fn write_file_level_property(text: &str, name: &str, value: &str) -> String {
         .unwrap_or(lines.len());
     let entry = format!(":{name}: {value}");
     let needle = format!(":{}:", name.to_ascii_lowercase());
+    // Scan only the preamble (before the first headline) for an existing
+    // `:PROPERTIES:` drawer; update the property in place if present, else
+    // insert it before `:END:`. With no drawer, one is created at the top of
+    // the headline boundary below.
     let mut i = 0;
     while i < first_headline {
         if lines[i].trim().eq_ignore_ascii_case(":PROPERTIES:")

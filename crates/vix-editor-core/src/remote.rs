@@ -3,7 +3,7 @@
 //! knowing about the network.
 //!
 //! - [`Editor::start_edit_log`](crate::editor::Editor::start_edit_log) / [`Editor::take_edit_log`](crate::editor::Editor::take_edit_log) report every local
-//!   content change as a [`Splice`](crate::code::Splice), including whole-buffer
+//!   content change as a [`Splice`], including whole-buffer
 //!   replacement. The collaboration layer feeds them to its CRDT.
 //! - [`Editor::apply_remote_edits`](crate::editor::Editor::apply_remote_edits) replays another participant's splices,
 //!   keeps the local cursor, selection and extra carets on their characters,
@@ -17,6 +17,12 @@
 //! result here with [`Editor::apply_remote_edits`](crate::editor::Editor::apply_remote_edits). To make that safe, this
 //! editor's own Undo and Redo do nothing while the edit log is on
 //! ([`Editor::is_edit_logging`](crate::editor::Editor::is_edit_logging)).
+//!
+//! The pure offset arithmetic lives in [`transform_offset`]; everything that
+//! keeps the cursor, selection and extra carets "on their characters" is
+//! built from it. Remote carets are drawn in [`crate::render`]'s pass between
+//! the local selection and the local cursor. The CRDT and transport are not
+//! here: see the Cowork crates and `crates/vix-editor-core/spec/index.md`.
 
 pub use crate::code::Splice;
 use crate::editor::Editor;
@@ -37,17 +43,40 @@ pub struct RemoteCaret {
 
 /// Where a character offset ends up after `edits` are applied in order. An
 /// insertion exactly at the offset leaves it in front of the new text.
+///
+/// Each [`Splice`] is interpreted against the buffer as it stood after the
+/// previous one (offsets are not all relative to the original text). A
+/// position inside a deleted range collapses to the start of that range.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::remote::{Splice, transform_offset};
+///
+/// let insert = |offset, text: &str| Splice { offset, delete: 0, insert: text.to_string() };
+/// // Text inserted before a position pushes it right...
+/// assert_eq!(transform_offset(5, &[insert(2, "abc")]), 8);
+/// // ...but an insertion exactly at the position leaves it in front.
+/// assert_eq!(transform_offset(5, &[insert(5, "abc")]), 5);
+///
+/// // A position inside a deleted range collapses to its start.
+/// let cut = Splice { offset: 2, delete: 6, insert: String::new() };
+/// assert_eq!(transform_offset(5, &[cut]), 2);
+/// ```
 #[must_use]
 pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
     for e in edits {
+        // Deletion first, then insertion, mirroring how a splice is applied.
         if e.delete > 0 {
             let end = e.offset.saturating_add(e.delete);
             if pos >= end {
+                // Wholly after the deleted range: shift left.
                 pos -= e.delete;
             } else if pos > e.offset {
                 pos = e.offset;
             }
         }
+        // Offsets are in chars, not bytes.
         let n = e.insert.chars().count();
         if n > 0 && e.offset < pos {
             pos += n;
@@ -57,6 +86,9 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
 }
 
 /// A readable text color over `bg`: black on light colors, white on dark.
+///
+/// Non-RGB palette colors are classified by hand: the dark named colors get
+/// white text, everything else black.
 fn text_on(bg: Color) -> Color {
     match bg {
         Color::Rgb(r, g, b) => {
@@ -121,6 +153,8 @@ impl Editor {
         }
         let len = self.code.len();
         self.cursor = self.cursor.min(len);
+        // The remembered vertical-motion column is meaningless after the text
+        // under it changed.
         self.goal_col = None;
         self.reset_highlight_cache();
     }

@@ -1,10 +1,40 @@
+//! The primitive editing and movement **actions**: small structs implementing
+//! [`Action`], applied with [`Editor::apply`].
+//!
+//! Every user-visible keystroke ends up as one of these (the default key map
+//! is in [`crate::editor_input`]; the named, catalog-driven wrappers such as
+//! `Editor::cursor_left` are in [`crate::named`]). Keeping them as values gives
+//! one place where cursor, selection, goal column and undo bookkeeping are
+//! handled.
+//!
+//! Shared conventions:
+//!
+//! - **Offsets are character indices**, never bytes.
+//! - **Mutating actions are one undo step.** They follow the same shape:
+//!   read cursor/selection, `code.tx()`, `set_state_before`, edit the rope,
+//!   `set_state_after`, `commit`, then push the new cursor/selection back to the
+//!   editor and reset the highlight cache. The saved before/after states are what
+//!   `Undo`/`Redo` restore.
+//! - **Multi-line actions edit bottom to top** (`.rev()`) so earlier line
+//!   offsets stay valid while later lines change.
+//! - The goal column (`Editor::goal_col`) survives only vertical moves:
+//!   `set_cursor` clears it, which `MoveUp`/`MoveDown` re-establish.
+//!
+//! See `crates/vix-editor-core/spec/index.md` and `spec/actions.tsv`.
+
 use crate::code::EditKind;
 use crate::editor::Editor;
 use crate::selection::Selection;
 
 /// An editing operation that can be applied to an [`Editor`].
+///
+/// Implemented by the unit/field structs in this module; hand them to
+/// [`Editor::apply`]. An action takes `&mut self` only so it can be built once
+/// and applied; none of the provided actions change themselves.
 pub trait Action {
     /// Apply this action to `editor`, mutating its buffer and/or cursor state.
+    /// Actions never fail: one that has nothing to do (cursor at the buffer
+    /// edge, no selection to copy) is a silent no-op.
     fn apply(&mut self, editor: &mut Editor);
 }
 
@@ -87,6 +117,11 @@ impl Action for MoveLeft {
 /// If the previous line is shorter, the cursor is placed at the end of that line.
 /// If `shift` is true, the selection is extended to the new cursor position.
 /// If `shift` is false, the selection is cleared.
+///
+/// The column aimed for is the editor's *goal column*, remembered across a run
+/// of vertical moves, so passing through a short line does not lose the
+/// original column. On the first line it does nothing (it does not move to
+/// column 0 and does not clear the selection).
 pub struct MoveUp {
     /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
@@ -129,6 +164,8 @@ impl Action for MoveUp {
 /// If `shift` is true, the selection is extended to the new cursor position.
 /// If `shift` is false, the selection is cleared.
 ///
+/// Uses the goal column like `MoveUp`. On the last line it does nothing (it
+/// does not move to the line end).
 pub struct MoveDown {
     /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
@@ -166,6 +203,10 @@ impl Action for MoveDown {
 }
 
 /// Inserts arbitrary text at the cursor, replacing the selection if any.
+///
+/// Used for typed characters and as the building block of [`InsertNewline`].
+/// The cursor ends after the inserted text and the selection is cleared. The
+/// edit is a single undo step including the removal of the replaced selection.
 pub struct InsertText {
     /// The text to insert at the cursor.
     pub text: String,
@@ -209,7 +250,8 @@ impl Action for InsertText {
 /// Inserts a newline at the cursor with automatic indentation.
 ///
 /// The indentation is computed based on the current line and column.
-/// Delegates the actual insertion to `InsertText`.
+/// Delegates the actual insertion to [`InsertText`], so the newline and its
+/// indentation are one undo step.
 pub struct InsertNewline;
 
 impl Action for InsertNewline {
@@ -238,7 +280,10 @@ impl Action for InsertNewline {
 ///
 /// - If there is a non-empty selection, deletes the selection.
 /// - If there is no selection, deletes the previous character.
-/// - If the cursor is after indentation only, deletes the entire indentation.
+/// - If the cursor is after indentation only, deletes all of that indentation
+///   back to column 0 in one go, but only for languages that are known: with an
+///   unknown/empty language every backspace removes one character. At column 0
+///   it joins with the previous line.
 pub struct Delete;
 
 impl Action for Delete {
@@ -284,6 +329,11 @@ impl Action for Delete {
 }
 
 /// Toggles line comments on the selected lines (or the current line).
+///
+/// The marker is the language's comment string and is added or removed at
+/// **column 0** of each line (before any indentation), not after the indent.
+/// It is removed only when *every* affected line starts with the marker;
+/// otherwise it is added to every line (including blank ones).
 pub struct ToggleComment;
 
 impl Action for ToggleComment {
@@ -309,7 +359,9 @@ impl Action for ToggleComment {
         let comment_text = code.comment();
         let comment_len = comment_text.chars().count();
 
-        // 3. Determine lines to modify
+        // 3. Determine lines to modify: the rows of the selection's two ends,
+        // inclusive (so a selection ending at column 0 still counts that last
+        // line, as with `Indent`).
         let lines_to_handle = if let Some(sel) = &selection
             && !sel.is_empty()
         {
@@ -330,7 +382,8 @@ impl Action for ToggleComment {
                 && code.slice(line_start, line_start + comment_len) == comment_text
         });
 
-        // 5. Apply changes (add or remove comment)
+        // 5. Apply changes (add or remove comment), bottom line first so the
+        // character offsets of the lines still to do are not shifted.
         let mut comments_added = 0usize;
         let mut comments_removed = 0usize;
 
@@ -350,7 +403,10 @@ impl Action for ToggleComment {
             }
         }
 
-        // 6. Update cursor and selection
+        // 6. Update cursor and selection. For a forward selection the anchor
+        // is on the first line, so it shifts by one marker, while the cursor on
+        // the last line shifts by every marker added/removed before it; a
+        // backward selection swaps the roles.
         if let Some(sel) = &selection
             && !sel.is_empty()
         {
@@ -399,6 +455,11 @@ impl Action for ToggleComment {
 /// - If there is a selection, inserts indentation at the start of each selected line.
 /// - If there is no selection, inserts indentation at the current line.
 /// - Updates cursor and selection accordingly.
+///
+/// The unit inserted is the language's indent string (tab or N spaces) at
+/// column 0 of every affected line, blank lines included. This is *line*
+/// indentation even for a bare cursor: the default key map's Tab always indents
+/// the line rather than inserting a tab at the cursor.
 pub struct Indent;
 
 impl Action for Indent {
@@ -428,7 +489,9 @@ impl Action for Indent {
             vec![row]
         };
 
-        // 4. Insert indentation for each line (reverse to not shift indices)
+        // 4. Insert indentation for each line (reverse to not shift indices).
+        // Indent strings are ASCII (tab/spaces), so `len()` below equals the
+        // character count.
         let mut indents_added = 0;
         for &line_idx in lines_to_handle.iter().rev() {
             let line_start = code.line_to_char(line_idx);
@@ -472,6 +535,10 @@ impl Action for Indent {
 /// - If there is a selection, removes indentation from each selected line.
 /// - If there is no selection, removes indentation from the current line.
 /// - Updates cursor and selection accordingly.
+///
+/// Removes at most one indent unit's worth of leading whitespace per line (less
+/// if the line has less); lines with no leading indentation are left alone and
+/// do not shift the cursor.
 pub struct UnIndent;
 
 impl Action for UnIndent {
@@ -547,6 +614,8 @@ impl Action for UnIndent {
 }
 
 /// Selects the entire text in the editor.
+///
+/// Only the selection changes; the cursor stays where it is.
 pub struct SelectAll;
 
 impl Action for SelectAll {
@@ -565,6 +634,10 @@ impl Action for SelectAll {
 /// If there is a selection, it duplicates the selected text immediately after it.
 /// If there is no selection, it duplicates the entire line under the cursor,
 /// preserving the cursor's relative column position.
+///
+/// With a selection the cursor ends after the copy and the selection is
+/// cleared. On a last line with no trailing newline the copy gets a leading
+/// newline so it does not join onto the original.
 pub struct Duplicate;
 
 impl Action for Duplicate {
@@ -578,7 +651,7 @@ impl Action for Duplicate {
         code.set_state_before(cursor, selection);
 
         if let Some(sel) = &selection {
-            // Duplicate selected text
+            // Duplicate selected text (an empty selection duplicates nothing).
             let text = code.slice(sel.start, sel.end);
             let insert_pos = sel.end;
             code.insert(insert_pos, &text);
@@ -617,7 +690,9 @@ impl Action for Duplicate {
     }
 }
 
-/// Deletes the entire line under the cursor.
+/// Deletes the entire line under the cursor, including its newline, and leaves
+/// the cursor at the start of the line that took its place. A no-op on the
+/// empty last line (nothing left to delete).
 pub struct DeleteLine;
 
 impl Action for DeleteLine {
@@ -652,6 +727,10 @@ impl Action for DeleteLine {
 }
 
 /// Cuts the current selection: copies it to the clipboard and removes it from the editor.
+///
+/// With several carets it cuts every caret's selection (`Editor::multi_cut`).
+/// With no selection it does nothing; cutting the current line is the separate
+/// `Editor::cut_line` named action.
 pub struct Cut;
 
 impl Action for Cut {
@@ -692,7 +771,8 @@ impl Action for Cut {
 
 /// Copies the selected text to the clipboard.
 ///
-/// Does nothing if there is no active selection.
+/// Does nothing if there is no active selection. With several carets, every
+/// selection is copied, joined with newlines in buffer order.
 pub struct Copy;
 
 impl Action for Copy {
@@ -724,7 +804,9 @@ impl Action for Copy {
 /// Pastes text from the clipboard at the current cursor position.
 ///
 /// If a selection exists, it will be replaced by the pasted text.
-/// The pasted text is adjusted using language-specific indentation rules.
+/// The pasted text is adjusted using language-specific indentation rules
+/// (done by `Editor::paste_text`, which also handles multiple carets). A
+/// clipboard read failure is silently ignored.
 pub struct Paste;
 
 impl Action for Paste {
@@ -740,6 +822,9 @@ impl Action for Paste {
 ///
 /// Restores both the cursor position and selection state
 /// from the saved editor snapshot if available.
+///
+/// Extra carets are dropped: the history stores only the primary caret, so
+/// any other caret would point at stale offsets.
 pub struct Undo;
 
 impl Action for Undo {
@@ -765,7 +850,10 @@ impl Action for Undo {
             return;
         }
 
-        // 5. Otherwise infer cursor position from edits
+        // 5. Otherwise infer cursor position from edits. Undo inverts the
+        // batch, so an inserted range is now gone (cursor at its start) and a
+        // removed one is back (cursor after it); visited last-to-first so the
+        // first edit of the batch decides.
         for edit in batch.edits.iter().rev() {
             match &edit.kind {
                 EditKind::Insert { offset, .. } => {
@@ -782,7 +870,8 @@ impl Action for Undo {
 /// Redoes the last undone edit in the code buffer.
 ///
 /// Restores both the cursor position and selection state
-/// from the saved editor snapshot if available.
+/// from the saved editor snapshot if available. Like [`Undo`], it collapses
+/// extra carets into the primary.
 pub struct Redo;
 
 impl Action for Redo {
@@ -808,7 +897,8 @@ impl Action for Redo {
             return;
         }
 
-        // 5. Otherwise infer cursor position from edits
+        // 5. Otherwise infer cursor position from edits, replayed in order so
+        // the last edit decides.
         for edit in batch.edits {
             match &edit.kind {
                 EditKind::Insert { offset, text } => {

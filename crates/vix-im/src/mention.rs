@@ -3,6 +3,16 @@
 //! IRC servers declare how nicks compare in `ISUPPORT CASEMAPPING`; two nicks
 //! that fold to the same string are the same person. The fold applies to
 //! ASCII only (non-ASCII characters compare exactly), as in every IRC server.
+//!
+//! The mention scanner is shared by [`crate::Inbox::push`] (to classify a
+//! message as a mention) and by the panel (to highlight `@nick` spans).
+//! Owning spec: `crates/vix-im/spec/index.md`.
+//!
+//! ```
+//! use vix_im::{mentions, CaseMapping};
+//! assert!(mentions("hi @ANA!", "ana", CaseMapping::Rfc1459));
+//! assert!(!mentions("mail ana@example.org", "ana", CaseMapping::Rfc1459));
+//! ```
 
 use std::ops::Range;
 
@@ -43,7 +53,9 @@ impl CaseMapping {
         }
     }
 
-    /// Fold one character.
+    /// Fold one character. ASCII upper case always folds; the bracket
+    /// characters fold per the mapping (they are the Scandinavian letters
+    /// in IRC's original encoding, hence the odd rule).
     #[must_use]
     pub fn fold_char(self, c: char) -> char {
         match (self, c) {
@@ -62,7 +74,8 @@ impl CaseMapping {
         nick.chars().map(|c| self.fold_char(c)).collect()
     }
 
-    /// Whether two nicks name the same person.
+    /// Whether two nicks name the same person. Compares character by
+    /// character after folding, so it needs no allocation.
     #[must_use]
     pub fn nick_eq(self, a: &str, b: &str) -> bool {
         a.chars().count() == b.chars().count()
@@ -115,6 +128,8 @@ pub fn find_mentions(body: &str) -> Vec<(Range<usize>, &str)> {
     let mut found = Vec::new();
     let mut prev: Option<char> = None;
     for (at, c) in body.char_indices() {
+        // An `@` opens a mention only at a word boundary: not mid-nick (an
+        // e-mail address) and not right after another `@`.
         let starts = c == '@' && !prev.is_some_and(|p| is_nick_char(p) || p == '@');
         prev = Some(c);
         if !starts {
@@ -125,6 +140,7 @@ pub fn find_mentions(body: &str) -> Vec<(Range<usize>, &str)> {
             .char_indices()
             .find(|&(_, c)| !is_nick_char(c))
             .map_or(rest.len(), |(i, _)| i);
+        // A bare `@` with no nick characters after it is not a mention.
         if len > 0 {
             found.push((at..at + 1 + len, &rest[..len]));
         }

@@ -5,6 +5,32 @@
 //! UTF-8 is guessed with [`chardetng`]. A guess is only accepted when it
 //! decodes without errors *and* re-encodes to the exact same bytes, so saving
 //! an untouched buffer can never change the file.
+//!
+//! # How the pieces fit
+//!
+//! * [`TextEncoding`] names an encoding plus a BOM flag; it is what a tab
+//!   remembers so a save writes the file back in its original encoding.
+//! * [`detect`] is the open path (BOM, then UTF-8, then a guess);
+//!   [`decode_exact`] / [`decode_lossy`] serve the explicit "Reopen with
+//!   Encoding" chooser; [`encode`] is the save path.
+//! * The lossless invariant (decode, then re-encode, equals the input) is
+//!   enforced in exactly one place, [`decode_exact`], and everything else is
+//!   built on it.
+//!
+//! The crate is pure (bytes in, text out); the host does all file I/O.
+//!
+//! Spec: `crates/vix-encoding/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_encoding::{detect, encode, TextEncoding};
+//!
+//! let enc = TextEncoding::from_label("UTF-16LE").unwrap();
+//! let bytes = encode("hi\n", enc).unwrap();
+//! assert_eq!(&bytes[..2], b"\xFF\xFE"); // BOM first
+//! let (text, found) = detect(&bytes).unwrap();
+//! assert_eq!((text.as_str(), found), ("hi\n", enc));
+//! ```
 
 use std::borrow::Cow;
 use std::fmt;
@@ -12,18 +38,26 @@ use std::fmt;
 use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
 
 /// A file's encoding plus whether it starts with a byte-order mark.
+///
+/// The fields are private so the only constructors are [`TextEncoding::UTF8`],
+/// [`TextEncoding::from_label`] and [`sniff_bom`], all of which guarantee an
+/// encoding that [`encode`] can round-trip (no `replacement`, no stateful
+/// ISO-2022-JP) and that UTF-16 always carries a BOM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextEncoding {
     encoding: &'static Encoding,
     bom: bool,
 }
 
+/// The default is plain UTF-8 without a BOM, matching new files.
 impl Default for TextEncoding {
     fn default() -> Self {
         Self::UTF8
     }
 }
 
+/// Renders as the canonical name, plus a trailing ` BOM` when applicable
+/// (`UTF-8`, `UTF-16LE BOM`); this is the status-bar and chooser text.
 impl fmt::Display for TextEncoding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())?;
@@ -37,6 +71,10 @@ impl fmt::Display for TextEncoding {
 /// The encodings the Reopen/Save with Encoding choosers offer, by label.
 /// `ISO-8859-1` is decoded as `windows-1252`, as every browser does; the
 /// two agree on every byte outside 0x80–0x9F.
+///
+/// Every entry is accepted by [`TextEncoding::from_label`] (pinned by a test).
+/// Labels here are a curated subset: [`TextEncoding::from_label`] accepts any
+/// WHATWG label, but only these are shown in the UI.
 pub const CHOICES: &[&str] = &[
     "UTF-8",
     "UTF-8 BOM",
@@ -68,6 +106,15 @@ impl TextEncoding {
     /// with a BOM when the label ends in ` BOM`. UTF-16 always has a BOM,
     /// since without one it can't be told apart from binary. `None` for an
     /// unknown label, or one (like `replacement`) that can't round-trip.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_encoding::TextEncoding;
+    ///
+    /// assert_eq!(TextEncoding::from_label("latin1").unwrap().name(), "windows-1252");
+    /// assert!(TextEncoding::from_label("UTF-8 BOM").unwrap().has_bom());
+    /// assert!(TextEncoding::from_label("replacement").is_none());
+    /// ```
     #[must_use]
     pub fn from_label(label: &str) -> Option<Self> {
         let (name, bom) = match label.trim().strip_suffix(" BOM") {
@@ -75,6 +122,10 @@ impl TextEncoding {
             None => (label.trim(), false),
         };
         let encoding = Encoding::for_label(name.as_bytes())?;
+        // `output_encoding()` is the encoding encoding_rs actually *writes* for
+        // this one; it differs for `replacement` and `x-user-defined`, which
+        // would silently re-encode as UTF-8. UTF-16 is exempt because it is
+        // also "output as UTF-8" per WHATWG, but `encode` hand-writes it.
         if encoding.output_encoding() != encoding && !is_utf16(encoding) {
             return None; // e.g. `replacement`, `x-user-defined`
         }
@@ -106,6 +157,10 @@ impl TextEncoding {
     }
 
     /// The BOM bytes this encoding writes first (empty when it has none).
+    ///
+    /// A BOM-carrying legacy (non-Unicode) encoding cannot be built through
+    /// [`TextEncoding::from_label`] except as `"<label> BOM"`; the final arm
+    /// then writes the UTF-8 BOM, which is only meaningful for UTF-8.
     fn bom_bytes(&self) -> &'static [u8] {
         match (self.bom, self.encoding) {
             (false, _) => &[],
@@ -116,11 +171,23 @@ impl TextEncoding {
     }
 }
 
+/// Whether `encoding` is one of the two UTF-16 flavours, which `encoding_rs`
+/// can decode but not encode, so [`encode`] special-cases them.
 fn is_utf16(encoding: &'static Encoding) -> bool {
     encoding == UTF_16LE || encoding == UTF_16BE
 }
 
 /// The encoding a byte-order mark at the start of `bytes` names, if any.
+///
+/// Recognises the UTF-8, UTF-16LE and UTF-16BE marks. The returned encoding
+/// always has its BOM flag set.
+///
+/// # Examples
+/// ```
+/// let enc = vix_encoding::sniff_bom(b"\xEF\xBB\xBFhello").unwrap();
+/// assert_eq!(enc.to_string(), "UTF-8 BOM");
+/// assert!(vix_encoding::sniff_bom(b"hello").is_none());
+/// ```
 #[must_use]
 pub fn sniff_bom(bytes: &[u8]) -> Option<TextEncoding> {
     let (encoding, _) = Encoding::for_bom(bytes)?;
@@ -134,6 +201,16 @@ pub fn sniff_bom(bytes: &[u8]) -> Option<TextEncoding> {
 /// UTF-8, then a [`chardetng`] guess that decodes cleanly and round-trips
 /// byte for byte. `None` when nothing qualifies; the caller then falls back
 /// to a lossy, read-only open.
+///
+/// The returned text never includes the BOM; the BOM is remembered in the
+/// returned [`TextEncoding`] and re-emitted by [`encode`].
+///
+/// # Examples
+/// ```
+/// use vix_encoding::{detect, TextEncoding};
+///
+/// assert_eq!(detect(b"plain\n"), Some(("plain\n".to_string(), TextEncoding::UTF8)));
+/// ```
 #[must_use]
 pub fn detect(bytes: &[u8]) -> Option<(String, TextEncoding)> {
     if let Some(enc) = sniff_bom(bytes) {
@@ -142,9 +219,14 @@ pub fn detect(bytes: &[u8]) -> Option<(String, TextEncoding)> {
     if let Ok(text) = std::str::from_utf8(bytes) {
         return Some((text.to_string(), TextEncoding::UTF8));
     }
+    // Not a BOM and not valid UTF-8: ask chardetng. Deny ISO-2022-JP (stateful,
+    // never offered) and deny UTF-8 (we already know it isn't valid UTF-8).
+    // `true` marks this as the last chunk, so the detector can finalize.
     let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Deny);
     detector.feed(bytes, true);
     let encoding = detector.guess(None, chardetng::Utf8Detection::Deny);
+    // A guess is only a candidate: `from_label` may reject it, and
+    // `decode_exact` rejects it unless it round-trips byte for byte.
     let enc = TextEncoding::from_label(encoding.name())?;
     decode_exact(bytes, enc).map(|text| (text, enc))
 }
@@ -152,24 +234,53 @@ pub fn detect(bytes: &[u8]) -> Option<(String, TextEncoding)> {
 /// Decode `bytes` as `enc`, only if that is lossless: no malformed sequences,
 /// and [`encode`] gives back exactly `bytes`. A BOM must be there when `enc`
 /// has one, and is never part of the text.
+///
+/// Returns `None` (rather than an error) because callers only need to know
+/// "not losslessly decodable as `enc`", then fall back to [`decode_lossy`].
+///
+/// # Examples
+/// ```
+/// use vix_encoding::{decode_exact, TextEncoding};
+///
+/// let latin = TextEncoding::from_label("windows-1252").unwrap();
+/// assert_eq!(decode_exact(b"caf\xE9", latin).as_deref(), Some("caf\u{e9}"));
+/// // Invalid UTF-8 is not an exact UTF-8 decode.
+/// assert!(decode_exact(b"caf\xE9", TextEncoding::UTF8).is_none());
+/// ```
 #[must_use]
 pub fn decode_exact(bytes: &[u8], enc: TextEncoding) -> Option<String> {
+    // `strip_prefix` fails (`None`) when a BOM is required but absent; with an
+    // empty BOM it is a no-op.
     let body = bytes.strip_prefix(enc.bom_bytes())?;
     let text = enc
         .encoding
         .decode_without_bom_handling_and_without_replacement(body)?
         .into_owned();
+    // Round-trip check: catches decoders that map distinct byte sequences to
+    // the same text (e.g. non-canonical or overlong forms in some CJK sets),
+    // where saving would otherwise silently rewrite the file.
     (encode(&text, enc).ok()? == bytes).then_some(text)
 }
 
 /// Decode `bytes` as `enc` even if it isn't lossless (Reopen with Encoding):
 /// malformed sequences become U+FFFD. The flag is `true` when anything was
 /// replaced, so the caller can open it read-only.
+///
+/// # Examples
+/// ```
+/// use vix_encoding::{decode_lossy, TextEncoding};
+///
+/// let (text, lossy) = decode_lossy(b"caf\xE9", TextEncoding::UTF8);
+/// assert_eq!(text, "caf\u{FFFD}");
+/// assert!(lossy);
+/// ```
 #[must_use]
 pub fn decode_lossy(bytes: &[u8], enc: TextEncoding) -> (String, bool) {
     if let Some(text) = decode_exact(bytes, enc) {
         return (text, false);
     }
+    // Unlike `decode_exact`, a missing BOM is tolerated here: this path exists
+    // to open files that do not match, so it decodes whatever is there.
     let body = bytes.strip_prefix(enc.bom_bytes()).unwrap_or(bytes);
     let (text, _) = enc.encoding.decode_without_bom_handling(body);
     (text.into_owned(), true)
@@ -179,8 +290,12 @@ pub fn decode_lossy(bytes: &[u8], enc: TextEncoding) -> (String, bool) {
 /// saved in it without losing data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
+///
+/// Returned by [`encode`]; the host shows it in the save-failed message
+/// instead of writing a lossy `?`.
 pub struct Unmappable {
-    /// The first character that doesn't fit.
+    /// The first (in text order) character that doesn't fit. `U+FFFD` if the
+    /// culprit could not be isolated (never expected).
     pub ch: char,
     /// The encoding that can't hold it.
     pub encoding: TextEncoding,
@@ -206,6 +321,16 @@ impl std::error::Error for Unmappable {}
 ///
 /// [`Unmappable`] when `text` holds a character `enc` can't represent;
 /// nothing is ever replaced with `?` or an HTML entity.
+///
+/// # Examples
+/// ```
+/// use vix_encoding::{encode, TextEncoding};
+///
+/// let latin = TextEncoding::from_label("windows-1252").unwrap();
+/// assert_eq!(encode("caf\u{e9}", latin).unwrap(), b"caf\xE9");
+/// let err = encode("snow \u{2603}", latin).unwrap_err();
+/// assert_eq!(err.ch, '\u{2603}');
+/// ```
 pub fn encode(text: &str, enc: TextEncoding) -> Result<Vec<u8>, Unmappable> {
     let mut out = enc.bom_bytes().to_vec();
     if enc.encoding == UTF_8 {
@@ -222,6 +347,9 @@ pub fn encode(text: &str, enc: TextEncoding) -> Result<Vec<u8>, Unmappable> {
             });
         }
     } else {
+        // `encode` substitutes numeric character references for unmappable
+        // characters and reports `had_errors`; we treat that as a hard failure
+        // so a save can never lose data.
         let (bytes, _, had_errors) = enc.encoding.encode(text);
         if had_errors {
             let ch = first_unmappable(text, enc.encoding).unwrap_or('\u{FFFD}');
@@ -232,6 +360,9 @@ pub fn encode(text: &str, enc: TextEncoding) -> Result<Vec<u8>, Unmappable> {
     Ok(out)
 }
 
+/// Find the first character of `text` that `encoding` cannot represent, by
+/// encoding each char on its own. Only run on the (rare) error path, so the
+/// per-char cost does not matter.
 fn first_unmappable(text: &str, encoding: &'static Encoding) -> Option<char> {
     let mut buf = [0u8; 4];
     text.chars().find(|c| {

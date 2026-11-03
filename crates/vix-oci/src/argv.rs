@@ -7,6 +7,20 @@
 //! whitespace or control characters, are refused by [`check`] before any
 //! command exists. [`render`] formats a vector for the confirm prompts that
 //! precede every mutating command.
+//!
+//! The refusal rule is the crate's injection defense: because there is no
+//! shell, the only way a hostile value (an image name from a registry, a
+//! container name) could change a command is by being read as an *option*, so
+//! a leading `-` is rejected rather than escaped. A value that must legally
+//! start with `-` is not something Vix ever needs to pass. Owning spec:
+//! `crates/vix-oci/spec/index.md`.
+//!
+//! ```
+//! use vix_oci::argv;
+//! let args = argv::pull("docker.io/library/alpine:3").unwrap();
+//! assert_eq!(argv::render("docker", &args), "docker pull docker.io/library/alpine:3");
+//! assert!(argv::pull("--privileged").is_err());
+//! ```
 
 use crate::OciError;
 
@@ -91,6 +105,7 @@ pub enum ComposeOp {
 
 /// Refuse a value that is empty, starts with `-`, or contains whitespace or a
 /// control character. Used for ids, names, image references and ports.
+/// Returns the value unchanged so calls can be chained inline.
 ///
 /// # Errors
 /// [`OciError::InvalidArgument`] naming the refused value.
@@ -116,6 +131,7 @@ pub fn check_path(arg: &str) -> Result<&str, OciError> {
     Ok(arg)
 }
 
+/// A vector of owned strings from literals; keeps the builders readable.
 fn v(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|s| (*s).to_string()).collect()
 }
@@ -201,6 +217,8 @@ pub fn exec_shell(id: &str) -> Result<Vec<String>, OciError> {
 /// [`OciError::InvalidArgument`] for a bad image, name or port mapping.
 pub fn run(opts: &RunOptions) -> Result<Vec<String>, OciError> {
     let mut a = v(&["run"]);
+    // Attached runs are interactive and self-cleaning (`--rm`); detached
+    // ones persist until removed from the Containers panel.
     if opts.detach {
         a.push("-d".into());
     } else {
@@ -214,6 +232,8 @@ pub fn run(opts: &RunOptions) -> Result<Vec<String>, OciError> {
         a.push("-p".into());
         a.push(check(port)?.into());
     }
+    // The image goes last: anything after it would be the container's own
+    // command, which Vix never supplies.
     a.push(check(&opts.image)?.into());
     Ok(a)
 }
@@ -259,6 +279,8 @@ pub fn remove(kind: Kind, id: &str, force: bool) -> Result<Vec<String>, OciError
         Kind::Network => v(&["network", "rm"]),
         Kind::Pod => v(&["pod", "rm"]),
     };
+    // `network rm -f` means "ignore missing" on some engines and is
+    // rejected by others, so it is never emitted for networks.
     if force && kind != Kind::Network {
         a.push("-f".into());
     }
@@ -334,6 +356,7 @@ pub fn prune(kind: Kind) -> Result<Vec<String>, OciError> {
         Kind::Image => Ok(v(&["image", "prune", "-f"])),
         Kind::Volume => Ok(v(&["volume", "prune", "-f"])),
         Kind::Network => Ok(v(&["network", "prune", "-f"])),
+        // Podman has no `pod prune` in the form the other kinds use.
         Kind::Pod => Err(OciError::InvalidArgument("pod".into())),
     }
 }
@@ -343,6 +366,8 @@ pub fn prune(kind: Kind) -> Result<Vec<String>, OciError> {
 /// itself is what runs; this string is never executed.
 #[must_use]
 pub fn render(binary: &str, args: &[String]) -> String {
+    // POSIX single-quote style: an embedded `'` closes the quote, adds an
+    // escaped quote, and reopens (`'\''`).
     let mut out = String::from(binary);
     for a in args {
         out.push(' ');

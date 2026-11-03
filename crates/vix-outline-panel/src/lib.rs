@@ -5,6 +5,12 @@
 //! [`Outline`] of [`Entry`] rows, renders the list, and jumps to a chosen
 //! symbol's line. On open it can select the symbol nearest the cursor with
 //! [`Outline::select_nearest`].
+//!
+//! Selection and scroll arithmetic is delegated to the shared `vix_list_state`
+//! helpers (T144) so every list panel clamps identically. Entries are expected
+//! in ascending source-line order; [`Outline::select_nearest`] relies on it.
+//!
+//! Spec: `crates/vix-outline-panel/spec/index.md`.
 
 /// One outline row: a symbol's kind, name, and 1-based line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,8 +88,11 @@ impl Outline {
     }
 
     /// Select the last symbol at or before `cursor_line` (1-based) — the symbol
-    /// the cursor is currently inside. No-op when the outline is empty.
+    /// the cursor is currently inside. No-op when the outline is empty or when
+    /// the cursor is above the first symbol (the selection is left unchanged).
     pub fn select_nearest(&mut self, cursor_line: usize) {
+        // `rposition` (search from the end) because entries are in source order
+        // and the enclosing symbol is the last one starting at/before the cursor.
         if let Some(idx) = self.entries.iter().rposition(|e| e.line <= cursor_line) {
             self.selected = idx;
         }
