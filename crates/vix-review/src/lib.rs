@@ -388,6 +388,8 @@ impl Review {
     /// The comments as JSON (`{"range": .., "comments": [..]}`).
     #[must_use]
     pub fn to_json(&self) -> String {
+        // The on-disk shape of an exported review: a private DTO so the JSON
+        // format stays decoupled from `Review`'s in-memory fields.
         #[derive(Serialize)]
         struct Out<'a> {
             range: &'a str,
@@ -403,6 +405,8 @@ impl Review {
     /// Load comments saved by [`Review::to_json`] into this review. Text that
     /// does not parse leaves the review unchanged and returns `false`.
     pub fn load_json(&mut self, json: &str) -> bool {
+        // Mirror of `Out`; `default` makes a file with no `comments` key load as
+        // an empty review instead of failing.
         #[derive(Deserialize)]
         struct In {
             #[serde(default)]

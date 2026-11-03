@@ -19,6 +19,17 @@
 //! items take no input, [`v3`] and [`v5`] hash a fresh random name under the URL
 //! namespace, so each invocation yields a distinct — but correctly constructed —
 //! identifier. The deterministic core is [`v3_named`] / [`v5_named`].
+//!
+//! Every function returns the canonical 36-character hyphenated lowercase form
+//! as an owned `String`, ready to insert at the cursor. Spec:
+//! `crates/vix-uuid-tool/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! // Deterministic variants are stable across runs.
+//! assert_eq!(vix_uuid_tool::v5_named("x"), vix_uuid_tool::v5_named("x"));
+//! assert_eq!(vix_uuid_tool::v4().len(), 36);
+//! ```
 
 use uuid::Uuid;
 
@@ -28,6 +39,7 @@ fn random_node() -> [u8; 6] {
     let bytes = Uuid::new_v4().into_bytes();
     let mut node = [0u8; 6];
     node.copy_from_slice(&bytes[..6]);
+    // Multicast bit = least-significant bit of the first octet.
     node[0] |= 0x01;
     node
 }
@@ -47,7 +59,7 @@ pub fn v2() -> String {
     let mut bytes = Uuid::now_v1(&random_node()).into_bytes();
     // Low time field becomes the local domain id (Person id = 0).
     bytes[0..4].copy_from_slice(&0u32.to_be_bytes());
-    // Set the version nibble to 2.
+    // Set the version nibble to 2 (the variant bits from `now_v1` are kept).
     bytes[6] = (bytes[6] & 0x0f) | 0x20;
     // clock_seq_low carries the DCE local domain (Person = 0).
     bytes[9] = 0;

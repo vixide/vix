@@ -32,6 +32,8 @@ const PALETTE: [Rgb; 8] = [
     Rgb(0x8a, 0xa6, 0x1c),
 ];
 
+/// One sRGB channel converted to linear light, per the WCAG relative-luminance
+/// definition (the `0.03928` knee is the WCAG-published constant).
 fn channel(c: u8) -> f64 {
     let c = f64::from(c) / 255.0;
     if c <= 0.039_28 {

@@ -15,6 +15,8 @@ pub struct Subproject {
     pub relative_root: String,
 }
 
+/// Split a `/`-separated relative path into `(directory, file name)`; the
+/// directory is `""` for a file at the root.
 fn split_dir_file(path: &str) -> (&str, &str) {
     path.rsplit_once('/').unwrap_or(("", path))
 }

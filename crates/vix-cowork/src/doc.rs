@@ -120,10 +120,15 @@ fn check_shareable(text: &str, cap: usize) -> Result<(), CoworkError> {
     Ok(())
 }
 
+/// Wrap any CRDT-library error as [`CoworkError::Crdt`]. The library's error
+/// type is not part of this crate's API, so only its message is kept.
 fn crdt<E: std::fmt::Display>(e: E) -> CoworkError {
     CoworkError::Crdt(e.to_string())
 }
 
+/// Lock `m`, recovering from poisoning: the guarded edit queue is only ever
+/// appended to or drained whole, so a panic elsewhere cannot leave it half
+/// updated and propagating the poison would just wedge the collaboration.
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -153,6 +158,9 @@ fn push_edits(deltas: &[TextDelta], out: &mut Vec<BufferEdit>) {
 }
 
 impl SharedDoc {
+    /// Finish construction around an already-seeded `doc`: set the peer id, then
+    /// subscribe to text events so every change (local or imported) lands as
+    /// [`BufferEdit`]s in the shared `pending` queue for the caller to drain.
     fn build(doc: LoroDoc, me: PeerId, cap: usize) -> Result<Self, CoworkError> {
         doc.set_peer_id(me.0).map_err(crdt)?;
         let text = doc.get_text(TEXT);
@@ -361,6 +369,10 @@ impl SharedDoc {
         self.import(bytes)
     }
 
+    /// Import update `bytes` and return the buffer edits they imply. The queue is
+    /// cleared first so stale edits from an earlier failed call cannot leak in;
+    /// the size cap is checked *after* applying (the CRDT cannot be previewed),
+    /// so an over-cap result is an error the caller must treat as a rejection.
     fn import(&mut self, bytes: &[u8]) -> Result<Vec<BufferEdit>, CoworkError> {
         lock(&self.pending).clear();
         self.doc.import(bytes).map_err(crdt)?;
@@ -396,6 +408,9 @@ impl SharedDoc {
         self.revert(false)
     }
 
+    /// Shared body of [`undo`](Self::undo) / [`redo`](Self::redo): run the
+    /// per-peer undo manager, commit, and package the resulting edits with the
+    /// outgoing update so peers converge on the reversal.
     fn revert(&mut self, undo: bool) -> Result<Option<Reverted>, CoworkError> {
         lock(&self.pending).clear();
         let did = if undo {

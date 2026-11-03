@@ -486,12 +486,18 @@ impl Panel {
         p
     }
 
+    /// Replace the commit list and recompute everything derived from it: the
+    /// per-commit lane layout (over *all* commits, so lanes do not shift when a
+    /// filter hides rows) and then the filtered view.
     fn set_commits(&mut self, commits: Vec<Commit>) {
         self.commits = commits;
         self.rows = assign_lanes(&self.commits);
         self.refilter();
     }
 
+    /// Rebuild `visible` (indices into `commits`) for the current query and clamp
+    /// the selection into it. The query is lowercased once; `Commit::matches`
+    /// expects an already-lowercased needle.
     fn refilter(&mut self) {
         let q = self.query.to_lowercase();
         self.visible = self
@@ -648,6 +654,8 @@ pub fn valid_name(s: &str) -> bool {
     !s.is_empty() && !s.starts_with('-') && !s.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
+/// Run `git -C dir args...` and return its stdout. Goes through the workspace
+/// authority so a remote workspace executes git where its files live.
 #[cfg(feature = "process")]
 fn run(dir: &Path, args: &[&str]) -> Result<String, GraphError> {
     // Built by the workspace authority (T710): a remote workspace runs git

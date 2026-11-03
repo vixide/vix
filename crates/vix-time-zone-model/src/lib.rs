@@ -12,6 +12,17 @@
 //!   readers (the clock panel, status bar) query it. It defaults to UTC.
 //!
 //! The crate is pure data with no dependencies and no I/O.
+//!
+//! [`ZONES`] is sorted by name and every [`ZONES`] lookup is a linear scan; at
+//! 419 entries that is cheaper than maintaining an index. The active zone is
+//! stored as an *index* into the table (not a name) so reads are `Copy`-cheap
+//! and cannot dangle. Spec: `crates/vix-time-zone-model/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! assert_eq!(vix_time_zone_model::format_offset(-300), "UTC-05:00");
+//! assert!(vix_time_zone_model::index_of("Europe/Paris").is_some());
+//! ```
 
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -44,6 +55,8 @@ impl Zone {
 #[must_use]
 pub fn format_offset(minutes: i32) -> String {
     let sign = if minutes < 0 { '-' } else { '+' };
+    // Sign is printed separately so a negative sub-hour offset (e.g. -00:30)
+    // keeps its minus sign, which `minutes / 60` alone would lose.
     let m = minutes.abs();
     format!("UTC{sign}{:02}:{:02}", m / 60, m % 60)
 }
@@ -60,8 +73,9 @@ pub fn utc_index() -> usize {
     index_of("UTC").unwrap_or(0)
 }
 
-// The active zone: an index into `ZONES`. `None` means "not yet set" and reads
-// as UTC.
+/// The active zone: an index into `ZONES`. `None` means "not yet set" and reads
+/// as UTC. A `RwLock` (not an atomic) to mirror `vix-theme-model`'s identical
+/// pattern; accessed only through `read`/`write` so poisoning is recovered.
 static ACTIVE: RwLock<Option<usize>> = RwLock::new(None);
 
 /// Read-lock [`ACTIVE`], recovering from poisoning instead of panicking (Run
@@ -102,6 +116,8 @@ pub fn set_active(name: &str) -> bool {
 #[must_use]
 pub fn active() -> &'static Zone {
     let idx = read().unwrap_or_else(utc_index);
+    // The `min` is belt-and-braces: `set_active` only stores valid indexes, but
+    // clamping keeps this indexing infallible if the table ever shrinks.
     &ZONES[idx.min(ZONES.len() - 1)]
 }
 

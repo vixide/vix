@@ -5,6 +5,21 @@
 //! rendering, so the host draws it in whatever style it likes and the logic
 //! stays unit-testable without a terminal. The live date/time strings (local,
 //! UTC, ISO week, active zone) moved to `vix-clock-panel`.
+//!
+//! Two layers: [`month_grid`] is a pure function from a date to a Monday-first
+//! grid of day numbers; [`Calendar`] adds the keyboard cursor and the shown
+//! month on top, keeping them in lockstep (the shown month is always the month
+//! of the selected day). All date moves use saturating arithmetic so paging past
+//! `jiff`'s supported range clamps instead of panicking.
+//!
+//! # Examples
+//! ```
+//! use jiff::civil::date;
+//! let grid = vix_calendar_panel::month_grid(date(2024, 2, 10));
+//! // February 2024 (leap year) starts on a Thursday: column 3, Monday first.
+//! assert_eq!(grid.weeks[0][3], Some(1));
+//! assert_eq!(grid.weeks.last().unwrap().iter().flatten().max(), Some(&29));
+//! ```
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T566:
@@ -53,6 +68,8 @@ pub fn month_grid(month: Date) -> MonthGrid {
     let lead = usize::try_from(first.weekday().to_monday_zero_offset()).unwrap_or(0);
     let days = u8::try_from(first.days_in_month()).unwrap_or(0);
 
+    // "Today" is marked only for the real current month, so a navigated-to
+    // month shows no stray marker.
     let now = now_local().date();
     let today = (now.year() == first.year() && now.month() == first.month())
         .then_some(u8::try_from(now.day()).unwrap_or(0));
@@ -80,12 +97,14 @@ pub fn month_grid(month: Date) -> MonthGrid {
 /// [`Calendar::prev_month`] / [`Calendar::next_month`] while the date/time area
 /// keeps showing the present.
 pub struct Calendar {
-    /// First day of the month currently displayed.
+    /// First day of the month currently displayed. Invariant: always equals
+    /// `first_of_month(selected)` (restored by `sync_shown` after every move).
     shown: Date,
     /// The selected day (the keyboard cursor). The displayed month follows it.
     selected: Date,
 }
 
+/// Same as [`Calendar::new`] (the current local month, today selected).
 impl Default for Calendar {
     fn default() -> Self {
         Calendar::new()
@@ -110,6 +129,8 @@ impl Calendar {
 
     /// Move the selection by `days` (negative = earlier); the view follows.
     pub fn move_days(&mut self, days: i64) {
+        // Negative spans go through `saturating_sub` of the magnitude rather
+        // than negating a span, so the date clamps at the calendar limits.
         self.selected = if days >= 0 {
             self.selected.saturating_add(days.days())
         } else {

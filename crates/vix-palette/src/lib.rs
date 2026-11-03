@@ -121,6 +121,7 @@ pub struct Palette {
     pub selected: usize,
 }
 
+/// Same as [`Palette::new`].
 impl Default for Palette {
     fn default() -> Self {
         Palette::new()

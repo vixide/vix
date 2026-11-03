@@ -34,6 +34,8 @@ pub enum FormatError {
 }
 
 impl FormatError {
+    /// Wrap a parser's error, keeping only its message (the library error types
+    /// are not part of this crate's API).
     fn parse(format: &'static str, e: impl std::fmt::Display) -> Self {
         Self::Parse {
             format,
@@ -41,6 +43,7 @@ impl FormatError {
         }
     }
 
+    /// Wrap a serializer's error; see `parse`.
     fn render(format: &'static str, e: impl std::fmt::Display) -> Self {
         Self::Render {
             format,
@@ -49,6 +52,8 @@ impl FormatError {
     }
 }
 
+/// Displays just the underlying message (the format name is available in the
+/// variant for callers that want to prefix it).
 impl std::fmt::Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -61,6 +66,12 @@ impl std::error::Error for FormatError {}
 
 /// Pretty-print JSON with two-space indentation.
 ///
+/// # Examples
+/// ```
+/// let out = vix_format_tool::json_pretty(r#"{"a":1}"#).unwrap();
+/// assert_eq!(out, "{\n  \"a\": 1\n}");
+/// ```
+///
 /// # Errors
 /// Returns a [`FormatError`] when the input is not valid JSON.
 pub fn json_pretty(input: &str) -> Result<String, FormatError> {
@@ -70,6 +81,11 @@ pub fn json_pretty(input: &str) -> Result<String, FormatError> {
 }
 
 /// Minify JSON to its most compact single-line form.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_format_tool::json_minify("{ \"a\" : 1 }").unwrap(), "{\"a\":1}");
+/// ```
 ///
 /// # Errors
 /// Returns a [`FormatError`] when the input is not valid JSON.
