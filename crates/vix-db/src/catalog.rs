@@ -7,10 +7,32 @@
 //! folders, which expand into the objects themselves. Table details (columns,
 //! constraints, indexes, foreign keys, triggers) are fetched on demand with
 //! [`detail_sql`] and shown in the results grid.
+//!
+//! # Design notes
+//!
+//! - **State vs. SQL.** [`Tree`] and friends are pure state with no I/O; every
+//!   `*_sql` function is a pure `Kind -> SQL text` builder, so the whole module
+//!   is unit-testable without a database. Execution lives in
+//!   [`crate::session`] and the `Browser` methods that call these builders.
+//! - **One query per engine.** Each builder has a `match` over [`Kind`] because
+//!   `SQLite` (`sqlite_master` + `pragma_*` table-valued functions),
+//!   `PostgreSQL` and `MySQL` (`information_schema`) disagree about where
+//!   metadata lives. Result *shapes* are identical across engines (documented
+//!   per function) so callers never branch on the engine.
+//! - **Quoting.** Names interpolated into SQL are escaped with
+//!   [`quote_ident`], [`quote_literal`] or the private `quote_str`; the detail
+//!   builders embed names inside single-quoted literals (see the caveat on
+//!   [`detail_sql`]).
+//! - **SQLite has one schema** (`main`); its tree has a single schema row.
+//!
+//! Owning spec: `crates/vix-db/spec/index.md` ("Database Browser").
 
 use super::connect::Kind;
 
 /// The object folders under each schema.
+///
+/// The enum order (tables, views, functions) is the display order and matches
+/// [`Folder::index`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Folder {
     /// Base tables.
@@ -32,7 +54,16 @@ impl Folder {
         }
     }
 
-    /// Index into a `[T; 3]` of per-folder state.
+    /// Index into a `[T; 3]` of per-folder state (e.g.
+    /// [`Schema::folder_expanded`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::catalog::Folder;
+    /// assert_eq!(Folder::Tables.index(), 0);
+    /// assert_eq!(Folder::Functions.index(), 2);
+    /// ```
     #[must_use]
     pub fn index(self) -> usize {
         match self {
@@ -44,6 +75,9 @@ impl Folder {
 }
 
 /// A table-detail report the tree can request for the selected table.
+///
+/// Each variant maps to an engine-specific query built by [`detail_sql`]; the
+/// result is shown as-is in the results grid, so column sets differ by engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Detail {
     /// Column names, types, nullability, defaults.
@@ -78,6 +112,10 @@ pub struct Schema {
 }
 
 /// What a visible tree row points at.
+///
+/// Indices are positions in [`Tree::schemas`] and in the schema's per-folder
+/// vectors, *not* in the (possibly filtered) visible row list, so they stay
+/// valid while a search filter narrows what is shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowRef {
     /// A schema row (index into [`Tree::schemas`]).
@@ -104,6 +142,10 @@ pub struct RowView {
 }
 
 /// The schema tree: per-schema objects plus selection and scroll state.
+///
+/// The visible rows are derived on demand by [`Tree::rows`]; `sel` and
+/// `scroll` index into that derived list, so any change to expansion or the
+/// filter must re-clamp them (see [`Tree::filter_key`]).
 #[derive(Debug, Clone, Default)]
 pub struct Tree {
     /// All schemas, sorted by name.
@@ -122,6 +164,22 @@ impl Tree {
     /// Build a tree from `(schema, name, kind)` rows, where `kind` is one of
     /// `table`, `view`, `function`. The first schema and its Tables folder
     /// start expanded so the workbench opens showing something useful.
+    ///
+    /// Any `kind` other than `view` or `function` is treated as a table, and
+    /// schemas and names are sorted for a stable display.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::catalog::Tree;
+    /// let tree = Tree::from_objects(&[
+    ///     ("main".into(), "users".into(), "table".into()),
+    ///     ("main".into(), "active".into(), "view".into()),
+    /// ]);
+    /// assert_eq!(tree.table_names(), ["active", "users"]);
+    /// // schema row + Tables folder (expanded) + 1 table + collapsed Views folder
+    /// assert_eq!(tree.rows().len(), 4);
+    /// ```
     #[must_use]
     pub fn from_objects(objects: &[(String, String, String)]) -> Tree {
         let mut schemas: Vec<Schema> = Vec::new();
@@ -162,6 +220,10 @@ impl Tree {
     /// The flattened list of currently-visible rows. While a search filter is
     /// active, expansion state is ignored: every matching object is shown
     /// under its schema and folder headers.
+    ///
+    /// Empty folders are omitted, and while searching a schema with no
+    /// matching objects is dropped entirely. Search is a case-insensitive
+    /// substring match on the object name only.
     #[must_use]
     pub fn rows(&self) -> Vec<RowView> {
         let searching = !self.filter.is_empty();
@@ -179,6 +241,8 @@ impl Tree {
             if !s.expanded && !searching {
                 continue;
             }
+            // (folder, names, expanded) triples let one loop body build all
+            // three folders instead of three near-identical blocks.
             for (folder, names, expanded) in [
                 (
                     Folder::Tables,
@@ -230,7 +294,8 @@ impl Tree {
         out
     }
 
-    /// Append or erase one char of the search filter, clamping the selection.
+    /// Append (`Some`) or erase (`None`) one char of the search filter,
+    /// clamping the selection to the now-shorter row list.
     pub fn filter_key(&mut self, c: Option<char>) {
         match c {
             Some(ch) => self.filter.push(ch),
@@ -242,6 +307,9 @@ impl Tree {
     }
 
     /// Toggle (or set, when `expand` is given) the selected row's folder state.
+    /// A no-op on object rows or when nothing is selected. Operates on the
+    /// *stored* expansion flags, so it has no visible effect during a search
+    /// (which forces everything open).
     pub fn toggle(&mut self, expand: Option<bool>) {
         let rows = self.rows();
         let Some(row) = rows.get(self.sel) else {
@@ -260,7 +328,8 @@ impl Tree {
         }
     }
 
-    /// Move the selection `n` rows up or down, clamped.
+    /// Move the selection `n` rows up or down, clamped to the visible rows
+    /// (delegates the arithmetic to `vix_list_state`).
     pub fn step(&mut self, up: bool, n: usize) {
         self.sel = if up {
             vix_list_state::page_up(self.sel, n)
@@ -269,7 +338,8 @@ impl Tree {
         };
     }
 
-    /// Keep the selection within a window of `height` visible rows.
+    /// Keep the selection within a window of `height` visible rows by
+    /// adjusting [`Tree::scroll`]; the host calls this after each layout.
     pub fn ensure_visible(&mut self, height: usize) {
         self.scroll =
             vix_list_state::ensure_visible(self.sel, self.scroll, height, self.rows().len());
@@ -293,7 +363,8 @@ impl Tree {
         None
     }
 
-    /// Every table and view name (for autocomplete and details).
+    /// Every table and view name across all schemas (for autocomplete and
+    /// details), sorted and de-duplicated. Functions are excluded.
     #[must_use]
     pub fn table_names(&self) -> Vec<String> {
         let mut out = Vec::new();
@@ -307,7 +378,8 @@ impl Tree {
     }
 }
 
-/// Escape a name for embedding in a single-quoted SQL string literal.
+/// Escape a name for embedding in a single-quoted SQL string literal
+/// (doubles each `'`). Does not add the surrounding quotes.
 fn quote_str(name: &str) -> String {
     name.replace('\'', "''")
 }
@@ -338,6 +410,15 @@ fn is_plain_number(s: &str) -> bool {
 /// build a `WHERE col = <value>` clause safely. Any SQL metacharacter forces the
 /// quoted branch, so this is not an injection surface; the number check is kept
 /// strict to avoid `inf`/`nan`/exponent value confusion.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::catalog::quote_literal;
+/// assert_eq!(quote_literal("42"), "42");
+/// assert_eq!(quote_literal("O'Brien"), "'O''Brien'");
+/// assert_eq!(quote_literal("1e3"), "'1e3'");
+/// ```
 #[must_use]
 pub fn quote_literal(value: &str) -> String {
     let trimmed = value.trim();
@@ -350,6 +431,14 @@ pub fn quote_literal(value: &str) -> String {
 
 /// Quote `name` as an identifier for `kind`: backticks for `MySQL`, standard
 /// double quotes for `PostgreSQL` and `SQLite` (internal quotes doubled).
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::quote_ident, connect::Kind};
+/// assert_eq!(quote_ident(Kind::Postgres, "my\"t"), "\"my\"\"t\"");
+/// assert_eq!(quote_ident(Kind::Mysql, "t"), "`t`");
+/// ```
 #[must_use]
 pub fn quote_ident(kind: Kind, name: &str) -> String {
     match kind {
@@ -358,10 +447,23 @@ pub fn quote_ident(kind: Kind, name: &str) -> String {
     }
 }
 
-/// Rows shown by the tree's table-data preview.
+/// Rows shown by the tree's table-data preview (the `LIMIT` in
+/// [`preview_sql`]).
 pub const PREVIEW_LIMIT: usize = 200;
 
 /// A `SELECT * … LIMIT` preview of `schema`.`table`.
+///
+/// `SQLite` has a single schema, so it omits the schema qualifier.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::preview_sql, connect::Kind};
+/// assert_eq!(
+///     preview_sql(Kind::Postgres, "public", "users"),
+///     "SELECT * FROM \"public\".\"users\" LIMIT 200;"
+/// );
+/// ```
 #[must_use]
 pub fn preview_sql(kind: Kind, schema: &str, table: &str) -> String {
     let target = match kind {
@@ -375,6 +477,18 @@ pub fn preview_sql(kind: Kind, schema: &str, table: &str) -> String {
 
 /// Wrap `stmt` in the engine's EXPLAIN. `SQLite` has no ANALYZE variant of
 /// its readable plan, so both flavors use `EXPLAIN QUERY PLAN` there.
+///
+/// `EXPLAIN ANALYZE` actually *executes* the statement on `PostgreSQL`/`MySQL`,
+/// so callers must only pass `analyze = true` for statements the user has
+/// already been allowed to run (the AI validation path always passes `false`).
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::explain_sql, connect::Kind};
+/// assert_eq!(explain_sql(Kind::Postgres, "SELECT 1", true), "EXPLAIN ANALYZE SELECT 1;");
+/// assert_eq!(explain_sql(Kind::Sqlite, "SELECT 1", true), "EXPLAIN QUERY PLAN SELECT 1;");
+/// ```
 #[must_use]
 pub fn explain_sql(kind: Kind, stmt: &str, analyze: bool) -> String {
     let prefix = match (kind, analyze) {
@@ -387,6 +501,19 @@ pub fn explain_sql(kind: Kind, stmt: &str, analyze: bool) -> String {
 
 /// Whether an EXPLAIN result reports a full table scan — the plan-doctor
 /// heuristic behind the workbench's "consider an index" insight.
+///
+/// It is a text heuristic over every cell of the plan (engine-specific
+/// markers), so it can false-positive on, say, a data value `ALL` on `MySQL`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::scan_insight, connect::Kind};
+/// let scan = vec![vec!["SCAN users".to_string()]];
+/// let search = vec![vec!["SEARCH users USING INDEX i (id=?)".to_string()]];
+/// assert!(scan_insight(Kind::Sqlite, &scan));
+/// assert!(!scan_insight(Kind::Sqlite, &search));
+/// ```
 #[must_use]
 pub fn scan_insight(kind: Kind, rows: &[Vec<String>]) -> bool {
     let cells = rows.iter().flatten();
@@ -403,6 +530,10 @@ pub fn scan_insight(kind: Kind, rows: &[Vec<String>]) -> bool {
 
 /// The query listing every `(schema, name, kind)` object, where `kind` is
 /// `table`, `view`, or `function`.
+///
+/// `SQLite` reports `main` as the schema and has no functions; the server
+/// engines exclude system schemas (`MySQL` is scoped to the current database).
+/// This is the input to [`Tree::from_objects`] (via the host's row triples).
 #[must_use]
 pub fn objects_sql(kind: Kind) -> &'static str {
     match kind {
@@ -430,7 +561,8 @@ pub fn objects_sql(kind: Kind) -> &'static str {
     }
 }
 
-/// The query listing every `(table, column)` pair, for autocomplete.
+/// The query listing every `(table, column)` pair, for autocomplete, in
+/// declaration order per table.
 #[must_use]
 pub fn columns_sql(kind: Kind) -> &'static str {
     match kind {
@@ -555,6 +687,11 @@ pub fn ddl_sql(kind: Kind, schema: &str, table: &str) -> String {
 }
 
 /// The query for one table-detail report on `schema`.`table`.
+///
+/// Names are escaped for a single-quoted literal (`'` doubled) only. Table
+/// names containing a double quote can still produce a malformed query in the
+/// builders that wrap the name in `"…"` (`SQLite` stats, `PostgreSQL` size
+/// lookups); the tree only offers names the catalog itself returned.
 #[must_use]
 pub fn detail_sql(kind: Kind, detail: Detail, schema: &str, table: &str) -> String {
     let (s, t) = (quote_str(schema), quote_str(table));
@@ -672,6 +809,14 @@ pub const SQLITE_SCHEMA_SQL: &str = "SELECT m.name, m.type, p.name, p.type \
 /// The sqlx URL that opens the `SQLite` file at `path` **read-only**
 /// (`mode=ro`: the file is never created or written). `%`, `?` and `#` in
 /// the path are percent-encoded so they cannot end the path early.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// let url = vix_db::catalog::sqlite_read_only_url(Path::new("/tmp/a#b.db"));
+/// assert_eq!(url, "sqlite:///tmp/a%23b.db?mode=ro");
+/// ```
 #[must_use]
 pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
     let path = path
@@ -693,6 +838,8 @@ pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
 pub fn read_sqlite_schema(
     path: &std::path::Path,
 ) -> Result<Vec<(String, String, String, String)>, crate::session::SessionError> {
+    // Belt and braces: `mode=ro` already blocks writes at the file level, and
+    // `query_only` makes the intent explicit to the engine as well.
     let setup: Vec<String> = crate::connect::read_only_sql(Kind::Sqlite, true)
         .into_iter()
         .collect();

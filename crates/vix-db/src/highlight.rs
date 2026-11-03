@@ -7,6 +7,11 @@
 //! cyan, strings green, numbers yellow, comments gray) for themes that leave
 //! a token unset. Block comments can span lines, so the tokenizer threads a
 //! "still inside `/* … */`" flag from line to line.
+//!
+//! Only the colours come from the theme; classification is purely lexical, so
+//! it is fast enough to re-run on every visible line each frame. The keyword
+//! table is shared with [`crate::complete`] and [`crate::format`]. Owning
+//! spec: `crates/vix-db/spec/index.md` ("Syntax Highlighting").
 
 use ratatui::style::{Color, Style};
 
@@ -101,6 +106,8 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 /// A highlight class for one span of text.
+///
+/// Each class maps to a theme token in [`style`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tok {
     /// SQL keyword.
@@ -116,6 +123,13 @@ pub enum Tok {
 }
 
 /// Whether `word` is a SQL keyword (ASCII case-insensitive).
+///
+/// # Examples
+///
+/// ```
+/// assert!(vix_db::highlight::is_keyword("SeLeCt"));
+/// assert!(!vix_db::highlight::is_keyword("users"));
+/// ```
 #[must_use]
 pub fn is_keyword(word: &str) -> bool {
     KEYWORDS.contains(&word.to_ascii_lowercase().as_str())
@@ -142,6 +156,22 @@ pub fn style(tok: Tok) -> Style {
 /// Split `line` into `(class, text)` spans. `in_block` says the line starts
 /// inside a `/* … */` comment; the second return value says the *next* line
 /// does. Adjacent same-class spans are merged.
+///
+/// Strings (single or double quoted) are not continued across lines: an
+/// unterminated quote highlights to the end of its own line only. Numbers
+/// include trailing alphanumerics and dots (`1.5e3`, `0xFF`).
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::highlight::{highlight_line, Tok};
+/// let (spans, in_block) = highlight_line("select 1 -- hi", false);
+/// assert_eq!(spans[0], (Tok::Keyword, "select".to_string()));
+/// assert_eq!(spans.last().unwrap().0, Tok::Comment);
+/// assert!(!in_block);
+/// // An open block comment carries over to the next line.
+/// assert!(highlight_line("/* open", false).1);
+/// ```
 #[must_use]
 pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) {
     let mut spans: Vec<(Tok, String)> = Vec::new();
@@ -150,6 +180,8 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
     let mut block = in_block;
     while i < chars.len() {
         if block {
+            // Inside a block comment: consume to the closing `*/` or the end
+            // of the line, whichever comes first (the flag carries over).
             let start = i;
             while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
                 i += 1;

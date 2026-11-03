@@ -5,6 +5,27 @@
 //! cancelling a hung query. Extracted from `lib.rs` (T516): the one
 //! cohesive slice of [`Browser`]'s methods concerned with *running a
 //! statement*, as opposed to connecting or editing results.
+//!
+//! # Two execution paths
+//!
+//! - **Synchronous, internal** -- [`Browser::run_catalog`] (and
+//!   [`Browser::run_sql`]) call [`session::Session::run`] and block. They are
+//!   for fast background work (catalog, preview, ERD, commit/begin/rollback)
+//!   and are logged as [`store::Origin::App`] (or `User` for `run_sql`).
+//! - **Asynchronous, user** -- `start_query` sends the statement to the worker
+//!   and records a `Pending`; the host calls [`Browser::poll_query`] every tick
+//!   to drain streamed [`session::Chunk`]s into the grid. While one is in
+//!   flight the workbench is busy and only Ctrl+C responds.
+//!
+//! # Safety gates, in order
+//!
+//! 1. `:name` parameters are prompted for (`View::Params`) and substituted.
+//! 2. A write/DDL statement (see [`editor::is_write_statement`]) is refused
+//!    outright on a read-only session.
+//! 3. Otherwise it needs a `View::Confirm` approval -- except inside an
+//!    explicit transaction, where `ROLLBACK` can undo it.
+//!
+//! Owning specs: `crates/vix-db/spec/index.md` and `spec/session.md`.
 
 use vix_input::{KeyCode, KeyEvent};
 
@@ -13,7 +34,8 @@ use super::{
     store,
 };
 
-/// An execution awaiting write/DDL confirmation.
+/// An execution awaiting write/DDL confirmation. Stored in
+/// `Browser::pending_run` while the confirm view is up.
 #[derive(Debug, Clone)]
 pub(crate) enum PendingRun {
     /// One statement (possibly EXPLAIN-wrapped).
@@ -22,7 +44,9 @@ pub(crate) enum PendingRun {
     All(Vec<String>),
 }
 
-/// What to do with the reply from an in-flight asynchronous query.
+/// What to do with the reply from an in-flight asynchronous query. Chosen at
+/// send time so `finish_stream` knows whether to record history or run the
+/// plan-doctor scan check.
 #[derive(Debug, Clone, Copy)]
 enum QueryKind {
     /// A user statement — fill the grid and record history.
@@ -34,7 +58,8 @@ enum QueryKind {
 /// A user query running on the worker thread, awaited by [`Browser::poll_query`].
 #[derive(Debug, Clone)]
 pub(crate) struct Pending {
-    /// When the query was sent (for the elapsed indicator).
+    /// When the query was sent (for the elapsed indicator and the log's
+    /// duration).
     pub(super) started: std::time::Instant,
     /// The statement (for logging / transaction tracking) — the exact SQL sent.
     sql: String,
@@ -80,7 +105,7 @@ impl Browser {
     }
 
     /// Run `sql`, record its duration and outcome in the query log, and return
-    /// the result unchanged.
+    /// the result unchanged. Blocks until the statement finishes.
     fn run_traced(
         &mut self,
         sql: &str,
@@ -101,7 +126,8 @@ impl Browser {
         result
     }
 
-    /// Keys on the write/DDL confirmation.
+    /// Keys on the write/DDL confirmation: Enter or `y` runs the pending
+    /// execution; Esc, `n` or `q` discards it.
     pub(super) fn key_confirm(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Enter | KeyCode::Char('y') => {
@@ -181,7 +207,8 @@ impl Browser {
         self.pending_reconnect.is_some()
     }
 
-    /// Execute the statement at the cursor, showing its rows in the grid.
+    /// Execute the statement at the cursor, showing its rows in the grid
+    /// (F5 / Ctrl+Enter).
     /// Statements with `:name` parameters prompt for values first; write and
     /// DDL statements go through the confirmation view.
     pub fn execute(&mut self) {
@@ -226,6 +253,10 @@ impl Browser {
 
     /// Execute every statement in the buffer, in order (confirmed once when
     /// any of them writes). The grid shows the last statement's rows.
+    ///
+    /// Unlike [`Self::execute`], this path runs synchronously (it is not
+    /// streamed or cancellable), does not prompt for `:name` parameters, and
+    /// asks for confirmation even inside an explicit transaction.
     pub fn execute_all(&mut self) {
         let text = self.query.text();
         let stmts: Vec<String> = editor::statement_spans(&text)
@@ -282,6 +313,7 @@ impl Browser {
     }
 
     /// Run one statement now (no confirmation), recording it in the history.
+    /// Trailing `;` characters are stripped before sending.
     fn run_statement(&mut self, stmt: &str) {
         let sql = stmt.trim_end_matches(';').to_string();
         self.start_query(sql, QueryKind::Run);
@@ -348,8 +380,9 @@ impl Browser {
     /// hatch from a hung query — but reconnecting calls `Session::connect`
     /// again, so if the network condition that caused the hang was still
     /// present, cancelling a hung query could itself hang. Backgrounding it
-    /// fixes that; actually cancelling the *old* worker's stuck read is a
-    /// separate, deeper fix (T532).
+    /// fixes that. The old worker's stuck read is abandoned by
+    /// [`session::Session::restart`], which signals it to stop (T532) before
+    /// connecting afresh.
     pub fn cancel_query(&mut self) {
         if self.pending_query.take().is_none() {
             return;
@@ -357,6 +390,8 @@ impl Browser {
         let Some(mut session) = self.session.take() else {
             return;
         };
+        // `session` moves onto the thread: `restart` may block on the network,
+        // and the result (the same, now-fresh `Session`) comes back by channel.
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let result = session.restart().map(|()| session);
@@ -477,6 +512,12 @@ impl Browser {
     /// Update the client-side transaction state from an executed statement:
     /// `BEGIN`/`START` opens it, `COMMIT`/`ROLLBACK` closes it, and any failure
     /// inside an open transaction marks it aborted.
+    ///
+    /// This only inspects the first word, so it is a client-side *mirror* of
+    /// the server's state: it can drift (e.g. `END`, or `COMMIT` inside a
+    /// multi-statement string), which is why it only gates convenience
+    /// behaviour (the badge, skipping a confirmation) and the read-only
+    /// guard never depends on it.
     fn note_tx(&mut self, sql: &str, ok: bool) {
         if !ok {
             if self.tx == TxState::Open {
@@ -539,7 +580,8 @@ impl Browser {
     }
 
     /// Run `stmts` in order on the live session, stopping at the first error;
-    /// the grid shows the last statement's output.
+    /// the grid shows the last statement's output. On failure the status line
+    /// reads `n/total: error` and later statements are not run.
     fn run_all(&mut self, stmts: &[String]) {
         let mut last = (Vec::new(), Vec::new());
         for (i, stmt) in stmts.iter().enumerate() {

@@ -23,6 +23,29 @@
 //! export, and the tree/editor/results panes' own key dispatch). What's
 //! left here is genuinely shared: the `Browser`/`Form`/`Pane`/`View`/
 //! `Popup` state itself and the two top-level dispatchers.
+//!
+//! # Architecture and invariants
+//!
+//! - **No rendering here.** This crate is a pure state machine: the host
+//!   (`tui/src/ui`) reads the public fields and draws; the host's key handler
+//!   calls [`Browser::handle_key`] and acts on the returned [`Outcome`].
+//! - **Single-threaded UI, threaded I/O.** Anything that can block (connect,
+//!   a user query, a cancel's reconnect) runs on a background thread, and the
+//!   host polls the matching `poll_*` method each tick; AI requests are run by
+//!   the host itself (see [`ai_features`]). The [`Browser`] thus never blocks
+//!   the event loop on a stuck database (Run H, T531/T532).
+//! - **Secrets stay in memory.** Passwords live only in [`Browser::password`]
+//!   and the in-memory connection URL; persisted history stores bind-parameter
+//!   *templates*, never substituted values (see `history_override`).
+//! - **Read-only by default.** A session starts read-only whatever the saved
+//!   connection says until the user opts in; write/DDL statements are then
+//!   additionally gated behind a [`View::Confirm`] prompt.
+//! - **Host persistence is pull-based.** Mutations set a private dirty flag
+//!   and the host collects the changed store through the `take_dirty_*`
+//!   methods, so this crate never touches the settings file itself.
+//!
+//! The owning spec is `crates/vix-db/spec/index.md` (the live-session design
+//! is in `crates/vix-db/spec/session.md`).
 
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
@@ -55,6 +78,10 @@ pub mod tunnel;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Browser::handle_key`].
+///
+/// Only two outcomes exist because every other effect (status messages,
+/// view changes, persistence flags) is communicated through [`Browser`]'s own
+/// fields rather than the return value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Outcome {
     /// The key was handled; nothing further.
@@ -64,6 +91,10 @@ pub enum Outcome {
 }
 
 /// Which overlay screen is showing.
+///
+/// Exactly one view is active at a time; [`Browser::handle_key`] dispatches
+/// on it, and the host renders the matching screen. [`View::Workbench`] is
+/// the "home" view that most modal views return to when dismissed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View {
     /// The saved-connections list.
@@ -114,6 +145,10 @@ pub enum TxState {
 }
 
 /// Which persisted stores changed since the host last collected them.
+///
+/// Set by mutating code, cleared by the `take_dirty_*` accessors on
+/// [`Browser`]. Keeping this as flags (rather than pushing to the host) lets
+/// the host batch writes to the settings file once per tick.
 #[derive(Debug, Clone, Copy, Default)]
 struct Dirty {
     /// The connection list changed.
@@ -136,7 +171,15 @@ pub enum Pane {
 }
 
 impl Pane {
-    /// The next pane in Tab order.
+    /// The next pane in Tab order (tree, editor, results, then wrapping).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::Pane;
+    /// assert_eq!(Pane::Tree.next(), Pane::Editor);
+    /// assert_eq!(Pane::Results.next(), Pane::Tree);
+    /// ```
     #[must_use]
     pub fn next(self) -> Pane {
         match self {
@@ -146,15 +189,28 @@ impl Pane {
         }
     }
 
-    /// The previous pane in Tab order.
+    /// The previous pane in Tab order (Shift+Tab).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::Pane;
+    /// assert_eq!(Pane::Tree.prev(), Pane::Results);
+    /// ```
     #[must_use]
     pub fn prev(self) -> Pane {
+        // With three panes, two forward steps equal one step back.
         self.next().next()
     }
 }
 
 /// Number of text form fields (name, kind, file, host, port, user, database,
 /// password command, ssh host/user/port/identity, sslmode).
+///
+/// The `FORM_*` constants below are indices into [`Form::fields`] (and, for
+/// the two toggles past the end, row numbers into the form); they must stay in
+/// step with the field order documented on [`Form::fields`]. The kind row
+/// occupies slot 1 for navigation but holds no text.
 pub const FORM_FIELDS: usize = 13;
 
 /// Index of the kind row in the form (cycled, not typed).
@@ -199,6 +255,20 @@ pub struct Form {
 
 impl Form {
     /// A form pre-filled from `conn` (for editing).
+    ///
+    /// `editing` is the index of `conn` in the saved list so a later save
+    /// replaces it rather than appending; pass `None` to treat the form as a
+    /// copy-and-add. The inverse is [`Form::to_connection`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::{connect::Connection, Form};
+    /// let conn = Connection { name: "app".into(), ..Connection::default() };
+    /// let form = Form::from_connection(&conn, Some(0));
+    /// assert_eq!(form.fields[0], "app");
+    /// assert_eq!(form.to_connection().name, "app");
+    /// ```
     #[must_use]
     pub fn from_connection(conn: &connect::Connection, editing: Option<usize>) -> Form {
         let mut f = Form {
@@ -224,6 +294,9 @@ impl Form {
     }
 
     /// The connection this form currently describes.
+    ///
+    /// Performs no validation (an empty name is rejected by the form's key
+    /// handler on save, not here), so the result may be incomplete.
     #[must_use]
     pub fn to_connection(&self) -> connect::Connection {
         connect::Connection {
@@ -247,6 +320,10 @@ impl Form {
 }
 
 /// The autocomplete popup: candidates plus the prefix start they replace.
+///
+/// Built from [`complete::Completer`] output when typing in the SQL editor;
+/// Tab accepts the highlighted item, replacing the text from [`Popup::start`]
+/// to the cursor.
 #[derive(Debug, Clone, Default)]
 pub struct Popup {
     /// Candidate completions.
@@ -258,6 +335,10 @@ pub struct Popup {
 }
 
 /// Visible page sizes (rows) of the workbench panes, from the last layout.
+///
+/// Only the renderer knows the pane heights, so the host passes the latest
+/// values to every [`Browser::handle_key`] call; PageUp/PageDown and
+/// scroll-into-view use them. All zero (the default) is safe in tests.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Pages {
     /// Schema-tree rows.
@@ -269,6 +350,11 @@ pub struct Pages {
 }
 
 /// The DB overlay: saved connections, the active session, and the workbench.
+///
+/// Public fields are the read side for the renderer (and a few host
+/// mutators); private fields are internal state machines for in-flight work.
+/// Behavior is spread over `impl Browser` blocks in `lifecycle`, `execute`,
+/// `panels`, `cell_edit` and [`ai_features`], all sharing this one struct.
 pub struct Browser {
     /// Saved connections (mirrors the persisted setting).
     pub connections: Vec<connect::Connection>,
@@ -282,7 +368,8 @@ pub struct Browser {
     pub form: Form,
     /// Password being typed (session memory only; never persisted).
     pub password: String,
-    /// Connection index awaiting its password.
+    /// Connection index awaiting its password (set while [`View::Password`]
+    /// is showing; `None` otherwise).
     pending: Option<usize>,
     /// The active connection.
     pub conn: Option<connect::Connection>,
@@ -314,7 +401,8 @@ pub struct Browser {
     pub save_name: String,
     /// The statement captured when the save-query prompt opened.
     save_sql: String,
-    /// Execution awaiting write/DDL confirmation.
+    /// Execution awaiting write/DDL confirmation (the [`View::Confirm`]
+    /// screen); cleared on confirm or cancel.
     pending_run: Option<execute::PendingRun>,
     /// When set, the text to record in the *persisted* history for the next
     /// started query, in place of the executed SQL. Used to keep bind-parameter
@@ -384,7 +472,8 @@ pub struct Browser {
 /// filled one value at a time.
 #[derive(Debug, Clone, Default)]
 pub struct ParamPrompt {
-    /// The original statement holding the placeholders.
+    /// The original statement holding the placeholders. Private so the host
+    /// cannot desynchronize it from [`ParamPrompt::names`].
     sql: String,
     /// Placeholder names, in prompt order.
     pub names: Vec<String>,
@@ -404,6 +493,19 @@ impl ParamPrompt {
 
 impl Browser {
     /// Open the overlay on the connections list.
+    ///
+    /// `connections` is the host's saved-connection list (from settings).
+    /// The new browser is disconnected and read-only; the host should also
+    /// load [`Browser::history`] and [`Browser::saved`] from their stores.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::{Browser, View};
+    /// let b = Browser::new(Vec::new());
+    /// assert_eq!(b.view, View::Connections);
+    /// assert!(!b.write_enabled());
+    /// ```
     #[must_use]
     pub fn new(connections: Vec<connect::Connection>) -> Browser {
         Browser {
@@ -518,6 +620,10 @@ impl Browser {
     }
 
     /// Route a key to the current view.
+    ///
+    /// Clears the one-line [`Browser::message`] first, so a message lives
+    /// exactly until the next key press. `pages` are the pane heights from
+    /// the latest layout (see [`Pages`]).
     pub fn handle_key(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
         self.message = None;
         match self.view {
@@ -540,6 +646,13 @@ impl Browser {
     }
 
     /// Keys inside the workbench, after the pane-independent chords.
+    ///
+    /// Order matters: a busy workbench (a query running, or a cancelled
+    /// query's reconnect in flight) swallows keys first; then the global chords (F5/F6/F7/F8/F9 run, explain and
+    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U open the sub-views and AI
+    /// helpers; Alt+F formats); then Tab focus cycling (suppressed while the
+    /// autocomplete popup owns Tab); and only then the focused pane's own
+    /// handler.
     fn key_workbench(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
@@ -623,6 +736,8 @@ impl Browser {
                 self.focus = self.focus.prev();
                 return Outcome::Consumed;
             }
+            // Esc only leaves the workbench when nothing more local can
+            // consume it (popup, results filter, tree filter).
             KeyCode::Esc
                 if self.popup.is_none() && !self.grid.filtering && !self.tree.filtering =>
             {
@@ -641,6 +756,9 @@ impl Browser {
 }
 
 /// Rows of the catalog objects query as `(schema, name, kind)` triples.
+///
+/// Rows with fewer than three columns are dropped rather than panicking, since
+/// the row shape comes from a driver and a catalog query.
 fn object_triples(rows: Vec<Vec<String>>) -> Vec<(String, String, String)> {
     rows.into_iter()
         .filter(|r| r.len() >= 3)
@@ -650,6 +768,14 @@ fn object_triples(rows: Vec<Vec<String>>) -> Vec<(String, String, String)> {
 
 /// Pretty-print `text` when it parses as JSON (the cell viewer's `p` toggle);
 /// `None` for non-JSON content.
+///
+/// # Examples
+///
+/// ```
+/// let pretty = vix_db::pretty_json(r#"{"a":1}"#).unwrap();
+/// assert!(pretty.contains("\"a\": 1"));
+/// assert_eq!(vix_db::pretty_json("not json"), None);
+/// ```
 #[must_use]
 pub fn pretty_json(text: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;

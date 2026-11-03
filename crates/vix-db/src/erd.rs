@@ -12,10 +12,19 @@
 //! The function is pure and unit-tested; identifiers are sanitized to the
 //! `[A-Za-z0-9_]` tokens Mermaid accepts so odd column or table names cannot
 //! produce a diagram that fails to parse.
+//!
+//! The text is the whole product: this module draws nothing. The host opens
+//! it in [`crate::View::Erd`] (Ctrl+E), and the catalog queries that feed it
+//! are run by the `Browser`, not here. Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 /// Sanitize `name` to a single Mermaid-safe token: non-word characters become
 /// `_`, an empty result becomes `_`, and a leading digit is prefixed so the
 /// token is a valid identifier.
+///
+/// Sanitizing is lossy (`a-b` and `a.b` both become `a_b`), which can merge two
+/// distinct names in the diagram; that is accepted over emitting a diagram that
+/// fails to parse.
 fn ident(name: &str) -> String {
     let mut out: String = name
         .chars()
@@ -38,6 +47,30 @@ fn ident(name: &str) -> String {
 /// Render an `erDiagram` for `columns` (`(table, column, type)`, grouped in
 /// order of appearance) and `relationships`
 /// (`(child, child_col, parent, parent_col)`; `parent_col` may be empty).
+///
+/// Relationships with an empty child or parent table are skipped, and
+/// duplicates (same child table, parent table and child column) are drawn once.
+/// The parent column is accepted for symmetry with the catalog query but not
+/// drawn: the line is labelled with the referencing column only. Empty types
+/// are shown as `unknown`.
+///
+/// # Examples
+///
+/// ```
+/// let cols = vec![
+///     ("users".to_string(), "id".to_string(), "integer".to_string()),
+///     ("posts".to_string(), "user_id".to_string(), "integer".to_string()),
+/// ];
+/// let rels = vec![(
+///     "posts".to_string(),
+///     "user_id".to_string(),
+///     "users".to_string(),
+///     "id".to_string(),
+/// )];
+/// let text = vix_db::erd::mermaid(&cols, &rels);
+/// assert!(text.starts_with("erDiagram\n"));
+/// assert!(text.contains("posts }o--|| users : \"user_id\""));
+/// ```
 #[must_use]
 pub fn mermaid(
     columns: &[(String, String, String)],
@@ -66,6 +99,8 @@ pub fn mermaid(
         out.push_str("    }\n");
     }
 
+    // `}o--||` is Mermaid's "zero-or-more on the left, exactly one on the
+    // right": many child rows reference one parent row.
     // One crow's-foot line per distinct foreign key (many children → one
     // parent), labelled with the referencing column.
     let mut seen: Vec<(String, String, String)> = Vec::new();

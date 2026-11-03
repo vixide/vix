@@ -7,6 +7,14 @@
 //! unit-tested; [`load_history`] / [`save_history`] / [`load_saved`] /
 //! [`save_saved`] are the thin [`confy`] wrappers the host calls — the
 //! workbench itself only mutates in-memory copies and raises dirty flags.
+//!
+//! The third type, [`Log`], is the in-memory-only session query log (Ctrl+L):
+//! it records timing and outcome for every statement, including the
+//! workbench's own catalog queries, and is never written to disk.
+//!
+//! Persisted files can contain literal SQL, which may embed secrets, so saves
+//! narrow them to owner-only on Unix (T133). Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +27,7 @@ const HISTORY_NAME: &str = "db_history";
 /// File stem of the saved-queries store (`db_queries.toml`).
 const SAVED_NAME: &str = "db_queries";
 
-/// Most history entries kept; the oldest fall off.
+/// Most history entries kept; the oldest fall off (see [`History::push`]).
 pub const HISTORY_CAP: usize = 200;
 
 /// Most query-log entries kept in a session; the oldest fall off.
@@ -35,7 +43,8 @@ pub enum Origin {
 }
 
 impl Origin {
-    /// Short display tag.
+    /// Short display tag, shown in the query log. Intentionally not
+    /// translated: it is a technical column value, like the SQL itself.
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
@@ -68,7 +77,8 @@ pub struct Log {
 }
 
 impl Log {
-    /// Record one execution at the front, dropping the oldest past the cap.
+    /// Record one execution at the front, dropping the oldest past the cap
+    /// ([`LOG_CAP`]). `insert(0, ..)` is O(n) but n is capped at 200.
     pub fn push(&mut self, entry: LogEntry) {
         self.entries.insert(0, entry);
         self.entries.truncate(LOG_CAP);
@@ -76,6 +86,9 @@ impl Log {
 }
 
 /// Executed-statement history, newest first.
+///
+/// `#[serde(default)]` lets older or partial files load. The workbench records
+/// bind-parameter *templates* here, never substituted values.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct History {
@@ -87,6 +100,17 @@ impl History {
     /// Record `sql` as the most recent entry: an existing duplicate moves to
     /// the front instead of repeating, and the list stays under
     /// [`HISTORY_CAP`]. Whitespace-only statements are ignored.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::store::History;
+    /// let mut h = History::default();
+    /// h.push("select 1");
+    /// h.push("select 2");
+    /// h.push("  select 1  "); // trimmed duplicate moves to the front
+    /// assert_eq!(h.entries, ["select 1", "select 2"]);
+    /// ```
     pub fn push(&mut self, sql: &str) {
         let sql = sql.trim();
         if sql.is_empty() {
@@ -117,7 +141,19 @@ pub struct Saved {
 }
 
 impl Saved {
-    /// Save `sql` under `name`, replacing an existing query of the same name.
+    /// Save `sql` under `name`, replacing an existing query of the same name
+    /// (keeping its position in the list); new names are appended.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::store::Saved;
+    /// let mut s = Saved::default();
+    /// s.upsert("top", "select 1");
+    /// s.upsert("top", "select 2");
+    /// assert_eq!(s.queries.len(), 1);
+    /// assert_eq!(s.queries[0].sql, "select 2");
+    /// ```
     pub fn upsert(&mut self, name: &str, sql: &str) {
         if let Some(q) = self.queries.iter_mut().find(|q| q.name == name) {
             q.sql = sql.to_string();
@@ -137,8 +173,9 @@ pub fn load_history() -> History {
 }
 
 /// Persist the query history. `db_history.toml` can carry literal sensitive
-/// values (a query's own text, not just its bind parameters — those are
-/// already excluded, see the module-level history-vs-log distinction), so
+/// values (a query's own text; bind-parameter *values* are already excluded
+/// because the workbench stores the `:name` template, not the substituted
+/// statement), so
 /// on Unix it's narrowed to owner-only after each save (T133) — best-effort,
 /// same caveat as `vix-settings`'s equivalent: `confy` gives no hook to
 /// choose the mode as the file is made, only after.
@@ -174,7 +211,9 @@ pub fn save_saved(saved: &Saved) -> Result<(), confy::ConfyError> {
 }
 
 /// Narrow `<config>/<name>.toml` to owner-only on Unix, best-effort — the
-/// shared tail of [`save_history`]/[`save_saved`].
+/// shared tail of [`save_history`]/[`save_saved`]. A path lookup failure is
+/// ignored: the save itself already succeeded, and tightening permissions is
+/// defense in depth, not a precondition.
 fn restrict_store_file(name: &str) {
     if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(name)) {
         vix_fileops::restrict_to_owner(&path);

@@ -16,6 +16,10 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 - **Code documentation pass (group 5).** Added rustdoc and explanatory comments to the private items, fields and trait impls of `vix-lsp`, `vix-lsp-core`, `vix-im-irc`, `vix-hl7`, `vix-jupyter`, `vix-jupyter-core`, `vix-i18n`, `vix-jwt-tool`, `vix-session`, `vix-textops`, `vix-edit-outline`, `vix-edit-table`, `vix-clock-panel` and `vix-convert-tabular`, and fixed one broken intra-doc link. Documentation only; no behavior change.
 
+### Changed
+
+- **`vix-db` documentation pass.** Module docs, rustdoc (with runnable examples for the pure functions) and inline comments across `crates/vix-db/src`; documentation only, no behavior change.
+
 ### Fixed
 
 - **musl release build (T670).** The `x86_64-unknown-linux-musl` build is now configured to link statically and without PIE (`.cargo/config.toml`), and CI checks the result with the new `scripts/check-static-binary`. The previous build was dynamically linked against `/lib/ld-musl-x86_64.so.1`, so it did not start on glibc systems and crashed on Alpine. Not yet verified on a real release build.

@@ -14,6 +14,26 @@
 //! reconnects on a fresh connection to recover from a cancelled query. Dropping
 //! the `Session` closes the channel; the worker notices, closes the connection
 //! cleanly, and exits.
+//!
+//! # Invariants
+//!
+//! - **One statement at a time.** The worker serves requests strictly in
+//!   order and a statement's chunks are complete (`Head`, `Rows`*, then
+//!   `Done` or `Err`) before the next is read, so callers must drain one
+//!   statement ([`Session::poll`] until `Done`/`Err`) before reading the
+//!   reply of another.
+//! - **Text-only results.** Every cell is decoded to a `String`; `NULL`
+//!   becomes the empty string (see the private `cell`).
+//! - **Bounded memory.** Rows stream in `BATCH`-sized chunks and stop at
+//!   [`MAX_ROWS`], reported through `Chunk::Done(true)`.
+//! - **No secrets in errors.** Connect failures are passed through
+//!   `redact_url_secret` before reaching the UI.
+//! - **Cancellation is cooperative.** [`Session::cancel`] only signals; a
+//!   hung worker is abandoned (and a fresh one started by
+//!   [`Session::restart`]) rather than killed.
+//!
+//! The design is described in `crates/vix-db/spec/session.md`; the callers are
+//! the `lifecycle` (connect) and `execute` (run/cancel) modules of this crate.
 
 use futures_util::StreamExt as _;
 use sqlx::{Column as _, Row as _};
@@ -24,13 +44,15 @@ use std::sync::mpsc;
 pub type Table = (Vec<String>, Vec<Vec<String>>);
 
 /// Rows sent per streamed batch (M4): the grid grows this many rows at a time.
+/// A balance between channel traffic and how soon the first rows appear.
 const BATCH: usize = 512;
 
 /// Hard cap on streamed rows for one statement; beyond it the stream stops and
 /// the result is flagged truncated so the workbench and memory stay bounded.
 pub const MAX_ROWS: usize = 20_000;
 
-/// One statement for the worker.
+/// One statement for the worker. An enum (rather than a bare `String`) so
+/// further request kinds can be added without changing the channel type.
 enum Request {
     /// Execute the SQL and stream its rows back as [`Chunk`]s.
     Run(String),
@@ -185,7 +207,9 @@ impl QueryError {
     }
 }
 
-/// Registers sqlx's `Any` drivers exactly once per process.
+/// Registers sqlx's `Any` drivers exactly once per process. sqlx's `Any`
+/// connection panics on an unregistered scheme, so [`Session::connect`] calls
+/// this before every connect; `Once` makes that cheap and thread-safe.
 static DRIVERS: Once = Once::new();
 
 /// A live database connection on its own worker thread.
@@ -317,6 +341,11 @@ impl Session {
     /// Execute `sql` on the held connection and return its rows (headers are
     /// empty when the statement returns no rows).
     ///
+    /// Blocks the calling thread until the statement completes, so it is meant
+    /// for short internal queries (catalog, commit); user statements go through
+    /// [`Session::send`] / [`Session::poll`]. A truncated result (past
+    /// [`MAX_ROWS`]) is returned as-is without any indication here.
+    ///
     /// # Errors
     ///
     /// Returns [`SessionError::Query`] for the database error, or
@@ -350,6 +379,8 @@ fn worker(
     reply_tx: &mpsc::Sender<Chunk>,
     mut cancel_rx: tokio::sync::watch::Receiver<bool>,
 ) {
+    // A current-thread runtime is enough: the worker serves one statement at
+    // a time, and it keeps the thread count at one per connection.
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -376,6 +407,8 @@ fn worker(
             return;
         }
     }
+    // Readiness is reported only after setup succeeds, so `Session::connect`
+    // never hands back a session whose read-only pragma failed to apply.
     let _ = ready_tx.send(Ok(()));
     while let Ok(Request::Run(sql)) = req_rx.recv() {
         if !rt.block_on(stream_sql(&mut conn, &sql, reply_tx, &mut cancel_rx)) {
@@ -410,6 +443,9 @@ fn redact_url_secret(msg: &str, url: &str) -> String {
 }
 
 /// The password component of a `scheme://user:password@host/…` URL, if present.
+/// Splits on the *last* `@` so an `@` inside the (percent-encoded) userinfo
+/// cannot be mistaken for the host separator. The result is still
+/// percent-encoded, exactly as it appears in the URL.
 fn password_of(url: &str) -> Option<&str> {
     let after_scheme = url.split_once("://")?.1;
     let authority = after_scheme.split(['/', '?']).next()?;
@@ -503,6 +539,9 @@ async fn stream_sql(
 /// Decode one cell as display text. The `Any` driver types values at
 /// runtime, so try the common decodings widest-first; `NULL` renders as an
 /// empty string (matching the old CLI output).
+///
+/// Binary values are shown via lossy UTF-8, so non-text blobs display
+/// replacement characters; a value no decoding accepts also renders empty.
 fn cell(row: &sqlx::any::AnyRow, i: usize) -> String {
     if let Ok(v) = row.try_get::<Option<i64>, _>(i) {
         return v.map(|x| x.to_string()).unwrap_or_default();

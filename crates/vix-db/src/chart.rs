@@ -4,6 +4,11 @@
 //! bar, the last numeric-parseable column sizes it — into an ASCII chart shown
 //! in the workbench's text viewer. Pure and unit-tested; the workbench only
 //! feeds it the current (filtered) grid.
+//!
+//! Non-numeric rows are skipped rather than failing the whole chart, and
+//! bars scale to the largest *absolute* value, so negative values are drawn
+//! with a bar the same length as their positive counterparts (the printed
+//! number still carries the sign). Owning spec: `crates/vix-db/spec/index.md`.
 
 use std::fmt::Write as _;
 
@@ -16,6 +21,17 @@ const LABEL_MAX: usize = 24;
 /// Render `rows` as a horizontal bar chart, labelling each bar with the first
 /// column and sizing it by the last column parsed as a number. Returns `None`
 /// when there is no data, fewer than two columns, or no parseable numbers.
+///
+/// # Examples
+///
+/// ```
+/// let headers = vec!["city".to_string(), "pop".to_string()];
+/// let a = vec!["Oslo".to_string(), "10".to_string()];
+/// let b = vec!["Rome".to_string(), "5".to_string()];
+/// let chart = vix_db::chart::bars(&headers, &[&a, &b]).unwrap();
+/// assert!(chart.starts_with("city  by  pop"));
+/// assert!(chart.contains("Oslo"));
+/// ```
 #[must_use]
 pub fn bars(headers: &[String], rows: &[&Vec<String>]) -> Option<String> {
     if headers.len() < 2 || rows.is_empty() {
@@ -33,6 +49,8 @@ pub fn bars(headers: &[String], rows: &[&Vec<String>]) -> Option<String> {
     if parsed.is_empty() {
         return None;
     }
+    // Scale against the largest magnitude; a zero peak (all zeros) yields
+    // empty bars instead of dividing by zero.
     let peak = parsed.iter().fold(0f64, |m, (_, v)| m.max(v.abs()));
     let label_w = parsed
         .iter()
