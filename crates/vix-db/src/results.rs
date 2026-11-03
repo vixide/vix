@@ -5,10 +5,24 @@
 //! result sets, a live substring filter typed after `/`, and a numeric-aware
 //! sort cycled per column). Pure state — the UI sizes columns and draws; row
 //! counts come from [`Grid::filtered`].
+//!
+//! # Indexing model
+//!
+//! `rows` always holds the data in arrival order. Everything the user sees
+//! goes through [`Grid::filtered`], which yields *indices into `rows`* after
+//! applying the filter and sort; [`Grid::sel`] and [`Grid::scroll`] are
+//! positions in **that** list, not in `rows`. Code that needs a stable row
+//! identity (staged cell edits) must use [`Grid::selected_index`], which maps
+//! back to the underlying row. Every cell is a `String`: SQL `NULL` and the
+//! empty string are indistinguishable at this layer. Owning spec:
+//! `crates/vix-db/spec/index.md` ("Results Display").
 
 use std::cmp::Ordering;
 
 /// The results table plus its view state.
+///
+/// The `Default` grid is empty; [`Grid::set`] loads a result and resets the
+/// view state, [`Grid::append_rows`] extends it for streamed batches.
 #[derive(Debug, Clone, Default)]
 pub struct Grid {
     /// Column headers.
@@ -32,7 +46,18 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Replace the table contents, resetting the view state.
+    /// Replace the table contents, resetting the view state (selection,
+    /// scroll, sort and filter all go back to their defaults).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::results::Grid;
+    /// let mut g = Grid::default();
+    /// g.set(vec!["n".into()], vec![vec!["10".into()], vec!["9".into()]]);
+    /// g.cycle_sort(); // ascending on the current column
+    /// assert_eq!(g.filtered(), vec![1, 0]); // numeric, not lexicographic
+    /// ```
     pub fn set(&mut self, headers: Vec<String>, rows: Vec<Vec<String>>) {
         self.headers = headers;
         self.rows = rows;
@@ -53,6 +78,11 @@ impl Grid {
 
     /// Indices of the rows passing the filter, in sort order (arrival order
     /// when no sort is active; all rows when the filter is empty).
+    ///
+    /// The filter matches a case-insensitive substring in *any* cell. The sort
+    /// is stable, so equal keys keep arrival order. Recomputed on every call
+    /// (O(rows)); callers that need it more than once per frame should hold on
+    /// to the result.
     #[must_use]
     pub fn filtered(&self) -> Vec<usize> {
         let needle = self.filter.to_lowercase();
@@ -97,12 +127,17 @@ impl Grid {
 
     /// Move the column selection left or right, dragging the horizontal
     /// scroll along so the selection stays in view.
+    ///
+    /// The `3` below assumes roughly four columns fit on screen; the renderer
+    /// sizes columns by content, so this is a heuristic window, not an exact
+    /// fit.
     pub fn select_col(&mut self, left: bool) {
         if left {
             self.cur_col = self.cur_col.saturating_sub(1);
         } else {
             self.cur_col = (self.cur_col + 1).min(self.headers.len().saturating_sub(1));
         }
+        // Keep cur_col inside a window of col_off..=col_off+3.
         if self.cur_col < self.col_off {
             self.col_off = self.cur_col;
         } else if self.cur_col > self.col_off + 3 {
@@ -162,7 +197,9 @@ fn cell(row: &[String], col: usize) -> &str {
 }
 
 /// Numeric-aware cell ordering: two numbers compare numerically, everything
-/// else lexicographically.
+/// else lexicographically. A numeric cell therefore does not sort strictly
+/// consistently against a non-numeric one in mixed columns (the comparison
+/// switches between the two orders), which is acceptable for display sorting.
 fn compare_cells(a: &str, b: &str) -> Ordering {
     match (a.parse::<f64>(), b.parse::<f64>()) {
         (Ok(x), Ok(y)) => x.partial_cmp(&y).unwrap_or(Ordering::Equal),

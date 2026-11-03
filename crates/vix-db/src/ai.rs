@@ -13,6 +13,12 @@
 //! [`instruction`] is what lands on the assistant's command line, while the
 //! schema and the user's free-text question travel on stdin — so no
 //! user-supplied text is ever interpolated into a shell command.
+//!
+//! The stateful side (when a request is queued, in flight, or finished) is in
+//! [`crate::ai_features`]; this module only builds prompts and parses replies.
+//! All briefs share one shape: an `Engine:` line, a [`schema_block`]-style
+//! `Tables:` / `Foreign keys:` summary, then a task-specific tail. Owning
+//! spec: `crates/vix-db/spec/index.md`.
 
 use std::fmt::Write as _;
 
@@ -24,6 +30,18 @@ pub type Relationships = [(String, String, String, String)];
 
 /// The fixed instruction passed on the assistant's command line. The schema
 /// and question travel on stdin, so this string never contains user text.
+///
+/// With `read_only` the model is told to answer with a single `SELECT`; this
+/// is advisory only, since the workbench independently refuses writes on a
+/// read-only session.
+///
+/// # Examples
+///
+/// ```
+/// let text = vix_db::ai::instruction(true);
+/// assert!(text.contains("READ-ONLY"));
+/// assert!(!vix_db::ai::instruction(false).contains("READ-ONLY"));
+/// ```
 #[must_use]
 pub fn instruction(read_only: bool) -> String {
     let access = if read_only {
@@ -61,6 +79,15 @@ pub fn answer_instruction() -> String {
 
 /// The stdin brief for a fresh question: engine, schema summary, and the
 /// question. Row data is never included — privacy by construction.
+///
+/// # Examples
+///
+/// ```
+/// let cols = vec![("users".to_string(), "id".to_string(), "integer".to_string())];
+/// let brief = vix_db::ai::context("sqlite", &cols, &[], " how many users? ");
+/// assert!(brief.starts_with("Engine: sqlite\nTables:\n  users(id integer)"));
+/// assert!(brief.ends_with("Question: how many users?"));
+/// ```
 #[must_use]
 pub fn context(engine: &str, columns: &Columns, rels: &Relationships, question: &str) -> String {
     let mut out = String::new();
@@ -72,6 +99,8 @@ pub fn context(engine: &str, columns: &Columns, rels: &Relationships, question: 
 
 /// The stdin brief for an optimization round: the schema, the current query,
 /// and its `EXPLAIN` plan, asking for a faster equivalent with the same result.
+/// Feeds the validate-with-`EXPLAIN` / rewrite loop described in the module
+/// docs; `sql` and `plan` are trimmed.
 #[must_use]
 pub fn optimize_context(
     engine: &str,
@@ -127,8 +156,14 @@ pub fn explain_context(engine: &str, columns: &Columns, rels: &Relationships, sq
 
 /// A `Tables:` / `Foreign keys:` summary of the schema, tables in first-seen
 /// order with typed columns.
+///
+/// Columns with no type render bare (`name`); foreign keys with an empty child
+/// or parent table are skipped, and an empty parent column renders as just the
+/// parent table. The `Foreign keys:` header is omitted when there are none.
 fn schema_block(columns: &Columns, rels: &Relationships) -> String {
     let mut out = String::from("Tables:\n");
+    // First-seen table order keeps the brief stable and matches the catalog's
+    // own ordering without needing a map.
     let mut order: Vec<&str> = Vec::new();
     for (table, _, _) in columns {
         if !order.contains(&table.as_str()) {
@@ -175,6 +210,19 @@ const SQL_STARTS: &[&str] = &[
 /// Recover one runnable statement from the assistant's reply: prefer the first
 /// fenced ```` ``` ```` block, otherwise drop any leading prose up to the first
 /// line that begins with a SQL keyword. Falls back to the trimmed reply.
+///
+/// Keyword matching is a case-insensitive *prefix* test with no word boundary
+/// (a prose line starting "Selecting…" would match), which is acceptable
+/// because the fence path and the instruction make leaked prose rare.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::ai::extract_sql;
+/// assert_eq!(extract_sql("Sure!\n```sql\nSELECT 1\n```"), "SELECT 1");
+/// assert_eq!(extract_sql("Here you go:\nselect 2;"), "select 2;");
+/// assert_eq!(extract_sql("  nothing sql-like  "), "nothing sql-like");
+/// ```
 #[must_use]
 pub fn extract_sql(reply: &str) -> String {
     if let Some(fenced) = fenced_block(reply) {

@@ -5,6 +5,19 @@
 //! detail/DDL popup itself. Extracted from `lib.rs` (T516): the one
 //! cohesive slice of [`Browser`]'s methods concerned with *what a single
 //! cell or row means and how it gets changed*, as opposed to running SQL.
+//!
+//! # Edit model
+//!
+//! A grid is *editable* only when it came from a single-table preview whose
+//! table has a primary key (`edit_table` + `pk_cols`); any other result is
+//! read-only. Edits are **staged** in `Browser::edits`, keyed by the
+//! *underlying* row index (stable across filtering and sorting, see
+//! [`crate::results::Grid::selected_index`]) and column, as `(original, new)`.
+//! Nothing touches the database until `commit_edits`, which for each edit
+//! re-reads the live cell (optimistic conflict check against `original`), then
+//! applies all `UPDATE`s inside one `BEGIN`/`COMMIT`, rolling back on the first
+//! failure. Writes require write mode. Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent};
 
@@ -16,6 +29,7 @@ type CellEdit = ((usize, usize), (String, String));
 
 impl Browser {
     /// The staged new value for a cell, if any (for the grid overlay).
+    /// `row` is the underlying row index, not the filtered position.
     #[must_use]
     pub fn staged_value(&self, row: usize, col: usize) -> Option<&str> {
         self.edits.get(&(row, col)).map(|(_, new)| new.as_str())
@@ -28,7 +42,9 @@ impl Browser {
         self.edit_table.is_some()
     }
 
-    /// Keys in the cell / text viewer (scrolls long content).
+    /// Keys in the cell / text viewer (scrolls long content). Also used for
+    /// the AI prose answer, the row-expansion view and the DDL view, all of
+    /// which are shown through `cell_text`.
     pub(super) fn key_cell(&mut self, key: KeyEvent) -> Outcome {
         let last = self.cell_text.lines().count().saturating_sub(1);
         match key.code {
@@ -51,7 +67,9 @@ impl Browser {
         Outcome::Consumed
     }
 
-    /// Preview the selected table or view (`SELECT * … LIMIT`).
+    /// Preview the selected table or view (`SELECT * … LIMIT`). Functions are
+    /// ignored. A successful preview also makes the grid editable when the
+    /// table has a primary key.
     pub(super) fn preview_selected(&mut self) {
         let Some((schema, table, folder)) = self.tree.selected_object() else {
             return;
@@ -144,6 +162,8 @@ impl Browser {
         ) else {
             return;
         };
+        // The foreign-key graph is re-read each time; it is a cheap catalog
+        // query and keeps the lookup correct after schema changes.
         let (_, rels) = self.schema_facts();
         let edge = rels
             .iter()
@@ -153,6 +173,8 @@ impl Browser {
             return;
         };
         let (parent, parent_col) = (parent.clone(), parent_col.clone());
+        // SQLite may report no parent column when the FK targets the parent's
+        // implicit primary key; `rowid` is the best available guess there.
         let col = if parent_col.is_empty() {
             "rowid".to_string()
         } else {
@@ -216,6 +238,8 @@ impl Browser {
                         .cloned()
                         .unwrap_or_default();
                     let new = std::mem::take(&mut self.edit_input);
+                    // Staging the original value again is "undo": drop the entry
+                    // so commit never issues a no-op UPDATE.
                     if new == original {
                         self.edits.remove(&(row, col)); // reverting clears the stage
                     } else {
@@ -270,6 +294,8 @@ impl Browser {
             )
         };
 
+        // HashMap order is arbitrary; sort so UPDATEs run in grid order and
+        // any conflict message is deterministic.
         let mut edits: Vec<CellEdit> = self.edits.iter().map(|(k, v)| (*k, v.clone())).collect();
         edits.sort_by_key(|(k, _)| *k);
 
@@ -297,6 +323,9 @@ impl Browser {
     ) -> Option<Vec<String>> {
         let mut updates = Vec::new();
         for ((row, col), (original, new)) in edits {
+            // A row that vanished or whose primary key cannot be fully
+            // resolved is skipped rather than risk an UPDATE with a partial
+            // (over-broad) WHERE clause.
             let Some(cells) = self.grid.rows.get(*row) else {
                 continue;
             };
@@ -351,6 +380,10 @@ impl Browser {
 
     /// Apply every `UPDATE` in one transaction, rolling back and setting
     /// `self.message` on the first error. Returns whether the commit succeeded.
+    ///
+    /// Uses the real `BEGIN`/`COMMIT` on the persistent session and resets the
+    /// client-side [`TxState`] afterwards, since a user transaction cannot be
+    /// open while the edit commit runs.
     fn apply_updates_in_transaction(&mut self, updates: &[String]) -> bool {
         if self.run_sql("BEGIN").is_err() {
             self.message = Some(t!("msg.db_ai_failed").to_string());
@@ -441,7 +474,9 @@ impl Browser {
         }
     }
 
-    /// Recompute the autocomplete popup for the cursor position.
+    /// Recompute the autocomplete popup for the cursor position. The popup is
+    /// `None` when the completer has no candidates, which is how typing
+    /// dismisses it.
     pub(super) fn refresh_popup(&mut self) {
         let line = self.query.lines()[self.query.row].clone();
         let s = self.completer.suggest(&line, self.query.col);

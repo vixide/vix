@@ -5,6 +5,13 @@
 //! the prefix is `table.partial` — that table's columns. The engine is pure:
 //! the workbench feeds it the schema at connect time and asks for suggestions
 //! after each keystroke; the UI renders the popup and Tab accepts.
+//!
+//! A fourth, context-sensitive source — `JOIN` clauses derived from foreign
+//! keys — kicks in right after a `JOIN` keyword. The keyword list is shared
+//! with the syntax highlighter ([`crate::highlight::KEYWORDS`]) so what is
+//! coloured as a keyword is also completable. The browser wires this in
+//! `lib.rs` (popup state is [`crate::Popup`]); owning spec:
+//! `crates/vix-db/spec/index.md` ("Intelligent Autocomplete").
 
 use super::highlight::KEYWORDS;
 
@@ -17,6 +24,8 @@ const MAX_SUGGESTIONS: usize = 8;
 const MIN_PREFIX: usize = 2;
 
 /// A suggestion list plus where the to-be-replaced prefix starts.
+///
+/// An empty `items` means "show no popup"; `start` is then meaningless.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Suggestions {
     /// Char column where the replaced prefix begins.
@@ -26,6 +35,10 @@ pub struct Suggestions {
 }
 
 /// The autocomplete engine: keywords plus the connected database's schema.
+///
+/// Starts empty (keywords only). The browser fills it at connect time via
+/// [`Completer::set_schema`] and [`Completer::set_relationships`]; it holds
+/// only names, never row data.
 #[derive(Debug, Clone, Default)]
 pub struct Completer {
     /// Table and view names.
@@ -50,6 +63,24 @@ impl Completer {
 
     /// Suggest completions for the identifier ending at char column `col` of
     /// `line`. Empty items means "no popup".
+    ///
+    /// The "identifier" is the run of ASCII alphanumerics, `_` and `.` ending at
+    /// `col`. Resolution order: (1) a `table.partial` token completes that
+    /// table's columns; (2) after a `JOIN` keyword, foreign-key `table ON …`
+    /// clauses; (3) otherwise, once the token reaches [`MIN_PREFIX`] chars, table
+    /// names followed by uppercased keywords, capped at [`MAX_SUGGESTIONS`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::complete::Completer;
+    /// let mut c = Completer::default();
+    /// c.set_schema(vec!["users".into()], vec![("users".into(), "name".into())]);
+    /// let s = c.suggest("select us", 9);
+    /// assert_eq!(s.start, 7);
+    /// assert_eq!(s.items[0], "users");
+    /// assert_eq!(c.suggest("users.n", 7).items, ["name"]);
+    /// ```
     #[must_use]
     pub fn suggest(&self, line: &str, col: usize) -> Suggestions {
         let chars: Vec<char> = line.chars().collect();
@@ -63,6 +94,9 @@ impl Completer {
             start -= 1;
         }
         let token: String = chars[start..col].iter().collect();
+        // A dot anywhere in the token means column completion; the replaced
+        // prefix is only the part after the last dot, so `users.` + accept
+        // keeps the table qualifier.
         if let Some(dot) = token.rfind('.') {
             let table = &token[..dot];
             let partial = &token[dot + 1..];
@@ -99,6 +133,9 @@ impl Completer {
                 .filter(|k| starts_ci(k, &token))
                 .map(|k| k.to_ascii_uppercase()),
         );
+        // `dedup` only removes *adjacent* repeats (tables come first, then
+        // keywords), which is enough for the common table-named-like-keyword
+        // case without a sort that would lose the best-first ordering.
         items.dedup();
         items.truncate(MAX_SUGGESTIONS);
         Suggestions { start, items }
@@ -137,6 +174,9 @@ impl Completer {
 }
 
 /// ASCII case-insensitive `starts_with` (non-ASCII boundaries never match).
+/// `get(..n)` is byte-based and returns `None` when `n` falls inside a
+/// multi-byte char, which is what makes that case a safe non-match rather
+/// than a panic.
 fn starts_ci(s: &str, prefix: &str) -> bool {
     s.get(..prefix.len())
         .is_some_and(|head| head.eq_ignore_ascii_case(prefix))

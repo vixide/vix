@@ -5,6 +5,14 @@
 //! connect time and keeps it only in memory. [`url`] renders the connection
 //! (plus that in-memory password) as the `sqlite:` / `postgres:` / `mysql:`
 //! URL that [`crate::session`] hands to sqlx's `Any` driver.
+//!
+//! The [`Connection`] and [`Kind`] types themselves are defined in the
+//! `vix-settings` crate (they are persisted in the settings file) and
+//! re-exported here so the rest of this crate keeps a `connect::` path. This
+//! module only adds the DB-specific URL and read-only-pragma logic on top.
+//! The secret-sourcing side (password commands, keyring) lives in
+//! [`crate::secret`]; SSH forwarding in [`crate::tunnel`]. See
+//! `crates/vix-db/spec/index.md`.
 
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use std::fmt::Write as _;
@@ -15,6 +23,27 @@ pub use vix_settings::{Connection, Kind};
 /// in-memory string, percent-encoded alongside the user; it is never written
 /// anywhere. `SQLite` uses `mode=rwc` so a fresh path creates the file, like
 /// the `sqlite3` CLI would.
+///
+/// An empty `conn.port` falls back to the engine's default port. The
+/// database name and the `SQLite` file path are inserted verbatim (they are
+/// not percent-encoded), so a name containing `?` or `#` would alter the URL.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::connect::{url, Connection, Kind};
+/// let conn = Connection {
+///     kind: Kind::Postgres,
+///     host: "db.example.com".into(),
+///     user: "joel".into(),
+///     database: "orders".into(),
+///     ..Connection::default()
+/// };
+/// assert_eq!(
+///     url(&conn, "p@ss"),
+///     "postgres://joel:p%40ss@db.example.com:5432/orders"
+/// );
+/// ```
 #[must_use]
 pub fn url(conn: &Connection, password: &str) -> String {
     server_url(conn, password, &conn.host, {
@@ -28,6 +57,10 @@ pub fn url(conn: &Connection, password: &str) -> String {
 
 /// Like [`url`], but pointed at `127.0.0.1:local_port` — the local end of an
 /// SSH tunnel (see [`crate::tunnel`]). Server engines only.
+///
+/// For `SQLite` there is nothing to forward, so the result equals [`url`]'s.
+/// Everything else (credentials, database, TLS mode) is carried through
+/// unchanged; only the host and port are replaced.
 #[must_use]
 pub fn url_via_local(conn: &Connection, password: &str, local_port: u16) -> String {
     let port = local_port.to_string();
@@ -35,7 +68,8 @@ pub fn url_via_local(conn: &Connection, password: &str, local_port: u16) -> Stri
 }
 
 /// Build the server (`postgres` / `mysql`) URL against an explicit `host` and
-/// `port`; `SQLite` ignores both and targets its file.
+/// `port`; `SQLite` ignores both and targets its file. Shared by [`url`] and
+/// [`url_via_local`] so the credential/TLS encoding exists exactly once.
 fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> String {
     match conn.kind {
         Kind::Sqlite => format!("sqlite:{}?mode=rwc", conn.file),
@@ -45,6 +79,8 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
             } else {
                 "mysql"
             };
+            // Encode user and password with NON_ALPHANUMERIC so `:`, `@`, `/`
+            // and friends in a credential can never be read as URL structure.
             let user = utf8_percent_encode(&conn.user, NON_ALPHANUMERIC);
             let auth = if password.is_empty() {
                 user.to_string()
@@ -84,6 +120,20 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
 /// defense in depth behind the client-side
 /// [`crate::editor::is_write_statement`] guard. `MySQL` has no equivalent
 /// that survives autocommit, so it relies on the client guard alone.
+///
+/// The returned statement is meant to be run on the live session right after
+/// connect and whenever the user toggles write mode (F8).
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::connect::{read_only_sql, Kind};
+/// assert_eq!(
+///     read_only_sql(Kind::Sqlite, true).as_deref(),
+///     Some("PRAGMA query_only = ON")
+/// );
+/// assert_eq!(read_only_sql(Kind::Mysql, true), None);
+/// ```
 #[must_use]
 pub fn read_only_sql(kind: Kind, read_only: bool) -> Option<String> {
     match kind {

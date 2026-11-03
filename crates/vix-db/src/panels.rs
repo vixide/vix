@@ -5,6 +5,13 @@
 //! belong to any other slice). Extracted from `lib.rs` (T516): the last
 //! cohesive slice of [`Browser`]'s methods -- everything that isn't
 //! connecting, running SQL, talking to the assistant, or editing a cell.
+//!
+//! Most functions here are `key_*` handlers: one per [`crate::View`] (or
+//! per pane), each taking a key and mutating `Browser` state, always
+//! returning [`Outcome::Consumed`] (the pane handlers return nothing, and
+//! [`Browser::handle_key`] supplies the outcome). The `open_*` methods are the
+//! public entry points the host's menu actions call to switch views. Owning
+//! spec: `crates/vix-db/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -14,7 +21,7 @@ use super::{
 };
 
 impl Browser {
-    /// Keys on the CSV/TSV import prompt.
+    /// Keys on the CSV/TSV import prompt: a one-line path field; Enter imports.
     pub(super) fn key_import(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.import_path.push(c),
@@ -45,6 +52,11 @@ impl Browser {
 
     /// Read the delimited file at `import_path`, create a table from its header,
     /// and load its rows.
+    ///
+    /// Runs the statements synchronously and stops at the first failure
+    /// without rolling back (a failed `INSERT` leaves the empty table created
+    /// by the first statement). On success the catalog is refreshed so the new
+    /// table appears in the tree.
     fn do_import(&mut self) {
         let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
             return;
@@ -76,7 +88,10 @@ impl Browser {
         self.message = Some(t!("msg.db_imported", count = rows, table = table).to_string());
     }
 
-    /// Keys on the query-history and saved-queries lists.
+    /// Keys on the query-history and saved-queries lists (the two share one
+    /// handler and one selection, [`Browser::list_sel`], switching on the view).
+    /// Enter inserts the entry into the editor; `d`/Delete removes it and flags
+    /// the store dirty.
     pub(super) fn key_query_list(&mut self, key: KeyEvent) -> Outcome {
         let len = if self.view == View::History {
             self.history.entries.len()
@@ -112,6 +127,8 @@ impl Browser {
                     self.saved.queries.remove(self.list_sel);
                     self.dirty.saved = true;
                 }
+                // `len` is the pre-delete length, so `len - 2` is the new last
+                // index.
                 self.list_sel = self.list_sel.min(len.saturating_sub(2));
             }
             KeyCode::Esc | KeyCode::Char('q') => self.view = View::Workbench,
@@ -120,7 +137,8 @@ impl Browser {
         Outcome::Consumed
     }
 
-    /// Keys on the save-query naming prompt.
+    /// Keys on the save-query naming prompt. Saving an existing name replaces
+    /// that query (see [`crate::store::Saved::upsert`]).
     pub(super) fn key_save_name(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.save_name.push(c),
@@ -158,6 +176,10 @@ impl Browser {
 
     /// Append `sql` to the editor as its own statement and put the cursor on
     /// it.
+    ///
+    /// A non-empty buffer gets a `;` separator unless it already ends with one.
+    /// The buffer is rebuilt through the editor's own insert API (rather than
+    /// assigned) so the cursor ends up at the end of the inserted text.
     pub(super) fn insert_statement(&mut self, sql: &str) {
         let text = self.query.text();
         let joined = if text.trim().is_empty() {
@@ -212,7 +234,8 @@ impl Browser {
         self.view = View::Log;
     }
 
-    /// Keys in the ER-diagram viewer (scroll; `y` yanks the Mermaid text).
+    /// Keys in the ER-diagram viewer (scroll; `y` yanks the Mermaid text). The
+    /// diagram text lives in the shared `cell_text` / `view_scroll` fields.
     pub(super) fn key_erd(&mut self, key: KeyEvent) -> Outcome {
         let last = self.cell_text.lines().count().saturating_sub(1);
         match key.code {
@@ -237,6 +260,8 @@ impl Browser {
     }
 
     /// Build an ER diagram from the live schema and show it in the viewer.
+    /// Reports an "empty" message when the catalog has no columns; a failing
+    /// relationships query just yields a diagram with no edges.
     pub fn generate_erd(&mut self) {
         let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
             self.message = Some(t!("msg.db_not_connected").to_string());
@@ -265,7 +290,8 @@ impl Browser {
         self.view = View::Erd;
     }
 
-    /// Keys on the export dialog.
+    /// Keys on the export dialog: Left/Right choose the format (wrapping),
+    /// Tab toggles file vs clipboard, other characters edit the path.
     pub(super) fn key_export(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Left => {
@@ -286,6 +312,7 @@ impl Browser {
     }
 
     /// Open the export dialog for the current results (no-op when empty).
+    /// The path is pre-filled from the remembered format's extension.
     pub fn open_export(&mut self) {
         if self.grid.headers.is_empty() {
             return;
@@ -295,7 +322,8 @@ impl Browser {
     }
 
     /// Render the current (filtered, sorted) grid and write it to the chosen
-    /// destination.
+    /// destination. The table name for SQL `INSERT` output is the last
+    /// previewed table, or `vix_export` when the grid is an arbitrary query.
     fn run_export(&mut self) {
         let format = export::FORMATS[self.export_format % export::FORMATS.len()];
         let order = self.grid.filtered();
@@ -337,6 +365,12 @@ impl Browser {
     }
 
     /// Keys in the schema tree (including the live search filter).
+    ///
+    /// While the filter box is active it captures every key; otherwise `/`
+    /// starts a search and the single-letter keys select a detail report
+    /// (`i` indexes, `f` foreign keys, `g` triggers, `x` constraints, `s`
+    /// stats, `D` DDL, `p` preview, `r` refresh). `page` is the pane height
+    /// for PageUp/PageDown.
     pub(super) fn key_tree(&mut self, key: KeyEvent, page: usize) {
         if self.tree.filtering {
             match key.code {
@@ -391,7 +425,14 @@ impl Browser {
     }
 
     /// Keys in the SQL editor (including the autocomplete popup).
+    ///
+    /// When a popup is open, Up/Down/Tab/Esc drive it and everything else
+    /// falls through to normal editing (which recomputes or dismisses it).
+    /// Ctrl-modified characters are not inserted, so chords the workbench did
+    /// not claim cannot type stray letters.
     pub(super) fn key_editor(&mut self, key: KeyEvent, page: usize) {
+        // A popup is only ever `Some` with at least one item (`refresh_popup`
+        // guarantees it), so the `items.len() - 1` below cannot underflow.
         if let Some(popup) = self.popup.as_mut() {
             match key.code {
                 KeyCode::Up => {
@@ -448,6 +489,10 @@ impl Browser {
     }
 
     /// Keys in the results grid (including the live filter).
+    ///
+    /// `y`/`Y` copy the cell/row (tab-joined), `v` views the cell, `e`
+    /// exports, `x` expands the row, `f` follows a foreign key, `c` charts,
+    /// `i` stages a cell edit and `W` commits staged edits.
     pub(super) fn key_results(&mut self, key: KeyEvent, page: usize) {
         if self.grid.filtering {
             match key.code {
@@ -518,7 +563,8 @@ impl Browser {
         }
     }
 
-    /// Copy `text` to the system clipboard.
+    /// Copy `text` to the system clipboard and report the outcome on the
+    /// status line.
     pub(super) fn yank(&mut self, text: &str) {
         // Go through the shared, lock-guarded helper so this never races the
         // editor's clipboard access on the (non-thread-safe) platform backend.
@@ -528,7 +574,8 @@ impl Browser {
         });
     }
 
-    /// Beautify the statement at the cursor in place.
+    /// Beautify the statement at the cursor in place (Alt+F), via
+    /// [`crate::format::beautify`]. A no-op on an empty buffer.
     pub fn format_at_cursor(&mut self) {
         if let Some(stmt) = self.query.statement_at_cursor() {
             self.query
