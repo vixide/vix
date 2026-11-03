@@ -533,7 +533,7 @@ impl<T: Transport> ShellAuthority<T> {
     }
 
     /// Stat through a shell script; `follow` picks `stat` over `lstat`
-    /// semantics. The explicit `-e`/`-h` test yields the NotFound status
+    /// semantics. The explicit `-e`/`-h` test yields the `NotFound` status
     /// (100) instead of relying on `stat`'s locale-dependent message.
     fn stat(&self, path: &Path, follow: bool) -> io::Result<FileStat> {
         let flavor = self.flavor()?;
