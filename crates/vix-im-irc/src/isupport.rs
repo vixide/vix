@@ -62,6 +62,7 @@ pub struct Isupport {
 }
 
 impl Default for Isupport {
+    /// RFC 1459 casemapping, no nick-length limit, and the classic `#`/`&` channel prefixes: what a server is assumed to be before (or without) an `ISUPPORT` advertisement.
     fn default() -> Self {
         Isupport {
             casemapping: CaseMapping::default(),

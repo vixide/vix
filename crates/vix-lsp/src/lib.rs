@@ -44,22 +44,39 @@ const INITIALIZE_ID: i64 = 1;
 /// What a pending request's response should drive once it arrives.
 #[derive(Clone, Copy, Debug)]
 enum Pending {
+    /// `textDocument/hover`.
     Hover,
+    /// `textDocument/definition`.
     Definition,
+    /// `textDocument/completion`.
     Completion,
+    /// `textDocument/references`.
     References,
+    /// `textDocument/formatting`; edits are applied only to the version it was sent for (see [`Target`]).
     Formatting,
+    /// `textDocument/documentSymbol`.
     DocumentSymbols,
+    /// `workspace/symbol`.
     WorkspaceSymbols,
+    /// `textDocument/signatureHelp`.
     SignatureHelp,
+    /// `textDocument/rename`.
     Rename,
+    /// `textDocument/codeAction`.
     CodeAction,
+    /// `textDocument/selectionRange` (structural selection).
     SelectionRange,
+    /// `textDocument/documentHighlight`.
     DocumentHighlight,
+    /// `textDocument/foldingRange`.
     FoldingRange,
+    /// `completionItem/resolve` for one completion item.
     CompletionResolve,
+    /// `textDocument/inlayHint`.
     InlayHint,
+    /// `textDocument/linkedEditingRange`; applied only to the version it was sent for (see [`Target`]).
     LinkedEditing,
+    /// `textDocument/codeLens`, requested by the user.
     CodeLens,
     /// A background lens refresh (T726): silent on error, routed by path.
     CodeLensAuto,
@@ -71,7 +88,9 @@ enum Pending {
     DocumentColor,
     /// `textDocument/documentLink` (T621): silent on error, routed by path.
     DocumentLink,
+    /// `textDocument/prepareCallHierarchy` (T620).
     PrepareCallHierarchy,
+    /// `callHierarchy/incomingCalls` (T620).
     IncomingCalls,
     /// `callHierarchy/outgoingCalls` (T620).
     OutgoingCalls,
@@ -81,10 +100,12 @@ enum Pending {
     Supertypes,
     /// `typeHierarchy/subtypes` (T620).
     Subtypes,
+    /// `textDocument/prepareRename`; a `null` result is a meaningful "cannot rename here" answer.
     PrepareRename,
     /// `workspace/willRenameFiles` (T623): always answered with a
     /// [`LspEvent::WillRenameFiles`], even on error or an empty reply.
     WillRenameFiles,
+    /// `workspace/diagnostic` (T619): ambient, silent on error.
     WorkspaceDiagnostics,
     /// `textDocument/diagnostic` (T619): silent on error, routed by its target.
     DocumentDiagnostics,
@@ -133,7 +154,9 @@ struct Target {
 
 /// A message handed back from a server's stdout reader thread.
 enum Incoming {
+    /// A decoded JSON-RPC message.
     Message(Value),
+    /// The server's stdout closed: the process has gone.
     Exited,
 }
 
@@ -408,8 +431,11 @@ pub struct ServerStatus {
 /// latest message and percentage from `"report"`.
 #[derive(Clone, Debug, Default)]
 struct ProgressTask {
+    /// Set by the `begin` notification.
     title: Option<String>,
+    /// Latest message from `begin` or `report`.
     message: Option<String>,
+    /// Latest percentage (0-100) from `begin` or `report`, if the server reports one.
     percentage: Option<u64>,
 }
 
@@ -464,10 +490,12 @@ enum LensSupport {
 
 /// One running language server.
 struct Server {
+    /// The server process; killed when the server is stopped or restarted.
     child: Child,
     /// Framed messages to write to the server's stdin, drained by a dedicated
     /// writer thread so a stalled server can never block the UI thread.
     writer: Sender<Vec<u8>>,
+    /// Messages from the reader thread that parses the server's stdout, drained on each poll.
     rx: Receiver<Incoming>,
     /// Next id for a client→server request.
     next_id: i64,
@@ -570,6 +598,7 @@ impl Server {
 /// The LSP client: configured servers, the ones currently running, and the latest
 /// diagnostics per file.
 pub struct Lsp {
+    /// Master switch: when false the client reports itself inactive and starts no servers.
     enabled: bool,
     configs: Vec<ServerConfig>,
     /// Running servers keyed by language id.
@@ -2065,6 +2094,12 @@ impl Lsp {
         }
     }
 
+    /// Route a response (a message with an `id` and no `method`) to the request kind recorded in the server's `pending` map.
+    ///
+    /// The `initialize` reply is handled separately. A response whose id is not
+    /// pending (already cancelled, or from a restarted server) is dropped. Results
+    /// are parsed into [`LspEvent`]s pushed onto `events`; an error reply goes to
+    /// `error_reply` instead.
     fn handle_response(&mut self, lang: &str, id: i64, msg: &Value, events: &mut Vec<LspEvent>) {
         if id == INITIALIZE_ID {
             self.finish_initialize(lang, msg);
@@ -2441,7 +2476,7 @@ impl Lsp {
 
     /// The remaining `Pending` response kinds (selection ranges, highlights,
     /// folding, completion-resolve, inlay hints, code lenses).
-    /// Split from [`Server::response_to_events_more`] to keep it within the line
+    /// Split from [`Lsp::response_to_events_more`] to keep it within the line
     /// limit.
     fn response_to_events_last(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
         match kind {

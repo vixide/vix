@@ -43,6 +43,7 @@ pub struct LaunchOptions {
 }
 
 impl Default for LaunchOptions {
+    /// Defaults: private runtime directory under the OS temp dir, Vix's own working directory, IPC sockets on Unix and loopback TCP elsewhere, a 30 s start timeout, a 2 s shutdown grace, and the username `vix`.
     fn default() -> Self {
         Self {
             runtime_base: std::env::temp_dir(),
@@ -77,6 +78,7 @@ pub enum LaunchError {
 }
 
 impl fmt::Display for LaunchError {
+    /// Renders a sentence describing which launch step failed, including the underlying I/O error where there is one.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "cannot prepare the kernel's runtime directory: {e}"),
@@ -91,6 +93,7 @@ impl fmt::Display for LaunchError {
 impl std::error::Error for LaunchError {}
 
 impl From<KeyError> for LaunchError {
+    /// An empty signing key is the only [`KeyError`] case, and is reported as [`ConnectionError::EmptyKey`] so callers see one error type.
     fn from(_: KeyError) -> Self {
         Self::Connection(ConnectionError::EmptyKey)
     }
@@ -101,6 +104,7 @@ impl From<KeyError> for LaunchError {
 pub(crate) struct StderrTail(Arc<Mutex<Vec<u8>>>);
 
 impl StderrTail {
+    /// Append `chunk`, keeping only the last `STDERR_TAIL_BYTES` bytes. A poisoned lock is ignored: losing diagnostics must not take the reader thread down.
     fn push(&self, chunk: &[u8]) {
         if let Ok(mut buf) = self.0.lock() {
             buf.extend_from_slice(chunk);
@@ -169,14 +173,20 @@ pub(crate) fn spawn_kernel(
 /// [`KernelEvent`]s on [`events`](Self::events). Dropping the handle kills
 /// the kernel (if Vix launched it) and removes its runtime directory.
 pub struct KernelHandle {
+    /// Requests to the worker task. Sends never block, and fail silently once the worker has finished.
     commands: UnboundedSender<Command>,
+    /// Everything the worker reports, polled by the App.
     events: Receiver<KernelEvent>,
+    /// The random session id placed in every message header (also the prefix of request ids).
     session: String,
+    /// Counter for request ids, so [`KernelHandle::execute`] can return an id without waiting for the worker.
     next_id: AtomicU64,
+    /// The worker thread; taken when joined on drop.
     thread: Option<JoinHandle<()>>,
 }
 
 impl fmt::Debug for KernelHandle {
+    /// Prints only the session id; the channels and join handle carry nothing useful to log.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KernelHandle")
             .field("session", &self.session)
@@ -226,6 +236,7 @@ impl KernelHandle {
         Self::start(info, None, options)
     }
 
+    /// Shared tail of [`KernelHandle::launch`] and [`KernelHandle::connect`]: derive the signer from the key, mint a random session id, then run the async worker on a dedicated thread with its own single-threaded Tokio runtime, so the App's UI thread never touches an async runtime.
     fn start(
         info: ConnectionInfo,
         launched: Option<Launched>,
@@ -293,6 +304,7 @@ impl KernelHandle {
 }
 
 impl Drop for KernelHandle {
+    /// Dropping the handle kills the kernel (when Vix launched it) and joins the worker thread, so no process or thread outlives its owner.
     fn drop(&mut self) {
         let _ = self.commands.send(Command::Kill);
         if let Some(thread) = self.thread.take() {

@@ -34,6 +34,7 @@ pub enum PathError {
 }
 
 impl fmt::Display for PathError {
+    /// Renders a short lowercase reason, suitable for a status-line message.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             PathError::MissingSegment => "missing segment id",
@@ -46,6 +47,7 @@ impl fmt::Display for PathError {
 
 impl std::error::Error for PathError {}
 
+/// Parse a 1-based index; zero and non-numeric text are both [`PathError::BadNumber`].
 fn number(s: &str) -> Result<usize, PathError> {
     match s.parse::<usize>() {
         Ok(n) if n > 0 => Ok(n),
@@ -104,6 +106,7 @@ impl Path {
 }
 
 impl fmt::Display for Path {
+    /// Renders the canonical path text (`PID-5(2).1.3`), omitting absent parts; the output re-parses to the same [`Path`].
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}-{}", self.segment, self.field)?;
         if let Some(r) = self.repetition {

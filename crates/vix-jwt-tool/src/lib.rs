@@ -28,6 +28,7 @@ pub enum JwtError {
 }
 
 impl std::fmt::Display for JwtError {
+    /// Show the underlying decoder's message for the wrapped variants, so the user sees the real reason (bad base64 character, invalid UTF-8, JSON syntax).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotJwt => f.write_str("not a JWT (expected header.payload.signature)"),
@@ -39,6 +40,7 @@ impl std::fmt::Display for JwtError {
 }
 
 impl std::error::Error for JwtError {
+    /// Expose the wrapped base64/UTF-8 error as the cause; the other variants carry no inner error.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Base64(e) => Some(e),

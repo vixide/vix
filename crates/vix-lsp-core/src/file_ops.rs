@@ -45,6 +45,7 @@ impl FileChangeType {
 /// One glob a server registered interest in.
 #[derive(Clone, Debug)]
 struct Glob {
+    /// The compiled glob.
     matcher: GlobMatcher,
     /// `Some(true)` matches only directories, `Some(false)` only files.
     dirs: Option<bool>,
@@ -84,6 +85,7 @@ impl Glob {
 /// (the server named the operation without any filters) matches everything.
 #[derive(Clone, Debug, Default)]
 pub struct FileOpFilters {
+    /// The accepted filters; a path matches when any of them does.
     globs: Vec<Glob>,
     /// Filters existed but none applied to `file:` paths: match nothing.
     none: bool,
@@ -151,6 +153,7 @@ pub fn parse_file_operation(result: &Value, op: &str) -> Option<FileOpFilters> {
 /// One `FileSystemWatcher` a server registered dynamically.
 #[derive(Clone, Debug)]
 pub struct Watcher {
+    /// Which paths the watcher covers.
     glob: Glob,
     /// The `WatchKind` bit set (create 1, change 2, delete 4).
     kind: u8,

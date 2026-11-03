@@ -46,8 +46,11 @@ enum Mode {
 /// A point-in-time snapshot of the grid for undo/redo.
 #[derive(Clone)]
 struct Snapshot {
+    /// The grid cells, row-major.
     rows: Vec<Vec<String>>,
+    /// Cursor row.
     row: usize,
+    /// Cursor column.
     col: usize,
 }
 

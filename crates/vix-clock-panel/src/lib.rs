@@ -105,6 +105,7 @@ pub struct Clock {
 }
 
 impl Default for Clock {
+    /// Same as [`Clock::new`], so `Clock::default()` also starts on the first row.
     fn default() -> Self {
         Clock::new()
     }

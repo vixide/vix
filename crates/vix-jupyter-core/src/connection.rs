@@ -67,6 +67,7 @@ pub struct ConnectionInfo {
 }
 
 impl fmt::Debug for ConnectionInfo {
+    /// Hand-written `Debug` that redacts the HMAC `key`, so logging a connection never leaks the signing secret.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConnectionInfo")
             .field("transport", &self.transport)
@@ -98,6 +99,7 @@ pub enum ConnectionError {
 }
 
 impl fmt::Display for ConnectionError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TooLarge => f.write_str("connection file too large"),

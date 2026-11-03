@@ -612,6 +612,7 @@ pub fn parse_diagnostics(params: &Value) -> Option<(String, Vec<Diagnostic>)> {
     Some((uri, diags))
 }
 
+/// Parse one LSP `Diagnostic`. A missing `severity` is treated as an error (the conservative choice); `None` when the range is malformed.
 fn parse_one_diagnostic(v: &Value) -> Option<Diagnostic> {
     Some(Diagnostic {
         range: parse_range(v.get("range")?)?,
@@ -1003,6 +1004,7 @@ pub fn parse_hover(result: &Value) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
+/// Flatten hover `contents` to text: a bare string, a `MarkupContent` `value`, or (for the legacy `MarkedString[]` form) the non-empty elements joined by newlines. Any other shape becomes the empty string.
 fn hover_contents_text(contents: &Value) -> String {
     match contents {
         // A bare string, or a MarkupContent { kind, value }.
@@ -1290,6 +1292,7 @@ pub fn parse_document_symbols(result: &Value) -> Vec<(u32, u32, String)> {
     out
 }
 
+/// Collect a symbol and, recursively, its `children` into `out` as `(line, character, name)`. Handles both `DocumentSymbol` (`selectionRange`, falling back to `range`) and flat `SymbolInformation` (`location.range`); an item without a usable range is skipped but its children are still visited.
 fn collect_symbol(item: &Value, out: &mut Vec<(u32, u32, String)>) {
     let Some(name) = item.get("name").and_then(Value::as_str) else {
         return;
@@ -1391,6 +1394,7 @@ pub fn parse_locations(result: &Value) -> Vec<Location> {
     }
 }
 
+/// Parse a `LocationLink` (`targetUri` with `targetSelectionRange`, else `targetRange`) or a plain `Location` (`uri`/`range`) into a [`Location`]. A missing or malformed range defaults to the start of the file rather than dropping the result.
 fn parse_location(v: &Value) -> Option<Location> {
     // A LocationLink uses targetUri / targetSelectionRange; a Location uses
     // uri / range.
@@ -1517,6 +1521,7 @@ pub fn parse_completion(result: &Value) -> CompletionList {
     )
 }
 
+/// Parse one completion item, preferring the explicit `textEdit` text, then `insertText`, then the label as what to insert.
 fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
     let label = v.get("label")?.as_str()?.to_string();
     let text_edit = v.get("textEdit");
@@ -1611,6 +1616,7 @@ pub fn completion_params(
     params
 }
 
+/// Parse an LSP `Position`; `None` if a field is missing or does not fit `u32` (negative included).
 fn parse_position(v: &Value) -> Option<Position> {
     Some(Position {
         line: u32::try_from(v.get("line")?.as_i64()?).ok()?,
@@ -1618,6 +1624,7 @@ fn parse_position(v: &Value) -> Option<Position> {
     })
 }
 
+/// Parse an LSP `Range` from its `start` and `end` positions.
 fn parse_range(v: &Value) -> Option<Range> {
     Some(Range {
         start: parse_position(v.get("start")?)?,

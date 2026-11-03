@@ -34,33 +34,48 @@ const MAX_TRACKED: usize = 256;
 
 /// A reply held back until IOPub's `idle` for the same request.
 struct HeldReply {
+    /// The `execute_request` this reply answers.
     request: String,
+    /// How the execution ended.
     status: ReplyStatus,
+    /// The kernel's `In[n]` counter, if it reported one.
     execution_count: Option<u64>,
+    /// When the reply arrived, to give up waiting for `idle` after `REPLY_WAIT`.
     since: Instant,
 }
 
 /// A request from the handle.
 #[derive(Debug)]
 pub(crate) enum Command {
+    /// Run `code`; `id` was handed to the caller already and tags every resulting event.
     Execute { id: String, code: String },
+    /// Interrupt the running request.
     Interrupt,
+    /// Restart the kernel on the same connection.
     Restart,
+    /// Ask the kernel to exit, killing it after the grace period.
     Shutdown,
+    /// Stop now without asking (used when the handle is dropped).
     Kill,
 }
 
 /// A kernel process Vix started. Dropping it kills the process, then
 /// removes the runtime directory (fields drop in order, after `drop`).
 pub(crate) struct Launched {
+    /// The kernel process.
     pub(crate) child: Child,
+    /// The last bytes of the kernel's stderr, reported if it dies.
     pub(crate) stderr: StderrTail,
+    /// The kernelspec it was started from, kept so a restart can relaunch it.
     pub(crate) spec: KernelSpec,
+    /// Working directory for the process, kept for relaunch.
     pub(crate) cwd: Option<PathBuf>,
+    /// The private directory holding the connection file and IPC sockets. Declared last so it is removed only after the process has been killed.
     pub(crate) dir: RuntimeDir,
 }
 
 impl Drop for Launched {
+    /// Kill the child only if it is still running, then always reap it (`wait`) so it cannot linger as a zombie.
     fn drop(&mut self) {
         if matches!(self.child.try_wait(), Ok(None)) {
             let _ = self.child.kill();
@@ -70,6 +85,7 @@ impl Drop for Launched {
 }
 
 impl Launched {
+    /// `Some(reason)` once the child has exited (with its exit code and the tail of its stderr); `None` while it is still running or if it is not ours to watch.
     fn exited(&mut self) -> Option<DeathReason> {
         match self.child.try_wait() {
             Ok(Some(status)) => Some(DeathReason::Exited {
@@ -82,28 +98,47 @@ impl Launched {
     }
 }
 
+/// The three ZeroMQ sockets the worker uses: `shell` and `control` request/reply (dealers) and `iopub` the broadcast subscription.
 struct Sockets {
+    /// Shell channel: execute and `kernel_info` requests and replies.
     shell: DealerSocket,
+    /// Control channel: interrupt and shutdown.
     control: DealerSocket,
+    /// IOPub channel: status and outputs, broadcast to all clients.
     iopub: SubSocket,
 }
 
+/// What to do when a connection ends: reconnect after a restart, or stop for good.
 enum Next {
+    /// Reconnect to a freshly relaunched kernel.
     Restart,
+    /// Stop for good and report why.
     Stop(DeathReason),
 }
 
+/// State owned by the single worker task: the connection, the HMAC signer, the per-session ids, protocol limits and timeouts, the launched process (if any), the outgoing event channel, and the bookkeeping that pairs each `execute_reply` with its `idle` status.
 pub(crate) struct Worker {
+    /// Addresses and key of the kernel's channels.
     info: ConnectionInfo,
+    /// Signs outgoing and verifies incoming messages.
     signer: Signer,
+    /// Session id stamped into every message header.
     session: String,
+    /// The `username` stamped into message headers.
     username: String,
+    /// Size caps applied to received messages.
     limits: Limits,
+    /// How long the kernel has to become ready.
     start_timeout: Duration,
+    /// How long a kernel gets to exit after `shutdown_request`.
     grace: Duration,
+    /// The process we started; `None` when attached to someone else's kernel.
     launched: Option<Launched>,
+    /// Channel back to the [`KernelHandle`](crate::KernelHandle).
     events: Sender<KernelEvent>,
+    /// Commands received while (re)connecting, replayed once connected.
     pending: Vec<Command>,
+    /// Counter for worker-originated message ids.
     counter: u64,
     /// Replies that arrived before their request's `idle` status.
     held: Vec<HeldReply>,
@@ -111,6 +146,7 @@ pub(crate) struct Worker {
     idle: Vec<String>,
 }
 
+/// Connect the shell, control and iopub sockets, each with the connect timeout. iopub subscribes to every topic (empty prefix); which outputs matter is decided later from each message's parent header.
 async fn connect_sockets(
     shell: String,
     control: String,
@@ -136,6 +172,7 @@ async fn connect_sockets(
     })
 }
 
+/// Convert wire frames to a multipart ZeroMQ message.
 fn to_zmq(frames: Vec<Vec<u8>>) -> ZmqMessage {
     let mut frames = frames.into_iter();
     let mut message = ZmqMessage::from(frames.next().unwrap_or_default());
@@ -146,6 +183,7 @@ fn to_zmq(frames: Vec<Vec<u8>>) -> ZmqMessage {
 }
 
 impl Worker {
+    /// Create a worker for one connection; `launched` is `None` when attaching to a kernel someone else started.
     pub(crate) fn new(
         info: ConnectionInfo,
         signer: Signer,
@@ -171,10 +209,12 @@ impl Worker {
         }
     }
 
+    /// Send an event to the App; a dropped receiver is ignored because it just means nobody is listening any more.
     fn emit(&self, event: KernelEvent) {
         let _ = self.events.send(event);
     }
 
+    /// The worker's main loop: connect, serve until the connection ends, then either relaunch (restart request) or finish. [`KernelEvent::State`]`(Starting)` is re-emitted for every iteration so the status bar tracks restarts.
     pub(crate) async fn run(mut self, mut commands: UnboundedReceiver<Command>) {
         loop {
             self.emit(KernelEvent::State(KernelState::Starting));
@@ -198,6 +238,7 @@ impl Worker {
         }
     }
 
+    /// Terminal path: drop `launched` (kills the process and removes the runtime directory) before announcing, flush any replies still held, then emit the final `Dead` state and reason.
     fn finish(&mut self, reason: DeathReason) {
         // Kill the process and remove the runtime directory before saying so.
         self.launched = None;
@@ -206,6 +247,7 @@ impl Worker {
         self.emit(KernelEvent::Dead(reason));
     }
 
+    /// If we launched the kernel, whether its process has exited and why.
     fn check_exit(&mut self) -> Option<DeathReason> {
         self.launched.as_mut().and_then(Launched::exited)
     }
@@ -248,11 +290,13 @@ impl Worker {
         }
     }
 
+    /// A fresh message id: the session id plus a worker-local counter (`_w` marks worker-originated messages; `KernelHandle::execute` uses plain numbers).
     fn next_id(&mut self) -> String {
         self.counter += 1;
         format!("{}_w{}", self.session, self.counter)
     }
 
+    /// Build, sign and send one message of type `msg_type`. `id` is supplied for `execute_request` (the App already holds it) and generated otherwise.
     async fn send<S: SocketSend + Send>(
         &mut self,
         socket: &mut S,
@@ -268,6 +312,7 @@ impl Worker {
             .await
     }
 
+    /// Authenticate and type one received message. A message that fails the signature or size checks is reported as [`KernelEvent::Rejected`] and dropped, never acted on.
     fn decode(&self, message: ZmqMessage) -> Option<(Message, Content)> {
         let frames = message.into_vec();
         let decoded = wire::decode(&frames, &self.signer, self.limits).and_then(|m| {
@@ -293,6 +338,7 @@ impl Worker {
         )
     }
 
+    /// Serve one connection: send `kernel_info_request`, then multiplex shell and iopub traffic, handle-side commands, the process exiting and the start deadline until the connection ends or a restart/stop is requested.
     async fn serve(&mut self, s: &mut Sockets, commands: &mut UnboundedReceiver<Command>) -> Next {
         if let Err(e) = self
             .send(&mut s.shell, "kernel_info_request", request::empty(), None)
@@ -385,6 +431,7 @@ impl Worker {
         }
     }
 
+    /// Interrupt the running request. For a kernel Vix launched whose kernelspec says `interrupt_mode: signal` on Unix, send SIGINT to the process; otherwise (message mode, Windows, or an attached kernel) send an `interrupt_request` on the control channel.
     async fn interrupt(&mut self, s: &mut Sockets) -> ZmqResult<()> {
         #[cfg(unix)]
         if let Some(launched) = &self.launched
@@ -451,6 +498,7 @@ impl Worker {
         Ok(())
     }
 
+    /// Emit a pending reply as [`KernelEvent::Reply`].
     fn emit_reply(&self, held: HeldReply) {
         self.emit(KernelEvent::Reply {
             request: RequestId(held.request),
@@ -499,6 +547,7 @@ impl Worker {
         }
     }
 
+    /// Handle a shell message: `kernel_info_reply` marks the kernel ready; `execute_reply` is matched to its request via the parent id and held until the request's `idle` status arrives.
     fn on_shell(&mut self, message: ZmqMessage, ready: &mut bool) {
         let Some((message, content)) = self.decode(message) else {
             return;
@@ -522,6 +571,7 @@ impl Worker {
         }
     }
 
+    /// Handle an IOPub message. `status` updates the kernel state (and, on `idle` for one of our `execute_request`s, releases the matching reply). Everything else is an output; IOPub is a broadcast to every client of the kernel, so only messages whose parent header carries this session's id are forwarded.
     fn on_iopub(&mut self, message: ZmqMessage) {
         let Some((message, content)) = self.decode(message) else {
             return;

@@ -193,6 +193,7 @@ pub enum PaneNode {
 }
 
 impl Default for PaneNode {
+    /// A fresh layout is a single pane showing the first buffer (index 0).
     fn default() -> Self {
         PaneNode::Leaf(0)
     }

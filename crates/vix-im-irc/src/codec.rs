@@ -44,6 +44,7 @@ impl Prefix {
 }
 
 impl fmt::Display for Prefix {
+    /// Renders the conventional `nick[!user][@host]` prefix form.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.nick)?;
         if let Some(user) = &self.user {
@@ -78,6 +79,7 @@ pub enum ParseError {
 }
 
 impl fmt::Display for ParseError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParseError::NoCommand => f.write_str("line has no command"),
@@ -101,6 +103,7 @@ pub enum EncodeError {
 }
 
 impl fmt::Display for EncodeError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             EncodeError::ForbiddenChar => "line contains CR, LF or NUL",
@@ -161,6 +164,10 @@ pub fn escape_tag_value(value: &str) -> String {
     out
 }
 
+/// Parse the `;`-separated IRCv3 tag block (without the leading `@`).
+///
+/// A tag with no `=` or an empty value has `value: None`; values are
+/// unescaped per the message-tags spec.
 fn parse_tags(raw: &str) -> Vec<Tag> {
     raw.split(';')
         .filter(|t| !t.is_empty())
@@ -363,6 +370,7 @@ pub fn server_time_millis(value: &str) -> Option<i64> {
     Some(((days * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + millis)
 }
 
+/// Parse exactly `width` ASCII digits (no sign, no whitespace) as a number; `None` otherwise. Used for the fixed-width fields of `server-time` timestamps.
 fn num(text: &str, width: usize) -> Option<i64> {
     if text.len() != width || !text.bytes().all(|b| b.is_ascii_digit()) {
         return None;

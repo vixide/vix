@@ -22,6 +22,7 @@ pub enum TextError {
 }
 
 impl fmt::Display for TextError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             TextError::BadName => "bad nick, channel or target",
