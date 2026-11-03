@@ -4,6 +4,7 @@
 //! can be ignored: answering them would tell strangers about the user's
 //! machine, so this crate never does.
 
+/// The CTCP delimiter byte (`\x01`) that wraps a CTCP payload inside a message body.
 const DELIM: char = '\u{1}';
 
 /// Wrap `text` as a CTCP `ACTION` body.

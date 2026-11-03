@@ -44,6 +44,7 @@ impl Row {
     }
 }
 
+/// True when every subcomponent of the field is empty (so the field is skipped in the view).
 fn is_blank(f: &Field) -> bool {
     f.repetitions.iter().all(|r| {
         r.components
@@ -120,6 +121,7 @@ pub fn rows(msg: &Message) -> Vec<Row> {
     out
 }
 
+/// Build a leaf [`Row`] for a component or subcomponent: `raw` is unescaped (`\F\` and friends) for display while `line`/`col` still point at the source text.
 fn leaf(path: &Path, raw: &str, line: usize, col: usize, msg: &Message) -> Row {
     Row {
         kind: RowKind::Component,

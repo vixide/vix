@@ -69,6 +69,7 @@ pub enum SpecError {
 }
 
 impl fmt::Display for SpecError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::TooLarge => "kernel.json too large",
@@ -81,17 +82,24 @@ impl fmt::Display for SpecError {
 
 impl std::error::Error for SpecError {}
 
+/// The on-disk shape of `kernel.json`. Every field but `argv` is optional; unknown keys are ignored so newer kernelspecs still load.
 #[derive(Deserialize)]
 struct RawSpec {
+    /// The command line, with `{connection_file}` to be substituted. Required.
     argv: Vec<String>,
+    /// Human-readable name; empty if absent.
     #[serde(default)]
     display_name: String,
+    /// The kernel's language; empty if absent.
     #[serde(default)]
     language: String,
+    /// How to interrupt a running cell (signal by default).
     #[serde(default)]
     interrupt_mode: InterruptMode,
+    /// Extra environment variables for the kernel process.
     #[serde(default)]
     env: BTreeMap<String, String>,
+    /// Opaque extra data, carried through but never interpreted.
     #[serde(default)]
     metadata: Value,
 }
@@ -241,6 +249,7 @@ impl PathEnv {
     }
 }
 
+/// Treat an empty path (such as an unset-but-exported variable) as absent.
 fn non_empty(path: Option<&PathBuf>) -> Option<&PathBuf> {
     path.filter(|p| !p.as_os_str().is_empty())
 }

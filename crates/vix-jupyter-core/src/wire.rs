@@ -26,6 +26,7 @@ pub const DELIMITER: &[u8] = b"<IDS|MSG>";
 /// The only signature scheme Vix accepts.
 pub const SIGNATURE_SCHEME: &str = "hmac-sha256";
 
+/// HMAC-SHA256, the only signature scheme Vix accepts.
 type HmacSha256 = Hmac<Sha256>;
 
 /// An empty key: Jupyter allows one (no authentication), Vix does not.
@@ -33,6 +34,7 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct KeyError;
 
 impl fmt::Display for KeyError {
+    /// Renders a message that explains why an unsigned connection is refused.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("the connection key is empty; Vix requires signed messages")
     }
@@ -45,10 +47,12 @@ impl std::error::Error for KeyError {}
 /// Its `Debug` form never shows the key.
 #[derive(Clone)]
 pub struct Signer {
+    /// A MAC state already keyed, cloned for each message so the key schedule runs once per connection.
     mac: HmacSha256,
 }
 
 impl fmt::Debug for Signer {
+    /// Prints a placeholder; never the key material.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Signer { .. }")
     }
@@ -71,6 +75,7 @@ impl Signer {
             .map_err(|_| KeyError)
     }
 
+    /// A fresh MAC state seeded with the key, fed the four JSON parts (header, parent header, metadata, content) in order. Cloning the pre-keyed state avoids re-deriving the key for every message.
     fn mac_of(&self, parts: [&[u8]; 4]) -> HmacSha256 {
         let mut mac = self.mac.clone();
         for part in parts {
@@ -104,10 +109,12 @@ impl Signer {
     }
 }
 
+/// Lowercase hex digit for the low nibble of `n`.
 fn hex_digit(n: u8) -> char {
     char::from(b"0123456789abcdef"[usize::from(n & 0x0f)])
 }
 
+/// Value of a lowercase hex digit. Uppercase is rejected on purpose: signatures are produced and compared as lowercase hex, so only that form can be genuine.
 fn hex_value(c: u8) -> Option<u8> {
     match c {
         b'0'..=b'9' => Some(c - b'0'),
@@ -116,6 +123,7 @@ fn hex_value(c: u8) -> Option<u8> {
     }
 }
 
+/// Decode a 64-character lowercase hex string into 32 bytes (a SHA-256 digest); `None` for any other length or character.
 fn decode_hex_32(text: &[u8]) -> Option<[u8; 32]> {
     if text.len() != 64 {
         return None;
@@ -166,6 +174,7 @@ pub enum DecodeError {
 }
 
 impl fmt::Display for DecodeError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TooManyFrames => f.write_str("too many frames"),
@@ -204,6 +213,7 @@ pub fn encode(message: &Message, signer: &Signer) -> Vec<Vec<u8>> {
     frames
 }
 
+/// Serialize to JSON bytes. The `{}` fallback is unreachable in practice; it only exists to avoid a panic path.
 fn to_bytes<T: serde::Serialize>(value: &T) -> Vec<u8> {
     // Serializing a `Header` or a `serde_json` value to a Vec cannot fail:
     // every key is a string and there is no I/O.

@@ -19,6 +19,7 @@ pub enum MllpError {
 }
 
 impl fmt::Display for MllpError {
+    /// Renders the fixed human-readable message for the error.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MllpError::TooLarge => f.write_str("MLLP frame exceeds the size limit"),
@@ -57,8 +58,11 @@ pub fn frame(payload: &[u8]) -> Vec<u8> {
 /// `END`) are discarded, and a stray `START` inside a frame restarts it.
 #[derive(Debug, Clone)]
 pub struct Deframer {
+    /// Payload bytes of the frame being collected (empty between frames).
     buf: Vec<u8>,
+    /// True between a `START` byte and its `END`; bytes outside a frame are discarded.
     in_frame: bool,
+    /// Largest payload accepted; exceeding it is [`MllpError::TooLarge`].
     limit: usize,
 }
 

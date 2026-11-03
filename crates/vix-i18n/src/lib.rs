@@ -62,12 +62,14 @@ struct LazyBackend {
 }
 
 impl LazyBackend {
+    /// Build the backend with every locale slot empty; no blob is parsed until [`Self::messages`] is first asked for it.
     fn new() -> Self {
         Self {
             parsed: LOCALE_BLOBS.iter().map(|_| OnceLock::new()).collect(),
         }
     }
 
+    /// Position of `locale` in `LOCALE_BLOBS`, or `None` when it is not bundled (exact match; tag-truncation fallback happens above this layer).
     fn locale_index(locale: &str) -> Option<usize> {
         LOCALE_BLOBS.iter().position(|&(code, _)| code == locale)
     }
@@ -84,6 +86,7 @@ impl LazyBackend {
 }
 
 impl rust_i18n::Backend for LazyBackend {
+    /// Every bundled locale code, in `LOCALE_BLOBS` order. Does not force any blob to be parsed.
     fn available_locales(&self) -> Vec<Cow<'_, str>> {
         LOCALE_BLOBS
             .iter()
@@ -91,6 +94,7 @@ impl rust_i18n::Backend for LazyBackend {
             .collect()
     }
 
+    /// Look up `key` in `locale`; `None` for an unknown locale or key. Parses that locale's blob on first use.
     fn translate(&self, locale: &str, key: &str) -> Option<Cow<'_, str>> {
         let index = Self::locale_index(locale)?;
         self.messages(index)
@@ -98,6 +102,7 @@ impl rust_i18n::Backend for LazyBackend {
             .map(|v| Cow::Borrowed(v.as_str()))
     }
 
+    /// All `(key, value)` pairs of `locale` (unordered, as the underlying map is), or `None` for an unknown locale.
     fn messages_for_locale(&self, locale: &str) -> Option<Vec<(Cow<'_, str>, Cow<'_, str>)>> {
         let index = Self::locale_index(locale)?;
         Some(
@@ -121,6 +126,7 @@ static _RUST_I18N_BACKEND: LazyLock<LazyBackend> = LazyLock::new(LazyBackend::ne
 /// pass.
 static _RUST_I18N_FALLBACK_LOCALE: &[&str] = &["en"];
 
+/// The `rust_i18n` backend entry point the `t!` macro expands to: a plain exact-locale lookup in the lazy backend, with no fallback (see [`_rust_i18n_try_translate`] for that).
 #[inline]
 fn _rust_i18n_backend_translate<'r>(locale: &str, key: &str) -> Option<Cow<'r, str>> {
     _RUST_I18N_BACKEND.translate(locale, key)
@@ -170,6 +176,7 @@ pub fn _rust_i18n_translate<'r>(locale: &str, key: &'r str) -> Cow<'r, str> {
     clippy::used_underscore_items,
     reason = "the underscore-prefixed names are the ones rust-i18n's t! expansion requires"
 )]
+/// Look up `key` for `locale`, then retry with each progressively shorter fallback tag from `_rust_i18n_lookup_fallback`; `None` if no tag has the key.
 pub fn _rust_i18n_try_translate<'r>(locale: &str, key: impl AsRef<str>) -> Option<Cow<'r, str>> {
     _rust_i18n_backend_translate(locale, key.as_ref()).or_else(|| {
         let mut current_locale = locale;

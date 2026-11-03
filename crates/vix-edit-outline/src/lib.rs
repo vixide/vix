@@ -40,15 +40,20 @@ pub enum Outcome {
 /// collapsed (its descendants hidden).
 #[derive(Clone)]
 struct Item {
+    /// The item's text without its indentation.
     text: String,
+    /// Indentation depth: 0 is a top-level item, each step is one nesting level.
     level: usize,
+    /// When set, the item's descendants (the following items with a greater `level`) are hidden.
     collapsed: bool,
 }
 
 /// A point-in-time snapshot for undo/redo.
 #[derive(Clone)]
 struct Snapshot {
+    /// The whole outline, in document order.
     items: Vec<Item>,
+    /// Index of the selected item within `items`.
     sel: usize,
 }
 

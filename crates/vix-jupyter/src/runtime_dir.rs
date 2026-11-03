@@ -28,6 +28,7 @@ pub(crate) fn random_hex(n: usize) -> io::Result<String> {
 /// when dropped.
 #[derive(Debug)]
 pub(crate) struct RuntimeDir {
+    /// The created directory, removed on drop.
     path: PathBuf,
 }
 

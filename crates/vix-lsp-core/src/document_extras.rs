@@ -38,6 +38,7 @@ pub enum TargetKind {
     Unsupported,
 }
 
+/// Parse an LSP `Position` object; `None` if either field is missing, non-integer, or does not fit `u32`.
 fn position(v: &Value) -> Option<Position> {
     Some(Position {
         line: u32::try_from(v.get("line")?.as_u64()?).ok()?,
@@ -45,6 +46,7 @@ fn position(v: &Value) -> Option<Position> {
     })
 }
 
+/// Parse an LSP `Range` object from its `start` and `end` positions.
 fn range(v: &Value) -> Option<Range> {
     Some(Range {
         start: position(v.get("start")?)?,

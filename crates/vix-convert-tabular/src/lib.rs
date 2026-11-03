@@ -205,6 +205,7 @@ impl ConvertError {
 }
 
 impl std::fmt::Display for ConvertError {
+    /// Renders the human-readable message only; the structured fields on each variant are for callers that want line/column detail.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Parse { message, .. } | Self::Render { message, .. } => f.write_str(message),

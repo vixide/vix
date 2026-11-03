@@ -11,6 +11,7 @@ use vix_jupyter_core::{DecodeError, Output};
 pub struct RequestId(pub String);
 
 impl fmt::Display for RequestId {
+    /// Displays the bare id string.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }

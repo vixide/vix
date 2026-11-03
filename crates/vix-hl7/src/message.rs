@@ -19,6 +19,7 @@ pub struct Delimiters {
 }
 
 impl Default for Delimiters {
+    /// The standard HL7 v2 delimiters (`|^~\&`), used when a message has no usable `MSH` header.
     fn default() -> Self {
         Delimiters {
             field: '|',
@@ -123,6 +124,10 @@ fn split_cols(s: &str, sep: char, base: usize) -> Vec<(usize, &str)> {
     out
 }
 
+/// Split one field's text into repetitions, components and subcomponents.
+///
+/// `literal` marks MSH-2 (the encoding characters), which contains the
+/// delimiter characters themselves and must stay a single unsplit value.
 fn parse_field(text: &str, col: usize, d: &Delimiters, literal: bool) -> Field {
     let repetitions = if literal {
         vec![vec![vec![text.to_string()]]]
@@ -149,6 +154,13 @@ fn parse_field(text: &str, col: usize, d: &Delimiters, literal: bool) -> Field {
     }
 }
 
+/// Parse one segment line into its [`Segment`].
+///
+/// `MSH` is special: MSH-1 is the field separator itself (it has no text between
+/// separators, so it is synthesised as a literal field at column 3) and MSH-2 is
+/// the encoding characters, which is kept literal. Because both are pushed ahead of the
+/// remaining pieces, later fields keep their HL7 numbers (`MSH-3` is the third
+/// entry).
 fn parse_segment(line: &str, line_no: usize, d: &Delimiters) -> Segment {
     let pieces = split_cols(line, d.field, 0);
     let name = pieces[0].1.trim().to_string();
