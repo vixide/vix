@@ -8,24 +8,6 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
-### Changed
-
-- Documentation only: module docs, private-item docs, why-comments and runnable examples for 23 crates (acp, ai-panel, ascii-character-picker, base-tool, checksum-tool, convert-from-json-into-csv-tool, dap, edit-sql, hex-rgb, http-client, left-dock, list-state, macros, oci-panel, org-table, qr-tool, system-information-panel, theme, theme-editor-panel, undo-store, unit-converter-tool, url-tool, workspace-search); no behavior change.
-
-### Changed
-
-- **Code documentation pass (group 5).** Added rustdoc and explanatory comments to the private items, fields and trait impls of `vix-lsp`, `vix-lsp-core`, `vix-im-irc`, `vix-hl7`, `vix-jupyter`, `vix-jupyter-core`, `vix-i18n`, `vix-jwt-tool`, `vix-session`, `vix-textops`, `vix-edit-outline`, `vix-edit-table`, `vix-clock-panel` and `vix-convert-tabular`, and fixed one broken intra-doc link. Documentation only; no behavior change.
-
-### Changed
-
-- **`vix-db` documentation pass.** Module docs, rustdoc (with runnable examples for the pure functions) and inline comments across `crates/vix-db/src`; documentation only, no behavior change.
-
-### Changed
-
-- **Code documentation for the App shell.** Rustdoc and inline comments were added across
-  `tui/src/app.rs` and `tui/src/app/` (chooser, panel and Cowork handlers, search and
-  query-replace, explorer and mouse routing). Documentation only; no behavior change.
-
 ### Fixed
 
 - **musl release build (T670).** The `x86_64-unknown-linux-musl` build is now configured to link statically and without PIE (`.cargo/config.toml`), and CI checks the result with the new `scripts/check-static-binary`. The previous build was dynamically linked against `/lib/ld-musl-x86_64.so.1`, so it did not start on glibc systems and crashed on Alpine. Not yet verified on a real release build.
@@ -45,18 +27,6 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 - **Inline ghost-text completion (T618).** A suggestion drawn dimmed after the cursor, from a language server (`textDocument/inlineCompletion`, so copilot-language-server works) or from an AI fill-in-the-middle prompt, chosen by the new `inline_completion = "off" | "lsp" | "ai"` setting (default `"off"`). It is requested after an idle pause once you have typed, only when nothing but blanks follows the cursor, and dropped when the buffer or cursor changes or a server reply is for an older document. Tab accepts it, Ctrl+Right accepts one word, Esc dismisses; the actions `inline_completion.trigger`, `.accept`, `.accept_word` and `.dismiss` do the same from the palette. The `"ai"` source sends the text around the cursor to your configured AI provider, so it is opt-in and obeys `ai = "off"`. New: `vix_lsp_core::inline_completion`, `vix_lsp::ghost`, `vix_ai_core::fim`, `LspEvent::InlineCompletion` and `Lsp::request_inline_completion`. Only the first line is drawn (with `…` when more follow), and soft-wrapped views draw none.
 - **Project environment activation** (T667): new `vix-project-env` crate. Vix detects a project's `.venv`/`venv` (`pyvenv.cfg`), direnv (`.envrc`) or mise (`mise.toml`, `.mise.toml`, `.tool-versions`) and applies its variables to language servers, tasks/commands and the integrated terminal, with the source shown in the status bar. `direnv export json` and `mise env --json` run project-controlled code, so they run only in a workspace you trusted (the existing T132 trust decision); an untrusted workspace falls back to the file-only `.venv` source and says so. New action `project.reload_env` (Project → Reload Environment). Already-running servers keep their old environment until restarted. Custom detectors are not implemented.
 - **Safe saving (T663).** Saving a file with several hard links, or one owned by another user, now writes in place instead of renaming a temp file over it, so the links and the owner survive. Every in-place save first copies the original to the recovery directory (`~/.local/state/vix/recovery`) and removes the copy once the write is flushed; a copy left behind by an interrupted save is reported at the next start. (The Restore / Diff / Discard prompt is not built yet.)
-
-### Changed
-
-- **Code documentation pass (group 0).** Module, item and inline documentation (plus doctests) for `vix-editor-core`, `vix-im`, `vix-mcp-server`, `vix-oci`, `vix-project-env`, `vix-roam`, `vix-encoding`, `vix-input` and 14 smaller crates; no behavior change. Fixed several stale docs (for example `vix_roam::slugify`, `vix-column-view`'s `Outcome::Close`).
-
-### Changed
-
-- **Code documentation pass, group 2.** Module docs, rustdoc, example tests and why-comments across `vix-authority`, `vix-git`, `vix-keybindings`, `vix-large-file`, `vix-modal`, `vix-cowork-net`, `vix-diff-view`, `vix-edit-value`, `vix-structural-replace` and 15 small tool/panel crates. Comments only; no change in what the code does. Fixed two stale docs (`vix_authority::install`, `vix_diff_view::build`).
-
-### Changed
-
-- **Code annotations, batch 3 (docs only).** Module, item and inline documentation across 25 crates (`vix-menu`, `vix-editor`, `vix-settings`, `vix-org`, `vix-terminal`, `vix-fhir`, and others); no behavior change.
 
 ### Breaking
 
@@ -203,6 +173,15 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 - **Docs are spell-checked** in `scripts/check-docs` (CSpell; required in GitHub and Codeberg CI), and the existing spelling findings are fixed.
 - **README and website rewritten for new visitors**, and the website now uses the current Lily design system (PickerBar 0.5 with docs search, theme, language, text size and share pickers; 57 themes from `@lilydesignsystem/themes`).
 - **Dependencies updated (2026-10-30).** The MSRV moves to **Rust 1.97** (stable is 1.99; `rust-version`, the GitHub `msrv` job, GitLab's `rust:1.97` image and the Codeberg toolchain move together). Manifest bumps: `getrandom` 0.2 → 0.4 (`getrandom::fill`), `sysinfo` 0.39 → 0.40 (System Information now leaves out facts the platform can't report instead of failing), `etcetera` 0.10 → 0.11, and the compatible `arboard` 3.7, `rhai` 1.27, `rust-embed` 8.13, `tokio` 1.54.1, `tree-sitter-md` 0.5.4; `cargo update` refreshes the root, `gui/` and `fuzz/` lockfiles (among them `ureq` 3.5, `uuid` 1.29, `icu_*` 2.4, `pest` 2.9.5, `cc` 1.10, `wasm-bindgen` 0.2.130). Not taken: `keyring` 4 (a rewrite around separate credential-store crates), `vt100` 0.18 (`NonZeroU16` sizes and `String` screen dumps through the Cowork terminal mirror), `fontique` 0.12 (egui, parley and Slint are all on 0.11) and `evalexpr` 12+ (AGPL). Dependabot no longer ignores `getrandom` or `ureq`. GitHub Actions: `actions/checkout` v7, `actions/upload-artifact` v7, Docker's setup, login and build-and-push actions (v4, v4, v7); dist 0.33.1 (`release.yml` regenerated). Website: Svelte 5.57.3, Vite 8.3.5, svelte-check 4.7.7, `@sveltejs/vite-plugin-svelte` 7.3.1, `@lilydesignsystem/svelte-picker-bar` 0.5.1, pnpm 11.28.9, and its deploy workflow's Pages/pnpm/Node actions; TypeScript stays on 6 (SvelteKit 3.1's tsconfig check rejects 7).
+- Documentation only: module docs, private-item docs, why-comments and runnable examples for 23 crates (acp, ai-panel, ascii-character-picker, base-tool, checksum-tool, convert-from-json-into-csv-tool, dap, edit-sql, hex-rgb, http-client, left-dock, list-state, macros, oci-panel, org-table, qr-tool, system-information-panel, theme, theme-editor-panel, undo-store, unit-converter-tool, url-tool, workspace-search); no behavior change.
+- **Code documentation pass (group 5).** Added rustdoc and explanatory comments to the private items, fields and trait impls of `vix-lsp`, `vix-lsp-core`, `vix-im-irc`, `vix-hl7`, `vix-jupyter`, `vix-jupyter-core`, `vix-i18n`, `vix-jwt-tool`, `vix-session`, `vix-textops`, `vix-edit-outline`, `vix-edit-table`, `vix-clock-panel` and `vix-convert-tabular`, and fixed one broken intra-doc link. Documentation only; no behavior change.
+- **`vix-db` documentation pass.** Module docs, rustdoc (with runnable examples for the pure functions) and inline comments across `crates/vix-db/src`; documentation only, no behavior change.
+- **Code documentation for the App shell.** Rustdoc and inline comments were added across
+  `tui/src/app.rs` and `tui/src/app/` (chooser, panel and Cowork handlers, search and
+  query-replace, explorer and mouse routing). Documentation only; no behavior change.
+- **Code documentation pass (group 0).** Module, item and inline documentation (plus doctests) for `vix-editor-core`, `vix-im`, `vix-mcp-server`, `vix-oci`, `vix-project-env`, `vix-roam`, `vix-encoding`, `vix-input` and 14 smaller crates; no behavior change. Fixed several stale docs (for example `vix_roam::slugify`, `vix-column-view`'s `Outcome::Close`).
+- **Code documentation pass, group 2.** Module docs, rustdoc, example tests and why-comments across `vix-authority`, `vix-git`, `vix-keybindings`, `vix-large-file`, `vix-modal`, `vix-cowork-net`, `vix-diff-view`, `vix-edit-value`, `vix-structural-replace` and 15 small tool/panel crates. Comments only; no change in what the code does. Fixed two stale docs (`vix_authority::install`, `vix_diff_view::build`).
+- **Code annotations, batch 3 (docs only).** Module, item and inline documentation across 25 crates (`vix-menu`, `vix-editor`, `vix-settings`, `vix-org`, `vix-terminal`, `vix-fhir`, and others); no behavior change.
 
 ## [1.8.0] - 2026-10-25
 

@@ -273,7 +273,7 @@ impl App {
         }
     }
 
-    /// Spawn the configured AI command (see [`Settings::ai_command`]) over `text`,
+    /// Spawn the configured AI command (see `Settings::ai_command`) over `text`,
     /// returning a receiver for its captured stdout (or `None` after reporting an
     /// empty input or a spawn failure). The reader thread sends one [`AiMsg`] when
     /// the CLI exits. The command is built from the `ai_command` template so the
@@ -319,7 +319,7 @@ impl App {
     }
 
     /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: dispatch
-    /// on [`Settings::ai_provider`] (T124) to either the original CLI shell-out
+    /// on `Settings::ai_provider` (T124) to either the original CLI shell-out
     /// ([`Self::spawn_ai_cli`], the `"cli"` default — every existing call site
     /// is unaffected) or a direct HTTP provider ([`Self::spawn_ai_http`]).
     /// Unlike [`Self::spawn_ai`] this does **not** reject empty input — a chat
@@ -340,7 +340,7 @@ impl App {
         }
     }
 
-    /// Run the configured CLI (see [`Settings::ai_command`]) over `text`,
+    /// Run the configured CLI (see `Settings::ai_command`) over `text`,
     /// returning a receiver for its captured stdout (or `None` after reporting a
     /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
     /// The command is built from the `ai_command` template so the AI menu can

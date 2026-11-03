@@ -5032,7 +5032,7 @@ impl App {
     // ----- Org-node --------------------------------------------------------
 
     /// Surround the selection with a bracket/quote pair for an `edit.surround.*`
-    /// action (add on first use, remove on repeat — [`toggle_wrap`] handles both).
+    /// action (add on first use, remove on repeat — `toggle_wrap` handles both).
     /// Returns `true` if `action` was a known surround pair.
     fn surround(&mut self, action: &str) -> bool {
         let (open, close) = match action {

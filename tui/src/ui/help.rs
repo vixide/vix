@@ -121,7 +121,7 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 /// Vix → Keybindings…: the editable sibling of [`draw_help`] — same
-/// filter/sort/scroll table shape, plus a highlighted [`Panel::selected`]
+/// filter/sort/scroll table shape, plus a highlighted `Panel::selected`
 /// row (rebind/reset target) and a `[user]`/`[script: name]` tag on any
 /// row whose source isn't the built-in keymap.
 #[allow(

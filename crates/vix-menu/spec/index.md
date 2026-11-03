@@ -1,6 +1,6 @@
 # Menus
 
-Top menu bar with keyboard-navigable dropdowns (one level of submenus).
+Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested submenu levels).
 
 - Open with `F10`, or `Alt+<letter>` for a specific menu: File `Alt+F`, Edit
   `Alt+E`, View `Alt+I`, Go `Alt+N`, Run `Alt+R`, AI `Alt+A`, DB `Alt+D`, Git
