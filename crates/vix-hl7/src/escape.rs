@@ -38,6 +38,11 @@ pub fn unescape(raw: &str, d: &Delimiters) -> String {
     out
 }
 
+/// Decode the body of one escape sequence (the text between a pair of escape characters).
+///
+/// Returns `None` for an unrecognised body so the caller keeps the escape
+/// characters verbatim instead of dropping data. `H`/`N` (highlight on/off) decode
+/// to nothing because a plain-text view has no highlighting.
 fn decode_sequence(body: &str, d: &Delimiters) -> Option<String> {
     match body {
         "F" => Some(d.field.to_string()),
@@ -51,6 +56,11 @@ fn decode_sequence(body: &str, d: &Delimiters) -> Option<String> {
     }
 }
 
+/// Decode a `\Xhh..\` hex body into text.
+///
+/// The bytes are interpreted as UTF-8 (lossily: invalid bytes become U+FFFD).
+/// Odd-length, empty, non-ASCII or non-hex input yields `None`, which the
+/// caller treats as "not a valid sequence".
 fn decode_hex(hex: &str) -> Option<String> {
     if hex.is_empty() || !hex.is_ascii() || !hex.len().is_multiple_of(2) {
         return None;

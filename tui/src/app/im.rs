@@ -161,6 +161,7 @@ pub(crate) fn history_file_name(id: &ConversationId) -> String {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_') || (b == b'.' && !out.is_empty()) {
             out.push(char::from(b));
         } else {
+            // Upper-case hex digits for percent-escaping the bytes that are not file-name safe.
             const HEX: &[u8; 16] = b"0123456789ABCDEF";
             out.push('%');
             out.push(char::from(HEX[usize::from(b >> 4)]));

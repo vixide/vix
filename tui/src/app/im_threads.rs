@@ -77,10 +77,12 @@ impl ThreadStore {
         self.threads.iter().find(|t| t.id == id)
     }
 
+    /// Mutable access to the thread with this id.
     fn get_mut(&mut self, id: &str) -> Option<&mut Thread> {
         self.threads.iter_mut().find(|t| t.id == id)
     }
 
+    /// Keep threads in a stable display order: by file, then start line, then id.
     fn sort(&mut self) {
         self.threads
             .sort_by(|a, b| (&a.path, a.start_line, &a.id).cmp(&(&b.path, b.start_line, &b.id)));

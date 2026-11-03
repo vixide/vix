@@ -73,6 +73,9 @@ fn footer(p: &Panel) -> String {
     }
 }
 
+/// Draw the OC panel overlay: a tab line naming the lists, the rows of the
+/// current list and a footer (key hint, the exact command awaiting a yes, or a
+/// text prompt). No-op when the panel is closed.
 pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.oc.is_none() {
         return;

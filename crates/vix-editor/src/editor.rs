@@ -3,6 +3,13 @@
 //!
 //! The code editor addresses the cursor as a flat character offset; this module
 //! converts to/from 1-based line/column for the status bar and go-to-line.
+//!
+//! [`Editor`] owns the tab list and the display flags; each [`Tab`] owns one
+//! `CodeEditor` plus file metadata. All disk access goes through
+//! `vix_authority::current()` (T710) so remote workspaces behave like local
+//! ones. Rendering lives in the App shell's `src/ui.rs`, not here.
+//!
+//! Spec: `crates/vix-editor/spec/index.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -162,6 +169,8 @@ fn apply_theme(ed: &mut CodeEditor) {
     clippy::expect_used,
     reason = "invariant established earlier in this function"
 )]
+/// Build a configured `CodeEditor` for `text`, choosing the grammar from `path`
+/// (and a shebang in `text`). Unknown grammars fall back to plain text.
 fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> CodeEditor {
     let lang = lang_for_path(path, text);
     // An empty syntax theme keeps the editor monochrome (no token colors), as the
@@ -763,6 +772,13 @@ impl Editor {
         self.open_with_limit(path, preview, vix_fileops::HARD_MAX_TEXT_BYTES)
     }
 
+    /// Shared body of [`Editor::open`] and [`Editor::open_unbounded`]: focus an
+    /// already-open tab for the same canonical path, else read the file
+    /// (refusing anything over `max_bytes`) into a new tab.
+    ///
+    /// # Errors
+    ///
+    /// As [`Editor::open`].
     fn open_with_limit(&mut self, path: &Path, preview: bool, max_bytes: u64) -> io::Result<()> {
         // Through the authority slot (T710): the workspace may not be local.
         let auth = vix_authority::current();
@@ -985,6 +1001,13 @@ impl Editor {
         self.save_active_checked(opts, false)
     }
 
+    /// Save the active buffer to its own path. With `check` the tab's recorded
+    /// [`DiskStamp`] is compared against the file first; without it the write is
+    /// unconditional.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` when the buffer has no path, otherwise as [`Editor::save_active`].
     fn save_active_checked(&mut self, opts: SaveOptions, check: bool) -> io::Result<PathBuf> {
         let idx = self.active;
         let path = self.tabs[idx]

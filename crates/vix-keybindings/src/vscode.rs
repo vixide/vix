@@ -23,6 +23,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// VS Code's Ctrl-key bindings (its only context), with Shift encoded explicitly in the token.
 const NORMAL: &[Binding] = &[
     Binding {
         key_token: "C-q",
@@ -146,6 +147,7 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
+/// VS Code's chord contexts, shared by `vscode-macos` and `vscode-windows` in [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: NORMAL,

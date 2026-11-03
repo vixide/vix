@@ -29,6 +29,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// `IntelliJ` macOS-keymap bindings (top-level context only).
 const MACOS: &[Binding] = &[
     Binding {
         key_token: "C-A-l",
@@ -130,6 +131,7 @@ const MACOS: &[Binding] = &[
     },
 ];
 
+/// `IntelliJ` Windows-keymap bindings (top-level context only); differs from the macOS table in the "go to" family.
 const WINDOWS: &[Binding] = &[
     Binding {
         key_token: "C-A-l",
@@ -219,11 +221,13 @@ const WINDOWS: &[Binding] = &[
     },
 ];
 
+/// The `intellij-macos` chord contexts, wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS_MACOS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: MACOS,
 }];
 
+/// The `intellij-windows` chord contexts, wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS_WINDOWS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: WINDOWS,

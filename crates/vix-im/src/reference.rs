@@ -1,6 +1,19 @@
 //! Code references inside message text: `path:line`, `path:line:col` and
 //! `path:line-line`, and the pure path logic that keeps one inside the
 //! workspace root.
+//!
+//! Detection ([`find_refs`], [`parse_ref`]) is purely textual and
+//! conservative (a clock time like `10:30` must not look like a file
+//! position); [`resolve_in_root`] is the security boundary that stops a
+//! received reference such as `../../etc/passwd:1` from opening files outside
+//! the workspace. Owning spec: `crates/vix-im/spec/index.md`.
+//!
+//! ```
+//! use vix_im::{find_refs, parse_ref};
+//! let found = find_refs("see (src/a.rs:3-5), not 10:30");
+//! assert_eq!(found.len(), 1);
+//! assert_eq!(found[0].reference, parse_ref("src/a.rs:3-5").unwrap());
+//! ```
 
 use std::fmt;
 use std::ops::Range;
@@ -57,9 +70,12 @@ pub struct CodeRefMatch {
     pub reference: CodeRef,
 }
 
+/// Characters stripped from the front of a word before it is parsed.
 const OPENERS: &[char] = &[
     '(', '[', '{', '<', '"', '\'', '`', '\u{201C}', '\u{2018}', '\u{300C}', '\u{300A}', '\u{FF08}',
 ];
+/// Characters stripped from the end of a word (sentence punctuation and
+/// closing brackets/quotes, including CJK, Arabic and Devanagari forms).
 const CLOSERS: &[char] = &[
     ')', ']', '}', '>', '"', '\'', '`', ',', '.', ';', ':', '!', '?', '\u{201D}', '\u{2019}',
     '\u{300D}', '\u{300B}', '\u{FF09}', '\u{3002}', '\u{FF0C}', '\u{060C}', '\u{0964}',
@@ -108,7 +124,8 @@ fn word_ref(body: &str, start: usize, end: usize) -> Option<CodeRefMatch> {
     })
 }
 
-/// Parse exactly one reference, with nothing around it.
+/// Parse exactly one reference, with nothing around it. `None` for a URL or
+/// anything that does not look like a path followed by a 1-based position.
 #[must_use]
 pub fn parse_ref(text: &str) -> Option<CodeRef> {
     if text.contains("://") {
@@ -128,6 +145,8 @@ pub fn parse_ref(text: &str) -> Option<CodeRef> {
     })
 }
 
+/// The heuristic that keeps times and ratios out: needs a letter and one of
+/// `/`, `\` or `.`.
 fn looks_like_path(path: &str) -> bool {
     // `a.rs:1:2:3` is not `a.rs:1` at line 2, column 3.
     let ends_in_position = path
@@ -136,8 +155,11 @@ fn looks_like_path(path: &str) -> bool {
     !ends_in_position && path.chars().any(char::is_alphabetic) && path.contains(['/', '\\', '.'])
 }
 
+/// `(line, column, end_line)` as parsed from the text after the path.
 type Position = (u32, Option<u32>, Option<u32>);
 
+/// Parse `LINE`, `LINE:COL` or `LINE-END`; an `END` before `LINE` is
+/// rejected.
 fn parse_position(text: &str) -> Option<Position> {
     if let Some((line, col)) = text.split_once(':') {
         Some((number(line)?, Some(number(col)?), None))
@@ -167,12 +189,14 @@ fn number(text: &str) -> Option<u32> {
 #[must_use]
 pub fn resolve_in_root(root: &Path, reference: &CodeRef) -> Option<PathBuf> {
     let path = Path::new(&reference.path);
+    // An empty path would resolve to the root itself, which is a directory.
     if reference.path.is_empty() {
         return None;
     }
     let root = normalize(root)?;
     if path.has_root() || path.is_absolute() {
         let full = normalize(path)?;
+        // Component-wise `starts_with`, so `/work2` is not "under" `/work`.
         return (full.starts_with(&root) && full != root).then_some(full);
     }
     let mut parts: Vec<&std::ffi::OsStr> = Vec::new();
@@ -181,6 +205,7 @@ pub fn resolve_in_root(root: &Path, reference: &CodeRef) -> Option<PathBuf> {
             Component::Normal(part) => parts.push(part),
             Component::CurDir => {}
             Component::ParentDir => {
+                // `..` past the start (pop on empty) escapes the root: reject.
                 parts.pop()?;
             }
             Component::RootDir | Component::Prefix(_) => return None,
@@ -204,6 +229,8 @@ fn normalize(path: &Path) -> Option<PathBuf> {
             Component::Prefix(_) | Component::RootDir => out.push(component.as_os_str()),
             Component::CurDir => {}
             Component::ParentDir => {
+                // `depth` counts normal components pushed so far; a `..`
+                // with none left would climb above the start.
                 depth = depth.checked_sub(1)?;
                 out.pop();
             }

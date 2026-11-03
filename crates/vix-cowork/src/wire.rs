@@ -45,6 +45,8 @@ pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 /// Longest string field (names), in bytes.
 pub const MAX_NAME_BYTES: usize = 256;
+/// Alias used by the private `Reader::str`: every string field is a name-sized
+/// field, so they all share the [`MAX_NAME_BYTES`] cap.
 const MAX_STR: usize = MAX_NAME_BYTES;
 
 /// Most paths one [`Message::FileList`] carries; the host truncates beyond it.
@@ -163,6 +165,9 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+    /// The stable one-byte wire tag. These numbers are protocol: never reuse or
+    /// renumber one; add new codes at the end and bump `PROTOCOL_VERSION` if old
+    /// peers could misread them.
     const fn to_byte(self) -> u8 {
         match self {
             Self::PermissionDenied => 0,
@@ -174,6 +179,8 @@ impl ErrorCode {
         }
     }
 
+    /// Inverse of `to_byte`; `None` for an unassigned tag so the decoder can
+    /// report [`WireProblem::UnknownTag`] instead of guessing.
     const fn from_byte(b: u8) -> Option<Self> {
         Some(match b {
             0 => Self::PermissionDenied,
@@ -367,9 +374,13 @@ impl Message {
     }
 }
 
+/// Append-only little-endian encoder for the message payload. Infallible: the
+/// size cap is enforced by the caller (`MAX_MESSAGE_BYTES`) and by the matching
+/// bounds in [`Reader`], so encoding never needs to return an error.
 struct Writer(Vec<u8>);
 
 impl Writer {
+    // Fixed-width integers are all little-endian, matching `Reader`.
     fn u8(&mut self, v: u8) {
         self.0.push(v);
     }
@@ -379,6 +390,7 @@ impl Writer {
     fn u64(&mut self, v: u64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
+    /// A length-prefixed (u32 LE) byte string; the building block for `str` too.
     fn bytes(&mut self, b: &[u8]) {
         // Messages are bounded far below u32::MAX by MAX_MESSAGE_BYTES.
         let n = u32::try_from(b.len()).unwrap_or(u32::MAX);
@@ -396,12 +408,21 @@ impl Writer {
     }
 }
 
+/// Bounds-checked little-endian decoder over a borrowed message. Total by
+/// construction: every read goes through `take`, which returns
+/// [`WireProblem::Truncated`] rather than panicking or reading past the end, so
+/// hostile input from a peer can at worst be rejected (the codec is fuzzed and
+/// property-tested for this).
 struct Reader<'a> {
+    /// The whole message being decoded.
     buf: &'a [u8],
+    /// Next unread offset into `buf`; only ever advanced by `take`.
     pos: usize,
 }
 
 impl<'a> Reader<'a> {
+    /// Consume exactly `n` bytes. `checked_add` guards the (hostile) case of an
+    /// `n` that would overflow `usize` when added to the cursor.
     fn take(&mut self, n: usize) -> Result<&'a [u8], WireProblem> {
         let end = self.pos.checked_add(n).ok_or(WireProblem::Truncated)?;
         let slice = self.buf.get(self.pos..end).ok_or(WireProblem::Truncated)?;
@@ -416,6 +437,8 @@ impl<'a> Reader<'a> {
         a.copy_from_slice(self.take(8)?);
         Ok(u64::from_le_bytes(a))
     }
+    /// Read a length-prefixed byte string, rejecting a declared length over `max`
+    /// *before* slicing so a forged huge length can never trigger an allocation.
     fn bytes(&mut self, max: usize) -> Result<&'a [u8], WireProblem> {
         let mut a = [0u8; 4];
         a.copy_from_slice(self.take(4)?);
@@ -430,6 +453,8 @@ impl<'a> Reader<'a> {
             .map(str::to_owned)
             .map_err(|_| WireProblem::BadUtf8)
     }
+    /// Read a path field and validate it through [`SharedPath::parse`], the single
+    /// door for guest-named paths, so a malformed path is rejected at decode time.
     fn path(&mut self) -> Result<SharedPath, CoworkError> {
         let raw = self.bytes(crate::path::MAX_PATH_BYTES)?;
         let s = std::str::from_utf8(raw).map_err(|_| WireProblem::BadUtf8)?;
@@ -440,6 +465,8 @@ impl<'a> Reader<'a> {
         a.copy_from_slice(self.take(2)?);
         Ok(u16::from_le_bytes(a))
     }
+    /// A boolean is exactly `0` or `1`; any other byte is a protocol error (a
+    /// lenient "non-zero is true" would let two encodings mean the same thing).
     fn flag(&mut self) -> Result<bool, WireProblem> {
         match self.u8()? {
             0 => Ok(false),
@@ -452,6 +479,8 @@ impl<'a> Reader<'a> {
         a.copy_from_slice(self.take(4)?);
         Ok(u32::from_le_bytes(a))
     }
+    /// A large opaque payload (CRDT update / snapshot bytes), capped only by the
+    /// overall message limit.
     fn blob(&mut self) -> Result<Vec<u8>, WireProblem> {
         Ok(self.bytes(MAX_MESSAGE_BYTES)?.to_vec())
     }

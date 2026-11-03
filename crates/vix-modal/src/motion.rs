@@ -45,6 +45,8 @@ pub enum MotionKind {
     Linewise,
 }
 
+/// Decode `text` into chars once; every motion indexes by char offset, so
+/// this is the single place the byte/char conversion happens.
 fn chars_of(text: &str) -> Vec<char> {
     text.chars().collect()
 }
@@ -68,12 +70,16 @@ fn last_content_pos((start, end): (usize, usize)) -> usize {
     if end > start { end - 1 } else { start }
 }
 
+/// Offset of the first non-whitespace char of the `(start, end)` line, or
+/// `start` for a blank line (Vim's `^` rule).
 fn first_non_blank(chars: &[char], (start, end): (usize, usize)) -> usize {
     (start..end)
         .find(|&i| !chars[i].is_whitespace())
         .unwrap_or(start)
 }
 
+/// Split `pos` into `(row, column, all line ranges)`. A `pos` past the end
+/// falls back to the last row, so callers can index `lines[row]` safely.
 fn line_and_col(chars: &[char], pos: usize) -> (usize, usize, Vec<(usize, usize)>) {
     let lines = line_ranges(chars);
     let row = lines
@@ -84,6 +90,8 @@ fn line_and_col(chars: &[char], pos: usize) -> (usize, usize, Vec<(usize, usize)
     (row, col, lines)
 }
 
+/// The offset at column `col` of line `row`, clamped to the line's last
+/// content char (Normal mode never rests past it; see [`last_content_pos`]).
 fn clamp_to_row(lines: &[(usize, usize)], row: usize, col: usize) -> usize {
     let (start, end) = lines[row];
     start + col.min(last_content_pos((start, end)) - start)
@@ -237,6 +245,8 @@ pub fn word_end(text: &str, pos: usize, count: usize) -> usize {
 
 // ----- { } ( ) -----------------------------------------------------------
 
+/// Walk forward `count` times (at least once) to the next unit start strictly
+/// after the running position; falls back to `end` when no unit remains.
 fn nth_start_after(units: &[(usize, usize)], pos: usize, count: usize, end: usize) -> usize {
     let mut p = pos;
     for _ in 0..count.max(1) {
@@ -249,6 +259,8 @@ fn nth_start_after(units: &[(usize, usize)], pos: usize, count: usize, end: usiz
     p
 }
 
+/// Walk backward `count` times (at least once) to the previous unit start
+/// strictly before the running position; falls back to `0`.
 fn nth_start_before(units: &[(usize, usize)], pos: usize, count: usize) -> usize {
     let mut p = pos;
     for _ in 0..count.max(1) {

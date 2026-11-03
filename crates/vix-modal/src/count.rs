@@ -10,9 +10,10 @@
 pub struct Count(Option<usize>);
 
 impl Count {
-    /// Feed one more digit onto the accumulating count (`push_digit('3')`
-    /// then `push_digit('14')`'s first char... — callers pass one `char` at a
-    /// time as keys arrive). Returns `false` and leaves `self` unchanged for
+    /// Feed one more digit onto the accumulating count. Callers pass one
+    /// `char` at a time as keys arrive (`'1'` then `'4'` builds `14`).
+    /// Arithmetic saturates rather than overflowing, so an absurdly long digit
+    /// run clamps at `usize::MAX` instead of panicking. Returns `false` and leaves `self` unchanged for
     /// anything that isn't an ASCII digit, or for a leading `'0'` when no
     /// digits have been typed yet (that's the `0` motion, not a count — real
     /// Vim's own rule; see the spec's § Design: counts).
@@ -23,6 +24,7 @@ impl Count {
         if d == 0 && self.0.is_none() {
             return false;
         }
+        // Saturating, not checked: a pasted run of digits must never panic.
         let next = self
             .0
             .unwrap_or(0)

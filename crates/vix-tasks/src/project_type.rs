@@ -178,10 +178,13 @@ pub fn detect_package_manager(dir_entries: &[&str]) -> PackageManager {
     }
 }
 
+/// Look up a built-in project type by its `name` (`"cargo"`, `"npm"`, ...).
 fn project_type_by_name(name: &str) -> Option<&'static ProjectType> {
     PROJECT_TYPES.iter().find(|t| t.name == name)
 }
 
+/// The JavaScript package managers; at most one of these applies to a directory
+/// (chosen by lockfile in `resolve_js_project_type`), so they never stack.
 const JS_FAMILY: [&str; 4] = ["npm", "yarn", "pnpm", "bun"];
 
 /// Resolve the one JS project type (`npm`/`yarn`/`pnpm`/`bun`) that applies

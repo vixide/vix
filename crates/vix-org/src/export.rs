@@ -18,12 +18,14 @@ use super::{agenda_items, headline_level};
     clippy::expect_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// Matches a described Org link `[[target][description]]` (groups 1 and 2).
 pub(crate) static LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\[([^\]]+)\]\]").expect("link regex"));
 #[expect(
     clippy::expect_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// Matches an undescribed Org link `[[target]]` (group 1).
 pub(crate) static BARE_LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("bare link regex"));
 
@@ -216,6 +218,8 @@ fn escape_latex(s: &str) -> String {
     clippy::expect_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// Matches the control-char-delimited link placeholders (`\x01target\x02desc\x03`)
+/// inserted by `inline_latex` so link text survives LaTeX escaping.
 static SENTINEL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("\u{1}([^\u{2}]*)\u{2}([^\u{3}]*)\u{3}").expect("sentinel"));
 

@@ -14,6 +14,30 @@
 //! short tokens.
 //!
 //! [`spellbook`]: https://crates.io/crates/spellbook
+//!
+//! Dictionary discovery is separate from checking: [`system_dictionary_dirs`]
+//! lists the platform's Hunspell directories, [`find_dictionary`] resolves a
+//! locale to an `.aff`/`.dic` pair inside them, and [`load_for`] strings those
+//! together (explicit path, then `./dictionaries`, then system dirs). The
+//! optional `hunspell` Cargo feature additionally asks a `hunspell` binary on
+//! `PATH` for its search directories. Spec: `crates/vix-spellcheck/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_spellcheck::SpellChecker;
+//!
+//! let sc = SpellChecker::from_strings(
+//!     "SET UTF-8\n",
+//!     "2\nhello\nworld\n",
+//! )
+//! .unwrap();
+//! assert!(sc.check("hello"));
+//! assert!(sc.check("Hello")); // sentence-initial capital
+//! assert!(!sc.check("helo"));
+//! // (start, end) character spans of misspelled prose words.
+//! assert_eq!(sc.misspellings_in("hello wurld", 10), vec![(16, 21)]);
+//! ```
+//!
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
 use std::collections::HashSet;
@@ -27,6 +51,9 @@ use spellbook::Dictionary;
 pub const DEFAULT_MAX_SUGGESTIONS: usize = 7;
 
 /// An error loading or parsing a dictionary.
+///
+/// `Display` gives a short English diagnostic (these are developer-facing and
+/// not translated). `Io` does not implement `source`.
 #[derive(Debug)]
 pub enum Error {
     /// Reading an `.aff`/`.dic` file failed.
@@ -37,6 +64,7 @@ pub enum Error {
     NotFound(String),
 }
 
+/// Short diagnostic including the underlying I/O or parse message.
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -50,6 +78,10 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// A loaded dictionary plus the session's user/ignore words.
+///
+/// The user and ignore sets live only in memory for the life of the checker;
+/// persisting added words is the host's job. Both sets are consulted before the
+/// dictionary, so they take effect immediately without reloading it.
 pub struct SpellChecker {
     dict: Dictionary,
     user: HashSet<String>,
@@ -59,6 +91,9 @@ pub struct SpellChecker {
 
 impl SpellChecker {
     /// Build a checker from in-memory `.aff` and `.dic` contents.
+    ///
+    /// The `.aff` text carries the affix rules and the `.dic` text the word
+    /// list (first line is the entry count).
     ///
     /// # Errors
     /// Returns [`Error::Parse`] if `spellbook` rejects the dictionary.
@@ -103,7 +138,9 @@ impl SpellChecker {
 
     /// Whether `word` is spelled correctly: in the ignore set, the user
     /// dictionary, or the loaded dictionary. A sentence-initial capital is
-    /// accepted by also trying the lowercased form.
+    /// accepted by also trying the lowercased form (user-dictionary words are
+    /// also matched case-insensitively that way; ignored words are exact-match
+    /// only).
     #[must_use]
     pub fn check(&self, word: &str) -> bool {
         if self.ignored.contains(word) || self.user.contains(word) {
@@ -112,11 +149,16 @@ impl SpellChecker {
         if self.dict.check(word) {
             return true;
         }
+        // Retry lowercased so "Hello" passes when only "hello" is listed;
+        // skip the redundant lookup when lowercasing changes nothing.
         let lower = word.to_lowercase();
         lower != word && (self.user.contains(&lower) || self.dict.check(&lower))
     }
 
     /// Up to `max_suggestions` corrections for a (presumably misspelled) word.
+    ///
+    /// Suggestions come from `spellbook` only; user-dictionary words are not
+    /// offered. Order is the dictionary's own ranking.
     #[must_use]
     pub fn suggest(&self, word: &str) -> Vec<String> {
         let mut out = Vec::new();
@@ -140,6 +182,10 @@ impl SpellChecker {
     /// `base` (the char position of `text` within the larger buffer). Tokens that
     /// look like code — all-caps acronyms, camel/Pascal-case identifiers, and
     /// very short words — are skipped.
+    ///
+    /// Spans are half-open `(start, end)` in *characters* (not bytes), so they
+    /// can be used directly as editor positions. See `should_check` for the
+    /// exact skip heuristics.
     #[must_use]
     pub fn misspellings_in(&self, text: &str, base: usize) -> Vec<(usize, usize)> {
         tokenize(text)
@@ -170,7 +216,9 @@ fn locale_candidates(locale: &str) -> Vec<String> {
 
 /// Split `text` into `(start_char, end_char_exclusive, word)` tokens: maximal
 /// runs of alphabetic characters, allowing an apostrophe between two letters
-/// (so `don't` stays one token).
+/// (so `don't` stays one token). Offsets are character indices, matching the
+/// editor's addressing; a curly apostrophe (U+2019) is accepted and normalised
+/// to `'` in the token text, though the span still covers the original char.
 fn tokenize(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
@@ -188,6 +236,8 @@ fn tokenize(text: &str) -> Vec<(usize, usize, String)> {
             if c.is_alphabetic() {
                 word.push(c);
                 i += 1;
+            // An apostrophe joins two letters only (not leading or trailing,
+            // so a quote mark around a word is not part of the token).
             } else if (c == '\'' || c == '\u{2019}')
                 && !word.is_empty()
                 && i + 1 < n
@@ -309,7 +359,11 @@ fn hunspell_search_dirs() -> Vec<PathBuf> {
 }
 
 /// The platform's standard Hunspell dictionary directories that currently exist,
-/// augmented with whatever `hunspell -D` reports. Order is best-first.
+/// augmented with whatever `hunspell -D` reports (only with the `hunspell`
+/// feature). Order is best-first.
+///
+/// Directories are chosen by `cfg!(target_os)` plus `$HOME` and
+/// `$XDG_DATA_HOME`; nonexistent ones are filtered out and duplicates removed.
 #[must_use]
 pub fn system_dictionary_dirs() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -348,6 +402,10 @@ pub fn system_dictionary_dirs() -> Vec<PathBuf> {
 /// wooorm layout (`<dir>/<name>/index.{aff,dic}`) and the standard Hunspell
 /// layout (`<dir>/<name>.{aff,dic}`), then falls back to any `<base>*.dic` (e.g.
 /// `en_US`) with a matching `.aff`. Returns `(aff_path, dic_path)`.
+///
+/// Earlier `dirs` win over later ones for the same name; the prefix fallback is
+/// only reached when no exact-name candidate exists in any directory, and
+/// within a directory it picks the alphabetically first matching `.dic`.
 #[must_use]
 pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathBuf)> {
     for name in dict_name_candidates(locale) {
@@ -365,6 +423,7 @@ pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathB
         }
     }
     // Prefix fallback: e.g. locale "en" matches a file named "en_US.dic".
+    // Sorting makes the pick deterministic (read_dir order is unspecified).
     let base = locale.split(['-', '_']).next().unwrap_or(locale);
     for dir in dirs {
         let Ok(read) = std::fs::read_dir(dir) else {
@@ -400,6 +459,8 @@ pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathB
 /// Returns [`Error::NotFound`] when no dictionary matches, [`Error::Io`] on a
 /// read failure, or [`Error::Parse`] when the dictionary cannot be parsed.
 pub fn load_for(dictionary_path: &str, locale: &str) -> Result<SpellChecker, Error> {
+    // Priority: the user's explicit setting, then the bundled repo set, then
+    // whatever the OS provides.
     let mut dirs: Vec<PathBuf> = Vec::new();
     if !dictionary_path.is_empty() {
         dirs.push(PathBuf::from(dictionary_path));

@@ -6,6 +6,19 @@
 //! A handful of catalog actions are genuinely host- or mode-level (tabs, splits,
 //! files, macros, shell/command/overwrite modes, suspend); those are dispatched
 //! by the host, not here.
+//!
+//! Conventions shared by the methods below:
+//!
+//! - Motion methods first offer the move to `multi_motion`; when extra
+//!   carets exist (see [`crate::multicursor`]) it moves them all and the
+//!   single-caret code is skipped. Plain motions clear the selection; the
+//!   `select_*` forms extend it ([`Editor::extend_selection`] keeps the anchor).
+//! - Edits go through [`Editor::apply`] so they are undoable and respect
+//!   read-only.
+//! - "Sub-word" motions are currently aliases of whole-word motions.
+//!
+//! The authoritative list of names is `crates/vix-editor-core/spec/actions.tsv`;
+//! see also `crates/vix-editor-core/spec/index.md`.
 
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
@@ -109,16 +122,20 @@ impl Editor {
     }
 
     // ----- line motions ---------------------------------------------------
+    /// Char offset of the start of the line containing `pos`.
     pub(crate) fn line_start(&self, pos: usize) -> usize {
         self.code_ref()
             .line_to_char(self.code_ref().char_to_line(pos))
     }
+    /// Char offset just past the last character of `pos`'s line (before its
+    /// newline), i.e. the end-of-line cursor position.
     pub(crate) fn line_end(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let row = code.char_to_line(pos);
         code.line_to_char(row) + code.line_len(row)
     }
-    /// First non-whitespace column of the cursor's line.
+    /// Char offset of the first non-blank (not space/tab) character of the line
+    /// containing `pos`; the line end when the line is all blanks.
     pub(crate) fn line_first_text(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let row = code.char_to_line(pos);
@@ -147,7 +164,7 @@ impl Editor {
         let p = self.line_end(self.get_cursor());
         self.set_cursor(p);
     }
-    /// Move to the first non-whitespace character of the line.
+    /// Move to the first non-blank character of the line.
     pub fn start_of_text(&mut self) {
         if self.multi_motion(CaretMove::TextStart, false) {
             return;
@@ -156,7 +173,9 @@ impl Editor {
         let p = self.line_first_text(self.get_cursor());
         self.set_cursor(p);
     }
-    /// Toggle between the first non-whitespace character and column 0.
+    /// Smart Home: toggle between the first non-blank character and column 0
+    /// (from the first non-blank it goes to column 0, from anywhere else to the
+    /// first non-blank).
     pub fn start_of_text_toggle(&mut self) {
         if self.multi_motion(CaretMove::Home, false) {
             return;
@@ -214,6 +233,7 @@ impl Editor {
         self.set_cursor(p);
     }
     /// Select the whole current line (including its trailing newline if any).
+    /// The cursor ends at the selection end, so repeating is not cumulative.
     pub fn select_line(&mut self) {
         let code = self.code_ref();
         let cur = self.get_cursor();
@@ -229,6 +249,8 @@ impl Editor {
     }
 
     // ----- word motions (sub-word approximates whole-word) ----------------
+    /// Char offset of the *end* of the word at or after `pos` (the VS Code
+    /// style "word right" stop); `pos` itself when already at the buffer end.
     pub(crate) fn next_word(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let len = code.len_chars();
@@ -244,6 +266,8 @@ impl Editor {
             e2.max(pos + 1)
         }
     }
+    /// Char offset of the start of the word at or before the character left of
+    /// `pos`; `0` at the buffer start.
     pub(crate) fn prev_word(&self, pos: usize) -> usize {
         let code = self.code_ref();
         if pos == 0 {
@@ -253,7 +277,8 @@ impl Editor {
         start.min(pos.saturating_sub(1))
     }
 
-    /// Move the cursor to the start of the next word.
+    /// Move the cursor to the end of the current/next word (the stop
+    /// `next_word` computes).
     pub fn word_right(&mut self) {
         if self.multi_motion(CaretMove::WordRight, false) {
             return;
@@ -279,7 +304,7 @@ impl Editor {
     pub fn sub_word_left(&mut self) {
         self.word_left();
     }
-    /// Extend the selection to the start of the next word.
+    /// Extend the selection to the end of the current/next word.
     pub fn select_word_right(&mut self) {
         if self.multi_motion(CaretMove::WordRight, true) {
             return;
@@ -306,7 +331,7 @@ impl Editor {
         self.select_word_left();
     }
 
-    /// Delete from the cursor to the start of the next word.
+    /// Delete from the cursor to the end of the current/next word.
     pub fn delete_word_right(&mut self) {
         let cur = self.get_cursor();
         let to = self.next_word(cur);
@@ -336,6 +361,10 @@ impl Editor {
     }
 
     // ----- paragraph motions ---------------------------------------------
+    /// Char offset of the next (`forward`) or previous blank line from `pos`,
+    /// clamping to the buffer end or start when there is none. A paragraph
+    /// break is a line with zero characters (whitespace-only lines are not
+    /// blank).
     fn paragraph(&self, pos: usize, forward: bool) -> usize {
         let code = self.code_ref();
         let total = code.len_lines();
@@ -389,6 +418,8 @@ impl Editor {
     }
 
     // ----- vertical paging / scrolling -----------------------------------
+    /// Apply `rows` single-line moves. Going through `MoveUp`/`MoveDown`
+    /// (rather than jumping) preserves the goal column across short lines.
     fn move_by_rows(&mut self, rows: usize, down: bool, shift: bool) {
         for _ in 0..rows {
             if down {
@@ -428,20 +459,23 @@ impl Editor {
         let row = self.code_ref().char_to_line(self.get_cursor());
         self.set_offset_y(row.saturating_sub(view_h / 2));
     }
-    /// Move the cursor to the top/center/bottom visible line, keeping its column.
+    /// Move the cursor to the top visible line. (The cursor lands at the start of
+    /// that line; the old column is not kept.)
     pub fn cursor_to_view_top(&mut self) {
         self.clear_selection();
         let target = self.get_offset_y();
         self.set_cursor(self.code_ref().line_to_char(target));
     }
-    /// Move the cursor to the center visible line, keeping its column.
+    /// Move the cursor to the center visible line (at its start; the old column
+    /// is not kept).
     pub fn cursor_to_view_center(&mut self, view_h: usize) {
         self.clear_selection();
         let total = self.code_ref().len_lines().saturating_sub(1);
         let target = (self.get_offset_y() + view_h / 2).min(total);
         self.set_cursor(self.code_ref().line_to_char(target));
     }
-    /// Move the cursor to the bottom visible line, keeping its column.
+    /// Move the cursor to the bottom visible line (at its start; the old column
+    /// is not kept).
     pub fn cursor_to_view_bottom(&mut self, view_h: usize) {
         self.clear_selection();
         let total = self.code_ref().len_lines().saturating_sub(1);
@@ -464,6 +498,8 @@ impl Editor {
     }
     /// Forward delete (the character at the cursor).
     pub fn delete(&mut self) {
+        // Implemented as move-right then backspace so it shares `Delete`'s
+        // selection, auto-pair and undo handling.
         self.apply(MoveRight { shift: false });
         self.apply(Delete {});
     }
@@ -495,7 +531,8 @@ impl Editor {
     pub fn duplicate(&mut self) {
         self.apply(Duplicate {});
     }
-    /// Duplicate the current line.
+    /// Duplicate the current line (same action as [`Editor::duplicate`], which
+    /// already falls back to the line when nothing is selected).
     pub fn duplicate_line(&mut self) {
         self.apply(Duplicate {});
     }
@@ -521,6 +558,8 @@ impl Editor {
     }
     /// Copy the current line to the clipboard (without changing the selection).
     pub fn copy_line(&mut self) {
+        // Select, copy, then restore: the user's selection is observably
+        // unchanged.
         let saved = self.get_selection();
         let saved_cur = self.get_cursor();
         self.select_line();

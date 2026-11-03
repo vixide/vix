@@ -8,6 +8,19 @@
 //! configuration as fallbacks and the CLI's result line, then attaches to
 //! the running container through `docker exec` like any other container.
 //! Nothing here starts a process.
+//!
+//! The flow, driven by the App: [`parse_config`] the file found via
+//! [`CONFIG_FILES`] (for fallbacks only), run [`up_argv`] through
+//! [`crate::run`], read the result with [`parse_up`], then pick the in-container
+//! path with [`workspace_folder`]. Owning spec: `crates/vix-oci/spec/index.md`
+//! and the repo-level `spec/open-container`.
+//!
+//! ```
+//! use vix_oci::devcontainer::{parse_config, strip_jsonc};
+//! let config = parse_config("{ // note\n \"name\": \"dev\", }").unwrap();
+//! assert_eq!(config.name.as_deref(), Some("dev"));
+//! assert_eq!(strip_jsonc("[1, /* x */ 2,]").replace(' ', ""), "[1,2]");
+//! ```
 
 use crate::OciError;
 
@@ -58,6 +71,8 @@ pub fn strip_jsonc(text: &str) -> String {
     let mut chars = text.chars().peekable();
     let mut in_string = false;
     while let Some(c) = chars.next() {
+        // Inside a string everything is copied verbatim, so a `//` in a URL
+        // is not mistaken for a comment; a backslash escapes the next char.
         if in_string {
             out.push(c);
             if c == '\\' {
@@ -74,6 +89,7 @@ pub fn strip_jsonc(text: &str) -> String {
                 in_string = true;
                 out.push(c);
             }
+            // Line comment: skip to the newline but keep the newline itself.
             ('/', Some('/')) => {
                 for n in chars.by_ref() {
                     if n == '\n' {
@@ -82,6 +98,8 @@ pub fn strip_jsonc(text: &str) -> String {
                     }
                 }
             }
+            // Block comment. Newlines inside are kept so error line numbers
+            // from the JSON parser still point at the right place.
             ('/', Some('*')) => {
                 chars.next();
                 let mut prev = ' ';
@@ -124,6 +142,8 @@ fn drop_trailing_commas(text: &str) -> String {
             in_string = true;
             out.push(c);
         } else if c == ',' {
+            // Look past whitespace: a comma is trailing only if the next
+            // significant character closes the container.
             let next = chars[i + 1..].iter().find(|n| !n.is_whitespace());
             if !matches!(next, Some(']' | '}')) {
                 out.push(c);
@@ -179,6 +199,8 @@ pub fn parse_up(stdout: &str) -> Result<Up, OciError> {
         .lines()
         .rev()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l.trim()).ok())
+        // Scan from the end: earlier lines are build log output, possibly
+        // JSON too, and only the final result object has an `outcome`.
         .find(|v| v.get("outcome").is_some())
         .ok_or_else(|| OciError::Parse("devcontainer up printed no result".into()))?;
     let text = |key: &str| {
@@ -214,6 +236,8 @@ pub fn parse_up(stdout: &str) -> Result<Up, OciError> {
 /// default `/workspaces/<basename>`.
 #[must_use]
 pub fn workspace_folder(up: &Up, config: &Config, basename: &str) -> String {
+    // Precedence: what the CLI actually mounted beats the config's intent,
+    // which beats the spec default.
     if let Some(f) = &up.remote_workspace_folder {
         return f.clone();
     }

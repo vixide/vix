@@ -10,15 +10,31 @@
 
 /// Convert a day count since 1970-01-01 to a `(year, month, day)` civil date.
 /// The inverse of [`days_from_civil`].
+///
+/// Works in the proleptic Gregorian calendar for negative day counts (dates
+/// before 1970) too. The bracketed ranges in the body are the invariants of
+/// each intermediate value in Hinnant's derivation.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_civil_date::civil_from_days(0), (1970, 1, 1));
+/// assert_eq!(vix_civil_date::civil_from_days(-1), (1969, 12, 31));
+/// ```
 #[must_use]
 pub fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    // Shift the epoch from 1970-01-01 to 0000-03-01 so the leap day is the last
+    // day of the (March-based) year, which makes the arithmetic closed-form.
     let z = z + 719_468;
+    // An "era" is a 400-year Gregorian cycle (146_097 days); `div_euclid`
+    // keeps `doe` non-negative for dates before the epoch.
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097; // [0, 146096]
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
     let mp = (5 * doy + 2) / 153; // [0, 11]
     let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    // `mp` counts months from March; map back to calendar months, and January
+    // and February belong to the *next* civil year (hence `m <= 2` below).
     let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
     (era * 400 + yoe + i64::from(m <= 2), m, d)
 }
@@ -27,8 +43,15 @@ pub fn civil_from_days(z: i64) -> (i64, i64, i64) {
 /// The inverse of [`civil_from_days`]. `month`/`day` are not validated —
 /// an out-of-range value (e.g. `month: 13`) still produces a well-defined
 /// result via the same arithmetic, just not one naming a real date.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_civil_date::days_from_civil(1970, 1, 1), 0);
+/// assert_eq!(vix_civil_date::days_from_civil(2024, 2, 29), 19_782);
+/// ```
 #[must_use]
 pub fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    // January/February count as the tail of the previous March-based year.
     let y = if month <= 2 { year - 1 } else { year };
     let era = y.div_euclid(400);
     let yoe = y - era * 400; // [0, 399]

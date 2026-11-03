@@ -15,6 +15,8 @@ use super::{NERD_CELL_W, draw_scrollbar, trunc};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the Nerd Font glyph picker: a grid of glyphs, the selected glyph's name
+/// and a hint row.
 pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::nerd_font_picker::{COLS, GLYPHS};
     let Some(p) = app.info.nerd_palette() else {
@@ -91,6 +93,7 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the ASCII character table picker; rows are capped so the box fits.
 pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ascii_character_picker::{self as ascii, LEN};
     if app.info.ascii_panel().is_none() {
@@ -171,8 +174,8 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
-// Render the QR code overlay: the Unicode QR art, forced to black-on-white so it
-// scans regardless of the active theme, centered with a hint line.
+/// Render the QR code overlay: the Unicode QR art, forced to black-on-white so it
+/// scans regardless of the active theme, centered with a hint line.
 pub(super) fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(art) = app.qrcode.as_ref() else {
         return;
@@ -217,6 +220,8 @@ pub(super) fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Draw the X11 named-colour picker with swatches. No-op when closed or when
+/// the colour table is empty.
 pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let colors = crate::x11_color_picker::colors();
     let total = colors.len();
@@ -408,6 +413,7 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the media-type (MIME) browser overlay over `media_type::all()`.
 pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.info.media_type_panel().is_none() {
         return;

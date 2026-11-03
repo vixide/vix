@@ -166,6 +166,8 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     clippy::expect_used,
     reason = "the value is bounded well below the target type"
 )]
+/// Weekday abbreviation for a day count since 1970-01-01 (a Thursday, hence the
+/// table starting at `Thu`); `rem_euclid` keeps pre-1970 dates correct.
 fn weekday_name(days: i64) -> &'static str {
     ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"]
         [usize::try_from(days.rem_euclid(7)).expect("rem_euclid(7) fits usize")]

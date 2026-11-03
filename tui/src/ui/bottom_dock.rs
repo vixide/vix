@@ -18,6 +18,10 @@ fn hslice(line: &str, offset: usize, width: usize) -> String {
     line.chars().skip(offset).take(width).collect()
 }
 
+/// Draw the bottom dock: a bordered, scrollable list of its output lines.
+///
+/// Scrollbars appear only when enabled in the viewport settings and the content
+/// overflows.
 pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::BottomDock;
     let block = Block::default()

@@ -12,6 +12,8 @@ use super::{git_change_color, trunc, unix_secs_label};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the branch chooser, or the gutter-diff base chooser when the chooser
+/// was opened for that purpose (its title and hint differ).
 pub(super) fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.branch() else {
         return;
@@ -173,6 +175,7 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.chooser = chunks[0];
 }
 
+/// Draw the read-only diff viewer overlay (about 80% of the screen).
 pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::diff_view::Kind;
     let Some(d) = app.diff_view.as_ref() else {
@@ -249,6 +252,7 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+/// Draw the project (workspace root) chooser.
 pub(super) fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.workspace() else {
         return;
@@ -258,6 +262,7 @@ pub(super) fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rec
         draw_list_chooser(frame, area, &t!("ui.projects"), &hint, &c.roots, c.selected);
 }
 
+/// Draw the recorded-macro chooser; each row shows the macro name and its key count.
 pub(super) fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.macros() else {
         return;
@@ -301,6 +306,8 @@ pub(super) fn draw_http_env_chooser(app: &mut App, frame: &mut Frame, area: Rect
         draw_list_chooser(frame, area, &t!("ui.http_env"), &hint, &labels, c.selected);
 }
 
+/// Draw the clipboard-history chooser; each entry is flattened to one line and
+/// truncated to 80 characters.
 pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.clipboard() else {
         return;
@@ -319,6 +326,8 @@ pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rec
         draw_list_chooser(frame, area, &t!("ui.clipboard"), &hint, &labels, c.selected);
 }
 
+/// Draw the task chooser; each row shows "name - command" so the action is
+/// clear before it runs.
 pub(super) fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.task() else {
         return;
@@ -334,6 +343,8 @@ pub(super) fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
 }
 
+/// Draw the script-command chooser; each row shows the script-supplied label
+/// plus the owning script's file stem (two scripts may register the same label).
 #[cfg(feature = "script")]
 pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.chooser.script() else {
@@ -375,6 +386,8 @@ pub(super) fn draw_plugin_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         draw_list_chooser(frame, area, &t!("ui.plugins"), &hint, &labels, c.selected);
 }
 
+/// Draw the Git status panel: one row per changed file, highlighting the
+/// selected one, sized to fit (at most the screen height minus chrome).
 pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(selected) = app.git_panel.as_ref().map(|p| p.selected) else {
         return;
@@ -539,6 +552,8 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.git_log = chunks[0];
 }
 
+/// Draw the right-click context menu from `CONTEXT_ITEMS`; `menu.separator`
+/// entries become blank rows.
 pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::app::CONTEXT_ITEMS;
     let Some(cm) = app.context_menu.as_ref() else {
@@ -597,6 +612,8 @@ pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.context_menu = rect;
 }
 
+/// Draw the spelling-suggestion popup for the word under the cursor, sized to
+/// its widest suggestion or title.
 pub(super) fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.spell_suggest.as_ref() else {
         return;
@@ -827,6 +844,8 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
     app.layout.chooser = chunks[1];
 }
 
+/// Draw the location chooser (references, definitions, ...): the file name and
+/// line first so they survive truncation, then the directory.
 pub(super) fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(lc) = app.chooser.location() else {
         return;

@@ -1,12 +1,19 @@
 //! Convert HTML into Markdown (Tools → Convert → HTML → Markdown).
 //!
 //! Uses `htmd` (a Turndown-inspired converter) to turn an HTML fragment into
-//! Markdown text.
+//! Markdown text. Spec: `crates/vix-convert-from-html-into-markdown-tool/spec/index.md`.
 
 /// Convert HTML `input` to Markdown.
 ///
+/// # Examples
+/// ```
+/// let md = vix_convert_from_html_into_markdown_tool::convert("<h1>Title</h1>").unwrap();
+/// assert_eq!(md, "# Title");
+/// ```
+///
 /// # Errors
-/// Returns an error when the HTML cannot be converted.
+/// Returns a [`vix_convert_tabular::ConvertError`] (labelled "HTML") when
+/// `htmd` cannot convert the input.
 pub fn convert(input: &str) -> Result<String, vix_convert_tabular::ConvertError> {
     htmd::convert(input).map_err(|e| vix_convert_tabular::ConvertError::parse("HTML", e))
 }

@@ -20,6 +20,9 @@ pub struct ShellHost {
 }
 
 impl Host for ShellHost {
+    /// Files open in the saved session for the workspace rooted at `root`.
+    /// Uses the load-existing path so a missing `session.toml` is not created
+    /// (this mode is read-only); no recorded workspace yields an empty list.
     fn open_buffers(&self, root: &Path) -> Vec<PathBuf> {
         let session = match &self.session_path {
             Some(path) => crate::session::Session::load_existing_from(path),
@@ -31,6 +34,9 @@ impl Host for ShellHost {
             .unwrap_or_default()
     }
 
+    /// The schema of the `SQLite` file at `path`, or `None` when this build
+    /// has no `sql` capability (the server then reports the tool as
+    /// unavailable rather than failing).
     fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, vix_mcp_server::HostError>> {
         #[cfg(feature = "sql")]
         {
@@ -52,6 +58,8 @@ fn sqlite_schema(path: &Path) -> Result<Vec<Table>, crate::db::session::SessionE
     crate::db::catalog::read_sqlite_schema(path).map(|rows| {
         let mut tables: Vec<Table> = Vec::new();
         for (name, kind, column, data_type) in rows {
+            // The catalog rows arrive grouped by object, so a change of
+            // (name, kind) from the previous row starts a new table.
             if tables
                 .last()
                 .is_none_or(|t| t.name != name || t.kind != kind)

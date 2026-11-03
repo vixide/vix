@@ -9,12 +9,37 @@
 //! This crate is pure: it has no notion of "now", the active editor, or the
 //! filesystem. The host collects prompt answers, builds a [`Context`], reads
 //! and writes files, and calls into these functions to do the text shaping.
+//!
+//! # Pipeline
+//!
+//! 1. [`Target::parse`] reads the template's `target` string.
+//! 2. [`extract_prompts`] / [`wants_tags`] tell the host which questions to ask;
+//!    [`preview`] renders the half-answered template while it does.
+//! 3. [`expand`] substitutes answers, tags and [`Context`] values.
+//! 4. [`wrap_entry`] gives the text its entry shape (headline, item, ...).
+//! 5. One of [`insert_top_level`], [`insert_under_headline`],
+//!    [`insert_under_id`] or [`insert_datetree`] splices it into the target
+//!    file's text and returns the new text.
+//!
+//! # Text model
+//!
+//! File text is handled as `\n`-split lines; the insert functions return
+//! `lines.join("\n")`, so a file's trailing newline survives as a final empty
+//! line. Headlines are recognised as one or more `*` followed by a space, and
+//! titles are compared case-insensitively with a trailing `:tag:` block
+//! ignored (except in the date tree, which matches titles exactly). Property
+//! drawers are skipped when inserting at the *top* of a subtree so the entry
+//! lands after them, not inside them.
 
 // ----- Template shape --------------------------------------------------------
 
 pub use vix_settings::EntryType;
 
 /// Where a captured entry is filed, parsed from a template's `target` string.
+///
+/// Mirrors the destinations of Emacs `org-capture-templates`; the payload
+/// strings are left unexpanded (no `~`, no relative-path resolution -- the
+/// host does that).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     /// Insert at the cursor in the active buffer (the default).
@@ -34,9 +59,28 @@ pub enum Target {
 impl Target {
     /// Parse a template's `target` string. Anything unrecognized (including
     /// `"cursor"` and the empty string) is [`Target::Cursor`].
+    ///
+    /// A `file+headline:` target with no `#Headline` part degrades to
+    /// [`Target::File`] (append to the file) rather than failing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_org_capture::Target;
+    ///
+    /// assert_eq!(
+    ///     Target::parse("file+headline:notes.org#Inbox"),
+    ///     Target::FileHeadline("notes.org".into(), "Inbox".into())
+    /// );
+    /// assert_eq!(Target::parse("file+headline:notes.org"), Target::File("notes.org".into()));
+    /// assert_eq!(Target::parse("whatever"), Target::Cursor);
+    /// ```
     #[must_use]
     pub fn parse(raw: &str) -> Target {
         let raw = raw.trim();
+        // `file+headline:` and `file+datetree:` must be tried before plain
+        // `file:` -- they do not share its prefix, but keep the more specific
+        // forms first so a future overlap cannot shadow them.
         if let Some(id) = raw.strip_prefix("id:") {
             return Target::Id(id.trim().to_string());
         }
@@ -78,6 +122,19 @@ pub struct FieldPrompt {
 }
 
 /// Every `%^{...}` field prompt in `template`, in order.
+///
+/// A `%^{` with no closing `}` is not a prompt and is skipped.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::extract_prompts;
+///
+/// let prompts = extract_prompts("* %^{Title} %^{Priority|A|B}");
+/// assert_eq!(prompts[0].label, "Title");
+/// assert_eq!(prompts[1].choices, ["A", "B"]);
+/// assert_eq!(prompts[1].default, "A");
+/// ```
 #[must_use]
 pub fn extract_prompts(template: &str) -> Vec<FieldPrompt> {
     let chars: Vec<char> = template.chars().collect();
@@ -108,6 +165,13 @@ pub fn extract_prompts(template: &str) -> Vec<FieldPrompt> {
 }
 
 /// Whether `template` contains a `%^g`/`%^G` tag prompt.
+///
+/// # Examples
+///
+/// ```
+/// assert!(vix_org_capture::wants_tags("* x %^g"));
+/// assert!(!vix_org_capture::wants_tags("* x"));
+/// ```
 #[must_use]
 pub fn wants_tags(template: &str) -> bool {
     let chars: Vec<char> = template.chars().collect();
@@ -116,6 +180,7 @@ pub fn wants_tags(template: &str) -> bool {
         .any(|w| w[0] == '%' && w[1] == '^' && (w[2] == 'g' || w[2] == 'G'))
 }
 
+/// Index of the first `target` at or after `from` in `chars`, if any.
 fn find_char(chars: &[char], from: usize, target: char) -> Option<usize> {
     (from..chars.len()).find(|&i| chars[i] == target)
 }
@@ -151,6 +216,7 @@ pub struct Context {
 }
 
 impl Context {
+    /// `YYYY-MM-DD Weekday`, the body of an Org timestamp (no brackets).
     fn date(&self) -> String {
         format!(
             "{:04}-{:02}-{:02} {}",
@@ -158,13 +224,15 @@ impl Context {
         )
     }
 
+    /// [`Context::date`] plus ` HH:MM`.
     fn date_time(&self) -> String {
         format!("{} {:02}:{:02}", self.date(), self.hour, self.minute)
     }
 }
 
 /// `strftime`-lite: `%Y` `%m` `%d` `%H` `%M` `%a` `%%`. Unrecognized `%x`
-/// sequences pass through unchanged.
+/// sequences pass through unchanged. Used for `%<...>` placeholders; a
+/// hand-rolled subset because the crate has no clock or date dependency.
 fn strftime(fmt: &str, ctx: &Context) -> String {
     use std::fmt::Write as _;
     let chars: Vec<char> = fmt.chars().collect();
@@ -219,6 +287,20 @@ pub struct Expansion {
 /// (formatted by the caller, e.g. `":work:urgent:"`); `%t`/`%T`/`%u`/`%U`,
 /// `%<...>`, `%a`, `%i`, `%f`, `%F`, `%c` come from `ctx`; `%?` is not
 /// inserted but recorded as `cursor_offset`; `%%` is a literal `%`.
+///
+/// Missing answers expand to the empty string, and a `%` that starts no
+/// recognised sequence is kept literally -- expansion never fails.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::{expand, Context};
+///
+/// let ctx = Context { year: 2026, month: 3, day: 9, weekday: "Mon".into(), ..Context::default() };
+/// let out = expand("* %^{Title} %t%?", &["Buy milk".to_string()], None, &ctx);
+/// assert_eq!(out.text, "* Buy milk <2026-03-09 Mon>");
+/// assert_eq!(out.cursor_offset, Some(out.text.chars().count()));
+/// ```
 #[must_use]
 pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Context) -> Expansion {
     let chars: Vec<char> = template.chars().collect();
@@ -232,6 +314,7 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
             i += 1;
             continue;
         }
+        // A lone trailing `%` is literal.
         let Some(&next) = chars.get(i + 1) else {
             out.push('%');
             i += 1;
@@ -248,6 +331,8 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
                 i += 2;
             }
             '?' => {
+                // Counted in chars, not bytes, to match the editor's addressing.
+                // If `%?` appears more than once, the last one wins.
                 cursor_offset = Some(out.chars().count());
                 i += 2;
             }
@@ -257,6 +342,7 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
                     out.push_str(&strftime(&fmt, ctx));
                     i = close + 1;
                 } else {
+                    // No closing `>`: keep the `%` and rescan the rest as text.
                     out.push('%');
                     i += 1;
                 }
@@ -264,6 +350,8 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
             '^' => {
                 i = expand_caret(&chars, i, answers, &mut answer_idx, tags, &mut out);
             }
+            // Unknown sequence: emit `%` and let the next char be scanned as
+            // ordinary text (so `%z` stays `%z`).
             _ => {
                 out.push('%');
                 i += 1;
@@ -305,6 +393,8 @@ fn expand_caret(
     tags: Option<&str>,
     out: &mut String,
 ) -> usize {
+    // Prompt answers are consumed positionally: the n-th `%^{}` takes
+    // `answers[n]`, matching the order [`extract_prompts`] reports.
     match chars.get(i + 2) {
         Some('{') => {
             if let Some(close) = find_char(chars, i + 3, '}') {
@@ -337,6 +427,17 @@ fn expand_caret(
 /// `[Tags]` (only when the template actually has one — see [`wants_tags`]).
 /// Every other placeholder (`%t`, `%a`, `%i`, …) is fully expanded from
 /// `ctx`, same as [`expand`]. `%?` is dropped, same as final filing.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::{extract_prompts, preview, Context};
+///
+/// let tpl = "* %^{Title} / %^{Where}";
+/// let prompts = extract_prompts(tpl);
+/// let text = preview(tpl, &prompts, &["Hi".to_string()], Some(1), None, false, &Context::default());
+/// assert_eq!(text, "* Hi / \u{2039}Where\u{203a}");
+/// ```
 #[must_use]
 pub fn preview(
     template: &str,
@@ -347,6 +448,8 @@ pub fn preview(
     tags_current: bool,
     ctx: &Context,
 ) -> String {
+    // Reuse `expand` by feeding it display strings as the "answers", so the
+    // preview and the real filing cannot disagree about placeholder handling.
     let placeholders: Vec<String> = prompts
         .iter()
         .enumerate()
@@ -377,6 +480,19 @@ pub fn preview(
 /// Wrap `expanded` as `entry_type` — e.g. prefix `* ` for [`EntryType::Entry`]
 /// when its first line isn't already a headline. A no-op when the first line
 /// already has the expected shape.
+///
+/// Only the first line is inspected or changed; [`EntryType::Plain`] is always
+/// a no-op. A table line is only wrapped in `| ... |` when it does not already
+/// start with `|`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::{wrap_entry, EntryType};
+///
+/// assert_eq!(wrap_entry(EntryType::Entry, "Buy milk"), "* Buy milk");
+/// assert_eq!(wrap_entry(EntryType::CheckItem, "- [ ] done already"), "- [ ] done already");
+/// ```
 #[must_use]
 pub fn wrap_entry(entry_type: EntryType, expanded: &str) -> String {
     let mut lines: Vec<String> = expanded.split('\n').map(str::to_string).collect();
@@ -407,6 +523,7 @@ pub fn wrap_entry(entry_type: EntryType, expanded: &str) -> String {
 /// The number of leading `*` on a headline line (followed by a space), else
 /// `None`.
 fn headline_stars(line: &str) -> Option<usize> {
+    // `*` is one byte, so the byte-length difference is the star count.
     let stars = line.len() - line.trim_start_matches('*').len();
     (stars > 0 && after_stars(line, stars).starts_with(' ')).then_some(stars)
 }
@@ -425,6 +542,8 @@ fn after_stars(line: &str, stars: usize) -> &str {
 
 /// Strip a trailing ` :tag:tag:` block from a headline's text, if present.
 fn strip_tags(text: &str) -> &str {
+    // Org tags are `:a:b:` after a space; the character set check avoids eating
+    // a title that merely ends in a colon-bearing word.
     if let Some((head, tail)) = text.rsplit_once(" :")
         && let Some(tags) = tail.strip_suffix(':')
         && !tags.is_empty()
@@ -460,6 +579,8 @@ fn subtree_end(lines: &[String], start: usize, level: usize) -> usize {
 /// after the headline, skipping its property drawer if one immediately
 /// follows.
 fn child_insert_point(lines: &[String], headline_idx: usize) -> usize {
+    // Insert before existing children (prepend), but after the headline's own
+    // `:PROPERTIES:` drawer, which Org requires to sit directly under it.
     let mut i = headline_idx + 1;
     if lines
         .get(i)
@@ -469,6 +590,7 @@ fn child_insert_point(lines: &[String], headline_idx: usize) -> usize {
         while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
             i += 1;
         }
+        // Step past `:END:` (an unterminated drawer is left as found).
         i = if i < lines.len() { i + 1 } else { i };
     }
     i
@@ -498,10 +620,12 @@ fn front_matter_end(lines: &[String]) -> usize {
 /// Insert `block` at line index `at`, padded by `empty_lines` blank lines on
 /// both sides.
 fn splice(lines: &mut Vec<String>, at: usize, block: Vec<String>, empty_lines: u8) {
+    // The same padding goes before and after, mirroring Org's `:empty-lines`.
     let pad = vec![String::new(); empty_lines as usize];
     let mut insert = pad.clone();
     insert.extend(block);
     insert.extend(pad);
+    // Inserted one by one (O(n*m)); capture entries are a handful of lines.
     for (offset, line) in insert.into_iter().enumerate() {
         lines.insert(at + offset, line);
     }
@@ -514,6 +638,8 @@ fn bump_stars(entry_lines: &[String], target_level: usize) -> Vec<String> {
     let Some(first_stars) = entry_lines.first().and_then(|l| headline_stars(l)) else {
         return entry_lines.to_vec();
     };
+    // Every headline shifts by the same delta so the entry's internal
+    // hierarchy is preserved; `.max(1)` guards against going below one star.
     let delta =
         i64::try_from(target_level + 1).unwrap_or(0) - i64::try_from(first_stars).unwrap_or(0);
     entry_lines
@@ -531,6 +657,19 @@ fn bump_stars(entry_lines: &[String], target_level: usize) -> Vec<String> {
 
 /// Insert `entry` at the top or bottom of `file_text` (a `file:` target),
 /// after/before any leading front matter, padded by `empty_lines`.
+///
+/// `prepend` places the entry after the front matter (blank lines, a file
+/// `:PROPERTIES:` drawer and `#+` keyword lines); otherwise it goes at the very
+/// end of the text.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::insert_top_level;
+///
+/// let out = insert_top_level("#+TITLE: T\n* A", "* B", true, 0);
+/// assert_eq!(out, "#+TITLE: T\n* B\n* A");
+/// ```
 #[must_use]
 pub fn insert_top_level(file_text: &str, entry: &str, prepend: bool, empty_lines: u8) -> String {
     let mut lines: Vec<String> = file_text.split('\n').map(str::to_string).collect();
@@ -547,6 +686,19 @@ pub fn insert_top_level(file_text: &str, entry: &str, prepend: bool, empty_lines
 /// Insert `entry` as a child of the headline titled `headline` in
 /// `file_text` (a `file+headline:` target), creating that headline at the
 /// end of the file first if it doesn't already exist.
+///
+/// The entry's headline levels are shifted to sit one deeper than the target
+/// headline. `prepend` puts it before the headline's existing children (after
+/// any property drawer); otherwise at the end of its subtree.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::insert_under_headline;
+///
+/// let out = insert_under_headline("* Inbox", "Inbox", "* Task", false, 0);
+/// assert_eq!(out, "* Inbox\n** Task");
+/// ```
 #[must_use]
 pub fn insert_under_headline(
     file_text: &str,
@@ -557,6 +709,7 @@ pub fn insert_under_headline(
 ) -> String {
     let mut lines: Vec<String> = file_text.split('\n').map(str::to_string).collect();
     let title = headline.trim();
+    // Missing headline: create it as a new level-1 headline at the end.
     let h_idx = find_headline(&lines, title).map_or_else(
         || create_child_headline(&mut lines, None, 1, title),
         |(i, _)| i,
@@ -576,6 +729,21 @@ pub fn insert_under_headline(
 /// Insert `entry` as a child of the headline/file-level node carrying
 /// `:ID: id` (an `id:` target). Returns `None` if no such id is present in
 /// `file_text`.
+///
+/// The owner is the nearest headline *above* the `:ID:` line; an id in a
+/// file-level drawer (no headline above it) files the entry at the file's
+/// top level instead. Matching is on the trimmed id value, case-sensitive.
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::insert_under_id;
+///
+/// let text = "* Project\n:PROPERTIES:\n:ID: abc\n:END:";
+/// let out = insert_under_id(text, "abc", "* Note", false, 0).unwrap();
+/// assert!(out.ends_with("\n** Note"));
+/// assert!(insert_under_id(text, "nope", "* Note", false, 0).is_none());
+/// ```
 #[must_use]
 pub fn insert_under_id(
     file_text: &str,
@@ -616,6 +784,7 @@ pub fn insert_under_id(
 
 // ----- Date tree --------------------------------------------------------------
 
+/// English month names indexed by `month - 1`; Org date-tree titles are not localized.
 const MONTH_NAMES: [&str; 12] = [
     "January",
     "February",
@@ -702,6 +871,20 @@ fn create_child_headline(
 /// Insert `entry` under the dated subtree for `ctx`'s date in `file_text` (a
 /// `file+datetree:` target), creating the `Year > Month > Day` headline chain
 /// as needed.
+///
+/// Existing Year / Month / Day headlines are reused (matched by exact title),
+/// so repeated captures on one day accumulate under one node. The entry is
+/// nested at level 4 (under the level-3 day headline).
+///
+/// # Examples
+///
+/// ```
+/// use vix_org_capture::{insert_datetree, Context};
+///
+/// let ctx = Context { year: 2026, month: 3, day: 9, weekday: "Mon".into(), ..Context::default() };
+/// let out = insert_datetree("", &ctx, "* Task", false, 0);
+/// assert_eq!(out, "* 2026\n** 2026-03 March\n*** 2026-03-09 Mon\n**** Task");
+/// ```
 #[must_use]
 pub fn insert_datetree(
     file_text: &str,
@@ -719,6 +902,7 @@ pub fn insert_datetree(
         parent =
             Some(found.unwrap_or_else(|| create_child_headline(&mut lines, parent, level, title)));
     }
+    // The loop always sets `parent` (three levels), so the fallback is unreachable.
     let day_idx = parent.unwrap_or(0);
     let entry_lines: Vec<String> = entry.split('\n').map(str::to_string).collect();
     let bumped = bump_stars(&entry_lines, 3);

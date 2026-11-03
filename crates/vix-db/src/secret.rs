@@ -24,6 +24,11 @@
 //! opt in at startup; the test suite does not, so a test never waits on the
 //! host's keyring (a Keychain lookup can take seconds) or reads a real
 //! credential.
+//!
+//! Consumers: [`crate::connect`] builds the URL once a password is known;
+//! the connect path in `lifecycle` calls [`resolve`] on a background thread
+//! (T531) because a `password_command` or Keychain lookup can block for
+//! seconds. Owning spec: `crates/vix-db/spec/index.md` ("Secure" section).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -33,7 +38,9 @@ use super::connect::Connection;
 const SERVICE: &str = "vix-db";
 
 /// Whether [`keyring_get`] / [`keyring_set`] reach the OS keyring. Off until
-/// [`use_system_keyring`] turns it on.
+/// [`use_system_keyring`] turns it on. A process-global flag (rather than a
+/// parameter) because the opt-in is a once-per-process decision made by the
+/// binary; `Relaxed` ordering suffices since no other data is published with it.
 static SYSTEM_KEYRING: AtomicBool = AtomicBool::new(false);
 
 /// Route [`keyring_get`] / [`keyring_set`] to the OS keyring for the rest of
@@ -63,6 +70,9 @@ pub struct Cmd {
 }
 
 /// The keyring account key for `conn` — stable per saved connection.
+///
+/// It is the connection *name*, so renaming a saved connection orphans its
+/// stored password (the user is simply prompted again and re-saves it).
 fn account(conn: &Connection) -> String {
     conn.name.clone()
 }
@@ -165,6 +175,8 @@ pub fn keyring_set(conn: &Connection, password: &str) -> bool {
 pub fn run(cmd: &Cmd) -> Option<String> {
     use std::io::Write as _;
     use std::process::{Command, Stdio};
+    // stdout is captured; stderr is discarded so a failing helper cannot leak
+    // fragments of a secret (or noise) into the TUI's terminal.
     let mut child = Command::new(&cmd.program)
         .args(&cmd.args)
         .stdin(if cmd.stdin.is_some() {
@@ -177,6 +189,8 @@ pub fn run(cmd: &Cmd) -> Option<String> {
         .spawn()
         .ok()?;
     if let Some(input) = &cmd.stdin {
+        // `take()` drops the handle on return, closing the pipe so the child
+        // sees EOF on its stdin and can finish.
         child.stdin.take()?.write_all(input.as_bytes()).ok()?;
     }
     let output = child.wait_with_output().ok()?;
@@ -188,6 +202,11 @@ pub fn run(cmd: &Cmd) -> Option<String> {
 
 /// Resolve `conn`'s password non-interactively: try its `password_command`,
 /// then the OS keyring. `None` means "fall back to prompting".
+///
+/// The `password_command` is run through `sh -c`, so it may use pipes and
+/// quoting; it is user-authored configuration, not untrusted input. An empty
+/// output counts as failure so a misconfigured command falls through to the
+/// keyring instead of connecting with an empty password.
 #[must_use]
 pub fn resolve(conn: &Connection) -> Option<String> {
     let command = conn.password_command.trim();
@@ -205,6 +224,9 @@ pub fn resolve(conn: &Connection) -> Option<String> {
 }
 
 /// Store `password` for `conn` in the keyring (best effort); `true` on success.
+///
+/// Called only when the connection has `store_keyring` set; returns `false`
+/// (and stores nothing) unless [`use_system_keyring`] was called.
 #[must_use]
 pub fn store(conn: &Connection, password: &str) -> bool {
     keyring_set(conn, password)

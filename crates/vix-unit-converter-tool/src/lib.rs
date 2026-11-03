@@ -10,6 +10,12 @@
 //!
 //! The base units are: metre (length), gram (mass), kelvin (temperature), byte
 //! (data) and second (time).
+//!
+//! Units live in the static [`UNITS`] table and are addressed everywhere by
+//! index into it, so the dialog can cycle them with plain integers. Conversion
+//! is done in `f64`; very large or very small values lose precision as usual.
+//!
+//! Owning spec: `crates/vix-unit-converter-tool/spec/index.md`.
 
 /// A measurable quantity. Conversions are only defined within one dimension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +237,21 @@ pub static UNITS: &[Unit] = &[
 /// Convert `value` from unit index `from` to unit index `to` (indices into
 /// [`UNITS`]). Returns `None` when the indices are out of range or name
 /// incompatible dimensions.
+///
+/// The value is routed through the dimension's base unit
+/// (`to.of_base(from.to_base(value))`), which is what makes the affine
+/// temperature scales work without a special case.
+///
+/// # Examples
+///
+/// ```
+/// use vix_unit_converter_tool::{convert, UNITS};
+/// let idx = |l: &str| UNITS.iter().position(|u| u.label == l).unwrap();
+/// assert_eq!(convert(1.0, idx("km"), idx("m")), Some(1000.0));
+/// let f = convert(100.0, idx("°C"), idx("°F")).unwrap();
+/// assert!((f - 212.0).abs() < 1e-9);
+/// assert_eq!(convert(1.0, idx("m"), idx("kg")), None);
+/// ```
 #[must_use]
 pub fn convert(value: f64, from: usize, to: usize) -> Option<f64> {
     let from = UNITS.get(from)?;
@@ -276,7 +297,9 @@ impl Converter {
     /// A fresh converter: `1` metre → kilometres, focused on the value field.
     #[must_use]
     pub fn new() -> Self {
-        // Default to the first two length units (m → km look-up by label).
+        // Look the defaults up by label rather than hard-coding indexes, so
+        // reordering `UNITS` cannot silently change the starting units. The
+        // `unwrap_or(0)` is unreachable while both labels exist in the table.
         let m = unit_index("m").unwrap_or(0);
         let km = unit_index("km").unwrap_or(0);
         Converter {
@@ -306,6 +329,10 @@ impl Converter {
     }
 
     /// Append a character to the value field (digits, sign, decimal point only).
+    ///
+    /// `e`/`E` are allowed for scientific notation (`1e3`). Only the *character
+    /// class* is checked here, so a typed value can be malformed (`1-2`);
+    /// [`Converter::output`] then yields `None` and the dialog shows a dash.
     pub fn push(&mut self, c: char) {
         if c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E') {
             self.value.push(c);
@@ -351,6 +378,12 @@ impl Converter {
 
     /// The text inserted into the editor: `"<output> <unit>"`, or empty when
     /// there is no valid output.
+    ///
+    /// # Panics
+    /// If the public [`to`](Self::to) index is out of range of [`UNITS`]
+    /// (cannot happen when it is only changed via [`Converter::cycle`]); an
+    /// out-of-range `from`/`to` makes [`Converter::output`] `None` first, so
+    /// the indexing is reached only for valid output.
     #[must_use]
     pub fn insert_text(&self) -> String {
         match self.output() {
@@ -367,6 +400,8 @@ fn unit_index(label: &str) -> Option<usize> {
 
 /// Format a number without a trailing `.0`, trimming float noise to 6 decimals.
 fn format_number(v: f64) -> String {
+    // Below 1e15 every integer-valued f64 prints exactly; beyond that fall
+    // through to fixed-point formatting.
     if v.fract() == 0.0 && v.abs() < 1e15 {
         // Integer-valued: `f64`'s `Display` prints it without a trailing `.0`.
         // Adding 0.0 normalizes `-0.0` to `0.0` to match the prior `as i64`.

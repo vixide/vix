@@ -88,6 +88,11 @@ pub fn agent_note(host: &str, status: &crate::authority::ssh::AgentStatus) -> Op
 /// A connect's workspace root, the file to open, and the agent note.
 type Connected = (PathBuf, Option<PathBuf>, Option<String>);
 
+/// Open the remote connection for `target` and resolve it to a local view: the
+/// workspace root to use, the file to open (if the target named one) and an
+/// optional note about the remote agent. `remote_agent` is the user's
+/// `remote_agent` setting, interpreted by `AgentMode::from_setting`. The
+/// error string is already translated and ready to show.
 #[cfg(feature = "tasks")]
 fn connect(target: &RemoteTarget, remote_agent: &str) -> Result<Connected, String> {
     use crate::authority::remote::ConnectOptions;
@@ -123,6 +128,8 @@ fn connect(_target: &RemoteTarget, _remote_agent: &str) -> Result<Connected, Str
 mod tests {
     use super::*;
 
+    /// Only a single remote-looking name triggers a connection; everything
+    /// else (plain paths, several files, none) is left for normal opening.
     #[test]
     fn local_names_are_left_alone() {
         let mut files = vec![PathBuf::from("src/main.rs")];
@@ -137,6 +144,8 @@ mod tests {
         assert_eq!(connect_cli(&mut none, "off"), Ok(None));
     }
 
+    /// A host that looks like an `ssh` option (leading `-`) is rejected by
+    /// name validation, so no process is spawned (option-injection guard).
     #[test]
     fn a_bad_remote_name_is_an_error_before_any_connection() {
         let mut files = vec![PathBuf::from("ssh://-oProxyCommand=x/y")];

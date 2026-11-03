@@ -1,5 +1,8 @@
 //! Worktrees (T634): parse `git worktree list --porcelain`, and add or
 //! remove a linked worktree.
+//!
+//! Re-exported from the crate root; parsers are pure, runners need the
+//! `process` feature. See `crates/vix-git/spec/index.md`.
 
 #[cfg(feature = "process")]
 use std::path::Path;

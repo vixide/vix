@@ -4,6 +4,12 @@
 //! matches (or the compile error) as the user types. Matching uses the same
 //! `regex` engine as Find/Replace. The host renders the [`Tester`]; this module
 //! holds the fields and computes [`Tester::result`].
+//!
+//! The state is plain data with no I/O, so it is unit-tested directly. The
+//! matcher is re-run from scratch on every keystroke; there is no cached
+//! compiled regex, which keeps [`Tester`] trivially `Clone`/`Default`.
+//!
+//! Spec: `crates/vix-regex-tool/spec/index.md`.
 
 /// Which field the regex-tester dialog is editing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -18,9 +24,11 @@ pub enum Field {
 /// The outcome of evaluating the current pattern against the subject.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-    /// The matched substrings (capped), in order.
+    /// The matched substrings (capped at 100), in order of appearance. Empty
+    /// when the pattern is empty or nothing matches.
     Matches(Vec<String>),
-    /// The pattern failed to compile, with this message.
+    /// The pattern failed to compile (or exceeded the size limit), with the
+    /// `regex` crate's error message.
     Error(String),
 }
 
@@ -36,7 +44,8 @@ pub struct Tester {
 }
 
 impl Tester {
-    /// A new tester, optionally seeded with `subject`.
+    /// A new tester with an empty pattern, seeded with `subject` (typically the
+    /// editor selection). Focus starts on the pattern field.
     #[must_use]
     pub fn new(subject: String) -> Self {
         Tester {
@@ -81,6 +90,17 @@ impl Tester {
 
     /// Evaluate the pattern against the subject (capped at 100 matches). An empty
     /// pattern yields no matches; an invalid pattern yields an [`Outcome::Error`].
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_regex_tool::{Outcome, Tester};
+    ///
+    /// let mut t = Tester::new("a1 b2".to_string());
+    /// for c in r"\d".chars() {
+    ///     t.push(c);
+    /// }
+    /// assert_eq!(t.result(), Outcome::Matches(vec!["1".into(), "2".into()]));
+    /// ```
     #[must_use]
     pub fn result(&self) -> Outcome {
         if self.pattern.is_empty() {

@@ -17,6 +17,7 @@ use vix_jupyter_core::{KernelSpec, PathEnv};
 /// Most kernel directories read per data directory.
 pub const MAX_KERNELS_PER_DIR: usize = 256;
 
+/// Read an environment variable as a path, treating an unset or empty value as absent (an empty `JUPYTER_DATA_DIR=` must not mean "the current directory").
 fn var_path(name: &str) -> Option<PathBuf> {
     env::var_os(name)
         .filter(|v| !v.is_empty())
@@ -67,6 +68,7 @@ pub fn path_env() -> PathEnv {
     }
 }
 
+/// Read a kernel.json for at most `MAX_KERNEL_JSON_BYTES + 1` bytes, so an oversized or hostile file costs bounded memory. The extra byte lets the parser see that the cap was exceeded and reject it, instead of silently truncating.
 fn read_capped(path: &Path) -> Option<String> {
     let file = fs::File::open(path).ok()?;
     let mut text = String::new();

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Top menu bar with keyboard-navigable dropdowns (one level of submenus)."
+description = "Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested submenu levels)."
 
 [dependencies]
 rust-i18n = { workspace = true }

@@ -7,6 +7,20 @@
 //! in a block before it is handed to [`crate::parse_request`]. Everything here
 //! is pure apart from the clock, the random source and the environment, which
 //! only the system variables read.
+//!
+//! Variable resolution order (see [`Context`]): `$`-prefixed system variables
+//! first, then `name.response.<part>` references to earlier named responses,
+//! then the variable list searched from the end so the *last* definition wins
+//! (the caller orders it `$shared`, file, active environment; see
+//! [`crate::env::Environments::variables`]). Values may reference other
+//! variables, bounded by `MAX_DEPTH` so a cycle fails with
+//! [`VarError::TooDeep`] instead of looping.
+//!
+//! Security-relevant helpers live here too: [`load_body_file`] refuses paths
+//! that leave the `.http` file's folder, and `$aadToken` shells out only via
+//! [`crate::aad`].
+//!
+//! Owning spec: `crates/vix-http-client/spec/index.md`.
 
 use crate::{Request, Response};
 use std::collections::HashMap;
@@ -29,6 +43,8 @@ pub fn blocks(text: &str) -> Vec<Block> {
     let lines: Vec<&str> = text.lines().collect();
     let mut out = Vec::new();
     let mut start = 0;
+    // Iterate one past the end so the final block (no trailing `###`) is
+    // flushed by the same code path as the others.
     for i in 0..=lines.len() {
         if i == lines.len() || lines[i].trim_start().starts_with("###") {
             if has_request(&lines[start..i]) {
@@ -41,7 +57,8 @@ pub fn blocks(text: &str) -> Vec<Block> {
 }
 
 /// Whether `lines` hold a request line (a non-blank line that is not a comment
-/// or a variable definition).
+/// or a variable definition). Mirrors the skip rules of [`crate::parse_request`]
+/// so a block is only reported when that parser could find a request in it.
 fn has_request(lines: &[&str]) -> bool {
     lines.iter().any(|l| {
         let t = l.trim();
@@ -79,6 +96,8 @@ pub fn file_variables(text: &str) -> Vec<(String, String)> {
     text.lines()
         .filter_map(|l| {
             let rest = l.trim().strip_prefix('@')?;
+            // Split on the *first* `=` so values may themselves contain `=`
+            // (e.g. a base64 token or a query string).
             let (name, value) = rest.split_once('=')?;
             let name = name.trim();
             (!name.is_empty() && !name.contains(char::is_whitespace))
@@ -97,6 +116,7 @@ pub fn request_name(block: &str) -> Option<String> {
             .trim_start_matches('/')
             .trim();
         let rest = t.strip_prefix("@name")?;
+        // Both `@name foo` and `@name = foo` spellings are accepted.
         let name = rest.trim_start_matches(['=', ' ', '\t']).trim();
         (!name.is_empty()).then(|| name.to_string())
     })
@@ -170,12 +190,16 @@ pub fn expand(text: &str, ctx: &Context<'_>) -> Result<String, VarError> {
     expand_depth(text, ctx, 0)
 }
 
+/// [`expand`] with the current nesting `depth` (variables referencing
+/// variables); `depth` is capped at `MAX_DEPTH`.
 fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarError> {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(open) = rest.find("{{") {
         out.push_str(&rest[..open]);
         let after = &rest[open + 2..];
+        // A lone `{{` is an error rather than literal text, so a typo'd
+        // variable fails loudly instead of being sent verbatim.
         let close = after.find("}}").ok_or(VarError::Unterminated)?;
         let name = after[..close].trim();
         if depth >= MAX_DEPTH {
@@ -188,6 +212,8 @@ fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, V
     Ok(out)
 }
 
+/// Resolve one `{{name}}` body: system variable, named-response reference, or
+/// file/environment variable, in that order.
 fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarError> {
     if let Some(sys) = name.strip_prefix('$') {
         return system_variable(sys, name, ctx);
@@ -210,7 +236,9 @@ fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarErr
     expand_depth(value, ctx, depth + 1)
 }
 
-/// `body`, `body.$.path` (JSON), `body.*`, or `headers.Name`.
+/// `body`, `body.$.path` (JSON), `body.*`, or `headers.Name`. A body path
+/// starting with `/` is an `XPath` over XML (see `crate::xpath`); anything else
+/// is a JSON path. Header names compare case-insensitively, as in HTTP.
 fn response_part(resp: &Response, tail: &str) -> Option<String> {
     if let Some(h) = tail.strip_prefix("headers.") {
         return resp
@@ -235,6 +263,19 @@ fn response_part(resp: &Response, tail: &str) -> Option<String> {
 
 /// Evaluate a JSON path such as `$.data.items[0].id` against `body`. Strings
 /// come back unquoted; other values as JSON text.
+///
+/// Only the simple subset is supported: `.key` and `[index]` steps. Wildcards,
+/// filters and negative indexes return `None`, as does invalid JSON.
+///
+/// # Examples
+///
+/// ```
+/// use vix_http_client::rest::json_path;
+/// let body = r#"{"data":{"items":[{"id":7}]},"name":"x"}"#;
+/// assert_eq!(json_path(body, "$.data.items[0].id").as_deref(), Some("7"));
+/// assert_eq!(json_path(body, "$.name").as_deref(), Some("x"));
+/// assert_eq!(json_path(body, "$.missing"), None);
+/// ```
 #[must_use]
 pub fn json_path(body: &str, path: &str) -> Option<String> {
     let mut value: serde_json::Value = serde_json::from_str(body).ok()?;
@@ -260,6 +301,10 @@ pub fn json_path(body: &str, path: &str) -> Option<String> {
     })
 }
 
+/// Expand a `$`-prefixed system variable. `sys` is the text after the `$`
+/// (name plus arguments); `full` is the original `$name args` for error
+/// messages. Supported: `guid`, `randomInt`, `timestamp`, `datetime`,
+/// `localDatetime`, `aadToken`, `processEnv`, `dotenv`.
 fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, VarError> {
     let mut parts = sys.split_whitespace();
     let bad = || VarError::BadArguments(full.to_string());
@@ -272,9 +317,13 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
                 return Err(bad());
             }
             let span = u64::try_from(max - min).map_err(|_| bad())?;
+            // Range is `[min, max)`. The modulo introduces a negligible bias,
+            // acceptable for test-data values (this is not for security use).
             Ok((min + i64::try_from(random_u64() % span).map_err(|_| bad())?).to_string())
         }
         "timestamp" => {
+            // Time comes from `ctx.now_ms`, not the clock, so expansion stays
+            // deterministic and testable.
             let ms = ctx.now_ms + offset_ms(parts.next(), parts.next()).ok_or_else(bad)?;
             Ok((ms / 1000).to_string())
         }
@@ -305,6 +354,8 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
                 crate::aad::AadError::Failed => VarError::AzureTokenFailed,
             })
         }
+        // `processEnv`/`dotenv` read secrets without them living in the .http
+        // file; a missing one reports the variable, never a value.
         "processEnv" => {
             let name = parts.next().ok_or_else(bad)?;
             std::env::var(name).map_err(|_| VarError::BadReference(full.to_string()))
@@ -321,6 +372,7 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
     }
 }
 
+/// 64 random bits from the OS RNG (used by `$randomInt`).
 fn random_u64() -> u64 {
     let mut buf = [0_u8; 8];
     // A failed OS RNG degrades to a fixed value rather than aborting a send.
@@ -330,6 +382,8 @@ fn random_u64() -> u64 {
 
 /// `<n> <unit>` as milliseconds; no arguments means zero.
 fn offset_ms(n: Option<&str>, unit: Option<&str>) -> Option<i64> {
+    // `{{$timestamp}}` (neither) is valid; `{{$timestamp 1}}` (number without
+    // unit) is not. `checked_mul` rejects an overflowing offset.
     let (Some(n), Some(unit)) = (n, unit) else {
         return if n.is_none() { Some(0) } else { None };
     };
@@ -357,6 +411,9 @@ fn dotenv_get(text: &str, name: &str) -> Option<String> {
 
 /// Days since 1970-01-01 to (year, month, day), proleptic Gregorian.
 fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    // Howard Hinnant's `civil_from_days` algorithm: shifts the epoch to
+    // 0000-03-01 so leap days fall at the end of the "year", then works in
+    // 400-year eras. Exact for the whole proleptic Gregorian calendar.
     let z = z + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -374,18 +431,23 @@ fn offset_colon(off: i32) -> String {
     format!("{sign}{:02}:{:02}", a / 60, a % 60)
 }
 
+/// ISO 8601 in the local zone: shift the instant by the offset, format it as
+/// UTC, then swap the `Z` for the real `+hh:mm` offset.
 fn local_iso8601(ms: i64, off: i32) -> String {
     let shifted = iso8601(ms + i64::from(off) * 60_000);
     // Swap the trailing `Z` for the real offset.
     format!("{}{}", shifted.trim_end_matches('Z'), offset_colon(off))
 }
 
+/// RFC 1123 in the local zone; the zone is written `+hhmm` (no colon) as
+/// RFC 1123/822 require, replacing the literal `GMT`.
 fn local_rfc1123(ms: i64, off: i32) -> String {
     let shifted = rfc1123(ms + i64::from(off) * 60_000);
     let zone = offset_colon(off).replace(':', "");
     format!("{}{zone}", shifted.trim_end_matches("GMT"))
 }
 
+/// UTC instant as `YYYY-MM-DDThh:mm:ss.mmmZ`.
 fn iso8601(ms: i64) -> String {
     let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
     let (y, m, d) = civil_from_days(days);
@@ -398,7 +460,9 @@ fn iso8601(ms: i64) -> String {
     )
 }
 
+/// UTC instant as an RFC 1123 date, e.g. `Tue, 14 Nov 2023 22:13:20 GMT`.
 fn rfc1123(ms: i64) -> String {
+    // Day 0 (1970-01-01) was a Thursday, hence the rotated table.
     const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -468,6 +532,8 @@ impl std::error::Error for BodyFileError {
 /// A [`BodyFileError`] when the path escapes `base` or the file cannot be read.
 pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), BodyFileError> {
     let body = req.body.trim();
+    // Only a single-line body of the form `< path` is a file reference;
+    // multi-line bodies that happen to start with `< ` are sent as written.
     let Some(rel) = body.strip_prefix("< ").filter(|_| !body.contains('\n')) else {
         return Ok(());
     };
@@ -490,6 +556,10 @@ pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), BodyFileErro
 
 /// Rewrite an `Authorization: Basic user:pass` (or `user pass`) header to the
 /// base64 form. A value that is already base64 is left alone.
+///
+/// The `Basic user pass` (space-separated) form is rewritten too, matching the
+/// VS Code REST Client. A single token with neither `:` nor a space is assumed
+/// to be pre-encoded and is left untouched.
 pub fn encode_basic_auth(req: &mut Request) {
     use base64::Engine as _;
     for (name, value) in &mut req.headers {
@@ -514,6 +584,17 @@ pub fn encode_basic_auth(req: &mut Request) {
 }
 
 /// `req` as a `curl` command line.
+///
+/// Every value is single-quoted (embedded `'` becomes `'\''`), so the result
+/// is safe to paste into a POSIX shell even with hostile header or body text.
+///
+/// # Examples
+///
+/// ```
+/// use vix_http_client::{parse_request, rest::to_curl};
+/// let req = parse_request("GET https://e.com/x\nAccept: */*\n").unwrap();
+/// assert_eq!(to_curl(&req), "curl -X GET 'https://e.com/x' \\\n  -H 'Accept: */*'");
+/// ```
 #[must_use]
 pub fn to_curl(req: &Request) -> String {
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));

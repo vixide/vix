@@ -11,6 +11,14 @@
 //! Both sides get forward secrecy from fresh ephemeral keys. The connection
 //! opens with a 13-byte plaintext preamble (magic, version, public token id)
 //! so the host knows which secret to use; it carries nothing secret.
+//!
+//! The preamble id is also bound into the Noise *prologue*, so a man in the
+//! middle who rewrites the id breaks the handshake rather than redirecting it.
+//! After the two handshake messages both sides switch to a *stateless*
+//! transport state: the caller supplies explicit nonces (see `link`), which
+//! lets the send and receive halves live on different threads. Failures on the
+//! host side are silent (the socket is dropped) so scanners learn nothing.
+//! Spec: `crates/vix-cowork-net/spec/index.md`.
 
 use crate::error::NetError;
 use crate::invite::{ID_LEN, Invite, InviteTable};
@@ -19,19 +27,26 @@ use snow::{Builder, Keypair};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+/// The Noise protocol name; fixes pattern, DH, cipher and hash.
 const PARAMS: &str = "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s";
+/// First four bytes of every connection; lets the host reject non-Cowork
+/// traffic (HTTP probes, port scanners) before spending any crypto.
 const MAGIC: &[u8; 4] = b"VXCW";
 /// The transport framing version, sent in the preamble.
 pub const WIRE_VERSION: u8 = 1;
 /// A first handshake message is about 48 bytes; anything near this is not one.
 const MAX_HANDSHAKE_FRAME: usize = 1024;
 
+/// The Noise prologue: a protocol label plus the public token id. Both sides
+/// must agree on it byte for byte or the handshake fails authentication.
 fn prologue(id: [u8; ID_LEN]) -> Vec<u8> {
     let mut p = b"vix-cowork/1".to_vec();
     p.extend_from_slice(&id);
     p
 }
 
+/// A Noise builder for [`PARAMS`]. Parsing the constant cannot realistically
+/// fail; it is mapped to [`NetError::Crypto`] rather than unwrapped.
 fn builder() -> Result<Builder<'static>, NetError> {
     let params = PARAMS.parse().map_err(|_| NetError::Crypto)?;
     Ok(Builder::new(params))
@@ -60,6 +75,7 @@ pub fn connect(invite: &Invite, timeout: Duration) -> Result<(Link, LinkReader),
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
 
+    // Preamble: 4 magic + 1 version + 8 token id = 13 bytes, plaintext.
     let mut pre = Vec::with_capacity(13);
     pre.extend_from_slice(MAGIC);
     pre.push(WIRE_VERSION);
@@ -72,10 +88,14 @@ pub fn connect(invite: &Invite, timeout: Duration) -> Result<(Link, LinkReader),
         .psk(0, &invite.secret)?
         .prologue(&pro)?
         .build_initiator()?;
+    // NK message 1 (`-> e, es`) carries no payload, so it is tiny.
     let mut buf = [0u8; 1024];
     let n = hs.write_message(&[], &mut buf)?;
     write_frame(&mut stream, &buf[..n])?;
 
+    // Message 2 (`<- e, ee`) completes the handshake; a wrong host key or a
+    // spent invite makes the host close instead, which shows up here as an
+    // error from `read_frame`/`read_message`.
     let reply = read_frame(&mut stream)?;
     if reply.len() > MAX_HANDSHAKE_FRAME {
         return Err(NetError::Protocol);
@@ -91,6 +111,11 @@ pub fn connect(invite: &Invite, timeout: Duration) -> Result<(Link, LinkReader),
 
 /// Answer one incoming connection. On success the invite is consumed.
 ///
+/// A failed handshake is charged against the token (`record_failure`), so
+/// three bad attempts revoke it. The token is consumed only *after* the
+/// handshake succeeds, so a stranger who knows only the public id cannot burn
+/// someone's invite without holding the secret.
+///
 /// # Errors
 ///
 /// Any failure, after which the caller drops the socket without a reply: a
@@ -105,6 +130,7 @@ pub(crate) fn accept_stream(
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
 
+    // Cheap checks first: wrong magic or version never reaches the crypto.
     let mut pre = [0u8; 13];
     std::io::Read::read_exact(&mut stream, &mut pre)?;
     if &pre[..4] != MAGIC || pre[4] != WIRE_VERSION {
@@ -114,6 +140,8 @@ pub(crate) fn accept_stream(
     id.copy_from_slice(&pre[5..]);
     let secret = invites.lookup(&id).ok_or(NetError::UnknownInvite)?;
 
+    // Run the handshake in a closure so every failure path funnels through the
+    // single `record_failure` below.
     let result: Result<snow::StatelessTransportState, NetError> = (|| {
         let pro = prologue(id);
         let mut hs = builder()?

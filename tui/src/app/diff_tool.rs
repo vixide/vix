@@ -51,6 +51,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the read-only diff view: Esc/`q` closes it, Up/Down and PageUp/PageDown
+    /// scroll (clamped to the last line).
     pub(super) fn diff_view_key(&mut self, key: KeyEvent) {
         let page = self.layout.editor.height.max(1) as usize;
         match key.code {

@@ -12,6 +12,7 @@ use crate::theme::{self, icon};
     clippy::too_many_lines,
     reason = "a single linear frame-drawing routine for one overlay"
 )]
+/// Draw the reviewable AI-diff hunk viewer overlay. No-op when no review is pending.
 pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ai_diff::Seg;
     let Some(review) = app.ai_diff_review() else {
@@ -112,6 +113,8 @@ fn seg_line_count(seg: &crate::ai_diff::Seg) -> usize {
     }
 }
 
+/// Draw the AI chat panel overlay (conversation, input line). No-op when the
+/// panel is closed.
 pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ai_panel::Role;
     if app.ai_panel.is_none() {

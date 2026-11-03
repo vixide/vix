@@ -11,6 +11,10 @@
 //! Powerline, Octicons) that almost every patched font ships, so the picker shows
 //! something useful regardless of which Nerd Font the terminal uses. A glyph that
 //! a particular font lacks simply renders as a fallback box; nothing breaks.
+//!
+//! The table is a hand-curated `const` (not generated), grouped by comment
+//! banners in [`GLYPHS`]. The last grid row may be partial, so navigation always
+//! bounds-checks against `GLYPHS.len()` rather than assuming a full grid. Spec: `crates/vix-nerd-font-picker/spec/index.md`.
 
 /// One selectable glyph and a short, human-readable name.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -267,6 +271,7 @@ pub struct Palette {
     pub selected: usize,
 }
 
+/// Same as [`Palette::open`].
 impl Default for Palette {
     fn default() -> Self {
         Palette::open()

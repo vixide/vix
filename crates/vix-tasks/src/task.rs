@@ -33,6 +33,8 @@ pub struct NamedTask {
     pub matcher: Option<String>,
 }
 
+/// A discovered [`crate::Task`] becomes a [`NamedTask`] with no `matcher`
+/// override (so output is parsed with the default `auto` problem matcher).
 impl From<&crate::Task> for NamedTask {
     fn from(task: &crate::Task) -> Self {
         NamedTask {

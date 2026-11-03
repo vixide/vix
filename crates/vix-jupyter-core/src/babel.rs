@@ -130,6 +130,7 @@ impl Header {
         header
     }
 
+    /// Apply the values of a `:results` header: `value`/`output` choose what is collected, `replace`/`append`/`silent`/`none` how the block is updated. Later words win; format words (`raw`, `drawer`, `table`, ...) are ignored.
     fn read_results(&mut self, values: &[String]) {
         for value in values {
             match value.to_ascii_lowercase().as_str() {

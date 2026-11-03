@@ -82,6 +82,7 @@ pub fn read_frame(r: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
     Ok(Some(payload))
 }
 
+/// An `InvalidData` error carrying `what`.
 fn bad(what: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what.to_string())
 }
@@ -330,6 +331,8 @@ pub enum ErrorCode {
     TooBig,
 }
 
+/// Every [`ErrorCode`], in wire-tag order: the tag byte is the index. Append
+/// only; reordering changes the protocol (bump [`PROTOCOL`]).
 const CODES: [ErrorCode; 15] = [
     ErrorCode::Other,
     ErrorCode::NotFound,
@@ -400,6 +403,8 @@ impl ErrorCode {
         io::Error::new(kind, message.to_string())
     }
 
+    /// The wire tag: this code's index in [`CODES`] (falling back to 0,
+    /// `Other`, which cannot happen for a listed code).
     fn tag(self) -> u8 {
         CODES
             .iter()
@@ -457,6 +462,12 @@ impl Reply {
 
 // ----- encoding -------------------------------------------------------------
 
+/// The encoder: appends big-endian primitives to a byte vector. Infallible;
+/// oversize results are caught by the frame length check instead. Layout
+/// reference: a `time` is a tag byte (0 none, 1 after the epoch, 2 before
+/// it), seconds (`u64`) and nanoseconds (`u32`); a `stat` is kind, len,
+/// modified, created, readonly, then an optional `u32` mode. [`Dec`] mirrors
+/// every method here; keep the two in step.
 struct Enc(Vec<u8>);
 
 impl Enc {
@@ -704,17 +715,27 @@ pub fn encode(message: &Message) -> Vec<u8> {
 
 // ----- decoding -------------------------------------------------------------
 
+/// The decoder: a cursor over one frame's payload. Every read is bounds
+/// checked ([`Dec::take`]) and returns a static reason string on failure,
+/// which [`decode`] turns into `InvalidData`.
 struct Dec<'a> {
+    /// The payload being decoded.
     buf: &'a [u8],
+    /// Offset of the next unread byte.
     pos: usize,
 }
 
+/// A decode result whose error is a short static reason.
 type R<T> = Result<T, &'static str>;
 
 impl<'a> Dec<'a> {
+    /// Bytes not yet consumed.
     fn left(&self) -> usize {
         self.buf.len() - self.pos
     }
+    /// Consume exactly `n` bytes, or fail with `"truncated"` without
+    /// advancing. Every length-prefixed read goes through here, so a lying
+    /// length can never allocate or read past the payload.
     fn take(&mut self, n: usize) -> R<&'a [u8]> {
         if n > self.left() {
             return Err("truncated");
@@ -726,6 +747,7 @@ impl<'a> Dec<'a> {
     fn u8(&mut self) -> R<u8> {
         Ok(self.take(1)?[0])
     }
+    /// A strict bool: only 0 and 1 are valid.
     fn bool(&mut self) -> R<bool> {
         match self.u8()? {
             0 => Ok(false),
@@ -772,6 +794,8 @@ impl<'a> Dec<'a> {
         }
         Ok(out)
     }
+    /// An optional time; rejects nanoseconds past one second and instants
+    /// not representable as `SystemTime`.
     fn time(&mut self) -> R<Option<SystemTime>> {
         let tag = self.u8()?;
         if tag == 0 {
@@ -816,6 +840,8 @@ impl<'a> Dec<'a> {
             .with_readonly(readonly)
             .with_mode(mode))
     }
+    /// One [`Op`]. `nested` is true inside a batch, where another batch is
+    /// refused (no unbounded recursion).
     fn op(&mut self, nested: bool) -> R<Op> {
         let tag = self.u8()?;
         Ok(match tag {
@@ -911,6 +937,7 @@ impl<'a> Dec<'a> {
             _ => return Err("bad op"),
         })
     }
+    /// One [`Reply`]; `nested` as for [`Dec::op`].
     fn reply(&mut self, nested: bool) -> R<Reply> {
         let tag = self.u8()?;
         Ok(match tag {

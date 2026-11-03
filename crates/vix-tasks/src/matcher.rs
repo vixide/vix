@@ -244,37 +244,56 @@ fn re(pattern: &str) -> Regex {
     Regex::new(pattern).expect("built-in matcher pattern")
 }
 
+/// ANSI CSI escape sequences (colors, cursor moves), stripped before matching so
+/// colored compiler output parses like plain text.
 static ANSI: LazyLock<Regex> = LazyLock::new(|| re(r"\x1b\[[0-9;?]*[ -/]*[@-~]"));
 
+/// `rustc`/`cargo` diagnostic headline: `error[E0308]: mismatched types`. The
+/// location follows on a separate `-->` line ([`RUST_ARROW`]).
 static RUST_HEADER: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(error|warning|note|help)(?:\[[A-Za-z0-9_]+\])?: (.+)$"));
+/// `rustc` location line: `  --> src/main.rs:3:5`.
 static RUST_ARROW: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*--> (.+?):(\d+):(\d+)\s*$"));
+/// Modern (1.73+) panic location: `thread 'x' panicked at src/lib.rs:9:5:`.
 static RUST_PANIC: LazyLock<Regex> =
     LazyLock::new(|| re(r"^thread '.*' panicked at (.+?):(\d+):(\d+):?\s*$"));
+/// Pre-1.73 panic format, where the message is quoted on the same line.
 static RUST_PANIC_OLD: LazyLock<Regex> =
     LazyLock::new(|| re(r"^thread '.*' panicked at '(.*)', (.+?):(\d+):(\d+)\s*$"));
 
+/// GCC/Clang: `file:line[:col]: error|warning: message` (column optional).
 static GCC: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?):(\d+):(?:(\d+):)? (fatal error|error|warning): (.+)$"));
 
+/// `tsc` plain format: `file(line,col): error TS1234: message`.
 static TSC_PAREN: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?)\((\d+),(\d+)\): (error|warning) (TS\d+): (.+)$"));
+/// `tsc --pretty` format: `file:line:col - error TS1234: message`.
 static TSC_PRETTY: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?):(\d+):(\d+) - (error|warning) (TS\d+): (.+)$"));
 
+/// `ESLint` "stylish" row, which lacks the file name (it was printed on an
+/// earlier header line, tracked in `state.eslint_file`): `  3:7  error  msg  rule`.
 static ESLINT_ROW: LazyLock<Regex> =
     LazyLock::new(|| re(r"^\s+(\d+):(\d+)\s+(error|warning)\s+(.+?)(?:\s{2,}(\S+))?\s*$"));
+/// `ESLint` `--format compact`: `file: line 3, col 7, Error - message`.
 static ESLINT_COMPACT: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?): line (\d+), col (\d+), (Error|Warning) - (.+)$"));
+/// `ESLint` `--format unix`: `file:3:7: message [Error/rule]`.
 static ESLINT_UNIX: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(\S.*?):(\d+):(\d+): (.+) \[(Error|Warning)(?:/(\S+))?\]$"));
 
+/// Python traceback frame: `  File "x.py", line 12, in f`. The *last* frame
+/// before the exception line is the reported location.
 static PY_FRAME: LazyLock<Regex> =
     LazyLock::new(|| re(r#"^\s*File "(.+)", line (\d+)(?:, in .*)?\s*$"#));
+/// Python exception line closing a traceback: `ValueError: message`.
 static PY_EXCEPTION: LazyLock<Regex> =
     LazyLock::new(|| re(r"^([A-Za-z_][A-Za-z0-9_.]*)(?::\s?(.*))?$"));
+/// pytest short-summary failure location: `tests/test_x.py:14: AssertionError`.
 static PYTEST_LOCATION: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*(\S[^:]*\.py):(\d+): (.+)$"));
 
+/// Go compiler/test output: `file.go:line[:col]: message`.
 static GO: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*(\S+\.go):(\d+)(?::(\d+))?: (.+)$"));
 
 /// `text` without ANSI color/cursor escape sequences.
@@ -385,6 +404,10 @@ impl Scanner {
             }
             return;
         }
+        // First recognizer to consume the line wins (short-circuit `||`). Order
+        // matters: Python goes first because it carries traceback state across
+        // lines, and the generic `file:line:` shapes (gcc, go, pytest) come
+        // after the more specific compiler formats.
         let _ = self.try_python(line)
             || self.try_rustc(line)
             || self.try_tsc(line)
@@ -406,6 +429,10 @@ impl Scanner {
         }
     }
 
+    /// Try the Python traceback (frame then exception line) recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_python(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Python) {
             return false;
@@ -450,6 +477,10 @@ impl Scanner {
         false
     }
 
+    /// Try the rustc/cargo diagnostics (headline then `-->` location) and panics recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_rustc(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Rustc) {
             return false;
@@ -511,6 +542,10 @@ impl Scanner {
         false
     }
 
+    /// Try the TypeScript compiler diagnostics recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_tsc(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Tsc) {
             return false;
@@ -534,6 +569,10 @@ impl Scanner {
         true
     }
 
+    /// Try the `ESLint` recognizer (stylish, compact and unix formats) on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_eslint(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Eslint) {
             return false;
@@ -617,6 +656,10 @@ impl Scanner {
         path_like
     }
 
+    /// Try the GCC/Clang diagnostics recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_gcc(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Gcc) {
             return false;
@@ -637,6 +680,10 @@ impl Scanner {
         true
     }
 
+    /// Try the Go compiler and test diagnostics recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_go(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Go) {
             return false;
@@ -657,6 +704,10 @@ impl Scanner {
         true
     }
 
+    /// Try the pytest short-summary failure locations recognizer on `line`. Returns `true` when the line was consumed
+    /// (matched, or continued a multi-line construct) so later recognizers are
+    /// skipped; returns `false` immediately when this matcher is not enabled in
+    /// the spec.
     fn try_pytest(&mut self, line: &str) -> bool {
         if !self.spec.runs(Builtin::Python) {
             return false;

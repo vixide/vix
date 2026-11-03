@@ -10,6 +10,29 @@
 //! Nothing here does I/O, starts a thread or reads the clock: the App owns
 //! sockets, files and time, and hands this crate plain values. Nothing here
 //! returns user-facing text either; results are enums the App translates.
+//!
+//! # Layout
+//!
+//! This file holds the data model ([`Message`], [`Conversation`], [`Inbox`])
+//! and the notification policy ([`should_notify`]); each submodule is one
+//! self-contained pure concern, re-exported at the crate root. The App side
+//! (IRC transport, Cowork bridge, panel rendering) lives in the App shell (`tui/src/app/im*.rs`); the
+//! full behavior is specified in `crates/vix-im/spec/index.md` and the
+//! repo-level `spec/instant-message`.
+//!
+//! # Example
+//!
+//! ```
+//! use vix_im::{CaseMapping, Conversation, ConversationId, ConversationKind};
+//! use vix_im::{Delivery, Inbox, Message};
+//!
+//! let mut inbox = Inbox::new("ana", CaseMapping::Rfc1459);
+//! let room = ConversationId::new("irc:libera:#vix");
+//! inbox.add(Conversation::new(room.clone(), ConversationKind::Room, "#vix"));
+//! let delivery = inbox.push(&room, Message::text("bo", 0, "hi @ana"));
+//! assert_eq!(delivery, Delivery::Unread { mention: true });
+//! assert_eq!(inbox.total_unread(), 1);
+//! ```
 
 pub mod command;
 pub mod history;
@@ -193,7 +216,8 @@ impl Message {
     }
 }
 
-/// Your availability.
+/// Your availability, as set by `/status` or the IM menu. It gates
+/// notifications only (see [`should_notify`]); it never hides messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -209,6 +233,12 @@ pub enum Presence {
 
 impl Presence {
     /// Parse `available`, `away` or `busy` (any ASCII case).
+    ///
+    /// ```
+    /// use vix_im::Presence;
+    /// assert_eq!(Presence::parse("BUSY"), Some(Presence::Busy));
+    /// assert_eq!(Presence::parse("lunch"), None);
+    /// ```
     #[must_use]
     pub fn parse(text: &str) -> Option<Presence> {
         match text.to_ascii_lowercase().as_str() {
@@ -273,6 +303,15 @@ impl FromStr for NotifyPolicy {
 /// Whether a new unread message should notify. Busy silences everything;
 /// otherwise the policy decides. Notifying never opens or focuses anything:
 /// it only raises the status-bar marker.
+///
+/// `is_mention` is true for an `@nick` mention or any direct message (see
+/// [`Delivery::Unread`]).
+///
+/// ```
+/// use vix_im::{should_notify, NotifyPolicy, Presence};
+/// assert!(should_notify(NotifyPolicy::Mentions, Presence::Away, true));
+/// assert!(!should_notify(NotifyPolicy::All, Presence::Busy, true));
+/// ```
 #[must_use]
 pub fn should_notify(policy: NotifyPolicy, presence: Presence, is_mention: bool) -> bool {
     match (presence, policy) {
@@ -283,6 +322,9 @@ pub fn should_notify(policy: NotifyPolicy, presence: Presence, is_mention: bool)
 }
 
 /// A named stream of messages with its unread state.
+///
+/// The unread fields are maintained by [`Inbox::push`] and
+/// [`Conversation::mark_read`]; mutate `messages` directly only in tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conversation {
     /// Its identity.
@@ -370,16 +412,29 @@ impl Delivery {
     }
 }
 
-/// The default cap on stored messages per conversation.
+/// The default cap on stored messages per conversation; bounds memory for
+/// long-lived channels. Change it per inbox with [`Inbox::set_message_limit`].
 pub const DEFAULT_MESSAGE_LIMIT: usize = 5_000;
 
 /// Every conversation, with who you are and who you have blocked.
+///
+/// The inbox is the single owner of unread bookkeeping: all message arrival
+/// goes through [`Inbox::push`], which sanitizes, filters blocked authors,
+/// classifies the message as read/unread/mention and enforces the size cap.
+/// Fields are private so those invariants (for example `first_unread` staying
+/// in step with trimming) cannot be bypassed.
 #[derive(Debug, Clone)]
 pub struct Inbox {
+    /// Conversations in the order added (the order the panel lists them).
     conversations: Vec<Conversation>,
+    /// Your current nick; messages from it count as your own.
     nick: String,
+    /// How nicks compare (blocked list, own-nick test, mention matching).
     mapping: CaseMapping,
+    /// Blocked nicks, compared under `mapping` rather than stored folded so
+    /// a later `set_case_mapping` stays correct.
     blocked: Vec<String>,
+    /// Per-conversation message cap, always at least 1.
     limit: usize,
 }
 
@@ -486,11 +541,15 @@ impl Inbox {
     /// marker if it was clear) and is a mention when it `@`-mentions your
     /// nick or the conversation is [`ConversationKind::Direct`].
     pub fn push(&mut self, id: &ConversationId, mut message: Message) -> Delivery {
+        // Sanitize before anything else: the block list and mention test must
+        // see the same text that will be stored and displayed.
         message.sanitize();
         if self.is_blocked(&message.author) {
             return Delivery::Blocked;
         }
         let own = self.mapping.nick_eq(&message.author, &self.nick);
+        // Only prose can mention; a snippet's code or a location is not
+        // scanned for `@nick` (it would raise false alarms on decorators).
         let mention = !own
             && match message.kind {
                 MessageKind::Text | MessageKind::Action => {
@@ -505,6 +564,9 @@ impl Inbox {
         };
         let mention = mention || (!own && !system && conversation.kind == ConversationKind::Direct);
         conversation.messages.push(message);
+        // Trim oldest-first. `first_unread` is an index, so it must shift down
+        // by the same amount (saturating: an unread marker that was trimmed
+        // away now points at the oldest kept message).
         let overflow = conversation.messages.len().saturating_sub(limit);
         if overflow > 0 {
             conversation.messages.drain(..overflow);
@@ -520,6 +582,7 @@ impl Inbox {
             return Delivery::Read;
         }
         conversation.unread += 1;
+        // Only the first unread message sets the marker; later ones keep it.
         conversation
             .first_unread
             .get_or_insert(conversation.messages.len() - 1);
@@ -541,6 +604,9 @@ impl Inbox {
     pub fn next_unread(&self, after: Option<&ConversationId>) -> Option<&ConversationId> {
         let len = self.conversations.len();
         let start = after.and_then(|id| self.index_of(id)).map_or(0, |i| i + 1);
+        // Walk every conversation once starting at `start`, wrapping; `after`
+        // itself comes last (k == len - 1). `% len` is safe: with len == 0
+        // the range is empty and the closure never indexes.
         let order = || (0..len).map(|k| &self.conversations[(start + k) % len]);
         order()
             .find(|c| c.unread > 0 && c.mentioned)

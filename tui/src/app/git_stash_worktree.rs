@@ -56,6 +56,8 @@ impl App {
         Some((e.index, e.message.clone()))
     }
 
+    /// Handle a key in the stash chooser: Up/Down move, Enter shows the stash diff, `r` reviews
+    /// it, `a` applies, `p` pops (apply and drop), `d`/Delete asks to drop it, Esc closes.
     pub(super) fn stash_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -78,6 +80,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the stash chooser: clicking a row shows that stash's diff.
     pub(super) fn stash_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.stash_mut()
@@ -251,6 +254,9 @@ impl App {
         true
     }
 
+    /// Handle a key in the worktree chooser: Up/Down move, Enter switches to (or, in remove
+    /// mode, removes) the worktree, `d`/Delete asks to remove it, `a` starts adding one (not in
+    /// remove mode), Esc closes.
     pub(super) fn worktree_chooser_key(&mut self, key: KeyEvent) {
         let remove = self.chooser.worktree().is_some_and(|c| c.remove);
         match key.code {
@@ -272,6 +278,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the worktree chooser: clicking a row activates it (switch, or
+    /// remove in remove mode).
     pub(super) fn worktree_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.worktree_mut()

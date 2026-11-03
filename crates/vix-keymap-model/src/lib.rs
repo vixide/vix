@@ -10,10 +10,12 @@
 //! - **Vi** — modal editing, where keys mean different things per mode.
 //! - **Spacemacs** — Vi-style modal editing plus a `Space` leader for menus
 //!   (e.g. `SPC f f` find file, `SPC g s` git status).
+//! - **`IntelliJ` macOS / Windows**, **Eclipse**, **Sublime Text** — the
+//!   signature bindings of those editors.
 //!
 //! This crate is pure data: it lists the keymaps. The host persists the choice
 //! (the View → Keymap submenu is built from [`KEYMAPS`]) and maps it onto key
-//! bindings.
+//! bindings. Spec: `crates/vix-keymap-model/spec/index.md`.
 
 /// One selectable keyboard navigation style.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -27,6 +29,7 @@ pub struct Keymap {
 }
 
 /// All keymaps, in menu order. Apple is first (Vix's default bindings).
+/// Each `id` is unique; it is the value persisted in settings.
 pub const KEYMAPS: &[Keymap] = &[
     Keymap {
         id: "apple",
@@ -81,6 +84,13 @@ pub const KEYMAPS: &[Keymap] = &[
 ];
 
 /// The keymap with the given `id`, if known.
+///
+/// # Examples
+/// ```
+/// let k = vix_keymap_model::by_id("emacs").unwrap();
+/// assert_eq!(k.name, "Emacs");
+/// assert!(vix_keymap_model::by_id("nope").is_none());
+/// ```
 #[must_use]
 pub fn by_id(id: &str) -> Option<&'static Keymap> {
     KEYMAPS.iter().find(|k| k.id == id)

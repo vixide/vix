@@ -1,6 +1,12 @@
 //! [`ExecTransport`] and [`ContainerAuthority`] (T718): the shell authority's
 //! scripts run through `docker exec`, `podman exec`, `kubectl exec` or
 //! `wsl.exe --exec` instead of `ssh`.
+//!
+//! There is no container-specific file logic here: [`ExecTransport`] only
+//! builds the engine command line and classifies engine failures, and
+//! everything else (scripts, quoting, error codes, the agent) is
+//! [`crate::ssh::ShellAuthority`], shared with SSH. Target parsing lives in
+//! [`super::target`]. Owning spec: `crates/vix-authority/spec/container/index.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -54,7 +60,9 @@ impl ExecOptions {
 /// distribution), entered with its engine's `exec` for each script.
 #[derive(Debug)]
 pub struct ExecTransport {
+    /// Which container, engine kind, user and path.
     target: ContainerTarget,
+    /// Engine program override and agent settings.
     options: ExecOptions,
 }
 
@@ -120,6 +128,11 @@ impl ExecTransport {
 
 /// Engine messages that mean the container (or the engine, the cluster,
 /// the distribution) is gone rather than that a script failed.
+///
+/// Matched as substrings of the engine's stderr by [`Transport::lost`]. The
+/// strings are the engines' own (untranslated) English messages, so this list
+/// is best-effort: an unrecognized message surfaces as an ordinary script
+/// failure rather than a lost connection.
 const LOST: &[&str] = &[
     // Docker
     "Error response from daemon",

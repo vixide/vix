@@ -129,6 +129,8 @@ impl App {
             .open_http_env(HttpEnvChooser { names, selected });
     }
 
+    /// Handle a key in the HTTP-environment chooser: Up/Down move, Enter applies the
+    /// environment, Esc closes. Index `names.len()` is the extra "no environment" row.
     pub(super) fn http_env_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -147,6 +149,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the HTTP-environment chooser: clicking a row applies it.
     pub(super) fn http_env_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.http_env_mut()

@@ -1,4 +1,13 @@
 //! Building FHIR REST requests from an interaction description.
+//!
+//! The pipeline is `text command -> Spec -> BuiltRequest`: [`Spec::parse_command`]
+//! turns the user's one-line command into a validated [`Spec`], and
+//! [`Spec::build`] resolves it against a [`Profile`]. Everything user-supplied
+//! that lands in the URL is either validated against a strict grammar (type, id)
+//! or percent-encoded (search parameters), so a command cannot inject path
+//! segments or extra query parameters. The credential is intentionally absent
+//! from [`BuiltRequest`]; the `net` layer adds it. Spec:
+//! `crates/vix-fhir/spec/index.md`.
 
 use crate::url::{encode, origin};
 use crate::{FhirError, Profile};
@@ -54,12 +63,16 @@ pub struct BuiltRequest {
     pub body: String,
 }
 
+/// Whether `t` is acceptable as a resource type: at most 64 ASCII alphanumerics
+/// starting with an uppercase letter (this also admits digits, which the
+/// FHIR type grammar itself never uses; harmless since it is path-safe).
 fn valid_type(t: &str) -> bool {
     t.len() <= 64
         && t.chars().next().is_some_and(|c| c.is_ascii_uppercase())
         && t.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
+/// Whether `id` matches the FHIR `id` grammar `[A-Za-z0-9.-]{1,64}`.
 fn valid_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
         && id
@@ -137,6 +150,10 @@ impl Spec {
         matches!(self.interaction, Interaction::Create | Interaction::Update)
     }
 
+    /// Check the target is well-formed for the interaction: a valid type (except
+    /// for Capabilities), an id where Read/Update/Delete require one, and a valid
+    /// id whenever one is present. Run by both parsing and [`Spec::build`], since
+    /// a `Spec` can also be constructed field by field.
     fn validate(&self) -> Result<(), FhirError> {
         if self.interaction == Interaction::Capabilities {
             return Ok(());
@@ -157,6 +174,19 @@ impl Spec {
     }
 
     /// Build the HTTP request against `profile`.
+    ///
+    /// Search parameter names keep `:` literal (modifiers like `name:exact`) and
+    /// values keep `,` literal (OR lists); everything else is percent-encoded. A
+    /// stray `id` on Search/Create is ignored (the URL addresses the type only).
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_fhir::{Profile, Spec};
+    /// let p = Profile::parse(r#"{"base_url":"https://f.example/r4"}"#).unwrap();
+    /// let r = Spec::parse_command("search Patient name=John Smith").unwrap().build(&p).unwrap();
+    /// assert_eq!(r.method, "GET");
+    /// assert!(r.url.starts_with("https://f.example/r4/Patient?name="));
+    /// ```
     ///
     /// # Errors
     /// The validation errors of [`Spec::parse_command`], plus
@@ -211,6 +241,7 @@ impl Spec {
     }
 
     /// The body, checked to be a resource of the right type (and id on Update).
+    /// An Update body with no `id` is accepted: the URL id is authoritative.
     fn checked_body(&self) -> Result<String, FhirError> {
         let body = self.body.as_deref().ok_or(FhirError::MissingBody)?;
         let value: serde_json::Value =
@@ -252,7 +283,7 @@ impl Profile {
     }
 }
 
-/// Pretty-print JSON text (two-space indent).
+/// Pretty-print JSON text (two-space indent) for display in a read-only buffer.
 ///
 /// # Errors
 /// [`FhirError::NotJson`] when `text` is not JSON.

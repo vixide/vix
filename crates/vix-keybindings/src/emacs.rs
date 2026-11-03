@@ -379,6 +379,7 @@ const CTRL_C_P_C_M: &[Binding] = &[
     },
 ];
 
+/// The Emacs chord contexts, named by the key tokens typed to reach them (`""`, `C-x`, `C-c`, `C-c C-x`, `C-c p c`, `C-c p c m`), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[
     ChordContext {
         name: "",

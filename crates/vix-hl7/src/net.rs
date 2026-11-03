@@ -33,6 +33,7 @@ pub enum EndpointError {
 }
 
 impl fmt::Display for EndpointError {
+    /// Renders a short lowercase reason, suitable for a status-line message.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             EndpointError::Empty => "empty endpoint",
@@ -75,6 +76,7 @@ impl Endpoint {
 }
 
 impl fmt::Display for Endpoint {
+    /// Renders `host:port`, bracketing IPv6 literals (`[::1]:2575`) so the result parses back through the endpoint parser.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.host.contains(':') {
             write!(f, "[{}]:{}", self.host, self.port)
@@ -98,6 +100,7 @@ pub struct SendOptions {
 }
 
 impl Default for SendOptions {
+    /// Defaults: 5 s to connect, 10 s per write, 30 s for the peer's acknowledgement, and a 1 MiB cap on the reply frame so a hostile peer cannot make us buffer without bound.
     fn default() -> Self {
         SendOptions {
             connect_timeout: Duration::from_secs(5),
@@ -144,6 +147,7 @@ impl SendError {
 }
 
 impl fmt::Display for SendError {
+    /// Renders a generic message plus the stable [`SendError::code`] so UI text can be keyed off the code.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MLLP send failed ({})", self.code())
     }
@@ -151,6 +155,7 @@ impl fmt::Display for SendError {
 
 impl std::error::Error for SendError {}
 
+/// Both `WouldBlock` and `TimedOut` mean a socket read/write timeout fired (which one the OS reports differs by platform).
 fn is_timeout(kind: ErrorKind) -> bool {
     matches!(kind, ErrorKind::WouldBlock | ErrorKind::TimedOut)
 }
@@ -198,6 +203,11 @@ pub fn send(ep: &Endpoint, payload: &[u8], opts: &SendOptions) -> Result<Vec<u8>
     read_reply(&mut stream, opts)
 }
 
+/// Read from `stream` until the first complete MLLP frame arrives and return its payload.
+///
+/// The overall `reply_timeout` is enforced with a deadline in addition to the
+/// per-read socket timeout, so a peer that trickles bytes cannot keep us waiting
+/// forever. Anything after the first frame is ignored.
 fn read_reply(stream: &mut impl Read, opts: &SendOptions) -> Result<Vec<u8>, SendError> {
     let deadline = Instant::now() + opts.reply_timeout;
     let mut deframer = Deframer::new(opts.max_reply);

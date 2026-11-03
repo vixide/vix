@@ -33,8 +33,11 @@ impl Source {
 /// computed for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ghost {
+    /// The suggested text to show after the cursor.
     text: String,
+    /// The buffer revision the suggestion was computed for.
     revision: u64,
+    /// The cursor's char offset when it was computed.
     cursor: usize,
 }
 

@@ -19,6 +19,7 @@
   const navLinks: NavLink[] = [
     { href: '/', label: 'Home' },
     { href: '/features/', label: 'Features' },
+    { href: '/whats-new/', label: 'What’s new' },
     { href: '/install/', label: 'Install' }
   ];
 
@@ -199,6 +200,7 @@
       <a href={docsUrl}>Documentation</a>
       <a href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">Changelog</a>
       <a href="/features/">Features</a>
+      <a href="/whats-new/">What’s new</a>
       <a href="/install/">Install</a>
     </nav>
   </div>

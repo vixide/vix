@@ -8,6 +8,14 @@
 //! mouse) and can insert any value into the active editor. This crate gathers the
 //! data (via [`sysinfo`]) and tracks the highlighted row and scroll offset; the
 //! host renders the table, maps clicks to rows, and inserts the chosen value.
+//!
+//! [`gather`] builds rows in four groups (OS/CPU, Memory/Storage,
+//! Uptime/Environment), each in its own private helper so a platform that
+//! `sysinfo` does not support degrades per-section instead of failing the
+//! panel. Every label is translated via `t!`; values read from the host
+//! (hostnames, paths) are shown verbatim.
+//!
+//! Owning spec: `crates/vix-system-information-panel/spec/index.md`.
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
@@ -30,6 +38,8 @@ pub struct Row {
 }
 
 impl Row {
+    /// A section heading: a label with an empty value (so
+    /// [`Row::is_heading`] is true and selecting it inserts nothing).
     fn heading(label: &str) -> Self {
         Row {
             label: label.to_string(),
@@ -37,6 +47,8 @@ impl Row {
         }
     }
 
+    /// A `label`/`value` row. A genuinely empty value would read as a heading;
+    /// callers substitute the translated "unknown" text instead.
     fn pair(label: &str, value: impl Into<String>) -> Self {
         Row {
             label: label.to_string(),
@@ -150,6 +162,17 @@ pub fn human_bytes(n: u64) -> String {
 }
 
 /// Format a duration in seconds as `Dd Hh Mm`.
+///
+/// Larger units are dropped when zero (`5400` -> `1h 30m`, `60` -> `1m`).
+/// Seconds are never shown. Not locale-aware (the `d`/`h`/`m` suffixes are
+/// fixed).
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_system_information_panel::human_uptime(90_000), "1d 1h 0m");
+/// assert_eq!(vix_system_information_panel::human_uptime(5_400), "1h 30m");
+/// ```
 #[must_use]
 pub fn human_uptime(secs: u64) -> String {
     let days = secs / 86_400;
@@ -164,6 +187,8 @@ pub fn human_uptime(secs: u64) -> String {
     }
 }
 
+/// The first non-empty environment variable among `keys`, else `fallback`.
+/// Several keys cover Unix and Windows spellings (`USER`/`USERNAME`).
 fn env_or(keys: &[&str], fallback: &str) -> String {
     for key in keys {
         if let Ok(v) = std::env::var(key)
@@ -177,6 +202,8 @@ fn env_or(keys: &[&str], fallback: &str) -> String {
 
 /// The "Operating System" and "CPU" sections (host identity + processor facts).
 fn os_and_cpu_rows(sys: Option<&System>, unknown: &str) -> Vec<Row> {
+    // `sys` is `None` when `sysinfo` does not support the platform; the OS
+    // facts below use associated functions that fail independently.
     let mut rows = vec![
         Row::heading(&t!("info.operating_system")),
         Row::pair(
@@ -256,6 +283,7 @@ fn memory_and_storage_rows(sys: Option<&System>) -> Vec<Row> {
 
 /// The "Uptime" and "Environment" sections (load average + shell env vars).
 fn uptime_and_environment_rows(unknown: &str) -> Vec<Row> {
+    // Windows has no load average; the default (all zeros) is shown there.
     let load = System::load_average().unwrap_or_default();
     let cwd =
         std::env::current_dir().map_or_else(|_| unknown.to_string(), |p| p.display().to_string());

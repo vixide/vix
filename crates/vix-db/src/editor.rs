@@ -5,8 +5,24 @@
 //! semicolons, ignoring those inside strings and comments — so Ctrl+Enter /
 //! F5 executes only that statement and Alt+Shift+F formats only it
 //! (`spec/index.md`: "Execute at Cursor", "Respects Semicolons").
+//!
+//! # Coordinates
+//!
+//! The cursor is `(row, col)` where `col` counts **chars**, not bytes, so
+//! non-ASCII SQL edits correctly; the private `byte_col` converts when
+//! slicing a line. Statement spans from [`statement_spans`] are likewise
+//! **char offsets** into [`Query::text`] (lines joined with `\n`), which is
+//! what [`Query::cursor_offset`] returns, so the two compare directly.
+//!
+//! The module also hosts [`is_write_statement`], the client-side guard behind
+//! the read-only default and the write-confirmation prompt; it is a
+//! conservative lexical scan, not a SQL parser. Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 /// The query editor: lines of SQL plus cursor and scroll state.
+///
+/// Invariant: `lines` is never empty and `row`/`col` always address a valid
+/// position (each mutator re-clamps), so indexing `lines[row]` cannot panic.
 #[derive(Debug, Clone)]
 pub struct Query {
     /// Buffer lines; always at least one (possibly empty) line.
@@ -43,7 +59,8 @@ impl Query {
         self.lines.join("\n")
     }
 
-    /// Insert `c` at the cursor.
+    /// Insert `c` at the cursor and advance past it. A `\n` is not handled
+    /// specially here; use [`Query::newline`] to split lines.
     pub fn insert_char(&mut self, c: char) {
         let col = self.byte_col();
         self.lines[self.row].insert(col, c);
@@ -96,6 +113,10 @@ impl Query {
     }
 
     /// Move the cursor one step in the given direction, clamped.
+    ///
+    /// `dx`/`dy` are signed step counts. Pure horizontal moves (`dy == 0`)
+    /// wrap across line boundaries (left at column 0 goes to the previous
+    /// line's end); vertical moves keep the column, clamped to the new line.
     pub fn arrow(&mut self, dx: isize, dy: isize) {
         if dy < 0 {
             self.row = self.row.saturating_sub(dy.unsigned_abs());
@@ -146,7 +167,8 @@ impl Query {
             vix_list_state::ensure_visible(self.row, self.scroll, height, self.lines.len());
     }
 
-    /// The char offset of the cursor within [`Query::text`].
+    /// The char offset of the cursor within [`Query::text`] (each preceding
+    /// line contributes its char count plus one for the joining newline).
     #[must_use]
     pub fn cursor_offset(&self) -> usize {
         self.lines[..self.row]
@@ -157,6 +179,20 @@ impl Query {
     }
 
     /// The statement under the cursor (or the one just before it), trimmed.
+    ///
+    /// `None` when the buffer holds no non-whitespace statement. Backs
+    /// execute-at-cursor (F5/Ctrl+Enter), format, explain and optimize.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::editor::Query;
+    /// let mut q = Query::default();
+    /// for c in "select 1; select 2".chars() {
+    ///     q.insert_char(c);
+    /// }
+    /// assert_eq!(q.statement_at_cursor().as_deref(), Some("select 2"));
+    /// ```
     #[must_use]
     pub fn statement_at_cursor(&self) -> Option<String> {
         let text = self.text();
@@ -168,6 +204,10 @@ impl Query {
 
     /// Replace the statement under the cursor with `new`, moving the cursor to
     /// the start of the replacement.
+    ///
+    /// Only surrounding text is preserved verbatim (including the leading
+    /// whitespace of the replaced span). The cursor lands on the first line of
+    /// the replacement, keeping its old column clamped to that line.
     pub fn replace_statement_at_cursor(&mut self, new: &str) {
         let Some((start, end)) = self.span_at_cursor() else {
             return;
@@ -189,6 +229,10 @@ impl Query {
 
     /// The char-offset span of the statement containing (or preceding) the
     /// cursor.
+    ///
+    /// Fallback order: a span containing the cursor (inclusive of its end, so
+    /// a cursor right after the last char counts), else the nearest span
+    /// *before* it (cursor in whitespace after a `;`), else the first span.
     fn span_at_cursor(&self) -> Option<(usize, usize)> {
         let text = self.text();
         let spans = statement_spans(&text);
@@ -213,10 +257,26 @@ impl Query {
 /// Char-offset spans of the statements in `text`, split on top-level
 /// semicolons (ignored inside strings and `--` / `/* … */` comments). Spans
 /// exclude the semicolon; whitespace-only pieces are dropped.
+///
+/// This is a small lexer, not a parser: it does not understand `PostgreSQL`
+/// dollar-quoted bodies (`$$ … $$`), so a `;` inside one splits the statement.
+/// Unterminated strings/comments simply run to the end of the text.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::editor::statement_spans;
+/// // The `;` inside the string literal does not split.
+/// assert_eq!(statement_spans("select ';'; select 2"), vec![(0, 10), (11, 20)]);
+/// ```
 #[must_use]
 pub fn statement_spans(text: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut start = 0usize;
+    // Lexer state: inside a '…' string, a "…" identifier, a `--` line comment
+    // or a `/* … */` block comment. At most one is set at a time; the checks
+    // below test them in that exclusive order. Doubled quotes (`''`) need no
+    // special case: closing then immediately re-opening nets out the same.
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
@@ -252,7 +312,8 @@ pub fn statement_spans(text: &str) -> Vec<(usize, usize)> {
     out
 }
 
-/// Record `[start, end)` if it holds any non-whitespace.
+/// Record the char-offset span `[start, end)` if it holds any non-whitespace
+/// (so blank segments between consecutive `;` never become statements).
 fn push_span(out: &mut Vec<(usize, usize)>, chars: &[char], start: usize, end: usize) {
     if chars[start..end].iter().any(|c| !c.is_whitespace()) {
         out.push((start, end));
@@ -260,6 +321,7 @@ fn push_span(out: &mut Vec<(usize, usize)>, chars: &[char], start: usize, end: u
 }
 
 /// Keywords that make a statement a write / DDL (confirmation required).
+/// Lowercase; compared case-insensitively against whole words.
 const WRITE_KEYWORDS: &[&str] = &[
     "insert", "update", "delete", "drop", "alter", "truncate", "create", "grant", "revoke",
     "merge", "replace", "vacuum", "reindex", "attach", "detach",
@@ -269,6 +331,21 @@ const WRITE_KEYWORDS: &[&str] = &[
 /// Scans every keyword outside strings and comments — which also catches a
 /// CTE like `WITH … AS (…) DELETE FROM …` whose first word is a harmless
 /// `WITH` (pgsavvy calls this CTE detection).
+///
+/// The scan is deliberately conservative: it matches whole words anywhere
+/// outside strings and comments, so a harmless call such as `replace(x, …)`
+/// or a column named `update` is reported as a write (an extra confirmation
+/// at worst, never a missed one). Only a keyword split across tokens or hidden
+/// in a dollar-quoted body could evade it, and the database-level read-only
+/// pragma (see [`crate::connect::read_only_sql`]) backs it up.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::editor::is_write_statement;
+/// assert!(is_write_statement("WITH x AS (SELECT 1) DELETE FROM t"));
+/// assert!(!is_write_statement("select 'drop table' -- delete"));
+/// ```
 #[must_use]
 pub fn is_write_statement(sql: &str) -> bool {
     let chars: Vec<char> = sql.chars().collect();
@@ -294,6 +371,8 @@ pub fn is_write_statement(sql: &str) -> bool {
                 '-' if chars.get(i + 1) == Some(&'-') => line_c = true,
                 '/' if chars.get(i + 1) == Some(&'*') => block_c = true,
                 c if c.is_ascii_alphabetic() || c == '_' => {
+                    // Consume a whole identifier so `updated_at` is one word
+                    // (not the keyword `update`), then skip the trailing `i += 1`.
                     let start = i;
                     while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
                         i += 1;

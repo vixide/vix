@@ -7,6 +7,12 @@
 //! [`vix_settings::Settings`] value, deliberately — the CLI path
 //! (`vix --doctor`) runs before any `App` exists at all, so nothing here can
 //! depend on the App shell or a terminal.
+//!
+//! The `probe-git` and `probe-lsp` cargo features gate the checks that *spawn*
+//! external programs; builds that must never start a child process compile them
+//! out and [`run`] simply omits those entries (see the private `git_probe` /
+//! `lsp_probes` shims). Every check returns a [`Check`] value rather than
+//! printing, so the CLI and the TUI overlay share one data path.
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T561:
@@ -58,6 +64,9 @@ fn spawnable(program: &str) -> bool {
         .stderr(std::process::Stdio::null())
         .spawn()
         .map(|mut child| {
+            // Errors are ignored on purpose: the child may already have exited
+            // (killing a dead process fails), and we only needed the spawn to
+            // succeed. `wait` reaps it so no zombie is left behind.
             let _ = child.kill();
             let _ = child.wait();
         })
@@ -97,6 +106,8 @@ pub fn check_lsp_servers(settings: &Settings) -> Vec<Check> {
         .lsp_servers
         .iter()
         .map(|server| {
+            // An empty `command` list is a configuration mistake, reported
+            // distinctly from "binary not found" below.
             let program = server.command.first().map_or("", String::as_str);
             let ok = !program.is_empty() && spawnable(program);
             Check {
@@ -139,6 +150,8 @@ pub fn check_spellcheck_dictionary(settings: &Settings) -> Check {
 /// failing on it, since that's a deliberate opt-out rather than a
 /// misconfiguration.
 fn terminal_check(term: Option<&str>, no_color_set: bool) -> Check {
+    // `TERM=dumb` (or unset) means the terminal cannot do cursor addressing or
+    // color, which Vix needs; any other value is trusted.
     let ok = term.is_some_and(|t| t != "dumb");
     let mut detail = match term {
         Some("dumb") => t!("doctor.term_dumb").to_string(),

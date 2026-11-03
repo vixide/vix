@@ -1,3 +1,16 @@
+//! The widget's built-in keyboard and mouse handling: the default key map an
+//! [`Editor`] uses when it is driven directly (without the host app's
+//! keybinding layer), plus bracket auto-pairing and drag auto-scroll.
+//!
+//! [`Editor::input`] translates a [`KeyEvent`] into an
+//! [`actions`](crate::actions) value and [`Editor::apply`]s it; while extra
+//! carets exist ([`crate::multicursor`]) the motion/edit keys are routed to the
+//! multi-caret operations instead. The match arm order is significant: the
+//! first matching arm wins, so guarded arms (`if self.has_multi_carets()`,
+//! `if ctrl`) sit before the unguarded fallbacks they shadow. The Vix app
+//! normally resolves keys itself and calls the actions directly; this is the
+//! standalone/default path. See `crates/vix-editor-core/spec/index.md`.
+
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
@@ -19,10 +32,15 @@ impl Editor {
 
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        // Alt is read but unused: reserved so adding an Alt chord doesn't
+        // change this function's shape.
         let _alt = key.modifiers.contains(KeyModifiers::ALT);
 
         match key.code {
+            // `÷` is what Option+/ types on a macOS keyboard; treat it as the
+            // comment-toggle chord there.
             KeyCode::Char('÷') => self.apply(ToggleComment {}),
+            // Shift makes terminals report an uppercase `Z`; accept both.
             KeyCode::Char('z' | 'Z') if ctrl && shift => self.apply(Redo {}),
             KeyCode::Char('z') if ctrl => self.apply(Undo {}),
             KeyCode::Char('c') if ctrl => self.apply(Copy {}),
@@ -57,9 +75,12 @@ impl Editor {
             KeyCode::Right => self.apply(MoveRight { shift }),
             KeyCode::Up => self.apply(MoveUp { shift }),
             KeyCode::Down => self.apply(MoveDown { shift }),
+            // Guard-with-side-effect: `auto_pair_backspace` performs the
+            // paired delete itself and returns `true` to swallow the key.
             KeyCode::Backspace if self.auto_pair_backspace() => {}
             KeyCode::Backspace => self.apply(Delete {}),
             KeyCode::Enter => self.apply(InsertNewline {}),
+            // Same trick: `auto_pair` inserts/steps itself when it fires.
             KeyCode::Char(c) if self.auto_pair(c) => {}
             KeyCode::Char(c) => self.apply(InsertText {
                 text: c.to_string(),
@@ -83,6 +104,7 @@ impl Editor {
     /// - Quotes are not paired right next to a word character (so apostrophes in
     ///   prose/identifiers are left alone).
     fn auto_pair(&mut self, c: char) -> bool {
+        // Duplicated in `auto_pair_backspace`; keep the two tables in sync.
         const PAIRS: &[(char, char)] = &[
             ('(', ')'),
             ('[', ']'),
@@ -98,7 +120,9 @@ impl Editor {
         let cursor = self.get_cursor();
         let next = self.char_at(cursor);
 
-        // Step over an existing closer.
+        // Step over an existing closer. Checked before the opener lookup so
+        // that for symmetric pairs (`"`) typing the second quote steps over
+        // instead of opening a new pair.
         if PAIRS.iter().any(|&(_, cl)| cl == c) && next == Some(c) {
             self.apply(MoveRight { shift: false });
             return true;
@@ -127,6 +151,7 @@ impl Editor {
             }
         }
 
+        // Two actions, but the cursor ends between the pair for the user.
         self.apply(InsertText {
             text: format!("{c}{closer}"),
         });
@@ -160,6 +185,8 @@ impl Editor {
         if !PAIRS.iter().any(|&(op, cl)| op == prev && next == Some(cl)) {
             return false;
         }
+        // Hand-rolled transaction (not `apply`) so both characters go in one
+        // undo step and the cursor is restored precisely on undo.
         let code = self.code_mut();
         code.tx();
         code.set_state_before(cursor, None);
@@ -174,6 +201,10 @@ impl Editor {
     }
 
     /// Handle a mouse event (scroll, click, drag, selection).
+    ///
+    /// `area` is the rectangle the editor was last rendered into, used to map
+    /// terminal cells to buffer offsets. A drag also records the pointer so
+    /// [`Editor::autoscroll_tick`] can keep scrolling while it is held still.
     ///
     /// # Errors
     /// Returns an error when an applied action fails.
@@ -206,6 +237,8 @@ impl Editor {
     /// extends to the edge row, and one left of the text clamps to the first
     /// column, so the selection keeps growing instead of stalling.
     fn drag_to(&mut self, column: u16, row: u16, area: Rect) {
+        // Scroll first, then extend to the (clamped) edge row, so the
+        // selection tracks the freshly scrolled-in line.
         let top = area.top();
         let last = area.bottom().saturating_sub(1);
         if row <= top {
@@ -232,6 +265,8 @@ impl Editor {
         let Some((column, row)) = self.drag_pointer else {
             return false;
         };
+        // Strictly inside the view: nothing to do. The edge rows themselves
+        // count as "outside" to match `drag_to`'s `<= top` / `>= last`.
         if row > area.top() && row < area.bottom().saturating_sub(1) {
             return false;
         }

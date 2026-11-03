@@ -1,4 +1,10 @@
 //! `Bundle` parsing: one [`Entry`] per `entry`, plus paging links.
+//!
+//! Parsing is deliberately lenient: it walks a generic [`serde_json::Value`] and
+//! tolerates missing or wrongly typed fields (they become empty/`None`) so a
+//! hostile or partial server reply can never panic the viewer. Only the
+//! top-level `resourceType` is validated. The result feeds
+//! [`BundlePanel`](crate::BundlePanel). Spec: `crates/vix-fhir/spec/index.md`.
 
 use serde_json::Value;
 
@@ -61,7 +67,10 @@ pub struct Bundle {
     pub previous: Option<String>,
 }
 
-/// The first non-empty string at any of the dotted `paths` in `v`.
+/// The first non-empty string found by trying each of `paths` in `v` in order.
+///
+/// Each path is a list of keys; a key that parses as a number indexes into an
+/// array (so `["code","coding","0","display"]` is `code.coding[0].display`).
 fn first_string(v: &Value, paths: &[&[&str]]) -> Option<String> {
     paths.iter().find_map(|path| {
         let mut cur = v;
@@ -100,6 +109,10 @@ fn name_of(resource: &Value) -> Option<String> {
     }
 }
 
+/// A short human label for a resource: its name if it has one, else the first
+/// of a fixed list of descriptive fields (code text, coding display, title,
+/// description, type text, status); empty when none apply. Drives the `summary`
+/// column of the Bundle list.
 fn summary_of(resource: &Value) -> String {
     name_of(resource)
         .or_else(|| {
@@ -118,6 +131,8 @@ fn summary_of(resource: &Value) -> String {
         .unwrap_or_default()
 }
 
+/// The `url` of the first Bundle `link` whose `relation` matches (`next`,
+/// `previous`, ...).
 fn link(links: &[Value], relation: &str) -> Option<String> {
     links.iter().find_map(|l| {
         (l.get("relation").and_then(Value::as_str) == Some(relation))
@@ -126,6 +141,8 @@ fn link(links: &[Value], relation: &str) -> Option<String> {
     })
 }
 
+/// Build an [`Entry`] from one `Bundle.entry` object. Never fails: absent parts
+/// become empty strings, `None`, or `Value::Null`.
 fn parse_entry(e: &Value) -> Entry {
     let resource = e.get("resource").cloned().unwrap_or(Value::Null);
     let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(String::from);
@@ -141,6 +158,19 @@ fn parse_entry(e: &Value) -> Entry {
 }
 
 /// Parse a `Bundle` resource.
+///
+/// The paging links are returned as-is; this function does not check that they
+/// stay on the profile's server (see [`FhirError::ForeignLink`] and the request
+/// layer for that).
+///
+/// # Examples
+/// ```
+/// let b = vix_fhir::parse_bundle(
+///     r#"{"resourceType":"Bundle","type":"searchset","total":1,
+///         "entry":[{"resource":{"resourceType":"Patient","id":"7"}}]}"#,
+/// ).unwrap();
+/// assert_eq!(b.entries[0].reference(), "Patient/7");
+/// ```
 ///
 /// # Errors
 /// [`FhirError::NotJson`], [`FhirError::NotFhir`] or [`FhirError::NotBundle`].

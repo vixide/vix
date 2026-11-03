@@ -7,6 +7,18 @@
 //! child's lifetime is tied to the [`Tunnel`] — dropping it kills `ssh`, so a
 //! disconnect tears the forward down. The argument construction is pure and
 //! unit-tested; only [`open`] spawns a process.
+//!
+//! # Security
+//!
+//! The `ssh` argv is built from saved-connection fields that can arrive from a
+//! shared or imported config, so they are untrusted: [`ssh_args`] refuses any
+//! value that `ssh` could parse as an option (a leading `-`, e.g.
+//! `-oProxyCommand=…`) or that contains whitespace/control characters, and
+//! ends options with `--` before the destination. No shell is involved; the
+//! arguments are passed to `Command` directly. The child's stdio is all null,
+//! so `ssh` can never prompt on (or scribble over) the TUI's terminal -- key
+//! or agent authentication is therefore required. Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 use super::connect::{Connection, Kind};
 use std::net::TcpListener;
@@ -81,6 +93,15 @@ impl From<std::io::Error> for TunnelError {
 }
 
 /// The `-L` forward spec `local:db_host:db_port`.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     vix_db::tunnel::forward_spec(55000, "db.internal", "5432"),
+///     "55000:db.internal:5432"
+/// );
+/// ```
 #[must_use]
 pub fn forward_spec(local_port: u16, db_host: &str, db_port: &str) -> String {
     format!("{local_port}:{db_host}:{db_port}")
@@ -165,12 +186,16 @@ pub fn ssh_args(conn: &Connection, local_port: u16) -> Result<Vec<String>, Tunne
 }
 
 /// Whether `conn` asks to be tunnelled (a server engine with an `ssh_host`).
+/// `SQLite` never tunnels, whatever its `ssh_host` says.
 #[must_use]
 pub fn wanted(conn: &Connection) -> bool {
     !matches!(conn.kind, Kind::Sqlite) && !conn.ssh_host.trim().is_empty()
 }
 
 /// Open a tunnel for `conn`, or `Ok(None)` when none is configured.
+///
+/// Blocks for up to the ready timeout while waiting for the forward, so the
+/// host calls it from the background connect thread, not the UI thread.
 ///
 /// # Errors
 ///
@@ -181,6 +206,9 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
     if !wanted(conn) {
         return Ok(None);
     }
+    // The port is probed free and then released before `ssh` binds it, so
+    // another process could grab it in between; `ExitOnForwardFailure=yes`
+    // turns that rare race into a prompt `Timeout` instead of a silent hang.
     let local_port = free_port().ok_or(TunnelError::NoPort)?;
     let args = ssh_args(conn, local_port)?;
     let child = std::process::Command::new("ssh")
@@ -194,7 +222,8 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
     if wait_ready(local_port, &mut tunnel.child) {
         Ok(Some(tunnel))
     } else {
-        // Drop kills the child; surface the failure.
+        // Kill explicitly (Drop would too) so the failure path is obvious,
+        // then surface the timeout.
         let _ = tunnel.child.kill();
         Err(TunnelError::Timeout)
     }
@@ -219,6 +248,8 @@ fn free_port() -> Option<u16> {
 )]
 fn wait_ready(local_port: u16, child: &mut Child) -> bool {
     use std::net::TcpStream;
+    // Poll rather than sleep once: `ssh` gives no readiness signal, and the
+    // only observable "up" state is the local port accepting a connection.
     let deadline = Instant::now() + READY_TIMEOUT;
     let addr = format!("127.0.0.1:{local_port}");
     while Instant::now() < deadline {

@@ -94,9 +94,13 @@ impl SharedPath {
     ///   `.keystore`, `.kdbx`, `.gpg`.
     #[must_use]
     pub fn is_private(&self) -> bool {
+        // Directories whose entire contents are private (credentials, VCS
+        // internals, Vix's own state). Matching is case-insensitive because the
+        // path parts are lowercased below.
         const DIRS: &[&str] = &[
             ".git", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".vix",
         ];
+        // Exact file names that conventionally hold secrets.
         const NAMES: &[&str] = &[
             ".netrc",
             ".npmrc",
@@ -105,7 +109,9 @@ impl SharedPath {
             "credentials",
             "credentials.json",
         ];
+        // SSH private-key base names; the `.pub` public half is hidden too.
         const KEYS: &[&str] = &["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"];
+        // Key / keystore / vault file extensions.
         const EXTS: &[&str] = &[
             ".pem",
             ".key",
@@ -139,6 +145,9 @@ impl SharedPath {
     }
 }
 
+/// Whether `raw` starts with a Windows drive prefix such as `C:`. Rejected on
+/// every platform: a path that is relative on Unix but absolute on Windows would
+/// let a guest escape the share root when the host runs on Windows.
 fn has_drive_prefix(raw: &str) -> bool {
     let b = raw.as_bytes();
     b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':'

@@ -1,14 +1,35 @@
 //! AI features: Ask a schema-grounded question, fix the last error, explain
 //! a query in plain English, optimize the statement at the cursor, and
-//! apply/discard the reply once the host's assistant CLI returns it.
+//! apply the reply (or report failure) once the host's assistant CLI returns it.
 //! Extracted from `lib.rs` (T516): the one cohesive slice of [`Browser`]'s
 //! methods that talk to [`ai`] rather than the database itself.
+//!
+//! # Request lifecycle
+//!
+//! This crate never spawns the assistant process; it only *queues* work and
+//! consumes the result, so it stays free of process and threading concerns:
+//!
+//! 1. A feature method ([`Browser::submit_ask`], [`Browser::fix_error`],
+//!    [`Browser::explain_query`], [`Browser::optimize_current`]) builds a
+//!    schema-only brief with [`ai`] and stores it as `AiState::Pending`.
+//! 2. The host drains it with [`Browser::take_ai_request`] (state becomes
+//!    `Running`), spawns the configured assistant CLI, and feeds
+//!    [`AiRequest::prompt`] as the argument and [`AiRequest::context`] on stdin.
+//! 3. The host reports back with [`Browser::apply_ai_reply`] or
+//!    [`Browser::ai_failed`], returning the state to `Idle`.
+//!
+//! Only one request may be outstanding ([`Browser::ai_busy`]); a second
+//! trigger just shows a "busy" message. Row data never leaves the machine via
+//! this path -- only the catalog's tables, columns, types and foreign keys.
+//! Owning spec: `crates/vix-db/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, View, ai, catalog, editor, object_triples};
 
-/// Where an assistant reply is routed once it lands.
+/// Where an assistant reply is routed once it lands. Recorded at queue time
+/// (not derived from the reply) so the same CLI output is interpreted by the
+/// feature that asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AiReply {
     /// Recover SQL and place it in the editor (Ask, optimize, fix-error).
@@ -50,13 +71,17 @@ type SchemaColumns = Vec<(String, String, String)>;
 type SchemaRels = Vec<(String, String, String, String)>;
 
 impl Browser {
-    /// Whether an AI request is queued or in flight.
+    /// Whether an AI request is queued or in flight. The host uses this to
+    /// show a spinner; the feature methods use it to refuse overlapping asks.
     #[must_use]
     pub fn ai_busy(&self) -> bool {
         !matches!(self.ai, AiState::Idle)
     }
 
     /// Drain a queued AI request for the host to spawn, marking it in flight.
+    ///
+    /// Returns `None` when nothing is queued (idle or already running), so the
+    /// host can call it every tick. Each request is handed out exactly once.
     pub fn take_ai_request(&mut self) -> Option<AiRequest> {
         if let AiState::Pending(req) = &self.ai {
             let reply = req.reply;
@@ -68,7 +93,8 @@ impl Browser {
         None
     }
 
-    /// Keys on the "Ask AI" prompt.
+    /// Keys on the "Ask AI" prompt: a single-line text field, Enter submits,
+    /// Esc returns to the workbench.
     pub(super) fn key_ask(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.ask_input.push(c),
@@ -94,6 +120,10 @@ impl Browser {
 
     /// The live schema as `(columns, relationships)` for an AI brief — types and
     /// foreign keys, never row data.
+    ///
+    /// Runs two catalog queries synchronously on the session; a failed query
+    /// degrades to an empty list (the brief is then just thinner) rather than
+    /// aborting the request. Returns empty lists when not connected.
     pub(super) fn schema_facts(&mut self) -> (SchemaColumns, SchemaRels) {
         let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
             return (Vec::new(), Vec::new());
@@ -116,6 +146,9 @@ impl Browser {
 
     /// Send the typed question to the assistant: build a schema-only brief and
     /// queue an [`AiRequest`] for the host. Read-only unless writes are enabled.
+    ///
+    /// A leading `?` switches to a data-model question answered in prose; an
+    /// empty question just closes the prompt.
     pub fn submit_ask(&mut self) {
         if self.ai_busy() {
             self.message = Some(t!("msg.db_ai_busy").to_string());
@@ -147,6 +180,7 @@ impl Browser {
     }
 
     /// Queue an [`AiRequest`] for the host and mark the workbench busy.
+    // The status line shows "thinking" until the reply (or failure) replaces it.
     fn queue_ai(&mut self, prompt: String, context: String, reply: AiReply) {
         self.ai = AiState::Pending(AiRequest {
             prompt,
@@ -210,6 +244,8 @@ impl Browser {
             self.message = Some(t!("msg.db_no_statement").to_string());
             return;
         };
+        // A failed EXPLAIN (e.g. syntax error) yields an empty plan; the model
+        // still gets the query and schema, just without plan hints.
         let plan = self
             .run_catalog(&catalog::explain_sql(kind, &stmt, false))
             .map(|(_, rows)| {
@@ -227,6 +263,10 @@ impl Browser {
     /// Apply the assistant's reply, routed by the request kind: SQL replies land
     /// in the editor (validated with `EXPLAIN`); prose replies open in the
     /// scrollable text viewer.
+    ///
+    /// A SQL reply *replaces* the editor buffer. If the request state was not
+    /// `Running` (a stray reply) it is treated as SQL. An empty reply only sets
+    /// a message and changes nothing else.
     pub fn apply_ai_reply(&mut self, reply: &str) {
         let kind = match self.ai {
             AiState::Running(k) => k,
@@ -272,6 +312,7 @@ impl Browser {
     }
 
     /// Report that the AI request failed (spawn error or empty output).
+    /// Clears the in-flight state so a new request can be made.
     pub fn ai_failed(&mut self) {
         self.ai = AiState::Idle;
         self.message = Some(t!("msg.db_ai_failed").to_string());

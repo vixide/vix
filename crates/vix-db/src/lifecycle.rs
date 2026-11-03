@@ -4,6 +4,25 @@
 //! thread (Run H, T531). Extracted from `lib.rs` (T516): the one cohesive
 //! slice of [`Browser`]'s ~110 methods concerned with the connection's
 //! *lifecycle* rather than anything the workbench does once connected.
+//!
+//! # Connect flow
+//!
+//! ```text
+//! Enter on a saved connection
+//!   -> start_connect -> begin_connect   (spawns a thread running connect_worker)
+//!        connect_worker: resolve password (secret) -> open SSH tunnel -> Session::connect
+//!   -> poll_connect, once per host tick, turns the ConnectOutcome into:
+//!        Connected     -> finish_connected (load catalog, enter the workbench)
+//!        NeedsPassword -> View::Password; Enter there calls begin_connect again
+//!                         with the typed password
+//!        Failed        -> status message, back to the connections list
+//! ```
+//!
+//! While a connect is pending the connections list ignores keys so a second
+//! attempt cannot race the first. The same module owns the saved-connection
+//! list and form key handling, and [`Browser::disconnect`], which resets every
+//! piece of per-connection state. Owning spec: `crates/vix-db/spec/index.md`
+//! ("Connection Management") and `spec/session.md`.
 
 use vix_input::{KeyCode, KeyEvent};
 
@@ -40,7 +59,8 @@ enum ConnectOutcome {
 pub(crate) struct PendingConnect {
     /// The eventual [`ConnectOutcome`].
     rx: std::sync::mpsc::Receiver<ConnectOutcome>,
-    /// When the attempt began (for a future "still connecting…" indicator).
+    /// When the attempt began, for the elapsed-seconds status line that
+    /// [`Browser::poll_connect`] refreshes while waiting.
     started: std::time::Instant,
     /// The connection being connected to.
     conn: connect::Connection,
@@ -58,7 +78,8 @@ pub(crate) struct PendingConnect {
 }
 
 impl Browser {
-    /// Keys on the saved-connections list.
+    /// Keys on the saved-connections list: navigate (arrows or `j`/`k`),
+    /// Enter to connect, `a`dd, `e`dit, `d`elete, Esc/`q` to leave.
     pub(super) fn key_connections(&mut self, key: KeyEvent) -> Outcome {
         // A connect is running in the background (T531); ignore other input
         // rather than race a second connect attempt against it.
@@ -104,6 +125,11 @@ impl Browser {
     }
 
     /// Keys on the add/edit connection form.
+    ///
+    /// Row `FORM_KIND` and the two toggle rows (`FORM_WRITABLE`, `FORM_STORE`)
+    /// respond to Left/Right/Space instead of text entry; the others are plain
+    /// text fields. Enter saves (rejecting an empty name) and flags the
+    /// connection list dirty for the host to persist.
     pub(super) fn key_form(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Up => self.form.sel = self.form.sel.saturating_sub(1),
@@ -126,6 +152,8 @@ impl Browser {
                 self.form.fields[self.form.sel].pop();
             }
             KeyCode::Enter => {
+                // The name is the only required field: it identifies the
+                // connection in the list and keys its keyring entry.
                 if self.form.fields[0].trim().is_empty() {
                     self.message = Some(t!("msg.db_name_required").to_string());
                 } else {
@@ -144,7 +172,8 @@ impl Browser {
         Outcome::Consumed
     }
 
-    /// Keys on the password prompt.
+    /// Keys on the password prompt. Typed characters go to
+    /// [`Browser::password`] (rendered masked by the host); Esc wipes it.
     pub(super) fn key_password(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.password.push(c),
@@ -230,6 +259,8 @@ impl Browser {
     /// can now genuinely take a while (an unreachable host's OS TCP timeout
     /// is commonly 60-130s), so the user needs proof it isn't stuck.
     pub fn poll_connect(&mut self) {
+        // `take()` then re-insert on `Empty` keeps the borrow checker happy
+        // while still letting the other arms consume `pending` by value.
         let Some(pending) = self.pending_connect.take() else {
             return;
         };
@@ -292,6 +323,9 @@ impl Browser {
     ) {
         self.session = Some(session);
         self.tunnel = tunnel;
+        // A session starts with exactly the access the saved connection
+        // grants (read-only unless the user flagged it writable); F8 can
+        // change it for this session only, and it is not saved back.
         self.write_enabled = conn.writable;
         self.tx = TxState::None;
         match self.run_catalog(catalog::objects_sql(conn.kind)) {
@@ -311,7 +345,9 @@ impl Browser {
         }
     }
 
-    /// Fetch every `(table, column)` pair for autocomplete (best effort).
+    /// Fetch every `(table, column)` pair, and every foreign-key edge, for
+    /// autocomplete (best effort: a failing query just leaves that part of the
+    /// completer empty).
     fn load_columns(&mut self, kind: connect::Kind) {
         let columns = self
             .run_catalog(catalog::columns_sql(kind))
@@ -338,6 +374,10 @@ impl Browser {
 
     /// Drop the active connection — closing the persistent session and its
     /// in-memory password — and return to the connections list.
+    ///
+    /// Resets all per-connection state (tree, completer, log, transaction
+    /// badge, pending work, staged edits) so nothing from one database can
+    /// leak into the next. Saved queries and history are deliberately kept.
     pub fn disconnect(&mut self) {
         self.conn = None;
         // Signal the worker before dropping it (T532): if it's stuck mid-
@@ -370,7 +410,9 @@ impl Browser {
         self.message = Some(t!("msg.db_disconnected").to_string());
     }
 
-    /// Re-run the catalog queries on the live session.
+    /// Re-run the catalog queries on the live session, rebuilding the tree
+    /// (and thereby resetting its expansion and selection state). On failure
+    /// the old tree is kept and the error is shown. A no-op when disconnected.
     pub fn refresh_catalog(&mut self) {
         let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
             return;
@@ -409,6 +451,7 @@ fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> Connect
         Ok(tunnel) => tunnel,
         Err(e) => return ConnectOutcome::Failed(e.to_string()),
     };
+    // With a tunnel the driver must dial the local end, not the real host.
     let url = match &tunnel {
         Some(t) => connect::url_via_local(conn, &password, t.local_port),
         None => connect::url(conn, &password),

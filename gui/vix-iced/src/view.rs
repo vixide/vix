@@ -370,6 +370,8 @@ impl VixIced {
         }
     }
 
+    /// Forward a mouse event at grid cell `cell` to the `App` (the same entry point
+    /// the terminal's `Event::Mouse` uses).
     fn mouse(&mut self, kind: MouseEventKind, cell: (u16, u16), mods: KeyModifiers) {
         if let Some(app) = &mut self.app {
             app.on_mouse(MouseEvent {

@@ -8,6 +8,11 @@
 //! `Hello` becomes a [`Knock`]: authenticated, but **not yet admitted**. The
 //! host's UI shows the guest's name and either approves it (the session then
 //! sends `Welcome`) or declines it. Nothing is shared with a knock.
+//!
+//! Resource bounds (all enforced with counters, not queues): [`MAX_HANDSHAKES`]
+//! in-flight handshakes, [`MAX_PENDING_KNOCKS`] undecided guests, a
+//! 5-second handshake/`Hello` deadline, and the invite table's own cap. Spec:
+//! `crates/vix-cowork-net/spec/index.md`.
 
 use crate::error::NetError;
 use crate::handshake::{accept_stream, new_keypair};
@@ -31,7 +36,8 @@ pub const MAX_PENDING_KNOCKS: usize = 4;
 /// Time a connection gets to finish the handshake and say `Hello`.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Decrements a counter when dropped.
+/// RAII guard for one unit of a bounded counter: decrements it on drop, so a
+/// slot is released on every exit path (including panics and early returns).
 struct Slot(Arc<AtomicUsize>);
 
 impl Drop for Slot {
@@ -40,6 +46,8 @@ impl Drop for Slot {
     }
 }
 
+/// Claim a slot if fewer than `max` are in use. Increment-then-check keeps it
+/// race-free without a lock: an over-limit claimant undoes its increment.
 fn take_slot(counter: &Arc<AtomicUsize>, max: usize) -> Option<Slot> {
     let prev = counter.fetch_add(1, Ordering::SeqCst);
     if prev >= max {
@@ -59,9 +67,12 @@ pub struct Knock {
     pub peer_addr: Option<SocketAddr>,
     link: Link,
     reader: LinkReader,
+    /// Holds a pending-knock slot until the knock is approved, declined or
+    /// dropped (never read; kept for its `Drop`).
     _slot: Slot,
 }
 
+/// `Slot` wraps an atomic counter with nothing useful to print.
 impl std::fmt::Debug for Slot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Slot")
@@ -87,10 +98,14 @@ impl Knock {
 /// The host's listening socket and its invites.
 pub struct Listener {
     local: SocketAddr,
+    /// This session's static public key, put into every minted invite.
     key: [u8; KEY_LEN],
     invites: Arc<InviteTable>,
+    /// Tells the accept thread to exit.
     stop: Arc<AtomicBool>,
+    /// Receiver for authenticated guests; `Mutex` makes `Listener: Sync`.
     knocks: Mutex<Receiver<Knock>>,
+    /// The accept thread; `None` once joined.
     thread: Option<JoinHandle<()>>,
 }
 
@@ -112,6 +127,7 @@ impl Listener {
     /// When the socket cannot be bound.
     pub fn bind(addr: SocketAddr) -> Result<Self, NetError> {
         let socket = TcpListener::bind(addr)?;
+        // Non-blocking so the accept loop can poll `stop` and shut down.
         socket.set_nonblocking(true)?;
         let local = socket.local_addr()?;
         let keypair = new_keypair()?;
@@ -179,6 +195,8 @@ impl Listener {
         self.shutdown();
     }
 
+    /// Stop the accept thread and revoke invites. Idempotent: `close` and
+    /// `Drop` may both run it.
     fn shutdown(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         self.invites.revoke_all();
@@ -194,6 +212,10 @@ impl Drop for Listener {
     }
 }
 
+/// The accept thread body. Polls a non-blocking socket (sleeping 20 ms when
+/// idle, 100 ms after a hard error) until `stop`, spawning one handshake thread
+/// per connection within the [`MAX_HANDSHAKES`] bound. The `Keypair` is copied
+/// into an `Arc` because the handshake threads outlive this borrow.
 fn accept_loop(
     socket: &TcpListener,
     keypair: &Keypair,
@@ -232,6 +254,7 @@ fn accept_loop(
                         return;
                     };
                     let _ = reader.set_timeout(Some(HANDSHAKE_TIMEOUT));
+                    // The guest must speak first, within the same deadline.
                     let Ok(Message::Hello { version, name }) = reader.recv() else {
                         link.close();
                         return;
@@ -243,6 +266,7 @@ fn accept_loop(
                         link.close();
                         return;
                     }
+                    // Too many undecided guests: refuse early rather than queue.
                     let Some(slot) = take_slot(&pending, MAX_PENDING_KNOCKS) else {
                         let _ = link.send(&Message::Error {
                             code: ErrorCode::Declined,
@@ -253,6 +277,7 @@ fn accept_loop(
                     // The host may take a while to decide; the reader waits
                     // indefinitely from here on.
                     let _ = reader.set_timeout(None);
+                    // The guest chose `name`; sanitize before any UI shows it.
                     let knock = Knock {
                         name: sanitize_name(&name),
                         peer_addr: link.peer_addr(),
@@ -271,7 +296,8 @@ fn accept_loop(
     }
 }
 
-/// What a guest receives from [`join`].
+/// What a guest receives from [`join`]: both link halves plus the host's
+/// `Welcome`, already read.
 #[derive(Debug)]
 pub struct Joined {
     /// Send half.
@@ -302,6 +328,8 @@ pub fn join(
         version: PROTOCOL_VERSION,
         name: name.to_string(),
     })?;
+    // The host's human may take a while; wait up to `consent_timeout` only for
+    // the decision, then go back to waiting indefinitely.
     reader.set_timeout(Some(consent_timeout))?;
     let welcome = reader.recv()?;
     reader.set_timeout(None)?;

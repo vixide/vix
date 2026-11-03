@@ -39,6 +39,8 @@ pub fn default_lifecycle(types: &[&ProjectType]) -> LifecycleCommands {
     }
 }
 
+/// The first project type (in the given priority order) that defines the
+/// lifecycle `slot`, as an owned command string.
 fn first_some(
     types: &[&ProjectType],
     slot: impl Fn(&ProjectType) -> Option<&'static str>,
@@ -96,6 +98,9 @@ pub fn effective_lifecycle(
     }
 }
 
+/// Pick a lifecycle command by precedence: a command remembered from the
+/// user's last use (`cached`) beats a per-project override, which beats the
+/// project type's built-in `default`.
 fn resolve(
     default: Option<&str>,
     project_override: Option<&str>,

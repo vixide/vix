@@ -3,6 +3,15 @@
 //! rows; a shared [`Editor::visual_rows`] layout drives the renderer here as well
 //! as the cursor scroll (`Editor::focus`) and mouse hit-testing
 //! (`cursor_from_mouse`).
+//!
+//! Wrapping is by **display columns** at grapheme boundaries (never splitting
+//! a grapheme cluster), with tabs counted as one cell, matching how the
+//! renderer draws them. It is a hard wrap at the width: there is no
+//! word-boundary breaking. `offset_y` stays a *logical line* index in this
+//! mode, so the view always starts at the top of a line (it cannot begin
+//! mid-wrap). Enabled by [`Editor::set_soft_wrap`](crate::editor::Editor::set_soft_wrap);
+//! the non-wrapped renderer lives in [`crate::render`].
+//! See `crates/vix-editor-core/spec/index.md`.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
@@ -18,9 +27,13 @@ use crate::editor::{Editor, Flags};
 /// first char).
 #[derive(Clone, Copy)]
 pub(crate) struct VRow {
+    /// Zero-based logical line this row belongs to.
     pub(crate) line: usize,
+    /// First character offset (absolute, in the whole buffer) of the segment.
     pub(crate) start: usize,
+    /// One past the last character offset of the segment (exclusive).
     pub(crate) end: usize,
+    /// Whether this is the virtual code-lens row above `line`, not text.
     pub(crate) lens: bool,
 }
 
@@ -29,13 +42,22 @@ pub(crate) struct VRow {
 /// a manageable number of arguments.
 #[derive(Clone, Copy)]
 struct RowCtx<'a> {
+    /// The whole widget rectangle being rendered into.
     area: Rect,
+    /// Absolute x of the first text cell (just right of the gutter).
     text_x0: u16,
+    /// Absolute x one past the last drawable cell (`area.right()`).
     right: u16,
+    /// Absolute y of the row being drawn.
     draw_y: u16,
+    /// Width of the line-number column in digits (at least 5, so the gutter
+    /// does not jitter as the line count crosses a power of ten).
     line_number_digits: usize,
+    /// Base style for plain text.
     default_text_style: Style,
+    /// Every caret's non-empty selection as `(start, end)` char offsets.
     caret_sels: &'a [(usize, usize)],
+    /// Char offset of the bracket matching the one under the cursor, if any.
     bracket: Option<usize>,
 }
 
@@ -64,10 +86,11 @@ impl Editor {
         let height = area.height as usize;
         let default_text_style = self.text_style;
 
+        // One layout pass shared by every row; rows beyond `height` are never
+        // computed.
         let rows = self.visual_rows(text_width, height);
         let bracket = self.matching_bracket();
 
-        // Sorted selection range as char offsets, if non-empty.
         // Every caret's selection range (multiple-cursor aware).
         let caret_sels = self.caret_selections();
 
@@ -134,7 +157,8 @@ impl Editor {
             self.draw_gutter_sign(buf, sign_x, draw_y, vr.line, right);
         }
 
-        // Base text for the segment (with whitespace glyphs if enabled).
+        // Base text for the segment (with whitespace glyphs if enabled). Tabs
+        // are drawn as one cell either way, matching `gwidth` in the layout.
         let seg = code.char_slice(vr.start, vr.end);
         let displayed: String = if self.flags.contains(Flags::SHOW_WHITESPACE) {
             seg.chars()
@@ -295,6 +319,7 @@ impl Editor {
     pub(crate) fn visual_rows(&self, text_width: usize, max_rows: usize) -> Vec<VRow> {
         let code = self.code_ref();
         let total_lines = code.len_lines();
+        // A zero-width view would never make progress below; wrap at 1 column.
         let tw = text_width.max(1);
         let mut rows = Vec::new();
         let mut line = self.offset_y;
@@ -312,6 +337,7 @@ impl Editor {
                     break;
                 }
             }
+            // An empty line still occupies one row (so its number and caret show).
             if line_len == 0 {
                 rows.push(VRow {
                     line,
@@ -330,6 +356,8 @@ impl Editor {
                 for g in RopeGraphemes::new(&slice) {
                     let g_chars = grapheme_width_and_chars_len(g).1;
                     let gw = gwidth(g);
+                    // `seg_chars > 0` guarantees progress: a single grapheme
+                    // wider than the view still gets a row of its own.
                     if width + gw > tw && seg_chars > 0 {
                         break;
                     }
@@ -339,6 +367,7 @@ impl Editor {
                         break;
                     }
                 }
+                // Defensive: never emit an empty segment (infinite loop).
                 if seg_chars == 0 {
                     seg_chars = 1;
                 }
@@ -358,7 +387,7 @@ impl Editor {
 }
 
 /// Apply `style` to the `width` cells starting at `x` on row `y`, clipped to
-/// `right`.
+/// `right` (so a wide grapheme at the edge is styled only as far as it fits).
 fn paint(buf: &mut Buffer, x: u16, width: u16, right: u16, y: u16, style: Style) {
     for dx in 0..width {
         let cx = x + dx;

@@ -5,10 +5,18 @@
 //! clipboard. Formats: CSV, TSV, JSON array, NDJSON, Markdown table, and SQL
 //! `INSERT` statements (the caller supplies the table name; the workbench
 //! uses `vix_export` when the source table is unknown).
+//!
+//! All cells arrive as strings (the grid is untyped text), so JSON output
+//! carries every value as a JSON string and the SQL renderer decides
+//! bare-vs-quoted by whether a cell parses as a number. Owning spec:
+//! `crates/vix-db/spec/index.md` ("Results Display").
 
 use std::fmt::Write as _;
 
 /// An export format.
+///
+/// The export dialog cycles through [`FORMATS`]; [`Format::label`] doubles as
+/// the default file extension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Format {
     /// Comma-separated values with RFC-4180 quoting.
@@ -53,6 +61,15 @@ impl Format {
 
 /// Render `rows` under `headers` in `format`. `table` names the target of
 /// SQL `INSERT` statements and is ignored by the other formats.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::export::{render, Format};
+/// let headers = vec!["id".to_string(), "name".to_string()];
+/// let row = vec!["1".to_string(), "a,b".to_string()];
+/// assert_eq!(render(Format::Csv, &headers, &[&row], ""), "id,name\n1,\"a,b\"\n");
+/// ```
 #[must_use]
 pub fn render(format: Format, headers: &[String], rows: &[&Vec<String>], table: &str) -> String {
     match format {
@@ -94,7 +111,9 @@ fn csv_cell(cell: &str) -> String {
     }
 }
 
-/// A JSON array of row objects (`array = true`) or NDJSON lines.
+/// A JSON array of row objects (`array = true`) or NDJSON lines. A row shorter
+/// than the header list yields empty strings for the missing cells; extra
+/// cells beyond the headers are dropped.
 fn json(headers: &[String], rows: &[&Vec<String>], array: bool) -> String {
     let objects: Vec<serde_json::Value> = rows
         .iter()
@@ -141,6 +160,12 @@ fn markdown(headers: &[String], rows: &[&Vec<String>]) -> String {
 
 /// One `INSERT INTO table (cols) VALUES (…);` per row. Numeric cells stay
 /// bare; everything else is single-quoted with internal quotes doubled.
+///
+/// Caveats: "numeric" means `f64::from_str` succeeds, so `inf`, `nan` and `1e3`
+/// are also emitted bare (unlike the stricter `catalog::quote_literal`); and
+/// the table and column names are inserted as given, not identifier-quoted. An
+/// SQL `NULL` cannot be told apart from an empty string in the text grid, so
+/// both become `''`.
 fn sql_inserts(headers: &[String], rows: &[&Vec<String>], table: &str) -> String {
     let cols = headers.join(", ");
     let mut out = String::new();

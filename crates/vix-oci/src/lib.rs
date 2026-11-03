@@ -22,6 +22,25 @@
 //! [`run`] takes the resolved program path, the argument vector and optional
 //! standard input (the only way a registry password ever travels), and returns
 //! the output or a typed [`OciError`].
+//!
+//! [`devcontainer`] is a fourth, independent piece: a tolerant reader for
+//! `devcontainer.json` that lets the app offer to reopen a project in its
+//! container.
+//!
+//! The OC menu and panels built on this crate are
+//! `vix-oci-panel` and the App shell
+//! (`tui/src/app/oc.rs`). Owning spec: `crates/vix-oci/spec/index.md`, and the
+//! repo-level `spec/open-container`.
+//!
+//! ```
+//! use std::path::PathBuf;
+//! use vix_oci::{detect, Engine};
+//!
+//! // Pretend only podman is installed.
+//! let found = detect("", |name| (name == "podman").then(|| PathBuf::from("/bin/podman")));
+//! assert_eq!(found.unwrap().engine, Engine::Podman);
+//! assert_eq!(Engine::from_name("Docker"), Some(Engine::Docker));
+//! ```
 
 pub mod argv;
 pub mod devcontainer;
@@ -68,14 +87,15 @@ impl Engine {
             .find(|e| e.binary().eq_ignore_ascii_case(name))
     }
 
-    /// Whether this engine has pods (`pod ps`).
+    /// Whether this engine has pods (`pod ps`). Only Podman does; the App
+    /// hides the Pods panel for the others.
     #[must_use]
     pub fn has_pods(self) -> bool {
         self == Engine::Podman
     }
 }
 
-/// A detected engine and where its binary lives.
+/// A detected engine and where its binary lives, as returned by [`detect`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Detected {
     /// Which engine it is.
@@ -85,6 +105,10 @@ pub struct Detected {
 }
 
 /// Why an engine operation failed.
+///
+/// `Display` gives untranslated developer text; the App maps each variant to
+/// a translated message and shows [`OciError::Failed`]'s `stderr` verbatim,
+/// since it is the engine's own diagnosis.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum OciError {
@@ -132,6 +156,8 @@ impl std::error::Error for OciError {
 }
 
 impl From<std::io::Error> for OciError {
+    /// A missing program (`NotFound` from spawn) is "not installed", not a
+    /// generic I/O failure, so the UI can offer install guidance.
     fn from(e: std::io::Error) -> Self {
         if e.kind() == std::io::ErrorKind::NotFound {
             Self::NotInstalled
@@ -152,6 +178,8 @@ pub fn detect(
     preferred: &str,
     find: impl Fn(&str) -> Option<PathBuf>,
 ) -> Result<Detected, OciError> {
+    // The preferred engine is tried first; if it is not installed we fall
+    // through to the normal order (it may be tried a second time, harmlessly).
     let order = Engine::from_name(preferred).into_iter().chain(Engine::ALL);
     for engine in order {
         if let Some(program) = find(engine.binary()) {
@@ -178,6 +206,9 @@ pub fn run(
     use std::io::Write;
     use std::process::{Command, Stdio};
 
+    // Arguments are passed as an argv vector with no shell, so quoting is
+    // never an issue; `argv` has already refused option-like values.
+
     let mut child = Command::new(program)
         .args(args)
         .stdin(if stdin.is_some() {
@@ -191,7 +222,11 @@ pub fn run(
     if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
         // A broken pipe means the engine exited early; its status says why.
         let _ = pipe.write_all(text.as_bytes());
+        // `pipe` drops here, closing stdin so the engine sees end of input
+        // (a `docker login --password-stdin` would otherwise wait forever).
     }
+    // `wait_with_output` drains stdout and stderr concurrently, so a chatty
+    // engine cannot deadlock on a full pipe.
     let out = child.wait_with_output()?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())

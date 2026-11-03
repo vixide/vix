@@ -41,6 +41,7 @@ pub enum ImageError {
 }
 
 impl std::fmt::Display for ImageError {
+    /// Renders a fixed human-readable message for the error.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TooLarge => write!(f, "image over {MAX_IMAGE_BYTES} bytes"),
@@ -144,11 +145,13 @@ pub fn decode(mime: &str, base64_text: &str) -> Result<Image, ImageError> {
     })
 }
 
+/// Big-endian `u32` at `at`, or `None` if the slice is too short.
 fn be_u32(bytes: &[u8], at: usize) -> Option<u32> {
     let b = bytes.get(at..at + 4)?;
     Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
 }
 
+/// Big-endian `u16` at `at`, or `None` if the slice is too short.
 fn be_u16(bytes: &[u8], at: usize) -> Option<u16> {
     let b = bytes.get(at..at + 2)?;
     Some(u16::from_be_bytes([b[0], b[1]]))
@@ -156,6 +159,7 @@ fn be_u16(bytes: &[u8], at: usize) -> Option<u16> {
 
 /// Width and height from a PNG's signature and `IHDR` chunk.
 fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    /// The 8-byte PNG file signature.
     const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
     if bytes.get(..8)? != SIGNATURE || bytes.get(12..16)? != b"IHDR" {
         return None;

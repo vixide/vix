@@ -5,6 +5,21 @@
 //! the request lexically, canonicalizes it, and checks the canonical path
 //! still lies under the canonical root, so neither `..` nor a symbolic link
 //! can lead outside the workspace.
+//!
+//! This module is the crate's security boundary; [`crate::tools`] and the
+//! `resources/read` handler never touch the filesystem except through it.
+//! Its limits ([`MAX_FILE_BYTES`], [`MAX_DB_DEPTH`], [`MAX_DATABASES`]) bound
+//! how much an MCP client can make the server read or walk. Errors are typed
+//! ([`WorkspaceError`], T610) and rendered to text only at the protocol edge.
+//! Owning spec: `crates/vix-mcp-server/spec/index.md`.
+//!
+//! ```
+//! use std::path::Path;
+//! use vix_mcp_server::workspace::{is_secret, relative};
+//! assert!(is_secret(Path::new("config/.env.local")));
+//! assert!(!is_secret(Path::new("src/main.rs")));
+//! assert_eq!(relative(Path::new("/w"), Path::new("/w/src/a.rs")), "src/a.rs");
+//! ```
 
 use std::fs;
 use std::io::Read as _;
@@ -135,6 +150,9 @@ pub fn resolve(root: &Path, request: &str) -> Result<PathBuf, WorkspaceError> {
         lexical_join(root, Path::new(request)).ok_or_else(|| WorkspaceError::OutsideRoot {
             request: request_owned(),
         })?;
+    // Canonicalizing resolves symbolic links, so a link inside the root that
+    // points outside is caught by the `starts_with` check below. A missing
+    // file also fails here, which is reported as NotFound.
     let canonical = lexical
         .canonicalize()
         .map_err(|_| WorkspaceError::NotFound {
@@ -163,6 +181,9 @@ pub fn resolve(root: &Path, request: &str) -> Result<PathBuf, WorkspaceError> {
 /// component and may not climb above `root`; an absolute request must lie
 /// under `root` once normalized. `None` when the result would leave `root`.
 fn lexical_join(root: &Path, request: &Path) -> Option<PathBuf> {
+    // For a relative request `..` may not pop below the root's own depth
+    // (`floor`); for an absolute one the final `starts_with(root)` check is
+    // what confines it.
     let base = if request.is_absolute() {
         PathBuf::new()
     } else {
@@ -192,6 +213,10 @@ fn lexical_join(root: &Path, request: &Path) -> Option<PathBuf> {
 /// Whether a workspace-relative path names a file that may hold secrets:
 /// `.env` and `.env.*`, private keys and certificates, `.netrc`, `.pgpass`,
 /// `credentials*`, and anything under `.git/` or `.ssh/`.
+///
+/// The match is deliberately broad and prefix-based (so `id_rsa.pub` is also
+/// refused): a false refusal costs the client one file, a false accept could
+/// leak a credential. Names compare in ASCII lower case.
 #[must_use]
 pub fn is_secret(rel: &Path) -> bool {
     let in_secret_dir = rel
@@ -239,6 +264,8 @@ pub fn relative(root: &Path, abs: &Path) -> String {
 pub fn read_text(root: &Path, request: &str) -> Result<(String, String), WorkspaceError> {
     let path = resolve(root, request)?;
     let rel = relative(root, &path);
+    // Check the size from metadata first so an oversized file is never read
+    // into memory.
     let io_error = |source| WorkspaceError::Io {
         path: rel.clone(),
         source,
@@ -248,6 +275,7 @@ pub fn read_text(root: &Path, request: &str) -> Result<(String, String), Workspa
         return Err(WorkspaceError::TooLarge { path: rel, size });
     }
     let bytes = fs::read(&path).map_err(io_error)?;
+    // A NUL byte is the usual binary-file heuristic.
     if bytes.contains(&0) {
         return Err(WorkspaceError::Binary { path: rel });
     }
@@ -316,6 +344,8 @@ fn is_sqlite_candidate(root: &Path, path: &Path) -> bool {
     if is_secret(path.strip_prefix(root).unwrap_or(path)) {
         return false;
     }
+    // Reading only the header keeps the walk cheap and rejects files that
+    // merely have a database-like extension.
     let mut header = [0u8; 16];
     fs::File::open(path)
         .and_then(|mut f| f.read_exact(&mut header))

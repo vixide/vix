@@ -6,6 +6,15 @@
 //! user can reorder, delete, and format statements (uppercasing keywords), then
 //! save the result back to the buffer. It mirrors the other `edit_*` surfaces:
 //! pure logic here, rendering and file I/O in the host.
+//!
+//! Known scope limits of the hand-rolled scanner (shared by
+//! [`split_statements`] and [`format_sql`]): it understands `'...'` / `"..."`
+//! strings, `-- ...` and `/* ... */` comments only. A doubled quote (`''`) works
+//! by closing and immediately reopening the string; PostgreSQL dollar-quoted
+//! bodies (`$$ ... $$`) are *not* recognised, so a `;` inside one splits the
+//! statement. Block comments do not nest.
+//!
+//! Owning spec: `crates/vix-edit-sql/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -20,7 +29,11 @@ pub enum Outcome {
     Save,
 }
 
-/// Common SQL keywords, uppercased on format.
+/// Common SQL keywords, uppercased on format. Lowercase, matched
+/// case-insensitively. Includes a few very common aggregate names (`count`,
+/// `sum`, ...) and words that are also frequent identifiers (`user`, `key`),
+/// so formatting can capitalise an identically-named column; it is a
+/// readability aid, not a parser.
 const KEYWORDS: &[&str] = &[
     "select",
     "from",
@@ -103,23 +116,31 @@ const KEYWORDS: &[&str] = &[
     "max",
 ];
 
-/// Maximum retained undo steps.
+/// Maximum retained undo steps (oldest dropped first).
 const HISTORY_CAP: usize = 200;
 
 /// A point-in-time snapshot for undo/redo.
 #[derive(Clone)]
 struct Snapshot {
+    /// The full statement list at that moment (cheap: statements are small).
     statements: Vec<String>,
+    /// The selection to restore with it.
     sel: usize,
 }
 
 /// The SQL statement list with a cursor, scroll offset, and edit history.
 pub struct Editor {
+    /// One trimmed statement per entry, without its terminating `;`.
     statements: Vec<String>,
+    /// Highlighted statement index (kept `< len` except when empty).
     sel: usize,
+    /// First visible row; maintained by [`Editor::ensure_visible`].
     scroll: usize,
+    /// Set by any edit (including undo/redo), cleared by `mark_saved`.
     dirty: bool,
+    /// Snapshots to restore on `u`, newest last, capped at `HISTORY_CAP`.
     undo: Vec<Snapshot>,
+    /// Snapshots undone and re-appliable with Ctrl-R; cleared by a new edit.
     redo: Vec<Snapshot>,
 }
 
@@ -189,6 +210,13 @@ impl Editor {
     }
 
     /// Join the statements back into buffer text (one per block, `;`-terminated).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let e = vix_edit_sql::Editor::from_text("select 1; select 2");
+    /// assert_eq!(e.to_text(), "select 1;\n\nselect 2;\n");
+    /// ```
     #[must_use]
     pub fn to_text(&self) -> String {
         let mut out = String::new();
@@ -217,11 +245,18 @@ impl Editor {
     }
 
     /// Handle a key, returning what the host should do.
+    ///
+    /// Vim-style `j`/`k`, arrows and paging move the selection; `J`/`K` or
+    /// Alt-Up/Down reorder; `d`/Delete removes; `f`/`F` format the selected/all
+    /// statements; `u`/Ctrl-R undo/redo; Ctrl-S saves; Esc/`q` closes.
+    /// `page` is the host's visible row count, used for PageUp/PageDown.
     pub fn handle_key(&mut self, key: KeyEvent, page: usize) -> Outcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         match key.code {
             KeyCode::Char('s') if ctrl => return Outcome::Save,
+            // The Alt arms must precede the plain Up/Down arms below, since
+            // match arms are tried in order.
             KeyCode::Up if alt => self.move_stmt(true),
             KeyCode::Down if alt => self.move_stmt(false),
             KeyCode::Char('K') => self.move_stmt(true),
@@ -312,6 +347,7 @@ impl Editor {
     }
 
     /// Push the current state onto the undo stack (clearing redo).
+    /// Call *before* mutating, so the snapshot is the pre-edit state.
     fn push_undo(&mut self) {
         // Delegates to `vix-capped-stack` (Run H, T525) -- this crate and
         // four siblings used to each hand-roll this identical clamp.
@@ -381,11 +417,26 @@ fn kind_of(stmt: &str) -> &'static str {
 /// Split SQL into statements on top-level semicolons, ignoring semicolons inside
 /// single/double-quoted strings, line comments (`-- …`), and block comments
 /// (`/* … */`). Blank pieces are dropped; each is trimmed.
+///
+/// The `;` terminators are consumed, not kept; see [`Editor::to_text`] for the
+/// inverse. See the crate docs for unsupported constructs (dollar quoting).
+///
+/// # Examples
+///
+/// ```
+/// use vix_edit_sql::split_statements;
+/// assert_eq!(
+///     split_statements("select ';'; -- c;\nselect 2;"),
+///     vec!["select ';'", "-- c;\nselect 2"]
+/// );
+/// ```
 #[must_use]
 pub fn split_statements(sql: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut chars = sql.chars().peekable();
+    // Lexer state: at most one of these is true at a time. Inside any, `;`
+    // is ordinary text. Comments are kept in the statement text, not stripped.
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
     while let Some(c) = chars.next() {
         if line_c {
@@ -452,6 +503,18 @@ pub fn split_statements(sql: &str) -> Vec<String> {
 }
 
 /// Uppercase SQL keywords in `stmt`, leaving string/comment spans untouched.
+///
+/// Only whole words from the built-in keyword list are changed; identifiers
+/// that merely contain a keyword (`selected`) are left alone.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     vix_edit_sql::format_sql("select a from t where b = 'from'"),
+///     "SELECT a FROM t WHERE b = 'from'"
+/// );
+/// ```
 #[must_use]
 pub fn format_sql(stmt: &str) -> String {
     let mut out = String::with_capacity(stmt.len());

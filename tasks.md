@@ -9317,10 +9317,23 @@ editor by completion, diagnostics and never losing work first.
     audited. Remote authorities don't stream (they return the whole file).
     Image display in kitty, iTerm2 and WezTerm was not re-checked by hand
     in those terminals; the probe itself is unchanged, only its timing.
-- [ ] **T745 — 2.0 launch kit.** A "What's new in 2.0" page on the site,
+- [x] **T745 — 2.0 launch kit.** A "What's new in 2.0" page on the site,
   release notes written for users rather than library authors, and
   announcement drafts for the user to post. Nothing is posted without the
   user's say-so. **Small–Medium.**
+  - **Done 2026-11-03** (`feat/t745-launch-kit`): site page `/whats-new/`
+    (nav, footer, sitemap, home link, `llms.txt`/`llms.json` of both the repo
+    and the site); user-facing release notes in
+    [`docs/whats-new-2-0`](docs/whats-new-2-0/index.md) (in the mdBook
+    `SUMMARY.md`); drafts in [`docs/launch/`](docs/launch/index.md) (blog post,
+    Show HN, Reddit, short posts), each marked DRAFT and nothing sent. Every
+    claim is from `CHANGELOG.md` `[Unreleased]` and this file; partial or
+    opt-in items (remote editing experimental, Cowork and Jupyter opt-in,
+    Kubernetes/WSL stand-in only, Matrix, ACP first slice, unpublished
+    install channels, the unverified musl fix) are listed as such. The site
+    and notes say "not released yet": when 2.0 ships, drop that wording, fill
+    the `[RELEASE DATE]` and `[LINK]` placeholders, and re-check against the
+    released changelog. Posting still needs the user (and T746 listings).
 - [ ] **T746 — Listings (needs the user's approval for each).** Ratatui's
   showcase and awesome-ratatui, awesome-rust, Terminal Trove and
   AlternativeTo. Each listing is outward-facing, so the user approves

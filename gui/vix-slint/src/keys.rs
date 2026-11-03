@@ -22,6 +22,8 @@ use vix_input::{KeyEvent, KeyModifiers};
     clippy::struct_excessive_bools,
     reason = "mirrors Slint's KeyboardModifiers, four independent flags"
 )]
+/// The held modifier keys as Slint reports them (see the field docs for the
+/// macOS naming swaps).
 pub struct Mods {
     /// Slint's `control` (Command on macOS).
     pub control: bool,

@@ -18,6 +18,8 @@
 //! rejects a file whose hash does not match, so a torn or hand-edited backup
 //! is never offered. Nothing here applies a backup: the host only ever
 //! offers it, shown as a diff against the file.
+//!
+//! Owning spec: `crates/vix-undo-store/spec/index.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -54,16 +56,22 @@ pub struct Backup {
 /// Borrowed form written to disk (avoids copying the text).
 #[derive(serde::Serialize)]
 struct StoredRef<'a> {
+    /// Which buffer this backup is for (path, `ssh://` form, or `untitled:<id>`).
     identity: &'a str,
+    /// SHA-256 of `text`, verified on read to reject torn/edited files.
     hash: &'a str,
+    /// The unsaved buffer text.
     text: &'a str,
 }
 
 /// Owned form read from disk.
 #[derive(serde::Deserialize)]
 struct Stored {
+    /// See [`StoredRef::identity`].
     identity: String,
+    /// See [`StoredRef::hash`].
     hash: String,
+    /// See [`StoredRef::text`].
     text: String,
 }
 
@@ -80,6 +88,8 @@ pub fn local_identity(file: &Path) -> String {
 /// alphanumerics, so it is safe in a file name.
 #[must_use]
 pub fn new_session_id() -> String {
+    // Distinguishes ids minted in the same millisecond by this process; the
+    // clock and pid separate runs and concurrent editor instances.
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let ms = std::time::SystemTime::now()
@@ -88,7 +98,9 @@ pub fn new_session_id() -> String {
     format!("{ms:x}p{:x}n{n:x}", std::process::id())
 }
 
-/// Whether `id` could have come from [`new_session_id`].
+/// Whether `id` could have come from [`new_session_id`]. Guards
+/// [`BackupStore::untitled_ids`] against stray or hostile file names in the
+/// directory leaking into a path.
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric())
 }
@@ -102,6 +114,7 @@ fn workspace_tag(workspace: &str) -> String {
 /// A hot-exit backup store rooted at a directory.
 #[derive(Debug, Clone)]
 pub struct BackupStore {
+    /// Directory holding the backup JSON files (created on first write).
     root: PathBuf,
 }
 

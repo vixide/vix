@@ -6,6 +6,13 @@
 //! conditions continued on their own lines with 4-space indentation. String
 //! literals and comments pass through untouched; clause breaks apply only at
 //! parenthesis depth zero so inline subqueries stay inline.
+//!
+//! The formatter is token-based: [`beautify`] scans the statement into a few
+//! coarse tokens, then re-emits them, synthesizing whitespace. It is not a SQL
+//! parser, so unusual syntax is laid out by the same simple rules rather than
+//! rejected. The workbench applies it to the statement under the cursor only
+//! (`Browser::format_at_cursor`). Owning spec: `crates/vix-db/spec/index.md`
+//! ("Query Formatting").
 
 use super::highlight::is_keyword;
 
@@ -51,6 +58,21 @@ const CLAUSE_STARTERS: &[&str] = &[
 const CONTINUATIONS: &[&str] = &["and", "or"];
 
 /// Reformat one SQL statement (no trailing semicolon required or added).
+///
+/// Keywords from [`crate::highlight::KEYWORDS`] are uppercased; other words
+/// keep their case. The output has no trailing whitespace.
+///
+/// A quirk to know: the string scanner treats a doubled quote (`'it''s'`) as
+/// two adjacent literals, so the formatter may insert a space between them.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     vix_db::format::beautify("select a from t where x=1 and y=2"),
+///     "SELECT a\nFROM t\nWHERE x = 1\n    AND y = 2"
+/// );
+/// ```
 #[must_use]
 pub fn beautify(sql: &str) -> String {
     let tokens = scan(sql);
@@ -58,6 +80,9 @@ pub fn beautify(sql: &str) -> String {
     let mut line_len = 0usize;
     let mut depth = 0usize;
     let mut first = true;
+    // `line_len` is the width of the current output line; zero means we are at
+    // a line start, where no separating space is needed and a break would only
+    // produce a blank line.
     // A starter directly after a starter ("LEFT JOIN") must not break again.
     let mut prev_starter = false;
     for tok in tokens {
@@ -114,7 +139,8 @@ pub fn beautify(sql: &str) -> String {
     out
 }
 
-/// Whether a space belongs between the end of `out` and `next`.
+/// Whether a space belongs between the end of `out` and `next`: never at the
+/// start, after a newline, `(` or `.`, nor before `,` `)` `;` `.`.
 fn needs_space(out: &str, next: &str) -> bool {
     let Some(prev) = out.chars().last() else {
         return false;
@@ -129,6 +155,7 @@ fn needs_space(out: &str, next: &str) -> bool {
 }
 
 /// Scan `sql` into tokens, preserving strings and comments verbatim.
+/// Unterminated strings and block comments run to the end of the input.
 fn scan(sql: &str) -> Vec<FTok> {
     let chars: Vec<char> = sql.chars().collect();
     let mut out = Vec::new();

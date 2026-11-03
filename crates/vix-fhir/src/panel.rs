@@ -1,4 +1,9 @@
 //! The Bundle viewer's list state.
+//!
+//! A thin wrapper binding a parsed [`Bundle`] to a selection and scroll offset;
+//! all index arithmetic is delegated to `vix_list_state` so clamping behaves
+//! identically to every other list panel. Rendering lives in the host UI, not
+//! here. Spec: `crates/vix-fhir/spec/index.md`.
 
 use crate::{Bundle, Entry};
 

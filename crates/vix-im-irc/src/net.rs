@@ -55,20 +55,27 @@ impl ConnectOptions {
     }
 }
 
+/// A message from the App to the connection thread.
 enum Request {
+    /// Run a client command (join, message, ...).
     Command(Command),
+    /// Send `QUIT` and end the thread.
     Close,
 }
 
 /// The App's side of a connection.
 #[derive(Debug)]
 pub struct Handle {
+    /// Requests to the connection thread.
     tx: Sender<Request>,
+    /// Events from the connection thread, polled by the App.
     rx: Receiver<Event>,
+    /// The connection thread; taken when joined so shutdown is idempotent.
     thread: Option<JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for Request {
+    /// Prints only the variant name, so passwords or message text carried by a command never reach logs.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Request::Command(_) => "Command",
@@ -134,6 +141,7 @@ impl Handle {
         self.rx.try_iter().collect()
     }
 
+    /// Ask the thread to close and wait for it to exit. Idempotent: the join handle is taken, so a second call does nothing.
     fn shutdown(&mut self) {
         let _ = self.tx.send(Request::Close);
         if let Some(t) = self.thread.take() {
@@ -143,6 +151,7 @@ impl Handle {
 }
 
 impl Drop for Handle {
+    /// Dropping the handle closes the connection and joins the thread, so no thread outlives its owner.
     fn drop(&mut self) {
         self.shutdown();
     }
@@ -150,11 +159,14 @@ impl Drop for Handle {
 
 /// A plaintext or TLS stream.
 enum Transport {
+    /// An unencrypted connection.
     Plain(TcpStream),
+    /// A TLS connection; boxed to keep the enum small.
     Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
 }
 
 impl Read for Transport {
+    /// Read from the underlying plain or TLS stream.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Transport::Plain(s) => s.read(buf),
@@ -164,6 +176,7 @@ impl Read for Transport {
 }
 
 impl Write for Transport {
+    /// Write to the underlying plain or TLS stream.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Transport::Plain(s) => s.write(buf),
@@ -171,6 +184,7 @@ impl Write for Transport {
         }
     }
 
+    /// Flush the underlying plain or TLS stream.
     fn flush(&mut self) -> io::Result<()> {
         match self {
             Transport::Plain(s) => s.flush(),
@@ -180,6 +194,7 @@ impl Write for Transport {
 }
 
 impl Transport {
+    /// The raw TCP socket under either variant (for timeouts and shutdown).
     fn tcp(&self) -> &TcpStream {
         match self {
             Transport::Plain(s) => s,
@@ -188,6 +203,7 @@ impl Transport {
     }
 }
 
+/// Open a TCP connection, trying each resolved address in turn with the configured connect timeout; returns the last error if all fail.
 fn dial(options: &ConnectOptions) -> io::Result<TcpStream> {
     let addrs: Vec<SocketAddr> = (options.host.as_str(), options.port)
         .to_socket_addrs()?
@@ -202,6 +218,7 @@ fn dial(options: &ConnectOptions) -> io::Result<TcpStream> {
     Err(last)
 }
 
+/// Build the TLS client configuration: the bundled Mozilla roots (`webpki-roots`, so no OS trust store is needed), the `ring` crypto provider, safe default protocol versions and no client certificate.
 fn tls_config() -> io::Result<Arc<rustls::ClientConfig>> {
     let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -213,6 +230,12 @@ fn tls_config() -> io::Result<Arc<rustls::ClientConfig>> {
     Ok(Arc::new(config))
 }
 
+/// Connect and, if requested, complete the TLS handshake, returning the ready [`Transport`].
+///
+/// The TLS handshake runs under the connect timeout so a certificate problem is
+/// reported before registration starts. The write timeout is a fixed 10 s so a
+/// stalled server cannot block `close`; the steady-state read timeout is the
+/// poll interval so the thread wakes regularly to service requests.
 fn open(options: &ConnectOptions) -> io::Result<Transport> {
     let tcp = dial(options)?;
     tcp.set_nodelay(true)?;
@@ -238,6 +261,7 @@ fn open(options: &ConnectOptions) -> io::Result<Transport> {
     Ok(Transport::Tls(Box::new(stream)))
 }
 
+/// Write each line followed by CRLF and flush once at the end.
 fn write_lines(stream: &mut Transport, lines: &[String]) -> io::Result<()> {
     for line in lines {
         stream.write_all(line.as_bytes())?;
@@ -251,6 +275,7 @@ fn forward(events: &Sender<Event>, step: Vec<Event>) -> bool {
     step.into_iter().all(|e| events.send(e).is_ok())
 }
 
+/// Thread body: run the session and always finish by sending [`Event::Disconnected`] with the reason, whether it ended cleanly or with an error.
 fn run(options: ConnectOptions, requests: &Receiver<Request>, events: &Sender<Event>) {
     let reason = match session(options, requests, events) {
         Ok(reason) => reason,

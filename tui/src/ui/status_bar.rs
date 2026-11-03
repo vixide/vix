@@ -8,6 +8,8 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the status bar: file path with dirty flag, cursor position and the
+/// other indicators.
 pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let (line, col) = app.editor.cursor_1based();
     let path = app

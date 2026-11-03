@@ -218,6 +218,8 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &crate::editor::CodeEditor)
     }
 }
 
+/// Draw the centre column's content: an image preview for image tabs,
+/// otherwise the text editor with its scrollbar.
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
     let is_image = app
         .editor

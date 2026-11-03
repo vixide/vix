@@ -16,6 +16,15 @@
 //! line), and return the rewritten text (and, where the cursor should follow,
 //! its new position). All functions are pure so they can be unit-tested
 //! without a live editor.
+//!
+//! Layout of this file: the model ([`Table`], [`Row`]), recognition and
+//! parsing, rendering/alignment, field navigation, row and column edits,
+//! sorting, rectangle copy/paste, import/export, and last the `#+TBLFM:`
+//! formula engine (references like `@2$3` / `$1..$3` are resolved here and the
+//! arithmetic is delegated to `evalexpr`). Each section is introduced by a
+//! banner comment.
+//!
+//! Owning spec: `crates/vix-org-table/spec/index.md`.
 
 // Tests slice their own ASCII fixtures; the lint guards library code that
 // slices user text.
@@ -65,6 +74,14 @@ fn is_hline_line(line: &str) -> bool {
 /// The `[first_line, last_line]` (inclusive, 0-indexed) line range of the
 /// contiguous run of table lines containing `line`, or `None` if `line` is not
 /// itself a table line.
+///
+/// # Examples
+///
+/// ```
+/// let text = "intro\n| a | b |\n|---+---|\n| 1 | 2 |\noutro";
+/// assert_eq!(vix_org_table::table_range(text, 2), Some((1, 3)));
+/// assert_eq!(vix_org_table::table_range(text, 0), None);
+/// ```
 #[must_use]
 pub fn table_range(text: &str, line: usize) -> Option<(usize, usize)> {
     let lines: Vec<&str> = text.split('\n').collect();
@@ -246,6 +263,13 @@ fn splice_lines(text: &str, first: usize, last: usize, replacement: &str) -> Str
 
 /// Realign (re-render) the table at `line`: `C-c C-c` / `org-table-align`.
 /// `None` if `line` is not inside a table.
+///
+/// # Examples
+///
+/// ```
+/// let aligned = vix_org_table::align("|a|bb|\n|ccc|d|", 0).unwrap();
+/// assert_eq!(aligned, "| a   | bb |\n| ccc | d  |");
+/// ```
 #[must_use]
 pub fn align(text: &str, line: usize) -> Option<String> {
     let (first, last) = table_range(text, line)?;
@@ -313,6 +337,8 @@ fn next_data_row_index(rows: &[Row], from: usize) -> Option<usize> {
     (from + 1..rows.len()).find(|&i| matches!(rows[i], Row::Data(_)))
 }
 
+/// The text of cell `(row, col)`, or `None` for an hline or out-of-range
+/// index (a short row simply has no cell there).
 fn get_cell(table: &Table, row: usize, col: usize) -> Option<String> {
     match table.rows.get(row)? {
         Row::Data(cells) => cells.get(col).cloned(),
@@ -320,6 +346,8 @@ fn get_cell(table: &Table, row: usize, col: usize) -> Option<String> {
     }
 }
 
+/// Set cell `(row, col)`, growing a short data row with empty cells; a
+/// no-op on an hline or out-of-range row (formulas never create rows).
 fn set_cell(table: &mut Table, row: usize, col: usize, value: String) {
     if let Some(Row::Data(cells)) = table.rows.get_mut(row) {
         if col >= cells.len() {

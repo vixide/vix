@@ -5,6 +5,11 @@
 //! copy of this function, including its doc comment — a real duplication,
 //! not domain-driven similarity, since both crates format the exact same
 //! quantity (a file or disk size in bytes) the exact same way.
+//!
+//! Units are binary (1 KiB = 1024 B), labelled `B`/`KiB`/…/`PiB`. The unit
+//! labels themselves are not translated. Use [`human_bytes_for_locale`] for
+//! user-visible output and [`human_bytes`] for locale-independent text (logs,
+//! tests). See `crates/vix-byte-size/spec/index.md` for the spec.
 
 /// Convert a `u64` to the nearest `f64` without a lossy `as` cast. The high
 /// and low 32-bit halves are each representable exactly, so the single
@@ -18,6 +23,17 @@ fn u64_to_f64(n: u64) -> f64 {
 /// Format a byte count as a human-readable size (`16.0 KiB`), always using
 /// `.` as the decimal separator regardless of locale. Prefer
 /// [`human_bytes_for_locale`] for output a user will actually see.
+///
+/// Counts under 1024 print as whole bytes (`1023 B`); larger values are
+/// divided by 1024 until below 1024 (or `PiB` is reached, which then keeps
+/// growing, e.g. `u64::MAX` is `16384.0 PiB`) and shown with one decimal.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_byte_size::human_bytes(1023), "1023 B");
+/// assert_eq!(vix_byte_size::human_bytes(16 * 1024), "16.0 KiB");
+/// ```
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
     const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
@@ -26,6 +42,7 @@ pub fn human_bytes(n: u64) -> String {
     }
     let mut value = u64_to_f64(n);
     let mut unit = 0;
+    // Stop at the last unit rather than indexing past `UNITS`.
     while value >= 1024.0 && unit < UNITS.len() - 1 {
         value /= 1024.0;
         unit += 1;
@@ -45,9 +62,22 @@ const COMMA_DECIMAL_LOCALES: &[&str] = &["de", "es", "fr", "pl", "pt", "ru"];
 /// T567: [`human_bytes`] always used Rust's locale-invariant float
 /// formatting (a literal `.`), which is wrong for the several Vix locales
 /// that conventionally use `,` as their decimal separator.
+///
+/// The locale is matched exactly against a short list (`de`, `es`, `fr`, `pl`,
+/// `pt`, `ru`); any other code, including region-suffixed ones such as
+/// `de-DE`, keeps the `.`.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_byte_size::human_bytes_for_locale(16 * 1024, "de"), "16,0 KiB");
+/// assert_eq!(vix_byte_size::human_bytes_for_locale(16 * 1024, "en"), "16.0 KiB");
+/// ```
 #[must_use]
 pub fn human_bytes_for_locale(n: u64, locale: &str) -> String {
     let formatted = human_bytes(n);
+    // Safe to replace every `.`: the only one in the output is the decimal
+    // point (unit labels contain none).
     if COMMA_DECIMAL_LOCALES.contains(&locale) {
         formatted.replace('.', ",")
     } else {

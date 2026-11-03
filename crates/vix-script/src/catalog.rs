@@ -177,6 +177,8 @@ pub enum CatalogError {
     },
 }
 
+/// Prints the stored message for parse/read failures and a `key: not a string`
+/// note for a non-string table value.
 impl std::fmt::Display for CatalogError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

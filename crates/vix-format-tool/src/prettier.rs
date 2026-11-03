@@ -50,6 +50,7 @@ pub enum PrettierError {
     BadOutput,
 }
 
+/// Short lowercase messages, suitable for the status line.
 impl fmt::Display for PrettierError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -62,6 +63,7 @@ impl fmt::Display for PrettierError {
     }
 }
 
+/// Only [`PrettierError::Io`] wraps another error; the rest are leaf conditions.
 impl std::error::Error for PrettierError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -87,6 +89,8 @@ pub fn is_enabled_for(path: &Path, enabled: &[String]) -> bool {
     language_of(path).is_some_and(|lang| enabled.iter().any(|e| e.eq_ignore_ascii_case(lang)))
 }
 
+/// Executable names to look for, in priority order. On Windows npm installs a
+/// `.cmd` shim, so it is tried before the bare name.
 fn exe_names() -> &'static [&'static str] {
     if cfg!(windows) {
         &["prettier.cmd", "prettier.exe", "prettier"]

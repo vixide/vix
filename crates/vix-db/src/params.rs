@@ -4,6 +4,14 @@
 //! string literals, comments, and `PostgreSQL` `::type` casts) and [`substitute`]
 //! replaces each with a SQL literal once the workbench has prompted for values.
 //! Pure and unit-tested; the workbench drives the prompt.
+//!
+//! The two functions share one set of skipping rules (single-quoted strings,
+//! `--` and `/* */` comments, `::` casts) but are written as separate scans;
+//! keep them in step. Values are always rendered through
+//! [`crate::catalog::quote_literal`], so substitution is textual but safe:
+//! anything that is not a plain number is quoted and escaped. Substituted
+//! text is never recorded in persisted history (see `history_override` in
+//! `lib.rs`). Owning spec: `crates/vix-db/spec/index.md`.
 
 use super::catalog::quote_literal;
 
@@ -14,6 +22,20 @@ fn is_name_char(c: char) -> bool {
 
 /// The distinct `:name` placeholders in `sql`, in first-seen order. Colons in
 /// string literals, comments, and `::` casts are ignored.
+///
+/// A bare `:` not followed by a name character is ignored. Double-quoted
+/// identifiers are *not* skipped, so a `:` inside one would be read as a
+/// placeholder.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::params::names;
+/// assert_eq!(
+///     names("select * from t where a = :id and b = ':no' and c = :id and d = x::int"),
+///     ["id"]
+/// );
+/// ```
 #[must_use]
 pub fn names(sql: &str) -> Vec<String> {
     let chars: Vec<char> = sql.chars().collect();
@@ -72,6 +94,17 @@ pub fn names(sql: &str) -> Vec<String> {
 /// Replace each `:name` in `sql` with its value from `values` as a SQL literal.
 /// Unmatched placeholders are left untouched; the same skipping rules as
 /// [`names`] apply so colons in strings/comments/casts are preserved.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::params::substitute;
+/// let sql = substitute("where n = :n and s = :s", &[
+///     ("n".into(), "5".into()),
+///     ("s".into(), "O'Reilly".into()),
+/// ]);
+/// assert_eq!(sql, "where n = 5 and s = 'O''Reilly'");
+/// ```
 #[must_use]
 pub fn substitute(sql: &str, values: &[(String, String)]) -> String {
     let chars: Vec<char> = sql.chars().collect();

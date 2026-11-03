@@ -35,12 +35,14 @@ impl Password {
 }
 
 impl fmt::Debug for Password {
+    /// Never prints the secret: `Debug` output (logs, panics, test failures) shows only `Password(<redacted>)`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Password(<redacted>)")
     }
 }
 
 impl Drop for Password {
+    /// Zeroize the password bytes on drop so the secret does not linger in freed memory.
     fn drop(&mut self) {
         self.0.zeroize();
     }
@@ -250,6 +252,11 @@ pub struct Step {
 }
 
 impl Step {
+    /// Queue one outgoing protocol line (already without its CRLF).
+    ///
+    /// Encoding can only fail on a programming error (every name was validated or
+    /// came from the server), so a failure silently drops the line instead of
+    /// sending something malformed.
     fn line(&mut self, command: &str, params: &[&str]) {
         // Every name in an outgoing line was checked or came from the
         // server's own lines, so this only fails on a bug; drop the line
@@ -259,11 +266,13 @@ impl Step {
         }
     }
 
+    /// Queue one [`Event`] for the App.
     fn event(&mut self, event: Event) {
         self.events.push(event);
     }
 }
 
+/// Where the connection handshake currently is. It normally advances `Idle -> CapLs -> CapReq -> (Sasl) -> Registering -> Registered`; `001` forces `Registered` from any phase because a server without CAP support welcomes us without any negotiation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     /// Before [`Client::start`].
@@ -285,14 +294,23 @@ enum Phase {
 /// The IRC client state machine. See the module docs.
 #[derive(Debug)]
 pub struct Client {
+    /// The caller's settings. The SASL credentials inside are cleared as soon as the handshake no longer needs them.
     config: Config,
+    /// Handshake progress.
     phase: Phase,
+    /// Our current nick: the configured one, a retry variant after a collision, or what the server assigned on `001`.
     nick: String,
+    /// Server parameters learned from `005` (casemapping, nick length, channel prefixes).
     isupport: Isupport,
+    /// Capabilities from `CAP LS` as `(name, optional value)`.
     offered: Vec<(String, Option<String>)>,
+    /// Capabilities the server acknowledged (`CAP ACK`), minus any it later disabled.
     enabled: Vec<String>,
+    /// Channels requested before registration; joined once `001` arrives.
     pending_joins: Vec<String>,
+    /// Per-channel nick lists being accumulated across `353` lines until `366`.
     names: Vec<(String, Vec<String>)>,
+    /// How many collisions we have retried; capped at `MAX_NICK_RETRIES`.
     nick_retries: u8,
 }
 
@@ -474,6 +492,11 @@ impl Client {
         step
     }
 
+    /// Validate and execute one [`Command`], queueing wire lines into `step`.
+    ///
+    /// Before registration (`001`) `JOIN`s are parked in `pending_joins` and sent
+    /// after the welcome; every other command fails with
+    /// [`TextError::NotRegistered`].
     fn try_command(&mut self, command: Command, step: &mut Step) -> Result<(), TextError> {
         let registered = self.phase == Phase::Registered;
         match command {
@@ -534,6 +557,7 @@ impl Client {
         Ok(())
     }
 
+    /// `Ok` when the connection is registered, else [`TextError::NotRegistered`].
     fn need_registered(registered: bool) -> Result<(), TextError> {
         if registered {
             Ok(())
@@ -542,14 +566,17 @@ impl Client {
         }
     }
 
+    /// The most text one outgoing message may carry: the 512-byte line limit minus what the server will prepend when relaying (our `nick!user@host` prefix, see `relay_reserve`).
     fn max_line(&self) -> usize {
         MAX_LINE.saturating_sub(relay_reserve(&self.nick, &self.config.user))
     }
 
+    /// The IRCv3 `server-time` tag of `line` in Unix milliseconds, if present and well formed.
     fn time_of(line: &Line) -> Option<i64> {
         line.tag("time").and_then(server_time_millis)
     }
 
+    /// Handle `CAP` replies. `LS` (possibly spread over several lines; a `*` marker means more follow) accumulates the offered capabilities and, on the last chunk, requests the wanted ones. `ACK` updates the enabled set (a `-name` entry disables one); while a request is outstanding it then starts SASL PLAIN if `sasl` was granted and credentials exist, otherwise ends negotiation. `NAK` ends negotiation so registration still completes without the optional features.
     fn on_cap(&mut self, line: &Line, step: &mut Step) {
         // CAP <target> <sub> [*] :<caps>
         let sub = line.param(1).to_ascii_uppercase();
@@ -595,6 +622,7 @@ impl Client {
         }
     }
 
+    /// True when the server offered `sasl` and either did not list mechanisms (CAP 3.1) or lists `PLAIN` among them.
     fn sasl_plain_offered(&self) -> bool {
         self.offered.iter().any(|(name, value)| {
             name == "sasl"
@@ -604,6 +632,10 @@ impl Client {
         })
     }
 
+    /// Send `CAP REQ` for the offered subset of `WANTED_CAPS`.
+    ///
+    /// `sasl` is only requested when credentials are configured and the server
+    /// offers the PLAIN mechanism. With nothing to ask for, negotiation ends at once.
     fn request_caps(&mut self, step: &mut Step) {
         let wanted: Vec<&str> = WANTED_CAPS
             .iter()
@@ -619,6 +651,10 @@ impl Client {
         }
     }
 
+    /// Answer the server's `AUTHENTICATE +` prompt with the SASL PLAIN payload.
+    ///
+    /// The credentials are taken (`Option::take`) so they are used for exactly one
+    /// attempt and cannot be replayed on a reconnect.
     fn on_authenticate(&mut self, line: &Line, step: &mut Step) {
         if self.phase != Phase::Sasl || line.param(0) != "+" {
             return;
@@ -647,6 +683,7 @@ impl Client {
         encoded.zeroize();
     }
 
+    /// Finish capability negotiation with `CAP END` and move on to registration. The SASL password is dropped here, since it is only needed during the handshake.
     fn end_cap(&mut self, step: &mut Step) {
         // The password is needed for one handshake only.
         self.config.sasl = None;
@@ -656,6 +693,10 @@ impl Client {
         }
     }
 
+    /// Pick another nickname after a `433` (in use) reply.
+    ///
+    /// Appends `_`; when the server's `NICKLEN` would be exceeded the last character
+    /// is replaced instead so the retry is always legal.
     fn retry_nick(&mut self, step: &mut Step) {
         self.nick_retries += 1;
         let mut next = format!("{}_", self.nick);
@@ -674,6 +715,7 @@ impl Client {
         self.nick = next;
     }
 
+    /// Handle `001`: registration is complete. Adopts the nick the server actually assigned, drops any leftover SASL credentials (a server without CAP never needed them), emits [`Event::Connected`] and flushes the parked joins.
     fn on_welcome(&mut self, line: &Line, step: &mut Step) {
         // A server without CAP support goes straight to 001.
         self.config.sasl = None;
@@ -691,6 +733,7 @@ impl Client {
         }
     }
 
+    /// Accumulate one `353` (`NAMES`) reply chunk for a channel, stripping the membership prefixes (`~&@%+`) so only nicks are kept. The list is emitted on `366`.
     fn on_names(&mut self, line: &Line) {
         // 353 me <type> <channel> :nicks
         let channel = line.param(2).to_string();
@@ -707,6 +750,7 @@ impl Client {
         }
     }
 
+    /// Handle `366` (end of `NAMES`): emit the nicks accumulated for the channel as one [`Event::Names`].
     fn on_end_names(&mut self, line: &Line, step: &mut Step) {
         let channel = line.param(1);
         let at = self.names.iter().position(|(c, _)| c == channel);
@@ -717,6 +761,7 @@ impl Client {
         });
     }
 
+    /// A `JOIN`: our own is [`Event::Joined`], anyone else's is [`Event::UserJoined`].
     fn on_join(&self, line: &Line, step: &mut Step) {
         let channel = line.param(0).to_string();
         let who = line.source_nick();
@@ -730,6 +775,7 @@ impl Client {
         }
     }
 
+    /// A `PART`: our own is [`Event::Parted`], anyone else's is [`Event::UserParted`]; an empty reason is reported as `None`.
     fn on_part(&self, line: &Line, step: &mut Step) {
         let channel = line.param(0).to_string();
         let reason = line.params.get(1).cloned().filter(|r| !r.is_empty());
@@ -745,6 +791,7 @@ impl Client {
         }
     }
 
+    /// A `KICK`: when we are the victim it is reported as our own [`Event::Parted`], otherwise the victim leaves as a [`Event::UserParted`].
     fn on_kick(&self, line: &Line, step: &mut Step) {
         // KICK <channel> <nick> [:reason]
         let channel = line.param(0).to_string();
@@ -761,6 +808,7 @@ impl Client {
         }
     }
 
+    /// A `NICK` change; tracks our own new nick so later `is_me` checks stay correct.
     fn on_nick(&mut self, line: &Line, step: &mut Step) {
         let old = line.source_nick().to_string();
         let new = line.param(0).to_string();
@@ -771,6 +819,7 @@ impl Client {
         step.event(Event::NickChanged { old, new, is_self });
     }
 
+    /// A `PRIVMSG` body: decodes a CTCP `ACTION` (`/me`) and silently ignores any other CTCP request, which is never answered.
     fn on_privmsg(&self, line: &Line, step: &mut Step) {
         let body = line.param(1);
         let (text, is_action) = match ctcp::decode_action(body) {
@@ -794,6 +843,7 @@ impl Client {
         });
     }
 
+    /// Turn a numeric error reply (400-599, exactly three digits) into an [`Event::Error`] (`433` becomes [`ErrorKind::NickInUse`], the rest [`ErrorKind::Numeric`]); every other command is ignored.
     fn on_other(command: &str, line: &Line, step: &mut Step) {
         let Ok(code) = command.parse::<u16>() else {
             return;

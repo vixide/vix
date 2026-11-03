@@ -679,6 +679,10 @@ const TOGGLE_WORDS: &[(&str, &str)] = &[
     ("min", "max"),
     ("and", "or"),
 ];
+/// Symbol pairs that `smart_toggle_at` flips in either direction (`&&` <-> `||`, `==` <-> `!=`, ...).
+///
+/// Entries are tried in order and two-character operators come before their
+/// one-character prefixes, so `<=` is matched as `<=` rather than as `<`.
 const TOGGLE_SYMBOLS: &[(&str, &str)] = &[
     ("&&", "||"),
     ("==", "!="),

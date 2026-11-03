@@ -93,6 +93,7 @@ pub mod terminal {
     pub struct Tabs<T>(core::marker::PhantomData<T>);
 
     impl<T> Default for Tabs<T> {
+        /// An empty tab set (the only kind this stub has).
         fn default() -> Self {
             Tabs(core::marker::PhantomData)
         }
@@ -260,6 +261,10 @@ pub use crate::clock_panel as clock;
 // their `vix::…` paths working.
 #[cfg(test)]
 extern crate self as vix;
+// The integration tests are compiled into the library's own test target (not a
+// separate `tests/` binary) so they can reach crate-private items through
+// `crate::` / the `vix::` alias above; run them with
+// `cargo test -p vix-tui --lib -- <filter>`.
 #[cfg(test)]
 #[path = "../tests/integration/main.rs"]
 mod integration;

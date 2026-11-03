@@ -3,7 +3,8 @@
 //! `name PASSED/FAILED/SKIPPED` shape (pytest `-v`, many others).
 //!
 //! Pure text → data, so it is unit-testable; the host runs the command (via the
-//! async pipeline) and renders the [`TestResult`]s.
+//! async pipeline) and renders the [`TestResult`]s. Spec:
+//! `crates/vix-test-runner/spec/index.md`.
 
 /// Outcome of a single test.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -27,7 +28,15 @@ pub struct TestResult {
     pub location: Option<(String, usize)>,
 }
 
-/// Counts of passed / failed / ignored in a result set.
+/// Counts of passed / failed / ignored in a result set, as
+/// `(passed, failed, ignored)`.
+///
+/// # Examples
+/// ```
+/// use vix_test_runner::{parse, tally};
+/// let r = parse("test a ... ok\ntest b ... FAILED\n");
+/// assert_eq!(tally(&r), (1, 1, 0));
+/// ```
 #[must_use]
 pub fn tally(results: &[TestResult]) -> (usize, usize, usize) {
     let mut pass = 0;
@@ -46,6 +55,22 @@ pub fn tally(results: &[TestResult]) -> (usize, usize, usize) {
 /// Parse test-runner `output` lines into results, attaching failure locations
 /// found in libtest failure blocks. Results are sorted by name (which groups
 /// them by module prefix).
+///
+/// Lines are tried in order: a libtest `test NAME ... STATUS` line; the generic
+/// `NAME PASSED|FAILED|SKIPPED` shape; a libtest `---- NAME stdout ----`
+/// header, which selects which failure the next `panicked at FILE:LINE:COL`
+/// line belongs to. Unrecognised lines are ignored, so noisy compiler output is
+/// harmless and a run with no recognised lines yields an empty list.
+///
+/// # Examples
+/// ```
+/// use vix_test_runner::{parse, Status};
+/// let out = "test m::bad ... FAILED\n\n---- m::bad stdout ----\n\
+///            thread 'm::bad' panicked at src/lib.rs:7:5:\n";
+/// let r = parse(out);
+/// assert_eq!(r[0].status, Status::Fail);
+/// assert_eq!(r[0].location, Some(("src/lib.rs".to_string(), 7)));
+/// ```
 #[must_use]
 pub fn parse(output: &str) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
@@ -68,7 +93,8 @@ pub fn parse(output: &str) -> Vec<TestResult> {
                 continue;
             }
         }
-        // Generic: `path::name PASSED | FAILED | SKIPPED` (pytest -v, etc.).
+        // Reached when the libtest branch did not match (or its tail was an
+        // unknown status). Generic: `path::name PASSED | FAILED | SKIPPED` (pytest -v, etc.).
         if let Some((name, verdict)) = trimmed.rsplit_once(' ') {
             let status = match verdict {
                 "PASSED" => Some(Status::Pass),
@@ -99,6 +125,7 @@ pub fn parse(output: &str) -> Vec<TestResult> {
     }
 
     results.sort_by(|a, b| a.name.cmp(&b.name));
+    // `upsert` already keeps names unique; this is a defensive no-op.
     results.dedup_by(|a, b| a.name == b.name);
     results
 }
@@ -133,6 +160,8 @@ fn panic_location(line: &str) -> Option<(String, usize)> {
     let mut parts = after.trim().splitn(3, ':');
     let file = parts.next()?.trim();
     let line_no: usize = parts.next()?.trim().parse().ok()?;
+    // Reject prose like `note: 3 failed` that merely contains a colon: a real
+    // path has a separator or an extension.
     if file.is_empty() || !file.contains(['/', '.']) {
         return None;
     }

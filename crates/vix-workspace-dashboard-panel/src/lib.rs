@@ -4,6 +4,10 @@
 //! usage via `du`, a recursive file count, and the git commit count — and each
 //! metric stays `None` until its computation finishes, so the panel can show a
 //! "computing…" placeholder. The host owns the threads and rendering.
+//!
+//! The `None` vs `Some` split is the whole protocol: there is no separate
+//! "loading" flag, so a metric can never be marked done without a value.
+//! Spec: `crates/vix-workspace-dashboard-panel/spec/index.md`.
 
 /// Workspace metrics shown in the dashboard. Each `Option` is `None` while its
 /// background computation is still running.
@@ -20,6 +24,12 @@ pub struct Dashboard {
 
 impl Dashboard {
     /// A dashboard for `folder` with every metric still pending.
+    ///
+    /// # Examples
+    /// ```
+    /// let d = vix_workspace_dashboard_panel::Dashboard::new("vix");
+    /// assert!(!d.is_complete());
+    /// ```
     #[must_use]
     pub fn new(folder: impl Into<String>) -> Self {
         Dashboard {

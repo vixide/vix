@@ -1,4 +1,14 @@
 //! What an agent may touch: workspace path containment and permission choice.
+//!
+//! The agent is untrusted code that names file paths in requests such as
+//! `fs/read_text_file`. Everything here is the gatekeeper between those
+//! requests and the file system; [`crate::client::Client`] and the App call it
+//! before any read or write. [`contain`] is purely lexical (cheap, testable);
+//! [`contain_on_disk`] adds the symlink check that needs the real file system.
+//! Permission helpers deliberately only ever pick a *one-shot* allow, or a
+//! reject: a standing grant must be an explicit user decision elsewhere.
+//!
+//! Owning spec: `crates/vix-acp/spec/index.md` (trust model).
 
 use std::path::{Component, Path, PathBuf};
 
@@ -18,9 +28,25 @@ pub enum PathError {
 /// Lexically check that `requested` is an absolute path inside `root`, with no
 /// `..`. Pure: touches no file system. See [`contain_on_disk`] for symlinks.
 ///
+/// `starts_with` compares whole path components, so `/w/proj2/x` is *not*
+/// inside `/w/proj`.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use vix_acp::policy::{contain, PathError};
+/// let root = Path::new("/w/proj");
+/// assert!(contain(root, "/w/proj/a.rs").is_ok());
+/// assert_eq!(contain(root, "/w/proj/../x"), Err(PathError::Traversal));
+/// assert_eq!(contain(root, "a.rs"), Err(PathError::NotAbsolute));
+/// ```
+///
 /// # Errors
 /// [`PathError`] naming the first rule the path breaks.
 pub fn contain(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
+    // A NUL byte could truncate the path at the OS boundary and make a
+    // checked path differ from the one actually opened.
     if requested.contains('\0') {
         return Err(PathError::Traversal);
     }
@@ -47,7 +73,11 @@ pub fn contain(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
 /// leads out of the root.
 pub fn contain_on_disk(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
     let path = contain(root, requested)?;
+    // Canonicalise the root too: it may itself sit behind a symlink (e.g.
+    // macOS `/tmp` -> `/private/tmp`), which would otherwise fail `starts_with`.
     let real_root = root.canonicalize().map_err(|_| PathError::Outside)?;
+    // A file the agent is about to create does not exist, so `canonicalize`
+    // fails; walk up to the nearest ancestor that does and judge that instead.
     let mut probe = path.as_path();
     loop {
         if let Ok(real) = probe.canonicalize() {

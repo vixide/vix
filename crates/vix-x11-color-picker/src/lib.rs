@@ -7,6 +7,9 @@
 //! — the color table is bundled as a TSV and parsed once on first use, and a
 //! [`Panel`] tracks the highlighted row and scroll offset. The host renders the
 //! rows, maps clicks to rows, and inserts the chosen hex.
+//!
+//! List navigation delegates to `vix_list_state`. Spec:
+//! `crates/vix-x11-color-picker/spec/index.md`.
 
 use std::sync::OnceLock;
 
@@ -26,8 +29,15 @@ pub struct Color {
 
 /// The X11 color table, parsed once from the bundled TSV (the header row is
 /// skipped). Never empty in practice.
+///
+/// # Examples
+/// ```
+/// let first = &vix_x11_color_picker::colors()[0];
+/// assert_eq!((first.name, first.hex), ("AliceBlue", "#F0F8FF"));
+/// ```
 #[must_use]
 pub fn colors() -> &'static [Color] {
+    // Parsed lazily, once per process; rows borrow the embedded TSV.
     static COLORS: OnceLock<Vec<Color>> = OnceLock::new();
     COLORS.get_or_init(|| {
         include_str!("x11-color-list.tsv")
@@ -38,7 +48,9 @@ pub fn colors() -> &'static [Color] {
     })
 }
 
-/// Parse one `Name<TAB>#Hex<TAB>R<TAB>G<TAB>B` row; `None` for malformed lines.
+/// Parse one `Name<TAB>#Hex<TAB>R<TAB>G<TAB>B` row; `None` for malformed lines
+/// (missing fields, non-numeric or out-of-`u8`-range components, empty name).
+/// The hex string is taken as written, not recomputed from `r`/`g`/`b`.
 fn parse_line(line: &'static str) -> Option<Color> {
     let mut f = line.split('\t');
     let name = f.next()?.trim();
@@ -55,6 +67,16 @@ fn parse_line(line: &'static str) -> Option<Color> {
 /// Selection + scroll state for the X11 color palette overlay: a row index into
 /// [`colors`] plus the first visible row, so the host can render a scrolling
 /// window.
+///
+/// # Examples
+/// ```
+/// let mut p = vix_x11_color_picker::Panel::open();
+/// p.down();
+/// assert_eq!(p.selected, 1);
+/// p.up();
+/// p.up(); // clamps at the top
+/// assert_eq!(p.selected, 0);
+/// ```
 pub struct Panel {
     /// Index of the highlighted row.
     pub selected: usize,
@@ -129,7 +151,8 @@ impl Panel {
             vix_list_state::ensure_visible(self.selected, self.scroll, height, self.len());
     }
 
-    /// The highlighted color.
+    /// The highlighted color. `selected` is clamped to the last row so this
+    /// never indexes out of range even if a caller set `selected` directly.
     #[must_use]
     pub fn selected_color(&self) -> &'static Color {
         let i = self.selected.min(self.len().saturating_sub(1));

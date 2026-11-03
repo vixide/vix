@@ -19,6 +19,7 @@ pub fn encode(value: &Value) -> Vec<u8> {
 /// to pop each complete JSON message. Partial messages stay buffered.
 #[derive(Default)]
 pub struct Decoder {
+    /// Bytes received but not yet consumed as a whole message.
     buf: Vec<u8>,
 }
 

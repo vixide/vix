@@ -4,12 +4,15 @@
 //! (`A–Z a–z 0–9 - _ . ~`), so the result is safe to drop into any part of a
 //! URL — spaces become `%20`, not `+`. [`decode`] reverses any `%XX` escapes and
 //! reports an error when the result is not valid UTF-8.
+//!
+//! Owning spec: `crates/vix-url-tool/spec/index.md`.
 
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, percent_encode};
 
 /// Everything except the RFC 3986 "unreserved" set is escaped: start from all
 /// controls and add every ASCII punctuation/space character except `-`, `_`,
-/// `.`, and `~`.
+/// `.`, and `~`. Non-ASCII bytes are always escaped by `percent_encoding`
+/// itself (they are outside any `AsciiSet`), so UTF-8 text encodes byte-wise.
 const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'!')
@@ -69,6 +72,13 @@ impl std::error::Error for UrlError {
 
 /// Percent-encode `input` for safe use anywhere in a URL.
 ///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_url_tool::encode("a b/c?").unwrap(), "a%20b%2Fc%3F");
+/// assert_eq!(vix_url_tool::decode("a%20b%2Fc%3F").unwrap(), "a b/c?");
+/// ```
+///
 /// # Errors
 /// Never fails; returns `Result` for a uniform tool interface with [`decode`].
 pub fn encode(input: &str) -> Result<String, UrlError> {
@@ -80,6 +90,9 @@ pub fn encode(input: &str) -> Result<String, UrlError> {
 /// # Errors
 /// Returns [`UrlError::NotUtf8`] when the decoded bytes are not valid UTF-8.
 pub fn decode(input: &str) -> Result<String, UrlError> {
+    // Malformed escapes (`%zz`, a trailing `%`) pass through literally rather
+    // than erroring; only invalid UTF-8 in the *decoded* bytes is an error.
+    // `+` is not treated as a space (this is not form decoding).
     percent_decode_str(input)
         .decode_utf8()
         .map(std::borrow::Cow::into_owned)

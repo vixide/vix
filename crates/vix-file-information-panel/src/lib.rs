@@ -6,6 +6,10 @@
 //! gathers the raw values (it owns the buffer and does the filesystem stat) into
 //! a [`FileInfo`]; this crate formats them into [`Row`]s and tracks the selection
 //! so a value can be inserted into the editor.
+//!
+//! Labels and the Modified / Unsaved wording are translated via `t!` (T563);
+//! the formatting helpers delegate to `vix-byte-size` and `vix-civil-date`.
+//! Spec: `crates/vix-file-information-panel/spec/index.md`.
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
@@ -16,6 +20,10 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 /// Raw facts the host gathers about the active file.
+///
+/// `Default` is an empty, clean, unsaved buffer; the optional fields are `None`
+/// exactly when the host has no on-disk data (unsaved file, or a platform
+/// without the concept).
 #[derive(Clone, Debug, Default)]
 pub struct FileInfo {
     /// File name (e.g. `main.rs`), or a placeholder for an unsaved buffer.
@@ -50,6 +58,7 @@ pub struct Row {
 }
 
 impl Row {
+    /// Build a row from an already-translated `label` and its `value`.
     fn new(label: &str, value: impl Into<String>) -> Self {
         Row {
             label: label.to_string(),
@@ -59,6 +68,21 @@ impl Row {
 }
 
 /// Build the display rows for `info`.
+///
+/// Always emits Name, Path, Language, Modified (the dirty flag, not a time),
+/// Characters, Words and Lines; Size, Permissions and Last Modified are
+/// appended only when the matching `Option` is `Some`. An empty name or path is
+/// shown as the translated "unsaved" placeholder. Labels and wording follow the
+/// active locale.
+///
+/// # Examples
+/// ```
+/// use vix_file_information_panel::{rows, FileInfo};
+///
+/// let info = FileInfo { lines: 1, ..Default::default() };
+/// // Unsaved, so no Size/Permissions/Last-Modified rows.
+/// assert_eq!(rows(&info).len(), 7);
+/// ```
 #[must_use]
 pub fn rows(info: &FileInfo) -> Vec<Row> {
     let unsaved = t!("info.unsaved").to_string();
@@ -118,6 +142,8 @@ pub fn rows(info: &FileInfo) -> Vec<Row> {
 /// Format a byte count as a human-readable size (`16.0 KiB`), using the
 /// active locale's decimal-separator convention (T567).
 ///
+/// The separator depends on the process-global locale, so there is no doctest.
+///
 /// Delegates to `vix-byte-size` (Run H, T521) — this crate and
 /// `vix-system-information-panel` used to each hand-roll an identical copy.
 #[must_use]
@@ -126,6 +152,15 @@ pub fn human_bytes(n: u64) -> String {
 }
 
 /// Format Unix permission bits as a `rwxr-xr-x`-style string (low 9 bits).
+///
+/// Only the rwx triplets are shown; setuid/setgid/sticky and the file-type bits
+/// are ignored here (the octal form shown beside it keeps the low 12 bits).
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_file_information_panel::format_unix_mode(0o755), "rwxr-xr-x");
+/// assert_eq!(vix_file_information_panel::format_unix_mode(0o600), "rw-------");
+/// ```
 #[must_use]
 pub fn format_unix_mode(mode: u32) -> String {
     let bit = |shift: u32, ch: char| if mode & (1 << shift) != 0 { ch } else { '-' };
@@ -148,7 +183,18 @@ pub fn format_unix_mode(mode: u32) -> String {
 ///
 /// Delegates to `vix-civil-date` (Run H, T520) — this crate, `vix-git`, and
 /// `vix-org` used to each hand-roll an independent copy of the same
-/// day-count-to-calendar-date algorithm.
+/// day-count-to-calendar-date algorithm. Only the date part is delegated; the
+/// time of day is computed here. Negative (pre-1970) `secs` work because
+/// `div_euclid`/`rem_euclid` floor toward negative infinity.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_file_information_panel::format_unix_time(0), "1970-01-01 00:00:00 UTC");
+/// assert_eq!(
+///     vix_file_information_panel::format_unix_time(1_609_459_200),
+///     "2021-01-01 00:00:00 UTC"
+/// );
+/// ```
 #[must_use]
 pub fn format_unix_time(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
@@ -159,6 +205,9 @@ pub fn format_unix_time(secs: i64) -> String {
 }
 
 /// Selection + scroll state for the File Information overlay.
+///
+/// The rows are fixed at [`Panel::open`] time; the panel is a snapshot and does
+/// not track later edits to the file.
 pub struct Panel {
     /// The rows, in display order.
     pub rows: Vec<Row>,

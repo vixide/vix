@@ -182,7 +182,7 @@ vix-editor = { path = "../crates/vix-editor", version = "2.0.0", default-feature
 vix-editor-core = { path = "../crates/vix-editor-core", version = "2.0.0", default-features = false }
 # LSP client: process management and document sync over `vix_lsp_core`.
 vix-lsp = { path = "../crates/vix-lsp", version = "2.0.0", default-features = false }
-# Top menu bar with keyboard-navigable dropdowns (one level of submenus).
+# Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested submenu levels).
 vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
 # buffer (see crates/vix-script/spec/index.md). Optional behind the `script`

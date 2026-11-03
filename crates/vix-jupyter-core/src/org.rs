@@ -33,6 +33,7 @@ pub struct ResultsEdit {
     pub text: String,
 }
 
+/// Whether `line` would be mistaken for Org structure inside a block (a heading `*` or a `#+` keyword, ignoring leading blanks and any existing comma). Such lines get a leading comma, Org's own escape for block contents.
 fn needs_escape(line: &str) -> bool {
     let rest = line.trim_start_matches([' ', '\t']).trim_start_matches(',');
     rest.starts_with('*') || rest.starts_with("#+")
@@ -80,6 +81,7 @@ pub fn results_block(value: &ResultValue) -> String {
     out
 }
 
+/// Whether `line` starts an Org results block (`#+RESULTS:` or `#+RESULTS[hash]:`), case-insensitively.
 fn is_results_line(line: &str) -> bool {
     let t = line.trim_start().to_ascii_lowercase();
     t.starts_with("#+results:") || t.starts_with("#+results[")
@@ -187,6 +189,7 @@ pub fn results_append_edit(buffer: &str, end_src: usize, block: &str) -> Results
     }
 }
 
+/// Byte offset of the start of 0-based `line` in `buffer`; the buffer length when `line` is past the end.
 fn line_offset(buffer: &str, line: usize) -> usize {
     if line == 0 {
         return 0;

@@ -211,6 +211,7 @@ impl App {
     pub(super) fn ai_generate_doc_comment(&mut self) {
         // A generous but bounded context window -- enough for a typical
         // function/type/impl block without risking sending the whole file.
+        // Lines of surrounding text sent to the assistant with the doc-comment prompt.
         const CONTEXT_LINES: usize = 40;
         if self.ai_replace.is_some() {
             self.status = t!("status.ai_busy").to_string();
@@ -272,7 +273,7 @@ impl App {
         }
     }
 
-    /// Spawn the configured AI command (see [`Settings::ai_command`]) over `text`,
+    /// Spawn the configured AI command (see `Settings::ai_command`) over `text`,
     /// returning a receiver for its captured stdout (or `None` after reporting an
     /// empty input or a spawn failure). The reader thread sends one [`AiMsg`] when
     /// the CLI exits. The command is built from the `ai_command` template so the
@@ -318,7 +319,7 @@ impl App {
     }
 
     /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: dispatch
-    /// on [`Settings::ai_provider`] (T124) to either the original CLI shell-out
+    /// on `Settings::ai_provider` (T124) to either the original CLI shell-out
     /// ([`Self::spawn_ai_cli`], the `"cli"` default — every existing call site
     /// is unaffected) or a direct HTTP provider ([`Self::spawn_ai_http`]).
     /// Unlike [`Self::spawn_ai`] this does **not** reject empty input — a chat
@@ -339,7 +340,7 @@ impl App {
         }
     }
 
-    /// Run the configured CLI (see [`Settings::ai_command`]) over `text`,
+    /// Run the configured CLI (see `Settings::ai_command`) over `text`,
     /// returning a receiver for its captured stdout (or `None` after reporting a
     /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
     /// The command is built from the `ai_command` template so the AI menu can
@@ -350,6 +351,12 @@ impl App {
         clippy::expect_used,
         reason = "stdout was configured as piped when the child was spawned"
     )]
+    /// Spawn the configured assistant CLI (`ai_command`) in a background thread and return the
+    /// receiver its output streams over.
+    ///
+    /// Returns `None` (with a status message set) when the private temp input file cannot be
+    /// written. `prompt` is the instruction and `text` the buffer or selection text passed to
+    /// the command through a temp file.
     pub(super) fn spawn_ai_cli(
         &mut self,
         prompt: &str,

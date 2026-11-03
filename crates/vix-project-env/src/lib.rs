@@ -14,6 +14,30 @@
 //!
 //! Starting `direnv`/`mise` needs the `process` Cargo feature (enabled by
 //! Vix's `tasks` capability); without it they are never started.
+//!
+//! **Order and precedence.** [`resolve_with`] tries, in order: a user-defined
+//! [`Detector`] from `.vix/env.toml`, then direnv, then mise, then the `.venv`
+//! (see [`Source`]). The first that yields variables wins; the `.venv` is the
+//! fallback and is also what remains when a trusted tool prints nothing.
+//!
+//! **Process-global state.** The active environment lives in one `static`
+//! behind a mutex ([`set_active`]), because the consumers (language-server
+//! launch, task runner, terminal) are in different crates and have no shared
+//! context to carry it. All pure functions here take explicit arguments and
+//! are what the tests exercise. App side: `tui/src/app/project_env.rs`.
+//! Owning spec: `crates/vix-project-env/spec/index.md`.
+//!
+//! ```
+//! use std::path::Path;
+//! use vix_project_env::resolve_with;
+//!
+//! // An empty directory has no environment; nothing is run.
+//! let never = |_: &str, _: &[&str], _: &Path| -> Option<String> { unreachable!() };
+//! let dir = std::env::temp_dir().join("vix-project-env-doctest");
+//! std::fs::create_dir_all(&dir).unwrap();
+//! let resolved = resolve_with(&dir, false, &never, None);
+//! assert!(resolved.env.is_none() && resolved.blocked.is_none());
+//! ```
 
 #[cfg(feature = "process")]
 mod run;
@@ -58,11 +82,15 @@ impl Source {
 }
 
 /// A resolved environment: variable overrides for spawned processes.
+///
+/// It is a *delta* applied on top of the inherited environment, not a full
+/// environment: `Some` sets a variable and `None` removes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectEnv {
     /// Where it came from.
     pub source: Source,
-    /// Variables to set (`Some`) or remove (`None`), in a stable order.
+    /// Variables to set (`Some`) or remove (`None`), in a stable order
+    /// (`BTreeMap`, so status text and tests are deterministic).
     pub vars: BTreeMap<String, Option<String>>,
 }
 
@@ -96,7 +124,7 @@ pub struct Detector {
     pub command: Vec<String>,
 }
 
-/// The `.vix/env.toml` file shape.
+/// The `.vix/env.toml` file shape: zero or more `[[detector]]` tables.
 #[derive(serde::Deserialize)]
 struct DetectorFile {
     #[serde(default)]
@@ -105,6 +133,10 @@ struct DetectorFile {
 
 impl Detector {
     /// Whether the detector is well-formed and safe to evaluate.
+    ///
+    /// `detect` paths must be relative and free of `..`, so a checked-in
+    /// config cannot probe files outside the project; NUL bytes are refused
+    /// because they cannot be passed to a process or path API.
     fn valid(&self) -> bool {
         let rel_ok = |p: &String| {
             let path = Path::new(p);
@@ -124,7 +156,8 @@ impl Detector {
             && !self.command[0].is_empty()
     }
 
-    /// Whether any of the detector's files exists under `root`.
+    /// Whether any of the detector's files exists under `root` (`exists`,
+    /// not `is_file`, so a directory marker also counts).
     fn applies(&self, root: &Path) -> bool {
         self.detect.iter().any(|f| root.join(f).exists())
     }
@@ -134,6 +167,8 @@ impl Detector {
 /// detectors, an invalid detector) rejects the whole file: `None`.
 #[must_use]
 pub fn parse_detectors(text: &str) -> Option<Vec<Detector>> {
+    // All-or-nothing on purpose: a half-applied file could silently run a
+    // different command than its author intended.
     let file: DetectorFile = toml::from_str(text).ok()?;
     if file.detector.len() > MAX_DETECTORS || !file.detector.iter().all(Detector::valid) {
         return None;
@@ -156,6 +191,8 @@ pub fn load_detectors(root: &Path) -> Vec<Detector> {
 /// valid user detector whose files exist.
 #[must_use]
 pub fn needs_trust(root: &Path) -> bool {
+    // `.venv` is deliberately absent: it only reads files, so it never
+    // warrants a prompt.
     detect_code_source(root).is_some() || load_detectors(root).iter().any(|d| d.applies(root))
 }
 
@@ -187,11 +224,15 @@ pub fn find_venv(root: &Path) -> Option<PathBuf> {
 /// its `bin` (or `Scripts`) directory prefixed onto `PATH`. Pure file reads.
 #[must_use]
 pub fn venv_env(venv: &Path, current_path: Option<&OsString>) -> ProjectEnv {
+    // Windows venvs use `Scripts`; prefer it only when `bin` is absent so a
+    // POSIX venv on a shared filesystem is not misread.
     let bin = if venv.join("Scripts").is_dir() && !venv.join("bin").is_dir() {
         venv.join("Scripts")
     } else {
         venv.join("bin")
     };
+    // The venv's bin directory goes first so its `python` shadows the system
+    // one, exactly as `activate` does.
     let mut dirs = vec![bin];
     if let Some(p) = current_path {
         dirs.extend(std::env::split_paths(p));
@@ -201,6 +242,8 @@ pub fn venv_env(venv: &Path, current_path: Option<&OsString>) -> ProjectEnv {
         "VIRTUAL_ENV".to_string(),
         Some(venv.to_string_lossy().into_owned()),
     );
+    // `join_paths` fails only for a path containing the separator; then we
+    // leave PATH alone rather than set a broken one.
     if let Ok(joined) = std::env::join_paths(dirs) {
         vars.insert(
             "PATH".to_string(),
@@ -224,6 +267,8 @@ pub fn parse_env_json(text: &str) -> Option<BTreeMap<String, Option<String>>> {
     let object = value.as_object()?;
     let mut out = BTreeMap::new();
     for (key, val) in object {
+        // Names the OS cannot represent in an environment block would make
+        // `Command::env` panic; reject the whole document instead.
         if key.is_empty() || key.contains('=') || key.contains('\0') {
             return None;
         }
@@ -242,7 +287,9 @@ pub fn parse_env_json(text: &str) -> Option<BTreeMap<String, Option<String>>> {
 
 /// Resolve the workspace's environment with the real `direnv`/`mise`.
 ///
-/// `trusted` must be the workspace-trust decision; see the module docs.
+/// `trusted` must be the workspace-trust decision; see the module docs. This
+/// may start external programs (each limited to a few seconds) and so should
+/// not be called on the UI thread.
 #[must_use]
 pub fn resolve(root: &Path, trusted: bool) -> Resolved {
     resolve_with(
@@ -262,6 +309,8 @@ pub fn resolve_with(
     current_path: Option<&OsString>,
 ) -> Resolved {
     let mut out = Resolved::default();
+    // 1. User detectors override everything built in. Only the first
+    //    applicable one is tried; if it yields nothing we fall through.
     if let Some(d) = load_detectors(root).into_iter().find(|d| d.applies(root)) {
         if trusted {
             let args: Vec<&str> = d.command[1..].iter().map(String::as_str).collect();
@@ -279,6 +328,8 @@ pub fn resolve_with(
             out.blocked = Some(Source::Custom);
         }
     }
+    // 2. direnv / mise. When a custom detector was already blocked, keep
+    //    reporting that one (`blocked` holds a single source).
     if let Some(source) = detect_code_source(root) {
         if trusted {
             let text = match source {
@@ -297,13 +348,17 @@ pub fn resolve_with(
             out.blocked = Some(source);
         }
     }
+    // 3. The .venv fallback: pure file reads, so it runs even when untrusted
+    //    (and then coexists with `blocked`).
     if let Some(venv) = find_venv(root) {
         out.env = Some(venv_env(&venv, current_path));
     }
     out
 }
 
-/// The environment currently applied to spawned processes.
+/// The environment currently applied to spawned processes. A poisoned lock
+/// is ignored rather than propagated: losing the overlay is better than
+/// failing to launch a language server.
 static ACTIVE: Mutex<Option<ProjectEnv>> = Mutex::new(None);
 
 /// Publish `env` (or clear with `None`) as the active environment.

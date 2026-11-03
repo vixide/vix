@@ -251,6 +251,7 @@ mod tests {
 
     const DARK: Palette = Palette::for_appearance(true);
 
+    /// `Reset` takes the default, `Rgb` passes through and `Indexed` uses the xterm palette.
     #[test]
     fn resolves_reset_rgb_and_indexed_colors() {
         let default = Rgba8::hex(0x12_3456);
@@ -267,6 +268,7 @@ mod tests {
         assert_eq!(resolve(Color::Indexed(232), default), Rgba8::rgb(8, 8, 8));
     }
 
+    /// `REVERSED` swaps foreground and background; `DIM` lowers the foreground's alpha.
     #[test]
     fn reversed_swaps_and_dim_fades() {
         let mut cell = Cell::new("x");
@@ -279,6 +281,7 @@ mod tests {
         assert!(cell_colors(&cell, DARK).0.a < 255);
     }
 
+    /// A row splits into runs of equal style, with non-ASCII glyphs isolated in their own spans.
     #[test]
     fn rows_split_into_styled_spans_and_isolate_non_ascii() {
         let mut buf = Buffer::empty(Rect::new(0, 0, 12, 1));
@@ -302,6 +305,7 @@ mod tests {
         assert_eq!(spans[1].style.fg, Rgba8::hex(0xcd_0000));
     }
 
+    /// Only cells with a non-default background produce background runs.
     #[test]
     fn background_runs_skip_the_default() {
         let mut buf = Buffer::empty(Rect::new(0, 0, 6, 1));

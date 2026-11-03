@@ -35,7 +35,9 @@ Highlights:
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
 - [Large File Viewer](large-file-viewer/index.md): view multi-gigabyte files
   read-only without loading them.
-- New in 2.0 (unreleased): [Remote Editing](remote-editing/index.md) (a
+- New in 2.0 (unreleased): [What's new in 2.0](whats-new-2-0/index.md)
+  (release notes) · [Launch kit](launch/index.md) (announcement drafts) ·
+  [Remote Editing](remote-editing/index.md) (a
   folder over SSH, experimental) · [Cowork](cowork/index.md) (real-time
   co-editing, opt-in `cowork` build) · [IM](im/index.md) (code-aware chat,
   threads on lines, IRCv3) · [MCP Server](mcp-server/index.md) (`vix --mcp`)

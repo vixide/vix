@@ -194,6 +194,7 @@ pub struct KernelInfoReply {
     pub banner: String,
 }
 
+/// Serde default for `status` fields: a reply that omits the field is taken as successful.
 fn ok() -> ReplyStatus {
     ReplyStatus::Ok
 }
@@ -339,6 +340,7 @@ impl Content {
     ///
     /// When a known type's content does not have that type's shape.
     pub fn parse(msg_type: &str, content: &Value) -> Result<Self, serde_json::Error> {
+        /// Deserialize `content` into the concrete type for each known message type; unknown types become [`Content::Other`] so a newer kernel's extra messages do not break the client.
         fn de<T: serde::de::DeserializeOwned>(v: &Value) -> Result<T, serde_json::Error> {
             T::deserialize(v)
         }

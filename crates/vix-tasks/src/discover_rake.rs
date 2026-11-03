@@ -53,6 +53,10 @@ pub fn discover_rake_tasks(rakefiles: &[(&str, &str)], use_bundler: bool) -> Vec
     out
 }
 
+/// Scan one Rakefile's text, tracking `namespace ... do` nesting so each task
+/// is reported with its fully qualified `ns:task` name. A line-based scanner,
+/// not a Ruby parser: it counts `do`/`end` pairs well enough for conventional
+/// Rakefiles and deliberately ignores anything it cannot recognise.
 fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTask> {
     let mut namespace_stack: Vec<(String, usize)> = Vec::new();
     let mut do_depth: usize = 0;
@@ -90,10 +94,15 @@ fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTas
     out
 }
 
+/// Whether a (trimmed) line opens a Ruby `do` block, so the scanner must expect
+/// a matching `end`.
 fn ends_with_block_open(line: &str) -> bool {
     line.ends_with(" do") || line == "do"
 }
 
+/// Push `name`, qualified by the current namespace stack, onto `out`. Names
+/// containing `#{` (Ruby string interpolation) are skipped: they are generated
+/// at load time and cannot be known statically.
 fn record_task(
     name: &str,
     namespace_stack: &[(String, usize)],

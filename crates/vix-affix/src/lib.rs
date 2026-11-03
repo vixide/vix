@@ -12,15 +12,43 @@
 //! So [`add`] returns `prefix + text + suffix`; [`drop`] removes a leading
 //! `prefix` and a trailing `suffix`; [`toggle`] drops them when `text` is already
 //! wrapped (starts with `prefix` and ends with `suffix`), otherwise adds them.
+//!
+//! All three are pure `&str -> String` functions with no editor state, so the
+//! host (the `vix` app's wrap-selection command, re-exported there as
+//! `affix`) can apply them to any selection text and replace it with the
+//! result. Matching is byte-wise on
+//! UTF-8 string slices, so multi-byte prefixes and suffixes are handled
+//! correctly. The names `add`/`drop`/`toggle` are meant to be called qualified
+//! (`vix_affix::drop`), since `drop` shadows the prelude's [`std::mem::drop`]
+//! when glob-imported.
+//!
+//! Spec: `crates/vix-affix/spec/index.md`.
 
 /// Wrap `text` with `prefix` before and `suffix` after.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_affix::add("x", "(", ")"), "(x)");
+/// // Empty affixes are a no-op.
+/// assert_eq!(vix_affix::add("x", "", ""), "x");
+/// ```
 #[must_use]
 pub fn add(text: &str, prefix: &str, suffix: &str) -> String {
     format!("{prefix}{text}{suffix}")
 }
 
 /// Remove a leading `prefix` (if present) and a trailing `suffix` (if present)
-/// from `text`. Anything not present is left as is.
+/// from `text`. Anything not present is left as is, so the two sides are
+/// independent: `drop("bravoalfa", "bravo", "charlie")` removes only the prefix.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_affix::drop("(x)", "(", ")"), "x");
+/// // Only the prefix is present, so only it is removed.
+/// assert_eq!(vix_affix::drop("(x", "(", ")"), "x");
+/// ```
 #[must_use]
 pub fn drop(text: &str, prefix: &str, suffix: &str) -> String {
     let without_prefix = text.strip_prefix(prefix).unwrap_or(text);
@@ -32,9 +60,21 @@ pub fn drop(text: &str, prefix: &str, suffix: &str) -> String {
 
 /// [`drop`] the pair when `text` is already wrapped (starts with `prefix` and
 /// ends with `suffix`); otherwise [`add`] it.
+///
+/// Calling it twice returns the original text.
+///
+/// # Examples
+///
+/// ```
+/// let once = vix_affix::toggle("x", "[", "]");
+/// assert_eq!(once, "[x]");
+/// assert_eq!(vix_affix::toggle(&once, "[", "]"), "x");
+/// ```
 #[must_use]
 pub fn toggle(text: &str, prefix: &str, suffix: &str) -> String {
-    // Require room for both affixes so a short string isn't mistaken for wrapped.
+    // Require room for both affixes so a short string isn't mistaken for wrapped:
+    // with prefix == suffix == "*", the one-char text "*" starts and ends with
+    // "*" but is one star, not a wrapped empty string (which needs two).
     if text.len() >= prefix.len() + suffix.len()
         && text.starts_with(prefix)
         && text.ends_with(suffix)

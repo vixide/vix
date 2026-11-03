@@ -20,6 +20,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// The `SPC`-leader sequences. Each `key_token` is a whole typed sequence (e.g. `ff`), matched via [`crate::lookup_sequence`].
 const LEADER: &[Binding] = &[
     Binding {
         key_token: " ", // SPC SPC — M-x / command palette
@@ -119,6 +120,7 @@ const LEADER: &[Binding] = &[
     },
 ];
 
+/// Spacemacs's chord contexts (the leader context only; Normal mode lives under the `vi` id), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: LEADER,

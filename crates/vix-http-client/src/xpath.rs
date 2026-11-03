@@ -6,35 +6,59 @@
 //! the step's matches from one context node), `[@a]` and `[@a='v']`. The result is
 //! the first match's text (an element's text is all its descendant text).
 //! DTDs are refused by the parser, so entity expansion cannot be abused.
+//!
+//! Used only by [`crate::rest`] when a `{{req.response.body./path}}` reference
+//! has a body path starting with `/`. Deliberately not a full `XPath` engine:
+//! no axes other than child/descendant, no functions besides `text()`, no
+//! boolean operators. Unsupported syntax makes [`query`] return `None`.
+//!
+//! Owning spec: `crates/vix-http-client/spec/index.md`.
 
 use roxmltree::{Document, Node};
 
+/// How a step walks from its context node: `/` or `//`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Axis {
+    /// `/`: direct children.
     Child,
+    /// `//`: all descendants (excluding the context node itself).
     Descendant,
 }
 
+/// What a step selects.
 #[derive(Debug, PartialEq, Eq)]
 enum Test {
+    /// An element, by local name (namespace prefixes ignored).
     Name(String),
+    /// `*`: any element.
     Any,
+    /// `text()`: text nodes.
     Text,
+    /// `@attr`: an attribute's value.
     Attr(String),
+    /// `.`: the context node itself.
     Current,
 }
 
+/// A bracketed filter on a step.
 #[derive(Debug, PartialEq, Eq)]
 enum Pred {
+    /// `[n]`: the n-th match, 1-based (0 is rejected at parse time).
     Index(usize),
+    /// `[@a]`: has attribute.
     HasAttr(String),
+    /// `[@a='v']`: attribute equals value.
     AttrEq(String, String),
 }
 
+/// One parsed path step: axis, node test, and predicates.
 #[derive(Debug)]
 struct Step {
+    /// Child or descendant.
     axis: Axis,
+    /// What the step selects.
     test: Test,
+    /// Filters applied in order (only the first `[n]` is honoured).
     preds: Vec<Pred>,
 }
 
@@ -46,6 +70,8 @@ enum Item<'a, 'i> {
 
 /// Evaluate `path` against the XML `body`: the first match's text.
 pub(crate) fn query(body: &str, path: &str) -> Option<String> {
+    // `roxmltree` refuses DTDs by default, which is what makes entity-expansion
+    // ("billion laughs") attacks impossible here.
     let doc = Document::parse(body).ok()?;
     let steps = parse(path)?;
     let mut items = vec![Item::Node(doc.root())];
@@ -68,10 +94,12 @@ pub(crate) fn query(body: &str, path: &str) -> Option<String> {
     }
 }
 
+/// The local part of a possibly prefixed name (`ns:item` -> `item`).
 fn local(name: &str) -> &str {
     name.rsplit(':').next().unwrap_or(name)
 }
 
+/// Apply one `step` to context node `ctx`, appending its matches to `out`.
 fn apply<'a, 'i>(ctx: Node<'a, 'i>, step: &Step, out: &mut Vec<Item<'a, 'i>>) {
     let mut found: Vec<Item<'a, 'i>> = Vec::new();
     let candidates: Vec<Node<'a, 'i>> = match step.axis {
@@ -121,6 +149,8 @@ fn apply<'a, 'i>(ctx: Node<'a, 'i>, step: &Step, out: &mut Vec<Item<'a, 'i>>) {
     out.extend(found);
 }
 
+/// Whether element `n` passes the attribute predicates; `Index` is ignored
+/// here and handled afterwards by [`positional`].
 fn attr_pred(n: &Node<'_, '_>, p: &Pred) -> bool {
     match p {
         Pred::Index(_) => true,
@@ -141,6 +171,7 @@ fn positional(step: &Step, found: &mut Vec<Item<'_, '_>>) {
     }
 }
 
+/// Parse an absolute path into steps; `None` for anything unsupported.
 fn parse(path: &str) -> Option<Vec<Step>> {
     if !path.starts_with('/') {
         return None;
@@ -176,6 +207,7 @@ fn step_end(s: &str) -> usize {
     s.len()
 }
 
+/// Parse one step's text, e.g. `item[@id='1'][2]`, into a [`Step`].
 fn parse_step(axis: Axis, text: &str) -> Option<Step> {
     let (head, mut preds_text) = match text.find('[') {
         Some(i) => text.split_at(i),
@@ -205,6 +237,7 @@ fn parse_step(axis: Axis, text: &str) -> Option<Step> {
     })
 }
 
+/// Parse the inside of one `[...]` predicate.
 fn parse_pred(p: &str) -> Option<Pred> {
     if let Ok(n) = p.parse::<usize>() {
         return (n >= 1).then_some(Pred::Index(n));

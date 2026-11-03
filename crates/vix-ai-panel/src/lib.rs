@@ -7,6 +7,9 @@
 //!
 //! Keeping it data-only makes the transcript layout (word wrapping, the visible
 //! window) unit-testable without a terminal.
+//!
+//! Rendering lives in `src/ui.rs`; this crate only supplies the lines to draw.
+//! Owning spec: `crates/vix-ai-panel/spec/index.md`.
 
 /// Who authored a turn in the transcript.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -79,6 +82,19 @@ impl Panel {
 
     /// Prior conversation formatted as plain text, fed to the CLI on stdin so the
     /// assistant has the running context. Empty when there are no turns yet.
+    ///
+    /// [`Role::Error`] turns are omitted: they are UI notices, not part of the
+    /// dialogue, and echoing them back would confuse the assistant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_ai_panel::{Panel, Role};
+    /// let mut p = Panel::open();
+    /// p.push(Role::User, "hi");
+    /// p.push(Role::Error, "spawn failed");
+    /// assert_eq!(p.context(), "User: hi\n\n");
+    /// ```
     #[must_use]
     pub fn context(&self) -> String {
         let mut out = String::new();
@@ -110,10 +126,13 @@ impl Panel {
     /// A blank separator line is inserted between turns.
     #[must_use]
     pub fn wrapped(&self, width: usize) -> Vec<(Role, String)> {
+        // A zero width would make the wrapper loop forever / emit nothing.
         let width = width.max(1);
         let mut lines = Vec::new();
         for (i, turn) in self.turns.iter().enumerate() {
             if i > 0 {
+                // The separator takes the *next* turn's role so it is styled
+                // with the turn it introduces.
                 lines.push((turn.role, String::new()));
             }
             for para in turn.text.split('\n') {
@@ -139,6 +158,8 @@ impl Panel {
         if self.scroll > max_scroll {
             self.scroll = max_scroll;
         }
+        // `scroll` counts up from the bottom, so the window ends `scroll`
+        // lines before the last line and extends `height` lines upward.
         let end = all.len().saturating_sub(self.scroll);
         let start = end.saturating_sub(height);
         all[start..end].to_vec()

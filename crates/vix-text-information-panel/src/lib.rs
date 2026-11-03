@@ -13,6 +13,14 @@
 //! - **sentences**: runs of sentence-ending punctuation (`.`, `!`, `?`); text
 //!   with content but no terminator counts as one sentence.
 //! - **paragraphs**: maximal runs of non-blank lines.
+//!
+//! Spec: `crates/vix-text-information-panel/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! let s = vix_text_information_panel::analyze("Hi there. Bye!\n\nNext.");
+//! assert_eq!((s.words, s.sentences, s.paragraphs), (4, 3, 2));
+//! ```
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
@@ -62,6 +70,8 @@ fn count_sentences(text: &str) -> usize {
         }
         prev_term = term;
     }
+    // Consecutive terminators ("?!", "...") are one run, so ellipses count once.
+    // Unterminated non-blank text is still one sentence.
     if runs == 0 && text.chars().any(|c| !c.is_whitespace()) {
         1
     } else {

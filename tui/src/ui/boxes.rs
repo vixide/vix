@@ -15,6 +15,9 @@ pub const CAL_PREV: char = '\u{25c0}';
 /// Next-month arrow glyph, at column 20 of the calendar's month-header row.
 pub const CAL_NEXT: char = '\u{25b6}';
 
+/// Draw the month-grid calendar box in the top-right corner of `area`.
+///
+/// The month shown follows the user's navigation (`App::calendar`).
 pub(super) fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     // The month area follows the user's navigation (see `App::calendar`). Live
     // date/time strings now live in the separate clock box (Tools → Clock…).
@@ -62,6 +65,8 @@ pub(super) fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(help), rows[2]);
 }
 
+/// Draw the clock box (Tools -> Clock...) in the top-right corner: one row per
+/// configured zone for the current local time, sized to the row count.
 pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     let now = clock::now_local();
     let rows_data = app.clock.rows(&now);
@@ -112,6 +117,9 @@ pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(help), rows[1]);
 }
 
+/// Draw the workspace dashboard overlay. Figures still being computed in the
+/// background show a "computing" placeholder instead of a number. No-op when
+/// the dashboard is closed.
 pub(super) fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
     let Some(d) = app.dashboard.as_ref() else {
         return;
@@ -168,6 +176,8 @@ pub(super) fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+/// Render a month grid as styled lines: a weekday header, then one line per
+/// week. The selected day is reverse-highlighted and today underlined.
 fn month_lines(cal: &calendar::Calendar) -> Vec<Line<'static>> {
     let grid = cal.grid();
     let selected = cal.selected_day_in_shown();

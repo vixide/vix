@@ -74,6 +74,7 @@ pub enum PluginError {
     GitUnavailable,
 }
 
+/// Lowercase, user-facing messages for the status line.
 impl fmt::Display for PluginError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -92,6 +93,7 @@ impl fmt::Display for PluginError {
     }
 }
 
+/// Only [`PluginError::Io`] has an underlying cause.
 impl std::error::Error for PluginError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -101,6 +103,7 @@ impl std::error::Error for PluginError {
     }
 }
 
+/// Lets filesystem calls use `?` directly.
 impl From<std::io::Error> for PluginError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)

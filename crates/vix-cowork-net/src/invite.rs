@@ -13,6 +13,10 @@
 //! Invites are single-use and short-lived. The host's table keeps the secrets;
 //! it expires them, caps how many are outstanding, and revokes a token after
 //! repeated failed handshakes against it.
+//!
+//! String form: `vix-cowork:1:<base64url(host_key || id || secret)>@<host:port>`
+//! (no padding). The secret travels only in this string, never on the wire.
+//! Spec: `crates/vix-cowork-net/spec/index.md`.
 
 use crate::error::NetError;
 use base64::Engine;
@@ -98,15 +102,23 @@ impl FromStr for Invite {
     }
 }
 
+/// One outstanding token in the host's [`InviteTable`].
 struct Entry {
+    /// The pre-shared key mixed into the handshake.
     secret: [u8; SECRET_LEN],
+    /// Wall-clock-independent deadline (monotonic `Instant`).
     expires: Instant,
+    /// Failed handshakes so far; at [`MAX_FAILURES`] the token is dropped.
     failures: u8,
 }
 
-/// The host's outstanding invites.
+/// The host's outstanding invites. Interior-mutable and thread-safe: handshake
+/// threads look tokens up and consume them while the UI thread mints and
+/// revokes.
 #[derive(Default)]
 pub struct InviteTable {
+    /// Token id to entry. A poisoned lock is recovered (the map has no
+    /// invariant a panic could break).
     entries: Mutex<HashMap<[u8; ID_LEN], Entry>>,
 }
 
@@ -116,12 +128,15 @@ impl fmt::Debug for InviteTable {
     }
 }
 
-/// Fill `buf` with operating-system randomness.
+/// Fill `buf` with operating-system randomness (`getrandom`). Used for both
+/// the token id and the secret; failure is reported as [`NetError::Crypto`]
+/// rather than falling back to anything weaker.
 pub(crate) fn random(buf: &mut [u8]) -> Result<(), NetError> {
     getrandom::fill(buf).map_err(|_| NetError::Crypto)
 }
 
 impl InviteTable {
+    /// Lock the table, ignoring poison.
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<[u8; ID_LEN], Entry>> {
         self.entries.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -135,6 +150,7 @@ impl InviteTable {
     pub fn mint(&self, ttl: Duration) -> Result<([u8; ID_LEN], [u8; SECRET_LEN]), NetError> {
         let mut map = self.lock();
         let now = Instant::now();
+        // Purge expired tokens first so they do not count against the cap.
         map.retain(|_, e| e.expires > now);
         if map.len() >= MAX_OUTSTANDING {
             return Err(NetError::TooLarge);
@@ -154,7 +170,8 @@ impl InviteTable {
         Ok((id, secret))
     }
 
-    /// The secret for `id`, if the token is live.
+    /// The secret for `id`, if the token is live. An expired token is removed
+    /// as a side effect. Does not consume the token (see [`consume`](Self::consume)).
     #[must_use]
     pub fn lookup(&self, id: &[u8; ID_LEN]) -> Option<[u8; SECRET_LEN]> {
         let mut map = self.lock();
@@ -177,7 +194,7 @@ impl InviteTable {
         }
     }
 
-    /// Use the token up. `true` exactly once per token: a second, concurrent
+    /// Use the token up (without needing the secret). `true` exactly once per token: a second, concurrent
     /// handshake with the same invite loses.
     pub fn consume(&self, id: &[u8; ID_LEN]) -> bool {
         self.lock().remove(id).is_some()

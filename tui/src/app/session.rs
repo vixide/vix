@@ -367,6 +367,8 @@ impl App {
             .open_workspace(WorkspaceChooser { roots, selected: 0 });
     }
 
+    /// Handle a key in the workspace chooser: Up/Down move (wrapping), Enter switches to the
+    /// highlighted workspace root, Esc closes.
     pub(super) fn workspace_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -386,6 +388,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the workspace chooser: clicking a row switches to that
+    /// workspace.
     pub(super) fn workspace_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.chooser.workspace_mut()

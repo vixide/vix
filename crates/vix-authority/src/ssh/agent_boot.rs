@@ -203,6 +203,9 @@ impl<T: Transport> ShellAuthority<T> {
         status
     }
 
+    /// The fallible body of [`ShellAuthority::start_agent`]: every failure
+    /// is folded into an [`AgentStatus`] rather than returned, because a
+    /// missing agent is never fatal.
     fn try_start_agent(&self) -> AgentStatus {
         let mode = self.transport().agent_mode();
         if mode == AgentMode::Off {

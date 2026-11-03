@@ -2,6 +2,10 @@
 //!
 //! Deterministic (no randomness): words, sentences, and paragraphs are derived
 //! from a fixed canonical passage so output is stable and testable.
+//!
+//! A leaf crate with no dependencies; the host's Tools → Insert → Lorem ipsum
+//! actions call these functions and insert the returned text. Spec:
+//! `crates/vix-lorem/spec/index.md`.
 
 /// The canonical lorem ipsum passage the generators draw from.
 const PARAGRAPH: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, \
@@ -12,10 +16,21 @@ esse cillum dolore eu fugiat nulla pariatur.";
 
 /// The first `n` words of the passage (at least one), stripped of punctuation
 /// and joined by spaces.
+///
+/// `n` is clamped to a minimum of 1, and the passage holds a finite number of
+/// words, so a very large `n` simply returns every word of the passage rather
+/// than repeating it.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_lorem::words(3), "Lorem ipsum dolor");
+/// assert_eq!(vix_lorem::words(0), "Lorem");
+/// ```
 #[must_use]
 pub fn words(n: usize) -> String {
     PARAGRAPH
         .split_whitespace()
+        // The passage only ever carries trailing commas and periods.
         .map(|w| w.trim_end_matches([',', '.']))
         .take(n.max(1))
         .collect::<Vec<_>>()
@@ -23,14 +38,27 @@ pub fn words(n: usize) -> String {
 }
 
 /// The passage's first sentence (ending in a period).
+///
+/// # Examples
+/// ```
+/// assert!(vix_lorem::sentence().starts_with("Lorem ipsum dolor sit amet"));
+/// assert!(vix_lorem::sentence().ends_with('.'));
+/// ```
 #[must_use]
 pub fn sentence() -> String {
     PARAGRAPH
+        // Split at the first ". " (period + space) so abbreviations-free text
+        // yields exactly one sentence; the head loses its period, re-added below.
         .split_once(". ")
         .map_or_else(|| PARAGRAPH.to_string(), |(head, _)| format!("{head}."))
 }
 
-/// A full lorem ipsum paragraph.
+/// A full lorem ipsum paragraph (the whole canonical passage).
+///
+/// # Examples
+/// ```
+/// assert!(vix_lorem::paragraph().contains("pariatur"));
+/// ```
 #[must_use]
 pub fn paragraph() -> String {
     PARAGRAPH.to_string()

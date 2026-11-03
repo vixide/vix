@@ -24,6 +24,8 @@ fn right_align(app: &App, frame: &mut Frame, inner: Rect) {
     }
 }
 
+/// Draw the yes/no confirmation dialog. Width is measured in display columns
+/// (so wide text fits) and a message wider than the screen wraps onto more lines.
 pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.confirm.as_ref() else {
         return;
@@ -125,6 +127,7 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
     right_align(app, frame, inner);
 }
 
+/// Draw the workspace-replace confirmation overlay listing the pending changes.
 pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(rc) = app.replace_confirm.as_ref() else {
         return;
@@ -260,6 +263,7 @@ fn draw_preview_confirm(
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+/// Draw the "unsaved changes" prompt shown before closing a modified tab.
 pub(super) fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
     let Some(u) = app.unsaved.as_ref() else {
         return;
@@ -293,6 +297,8 @@ pub(super) fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
     right_align(app, frame, inner);
 }
 
+/// Draw the prompt shown when pasting a file whose name already exists in the
+/// target folder, offering the resolution choices.
 pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     let Some(op) = app.paste.as_ref() else { return };
     let Some(src) = op.conflict.as_ref() else {
@@ -326,6 +332,7 @@ pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     right_align(app, frame, inner);
 }
 
+/// Draw the one-line query-replace (y/n/!/q) bar along the bottom of `area`.
 pub(super) fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
     let Some(qr) = app.query_replace.as_ref() else {
         return;

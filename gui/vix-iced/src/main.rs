@@ -43,6 +43,8 @@ use vix::cli::Cli;
 
 use crate::view::VixIced;
 
+/// Parse the command line, load settings and the initial files through
+/// `startup::load`, then run the iced application.
 fn main() -> iced::Result {
     let cli = Cli::parse();
     let loaded = startup::load(&cli);

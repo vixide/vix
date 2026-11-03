@@ -8,6 +8,14 @@
 //! and legacy bare `TYPE` parameters), and value **unescaping** (`\\`, `\n`,
 //! `\,`, `\;`). It is pure: the host reads the `.vcf` files.
 //!
+//! The parser is intentionally lenient and infallible: [`parse`] never returns
+//! an error and never panics (a `.vcf` may be an attacker-supplied file, see
+//! the proptests below). Malformed lines (no `:`) are skipped rather than
+//! reported. It does not model multiple cards per file, quoted parameter
+//! values, or structured values (`N`, `ADR` stay as raw `;`-separated text).
+//!
+//! Spec: `crates/vix-vcard-parser/spec/index.md`.
+//!
 //! [RFC 6350]: https://www.rfc-editor.org/info/rfc6350
 
 /// One vCard property: a name, its parameters, and its (unescaped) value.
@@ -52,6 +60,18 @@ pub struct Vcard {
 }
 
 /// Parse vCard text into a [`Vcard`].
+///
+/// Never fails: blank lines, lines without a `:`, and the `BEGIN`/`END`/
+/// `VERSION` envelope lines are dropped. Only the first card's worth of
+/// properties is meaningful; a file holding several cards yields one merged
+/// property list.
+///
+/// # Examples
+/// ```
+/// let card = vix_vcard_parser::parse("FN:Ada Lovelace\r\nTEL;TYPE=work:555-0100\r\n");
+/// assert_eq!(card.display_name(), "Ada Lovelace");
+/// assert_eq!(card.get("TEL").unwrap().types().as_deref(), Some("work"));
+/// ```
 #[must_use]
 pub fn parse(text: &str) -> Vcard {
     let mut properties = Vec::new();
@@ -72,6 +92,10 @@ pub fn parse(text: &str) -> Vcard {
 
 /// Unfold the content lines: a line beginning with a space or tab is a
 /// continuation of the previous one (its leading whitespace removed).
+///
+/// Exactly one leading whitespace character is consumed, per RFC 6350 §3.2;
+/// any further spaces belong to the value. Both `\n` and `\r\n` line ends work.
+/// A continuation with no preceding line is kept as an ordinary line.
 fn unfold(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for raw in text.split('\n') {
@@ -89,8 +113,13 @@ fn unfold(text: &str) -> Vec<String> {
 
 /// Parse a single unfolded content line into a [`Property`].
 fn parse_line(line: &str) -> Option<Property> {
+    // The first `:` separates name+params from the value. Quoted parameter
+    // values containing `:` (legal in RFC 6350) are not handled; the line would
+    // be split early.
     let colon = line.find(':')?;
     let (left, value) = line.split_at(colon);
+    // `split_at` leaves the `:` at the head of `value`; `[1..]` skips that
+    // single ASCII byte, so the slice is on a char boundary.
     let value = unescape(&value[1..]);
 
     let mut parts = left.split(';');
@@ -123,6 +152,9 @@ fn parse_line(line: &str) -> Option<Property> {
 }
 
 /// Unescape a vCard text value (`\\`, `\n`/`\N`, `\,`, `\;`).
+///
+/// Unknown escapes are preserved verbatim (backslash kept) and a trailing lone
+/// backslash becomes a literal `\`, so unescaping never loses input.
 fn unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -147,6 +179,9 @@ fn unescape(s: &str) -> String {
 
 impl Vcard {
     /// The first property named `name` (case-insensitive).
+    ///
+    /// Group prefixes were already stripped at parse time, so `item1.EMAIL`
+    /// is found as `"EMAIL"`.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Property> {
         self.properties
@@ -171,6 +206,9 @@ impl Vcard {
 
     /// A human display name: the `FN`, else a `Given Family` derived from `N`,
     /// else `"(unnamed)"`.
+    ///
+    /// `(unnamed)` is a fixed English fallback, not translated here; hosts that
+    /// need localisation should check [`Vcard::get`] themselves.
     #[must_use]
     pub fn display_name(&self) -> String {
         if let Some(fnv) = self.value("FN")

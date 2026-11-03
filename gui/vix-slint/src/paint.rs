@@ -55,14 +55,17 @@ pub fn color(c: Rgba8) -> Color {
     Color::from_argb_u8(c.a, c.r, c.g, c.b)
 }
 
+/// A solid-colour Slint brush value for `c`.
 fn brush(c: Rgba8) -> Value {
     Value::Brush(Brush::SolidColor(color(c)))
 }
 
+/// A Slint number value for `n`.
 fn number(n: u16) -> Value {
     Value::Number(f64::from(n))
 }
 
+/// A Slint struct value built from named fields.
 fn record<const N: usize>(fields: [(&str, Value); N]) -> Value {
     Value::Struct(
         fields

@@ -96,6 +96,16 @@
           "notes": "Local History, Search Everywhere, Refactor… and Organize Imports, run configurations, peek definition, CodeLens, postfix completion"
         },
         {
+          "title": "What's new in 2.0",
+          "url": "https://github.com/vixide/vix/blob/main/docs/whats-new-2-0/index.md",
+          "notes": "user-facing release notes for the unreleased 2.0 — highlights, upgrading, what is not done"
+        },
+        {
+          "title": "Launch kit",
+          "url": "https://github.com/vixide/vix/blob/main/docs/launch/index.md",
+          "notes": "announcement drafts for 2.0 (never posted)"
+        },
+        {
           "title": "Remote editing",
           "url": "https://github.com/vixide/vix/blob/main/docs/remote-editing/index.md",
           "notes": "open a folder over SSH (experimental) — search, git, language servers, terminal, remote agent"

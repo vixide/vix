@@ -160,6 +160,8 @@ pub(super) fn draw_hover(app: &App, frame: &mut Frame) {
     frame.render_widget(para, rect);
 }
 
+/// Draw the code-action popup, or the refactor popup when it was opened by
+/// the refactor command (the title differs).
 pub(super) fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(menu) = app.code_actions.as_ref() else {
         return;

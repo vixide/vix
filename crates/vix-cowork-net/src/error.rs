@@ -1,4 +1,9 @@
 //! The transport's typed error.
+//!
+//! One flat enum so callers can match on *why* a connection ended without
+//! parsing strings. Several variants are deliberately vague (see
+//! [`NetError::Crypto`]) so a failing peer learns nothing from the error path.
+//! Spec: `crates/vix-cowork-net/spec/index.md`.
 
 use std::fmt;
 use vix_cowork::{CoworkError, ErrorCode};
@@ -30,6 +35,8 @@ pub enum NetError {
     Cowork(CoworkError),
 }
 
+/// Human-readable, English-only text for logs; the UI maps variants to
+/// translated strings itself, so these are not user-facing.
 impl fmt::Display for NetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -49,9 +56,13 @@ impl fmt::Display for NetError {
 
 impl std::error::Error for NetError {}
 
+/// Classify an I/O error: timeouts and "peer went away" kinds get their own
+/// variants (so callers can retry or tear down), anything else keeps its kind.
 impl From<std::io::Error> for NetError {
     fn from(e: std::io::Error) -> Self {
         match e.kind() {
+            // A socket read timeout surfaces as `WouldBlock` on Unix and
+            // `TimedOut` on Windows.
             std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => Self::Timeout,
             std::io::ErrorKind::UnexpectedEof
             | std::io::ErrorKind::ConnectionReset
@@ -68,6 +79,8 @@ impl From<CoworkError> for NetError {
     }
 }
 
+/// Every `snow` failure collapses to [`NetError::Crypto`], discarding detail on
+/// purpose (no oracle for an attacker).
 impl From<snow::Error> for NetError {
     fn from(_: snow::Error) -> Self {
         Self::Crypto

@@ -30,6 +30,8 @@ pub struct CellSize {
 }
 
 impl Default for CellSize {
+    /// Metrics used before the font is measured: an advance of 0.6 of the font size
+    /// and the default row height.
     fn default() -> Self {
         let h = f64::from(cell_height());
         Self {

@@ -7,32 +7,18 @@
 //! crate's `lang-*` Cargo features. Lint configuration (pedantic + the targeted
 //! exceptions) is inherited from the crate root (`lib.rs`).
 
-/// Editing operations (cursor movement, insert, delete, indent, clipboard, undo).
 pub mod actions;
-/// Mouse-click tracking for single/double/triple click detection.
 pub mod click;
-/// The text buffer, Tree-sitter highlighting, and undo/redo engine.
 pub mod code;
-/// The editor widget: state, cursor, selection, and input handling.
 pub mod editor;
-/// Key and mouse input handling for the editor, over backend-neutral
-/// `vix-input` events (always compiled).
 pub mod editor_input;
-/// Undo/redo history of edit batches.
 pub mod history;
-/// Multiple cursors ("carets") and the operations applied across them.
 pub mod multicursor;
 pub mod named;
-/// Collaboration support: the local edit log, applying remote edits, and
-/// drawing other participants' carets.
 pub mod remote;
-/// Rendering of the editor, including soft-wrap layout.
 pub mod render;
-/// Text selection ranges and selection-snapping modes.
 pub mod selection;
-/// Tree-sitter textobjects: function/class/parameter ranges and motions.
 pub mod textobject;
-/// Language detection and indentation, comment, color, and text helpers.
 pub mod utils;
 pub mod virtual_text;
 

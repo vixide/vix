@@ -13,6 +13,23 @@
 //!
 //! The optional `net` feature adds `net`, the blocking layer that fetches a
 //! token and performs a request through `vix-http-client`.
+//!
+//! # Security posture
+//!
+//! FHIR traffic can carry protected health information, so the crate is
+//! conservative by construction: secrets are held in [`Secret`] (redacted
+//! `Debug`, no `Display`), [`FhirError`] messages never include bodies, tokens
+//! or (for transport failures) URLs, credentials are only sent over `https` or
+//! loopback, and paging links to a foreign origin are refused. Environment
+//! variable names read from a project file must start with `FHIR_`.
+//!
+//! Spec: `crates/vix-fhir/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_fhir::{classify, Content};
+//! assert_eq!(classify(r#"{"resourceType":"Patient"}"#), Ok(Content::Resource("Patient".into())));
+//! ```
 
 mod bundle;
 mod outcome;
@@ -63,7 +80,8 @@ pub enum FhirError {
     EnvMissing(String),
     /// The command line named no known interaction; holds the word.
     BadInteraction(String),
-    /// The resource type is not a FHIR type name (`[A-Z][A-Za-z]*`).
+    /// The resource type is not a FHIR type name (an uppercase letter followed by
+    /// ASCII letters/digits, at most 64 characters: `[A-Z][A-Za-z0-9]{0,63}`).
     BadResourceType(String),
     /// The id is not a FHIR id (`[A-Za-z0-9.-]{1,64}`).
     BadId(String),

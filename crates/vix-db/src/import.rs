@@ -6,11 +6,26 @@
 //! (the header) into a `CREATE TABLE` of `TEXT` columns and the rest into a
 //! single multi-row `INSERT`. Pure and unit-tested; the workbench reads the
 //! file and runs the statements (writes, so write mode is required).
+//!
+//! The pipeline is `delimiter` -> [`parse`] -> `table_name` -> [`statements`];
+//! all four are pure. Every imported column is `TEXT` -- the importer does no
+//! type inference, trading fidelity for never failing on a messy file. The
+//! prompt itself (Ctrl+U) lives in `panels`. Owning spec:
+//! `crates/vix-db/spec/index.md`.
 
 use super::catalog::{quote_ident, quote_literal};
 use super::connect::Kind;
 
 /// The field delimiter for `path`: a tab for `.tsv` / `.tab`, else a comma.
+/// The extension match is case-insensitive.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::import::delimiter;
+/// assert_eq!(delimiter("data.TSV"), '\t');
+/// assert_eq!(delimiter("data.csv"), ',');
+/// ```
 #[must_use]
 pub fn delimiter(path: &str) -> char {
     let ext = std::path::Path::new(path)
@@ -27,6 +42,17 @@ pub fn delimiter(path: &str) -> char {
 
 /// A table name derived from `path`'s file stem, sanitized to identifier
 /// characters (`import` if nothing usable remains).
+///
+/// A name that would start with a digit, or sanitizes to nothing, is prefixed
+/// with `t_` so it is a valid unquoted identifier on every engine.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::import::table_name;
+/// assert_eq!(table_name("/tmp/my-data.csv"), "my_data");
+/// assert_eq!(table_name("2024.csv"), "t_2024");
+/// ```
 #[must_use]
 pub fn table_name(path: &str) -> String {
     let stem = std::path::Path::new(path)
@@ -53,6 +79,19 @@ pub fn table_name(path: &str) -> String {
 
 /// Parse `content` into records of fields on `delim`, honoring double-quoted
 /// fields (a `""` inside a quoted field is a literal quote).
+///
+/// `\r` is dropped everywhere outside quotes (so CRLF files work), blank lines
+/// produce no record, and a final record without a trailing newline is kept.
+/// Rows may have differing field counts; [`statements`] pads or truncates them
+/// to the header width.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::import::parse;
+/// let rows = parse("a,b\n\"x,1\",\"say \"\"hi\"\"\"\n", ',');
+/// assert_eq!(rows, vec![vec!["a", "b"], vec!["x,1", "say \"hi\""]]);
+/// ```
 #[must_use]
 pub fn parse(content: &str, delim: char) -> Vec<Vec<String>> {
     let mut records: Vec<Vec<String>> = Vec::new();
@@ -60,6 +99,9 @@ pub fn parse(content: &str, delim: char) -> Vec<Vec<String>> {
     let mut field = String::new();
     let mut in_quotes = false;
     let mut chars = content.chars().peekable();
+    // True once the current record has any evidence of content (a delimiter or
+    // a quote opened), so `""` or `,` on a line still yields a record while a
+    // truly blank line does not.
     let mut seen_field = false;
     while let Some(c) = chars.next() {
         if in_quotes {
@@ -107,6 +149,26 @@ pub fn parse(content: &str, delim: char) -> Vec<Vec<String>> {
 
 /// `CREATE TABLE` + multi-row `INSERT` statements loading `records` (first row
 /// = header) into `table`. Empty when there is no header row.
+///
+/// Header names are sanitized to `[A-Za-z0-9_]` (blank ones become `colN`);
+/// short data rows are padded with `''` and long ones truncated to the header
+/// width. With a header but no data only the `CREATE TABLE` is returned. Values
+/// go through [`quote_literal`], so plain numbers are emitted bare: on an
+/// engine with `TEXT` affinity such as `SQLite` that can normalize text like
+/// `007` to `7`, a known fidelity limit of the type-free import.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{connect::Kind, import::statements};
+/// let records = vec![
+///     vec!["name".to_string()],
+///     vec!["Ada".to_string()],
+/// ];
+/// let sql = statements(Kind::Sqlite, "people", &records);
+/// assert_eq!(sql[0], "CREATE TABLE \"people\" (\"name\" TEXT)");
+/// assert_eq!(sql[1], "INSERT INTO \"people\" (\"name\") VALUES ('Ada')");
+/// ```
 #[must_use]
 pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<String> {
     let Some(header) = records.first() else {

@@ -23,10 +23,15 @@ use crate::settings::Settings;
 /// type; each impl below just forwards to the panel's identically-named
 /// inherent methods.
 pub(super) trait ListPanel {
+    /// Move the selection up one row.
     fn up(&mut self);
+    /// Move the selection down one row.
     fn down(&mut self);
+    /// Move the selection up by `page` rows.
     fn page_up(&mut self, page: usize);
+    /// Move the selection down by `page` rows.
     fn page_down(&mut self, page: usize);
+    /// Index of the first visible row (used to map a mouse click to a row).
     fn scroll(&self) -> usize;
 }
 
@@ -104,10 +109,13 @@ pub(super) fn list_panel_click_index<P: ListPanel>(
 }
 
 impl App {
+    /// Open the Nerd Font glyph palette.
     pub(super) fn open_nerd_palette(&mut self) {
         self.info.open_nerd_palette(NerdPalette::open());
     }
 
+    /// Handle a key in the Nerd Font palette: arrows move across the glyph grid, Enter inserts
+    /// the glyph (palette stays open for several picks), Esc closes.
     pub(super) fn nerd_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
@@ -138,6 +146,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the Nerd Font palette: a left click maps the pointer to a grid
+    /// cell (cells are `NERD_CELL_W` columns wide) and inserts that glyph.
     pub(super) fn nerd_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -169,6 +179,7 @@ impl App {
         }
     }
 
+    /// Open the ASCII character table.
     pub(super) fn open_ascii_panel(&mut self) {
         self.info.open_ascii_panel(AsciiPanel::open());
     }
@@ -191,6 +202,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the ASCII table: shared list navigation first, then Home/End jump to the
+    /// ends, Enter inserts the character (panel stays open), Esc closes.
     pub(super) fn ascii_key(&mut self, key: KeyEvent) {
         let page = (self.layout.ascii_panel.height as usize).max(1);
         if list_panel_nav_key(self.info.ascii_panel_mut(), key.code, page) {
@@ -215,6 +228,7 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the ASCII table: a left click on a row inserts that character.
     pub(super) fn ascii_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) =
             list_panel_click_index(self.info.ascii_panel(), self.layout.ascii_panel, mouse)
@@ -242,10 +256,14 @@ impl App {
         }
     }
 
+    /// Open the X11 color-name picker.
     pub(super) fn open_x11_panel(&mut self) {
         self.x11_panel = Some(X11Panel::open());
     }
 
+    /// Handle a key in the X11 color picker: shared list navigation, Home/End, Enter inserts
+    /// the color (or, when opened from the theme editor, assigns it to the slot), Esc closes it
+    /// and ends any theme-editor pick.
     pub(super) fn x11_key(&mut self, key: KeyEvent) {
         let page = (self.layout.x11_panel.height as usize).max(1);
         if list_panel_nav_key(self.x11_panel.as_mut(), key.code, page) {
@@ -274,6 +292,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the X11 color picker: a left click on a row acts on that color
+    /// as Enter does.
     pub(super) fn x11_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) =
             list_panel_click_index(self.x11_panel.as_ref(), self.layout.x11_panel, mouse)
@@ -340,6 +360,9 @@ impl App {
         self.theme_editor = Some(vix_theme_editor_panel::Panel::open(base));
     }
 
+    /// Handle a key in the theme editor: shared list navigation; Enter opens the X11 picker to
+    /// choose the highlighted slot's color; Ctrl+S prompts for a name to save the theme as; Esc
+    /// closes the editor (reverting the live preview).
     pub(super) fn theme_editor_key(&mut self, key: KeyEvent) {
         let page = (self.layout.theme_editor.height as usize).max(1);
         if list_panel_nav_key(self.theme_editor.as_mut(), key.code, page) {
@@ -365,6 +388,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the theme editor: a left click on a slot row selects it and
+    /// opens the X11 picker for it.
     pub(super) fn theme_editor_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) =
             list_panel_click_index(self.theme_editor.as_ref(), self.layout.theme_editor, mouse)
@@ -446,6 +471,8 @@ impl App {
             .open_media_type_panel(crate::media_type::Panel::open_for_extension(&ext));
     }
 
+    /// Handle a key in the media-type picker: shared list navigation, typing filters (Backspace
+    /// edits), Enter inserts the media type (panel stays open), Esc closes.
     pub(super) fn media_type_key(&mut self, key: KeyEvent) {
         let page = (self.layout.media_type_panel.height as usize).max(1);
         if list_panel_nav_key(self.info.media_type_panel_mut(), key.code, page) {
@@ -469,6 +496,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the media-type picker: a left click on a row inserts that media
+    /// type.
     pub(super) fn media_type_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) = list_panel_click_index(
             self.info.media_type_panel(),
@@ -513,6 +542,8 @@ impl App {
         self.todo_tree = Some(crate::todo_tree::Panel::new(items));
     }
 
+    /// Handle a key in the Todo Tree: shared list navigation; Space folds a group, `g` toggles
+    /// the grouping, `[`/`]` collapse/expand all, Enter jumps to the item, Esc closes.
     pub(super) fn todo_tree_key(&mut self, key: KeyEvent) {
         let page = (self.layout.todo_tree.height as usize).max(1);
         if list_panel_nav_key(self.todo_tree.as_mut(), key.code, page) {
@@ -536,6 +567,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the Todo Tree: a left click selects a row and activates it (a
+    /// group row folds, an item jumps to its location).
     pub(super) fn todo_tree_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) =
             list_panel_click_index(self.todo_tree.as_ref(), self.layout.todo_tree, mouse)

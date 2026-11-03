@@ -3,7 +3,32 @@
 //!
 //! Host-agnostic: the host turns its history into [`TreeNode`]s, calls
 //! [`Panel::open`], previews [`Panel::selected_seq`] whenever the selection
-//! moves, and commits or restores on close. See `spec/index.md`.
+//! moves, and commits or restores on close. See `spec/index.md`
+//! (`crates/vix-undo-tree-panel/spec/index.md`).
+//!
+//! Drawing model (see [`layout`]): states are listed in `seq` order, so a
+//! parent always precedes its children. The graph is a grid of two-character
+//! cells per lane — column `lane * 2` holds the lane's `|` or node glyph, the
+//! odd column between lanes holds connector glyphs (`\`, `/`, `-`). Lanes are
+//! reused once a branch ends, which keeps a deep linear history one column wide.
+//! Selection walks only state rows; connector rows are skipped.
+//!
+//! ```
+//! use vix_undo_tree_panel::{layout, TreeNode};
+//!
+//! // 0 -> 1 -> 2, then undo to 1 and edit: 3 branches off 1.
+//! let node = |seq, parent, children: Vec<usize>| TreeNode {
+//!     seq, parent, children, timestamp: 0,
+//! };
+//! let nodes = [
+//!     node(0, None, vec![1]),
+//!     node(1, Some(0), vec![2, 3]),
+//!     node(2, Some(1), vec![]),
+//!     node(3, Some(1), vec![]),
+//! ];
+//! let graph: Vec<String> = layout(&nodes, 3).into_iter().map(|r| r.graph).collect();
+//! assert_eq!(graph, ["o", "o", "|\\", "o |", "  @"]);
+//! ```
 
 use std::collections::HashMap;
 
@@ -43,8 +68,16 @@ const MARK: char = '@';
 /// A node's first child continues its lane; every later child opens a new
 /// lane (the lowest free one) on a connector row right after the parent. A
 /// lane is freed after the last state of its branch.
+///
+/// Children whose `seq` is not among `nodes` are ignored, and a node with no
+/// known parent lane (the root, or an orphan) claims a fresh lane, so a partial
+/// history still lays out without panicking. Nodes are processed in `seq`
+/// order regardless of the order given. The result has one row per state plus
+/// one connector row after each state that opens extra lanes.
 #[must_use]
 pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
+    // Process in creation order: a state's parent always has a lower `seq`, so
+    // the parent's lane is assigned before any child is visited.
     let mut sorted: Vec<&TreeNode> = nodes.iter().collect();
     sorted.sort_by_key(|n| n.seq);
     let by_seq: HashMap<usize, &TreeNode> = sorted.iter().map(|n| (n.seq, *n)).collect();
@@ -58,7 +91,8 @@ pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
         }
         seq
     };
-    // Lane -> the last state of the branch occupying it (`None` = free).
+    // Lane -> the last state of the branch occupying it (`None` = free). The
+    // stored value is only a busy marker today; `Some` draws a `|` on that lane.
     let mut lanes: Vec<Option<usize>> = Vec::new();
     let mut lane_of: HashMap<usize, usize> = HashMap::new();
     let mut rows = Vec::with_capacity(sorted.len() * 2);
@@ -93,6 +127,8 @@ pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
             }
             continue;
         };
+        // The first child continues this node's lane (a linear history stays in
+        // one column); only later siblings open new lanes.
         lane_of.insert(first, lane);
         if rest.is_empty() {
             continue;
@@ -141,10 +177,14 @@ fn cells_for(lanes: &[Option<usize>]) -> Vec<char> {
 /// lanes.
 fn connector(lanes: &[Option<usize>], from: usize, opened: &[usize]) -> String {
     let mut cells = cells_for(lanes);
+    // A just-opened lane has no state yet on this row, so blank its `|` before
+    // the branch glyph is drawn into the gap next to it.
     for &to in opened {
         cells[to * 2] = ' ';
     }
     for &to in opened {
+        // Branching right: dashes along the gap, then `\` into the new lane.
+        // Branching left (a freed lower lane was reused): `/` then dashes.
         if to > from {
             for c in &mut cells[from * 2 + 1..to * 2 - 1] {
                 if *c == ' ' {
@@ -175,9 +215,11 @@ fn trimmed(cells: &[char]) -> String {
 pub struct Panel {
     /// Every row, oldest state first.
     pub rows: Vec<Row>,
-    /// Indices into `rows` of the state rows, in order.
+    /// Indices into `rows` of the state rows, in order (connector rows are
+    /// absent, which is how navigation skips them).
     states: Vec<usize>,
-    /// The selected entry of `states`.
+    /// The selected entry of `states` (an index into `states`, not into `rows`;
+    /// use [`Panel::selected_row`] for the row index).
     selected: usize,
     /// The first visible row.
     pub scroll: usize,
@@ -186,7 +228,8 @@ pub struct Panel {
 }
 
 impl Panel {
-    /// Lay out `nodes` and select `current`, the state the buffer is in.
+    /// Lay out `nodes` and select `current`, the state the buffer is in. If
+    /// `current` is not among `nodes`, the first state is selected instead.
     #[must_use]
     pub fn open(nodes: &[TreeNode], current: usize) -> Self {
         let rows = layout(nodes, current);

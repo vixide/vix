@@ -5,6 +5,15 @@
 //! [`scan`] finds the tags in one file's text; [`Panel`] holds every [`Item`]
 //! found, the grouping, which groups are folded, and the selection. Everything
 //! is pure: the app reads the files and draws the rows.
+//!
+//! Row model: [`Panel::rows`] is recomputed from `items` + grouping + folds on
+//! every call rather than cached, so the selection (`selected`) is an index into
+//! that derived list and must be re-clamped by the navigation helpers whenever
+//! a fold or grouping change alters its length. Fold state is keyed by
+//! `(grouped_by_file, label)` so the same string used as a tag and as a file
+//! name does not fold both.
+//!
+//! Spec: `crates/vix-todo-tree/spec/index.md`.
 
 use std::collections::BTreeSet;
 
@@ -20,7 +29,8 @@ pub struct Item {
     pub file: String,
     /// 1-based line number.
     pub line: usize,
-    /// 1-based column of the tag.
+    /// 1-based character column of the tag within the *untrimmed* source line
+    /// (so it matches the editor's cursor column, not an offset into [`Item::text`]).
     pub col: usize,
     /// The trimmed line, cut to 120 characters.
     pub text: String,
@@ -28,6 +38,22 @@ pub struct Item {
 
 /// Every line of `text` that carries one of `tags` as a whole word. A line
 /// reports its first matching tag (in `tags` order) only.
+///
+/// "Whole word" means the tag is not adjacent to an alphanumeric or `_`
+/// character (see `vix_textops::tag_column`), so `TODOS` and `MY_TODO` do not
+/// match but `// TODO:` does. `file` is stored verbatim in each [`Item`].
+///
+/// # Examples
+///
+/// ```
+/// use vix_todo_tree::{scan, DEFAULT_TAGS};
+///
+/// let items = scan("a.rs", "fn f() {}\n    // TODO: later\n", DEFAULT_TAGS);
+/// assert_eq!(items.len(), 1);
+/// assert_eq!((items[0].line, items[0].col), (2, 8));
+/// assert_eq!(items[0].tag, "TODO");
+/// assert_eq!(items[0].text, "// TODO: later");
+/// ```
 #[must_use]
 pub fn scan(file: &str, text: &str, tags: &[&str]) -> Vec<Item> {
     text.lines()
@@ -101,10 +127,13 @@ impl Panel {
         }
     }
 
+    /// The key under which a group's fold state is stored in `collapsed`; the
+    /// leading `bool` is "grouped by file" so tag and file groups never collide.
     fn key(&self, label: &str) -> (bool, String) {
         (self.group_by == GroupBy::File, label.to_string())
     }
 
+    /// The label `item` belongs under for the current [`GroupBy`].
     fn group_label<'a>(&self, item: &'a Item) -> &'a str {
         match self.group_by {
             GroupBy::Tag => &item.tag,
@@ -115,6 +144,9 @@ impl Panel {
     /// The group labels in display order: known tags first, in
     /// [`DEFAULT_TAGS`] order, then everything else alphabetically.
     fn group_order(&self) -> Vec<String> {
+        // Collecting through a BTreeSet dedups and leaves labels alphabetical;
+        // the stable sort below then only reorders the known tags, so unknown
+        // tags (and all file groups) stay alphabetical.
         let mut labels: Vec<String> = self
             .items
             .iter()
@@ -135,6 +167,7 @@ impl Panel {
     }
 
     /// The visible rows: each group header, then its items unless folded.
+    /// Items within a group keep `items` order (file, then line, then column).
     #[must_use]
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
@@ -215,9 +248,12 @@ impl Panel {
         self.scroll = 0;
     }
 
-    /// The group header at or above the highlighted row.
+    /// The row index and label of the group header at or above the highlighted
+    /// row (the group the selection is inside); `None` when there are no rows.
     fn current_group(&self) -> Option<(usize, String)> {
         let rows = self.rows();
+        // Clamp a stale `selected` (e.g. after a fold shortened the list) to the
+        // last row; `checked_sub` yields `None` for an empty list.
         let upto = self.selected.min(rows.len().checked_sub(1)?);
         rows[..=upto]
             .iter()
@@ -239,6 +275,8 @@ impl Panel {
         if !self.collapsed.remove(&key) {
             self.collapsed.insert(key);
         }
+        // Park the highlight on the header: folding hides the items it may
+        // have been on, which would leave `selected` pointing at another group.
         self.selected = header;
     }
 

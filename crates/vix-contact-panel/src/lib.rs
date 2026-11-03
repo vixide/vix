@@ -5,6 +5,9 @@
 //! that list and tracks the highlighted row + scroll offset. Choosing a row opens
 //! that contact's vCard (the host then displays it with `vix-vcard-panel`). Pure
 //! data — no filesystem IO here.
+//!
+//! Navigation delegates to `vix_list_state` so clamping matches every other
+//! list panel. Spec: `crates/vix-contact-panel/spec/index.md`.
 
 use std::path::PathBuf;
 
@@ -94,6 +97,13 @@ impl Panel {
     }
 
     /// The highlighted contact's file path, if any.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_contact_panel::{Contact, Panel};
+    /// let p = Panel::open(vec![Contact { name: "Ada".into(), path: "a.vcf".into() }]);
+    /// assert_eq!(p.selected_path().unwrap().to_str(), Some("a.vcf"));
+    /// ```
     #[must_use]
     pub fn selected_path(&self) -> Option<PathBuf> {
         self.selected_contact().map(|c| c.path.clone())

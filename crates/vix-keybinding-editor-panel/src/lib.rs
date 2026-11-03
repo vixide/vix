@@ -20,6 +20,13 @@
 //! `crates/vix-keybindings/spec/index.md`, "Overrides never see a
 //! non-empty context") — listing a chord binding as "rebindable" here
 //! would promise something the system underneath can't actually do.
+//!
+//! `selected` indexes the *filtered, sorted* match list ([`Panel::matches`]),
+//! not [`Panel::rows`]; resolve it through [`Panel::selected_row`]. Every
+//! query-changing method resets `selected` and `scroll` to 0 so the highlight
+//! can never point past a shrunken result list.
+//!
+//! Spec: `crates/vix-keybinding-editor-panel/spec/index.md`.
 
 /// Where a row's effective binding currently comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,7 +79,9 @@ pub enum Column {
 /// Sorting is tri-state per click cycle, same as
 /// `vix-keyboard-shortcut-panel`'s read-only table: natural order until a
 /// header is clicked, then ascending, then descending on a second click
-/// of the same header.
+/// of the same header. (There is no click that returns to natural order;
+/// [`Panel::toggle_sort`] only alternates ascending/descending once a
+/// column is chosen.)
 pub struct Panel {
     /// The assembled rows, in natural (source) order.
     pub rows: Vec<Row>,
@@ -107,6 +116,8 @@ impl Panel {
     /// breaks ties).
     #[must_use]
     pub fn matches(&self) -> Vec<usize> {
+        // Only the display strings are searched, not the raw token or action id:
+        // the user filters by what they can see on screen.
         let needle = self.query.to_lowercase();
         let mut out: Vec<usize> = self
             .rows
@@ -120,6 +131,8 @@ impl Panel {
             .map(|(i, _)| i)
             .collect();
         if let Some((col, ascending)) = self.sort {
+            // `sort_by` is stable, so rows equal on both columns keep their
+            // natural (source) order.
             out.sort_by(|&a, &b| {
                 let (ra, rb) = (&self.rows[a], &self.rows[b]);
                 let key = |r: &Row| match col {
@@ -133,7 +146,8 @@ impl Panel {
         out
     }
 
-    /// Number of rows matching the current filter.
+    /// Number of rows matching the current filter. Recomputes
+    /// [`Panel::matches`] on each call, which is fine for a keymap-sized table.
     #[must_use]
     pub fn len(&self) -> usize {
         self.matches().len()
@@ -195,11 +209,13 @@ impl Panel {
     /// to keep [`Panel::selected`] visible, never further.
     pub fn clamp_scroll(&mut self, view_h: usize) {
         let view_h = view_h.max(1);
+        // Scroll the minimum distance that brings the selection into view...
         if self.selected < self.scroll {
             self.scroll = self.selected;
         } else if self.selected >= self.scroll + view_h {
             self.scroll = self.selected + 1 - view_h;
         }
+        // ...then never leave blank rows below the last match.
         self.scroll = self.scroll.min(self.len().saturating_sub(view_h));
     }
 }

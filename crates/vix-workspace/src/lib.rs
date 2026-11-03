@@ -13,12 +13,22 @@
 //! folders = ["/home/me/proj", "/home/me/lib"]
 //! files = ["/home/me/proj/src/main.rs"]
 //! ```
+//!
+//! # Security model
+//!
+//! A workspace file is portable and may come from an untrusted source, so every
+//! path in it is treated as hostile: callers are expected to check
+//! [`Workspace::has_root_or_empty_folder`] before adopting its folders and to
+//! gate [`Workspace::external_files`] behind a user confirmation. All file
+//! access goes through `vix_authority` so the sandbox/authority layer applies.
+//!
+//! Spec: `crates/vix-workspace/spec/index.md`.
 
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Lexically normalize a path: resolve `.` and `..` components textually
+/// Lexically normalize a path (private helper for the containment checks): resolve `.` and `..` components textually
 /// (without touching the filesystem, so it never follows a symlink or requires
 /// the path to exist). Used for containment checks on untrusted workspace paths.
 fn normalize_lexical(path: &Path) -> PathBuf {
@@ -26,7 +36,9 @@ fn normalize_lexical(path: &Path) -> PathBuf {
     for comp in path.components() {
         match comp {
             Component::ParentDir => {
-                // Pop a normal component; keep `..` that would escape the root.
+                // Pop a normal component; keep `..` that would escape the root
+                // (`pop` fails on an empty buffer or a bare root, so `/..` stays
+                // `/..` and is later detected as having no `Normal` component).
                 if !out.pop() {
                     out.push("..");
                 }
@@ -53,6 +65,18 @@ pub const EXTENSION: &str = "vix-workspace";
 
 /// A saved workspace: its folders (first is the primary root) and the files to
 /// reopen.
+///
+/// Serialized as TOML via [`Workspace::to_toml`] / [`Workspace::from_toml`]; both
+/// fields are optional on read (`#[serde(default)]`) so a hand-written file may
+/// omit either.
+///
+/// # Examples
+/// ```
+/// use vix_workspace::Workspace;
+/// let ws = Workspace { folders: vec!["/p".into()], files: vec![] };
+/// let text = ws.to_toml().unwrap();
+/// assert_eq!(Workspace::from_toml(&text).unwrap(), ws);
+/// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Workspace {
@@ -128,7 +152,7 @@ impl Workspace {
             .collect()
     }
 
-    /// Read a workspace file from `path`.
+    /// Read a workspace file from `path` through the ambient `vix_authority`.
     ///
     /// # Errors
     /// Returns an error if the file cannot be read or parsed.
@@ -137,7 +161,8 @@ impl Workspace {
         Self::from_toml(&text).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
-    /// Write this workspace to `path` as TOML.
+    /// Write this workspace to `path` as TOML, atomically (via the authority's
+    /// `write_atomic`, so a crash never leaves a half-written workspace file).
     ///
     /// # Errors
     /// Returns an error if serialization or the file write fails.
