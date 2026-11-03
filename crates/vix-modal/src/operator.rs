@@ -91,6 +91,9 @@ pub fn insert_at(text: &str, at: usize, content: &str) -> (String, usize) {
     (out, cursor)
 }
 
+/// Offset of the first non-blank char on the line holding `pos` (the line's
+/// start when it is all blank; `pos` itself when no line holds it). Used to
+/// place the cursor after a line-wise paste.
 fn first_non_blank_at(text: &str, pos: usize) -> usize {
     let chars: Vec<char> = text.chars().collect();
     let lines = line_ranges(&chars);

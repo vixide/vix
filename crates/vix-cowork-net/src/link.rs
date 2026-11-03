@@ -6,6 +6,12 @@
 //! plaintext starts with a flag byte (`1` = last chunk) and each uses the next
 //! nonce, so reordering, dropping or replaying a frame fails authentication.
 //! Reassembly is capped at [`MAX_MESSAGE_BYTES`].
+//!
+//! Each direction has its own monotonically increasing nonce counter (the
+//! transport is a snow *stateless* state, so nonces are explicit); the
+//! counters are never reused, and a counter at `u64::MAX` is refused as a
+//! [`NetError::Crypto`] rather than wrapping. Spec:
+//! `crates/vix-cowork-net/spec/index.md`.
 
 use crate::error::NetError;
 use snow::StatelessTransportState;
@@ -23,16 +29,22 @@ const CHUNK: usize = 60_000;
 /// Poly1305 tag length.
 const TAG: usize = 16;
 
+/// The send side's mutable state, behind one `Mutex` so concurrent `send`s
+/// serialize and nonces are assigned in the order frames hit the wire.
 struct Writer {
+    /// A clone of the socket used only for writing.
     stream: TcpStream,
+    /// The next outgoing Noise nonce.
     nonce: u64,
 }
 
 /// The sending half of a connection. Cheap to clone; sends are serialized.
 #[derive(Clone)]
 pub struct Link {
+    /// Shared with the reader half; stateless, so `&self` suffices to encrypt.
     state: Arc<StatelessTransportState>,
     writer: Arc<Mutex<Writer>>,
+    /// Remote address captured at connect time (it may be unavailable later).
     peer: Option<SocketAddr>,
 }
 
@@ -47,7 +59,9 @@ impl std::fmt::Debug for Link {
 /// The receiving half of a connection.
 pub struct LinkReader {
     state: Arc<StatelessTransportState>,
+    /// A clone of the socket used only for reading.
     stream: TcpStream,
+    /// The next expected incoming Noise nonce; a mismatch fails decryption.
     nonce: u64,
 }
 
@@ -89,7 +103,8 @@ pub(crate) fn split(
     Ok((link, reader))
 }
 
-/// Write one raw frame (length prefix + body).
+/// Write one raw frame (big-endian `u16` length prefix + body) and flush.
+/// Errors with [`NetError::TooLarge`] if `body` does not fit in a `u16`.
 pub(crate) fn write_frame(stream: &mut TcpStream, body: &[u8]) -> Result<(), NetError> {
     let len = u16::try_from(body.len()).map_err(|_| NetError::TooLarge)?;
     let mut out = Vec::with_capacity(2 + body.len());
@@ -100,7 +115,8 @@ pub(crate) fn write_frame(stream: &mut TcpStream, body: &[u8]) -> Result<(), Net
     Ok(())
 }
 
-/// Read one raw frame.
+/// Read one raw frame. The length prefix is a `u16`, so the allocation is
+/// bounded at 64 KiB per frame regardless of what the peer claims.
 pub(crate) fn read_frame(stream: &mut TcpStream) -> Result<Vec<u8>, NetError> {
     let mut len = [0u8; 2];
     stream.read_exact(&mut len)?;
@@ -138,7 +154,10 @@ impl Link {
         if data.len() > MAX_MESSAGE_BYTES {
             return Err(NetError::TooLarge);
         }
+        // Hold the lock across the whole message so chunks of two concurrent
+        // sends can never interleave on the wire.
         let mut w = self.writer.lock().unwrap_or_else(PoisonError::into_inner);
+        // An empty message still needs one (empty, final) chunk.
         let chunks: Vec<&[u8]> = if data.is_empty() {
             vec![&[][..]]
         } else {
@@ -149,6 +168,7 @@ impl Link {
             if w.nonce == u64::MAX {
                 return Err(NetError::Crypto);
             }
+            // Flag byte: 1 marks the final chunk of the message.
             let mut plain = Vec::with_capacity(1 + chunk.len());
             plain.push(u8::from(i == last));
             plain.extend_from_slice(chunk);
@@ -163,6 +183,8 @@ impl Link {
     /// Close the connection; a blocked [`LinkReader::recv`] returns.
     pub fn close(&self) {
         let w = self.writer.lock().unwrap_or_else(PoisonError::into_inner);
+        // Shutting down the shared socket (not just our clone) is what wakes a
+        // reader blocked in `recv` on the other half. Errors mean already closed.
         let _ = w.stream.shutdown(Shutdown::Both);
     }
 }
@@ -194,6 +216,7 @@ impl LinkReader {
         let mut assembled: Vec<u8> = Vec::new();
         loop {
             let ct = read_frame(&mut self.stream)?;
+            // A valid frame holds at least the flag byte plus the auth tag.
             if ct.len() < TAG + 1 {
                 return Err(NetError::Crypto);
             }
@@ -209,6 +232,8 @@ impl LinkReader {
             }
             assembled.extend_from_slice(body);
             match flag {
+                // Final chunk: decode. A reserved (future chat) family is dropped
+                // so a newer peer cannot end an older peer's session.
                 1 => match wire::decode(&assembled) {
                     Err(e) if e.is_reserved_message() => assembled.clear(),
                     decoded => return Ok(decoded?),
@@ -220,7 +245,9 @@ impl LinkReader {
     }
 
     /// Run a reader thread that forwards every message, tagged with `tag`,
-    /// into `tx`, and ends with [`LinkEvent::Closed`].
+    /// into `tx`, and ends with [`LinkEvent::Closed`]. The thread also ends
+    /// silently if the receiving end of `tx` is dropped. `tag` identifies the
+    /// connection when many readers share one channel (the host's guests).
     pub fn spawn<K>(mut self, tag: K, tx: Sender<(K, LinkEvent)>) -> JoinHandle<()>
     where
         K: Clone + Send + 'static,

@@ -34,6 +34,23 @@
 //! pathological patterns (many holes, adversarial input); realistic
 //! patterns against realistic file sizes are fast in practice, which is
 //! what this optimizes for.
+//!
+//! Spec: `crates/vix-structural-replace/spec/index.md`. The App shell drives
+//! this through a `StructuralReplace` session that reuses the query-replace
+//! y/n/!/q confirmation flow; this crate is pure text-in/text-out.
+//!
+//! # Example
+//!
+//! ```
+//! use vix_structural_replace::{Pattern, render_replacement};
+//!
+//! let src = "if (a > 0) { run(); }";
+//! // `$$C` (not `$C`): the condition is several tokens, and a single hole
+//! // matches exactly one unit.
+//! let pat = Pattern::compile("if ($$C) { $$B }").unwrap();
+//! let m = pat.find_all(src).remove(0);
+//! assert_eq!(render_replacement("when $C -> $B", src, &m), "when a > 0 -> run();");
+//! ```
 
 // Tests slice their own ASCII fixtures; the lint guards library code.
 #![cfg_attr(not(test), warn(clippy::string_slice))]
@@ -61,8 +78,11 @@ enum Kind {
 /// One token's structural kind and byte span in the text it came from.
 #[derive(Clone, Copy, Debug)]
 struct Token {
+    /// Bracket role.
     kind: Kind,
+    /// Start byte offset (inclusive).
     start: usize,
+    /// End byte offset (exclusive).
     end: usize,
 }
 
@@ -258,6 +278,7 @@ pub struct Match {
 /// A compiled structural pattern, ready to search source text.
 #[derive(Clone, Debug)]
 pub struct Pattern {
+    /// The compiled sequence; never empty (see [`Pattern::compile`]).
     tokens: Vec<PatternToken>,
 }
 
@@ -356,6 +377,8 @@ impl Pattern {
                     end,
                     captures,
                 });
+                // Resume after the match (non-overlapping); `max(i + 1)`
+                // guarantees progress when a pattern matched zero tokens.
                 i = end_idx.max(i + 1);
             } else {
                 i += 1;
@@ -365,11 +388,17 @@ impl Pattern {
     }
 
     /// The first match starting at or after byte offset `from` in `source`.
+    ///
+    /// Note this runs [`Pattern::find_all`] and filters, so it costs a full
+    /// scan per call; callers stepping through matches interactively are
+    /// working on editor-sized buffers where that is acceptable.
     #[must_use]
     pub fn find_from(&self, source: &str, from: usize) -> Option<Match> {
         self.find_all(source).into_iter().find(|m| m.start >= from)
     }
 
+    /// Try to match the whole pattern anchored at source token `start_idx`.
+    /// Returns the token index just past the match and the captures.
     fn try_match_at(
         &self,
         toks: &[Token],
@@ -408,6 +437,8 @@ impl Pattern {
             PatternToken::Hole { name, multi: false } => {
                 let unit_end = consume_unit(toks, ti)?;
                 let span = (toks[ti].start, toks[unit_end - 1].end);
+                // Captures are committed to `caps` only if the remainder of
+                // the pattern matches, so a failed branch leaves no residue.
                 let mut next_caps = caps.clone();
                 next_caps.push((name.clone(), span));
                 let result = self.match_from(pi + 1, toks, unit_end, source, &mut next_caps)?;
@@ -415,6 +446,12 @@ impl Pattern {
                 Some(result)
             }
             PatternToken::Hole { name, multi: true } => {
+                // Lazy: try the rest of the pattern after 0, 1, 2... tokens.
+                // `depth` tracks brackets opened inside the capture; the rest
+                // is only attempted at depth 0 so a capture never splits a
+                // bracketed group, and a closer with no opener (depth < 0)
+                // stops the search so the capture can't escape its enclosing
+                // group.
                 let mut depth = 0i32;
                 let mut j = ti;
                 loop {
@@ -473,7 +510,7 @@ fn consume_unit(toks: &[Token], i: usize) -> Option<usize> {
 }
 
 /// Substitute `$NAME`/`$$NAME` placeholders in `template` with `m`'s
-/// captured source text (the exact `source.get(start..end).unwrap_or_default()` slice for the
+/// captured source text (the exact byte slice of `source` for the
 /// *first* capture of that name), and copy any other text through as-is. A
 /// placeholder naming a hole the pattern didn't capture renders as an empty
 /// string rather than erroring, and a bare `$`/`$$` not followed by a name
@@ -508,6 +545,8 @@ pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
             }
         }
         if name_end == name_start {
+            // Bare `$`: copy it through and let the next loop turn handle
+            // whatever follows (a second `$` is then re-examined).
             out.push('$');
             i += 1;
             continue;

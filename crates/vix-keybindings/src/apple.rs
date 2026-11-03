@@ -27,6 +27,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// The Apple keymap's Ctrl-letter bindings (its only context). Rows that differ only by Shift are separate entries; see the module doc for which letters are Shift-guarded.
 const NORMAL: &[Binding] = &[
     // Shift-guarded: a genuinely different action per Shift state.
     Binding {
@@ -171,6 +172,7 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
+/// The Apple keymap's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: NORMAL,

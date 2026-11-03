@@ -6,6 +6,24 @@
 //! difference, the gutter marks for each side, and the text that results from
 //! copying one change across (vimdiff `dp`/`do`). It is pure, so the host
 //! recomputes it from the two buffers whenever either changes.
+//!
+//! Conventions: all line numbers are 0-based; ranges are half-open
+//! (`start..end`); a pure insertion or deletion is a hunk with an **empty**
+//! range on the side that lacks the lines, positioned where they would go.
+//! Spec: `crates/vix-diff-view/spec/index.md`.
+//!
+//! # Examples
+//!
+//! ```
+//! use vix_diff_view::compare::{Side, copy_hunk, hunks, map_line};
+//!
+//! let (l, r) = ("a\nb\nc\n", "a\nB\nc\n");
+//! let h = hunks(l, r);
+//! assert_eq!(h.len(), 1);
+//! assert_eq!(map_line(&h, Side::Left, 2), 2);
+//! // Copy the right side's change over to the left.
+//! assert_eq!(copy_hunk(&h, 0, Side::Right, l, r).unwrap(), r);
+//! ```
 
 use std::ops::Range;
 
@@ -131,6 +149,8 @@ pub fn fillers(hunks: &[Hunk], side: Side) -> Vec<(usize, usize)> {
 #[must_use]
 pub fn map_line(hunks: &[Hunk], side: Side, line: usize) -> usize {
     let other = side.other();
+    // Lines outside any hunk correspond one to one, shifted by the net size
+    // change of every hunk before them; lines inside a hunk map by offset.
     // Lines between hunks shift by the net size of every hunk before them.
     let mut delta: isize = 0;
     for h in hunks {
@@ -148,6 +168,8 @@ pub fn map_line(hunks: &[Hunk], side: Side, line: usize) -> usize {
     usize::try_from(signed(line) + delta).unwrap_or(0)
 }
 
+/// `usize` to `isize`, saturating (line counts never get near the limit; this
+/// just avoids a lossy cast).
 fn signed(n: usize) -> isize {
     isize::try_from(n).unwrap_or(isize::MAX)
 }
@@ -208,6 +230,7 @@ pub fn copy_hunk(
     left: &str,
     right: &str,
 ) -> Option<String> {
+    // Splice: keep dst up to the hunk, put src's hunk lines, keep dst after it.
     let h = hunks.get(index)?;
     let (src, dst) = match from {
         Side::Left => (left, right),
@@ -239,7 +262,9 @@ pub fn copy_hunk(
     Some(out)
 }
 
-/// The line ending `text` uses: CRLF when its first line ends in one.
+/// The line ending `text` uses: CRLF when its first line ends in one, else
+/// LF. Used to terminate a final line that lacked a newline when text is
+/// appended after it, so copied hunks keep the destination's convention.
 fn newline_of(text: &str) -> &'static str {
     match text.find('\n') {
         Some(i) if text[..i].ends_with('\r') => "\r\n",

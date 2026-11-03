@@ -1,5 +1,12 @@
 //! Container names (T718): `docker://`, `podman://`, `k8s://` and `wsl://`,
 //! parsed into a [`ContainerTarget`].
+//!
+//! Pure string handling, always compiled (no `ssh` feature needed). The
+//! parser is deliberately strict: every name, user and path is validated so
+//! that nothing option-shaped or shell-significant can reach an engine
+//! command line later. The SSH counterpart is [`crate::ssh::SshTarget`];
+//! [`crate::remote::RemoteTarget`] unifies the two. Owning spec:
+//! `crates/vix-authority/spec/container/index.md`.
 
 use crate::ssh::TargetError;
 use crate::ssh::target::{check_path, percent_decode, percent_encode};

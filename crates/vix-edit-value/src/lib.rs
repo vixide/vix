@@ -18,6 +18,11 @@
 //! to parent/first child); **Enter**/**F2** edit the selected scalar (or toggle a
 //! container); **Space** toggles fold; **u**/**Ctrl+R** undo/redo; **Ctrl+S**
 //! save; **Esc**/**q** close.
+//!
+//! Spec: `crates/vix-edit-value/spec/index.md`. The host (the App shell's
+//! JSON/YAML edit overlay) draws from the read accessors ([`Tree::label`],
+//! [`Tree::value`], [`Tree::depth`], ...) and never touches the tree directly,
+//! so all fold/undo invariants live here.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -44,17 +49,27 @@ pub enum Outcome {
 /// A structured value: scalar, array, or object (object key order preserved).
 #[derive(Clone, PartialEq)]
 enum Val {
+    /// JSON `null` / YAML `~`.
     Null,
+    /// A boolean scalar.
     Bool(bool),
     /// A number kept in its textual form so it round-trips unchanged.
     Num(String),
+    /// A string scalar.
     Str(String),
+    /// An array; `collapsed` is UI fold state, not part of the data.
     Arr {
+        /// Whether the children are hidden in the flattened view.
         collapsed: bool,
+        /// Elements in order.
         items: Vec<Val>,
     },
+    /// An object, kept as an ordered pair list (not a map) so key order
+    /// round-trips; duplicate keys are not expected from the parser.
     Obj {
+        /// Whether the children are hidden in the flattened view.
         collapsed: bool,
+        /// Key/value pairs in source order.
         entries: Vec<(String, Val)>,
     },
 }
@@ -62,30 +77,41 @@ enum Val {
 /// One step of a path locating a node within the tree.
 #[derive(Clone, PartialEq)]
 enum Seg {
+    /// An object key.
     Key(String),
+    /// An array position.
     Index(usize),
 }
 
 /// Whether a display row is a scalar leaf or a container (with collapse state).
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
+    /// A leaf value.
     Scalar,
+    /// An object/array; the flag is `true` when collapsed.
     Container(bool),
 }
 
 /// A flattened display row computed from the tree and its fold state.
 struct Row {
+    /// Nesting level (0 for the root), used for indentation.
     depth: usize,
+    /// Object key, or `[i]` for array elements; empty for the root.
     label: String,
+    /// Scalar text, or a `[n]` / `{n}` child-count summary for containers.
     value: String,
+    /// Scalar or container (with fold state).
     kind: Kind,
+    /// Path from the root; rows are re-found after a rebuild by this path.
     path: Vec<Seg>,
 }
 
 /// Current interaction mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
+    /// Navigating and folding.
     Normal,
+    /// Typing into the edit buffer for a scalar.
     Edit,
 }
 
@@ -117,15 +143,26 @@ impl std::error::Error for ParseError {}
 
 /// A foldable, editable JSON/YAML value tree with a cursor and undo history.
 pub struct Tree {
+    /// The data (with per-container fold flags).
     root: Val,
+    /// Serialization format chosen at open time.
     format: Format,
+    /// Visible rows, derived from `root`; rebuilt after every structural change.
     rows: Vec<Row>,
+    /// Selected index into `rows`.
     sel: usize,
+    /// First visible row.
     scroll: usize,
+    /// Unsaved edits exist.
     dirty: bool,
+    /// Navigating or editing.
     mode: Mode,
+    /// Text being typed while in [`Mode::Edit`] (private enum; see [`Tree::is_editing`]).
     edit_buf: String,
+    /// Whole-tree snapshots, capped at `HISTORY_CAP`; whole-tree clones keep
+    /// undo trivially correct at the cost of memory (values here are small).
     undo: Vec<Val>,
+    /// Snapshots undone and re-appliable; cleared by any new edit.
     redo: Vec<Val>,
 }
 
@@ -262,6 +299,10 @@ impl Tree {
     }
 
     /// Interpret a key event and report what the host should do next.
+    ///
+    /// `page` is the host's visible row count, used for PageUp/PageDown.
+    /// Ctrl+S is handled before the edit-mode check so a pending edit is
+    /// committed first and is included in what the host saves.
     pub fn handle_key(&mut self, key: KeyEvent, page: usize) -> Outcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         if ctrl && key.code == KeyCode::Char('s') {
@@ -286,6 +327,7 @@ impl Tree {
             KeyCode::Char(' ') => self.toggle(),
             KeyCode::Enter | KeyCode::F(2) => self.activate(),
             KeyCode::Char('u') => self.undo(),
+            // Plain `r` is deliberately unbound; only Ctrl+R redoes.
             KeyCode::Char('r') if ctrl => self.redo(),
             KeyCode::Esc | KeyCode::Char('q') => return Outcome::Close,
             _ => {}
@@ -385,6 +427,7 @@ impl Tree {
         let path = row.path.clone();
         let new = parse_scalar(&self.edit_buf);
         if let Some(node) = at_mut(&mut self.root, &path) {
+            // An unchanged value is not an edit: no undo step, not dirty.
             if *node == new {
                 return;
             }
@@ -523,6 +566,8 @@ fn parse_scalar(s: &str) -> Val {
         "true" => Val::Bool(true),
         "false" => Val::Bool(false),
         "null" => Val::Null,
+        // Any f64-parsable text counts as a number (kept verbatim, so `1.50`
+        // is not normalized); notably `nan`/`inf` also parse as f64.
         _ if s.parse::<f64>().is_ok() => Val::Num(s.to_string()),
         _ => Val::Str(s.to_string()),
     }
@@ -544,6 +589,8 @@ fn from_yaml(v: &serde_norway::Value) -> Val {
             collapsed: false,
             entries: m.iter().map(|(k, v)| (yaml_key(k), from_yaml(v))).collect(),
         },
+        // YAML tags (`!!str`, custom) are dropped; only the value is kept,
+        // so saving a YAML file loses explicit tags.
         Y::Tagged(t) => from_yaml(&t.value),
     }
 }
@@ -556,6 +603,7 @@ fn yaml_key(k: &serde_norway::Value) -> String {
         Y::Bool(b) => b.to_string(),
         Y::Number(n) => n.to_string(),
         Y::Null => "null".to_string(),
+        // Complex (sequence/mapping) keys have no sensible one-line label.
         _ => "?".to_string(),
     }
 }
@@ -566,6 +614,8 @@ fn to_yaml(val: &Val) -> serde_norway::Value {
     match val {
         Val::Null => Y::Null,
         Val::Bool(b) => Y::Bool(*b),
+        // Prefer an integer, then a float, so `7` stays `7` rather than `7.0`;
+        // text that is neither (an edit like `1e`) falls back to a string.
         Val::Num(s) => s
             .parse::<i64>()
             .map(Y::from)

@@ -10,6 +10,22 @@
 //! - RGB: `r, g, b` with each component 0–255.
 //! - HSL: `h, s%, l%` with hue 0–360 and saturation/lightness 0–100 (the `%`
 //!   signs are optional).
+//!
+//! The conversions are pure functions over integers and `f64`; float-to-int
+//! conversion is done without `as` casts (see `floor_to_u32`) to satisfy the
+//! workspace's pedantic lints. Round trips through HSL are lossy because HSL is
+//! rendered with integer components. Spec:
+//! `crates/vix-color-converter-tool/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_color_converter_tool::Color;
+//!
+//! let c = Color::from_hex("#f00").unwrap();
+//! assert_eq!(c.to_rgb(), "rgb(255, 0, 0)");
+//! assert_eq!(c.to_hsl(), "hsl(0, 100%, 50%)");
+//! assert_eq!(Color::from_hsl("120, 100%, 50%").unwrap().to_hex(), "#00ff00");
+//! ```
 
 /// An RGB color (8 bits per channel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +40,14 @@ pub struct Color {
 
 impl Color {
     /// Parse a HEX color: `#RGB`, `#RRGGBB`, or either without the `#`.
+    ///
+    /// Returns `None` for any other length or a non-hex digit. Leading and
+    /// trailing whitespace is ignored; every leading `#` is stripped. The
+    /// three-digit form doubles each digit (`#f80` is `#ff8800`).
+    ///
+    /// Caution: the six-digit branch slices the string by byte index, so a
+    /// six-*byte* input with a multibyte character can slice off a character
+    /// boundary; ASCII input is always safe.
     #[must_use]
     pub fn from_hex(text: &str) -> Option<Color> {
         let hex = text.trim().trim_start_matches('#');
@@ -31,6 +55,7 @@ impl Color {
             3 => {
                 let digit = |i: usize| {
                     let ch = hex.as_bytes()[i] as char;
+                    // Short form: a digit `d` means `dd`, i.e. d * 0x11 = d * 17.
                     ch.to_digit(16).and_then(|v| u8::try_from(v * 17).ok()) // 0xF -> 0xFF
                 };
                 (digit(0)?, digit(1)?, digit(2)?)
@@ -49,6 +74,9 @@ impl Color {
     }
 
     /// Parse an RGB color: `r, g, b` (each 0–255), optionally wrapped in `rgb(...)`.
+    ///
+    /// Components must be exactly three decimal integers that fit in a `u8`;
+    /// anything else (floats, percentages, 256) yields `None`.
     #[must_use]
     pub fn from_rgb(s: &str) -> Option<Color> {
         let parts = triple(s, "rgb")?;
@@ -65,6 +93,9 @@ impl Color {
 
     /// Parse an HSL color: `h, s%, l%` (hue 0–360, sat/light 0–100), optionally
     /// wrapped in `hsl(...)`. The `%` signs are optional.
+    ///
+    /// Components may be fractional; out-of-range values yield `None` rather
+    /// than being clamped. Hue 360 is accepted and equals hue 0.
     #[must_use]
     pub fn from_hsl(s: &str) -> Option<Color> {
         let parts = triple(s, "hsl")?;
@@ -81,6 +112,8 @@ impl Color {
     }
 
     /// Render as `#RRGGBB` (lowercase).
+    ///
+    /// Feeding the result back to [`Color::from_hex`] always round-trips.
     #[must_use]
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
@@ -92,7 +125,8 @@ impl Color {
         format!("rgb({}, {}, {})", self.r, self.g, self.b)
     }
 
-    /// Render as `hsl(h, s%, l%)` with integer components.
+    /// Render as `hsl(h, s%, l%)` with integer components (rounded to nearest, so
+    /// converting back may differ from the original by a channel step or two).
     #[must_use]
     pub fn to_hsl(self) -> String {
         let (hue, sat, light) = rgb_to_hsl(self);
@@ -162,6 +196,8 @@ fn triple(s: &str, name: &str) -> Option<[String; 3]> {
 /// Convert HSL (hue degrees, sat/light 0–1) to an RGB [`Color`].
 fn hsl_to_rgb(hue: f64, sat: f64, light: f64) -> Color {
     let chroma = (1.0 - (2.0 * light - 1.0).abs()) * sat;
+    // Standard HSL→RGB: `sector` is which of the six 60° wedges the hue is in,
+    // `chroma` the color intensity, `mid` the intermediate channel's value.
     let sector = hue / 60.0;
     let mid = chroma * (1.0 - (sector % 2.0 - 1.0).abs());
     // Truncate toward zero to pick the 60-degree sector (matches `as u32`).
@@ -194,10 +230,13 @@ fn rgb_to_hsl(color: Color) -> (f64, f64, f64) {
     let min = red.min(green).min(blue);
     let light = f64::midpoint(max, min);
     let delta = max - min;
+    // Achromatic (grey): hue is undefined, report 0 with zero saturation.
     if delta.abs() < f64::EPSILON {
         return (0.0, 0.0, light);
     }
     let sat = delta / (1.0 - (2.0 * light - 1.0).abs());
+    // The hue wedge depends on which channel is the maximum; the comparisons
+    // use EPSILON because the channels come from exact u8 / 255 divisions.
     let hue = if (max - red).abs() < f64::EPSILON {
         60.0 * (((green - blue) / delta).rem_euclid(6.0))
     } else if (max - green).abs() < f64::EPSILON {
@@ -209,6 +248,9 @@ fn rgb_to_hsl(color: Color) -> (f64, f64, f64) {
 }
 
 /// Which of the three fields is being edited.
+///
+/// The discriminant order (Hex, Rgb, Hsl) matches [`Converter::fields`] and
+/// [`Field::ALL`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     /// The `#RRGGBB` field.
@@ -247,6 +289,20 @@ impl Field {
 /// The Color Converter dialog's editing state: the text of all three fields and
 /// which one has focus. Editing the focused field reparses it and, when valid,
 /// rewrites the other two — so the three views stay in sync.
+///
+/// While the focused text does not parse (mid-typing), the other two fields are
+/// left as they were, so a half-typed value never blanks them.
+///
+/// # Examples
+/// ```
+/// use vix_color_converter_tool::Converter;
+///
+/// let mut c = Converter::new();
+/// for ch in "#00f".chars() {
+///     c.push(ch);
+/// }
+/// assert_eq!(c.fields[1], "rgb(0, 0, 255)");
+/// ```
 #[derive(Debug, Clone)]
 pub struct Converter {
     /// Field text in [`Field`] order: HEX, RGB, HSL.
@@ -271,7 +327,8 @@ impl Converter {
         }
     }
 
-    /// Seed every field from `color`, keeping the current focus.
+    /// Seed every field from `color`, keeping the current focus (including the
+    /// focused one, which is overwritten in its canonical form).
     pub fn set_color(&mut self, color: Color) {
         self.fields[Field::Hex.index()] = color.to_hex();
         self.fields[Field::Rgb.index()] = color.to_rgb();

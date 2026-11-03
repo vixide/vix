@@ -4,21 +4,33 @@
 //! the failures as human-readable lines (empty means it conforms). It is a
 //! plain function rather than a `#[test]` so each implementation's own test
 //! (local, fake, and later SSH) calls it with its own scratch path.
+//!
+//! The suite is split into one private function per area (`files`,
+//! `conflicts`, `listing`, `moves`, `processes`) that share a private `Report`; the
+//! order matters because later areas build on files earlier ones leave
+//! behind (`listing` expects `a.txt` and `sub/`, `moves` renames `a.txt`).
+//! Only behavior common to every authority is asserted, so a new
+//! implementation (T718's containers, for one) is held to the same contract.
+//! Owning spec: `crates/vix-authority/spec/index.md`.
 
 use std::path::Path;
 
 use crate::{Authority, FileKind, ProcessSpec, WalkOptions, WriteConflict};
 
-/// Collects failures without stopping at the first.
+/// Collects failures without stopping at the first, so one run lists every
+/// non-conformance instead of just the earliest. Holds the messages.
 struct Report(Vec<String>);
 
 impl Report {
+    /// Record `what` as a failure unless `ok`.
     fn check(&mut self, ok: bool, what: &str) {
         if !ok {
             self.0.push(what.to_string());
         }
     }
 
+    /// Unwrap `r`, recording `what: error` as a failure and returning `None`
+    /// on `Err`, so a step's follow-up checks can be skipped via `if let`.
     fn ok<T, E: std::fmt::Display>(&mut self, r: Result<T, E>, what: &str) -> Option<T> {
         match r {
             Ok(v) => Some(v),
@@ -33,6 +45,21 @@ impl Report {
 /// Run the suite against `auth`. `scratch` is a path in `auth`'s own
 /// namespace that must not exist yet; the suite creates it, works inside it,
 /// and removes it at the end.
+///
+/// Returns one line per failed expectation; an empty vector means `auth`
+/// conforms. Without the `process` feature the process checks instead assert
+/// that [`Authority::command`] reports `Unsupported`.
+///
+/// # Examples
+/// ```
+/// use vix_authority::{conformance, FakeAuthority};
+/// let dir = std::env::temp_dir().join(format!("vix-conf-doc-{}", std::process::id()));
+/// let fake = FakeAuthority::new(&dir).unwrap();
+/// let failures = conformance::run(&fake, std::path::Path::new("/scratch"));
+/// assert!(failures.is_empty(), "{failures:?}");
+/// let _ = std::fs::remove_dir_all(&dir);
+/// let _ = std::fs::remove_dir_all(fake.trash_dir());
+/// ```
 #[must_use]
 pub fn run(auth: &dyn Authority, scratch: &Path) -> Vec<String> {
     let mut r = Report(Vec::new());
@@ -57,6 +84,9 @@ pub fn run(auth: &dyn Authority, scratch: &Path) -> Vec<String> {
     r.0
 }
 
+/// Plain file operations: write/read (and limited/guarded variants), atomic
+/// and encoding-preserving writes, metadata (single and batched),
+/// `canonicalize`.
 fn files(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     let a = scratch.join("a.txt");
     r.ok(auth.write(&a, b"hello\n"), "write");
@@ -184,6 +214,8 @@ fn conflicts(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     r.ok(auth.remove_file(&fresh), "remove the new file");
 }
 
+/// `read_dir` and `walk_files`: listing shape, directory flags, ordering-free
+/// name sets, and the walk limit.
 fn listing(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     r.ok(
         auth.write(&scratch.join("sub/deeper/b.rs"), b"fn main() {}\n"),
@@ -226,6 +258,7 @@ fn listing(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     );
 }
 
+/// `rename`, `copy_recursive`, `move_path`, `remove_file` and `remove_path`.
 fn moves(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     let a = scratch.join("a.txt");
     let renamed = scratch.join("renamed.txt");
@@ -255,6 +288,8 @@ fn moves(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     r.check(!auth.exists(&moved), "remove_path removes the tree");
 }
 
+/// `which` and `command`: the platform shell must be found and run, and an
+/// unknown program must not resolve.
 #[cfg(feature = "process")]
 fn processes(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     let (program, args): (&str, &[&str]) = if cfg!(windows) {
@@ -281,6 +316,7 @@ fn processes(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     }
 }
 
+/// Without the `process` feature no authority may start a process.
 #[cfg(not(feature = "process"))]
 fn processes(auth: &dyn Authority, scratch: &Path, r: &mut Report) {
     r.check(

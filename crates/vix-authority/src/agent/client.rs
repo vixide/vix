@@ -5,6 +5,14 @@
 //! hands each reply to the caller waiting for it and each watch event to
 //! its subscription. When the connection ends, every waiting caller is
 //! released and the client stays dead.
+//!
+//! [`crate::agent::AgentAuthority`] is the public face; this module is its
+//! engine. The central distinction is [`Fail`]: an operation that *changed*
+//! something remotely and then lost the connection reports an I/O error (the
+//! outcome is unknown), while a read-only one, or one that never fit in a
+//! frame, reports `Unavailable` so the SSH authority can retry it as a shell
+//! script. Message layout: [`super::wire`]. Owning spec:
+//! `crates/vix-authority/spec/agent/index.md`.
 
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -39,15 +47,23 @@ struct Shared {
     /// Waiting callers by request id. `alive` is only changed under this
     /// lock, so a caller never registers after the reader gave up.
     pending: Mutex<HashMap<u64, Sender<Reply>>>,
+    /// Watch subscriptions by watch id; each receives the changed paths of
+    /// every event the agent pushes for it.
     watches: Mutex<HashMap<u64, Sender<Vec<PathBuf>>>>,
+    /// False once the reader thread has exited or a write failed.
     alive: AtomicBool,
 }
 
+/// Lock `m`, ignoring poisoning: the guarded maps and writer stay valid
+/// after a panicking holder, and a dead connection must not cascade panics.
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl Shared {
+    /// Mark the connection dead and release everyone waiting. Dropping the
+    /// pending senders makes each blocked `rx.recv()` in [`AgentClient::call`]
+    /// return `Err`. `alive` flips while holding `pending` (see its docs).
     fn die(&self) {
         let mut pending = lock(&self.pending);
         self.alive.store(false, Ordering::SeqCst);
@@ -59,12 +75,17 @@ impl Shared {
 
 /// The writing half, which a [`Watch`] also reaches (to unsubscribe).
 struct Core {
+    /// The agent's stdin; the mutex keeps each frame contiguous when several
+    /// threads send at once.
     writer: Mutex<Box<dyn Write + Send>>,
+    /// State shared with the reader thread.
     shared: Arc<Shared>,
+    /// Next request/watch id. Watch ids share the request id space.
     next: AtomicU64,
 }
 
 impl Core {
+    /// Encode and write one frame without waiting for a reply.
     fn send(&self, message: &Message) -> io::Result<()> {
         let payload = wire::encode(message);
         let mut w = lock(&self.writer);
@@ -74,8 +95,12 @@ impl Core {
 
 /// One connection to a remote agent.
 pub(crate) struct AgentClient {
+    /// Writer half plus shared state.
     core: Arc<Core>,
+    /// The agent's Vix version from its hello (verified equal to ours).
     version: String,
+    /// The agent process, when [`AgentClient::spawn`] started it; killed and
+    /// reaped on drop.
     #[cfg(feature = "process")]
     child: Mutex<Option<std::process::Child>>,
 }
@@ -187,6 +212,12 @@ impl AgentClient {
     }
 
     /// Send `op` and wait for its reply.
+    ///
+    /// The request id is registered before the frame is written so a fast
+    /// reply cannot race ahead of its waiter. A request over
+    /// [`wire::MAX_FRAME`] is never sent. An agent `TooBig` error becomes
+    /// [`Fail::Unavailable`] (retry another way); any other error code
+    /// becomes the matching `io::Error`.
     pub(crate) fn call(&self, op: Op) -> Result<Reply, Fail> {
         let read_only = op.is_read_only();
         let shared = &self.core.shared;
@@ -254,6 +285,7 @@ impl AgentClient {
 
     // ----- typed operations ----------------------------------------------
 
+    /// `stat` (`follow`) or `lstat` (not `follow`) of one path.
     pub(crate) fn stat(&self, path: &Path, follow: bool) -> Result<FileStat, Fail> {
         match self.call(Op::Stat {
             path: path_bytes(path),
@@ -329,6 +361,8 @@ impl AgentClient {
         }
     }
 
+    /// Plain truncating write; data over [`MAX_DATA`] is [`Fail::Unavailable`]
+    /// without being sent.
     pub(crate) fn write(&self, path: &Path, data: &[u8]) -> Result<(), Fail> {
         if data.len() as u64 > MAX_DATA {
             return Err(Fail::Unavailable);
@@ -339,6 +373,8 @@ impl AgentClient {
         }))
     }
 
+    /// Atomic write guarded by `expect` (the agent checks and writes in one
+    /// step); over [`MAX_DATA`] is [`Fail::Unavailable`] without being sent.
     pub(crate) fn write_atomic(
         &self,
         path: &Path,
@@ -355,6 +391,7 @@ impl AgentClient {
         }))
     }
 
+    /// The agent's canonical form of `path`.
     pub(crate) fn canonicalize(&self, path: &Path) -> Result<PathBuf, Fail> {
         match self.call(Op::Canonicalize {
             path: path_bytes(path),
@@ -364,6 +401,8 @@ impl AgentClient {
         }
     }
 
+    /// The entries of `dir`. Names are validated ([`valid_name`]) because the
+    /// reply comes from another machine and is joined onto `dir`.
     pub(crate) fn read_dir(&self, dir: &Path) -> Result<Vec<DirEntry>, Fail> {
         match self.call(Op::ReadDir {
             path: path_bytes(dir),
@@ -384,6 +423,7 @@ impl AgentClient {
         unit(self.call(op))
     }
 
+    /// Whether `path` exists but is not writable by the agent's user.
     pub(crate) fn is_unwritable(&self, path: &Path) -> Result<bool, Fail> {
         match self.call(Op::IsUnwritable {
             path: path_bytes(path),
@@ -393,6 +433,8 @@ impl AgentClient {
         }
     }
 
+    /// A remote project walk. The result is re-truncated to `opts.limit` so
+    /// a misbehaving agent cannot return more than was asked for.
     pub(crate) fn walk(&self, root: &Path, opts: &WalkOptions) -> Result<Vec<PathBuf>, Fail> {
         match self.call(Op::Walk {
             root: path_bytes(root),
@@ -407,6 +449,7 @@ impl AgentClient {
         }
     }
 
+    /// Resolve `name` on the agent's `PATH`.
     pub(crate) fn which(&self, name: &str) -> Result<Option<PathBuf>, Fail> {
         match self.call(Op::Which { name: name.into() })? {
             Reply::MaybePath(p) => Ok(p.map(|p| bytes_path(&p))),
@@ -432,6 +475,9 @@ fn valid_name(name: &[u8]) -> bool {
     !name.is_empty() && name != b"." && name != b".." && !name.contains(&b'/')
 }
 
+/// The failure for a connection that dropped mid-request. A read-only
+/// request is safe to repeat elsewhere; for one that may have changed
+/// something the caller must be told the outcome is unknown.
 fn lost(read_only: bool) -> Fail {
     if read_only {
         Fail::Unavailable
@@ -443,6 +489,7 @@ fn lost(read_only: bool) -> Fail {
     }
 }
 
+/// The agent answered with a reply variant the request cannot produce.
 fn unexpected() -> Fail {
     Fail::Io(io::Error::new(
         io::ErrorKind::InvalidData,
@@ -450,6 +497,7 @@ fn unexpected() -> Fail {
     ))
 }
 
+/// Require a `Reply::Unit` (an operation that only succeeds or fails).
 fn unit(r: Result<Reply, Fail>) -> Result<(), Fail> {
     match r? {
         Reply::Unit => Ok(()),
@@ -457,6 +505,8 @@ fn unit(r: Result<Reply, Fail>) -> Result<(), Fail> {
     }
 }
 
+/// [`unit()`], flattened to `io::Result` for [`AgentClient::watch`], where
+/// "unavailable" means the agent is not running.
 fn expect_unit(r: Result<Reply, Fail>) -> io::Result<()> {
     match unit(r) {
         Ok(()) => Ok(()),
@@ -475,6 +525,9 @@ fn read_loop(
     shared: &Shared,
     hello: &mpsc::SyncSender<Option<(u32, String)>>,
 ) {
+    // Protocol order is enforced here: the first frame must be the hello,
+    // after which only replies and events are legal (a request from the
+    // "agent" is a protocol violation and ends the connection).
     let mut greeted = false;
     while let Ok(Some(frame)) = wire::read_frame(&mut reader) {
         let Ok(message) = wire::decode(&frame) else {
@@ -515,8 +568,11 @@ fn read_loop(
 /// the agent last looked. Dropping it ends the subscription.
 #[derive(Debug)]
 pub struct Watch {
+    /// The subscription id, as the agent knows it.
     id: u64,
+    /// Events pushed by the reader thread.
     rx: Receiver<Vec<PathBuf>>,
+    /// Weak so a `Watch` does not keep a dead connection's writer alive.
     core: Weak<Core>,
 }
 

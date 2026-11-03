@@ -5,6 +5,14 @@
 //! It only touches the file system: there is no request that starts a
 //! process. It exits when its input ends (the SSH channel closed) or on the
 //! first malformed frame.
+//!
+//! Every file operation is delegated to [`LocalAuthority`] so the agent
+//! behaves exactly like a local Vix. Two things are specific to the agent:
+//! replies larger than one frame degrade to a `TooBig` error (the client then
+//! falls back to another route), and watches run on their own polling threads
+//! that share the output writer with the request loop. The client half is
+//! `client.rs`; the byte format is [`super::wire`]. Owning spec:
+//! `crates/vix-authority/spec/agent/index.md`.
 
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -50,10 +58,14 @@ pub fn serve(mut input: impl Read, output: impl Write + Send + 'static) -> io::R
             version: super::VERSION.to_string(),
         },
     )?;
+    // Answer a mismatched client with our hello (so it can report why) but
+    // serve nothing: different builds may disagree about message layouts.
     if protocol != PROTOCOL || version != super::VERSION {
         return Ok(());
     }
     let mut watches: HashMap<u64, Arc<AtomicBool>> = HashMap::new();
+    // Loop result is held, not returned, so the watch threads are always
+    // told to stop below, even when the connection ended with an error.
     let result = loop {
         let frame = match wire::read_frame(&mut input) {
             Ok(Some(frame)) => frame,
@@ -102,6 +114,8 @@ pub fn serve_stdio() -> io::Result<()> {
     serve(io::stdin().lock(), io::stdout())
 }
 
+/// Write one message as a frame; the lock keeps frames from interleaving
+/// with those the watch threads send.
 fn send(out: &Out, message: &Message) -> io::Result<()> {
     let payload = wire::encode(message);
     let mut w = out.lock().unwrap_or_else(PoisonError::into_inner);
@@ -127,7 +141,9 @@ fn send_reply(out: &Out, id: u64, reply: Reply) -> io::Result<()> {
     wire::write_frame(&mut *w, &payload)
 }
 
-/// A wire path as a local one: `~` and `~/…` are the home directory.
+/// A wire path as a local one: `~` and `~/…` are the home directory (the
+/// client cannot know the remote home, so it sends `~` and the agent
+/// expands it). Without `HOME` the path is used as written.
 fn local_path(bytes: &[u8]) -> PathBuf {
     let home = || std::env::var_os("HOME").map(PathBuf::from);
     if bytes == b"~"
@@ -143,6 +159,7 @@ fn local_path(bytes: &[u8]) -> PathBuf {
     bytes_path(bytes)
 }
 
+/// An operation that only succeeds or fails, as a reply.
 fn unit(r: io::Result<()>) -> Reply {
     r.map_or_else(|e| Reply::error(&e), |()| Reply::Unit)
 }
@@ -261,11 +278,15 @@ fn start_watch(
             "the watch id is in use",
         ));
     }
+    // Forget watches whose thread already stopped (output closed) so they
+    // do not count against the limit.
     watches.retain(|_, stop| !stop.load(Ordering::Relaxed));
     if watches.len() >= MAX_WATCHES {
         return Reply::error(&io::Error::other("too many watches"));
     }
     let stop = Arc::new(AtomicBool::new(false));
+    // Clamp to 0.1–60 s so a client cannot make the agent busy-poll or
+    // effectively never look.
     let interval = Duration::from_millis(u64::from(interval_ms.clamp(100, 60_000)));
     let targets: Vec<(Vec<u8>, PathBuf)> =
         paths.iter().map(|b| (b.clone(), local_path(b))).collect();
@@ -283,6 +304,11 @@ fn start_watch(
     }
 }
 
+/// The watch thread's body: remember each path's stat, and every `interval`
+/// send one event naming the paths whose kind, length or mtime changed or
+/// that appeared or vanished. Exits when `stop` is set or the output fails;
+/// it sets `stop` on exit so the request loop can prune the entry. Paths go
+/// back to the client as the exact bytes it sent, not the expanded form.
 fn poll_watch(
     out: &Out,
     stop: &AtomicBool,

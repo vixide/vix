@@ -1,5 +1,12 @@
 //! [`Source`]: an open file of a fixed length, navigated line by line through
 //! bounded chunk reads.
+//!
+//! All navigation (`forward`, `back`, `lines_from`, ...) works on **byte
+//! offsets of line starts** and never reads more than [`CHUNK`] bytes at a
+//! time, so cost is proportional to the lines moved, not the file size. A
+//! trailing `\n` ends the last line rather than starting an empty one; an
+//! empty file is one empty line. Used by `LineIndex` (`index.rs`) and `Viewer`
+//! (`viewer.rs`); spec: `crates/vix-large-file/spec/index.md`.
 
 use std::fs::File;
 use std::io;
@@ -7,7 +14,8 @@ use std::path::Path;
 
 use crate::read::read_full;
 
-/// How many bytes one navigation read covers.
+/// How many bytes one navigation read covers (64 KiB: big enough to amortize
+/// syscalls, small enough that a one-line move stays cheap).
 const CHUNK: usize = 64 * 1024;
 
 /// One line of the file: `start..end` in bytes, `end` excluding the `\n`
@@ -140,6 +148,8 @@ impl Source {
 
     /// Step up to `n` lines forward from `start`: how many it moved and where.
     fn forward_count(&self, start: u64, n: u64) -> io::Result<(u64, u64)> {
+        // `at` is the start of the last line reached; a `\n` that is the file's
+        // final byte starts no new line, hence the `next >= self.len` stop.
         let mut at = start;
         let mut moved = 0;
         let mut pos = start;
@@ -203,6 +213,8 @@ impl Source {
     /// The underlying read error.
     pub fn lines_from(&self, start: u64, n: usize) -> io::Result<Vec<LineSpan>> {
         let mut spans = Vec::with_capacity(n.min(4096));
+        // `start == len` is past a trailing newline (no line there), except in
+        // an empty file where the single empty line starts at 0 == len.
         if n == 0 || start > self.len || (start == self.len && self.len > 0) {
             return Ok(spans);
         }

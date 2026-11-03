@@ -11,10 +11,13 @@
 //! matching scan, deliberately not the Tree-sitter structural-expand
 //! feature — see the spec's own § Design: text objects for why.
 
+/// Decode `text` into chars: all offsets in this module are char offsets.
 fn chars_of(text: &str) -> Vec<char> {
     text.chars().collect()
 }
 
+/// Vim's "word character" class for `iw`/`aw`: alphanumeric or `_`. Everything
+/// else (punctuation and whitespace alike) is the non-word class.
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
@@ -172,6 +175,9 @@ pub fn around_pair(
     Some((o, c + 1))
 }
 
+/// The `(open, close)` char offsets of the `count`-th enclosing bracket pair
+/// around `pos` (`count` 1 = innermost). Each extra level re-searches from
+/// just before the previous opener, so the climb never re-finds the same pair.
 fn outer_pair(
     text: &str,
     pos: usize,

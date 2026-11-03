@@ -1,4 +1,10 @@
 //! [`LocalAuthority`]: today's behavior, unchanged.
+//!
+//! Every method is a one-line delegation to `std::fs` or to a `vix-fileops`
+//! helper, so moving a call site behind the [`Authority`] trait (T710) changed
+//! nothing observable. The two non-trivial helpers, [`read_limited_local`] and
+//! [`walk_local`], are `pub(crate)` because [`crate::FakeAuthority`] reuses
+//! them on its backing directory. Owning spec: `crates/vix-authority/spec/index.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -90,6 +96,10 @@ impl Authority for LocalAuthority {
     }
 
     fn read_dir(&self, dir: &Path) -> io::Result<Vec<DirEntry>> {
+        // `.flatten()` drops entries that fail to list, matching the old
+        // `read_dir(..).flatten()` call sites. `is_dir` follows symlinks so a
+        // link to a directory still reads as one, while `kind` stays the
+        // entry's own (non-followed) kind.
         Ok(std::fs::read_dir(dir)?
             .flatten()
             .map(|e| {
@@ -145,6 +155,7 @@ impl Authority for LocalAuthority {
         vix_fileops::which_on_path(name)
     }
 
+    // With the `process` feature off the build never starts a process (T595).
     #[cfg(feature = "process")]
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command> {
         Ok(spec.to_local_command())
@@ -156,7 +167,9 @@ impl Authority for LocalAuthority {
     }
 }
 
-/// Read at most `limit` bytes of a local file.
+/// Read at most `limit` bytes of a local file. `take` bounds memory even if
+/// the file is huge or grows while being read; exactly `limit` bytes back
+/// means "at least that much".
 pub(crate) fn read_limited_local(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     use std::io::Read as _;
     let mut bytes = Vec::new();
@@ -169,11 +182,15 @@ pub(crate) fn read_limited_local(path: &Path, limit: u64) -> io::Result<Vec<u8>>
 /// Walk a local directory with the `ignore` crate (ripgrep's engine) as `opts`
 /// says. Shared by [`LocalAuthority`] and the fake, which walks its backing
 /// directory the same way.
+///
+/// Returns only regular files, at most `opts.limit` of them (a `limit` of 0
+/// short-circuits to an empty list); unreadable entries are skipped silently.
 pub(crate) fn walk_local(root: &Path, opts: &WalkOptions) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if opts.limit == 0 {
         return out;
     }
+    // The filter closure must be `'static`, so it owns a copy of the names.
     let prune = opts.prune_dirs.clone();
     let walker = ignore::WalkBuilder::new(root)
         .max_depth(opts.max_depth)

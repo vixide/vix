@@ -11,6 +11,7 @@
 
 use crate::{Binding, ChordContext};
 
+/// Sublime Text's Ctrl-key bindings (its only context), with Shift encoded explicitly in the token.
 const NORMAL: &[Binding] = &[
     Binding {
         key_token: "C-S-p",
@@ -113,6 +114,7 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
+/// Sublime Text's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: NORMAL,

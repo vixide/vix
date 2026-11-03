@@ -12,6 +12,12 @@
 //! the host routes to it, returning an [`Outcome`]; the host renders the
 //! [`ViewLine`]s and [`Status`] it hands back.
 //!
+//! Concurrency model: the index and search threads own their own file handle
+//! and publish progress through atomics (`Release` stores, `Acquire` loads)
+//! and results through a `Mutex`; the UI thread never blocks on them, it
+//! polls ([`Viewer::poll`]) between redraws. Both threads stop when their
+//! owner is dropped. See this crate's `spec/index.md`.
+//!
 //! The viewer reads local files only: it opens the path with `std::fs`, not
 //! through `vix-authority`, so a remote workspace's files are not viewable
 //! this way yet.

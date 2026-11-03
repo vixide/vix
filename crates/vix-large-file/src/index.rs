@@ -1,5 +1,12 @@
 //! [`LineIndex`]: a sparse line-number → byte-offset index, built once on a
 //! background thread while the file is already on screen.
+//!
+//! Only every [`DEFAULT_STRIDE`]th line start is stored (checkpoint `k` is
+//! line `k * stride`), so memory stays tiny for multi-gigabyte files; a lookup
+//! jumps to a checkpoint and walks at most one stride of lines with
+//! [`Source::forward_exact`]. Readers may ask before the scan has finished and
+//! get [`Lookup::Pending`] rather than a wrong answer. Owner: `Viewer`
+//! (`viewer.rs`); spec: `crates/vix-large-file/spec/index.md`.
 
 use std::fs::File;
 use std::io;
@@ -55,9 +62,12 @@ pub enum Lookup {
     BeyondEnd,
 }
 
-/// State shared with the index thread.
+/// State shared with the index thread. Counters are written by the thread with
+/// `Release` and read by the UI with `Acquire`; only `checkpoints` needs a lock
+/// because it grows in place.
 #[derive(Debug, Default)]
 struct Shared {
+    /// Byte offsets of lines `0, stride, 2*stride, ...`; always starts with `0`.
     checkpoints: Mutex<Vec<u64>>,
     /// Bytes scanned so far.
     scanned: AtomicU64,
@@ -66,7 +76,9 @@ struct Shared {
     /// The file's last byte is `\n` (valid once `done`).
     trailing_newline: AtomicBool,
     done: AtomicBool,
+    /// A read error stopped the scan; the index stays partial forever.
     failed: AtomicBool,
+    /// Set by `Drop` so the thread exits at its next chunk.
     cancel: AtomicBool,
 }
 
@@ -105,6 +117,8 @@ impl LineIndex {
             .unwrap_or_else(PoisonError::into_inner)
             .push(0);
         let stride = stride.max(1);
+        // Seed checkpoint 0 (line 0 starts at byte 0) before the thread runs, so
+        // early lookups on the first stride never see an empty list.
         let worker = Arc::clone(&shared);
         let handle = std::thread::Builder::new()
             .name("vix-large-file-index".into())
@@ -189,6 +203,7 @@ impl LineIndex {
         {
             return Ok(Lookup::BeyondEnd);
         }
+        // Checkpoint k is line k*stride; walk the remainder from there.
         let k = line / self.stride;
         let checkpoint = {
             let cps = self
@@ -219,6 +234,8 @@ impl LineIndex {
     ///
     /// A read error from `src`.
     pub fn line_of(&self, src: &Source, offset: u64) -> io::Result<Option<u64>> {
+        // Not-yet-scanned region: counting from the last known checkpoint would
+        // under-count, so report "unknown" instead.
         if !self.is_done() && self.scanned() < offset {
             return Ok(None);
         }
@@ -228,6 +245,7 @@ impl LineIndex {
                 .checkpoints
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
+            // Last checkpoint at or before `offset`.
             let k = cps.partition_point(|&c| c <= offset).saturating_sub(1);
             (k as u64, cps.get(k).copied().unwrap_or(0))
         };
@@ -236,6 +254,8 @@ impl LineIndex {
 }
 
 impl Drop for LineIndex {
+    /// Ask the background thread to stop. It is not joined: it exits at its
+    /// next chunk boundary, so dropping never blocks the UI.
     fn drop(&mut self) {
         self.shared.cancel.store(true, Ordering::Release);
     }
@@ -266,6 +286,7 @@ fn run(file: &File, len: u64, stride: u64, chunk: usize, shared: &Shared) {
             Ok(0) => break,
             Ok(n) => n,
             Err(_) => {
+                // Leave `done` unset: `failed` tells the UI to stop waiting.
                 shared.failed.store(true, Ordering::Release);
                 return;
             }
@@ -279,6 +300,8 @@ fn run(file: &File, len: u64, stride: u64, chunk: usize, shared: &Shared) {
                 .unwrap_or_else(PoisonError::into_inner)
                 .extend_from_slice(&found);
         }
+        // Remember the final byte seen, to decide whether a trailing `\n` ends
+        // the last line (see `total_lines`).
         last = buf.get(got - 1).copied();
         pos += got as u64;
         shared.newlines.store(lines, Ordering::Release);

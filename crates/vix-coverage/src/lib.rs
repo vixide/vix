@@ -1,6 +1,24 @@
 //! LCOV and Cobertura XML coverage report parsing (T210): per-file, per-line
 //! hit data for the coverage gutter (Tools → Load Coverage File…). Vix
 //! visualizes an existing report; it doesn't run coverage tools itself.
+//!
+//! [`parse`] sniffs the format and returns a [`Report`]; the host asks
+//! [`Report::lines_for`] for the active buffer's path and paints a gutter mark
+//! per [`Hit`] (it shares the gutter column with the git diff marks). Both
+//! parsers are deliberately tolerant -- malformed records are skipped, never an
+//! error -- and Cobertura is read with a regex scan rather than an XML
+//! dependency. Spec: `crates/vix-coverage/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use std::path::Path;
+//! use vix_coverage::{parse, Hit};
+//!
+//! let report = parse("SF:src/lib.rs\nDA:1,3\nDA:2,0\nend_of_record\n");
+//! let lines = report.lines_for(Path::new("src/lib.rs")).unwrap();
+//! assert_eq!(lines[&1], Hit::Covered);
+//! assert_eq!(lines[&2], Hit::Uncovered);
+//! ```
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -9,7 +27,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 // A Cobertura class's opening tag or a line element, matched in document
-// order -- see `parse_cobertura`. Compiled once; the pattern is a fixed
+// order -- see `parse_cobertura`. Alternative 1 captures `file`; alternative 2
+// captures `num`, `hits` and `rest` (the remaining attributes, scanned later by
+// `is_partial_branch`). `[^>]*` stops at the tag end, so `number` must come
+// before `hits` within a `<line>`. Compiled once; the pattern is a fixed
 // literal, so this can't fail at runtime.
 #[expect(
     clippy::expect_used,
@@ -40,6 +61,10 @@ pub enum Hit {
 
 /// A parsed coverage report: the file paths it names, each mapped to its
 /// per-line (1-based) hit state.
+///
+/// Lines the report does not mention (blank lines, comments, unreachable code)
+/// are simply absent from the per-file map. Obtain one from [`parse`],
+/// [`parse_lcov`] or [`parse_cobertura`]; `Default` is an empty report.
 #[derive(Clone, Debug, Default)]
 pub struct Report {
     files: HashMap<String, HashMap<usize, Hit>>,
@@ -57,6 +82,11 @@ impl Report {
     /// same file elsewhere), so this tries an exact match first, then falls
     /// back to the recorded path being a suffix of `path` or vice versa, all
     /// compared via `normalize`.
+    ///
+    /// When several recorded paths match by suffix (e.g. `a/lib.rs` and
+    /// `b/lib.rs` for a query of `lib.rs`), the winner is whichever the map
+    /// iterates first, which is unspecified; prefer reports with unambiguous
+    /// paths.
     ///
     /// If neither finds a match, a last resort tries canonicalizing each
     /// recorded path and comparing that against `path` directly (assumed
@@ -115,6 +145,13 @@ fn normalize(s: &str) -> String {
 
 /// Parse a coverage report, auto-detecting LCOV vs. Cobertura XML from its
 /// content (an LCOV `.info` file never starts with `<`).
+///
+/// # Examples
+/// ```
+/// let xml = r#"<class filename="a.rs"><line number="1" hits="0"/></class>"#;
+/// assert_eq!(vix_coverage::parse(xml).file_count(), 1);
+/// assert_eq!(vix_coverage::parse("SF:a.rs\nend_of_record\n").file_count(), 1);
+/// ```
 #[must_use]
 pub fn parse(text: &str) -> Report {
     if text.trim_start().starts_with('<') {
@@ -128,6 +165,11 @@ pub fn parse(text: &str) -> Report {
 /// A line with any untaken branch (`BRDA:` `taken` of `-` or `0`) is
 /// [`Hit::Partial`]; otherwise a nonzero `DA:` count is [`Hit::Covered`] and a
 /// zero count is [`Hit::Uncovered`]. Malformed records are skipped.
+///
+/// Only complete records count: a file's data is committed at its
+/// `end_of_record`, so a truncated trailing record is dropped. `DA:`'s optional
+/// checksum field and `BRDA:` lines for lines with no `DA:` entry are ignored.
+/// Repeated `SF:` entries for one file merge, later lines overwriting earlier.
 #[must_use]
 pub fn parse_lcov(text: &str) -> Report {
     let mut files = HashMap::new();
@@ -137,6 +179,8 @@ pub fn parse_lcov(text: &str) -> Report {
     for raw in text.lines() {
         let line = raw.trim();
         if let Some(rest) = line.strip_prefix("SF:") {
+            // A new record starts: drop any half-read state from a previous
+            // record that never reached `end_of_record`.
             current = Some(rest.trim().to_string());
             counts.clear();
             partial.clear();
@@ -160,6 +204,8 @@ pub fn parse_lcov(text: &str) -> Report {
         {
             let entry: &mut HashMap<usize, Hit> = files.entry(f).or_default();
             for (&n, &c) in &counts {
+                // An unexecuted line is Uncovered even if it lists branches;
+                // Partial only refines lines that did run.
                 let hit = if c == 0 {
                     Hit::Uncovered
                 } else if partial.contains(&n) {
@@ -180,6 +226,9 @@ pub fn parse_lcov(text: &str) -> Report {
 /// `condition-coverage="…% (a/b)"` has `a < b` is [`Hit::Partial`]. This is a
 /// tolerant scan, not a validating XML parser -- it reads the two attributes
 /// it needs and ignores everything else about the document's structure.
+///
+/// Within a `<line>` the `number` attribute must precede `hits`. Lines seen
+/// before any `<class filename=…>` are dropped, as are non-numeric values.
 #[must_use]
 pub fn parse_cobertura(text: &str) -> Report {
     let mut files: HashMap<String, HashMap<usize, Hit>> = HashMap::new();
@@ -221,6 +270,7 @@ fn is_partial_branch(attrs: &str) -> bool {
     if !attrs.contains("branch=\"true\"") {
         return false;
     }
+    // Parse the `(a/b)` taken/total pair out of `condition-coverage`.
     let Some(start) = attrs.find('(') else {
         return false;
     };

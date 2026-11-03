@@ -4,6 +4,8 @@
 //! `+`/`/` and `=` padding). [`decode`] is lenient about surrounding whitespace
 //! and newlines — common when pasting wrapped Base64 — and reports an error when
 //! the input is not valid Base64 or does not decode to UTF-8 text.
+//!
+//! Spec: `crates/vix-base64-tool/spec/index.md`.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -20,6 +22,8 @@ pub enum Base64Error {
     NotUtf8(std::string::FromUtf8Error),
 }
 
+/// Delegates to the wrapped error so messages are those of the `base64` /
+/// `std` errors.
 impl std::fmt::Display for Base64Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -29,6 +33,7 @@ impl std::fmt::Display for Base64Error {
     }
 }
 
+/// Exposes the wrapped error as the `source`.
 impl std::error::Error for Base64Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -40,6 +45,11 @@ impl std::error::Error for Base64Error {
 
 /// Encode `input`'s UTF-8 bytes as standard Base64.
 ///
+/// # Examples
+/// ```
+/// assert_eq!(vix_base64_tool::encode("hello").unwrap(), "aGVsbG8=");
+/// ```
+///
 /// # Errors
 /// Never fails; returns `Result` for a uniform tool interface with [`decode`].
 pub fn encode(input: &str) -> Result<String, Base64Error> {
@@ -47,6 +57,16 @@ pub fn encode(input: &str) -> Result<String, Base64Error> {
 }
 
 /// Decode standard Base64 `input` back to text, ignoring ASCII whitespace.
+///
+/// Whitespace is stripped before decoding because wrapped Base64 (e.g. MIME
+/// 76-column lines) is commonly pasted with embedded newlines; padding is
+/// still required by the strict `STANDARD` engine.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_base64_tool::decode("aGVs\nbG8=").unwrap(), "hello");
+/// assert!(vix_base64_tool::decode("!!!").is_err());
+/// ```
 ///
 /// # Errors
 /// Returns [`Base64Error::Decode`] when the input is not valid Base64, or

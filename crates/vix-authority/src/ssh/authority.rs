@@ -1,6 +1,16 @@
 //! [`ShellAuthority`]: the workspace on another machine, reached through a
 //! [`Transport`] and plain POSIX `sh` + coreutils on the other side, and
 //! [`SshAuthority`] (T712), the one whose transport is the system `ssh`.
+//!
+//! Design in one paragraph: every [`Authority`] method builds a small POSIX
+//! `sh` script ([`Sh`]) with every path single-quoted, runs it through the
+//! [`Transport`] (so SSH and `docker exec` share all of this), and maps the
+//! script's exit status back to an `io::Error` kind via the [`code`] table
+//! and [`finish`]. When the remote agent is up ([`crate::agent`]), the same
+//! operations go over its framed protocol instead (`via`), and a shell script
+//! is the fallback for anything the agent declines. Owning spec:
+//! `crates/vix-authority/spec/ssh/index.md` (and `spec/container/index.md`
+//! for the exec transports).
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -24,16 +34,30 @@ use crate::{
 
 /// Exit statuses the remote scripts use to report an error kind; anything
 /// else is reported with the remote's own error output.
+///
+/// The 100–112 range avoids the statuses `sh` and common tools use (0, 1, 2,
+/// 126, 127, signals), and 255 is reserved for `ssh` itself.
 pub(super) mod code {
+    /// The path does not exist (`ErrorKind::NotFound`).
     pub(super) const NOT_FOUND: i32 = 100;
+    /// Not allowed (`PermissionDenied`).
     pub(super) const DENIED: i32 = 101;
+    /// The target already exists (`AlreadyExists`).
     pub(super) const EXISTS: i32 = 102;
+    /// A directory where a file was needed (`IsADirectory`).
     pub(super) const IS_DIR: i32 = 103;
+    /// A file where a directory was needed (`NotADirectory`).
     pub(super) const NOT_DIR: i32 = 104;
+    /// A directory that must be empty is not (`DirectoryNotEmpty`).
     pub(super) const NOT_EMPTY: i32 = 105;
+    /// The file changed since it was read ([`crate::WriteConflict`]).
     pub(super) const CONFLICT: i32 = 106;
+    /// Not a regular file ([`crate::TextReadError::NotRegular`]).
     pub(super) const NOT_REGULAR: i32 = 107;
+    /// The remote lacks something the operation needs, such as a trash
+    /// command (`Unsupported`).
     pub(super) const UNSUPPORTED: i32 = 108;
+    /// Over the size limit ([`crate::TextReadError::TooLarge`]).
     pub(super) const TOO_LARGE: i32 = 109;
     /// The uploaded agent's SHA-256 did not match (T717).
     pub(in crate::ssh) const CHECKSUM: i32 = 110;
@@ -145,11 +169,15 @@ impl SshOptions {
 /// `podman exec`, `kubectl exec` or `wsl.exe`.
 #[derive(Debug)]
 pub struct ShellAuthority<T: Transport> {
+    /// How scripts reach the other side (`ssh`, `docker exec`, …).
     transport: T,
+    /// The remote `stat` dialect (GNU or BSD), probed on first use.
     flavor: OnceLock<StatFlavor>,
+    /// Counter for unique temp-file names ([`ShellAuthority::token`]).
     seq: AtomicU64,
     /// The running remote agent, if any (T717).
     agent: RwLock<Option<Arc<AgentClient>>>,
+    /// What became of the last attempt to start the agent.
     agent_status: Mutex<AgentStatus>,
 }
 
@@ -161,7 +189,9 @@ pub type SshAuthority = ShellAuthority<SshTransport>;
 /// shared `ControlMaster` connection.
 #[derive(Debug)]
 pub struct SshTransport {
+    /// The host, port and user to connect to.
     target: SshTarget,
+    /// How `ssh` is run.
     options: SshOptions,
     /// The control socket pattern (`<dir>/%C`), when multiplexing.
     control_path: Option<String>,
@@ -419,10 +449,12 @@ impl<T: Transport> ShellAuthority<T> {
         }
     }
 
+    /// Install (or with `None`, drop and so close) the running agent client.
     pub(super) fn set_agent(&self, client: Option<AgentClient>) {
         *self.agent.write().unwrap_or_else(PoisonError::into_inner) = client.map(Arc::new);
     }
 
+    /// Record the outcome of an agent start attempt.
     pub(super) fn set_agent_status(&self, status: AgentStatus) {
         *self
             .agent_status
@@ -462,6 +494,8 @@ impl<T: Transport> ShellAuthority<T> {
         self.run(script, input)
     }
 
+    /// The shared runner: spawn the script with optional stdin `input`, wait,
+    /// and map the exit status through [`finish`].
     fn run(&self, script: &[u8], input: Option<&[u8]>) -> io::Result<Vec<u8>> {
         let mut cmd = self.script_command(script);
         cmd.stdin(if input.is_some() {
@@ -473,6 +507,8 @@ impl<T: Transport> ShellAuthority<T> {
         .stderr(Stdio::piped());
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take();
+        // Feed stdin from a scoped thread while `wait_with_output` drains
+        // stdout and stderr; writing inline could deadlock once a pipe fills.
         let out = std::thread::scope(|s| {
             if let (Some(mut w), Some(data)) = (stdin, input) {
                 // A script that fails early closes its stdin; not an error.
@@ -496,6 +532,9 @@ impl<T: Transport> ShellAuthority<T> {
         Ok(*self.flavor.get_or_init(|| flavor))
     }
 
+    /// Stat through a shell script; `follow` picks `stat` over `lstat`
+    /// semantics. The explicit `-e`/`-h` test yields the `NotFound` status
+    /// (100) instead of relying on `stat`'s locale-dependent message.
     fn stat(&self, path: &Path, follow: bool) -> io::Result<FileStat> {
         let flavor = self.flavor()?;
         let test = if follow {
@@ -534,6 +573,10 @@ impl<T: Transport> ShellAuthority<T> {
     }
 
     /// The atomic write, with the conflict check `expected` asks for.
+    ///
+    /// All of the check and the write happen in one remote script, so no
+    /// other process can slip in between them (unlike the default trait
+    /// method, which stats first and writes second).
     fn write_atomic_checked(
         &self,
         path: &Path,
@@ -666,9 +709,15 @@ else\n\
 fi\n";
 
 /// A remote script under construction.
+///
+/// A tiny builder over bytes (paths need not be UTF-8). Callers chain `t`
+/// (trusted literal text), `word`/`path`/`set` (quoted untrusted values) and
+/// finish with `done`. The only way untrusted data enters a script is through
+/// the quoting methods.
 struct Sh(Vec<u8>);
 
 impl Sh {
+    /// An empty script.
     fn new() -> Self {
         Self(Vec::new())
     }
@@ -696,6 +745,7 @@ impl Sh {
         self.t(name).t("=").path(path).t("\n")
     }
 
+    /// The finished script bytes.
     fn done(self) -> Vec<u8> {
         self.0
     }

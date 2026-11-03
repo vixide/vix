@@ -10,8 +10,22 @@
 //! the active keymap's chord tables). The user types to filter, scrolls, and
 //! sorts either column by clicking its header (first click ascending, second
 //! descending).
+//!
+//! Spec: `crates/vix-keyboard-shortcut-panel/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_keyboard_shortcut_panel::{Column, Panel, Shortcut};
+//!
+//! let mut p = Panel::open(vec![
+//!     Shortcut { action: "Save".into(), keys: "Ctrl S".into() },
+//!     Shortcut { action: "Open".into(), keys: "Ctrl O".into() },
+//! ]);
+//! p.toggle_sort(Column::Action);
+//! assert_eq!(p.matches(), vec![1, 0]); // Open, Save
+//! ```
 
-/// One help row.
+/// One help row (a static, untranslated key combo plus an i18n key).
 #[derive(Clone, Copy)]
 pub struct Row {
     /// Key combo, shown verbatim (e.g. `"Ctrl P"`).
@@ -66,9 +80,10 @@ pub enum Column {
     Keys,
 }
 
-/// Filter + sort + scroll state for the shortcut overlay. Sorting is
-/// tri-state per click cycle: natural order until a header is clicked, then
-/// ascending, then descending on a second click of the same header.
+/// Filter + sort + scroll state for the shortcut overlay. Sorting starts in
+/// natural (source) order; the first click on a header sorts ascending and each
+/// further click on the same header alternates descending/ascending (see
+/// [`Panel::toggle_sort`]) -- natural order is not restored by clicking again.
 pub struct Panel {
     /// The assembled rows, in natural (source) order.
     pub rows: Vec<Shortcut>,
@@ -95,6 +110,8 @@ impl Panel {
 
     /// Indices into [`Panel::rows`] of the rows matching the filter, ordered
     /// per the active sort (case-insensitive; the other column breaks ties).
+    ///
+    /// Without a sort the source order is kept.
     #[must_use]
     pub fn matches(&self) -> Vec<usize> {
         let needle = self.query.to_lowercase();
@@ -135,8 +152,8 @@ impl Panel {
         self.len() == 0
     }
 
-    /// A header click: sort `col` ascending, or flip to descending when `col`
-    /// is already the ascending sort column (and back again).
+    /// A header click: sort `col` ascending, or flip the direction when `col`
+    /// is already the active sort column. Rewinds the scroll.
     pub fn toggle_sort(&mut self, col: Column) {
         self.sort = match self.sort {
             Some((c, ascending)) if c == col => Some((col, !ascending)),
@@ -165,11 +182,14 @@ impl Panel {
     /// Scroll down by `n` rows; the host clamps to the view in
     /// [`Panel::clamp_scroll`].
     pub fn scroll_down(&mut self, n: usize) {
+        // Unclamped on purpose: the row count and viewport height are only
+        // known at render time, where `clamp_scroll` is called.
         self.scroll += n;
     }
 
     /// Keep the scroll within the filtered list for a `view_h`-row viewport.
     pub fn clamp_scroll(&mut self, view_h: usize) {
+        // `view_h.max(1)` keeps a zero-height viewport from hiding every row.
         self.scroll = self.scroll.min(self.len().saturating_sub(view_h.max(1)));
     }
 }

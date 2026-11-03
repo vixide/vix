@@ -1,4 +1,14 @@
-//! [`Viewer`]: the Large File Viewer's state and key handling.
+//! [`Viewer`]: the Large File Viewer's state and key handling (T733).
+//!
+//! The viewer is a small state machine over byte offsets: `top` (first visible
+//! line), `cursor` (current line) and an optional selection `anchor` are all
+//! *line-start offsets*, never line numbers, so they stay valid before the
+//! line index has finished. Keys come in through [`Viewer::handle_key`]; the
+//! host calls [`Viewer::poll`] each tick to collect background work (search
+//! results, deferred gotos, index failure) and [`Viewer::view`] /
+//! [`Viewer::status`] to render. Everything user-visible is data
+//! ([`ViewLine`], [`Status`], [`Notice`]); translation and drawing happen in
+//! the host. Spec: `crates/vix-large-file/spec/index.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -168,6 +178,7 @@ pub struct Viewer {
     /// A 0-based goto line waiting for the index.
     pending_goto: Option<u64>,
     notice: Option<Notice>,
+    /// The `IndexFailed` notice has been shown once; do not repeat it.
     index_failure_reported: bool,
     /// The view's size at the last render, for actions that need it.
     height: usize,
@@ -354,6 +365,7 @@ impl Viewer {
         Ok(())
     }
 
+    /// Open the one-line input for `kind` with an empty buffer.
     fn begin_input(&mut self, kind: InputKind) {
         self.input = Some((kind, String::new()));
     }
@@ -502,7 +514,8 @@ impl Viewer {
             (Direction::Backward, true) => Direction::Forward,
         };
         self.start_search(text, dir);
-        // Keep `n` meaning the original direction.
+        // `start_search` recorded the reversed direction as the "last" one;
+        // restore it so `n` keeps meaning the original direction after `N`.
         if let Some(last) = self.last_search.as_mut()
             && reverse
         {
@@ -628,7 +641,8 @@ impl Viewer {
         if from >= span.end {
             return Ok(line);
         }
-        // Up to 4 bytes a column, plus a few to spare for skipped bytes.
+        // Up to 4 bytes a column (UTF-8), plus a few to spare for skipped bytes;
+        // this bounds rendering to O(width) even for a multi-megabyte line.
         let want = self.width as u64 * 4 + 4;
         let to = span.end.min(from + want);
         let mut bytes = self.src.read(from, to - from)?;

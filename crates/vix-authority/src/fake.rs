@@ -5,6 +5,15 @@
 //! machine's paths. A test that installs it sees every routed call site work
 //! against paths that don't exist on the local machine, and can assert on the
 //! calls that were made.
+//!
+//! Two invariants carry the design: (1) a path is *confined* before every
+//! operation, so a test can never touch anything outside the backing
+//! directory, even through a symlink; (2) operations that name a link itself
+//! (`remove_*`, `rename`, `trash`, `symlink_metadata`, the source of
+//! `move_path`/`copy_recursive`) check only the parent, so a link that points
+//! outside can still be removed. Local file work is delegated to
+//! [`crate::LocalAuthority`]'s helpers. Owning spec:
+//! `crates/vix-authority/spec/index.md` (T711).
 
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -41,8 +50,13 @@ pub struct Call {
 /// - Every call is recorded; see [`FakeAuthority::calls`].
 #[derive(Debug)]
 pub struct FakeAuthority {
+    /// Canonicalized local directory standing in for the virtual `/`.
     backing: PathBuf,
+    /// Sibling `<backing>.trash`, so trashed files never land inside the
+    /// namespace being tested nor in the user's real trash.
     trash: PathBuf,
+    /// The recorded calls. A `Mutex` because [`Authority`] methods take
+    /// `&self`; poisoning is ignored (the log is append-only).
     calls: Mutex<Vec<Call>>,
 }
 
@@ -128,6 +142,7 @@ impl FakeAuthority {
         Some(out)
     }
 
+    /// Append one entry to the call log.
     fn record(&self, op: &'static str, path: &Path) {
         self.calls
             .lock()
@@ -149,6 +164,9 @@ impl FakeAuthority {
     /// (through symlinks) outside the backing directory. Not recorded.
     fn confine(&self, path: &Path) -> io::Result<PathBuf> {
         let backing = self.to_backing(path)?;
+        // Walk up to the nearest ancestor that exists: the target itself may
+        // not exist yet (a write), but its closest real ancestor decides
+        // whether a symlink on the way leads outside the namespace.
         let mut probe = backing.as_path();
         loop {
             if let Ok(real) = std::fs::canonicalize(probe) {
@@ -180,11 +198,16 @@ impl FakeAuthority {
         Ok(backing)
     }
 
+    /// The virtual form of a local backing path; `PermissionDenied` if it
+    /// lies outside the backing directory (a result that would leak a real
+    /// path into the virtual namespace).
     fn virtualize(&self, path: &Path) -> io::Result<PathBuf> {
         self.to_virtual(path).ok_or_else(|| denied(path))
     }
 }
 
+/// The `PermissionDenied` error every escape attempt maps to. Names the
+/// virtual path the caller supplied, never a real local one.
 fn denied(path: &Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::PermissionDenied,
@@ -304,6 +327,9 @@ impl Authority for FakeAuthority {
         let from = self.map_nofollow("trash", path)?;
         std::fs::create_dir_all(&self.trash)?;
         let name = from.file_name().ok_or_else(|| denied(path))?.to_os_string();
+        // Never overwrite an earlier trashed file of the same name: suffix
+        // `.1`, `.2`, … until the name is free (a dangling link counts as
+        // taken, hence `symlink_metadata`).
         let mut to = self.trash.join(&name);
         let mut n = 1u32;
         while to.symlink_metadata().is_ok() {
@@ -330,6 +356,7 @@ impl Authority for FakeAuthority {
             .collect()
     }
 
+    // Resolves against the real local `PATH`: the fake has no virtual `PATH`.
     fn which(&self, name: &str) -> Option<PathBuf> {
         self.record("which", Path::new(name));
         vix_fileops::which_on_path(name)
@@ -337,6 +364,8 @@ impl Authority for FakeAuthority {
 
     fn command(&self, spec: &ProcessSpec) -> io::Result<Command> {
         self.record("command", Path::new(spec.program()));
+        // The program runs for real, locally; only its working directory is
+        // translated from the virtual namespace into the backing directory.
         let cwd = match spec.cwd() {
             Some(dir) => Some(self.to_backing(dir)?),
             None => None,
