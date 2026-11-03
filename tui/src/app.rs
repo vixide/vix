@@ -75,9 +75,11 @@ use jupyter as jupyter_state;
 use jupyter_off as jupyter_state;
 pub(crate) mod chooser;
 mod debug_panel;
+pub(crate) mod info_panel;
 mod keymap;
 mod overlays;
 use chooser::ChooserSlot;
+use info_panel::InfoSlot;
 pub(crate) use overlays::OverlayId;
 mod large_file;
 mod lsp_dap;
@@ -2127,6 +2129,10 @@ pub struct App {
     /// The open list chooser (branch, stash, recent files, ...), if any. One slot
     /// for all of them: two choosers cannot be open at once (T611 step 2).
     pub(crate) chooser: Option<chooser::Chooser>,
+    /// The open read-only info or picker panel (Nerd palette, ASCII, media type,
+    /// system info, LSP status, file info, text info), if any. One slot for all of
+    /// them: two cannot be open at once (T611 step 2).
+    pub(crate) info: Option<info_panel::InfoPanel>,
     /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
     /// **File History**), when open.
     pub(crate) git_log: Option<crate::git::LogPanel>,
@@ -2188,10 +2194,6 @@ pub struct App {
     /// The template awaiting the final review-buffer step of a capture, while
     /// that prompt is open.
     capture_review: Option<vix_org_capture::CaptureTemplate>,
-    /// Nerd Font palette (character picker) overlay, when open.
-    pub(crate) nerd_palette: Option<NerdPalette>,
-    /// ASCII panel (reference table) overlay, when open.
-    pub(crate) ascii_panel: Option<AsciiPanel>,
     /// Table editor (CSV/TSV spreadsheet) overlay, when open.
     pub edit_table: Option<crate::edit_table::Grid>,
     /// Interactive Org Column View overlay, when open.
@@ -2220,8 +2222,6 @@ pub struct App {
     theme_editor_baseline: Option<String>,
     /// Undo tree overlay (T638) and what `Esc` restores, when open.
     pub(crate) undo_tree: Option<undo_tree::UndoTreeState>,
-    /// Media-type (MIME) picker overlay, when open.
-    pub(crate) media_type_panel: Option<crate::media_type::Panel>,
     /// Todo Tree overlay (comment tags grouped by tag or file), when open.
     pub(crate) todo_tree: Option<crate::todo_tree::Panel>,
     /// HL7 message view overlay, when open.
@@ -2274,10 +2274,6 @@ pub struct App {
     pub(crate) jupyter: jupyter_state::State,
     /// HTML character palette overlay, when open.
     pub(crate) html_panel: Option<HtmlPanel>,
-    /// System Information panel overlay, when open.
-    pub(crate) system_info: Option<SystemInfoPanel>,
-    /// View → LSP Status… overlay (T732), when open.
-    pub(crate) lsp_status: Option<lsp_status::LspStatusPanel>,
     /// Workspace Dashboard overlay, when open.
     pub(crate) dashboard: Option<Dashboard>,
     /// QR code overlay (rendered Unicode art), when open.
@@ -2310,10 +2306,6 @@ pub struct App {
     outline_dock_key: Option<(usize, u64)>,
     /// First-run welcome overlay, when shown.
     pub welcome: Option<WelcomePanel>,
-    /// File Information overlay, when open.
-    pub(crate) file_info: Option<FileInfoPanel>,
-    /// Text Information overlay, when open.
-    pub(crate) text_info: Option<TextInfoPanel>,
     /// Markdown preview overlay, when open.
     pub(crate) markdown_preview: Option<MarkdownPreview>,
     /// The preview's table-of-contents jump list (T206), when open over it --
@@ -2857,6 +2849,7 @@ impl App {
             context_menu: None,
             git_panel: None,
             chooser: None,
+            info: None,
             git_log: None,
             git_graph: None,
             git_rebase: None,
@@ -2880,8 +2873,6 @@ impl App {
             file_browser: None,
             pending_capture: None,
             capture_review: None,
-            nerd_palette: None,
-            ascii_panel: None,
             edit_table: None,
             column_view: None,
             edit_outline: None,
@@ -2896,7 +2887,6 @@ impl App {
             theme_editor: None,
             theme_editor_baseline: None,
             undo_tree: None,
-            media_type_panel: None,
             todo_tree: None,
             hl7_panel: None,
             #[cfg(feature = "http")]
@@ -2922,8 +2912,6 @@ impl App {
             cowork: cowork_state::State::default(),
             jupyter: jupyter_state::State::default(),
             html_panel: None,
-            system_info: None,
-            lsp_status: None,
             dashboard: None,
             dashboard_rx: None,
             outline: None,
@@ -2931,8 +2919,6 @@ impl App {
             outline_dock: None,
             outline_dock_key: None,
             welcome: None,
-            file_info: None,
-            text_info: None,
             markdown_preview: None,
             markdown_toc: None,
             snippets: None,
@@ -9164,27 +9150,35 @@ impl App {
         if self.terminal_visible() && self.terminal_mouse(mouse) {
             return true;
         }
+        macro_rules! info_panel {
+            ($accessor:ident, $handler:ident) => {
+                if self.info.$accessor().is_some() {
+                    self.$handler(mouse);
+                    return true;
+                }
+            };
+        }
         panel!(help, help_mouse);
         panel!(keybinding_editor, keybinding_editor_mouse);
         panel!(file_browser, file_browser_mouse);
         if self.chooser_mouse(mouse) {
             return true;
         }
-        panel!(nerd_palette, nerd_mouse);
-        panel!(ascii_panel, ascii_mouse);
+        info_panel!(nerd_palette, nerd_mouse);
+        info_panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
         panel!(theme_editor, theme_editor_mouse);
         panel!(undo_tree, undo_tree_mouse);
-        panel!(media_type_panel, media_type_mouse);
+        info_panel!(media_type_panel, media_type_mouse);
         panel!(todo_tree, todo_tree_mouse);
         panel!(hl7_panel, hl7_mouse);
         panel!(fhir_bundle, fhir_bundle_mouse);
         panel!(choice_list, choice_list_mouse);
         panel!(html_panel, html_mouse);
-        panel!(system_info, system_info_mouse);
-        panel!(lsp_status, lsp_status_mouse);
-        panel!(file_info, file_info_mouse);
-        panel!(text_info, text_info_mouse);
+        info_panel!(system_info, system_info_mouse);
+        info_panel!(lsp_status, lsp_status_mouse);
+        info_panel!(file_info, file_info_mouse);
+        info_panel!(text_info, text_info_mouse);
         if self.markdown_preview.is_some() {
             if let Some(p) = self.markdown_preview.as_mut() {
                 match mouse.kind {

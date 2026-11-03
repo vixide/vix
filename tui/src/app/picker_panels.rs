@@ -9,6 +9,7 @@
 //! media-type detection, not part of the media-type *panel*, despite the
 //! similar name.
 
+use crate::app::info_panel::InfoSlot;
 use ratatui::layout::Rect;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
@@ -62,11 +63,11 @@ impl_list_panel!(crate::fhir::BundlePanel);
 /// returning whether one handled `code`. Each caller still handles its own
 /// remaining keys (Home/End, Enter, Esc, ...) since those differ per panel.
 pub(super) fn list_panel_nav_key<P: ListPanel>(
-    panel: &mut Option<P>,
+    panel: Option<&mut P>,
     code: KeyCode,
     page: usize,
 ) -> bool {
-    let Some(p) = panel.as_mut() else {
+    let Some(p) = panel else {
         return false;
     };
     match code {
@@ -104,35 +105,35 @@ pub(super) fn list_panel_click_index<P: ListPanel>(
 
 impl App {
     pub(super) fn open_nerd_palette(&mut self) {
-        self.nerd_palette = Some(NerdPalette::open());
+        self.info.open_nerd_palette(NerdPalette::open());
     }
 
     pub(super) fn nerd_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(p) = self.nerd_palette.as_mut() {
+                if let Some(p) = self.info.nerd_palette_mut() {
                     p.up();
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.nerd_palette.as_mut() {
+                if let Some(p) = self.info.nerd_palette_mut() {
                     p.down();
                 }
             }
             KeyCode::Left => {
-                if let Some(p) = self.nerd_palette.as_mut() {
+                if let Some(p) = self.info.nerd_palette_mut() {
                     p.left();
                 }
             }
             KeyCode::Right => {
-                if let Some(p) = self.nerd_palette.as_mut() {
+                if let Some(p) = self.info.nerd_palette_mut() {
                     p.right();
                 }
             }
             // Enter inserts and keeps the palette open so several glyphs can be
             // picked in a row; Esc closes it.
             KeyCode::Enter => self.insert_selected_glyph(),
-            KeyCode::Esc => self.nerd_palette = None,
+            KeyCode::Esc => self.info.close_nerd_palette(),
             _ => {}
         }
     }
@@ -147,7 +148,7 @@ impl App {
         }
         let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
         let row = (mouse.row - r.y) as usize;
-        if let Some(p) = self.nerd_palette.as_mut()
+        if let Some(p) = self.info.nerd_palette_mut()
             && p.select_at(row, col)
         {
             self.insert_selected_glyph();
@@ -157,7 +158,7 @@ impl App {
     /// Insert the highlighted glyph into the active editor (leaving the palette
     /// open). No-op when there is no editable buffer (e.g. an image tab).
     fn insert_selected_glyph(&mut self) {
-        let Some(p) = self.nerd_palette.as_ref() else {
+        let Some(p) = self.info.nerd_palette() else {
             return;
         };
         let glyph = p.selected_glyph();
@@ -169,7 +170,7 @@ impl App {
     }
 
     pub(super) fn open_ascii_panel(&mut self) {
-        self.ascii_panel = Some(AsciiPanel::open());
+        self.info.open_ascii_panel(AsciiPanel::open());
     }
 
     /// Generate a QR code from the current selection (or the cursor's line) and
@@ -192,35 +193,35 @@ impl App {
 
     pub(super) fn ascii_key(&mut self, key: KeyEvent) {
         let page = (self.layout.ascii_panel.height as usize).max(1);
-        if list_panel_nav_key(&mut self.ascii_panel, key.code, page) {
+        if list_panel_nav_key(self.info.ascii_panel_mut(), key.code, page) {
             return;
         }
         match key.code {
             KeyCode::Home => {
-                if let Some(p) = self.ascii_panel.as_mut() {
+                if let Some(p) = self.info.ascii_panel_mut() {
                     p.page_up(p.len());
                 }
             }
             KeyCode::End => {
-                if let Some(p) = self.ascii_panel.as_mut() {
+                if let Some(p) = self.info.ascii_panel_mut() {
                     p.page_down(p.len());
                 }
             }
             // Enter inserts and keeps the panel open so several characters can be
             // picked in a row; Esc closes it.
             KeyCode::Enter => self.insert_selected_ascii(),
-            KeyCode::Esc => self.ascii_panel = None,
+            KeyCode::Esc => self.info.close_ascii_panel(),
             _ => {}
         }
     }
 
     pub(super) fn ascii_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) =
-            list_panel_click_index(self.ascii_panel.as_ref(), self.layout.ascii_panel, mouse)
+            list_panel_click_index(self.info.ascii_panel(), self.layout.ascii_panel, mouse)
         else {
             return;
         };
-        if let Some(p) = self.ascii_panel.as_mut()
+        if let Some(p) = self.info.ascii_panel_mut()
             && p.select_index(idx)
         {
             self.insert_selected_ascii();
@@ -230,7 +231,7 @@ impl App {
     /// Insert the highlighted character into the active editor (leaving the panel
     /// open). No-op when there is no editable buffer (e.g. an image tab).
     fn insert_selected_ascii(&mut self) {
-        let Some(p) = self.ascii_panel.as_ref() else {
+        let Some(p) = self.info.ascii_panel() else {
             return;
         };
         let ch = p.selected_char();
@@ -247,7 +248,7 @@ impl App {
 
     pub(super) fn x11_key(&mut self, key: KeyEvent) {
         let page = (self.layout.x11_panel.height as usize).max(1);
-        if list_panel_nav_key(&mut self.x11_panel, key.code, page) {
+        if list_panel_nav_key(self.x11_panel.as_mut(), key.code, page) {
             return;
         }
         match key.code {
@@ -341,7 +342,7 @@ impl App {
 
     pub(super) fn theme_editor_key(&mut self, key: KeyEvent) {
         let page = (self.layout.theme_editor.height as usize).max(1);
-        if list_panel_nav_key(&mut self.theme_editor, key.code, page) {
+        if list_panel_nav_key(self.theme_editor.as_mut(), key.code, page) {
             return;
         }
         match key.code {
@@ -441,41 +442,42 @@ impl App {
             .and_then(|p| p.extension())
             .map(|e| e.to_string_lossy().into_owned())
             .unwrap_or_default();
-        self.media_type_panel = Some(crate::media_type::Panel::open_for_extension(&ext));
+        self.info
+            .open_media_type_panel(crate::media_type::Panel::open_for_extension(&ext));
     }
 
     pub(super) fn media_type_key(&mut self, key: KeyEvent) {
         let page = (self.layout.media_type_panel.height as usize).max(1);
-        if list_panel_nav_key(&mut self.media_type_panel, key.code, page) {
+        if list_panel_nav_key(self.info.media_type_panel_mut(), key.code, page) {
             return;
         }
         match key.code {
             KeyCode::Backspace => {
-                if let Some(p) = self.media_type_panel.as_mut() {
+                if let Some(p) = self.info.media_type_panel_mut() {
                     p.backspace();
                 }
             }
             KeyCode::Char(c) => {
-                if let Some(p) = self.media_type_panel.as_mut() {
+                if let Some(p) = self.info.media_type_panel_mut() {
                     p.push(c);
                 }
             }
             // Enter inserts and keeps the panel open; Esc closes it.
             KeyCode::Enter => self.insert_selected_media_type(),
-            KeyCode::Esc => self.media_type_panel = None,
+            KeyCode::Esc => self.info.close_media_type_panel(),
             _ => {}
         }
     }
 
     pub(super) fn media_type_mouse(&mut self, mouse: MouseEvent) {
         let Some(idx) = list_panel_click_index(
-            self.media_type_panel.as_ref(),
+            self.info.media_type_panel(),
             self.layout.media_type_panel,
             mouse,
         ) else {
             return;
         };
-        if let Some(p) = self.media_type_panel.as_mut()
+        if let Some(p) = self.info.media_type_panel_mut()
             && p.select_index(idx)
         {
             self.insert_selected_media_type();
@@ -486,8 +488,8 @@ impl App {
     /// (leaving the panel open). No-op when there is no editable buffer.
     fn insert_selected_media_type(&mut self) {
         let Some(entry) = self
-            .media_type_panel
-            .as_ref()
+            .info
+            .media_type_panel()
             .and_then(crate::media_type::Panel::selected_entry)
         else {
             return;
@@ -513,7 +515,7 @@ impl App {
 
     pub(super) fn todo_tree_key(&mut self, key: KeyEvent) {
         let page = (self.layout.todo_tree.height as usize).max(1);
-        if list_panel_nav_key(&mut self.todo_tree, key.code, page) {
+        if list_panel_nav_key(self.todo_tree.as_mut(), key.code, page) {
             return;
         }
         let Some(p) = self.todo_tree.as_mut() else {

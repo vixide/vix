@@ -66,7 +66,7 @@ this only matters when two layers are open at once. The cases that moved:
 
 Step 2 replaces loose `Option<_>` fields with one enum for the modals that are
 mutually exclusive, so that two of them cannot be open at once at all. It is
-done in slices; this slice converts the **list choosers**.
+done in slices. Slice 1 converted the **list choosers**; slice 2 converted the **info panels** (below).
 
 `App::chooser: Option<Chooser>` replaces fifteen fields (`branch_chooser`,
 `stash_chooser`, `worktree_chooser`, `task_chooser`, `script_chooser`,
@@ -88,14 +88,34 @@ picker, holding that picker's state. Behavior:
   the `ChooserSlot` trait on `Option<Chooser>` so call sites borrow only the
   `chooser` field, as the per-picker fields did.
 
-**Remaining (later slices):** the other modals still use their own `Option`
-fields. Candidates for the next slices, in rough order of fit: the read-only
-info panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
-`media_type_panel`, `nerd_palette`, `ascii_panel`), then the edit surfaces
-(`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`, `edit_sql`,
-`column_view`). The stacking confirmations (`confirm`, `prompt`, `unsaved`,
-...) are not candidates: they legitimately open over another layer (a reword
-prompt over the rebase overlay, a confirmation over workspace search).
+### Slice 2: the info panels
+
+`App::info: Option<InfoPanel>` replaces seven fields (`system_info`,
+`lsp_status`, `file_info`, `text_info`, `media_type_panel`, `nerd_palette`,
+`ascii_panel`); `InfoPanel` has one variant per panel, in
+`tui/src/app/info_panel.rs`, with typed access through the `InfoSlot` trait on
+`Option<InfoPanel>` (`nerd_palette()`, `nerd_palette_mut()`,
+`open_nerd_palette(p)`, `close_nerd_palette()`, and the same for each panel).
+Behavior:
+
+- Opening an info panel **replaces** any other info panel. Previously a second
+  one could be opened beneath or beside the first and the first reappeared when
+  the second closed. These panels are opened from the menu bar or palette,
+  which closes first, so no supported flow had two open; the change removes the
+  impossible state. (Observable only through the tests: opening, say, the ASCII
+  table while the Nerd palette is open now leaves only the ASCII table.)
+- `close_*` closes a panel only if it is the open one, so a stale close never
+  dismisses a different panel.
+- Each panel keeps its own row in `OVERLAYS` (same height, key handler and
+  draw function); a row is open when the slot holds its variant. Key, mouse
+  and draw routing are unchanged.
+- The panels' layout rectangles (`Layout::nerd_palette`, ...) are unchanged.
+
+**Remaining (later slices):** the edit surfaces (`edit_table`, `edit_outline`,
+`edit_value`, `edit_bytes`, `edit_sql`, `column_view`). The stacking
+confirmations (`confirm`, `prompt`, `unsaved`, ...) are not candidates: they
+legitimately open over another layer (a reword prompt over the rebase overlay,
+a confirmation over workspace search).
 
 ## Tests
 
@@ -103,7 +123,7 @@ prompt over the rebase overlay, a confirmation over workspace search).
 offer order are the same open rows in opposite directions; opening the
 palette, help and welcome panels together and pressing `Esc` closes them
 top-down (so the topmost drawn layer really takes the key); opening one
-chooser while another is open replaces it (only one `Chooser` row is ever open); the set of
+chooser while another is open replaces it (only one `Chooser` row is ever open); opening one info panel while another is open replaces it (only one `InfoPanel` row is ever open), and closing a panel that is not the open one is a no-op; the set of
 draw-only layers is exactly which-key, completion and hover. The existing
 integration and snapshot suites cover the unchanged single-overlay behavior.
 

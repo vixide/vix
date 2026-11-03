@@ -7113,12 +7113,16 @@ new action.
     `App::chooser: Option<Chooser>` (`tui/src/app/chooser.rs`, typed access
     through `ChooserSlot`); opening one replaces another. Spec:
     `spec/overlay-priority/index.md`, "Step 2". **Remaining slices**: the
-    info panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
-    `media_type_panel`, `nerd_palette`, `ascii_panel`), then the edit
-    surfaces (`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`,
+    edit surfaces (`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`,
     `edit_sql`, `column_view`). Stacking confirmations (`confirm`,
     `prompt`, `unsaved`, ...) are not candidates. The box stays ticked for
     step 1; step 2 is open until those slices land.
+  - Step 2, slice 2 done 2026-11-03 (`feat/t611-info-panels`): the 7 info
+    panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
+    `media_type_panel`, `nerd_palette`, `ascii_panel`) are one
+    `App::info: Option<InfoPanel>` (`tui/src/app/info_panel.rs`, `InfoSlot`);
+    opening one replaces another. **Remaining**: only the edit surfaces
+    above.
 
 - [x] **T639 — `password_prompt_gates_server_connections` does a real OS
   keyring lookup, so it flakes under load.** Found 2026-10-22 while

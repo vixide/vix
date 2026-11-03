@@ -8,6 +8,7 @@
 //! of "tools", another large genuinely contiguous block like org core
 //! was, no cherry-picking needed).
 
+use crate::app::info_panel::InfoSlot;
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
@@ -160,7 +161,7 @@ impl App {
 
     pub(super) fn open_file_info(&mut self) {
         let info = self.gather_file_info();
-        self.file_info = Some(FileInfoPanel::open(&info));
+        self.info.open_file_info(FileInfoPanel::open(&info));
     }
 
     /// Collect facts about the active file: counts from the buffer, and size /
@@ -202,37 +203,37 @@ impl App {
         let page = (self.layout.file_info.height as usize).max(1);
         match key.code {
             KeyCode::Up => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.up();
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.down();
                 }
             }
             KeyCode::PageUp => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.page_up(page);
                 }
             }
             KeyCode::PageDown => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.page_down(page);
                 }
             }
             KeyCode::Home => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.page_up(p.len());
                 }
             }
             KeyCode::End => {
-                if let Some(p) = self.file_info.as_mut() {
+                if let Some(p) = self.info.file_info_mut() {
                     p.page_down(p.len());
                 }
             }
             KeyCode::Enter => self.insert_selected_file_info(),
-            KeyCode::Esc => self.file_info = None,
+            KeyCode::Esc => self.info.close_file_info(),
             _ => {}
         }
     }
@@ -246,7 +247,7 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.file_info.as_mut() {
+        if let Some(p) = self.info.file_info_mut() {
             let idx = p.scroll + row_in_view;
             if p.select_index(idx) {
                 self.insert_selected_file_info();
@@ -256,7 +257,7 @@ impl App {
 
     /// Insert the highlighted value into the active editor (leaving the panel open).
     fn insert_selected_file_info(&mut self) {
-        let Some(p) = self.file_info.as_ref() else {
+        let Some(p) = self.info.file_info() else {
             return;
         };
         let value = p.selected_value();
@@ -290,23 +291,23 @@ impl App {
     pub(super) fn open_text_info(&mut self) {
         let text = self.selected_or_all_text();
         let stats = crate::text_information_panel::analyze(&text);
-        self.text_info = Some(TextInfoPanel::open(&stats));
+        self.info.open_text_info(TextInfoPanel::open(&stats));
     }
 
     pub(super) fn text_info_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(p) = self.text_info.as_mut() {
+                if let Some(p) = self.info.text_info_mut() {
                     p.up();
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.text_info.as_mut() {
+                if let Some(p) = self.info.text_info_mut() {
                     p.down();
                 }
             }
             KeyCode::Enter => self.insert_selected_text_info(),
-            KeyCode::Esc => self.text_info = None,
+            KeyCode::Esc => self.info.close_text_info(),
             _ => {}
         }
     }
@@ -320,7 +321,7 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.text_info.as_mut()
+        if let Some(p) = self.info.text_info_mut()
             && p.select_index(row_in_view)
         {
             self.insert_selected_text_info();
@@ -329,7 +330,7 @@ impl App {
 
     /// Insert the highlighted value into the active editor (leaving the panel open).
     fn insert_selected_text_info(&mut self) {
-        let Some(p) = self.text_info.as_ref() else {
+        let Some(p) = self.info.text_info() else {
             return;
         };
         let value = p.selected_value();
@@ -786,45 +787,45 @@ impl App {
     }
 
     pub(super) fn open_system_info(&mut self) {
-        self.system_info = Some(SystemInfoPanel::open());
+        self.info.open_system_info(SystemInfoPanel::open());
     }
 
     pub(super) fn system_info_key(&mut self, key: KeyEvent) {
         let page = (self.layout.system_info.height as usize).max(1);
         match key.code {
             KeyCode::Up => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.up();
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.down();
                 }
             }
             KeyCode::PageUp => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.page_up(page);
                 }
             }
             KeyCode::PageDown => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.page_down(page);
                 }
             }
             KeyCode::Home => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.page_up(p.len());
                 }
             }
             KeyCode::End => {
-                if let Some(p) = self.system_info.as_mut() {
+                if let Some(p) = self.info.system_info_mut() {
                     p.page_down(p.len());
                 }
             }
             // Enter inserts the highlighted value and keeps the panel open; Esc closes.
             KeyCode::Enter => self.insert_selected_system_info(),
-            KeyCode::Esc => self.system_info = None,
+            KeyCode::Esc => self.info.close_system_info(),
             _ => {}
         }
     }
@@ -838,7 +839,7 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.system_info.as_mut() {
+        if let Some(p) = self.info.system_info_mut() {
             let idx = p.scroll + row_in_view;
             if p.select_index(idx) {
                 self.insert_selected_system_info();
@@ -849,7 +850,7 @@ impl App {
     /// Insert the highlighted value into the active editor (leaving the panel
     /// open). Section-heading rows have no value, so they insert nothing.
     fn insert_selected_system_info(&mut self) {
-        let Some(p) = self.system_info.as_ref() else {
+        let Some(p) = self.info.system_info() else {
             return;
         };
         let value = p.selected_value();

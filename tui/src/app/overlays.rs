@@ -11,6 +11,7 @@
 use vix_input::KeyEvent;
 
 use super::chooser::ChooserSlot;
+use super::info_panel::InfoSlot;
 use super::{App, ConfirmKind, Visible};
 
 /// Which layer a row stands for. The discriminant is the row's index in
@@ -265,6 +266,20 @@ macro_rules! chooser {
     };
 }
 
+/// A row for an info panel: open while `app.info` holds that variant.
+macro_rules! info_panel {
+    ($id:ident, $accessor:ident, $handler:ident) => {
+        Overlay {
+            id: OverlayId::$id,
+            open: |a| a.info.$accessor().is_some(),
+            key: Key::Handler(|a, k| {
+                a.$handler(k);
+                true
+            }),
+        }
+    };
+}
+
 /// A row for a layer that is drawn but never takes keys.
 macro_rules! draw_only {
     ($id:ident, $field:ident) => {
@@ -336,8 +351,8 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     chooser!(RefileChooser, refile, refile_chooser_key),
     chooser!(RecentChooser, recent, recent_key),
     unit!(FileBrowser, file_browser, file_browser_key),
-    unit!(NerdPalette, nerd_palette, nerd_key),
-    unit!(AsciiPanel, ascii_panel, ascii_key),
+    info_panel!(NerdPalette, nerd_palette, nerd_key),
+    info_panel!(AsciiPanel, ascii_panel, ascii_key),
     unit!(EditTable, edit_table, edit_table_key),
     unit!(ColumnView, column_view, column_view_key),
     unit!(EditOutline, edit_outline, edit_outline_key),
@@ -405,15 +420,15 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(StructuralReplace, structural_replace, sr_key),
     unit!(EditSql, edit_sql, edit_sql_key),
     unit!(Db, db, db_key),
-    unit!(MediaTypePanel, media_type_panel, media_type_key),
+    info_panel!(MediaTypePanel, media_type_panel, media_type_key),
     chooser!(EncodingChooser, encoding, encoding_key),
     chooser!(MacroChooser, macros, macro_key),
     chooser!(ClipboardChooser, clipboard, clipboard_key),
     chooser!(WorkspaceChooser, workspace, workspace_chooser_key),
-    unit!(SystemInfo, system_info, system_info_key),
-    unit!(LspStatus, lsp_status, lsp_status_key),
-    unit!(FileInfo, file_info, file_info_key),
-    unit!(TextInfo, text_info, text_info_key),
+    info_panel!(SystemInfo, system_info, system_info_key),
+    info_panel!(LspStatus, lsp_status, lsp_status_key),
+    info_panel!(FileInfo, file_info, file_info_key),
+    info_panel!(TextInfo, text_info, text_info_key),
     unit!(MarkdownPreview, markdown_preview, markdown_preview_key),
     unit!(MarkdownToc, markdown_toc, markdown_toc_key),
     unit!(Snippets, snippets, snippets_key),
@@ -609,5 +624,45 @@ mod tests {
         // Esc reaches the chooser's handler through the table and closes it.
         a.route_overlay_key(esc());
         assert!(a.chooser.is_none());
+    }
+
+    #[test]
+    fn two_info_panels_cannot_be_open_together() {
+        let mut a = app();
+        a.info.open_nerd_palette(crate::app::NerdPalette::open());
+        a.info.open_ascii_panel(crate::app::AsciiPanel::open());
+        let open: Vec<OverlayId> = a.open_overlays().map(|o| o.id).collect();
+        assert_eq!(
+            open,
+            [OverlayId::AsciiPanel],
+            "the newer panel replaced the older"
+        );
+        assert!(a.info.nerd_palette().is_none());
+        assert!(a.info.ascii_panel().is_some());
+    }
+
+    #[test]
+    fn closing_an_info_panel_that_is_not_open_is_a_no_op() {
+        let mut a = app();
+        a.info.open_ascii_panel(crate::app::AsciiPanel::open());
+        a.info.close_nerd_palette();
+        assert!(a.info.ascii_panel().is_some(), "a different panel stays");
+        a.info.close_ascii_panel();
+        assert!(a.info.is_none());
+    }
+
+    #[test]
+    fn an_info_panel_row_is_open_only_for_its_own_variant() {
+        let mut a = app();
+        a.info.open_system_info(crate::app::SystemInfoPanel::open());
+        let rows = OVERLAYS
+            .iter()
+            .filter(|o| (o.open)(&a))
+            .map(|o| o.id)
+            .collect::<Vec<_>>();
+        assert_eq!(rows, [OverlayId::SystemInfo]);
+        // Esc reaches the panel's handler through the table and closes it.
+        a.route_overlay_key(esc());
+        assert!(a.info.is_none());
     }
 }

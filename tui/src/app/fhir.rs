@@ -51,7 +51,7 @@ impl App {
     /// `n` follows the `next` link, Esc closes.
     pub(super) fn fhir_bundle_key(&mut self, key: KeyEvent) {
         let page = (self.layout.fhir_bundle.height as usize).max(1);
-        if list_panel_nav_key(&mut self.fhir_bundle, key.code, page) {
+        if list_panel_nav_key(self.fhir_bundle.as_mut(), key.code, page) {
             return;
         }
         match key.code {

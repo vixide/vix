@@ -3,6 +3,7 @@
 //! open files, in-flight progress, capabilities and last error. Read live
 //! from [`crate::lsp::Lsp::statuses`] each frame.
 
+use crate::app::info_panel::InfoSlot;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -134,7 +135,7 @@ fn server_lines(s: &ServerStatus, selected: bool, width: usize) -> Vec<Line<'sta
 
 /// Draw the LSP Status overlay, centered over `area`.
 pub(super) fn draw_lsp_status(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(selected) = app.lsp_status.as_ref().map(|p| p.selected) else {
+    let Some(selected) = app.info.lsp_status().map(|p| p.selected) else {
         return;
     };
     let statuses = app.lsp.statuses();
@@ -194,7 +195,7 @@ pub(super) fn draw_lsp_status(app: &mut App, frame: &mut Frame, area: Rect) {
     // its header in view always.
     let start = starts.get(selected).copied().unwrap_or(0);
     let end = starts.get(selected + 1).map_or(lines.len(), |&n| n - 1);
-    let Some(panel) = app.lsp_status.as_mut() else {
+    let Some(panel) = app.info.lsp_status_mut() else {
         return;
     };
     panel.selected = selected;

@@ -9,6 +9,7 @@
 //! crate (see `AGENTS.md`'s non-negotiable convention, and T142's own
 //! task text after it was revised to match).
 
+use crate::app::info_panel::InfoSlot;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -408,8 +409,8 @@ pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
-        .text_info
-        .as_ref()
+        .info
+        .text_info()
         .map(crate::text_information_panel::Panel::len)
     else {
         return;
@@ -437,7 +438,7 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let Some(p) = app.text_info.as_ref() else {
+    let Some(p) = app.info.text_info() else {
         return;
     };
     let view_h = chunks[0].height as usize;
@@ -470,8 +471,8 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
-        .file_info
-        .as_ref()
+        .info
+        .file_info()
         .map(vix_file_information_panel::Panel::len)
     else {
         return;
@@ -502,10 +503,10 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let view_h = chunks[0].height as usize;
-    if let Some(p) = app.file_info.as_mut() {
+    if let Some(p) = app.info.file_info_mut() {
         p.ensure_visible(view_h);
     }
-    let Some(p) = app.file_info.as_ref() else {
+    let Some(p) = app.info.file_info() else {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
@@ -538,8 +539,8 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
-        .system_info
-        .as_ref()
+        .info
+        .system_info()
         .map(vix_system_information_panel::Panel::len)
     else {
         return;
@@ -570,10 +571,10 @@ pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let view_h = chunks[0].height as usize;
-    if let Some(p) = app.system_info.as_mut() {
+    if let Some(p) = app.info.system_info_mut() {
         p.ensure_visible(view_h);
     }
-    let Some(p) = app.system_info.as_ref() else {
+    let Some(p) = app.info.system_info() else {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);

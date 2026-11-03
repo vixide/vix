@@ -7,6 +7,7 @@
 //! source ranges bundled into one module for symmetry with the app-side
 //! `picker_panels.rs` state module.
 
+use crate::app::info_panel::InfoSlot;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -16,7 +17,7 @@ use crate::theme::{self, icon};
 
 pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::nerd_font_picker::{COLS, GLYPHS};
-    let Some(p) = app.nerd_palette.as_ref() else {
+    let Some(p) = app.info.nerd_palette() else {
         return;
     };
     let grid_w = u16::try_from(COLS).unwrap_or(u16::MAX) * NERD_CELL_W;
@@ -92,7 +93,7 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ascii_character_picker::{self as ascii, LEN};
-    if app.ascii_panel.is_none() {
+    if app.info.ascii_panel().is_none() {
         return;
     }
     let width = 26u16.min(area.width);
@@ -133,10 +134,10 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     // Sync the scroll window to the highlighted row, then render that window.
     let view_h = chunks[1].height as usize;
-    if let Some(p) = app.ascii_panel.as_mut() {
+    if let Some(p) = app.info.ascii_panel_mut() {
         p.ensure_visible(view_h);
     }
-    let Some(p) = app.ascii_panel.as_ref() else {
+    let Some(p) = app.info.ascii_panel() else {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
@@ -408,7 +409,7 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.media_type_panel.is_none() {
+    if app.info.media_type_panel().is_none() {
         return;
     }
     let table = crate::media_type::all();
@@ -421,7 +422,7 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
         height,
     };
     frame.render_widget(Clear, rect);
-    let Some(p) = app.media_type_panel.as_ref() else {
+    let Some(p) = app.info.media_type_panel() else {
         return;
     };
     let block = Block::default()
@@ -457,10 +458,10 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     frame.render_widget(Paragraph::new(filter), chunks[0]);
 
     let view_h = chunks[1].height as usize;
-    if let Some(p) = app.media_type_panel.as_mut() {
+    if let Some(p) = app.info.media_type_panel_mut() {
         p.ensure_visible(view_h);
     }
-    let Some(p) = app.media_type_panel.as_ref() else {
+    let Some(p) = app.info.media_type_panel() else {
         return;
     };
     let filtered = p.matches();

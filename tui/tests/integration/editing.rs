@@ -10,6 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
+use crate::app::info_panel::InfoSlot;
 use crate::integration::common::*;
 
 #[test]
@@ -40,7 +41,7 @@ fn media_type_picker_filters_and_inserts() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.media_types");
     assert!(
-        app.media_type_panel.is_some(),
+        app.info.media_type_panel().is_some(),
         "Media Types opens the picker"
     );
 
@@ -53,7 +54,7 @@ fn media_type_picker_filters_and_inserts() {
 
     // Esc closes it.
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(app.media_type_panel.is_none());
+    assert!(app.info.media_type_panel().is_none());
 
     // The lookup table is also usable directly by extension.
     assert_eq!(
@@ -753,7 +754,7 @@ fn text_information_reports_counts() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "Hello world.\nHow are you?");
     app.run_action("tools.text_info");
-    let p = app.text_info.as_ref().expect("panel open");
+    let p = app.info.text_info().expect("panel open");
     assert_eq!(p.rows[0].label, "Characters");
     assert_eq!(p.rows[0].value, "25");
     assert_eq!(p.rows[1].value, "5"); // words
@@ -2932,12 +2933,18 @@ fn ctrl_tab_switches_tabs() {
 fn ascii_panel_opens_inserts_and_closes() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.ascii");
-    assert!(app.ascii_panel.is_some(), "Tools → ASCII opens the panel");
+    assert!(
+        app.info.ascii_panel().is_some(),
+        "Tools → ASCII opens the panel"
+    );
 
     // Highlight code 65 ('A') and insert it; the panel stays open.
-    app.ascii_panel.as_mut().unwrap().selected = 65;
+    app.info.ascii_panel_mut().unwrap().selected = 65;
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.ascii_panel.is_some(), "Enter keeps the panel open");
+    assert!(
+        app.info.ascii_panel().is_some(),
+        "Enter keeps the panel open"
+    );
     assert!(
         app.editor.active_tab().unwrap().lines()[0].contains('A'),
         "the highlighted character is inserted into the editor"
@@ -2945,7 +2952,7 @@ fn ascii_panel_opens_inserts_and_closes() {
 
     // Esc closes the panel.
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.ascii_panel.is_none(), "Esc closes the panel");
+    assert!(app.info.ascii_panel().is_none(), "Esc closes the panel");
 }
 
 #[test]
@@ -3378,30 +3385,33 @@ fn system_info_panel_opens_inserts_and_closes() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.system_info");
     assert!(
-        app.system_info.is_some(),
+        app.info.system_info().is_some(),
         "Tools → System Information opens the panel"
     );
 
     // Highlight the first row that has an insertable value, then insert it.
     let idx = app
-        .system_info
-        .as_ref()
+        .info
+        .system_info()
         .unwrap()
         .rows
         .iter()
         .position(|r| !r.value.is_empty())
         .expect("the snapshot has at least one value row");
-    let value = app.system_info.as_ref().unwrap().rows[idx].value.clone();
-    app.system_info.as_mut().unwrap().select_index(idx);
+    let value = app.info.system_info().unwrap().rows[idx].value.clone();
+    app.info.system_info_mut().unwrap().select_index(idx);
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.system_info.is_some(), "Enter keeps the panel open");
+    assert!(
+        app.info.system_info().is_some(),
+        "Enter keeps the panel open"
+    );
     assert!(
         app.editor.active_tab().unwrap().lines()[0].contains(&value),
         "the highlighted value is inserted into the editor"
     );
 
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.system_info.is_none(), "Esc closes the panel");
+    assert!(app.info.system_info().is_none(), "Esc closes the panel");
 }
 
 #[test]

@@ -8,6 +8,7 @@
 //! from Starting to Running (or Failed) while it is open. The panel itself
 //! only remembers which server is highlighted.
 
+use crate::app::info_panel::InfoSlot;
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{App, rect_contains};
@@ -31,14 +32,14 @@ const PROGRESS_SEGMENT_CHARS: usize = 48;
 impl App {
     /// Open View → LSP Status… (`lsp.status`).
     pub(super) fn open_lsp_status(&mut self) {
-        self.lsp_status = Some(LspStatusPanel::default());
+        self.info.open_lsp_status(LspStatusPanel::default());
     }
 
     /// Keys while the LSP Status panel is open: Up/Down pick a server, `r`
     /// or Enter restarts it, Esc or `q` closes.
     pub(super) fn lsp_status_key(&mut self, key: KeyEvent) {
         let count = self.lsp.statuses().len();
-        let Some(panel) = self.lsp_status.as_mut() else {
+        let Some(panel) = self.info.lsp_status_mut() else {
             return;
         };
         match key.code {
@@ -51,7 +52,7 @@ impl App {
             KeyCode::Home => panel.selected = 0,
             KeyCode::End => panel.selected = count.saturating_sub(1),
             KeyCode::Enter | KeyCode::Char('r') => self.lsp_status_restart_selected(),
-            KeyCode::Esc | KeyCode::Char('q') => self.lsp_status = None,
+            KeyCode::Esc | KeyCode::Char('q') => self.info.close_lsp_status(),
             _ => {}
         }
     }
@@ -67,7 +68,7 @@ impl App {
             return;
         }
         let row = usize::from(mouse.row - r.y);
-        let Some(panel) = self.lsp_status.as_mut() else {
+        let Some(panel) = self.info.lsp_status_mut() else {
             return;
         };
         let line = panel.scroll + row;
@@ -78,7 +79,7 @@ impl App {
 
     /// Restart the highlighted server in the LSP Status panel.
     fn lsp_status_restart_selected(&mut self) {
-        let Some(selected) = self.lsp_status.as_ref().map(|p| p.selected) else {
+        let Some(selected) = self.info.lsp_status().map(|p| p.selected) else {
             return;
         };
         let Some(status) = self.lsp.statuses().into_iter().nth(selected) else {

@@ -10,6 +10,7 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
+use crate::app::info_panel::InfoSlot;
 use crate::integration::common::*;
 
 #[test]
@@ -200,15 +201,21 @@ fn palette_recent_command_floats_to_top() {
 fn nerd_palette_inserts_glyph_with_keyboard() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.nerd_palette");
-    assert!(app.nerd_palette.is_some(), "the action opens the palette");
+    assert!(
+        app.info.nerd_palette().is_some(),
+        "the action opens the palette"
+    );
 
     // Move one cell right, capture the highlighted glyph, then insert it.
     app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    let expected = app.nerd_palette.as_ref().unwrap().selected_glyph();
+    let expected = app.info.nerd_palette().unwrap().selected_glyph();
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     // Enter inserts but keeps the palette open for picking more glyphs.
-    assert!(app.nerd_palette.is_some(), "Enter keeps the palette open");
+    assert!(
+        app.info.nerd_palette().is_some(),
+        "Enter keeps the palette open"
+    );
     let text = app.editor.active_tab().unwrap().text();
     assert!(
         text.contains(expected),
@@ -216,7 +223,7 @@ fn nerd_palette_inserts_glyph_with_keyboard() {
     );
 
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(app.nerd_palette.is_none(), "Esc closes the palette");
+    assert!(app.info.nerd_palette().is_none(), "Esc closes the palette");
 }
 
 #[test]
@@ -231,8 +238,11 @@ fn nerd_palette_click_inserts_glyph() {
 
     // The click both highlights that cell and inserts it; the palette stays open,
     // so its current glyph is the one just inserted.
-    assert!(app.nerd_palette.is_some(), "a click keeps the palette open");
-    let expected = app.nerd_palette.as_ref().unwrap().selected_glyph();
+    assert!(
+        app.info.nerd_palette().is_some(),
+        "a click keeps the palette open"
+    );
+    let expected = app.info.nerd_palette().unwrap().selected_glyph();
     let text = app.editor.active_tab().unwrap().text();
     assert!(
         text.contains(expected),

@@ -10,6 +10,8 @@
     reason = "every test needs a handful of the shared helpers in common.rs"
 )]
 
+#[cfg(feature = "lsp")]
+use crate::app::info_panel::InfoSlot;
 use crate::integration::common::*;
 
 #[test]
@@ -232,7 +234,7 @@ fn lsp_status_panel_lists_servers_and_closes() {
     app.lsp.did_open(Path::new("/proj/a.gh"), "x");
 
     app.run_action("lsp.status");
-    assert!(app.lsp_status.is_some(), "the panel opens");
+    assert!(app.info.lsp_status().is_some(), "the panel opens");
     let statuses = app.lsp.statuses();
     assert_eq!(statuses.len(), 2);
     assert_eq!(statuses[0].state, ServerState::Failed);
@@ -253,15 +255,18 @@ fn lsp_status_panel_lists_servers_and_closes() {
 
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Down));
-    assert_eq!(app.lsp_status.as_ref().unwrap().selected, 1, "clamped");
+    assert_eq!(app.info.lsp_status().unwrap().selected, 1, "clamped");
     app.on_key(keycode(KeyCode::Up));
     app.on_key(keycode(KeyCode::Up));
-    assert_eq!(app.lsp_status.as_ref().unwrap().selected, 0, "clamped");
+    assert_eq!(app.info.lsp_status().unwrap().selected, 0, "clamped");
     app.on_key(key('r'));
-    assert!(app.lsp_status.is_some(), "restart keeps the panel open");
+    assert!(
+        app.info.lsp_status().is_some(),
+        "restart keeps the panel open"
+    );
     assert_eq!(app.lsp.statuses()[0].state, ServerState::Failed);
     app.on_key(esc());
-    assert!(app.lsp_status.is_none(), "Esc closes");
+    assert!(app.info.lsp_status().is_none(), "Esc closes");
 }
 
 /// T620: a mock language server for call and type hierarchy. `argv[1]` is a
