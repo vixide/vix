@@ -1,0 +1,237 @@
+# Install-channel templates (T742, spec/packaging): winget, Scoop, the AUR and
+# the Nix flake. GitHub only.
+#
+# What runs when:
+#   * pull_request / push touching the templates: `check` (offline) and, for
+#     flake.nix / Cargo.lock, `verify-nix`.
+#   * the "Release" workflow finishing on a version tag (workflow_run: a release
+#     that dist creates with GITHUB_TOKEN cannot trigger a `release` event, and
+#     the assets only exist once Release is done): `render`, the verify jobs, and
+#     the publish jobs below.
+#   * workflow_dispatch with a version: the same, by hand.
+#
+# NOTHING IS PUBLISHED unless the repository variable PACKAGING_PUBLISH is
+# "true" AND the job's secret exists. The secrets named here are placeholders:
+# none has been created. This workflow has NOT run yet; see packaging/README.md
+# for the manual steps (buckets, accounts, tokens, the first winget-pkgs pull
+# request) that must come first.
+name: Packaging
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'Cargo.lock'
+      - 'scripts/packaging'
+      - '.github/workflows/packaging.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'scripts/packaging'
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to render and verify, for example 2.0.0 (no "v")'
+        required: true
+
+jobs:
+  check:
+    name: templates consistent
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/packaging check
+
+  # The version a release-driven run works on. Empty for a pull request or push.
+  version:
+    name: release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        env:
+          DISPATCH: ${{ inputs.version }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_OK: ${{ github.event.workflow_run.conclusion }}
+          RUN_REF: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          v=""
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            v="${DISPATCH}"
+          elif [ "${GITHUB_EVENT_NAME}" = workflow_run ] \
+            && [ "${RUN_EVENT}" = push ] && [ "${RUN_OK}" = success ]; then
+            v="${RUN_REF}"
+          fi
+          if [ -n "${v}" ] && ! printf '%s' "${v}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+            echo "not a plain version tag, skipping: ${v}"
+            v=""
+          fi
+          echo "version=${v}" >> "${GITHUB_OUTPUT}"
+
+  render:
+    name: render manifests for the release
+    needs: version
+    if: needs.version.outputs.version != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: render from the release's own .sha256 files
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: python3 scripts/packaging render "${VERSION}" --date "$(date -u +%F)"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packaging-manifests
+          path: packaging/
+          if-no-files-found: error
+
+  verify-nix:
+    name: nix flake check and build
+    needs: version
+    if: github.event_name != 'workflow_run' || needs.version.outputs.version != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check --print-build-logs
+      - run: nix build --print-build-logs
+      - run: ./result/bin/vix --version
+      - run: nix run . -- --version
+      # The first successful run shows what flake.lock should contain; a
+      # maintainer commits it (the lock is not written back from CI).
+      - name: show the lock that was resolved
+        run: nix flake metadata --json | head -c 4000
+
+  verify-winget:
+    name: winget validate
+    needs: [version, render]
+    if: needs.version.outputs.version != ''
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: packaging-manifests
+          path: rendered
+      - name: winget validate
+        shell: pwsh
+        run: |
+          winget validate --manifest rendered/winget
+
+  verify-aur:
+    name: PKGBUILD builds on Arch
+    needs: [version, render]
+    if: needs.version.outputs.version != ''
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: makepkg as an unprivileged user
+        run: |
+          useradd -m builder
+          cp -r packaging/aur/vix-tui-bin /home/builder/pkg
+          chown -R builder /home/builder/pkg
+          su builder -c 'cd ~/pkg && makepkg --syncdeps --noconfirm --cleanbuild'
+          su builder -c 'cd ~/pkg && bsdtar -tf vix-tui-bin-*.pkg.tar.zst | grep -q usr/bin/vix'
+
+  # ---------------------------------------------------------------- publish
+  # Each job needs the repository variable PACKAGING_PUBLISH=true and its own
+  # secret. Without them the job is skipped and nothing leaves the repository.
+
+  publish-winget:
+    name: submit to winget-pkgs
+    needs: [version, render, verify-winget]
+    # Only after the FIRST version has been submitted by hand and merged:
+    # `wingetcreate update` needs an existing package.
+    if: needs.version.outputs.version != '' && vars.PACKAGING_PUBLISH == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: wingetcreate update --submit
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          # PLACEHOLDER: a classic PAT with public_repo, from an account that
+          # can fork microsoft/winget-pkgs. Not created yet.
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: |
+          if (-not $env:WINGET_PKGS_TOKEN) { Write-Host 'WINGET_PKGS_TOKEN is not set; not submitting.'; exit 0 }
+          $base = "https://github.com/vixide/vix/releases/download/$env:VERSION"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe update vixide.vix-tui --version $env:VERSION `
+            --urls "$base/vix-tui-x86_64-pc-windows-msvc.zip|x64" "$base/vix-tui-aarch64-pc-windows-msvc.zip|arm64" `
+            --submit --token $env:WINGET_PKGS_TOKEN
+
+  publish-scoop:
+    name: update the Scoop bucket
+    needs: [version, render]
+    if: needs.version.outputs.version != '' && vars.PACKAGING_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: packaging-manifests
+          path: rendered
+      - name: push bucket/vix-tui.json
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          # PLACEHOLDER: a fine-grained PAT with Contents: read and write on
+          # vixide/scoop-bucket, which must be created first. Not created yet.
+          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          if [ -z "${SCOOP_BUCKET_TOKEN}" ]; then echo "SCOOP_BUCKET_TOKEN is not set; not pushing."; exit 0; fi
+          git clone "https://x-access-token:${SCOOP_BUCKET_TOKEN}@github.com/vixide/scoop-bucket.git" bucket
+          mkdir -p bucket/bucket
+          cp rendered/scoop/vix-tui.json bucket/bucket/vix-tui.json
+          cd bucket
+          git config user.name "vix packaging"
+          git config user.email "noreply@github.com"
+          git add bucket/vix-tui.json
+          git diff --cached --quiet || { git commit -m "vix-tui ${VERSION}" && git push; }
+
+  publish-aur:
+    name: push to the AUR
+    needs: [version, render, verify-aur]
+    if: needs.version.outputs.version != '' && vars.PACKAGING_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: packaging-manifests
+          path: rendered
+      - name: publish vix-tui-bin
+        # PLACEHOLDER: AUR_SSH_PRIVATE_KEY is the private half of a key added
+        # to an AUR account that maintains vix-tui-bin. Not created yet; the
+        # action fails clearly without it, so guard on its presence below.
+        env:
+          HAVE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
+        run: echo "have_key=${HAVE_KEY}" >> "${GITHUB_ENV}"
+      - uses: KSXGitHub/github-actions-deploy-aur@v4
+        if: env.have_key == 'true'
+        with:
+          pkgname: vix-tui-bin
+          pkgbuild: rendered/aur/vix-tui-bin/PKGBUILD
+          commit_username: vix packaging
+          commit_email: noreply@github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: vix-tui ${{ needs.version.outputs.version }}

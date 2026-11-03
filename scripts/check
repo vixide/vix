@@ -95,6 +95,9 @@ else
 	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 fi
 
+echo "==> packaging templates (T742)"
+python3 "$(dirname "$0")/packaging" check
+
 echo "==> scripts/check-docs"
 python3 "$(dirname "$0")/check-docs"
 

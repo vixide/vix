@@ -64,11 +64,23 @@
 
   <h2 id="not-yet">Not yet published</h2>
   <p>
-    winget, Scoop, the AUR, <code>cargo binstall</code>, a Nix flake, mise and
-    a container image on ghcr.io are templates in the repository that have not
-    been verified or published yet, so none of them works today. See
-    <a href={`${docs}getting-started/index.html`}>Getting Started</a> for
-    their status.
+    These channels have manifests, a flake or metadata in the repository, but
+    nobody has installed Vix with them on a real machine yet or published
+    them, so <strong>none of them works today</strong>. Use one of the
+    channels above. They are listed here so you can see what is coming:
+  </p>
+  <ul>
+    <li>winget (Windows): <code>winget install vixide.vix-tui</code></li>
+    <li>Scoop (Windows): <code>scoop install vix-tui</code>, from a Vix bucket</li>
+    <li>AUR (Arch): <code>yay -S vix-tui-bin</code></li>
+    <li>Nix: <code>nix run github:vixide/vix</code> to try it without installing</li>
+    <li><code>cargo binstall vix-tui</code>: the prebuilt archive instead of compiling</li>
+    <li>mise: <code>mise use -g cargo:vix-tui</code></li>
+    <li>A container image: <code>docker run --rm -it ghcr.io/vixide/vix</code></li>
+  </ul>
+  <p>
+    See <a href={`${docs}getting-started/index.html`}>Getting Started</a> for
+    the status of each.
   </p>
 
   <h2 id="minimal">Minimal build</h2>

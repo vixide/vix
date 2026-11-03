@@ -166,6 +166,17 @@ releases `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` (not `vix-gtk4`) fro
 members `cargo:.` and `cargo:gui`), so a GUI that does not build there fails the whole release.
 See `gui/spec/index.md`.
 
+### Packaging channels (T742)
+
+`.github/workflows/packaging.yml` (GitHub only) checks the install-channel
+templates under `packaging/` and the Nix flake, and, after the `Release`
+workflow succeeds on a version tag, renders them for that release and
+verifies them (`nix build`, `winget validate`, `makepkg`). Its publish jobs
+(winget-pkgs, a Scoop bucket, the AUR) run only when the repository variable
+`PACKAGING_PUBLISH` is `true` and the placeholder secret exists. See
+[`spec/packaging`](../packaging/index.md). `scripts/packaging check` is also a
+step of `scripts/check`.
+
 ### Chaos monkey (T575)
 
 `.github/workflows/chaos.yml` (GitHub only) runs `tui/examples/chaos_monkey` nightly and on

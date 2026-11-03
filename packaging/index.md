@@ -11,6 +11,36 @@ installers, npm, the MSI, `.deb`/`.rpm`/Arch packages and the release
 archives) are all built by `dist` and `.github/workflows/linux-packages.yml`;
 see [`dist-workspace.toml`](../dist-workspace.toml).
 
+## Tooling and CI (spec: [`spec/packaging`](../spec/packaging/index.md))
+
+- `scripts/packaging check` (offline; part of `scripts/check`) keeps the
+  templates consistent: one version, matching URLs, well-formed hashes, dist
+  targets, binstall metadata, the flake, `bash -n` on the PKGBUILD.
+- `scripts/packaging render <version>` rewrites the winget, Scoop and AUR
+  templates for a release from its `.sha256` files (or `--sums FILE`); an
+  arm64 Windows entry appears when that asset exists (2.0.0 and later).
+- [`.github/workflows/packaging.yml`](../.github/workflows/packaging.yml)
+  renders and verifies them after a release (`nix build`, `winget validate`,
+  `makepkg`) and has publish jobs for winget-pkgs, a Scoop bucket and the
+  AUR. The publish jobs do nothing unless the repository variable
+  `PACKAGING_PUBLISH` is `true` **and** the secret exists:
+  `WINGET_PKGS_TOKEN`, `SCOOP_BUCKET_TOKEN`, `AUR_SSH_PRIVATE_KEY`. None of
+  these exists. The workflow has never run.
+
+## What stays manual
+
+1. Verify each channel on a real machine (the "Verify first" steps below).
+2. Commit `flake.lock` from the first real `nix build`.
+3. Create `vixide/scoop-bucket`, the AUR account and `vix-tui-bin` package,
+   and the three tokens above; set `PACKAGING_PUBLISH=true`.
+4. Submit the first winget-pkgs pull request by hand and wait for Microsoft's
+   review; only then can `wingetcreate update` take over.
+5. Publish `vix-tui` to crates.io (for `cargo binstall`), make the ghcr.io
+   package public, and optionally submit to nixpkgs and mise's registry.
+6. Move each verified channel into the main install list of
+   [`docs/getting-started`](../docs/getting-started/index.md), the README and
+   the site's install page.
+
 ## What the release really ships
 
 Every template below points at the real assets of a GitHub Release, checked

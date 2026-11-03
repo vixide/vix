@@ -95,7 +95,9 @@ cargo build --release   # binary at target/release/vix
 > T743), waiting to be verified on a real machine or CI runner and then
 > published. Until then, use one of the channels above. The commands below
 > are what each channel will look like; see
-> [`packaging/index.md`](../../packaging/index.md) for the status of each.
+> [`packaging/index.md`](../../packaging/index.md) for the status of each and
+> [`spec/packaging`](../../spec/packaging/index.md) for how the templates are
+> checked and, once a maintainer opts in, published.
 
 - **winget** (Windows): `winget install vixide.vix-tui`. Manifest not yet
   submitted to winget-pkgs.
