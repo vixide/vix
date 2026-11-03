@@ -8,7 +8,7 @@
 //! DTDs are refused by the parser, so entity expansion cannot be abused.
 //!
 //! Used only by [`crate::rest`] when a `{{req.response.body./path}}` reference
-//! has a body path starting with `/`. Deliberately not a full XPath engine:
+//! has a body path starting with `/`. Deliberately not a full `XPath` engine:
 //! no axes other than child/descendant, no functions besides `text()`, no
 //! boolean operators. Unsupported syntax makes [`query`] return `None`.
 //!

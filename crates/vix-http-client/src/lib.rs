@@ -19,10 +19,10 @@
 //!
 //! Also parsed (see [`parse_request`]): `@name = value` variable-definition
 //! lines before the request line are skipped here (substitution is handled by
-//! [`env`]), a trailing `HTTP/x.y` token on the request line is dropped, and
+//! [`mod@env`]), a trailing `HTTP/x.y` token on the request line is dropped, and
 //! `?a=1` / `&b=2` continuation lines extend the URL's query.
 //!
-//! Submodules: [`env`] (environment files and `{{var}}` substitution), [`aad`]
+//! Submodules: [`mod@env`] (environment files and `{{var}}` substitution), [`aad`]
 //! (Azure AD token acquisition) and [`rest`] (the REST-client workbench model).
 //! Only `http`/`https` URLs are ever sent, see [`send_response`].
 //!

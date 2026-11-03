@@ -237,7 +237,7 @@ fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarErr
 }
 
 /// `body`, `body.$.path` (JSON), `body.*`, or `headers.Name`. A body path
-/// starting with `/` is an XPath over XML (see `crate::xpath`); anything else
+/// starting with `/` is an `XPath` over XML (see `crate::xpath`); anything else
 /// is a JSON path. Header names compare case-insensitively, as in HTTP.
 fn response_part(resp: &Response, tail: &str) -> Option<String> {
     if let Some(h) = tail.strip_prefix("headers.") {

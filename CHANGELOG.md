@@ -10,7 +10,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Changed
 
-- Documentation only: module docs, private-item docs, why-comments and doctests for 23 crates (acp, ai-panel, ascii-character-picker, base-tool, checksum-tool, convert-from-json-into-csv-tool, dap, edit-sql, hex-rgb, http-client, left-dock, list-state, macros, oci-panel, org-table, qr-tool, system-information-panel, theme, theme-editor-panel, undo-store, unit-converter-tool, url-tool, workspace-search); no behavior change.
+- Documentation only: module docs, private-item docs, why-comments and runnable examples for 23 crates (acp, ai-panel, ascii-character-picker, base-tool, checksum-tool, convert-from-json-into-csv-tool, dap, edit-sql, hex-rgb, http-client, left-dock, list-state, macros, oci-panel, org-table, qr-tool, system-information-panel, theme, theme-editor-panel, undo-store, unit-converter-tool, url-tool, workspace-search); no behavior change.
 
 ### Fixed
 
