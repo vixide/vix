@@ -5,6 +5,12 @@
 //! Everything here works on [`toml::Table`]s: a [`Settings`] is serialized
 //! to a table, a layer is merged onto it, and the result is deserialized
 //! back, so a layer needs to name only the keys it changes.
+//!
+//! The reverse direction is [`unmerge`]: when the user changes a setting in
+//! the app while a project layer is active, only the changed keys are written
+//! back to the user file, never the project's values.
+//!
+//! Spec: `crates/vix-settings/spec/index.md`.
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -48,6 +54,8 @@ pub enum LayerError {
     Serialize(toml::ser::Error),
 }
 
+/// Human-readable message only (no variant prefix); parse errors show just the
+/// `toml` message, since the caller already names the file.
 impl std::fmt::Display for LayerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -107,6 +115,7 @@ pub fn deep_merge(base: &mut toml::Table, layer: &toml::Table) {
 /// [`LayerError::Merge`] when the merged table is no longer valid settings
 /// (a value of the wrong type).
 pub fn merge_layer(base: &Settings, layer: &toml::Table) -> Result<Settings, LayerError> {
+    // Round-trip through a table so a layer need only name the keys it changes.
     let mut table = to_table(base)?;
     deep_merge(&mut table, layer);
     table.try_into().map_err(LayerError::Merge)
@@ -171,6 +180,8 @@ pub fn unmerge(user: &Settings, merged: &Settings, effective: &Settings) -> Sett
     else {
         return effective.clone();
     };
+    // Compare against `merged` (not `user`) so keys the project layer set, and
+    // the user left alone, are not copied into the user file.
     for (key, value) in effective {
         if merged.get(&key) != Some(&value) {
             out.insert(key, value);
@@ -179,6 +190,7 @@ pub fn unmerge(user: &Settings, merged: &Settings, effective: &Settings) -> Sett
     out.try_into().unwrap_or_else(|_| user.clone())
 }
 
+/// Per-buffer language overrides (`[languages.<id>]`).
 impl Settings {
     /// These settings with `lang`'s `[languages.<lang>]` table applied
     /// (only its [`LANGUAGE_KEYS`]; anything else is ignored). Borrowed

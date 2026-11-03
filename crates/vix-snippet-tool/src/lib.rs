@@ -3,8 +3,29 @@
 //! Vix's Tools → Snippets… picker lists each snippet by name; choosing one
 //! inserts its body at the cursor. The set is curated and language-agnostic; the
 //! host owns insertion.
+//!
+//! The crate has two halves:
+//!
+//! - the **catalogue** ([`SNIPPETS`]): static, compiled-in snippets, and
+//! - the **parser** ([`parse`], [`parse_lsp`], [`parse_with`]): a small
+//!   recursive-descent implementation of the LSP/VS Code snippet grammar that
+//!   turns a body into literal text plus ordered tabstops ([`Parsed`]). The same
+//!   parser serves user snippets (`vix-snippets`) and LSP completions (T613).
+//!
+//! Parsing is total: every input yields a `Parsed`, malformed constructs degrade
+//! to literal text, and nesting depth is capped (`MAX_DEPTH` levels) so
+//! untrusted LSP text cannot overflow the stack. All offsets are **char**
+//! offsets, matching the editor buffer. Spec: `crates/vix-snippet-tool/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! let p = vix_snippet_tool::parse("fn ${1:name}() {\n    $0\n}");
+//! assert_eq!(p.text, "fn name() {\n    \n}");
+//! // Navigation order: $1 first, the final stop $0 last.
+//! assert_eq!(p.stops.iter().map(|s| s.num).collect::<Vec<_>>(), vec![1, 0]);
+//! ```
 
-/// One named, insertable snippet.
+/// One named, insertable snippet (a compiled-in entry of [`SNIPPETS`]).
 pub struct Snippet {
     /// Display name shown in the picker.
     pub name: &'static str,
@@ -92,7 +113,7 @@ pub enum Dialect {
     Lsp,
 }
 
-/// Deepest placeholder nesting followed; anything deeper is literal text, so
+/// Maximum placeholder nesting depth followed; anything deeper is literal text, so
 /// a hostile body cannot exhaust the stack.
 const MAX_DEPTH: usize = 32;
 
@@ -122,7 +143,12 @@ pub fn parse_lsp(body: &str) -> Parsed {
 /// - a malformed construct (say an unclosed `${1:`) is literal text.
 ///
 /// A number used twice (a mirror) is navigated once, at its first
-/// occurrence. Stops come back in navigation order: `$1`, `$2`, …, then `$0`.
+/// occurrence in *closing* order (so for nested placeholders an inner stop wins
+/// over a same-numbered outer one, as it closes first). Stops come back in
+/// navigation order: `$1`, `$2`, …, then `$0`.
+///
+/// In [`Dialect::Lsp`] variables resolve to their default text or to nothing;
+/// `${NAME/regex/format/}` transforms are skipped rather than evaluated.
 #[must_use]
 pub fn parse_with(body: &str, dialect: Dialect) -> Parsed {
     let chars: Vec<char> = body.chars().collect();
@@ -149,7 +175,8 @@ pub fn parse_with(body: &str, dialect: Dialect) -> Parsed {
     }
 }
 
-/// Recursive-descent state for [`parse_with`].
+/// Recursive-descent state for [`parse_with`]. Works on a `Vec<char>` snapshot
+/// of the body so all indices and recorded offsets are char-based.
 struct Parser<'a> {
     /// The body being parsed.
     chars: &'a [char],
@@ -222,6 +249,7 @@ impl Parser<'_> {
     /// [`Parser::dollar`] without the rollback.
     fn dollar_inner(&mut self, i: usize, depth: usize) -> Option<usize> {
         let lsp = self.dialect == Dialect::Lsp;
+        // A trailing `$` (no next char) is malformed -> `None` -> literal `$`.
         let next = self.at(i + 1)?;
         if next.is_ascii_digit() {
             let (num, j) = self.number(i + 1);
@@ -231,6 +259,7 @@ impl Parser<'_> {
         if lsp && is_ident_start(next) {
             return Some(self.ident_end(i + 1));
         }
+        // Past MAX_DEPTH a `${` is treated as literal text rather than recursing.
         if next != '{' || depth >= MAX_DEPTH {
             return None;
         }

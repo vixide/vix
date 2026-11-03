@@ -1,17 +1,43 @@
 //! Several terminals at once (T631): an ordered set of tabs, one active, each
 //! with a stable id, plus whether the panel is shown. Generic over the tab's
 //! contents so the bookkeeping is tested without a PTY.
+//!
+//! The host instantiates it as `Tabs<Terminal>`; nothing here knows about PTYs.
+//! Invariant: `active` is a valid index whenever there is at least one tab
+//! (and 0 otherwise), maintained by every mutator.
+//!
+//! Spec: `crates/vix-terminal/spec/index.md`.
 
 /// An ordered set of terminal tabs. Ids are never reused, so a reference by id
 /// (Cowork's shared terminal, T697) cannot silently move to another tab.
+///
+/// # Examples
+///
+/// ```
+/// use vix_terminal::Tabs;
+///
+/// let mut tabs: Tabs<&str> = Tabs::default();
+/// let a = tabs.push("a");
+/// let b = tabs.push("b");
+/// assert_eq!(tabs.active(), Some(&"b"));
+/// tabs.remove(a);
+/// let c = tabs.push("c");
+/// assert!(c > b, "ids are never reused");
+/// ```
 #[derive(Debug)]
 pub struct Tabs<T> {
+    /// Tabs in display order, each with its stable id.
     items: Vec<(u64, T)>,
+    /// Index into `items` of the active tab.
     active: usize,
+    /// The id the next `push` hands out; only ever increases.
     next_id: u64,
+    /// Whether the panel is open; kept separate so hiding does not close tabs.
     shown: bool,
 }
 
+/// An empty, hidden tab set. Hand-written because a derived `Default` would
+/// require `T: Default` and would start `next_id` at 0.
 impl<T> Default for Tabs<T> {
     fn default() -> Self {
         Tabs {
@@ -133,9 +159,13 @@ impl<T> Tabs<T> {
     pub fn remove(&mut self, id: u64) -> Option<T> {
         let index = self.items.iter().position(|(i, _)| *i == id)?;
         let (_, item) = self.items.remove(index);
+        // A tab before the active one left: shift down so the same tab stays
+        // active. (Removing the active tab itself keeps the index, which now
+        // names its successor.)
         if index < self.active {
             self.active -= 1;
         }
+        // Removed the last tab while it was active: fall back to the new last.
         if self.active >= self.items.len() {
             self.active = self.items.len().saturating_sub(1);
         }
@@ -159,6 +189,8 @@ impl<T> Tabs<T> {
             .filter(|(_, t)| !keep(t))
             .map(|(id, _)| *id)
             .collect();
+        // Collect ids first, then remove: removing while iterating would shift
+        // indices under the `keep` pass. Ids are stable, so this is order-safe.
         for id in &gone {
             self.remove(*id);
         }

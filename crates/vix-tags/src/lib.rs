@@ -4,8 +4,15 @@
 //! offset of its partner's `<` — the closing tag for an opening one, or the
 //! opening tag for a closing one — accounting for nested same-name tags. Pure and
 //! unit-tested; the host uses it to move the cursor.
+//!
+//! The implementation is a lightweight scanner, not an HTML parser: it does not
+//! know void elements (`<br>` without `/`), raw-text elements, or attribute
+//! quoting, and it ignores only the opening `<!`/`<?` of comments and
+//! declarations. Spec: `crates/vix-tags/spec/index.md`.
+//!
+//! All offsets are **char** offsets (not bytes), matching the editor buffer.
 
-/// One parsed tag occurrence in the document.
+/// One parsed tag occurrence in the document (private; produced by [`scan`]).
 struct Tag {
     /// Char offset of the `<`.
     open: usize,
@@ -19,6 +26,10 @@ struct Tag {
 
 /// Scan `text` for tags (`<name …>`, `</name>`, `<name/>`), skipping comments and
 /// declarations (`<!-- … -->`, `<!doctype …>`, `<?…?>`).
+///
+/// Only the leading `<` of a comment/declaration is skipped, not its whole body,
+/// so a tag-looking string inside a comment is still reported. Tag names are
+/// lowercased so matching is case-insensitive.
 fn scan(text: &str) -> Vec<Tag> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
@@ -29,7 +40,8 @@ fn scan(text: &str) -> Vec<Tag> {
             i += 1;
             continue;
         }
-        // Skip comments / declarations / processing instructions.
+        // Skip comments / declarations / processing instructions (only the `<`
+        // is stepped over; the body is rescanned, see the fn docs).
         if chars.get(i + 1) == Some(&'!') || chars.get(i + 1) == Some(&'?') {
             i += 1;
             continue;
@@ -49,7 +61,8 @@ fn scan(text: &str) -> Vec<Tag> {
             i += 1;
             continue;
         }
-        // Find the tag's `>` and whether it self-closes.
+        // Find the tag's `>` and whether it self-closes (`/` immediately before
+        // `>`). An unterminated tag runs to end of text.
         let mut k = j;
         while k < n && chars[k] != '>' {
             k += 1;
@@ -68,6 +81,17 @@ fn scan(text: &str) -> Vec<Tag> {
 
 /// The char offset of the tag matching the one under `cursor`, or `None` when the
 /// cursor isn't in a tag, the tag self-closes, or no partner is found.
+///
+/// The cursor counts as "in" a tag anywhere from its `<` through its `>`
+/// inclusive. Only same-name tags participate in nesting depth.
+///
+/// # Examples
+/// ```
+/// let html = "<div><span>x</span></div>";
+/// assert_eq!(vix_tags::matching_tag(html, 1), Some(19));
+/// assert_eq!(vix_tags::matching_tag(html, 20), Some(0));
+/// assert_eq!(vix_tags::matching_tag("<br/>", 1), None);
+/// ```
 #[must_use]
 pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     let tags = scan(text);

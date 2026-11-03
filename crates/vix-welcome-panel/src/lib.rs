@@ -5,6 +5,20 @@
 //! locale key) so it is translatable; this crate is pure state — it holds the
 //! lines the host hands it and tracks the scroll offset. The host renders the
 //! visible window with a scrollbar and forwards scroll keys.
+//!
+//! # Usage order
+//!
+//! 1. [`Panel::open`] with the localized paragraphs.
+//! 2. Each frame, [`Panel::wrap_to`] with the current inner width, then read
+//!    [`Panel::lines`] and draw the window starting at [`Panel::scroll`].
+//! 3. Forward scroll keys to [`Panel::up`] / [`Panel::down`] / the page
+//!    variants, passing the visible row count as `viewport`; call
+//!    [`Panel::clamp`] after a resize that shrinks or grows the viewport.
+//!
+//! Wrapping is delegated to `vix-greedy-wrap`; scrolling helpers here do not
+//! use `vix-list-state` because there is no row selection, only a window.
+//!
+//! Spec: `crates/vix-welcome-panel/spec/index.md`.
 
 /// Scroll state for the welcome overlay.
 ///
@@ -12,15 +26,30 @@
 /// whole paragraph, a heading, a blank line, or a bullet). [`Panel::wrap_to`]
 /// word-wraps them to the render width into display lines; scrolling is over
 /// those display lines, so paragraphs **soft-wrap** and never leave orphan lines.
+///
+/// # Examples
+///
+/// ```
+/// use vix_welcome_panel::Panel;
+///
+/// let mut p = Panel::open(vec!["alpha beta gamma".to_string(), String::new()]);
+/// p.wrap_to(10);
+/// assert_eq!(p.lines(), ["alpha beta", "gamma", ""]);
+/// p.down(2);
+/// assert_eq!(p.scroll, 1);
+/// ```
 pub struct Panel {
     /// The source paragraphs (one per source line).
     paragraphs: Vec<String>,
     /// The paragraphs word-wrapped to [`Self::wrap_width`].
     wrapped: Vec<String>,
     /// Width the `wrapped` lines were computed for (so re-wrapping is skipped when
-    /// the width is unchanged).
+    /// the width is unchanged). `usize::MAX` means "not yet wrapped": `open`
+    /// seeds `wrapped` with the raw paragraphs and no real width can equal it,
+    /// so the first `wrap_to` always does the work.
     wrap_width: usize,
-    /// Index of the first visible display line.
+    /// Index of the first visible display line. Public so the host can read it
+    /// when drawing; mutate it via the scroll methods so the clamping holds.
     pub scroll: usize,
 }
 
@@ -39,6 +68,7 @@ impl Panel {
     /// string split into lines — one paragraph/heading/bullet per line).
     #[must_use]
     pub fn open(paragraphs: Vec<String>) -> Self {
+        // Unwrapped until the host supplies a width via `wrap_to`.
         let wrapped = paragraphs.clone();
         Panel {
             paragraphs,
@@ -60,6 +90,8 @@ impl Panel {
             .flat_map(|l| wrap_line(l, width))
             .collect();
         self.wrap_width = width;
+        // Fewer display lines after a widen: keep the offset on a real line.
+        // (Unlike `clamp` this does not account for the viewport height.)
         self.scroll = self.scroll.min(self.wrapped.len().saturating_sub(1));
     }
 
@@ -81,7 +113,9 @@ impl Panel {
         self.wrapped.is_empty()
     }
 
-    /// The greatest valid scroll offset for a `viewport` of visible rows.
+    /// The greatest valid scroll offset for a `viewport` of visible rows: the
+    /// offset at which the last line sits on the bottom row. `viewport` is
+    /// floored at 1 so a zero-height pane cannot yield `len` (one past the end).
     fn max_scroll(&self, viewport: usize) -> usize {
         self.wrapped.len().saturating_sub(viewport.max(1))
     }

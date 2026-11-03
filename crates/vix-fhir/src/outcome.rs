@@ -1,4 +1,8 @@
-//! `OperationOutcome` parsing.
+//! `OperationOutcome` parsing: the server's structured error/information report.
+//!
+//! Lenient like the Bundle parser: missing `severity` defaults to `error` and
+//! missing `code` to `unknown` (the conservative reading of a malformed issue).
+//! Spec: `crates/vix-fhir/spec/index.md`.
 
 use serde_json::Value;
 
@@ -25,6 +29,8 @@ pub struct OperationOutcome {
     pub issues: Vec<Issue>,
 }
 
+/// Collect the string elements of a JSON array, ignoring non-strings; empty when
+/// `v` is absent or not an array.
 fn string_list(v: Option<&Value>) -> Vec<String> {
     v.and_then(Value::as_array)
         .map(|a| {
@@ -36,6 +42,8 @@ fn string_list(v: Option<&Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The most human-readable detail of an issue, in priority order:
+/// `diagnostics`, `details.text`, first `details.coding[].display`; else empty.
 fn detail_of(issue: &Value) -> String {
     if let Some(d) = issue.get("diagnostics").and_then(Value::as_str) {
         return d.to_string();
@@ -56,6 +64,16 @@ fn detail_of(issue: &Value) -> String {
 }
 
 /// Parse an `OperationOutcome` resource.
+///
+/// `expression` falls back to the legacy `location` field when empty.
+///
+/// # Examples
+/// ```
+/// let oo = vix_fhir::parse_operation_outcome(
+///     r#"{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"invalid","diagnostics":"Bad date"}]}"#,
+/// ).unwrap();
+/// assert_eq!(oo.issues[0].detail, "Bad date");
+/// ```
 ///
 /// # Errors
 /// [`FhirError::NotJson`], [`FhirError::NotFhir`] or

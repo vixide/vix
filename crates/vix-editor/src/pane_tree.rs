@@ -5,6 +5,12 @@
 //!
 //! Leaves are addressed by their **in-order index** (left-to-right / top-to-bottom
 //! as laid out). The tree is capped at [`MAX_LEAVES`] panes.
+//!
+//! Every traversal here threads a mutable in-order counter (`i`) through the
+//! recursion, visiting `first` before `second`, so a leaf's index is the same
+//! in `layout`, `split_leaf`, `remove_leaf` and `set_leaf_tab`.
+//!
+//! Spec: `crates/vix-editor/spec/index.md`.
 
 use ratatui_core::layout::Rect;
 
@@ -60,6 +66,7 @@ impl Pane {
         out
     }
 
+    /// Append each leaf's tab to `out` in in-order (first child, then second).
     fn collect_tabs(&self, out: &mut Vec<usize>) {
         match self {
             Pane::Leaf(t) => out.push(*t),
@@ -93,6 +100,8 @@ impl Pane {
         self.leaf_tabs().get(n).copied()
     }
 
+    /// Call `f` on the tab of the leaf whose in-order index equals `target`;
+    /// `i` is the running leaf counter shared across the recursion.
     fn visit_leaf_mut(&mut self, i: &mut usize, target: usize, f: &mut impl FnMut(&mut usize)) {
         match self {
             Pane::Leaf(t) => {
@@ -118,6 +127,8 @@ impl Pane {
         self.split_leaf_inner(&mut i, n, dir, new_tab);
     }
 
+    /// Recursive worker for [`Pane::split_leaf`]; `i` is the in-order counter.
+    /// The matched leaf is replaced in place (via `*self =`) by a 50% split.
     fn split_leaf_inner(&mut self, i: &mut usize, target: usize, dir: SplitDir, new_tab: usize) {
         match self {
             Pane::Leaf(t) => {
@@ -148,6 +159,8 @@ impl Pane {
         self.remove_leaf_inner(&mut i, n)
     }
 
+    /// Recursive worker for [`Pane::remove_leaf`]. A split that loses one child
+    /// collapses to the surviving child, keeping that child's own subtree intact.
     fn remove_leaf_inner(self, i: &mut usize, target: usize) -> Option<Pane> {
         match self {
             Pane::Leaf(_) => {
@@ -186,6 +199,7 @@ impl Pane {
         out
     }
 
+    /// Recursive worker for [`Pane::layout`], appending leaves in in-order.
     fn layout_inner(&self, area: Rect, i: &mut usize, out: &mut Vec<LeafBox>) {
         match self {
             Pane::Leaf(tab) => {
@@ -218,6 +232,8 @@ impl Pane {
         out
     }
 
+    /// Recursive worker for [`Pane::dividers`]: emits this node's divider, then
+    /// recurses into the two child areas.
     fn dividers_inner(&self, area: Rect, out: &mut Vec<(SplitDir, Rect)>) {
         if let Pane::Split {
             dir,

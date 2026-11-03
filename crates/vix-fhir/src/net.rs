@@ -3,6 +3,10 @@
 //!
 //! Nothing here logs, caches or persists anything: a token lives only for the
 //! duration of one [`execute`] call, and error values carry no URL or body.
+//!
+//! The functions take the environment as a lookup closure (`env`) rather than
+//! reading `std::env` directly, which keeps credential resolution testable and
+//! lets the host decide what is visible. Spec: `crates/vix-fhir/spec/index.md`.
 
 use vix_http_client::{Request, Response, rest, send_response};
 
@@ -22,6 +26,8 @@ pub fn fetch_token(
     let Some(tr) = profile.token_request(env)? else {
         return Ok(None);
     };
+    // Build the Basic header from the raw `id:secret` pair; `encode_basic_auth`
+    // below base64-encodes it in place, so the plain pair never goes on the wire.
     let mut req = Request {
         method: "POST".to_string(),
         url: tr.url.clone(),
@@ -58,6 +64,8 @@ pub fn execute(
     built: &BuiltRequest,
     env: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Response, FhirError> {
+    // A statically configured bearer token wins; otherwise fall back to the
+    // client-credentials grant (which is `None` for schemes needing no token).
     let token = match profile.bearer(env)? {
         Some(t) => Some(t),
         None => fetch_token(profile, env)?,
@@ -67,6 +75,8 @@ pub fn execute(
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect::<Vec<_>>();
+    // The token is appended last and only here, so it exists in memory just for
+    // this one request.
     if let Some(t) = token {
         headers.push((
             "Authorization".to_string(),

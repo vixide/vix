@@ -3,6 +3,12 @@
 //! Pure: [`input`] builds the text sent through [`crate::complete`] with
 //! [`INSTRUCTION`], and [`clean`] turns the model's reply into the text to
 //! insert. No I/O, so it is unit-tested with plain strings.
+//!
+//! The editor sends the text around the cursor, then shows the cleaned reply
+//! as dimmed ghost text the user can accept. Bounding the context
+//! ([`PREFIX_CHARS`], [`SUFFIX_CHARS`]) and the suggestion ([`MAX_LINES`],
+//! [`MAX_CHARS`]) keeps requests cheap and suggestions unobtrusive. See
+//! `crates/vix-ai-core/spec/index.md`.
 
 /// How many characters before the cursor are sent.
 pub const PREFIX_CHARS: usize = 2000;
@@ -33,12 +39,24 @@ pub fn input(before: &str, after: &str) -> String {
 /// of `line_prefix` the model repeated, trims leading newlines and trailing
 /// blanks, and keeps at most [`MAX_LINES`] lines and [`MAX_CHARS`] characters.
 /// An empty result means no suggestion.
+///
+/// # Examples
+///
+/// ```
+/// use vix_ai_core::fim::clean;
+/// assert_eq!(clean("```\nfoo\n```", ""), "foo");
+/// assert_eq!(clean("let x = 1;", "let x ="), " 1;");
+/// ```
 #[must_use]
 pub fn clean(reply: &str, line_prefix: &str) -> String {
+    // Normalize CRLF first so every later step can assume `\n`.
     let mut text = reply.replace("\r\n", "\n");
     if let Some(inner) = unfence(&text) {
         text = inner;
     }
+    // Models often restate the current line; strip it so the insertion does
+    // not duplicate it. A blank prefix is skipped (stripping whitespace would
+    // eat meaningful leading indentation of the suggestion).
     if !line_prefix.trim().is_empty()
         && let Some(rest) = text.strip_prefix(line_prefix)
     {
@@ -52,12 +70,14 @@ pub fn clean(reply: &str, line_prefix: &str) -> String {
         }
         out.push_str(line);
     }
+    // Cap in characters (not bytes) so a multi-byte char is never split.
     let mut out: String = out.chars().take(MAX_CHARS).collect();
     out.truncate(out.trim_end().len());
     out
 }
 
 /// The body of a reply wrapped in a Markdown fence, or `None` when it is not.
+/// The info string after the opening fence (e.g. `rust`) is discarded.
 fn unfence(text: &str) -> Option<String> {
     let trimmed = text.trim();
     let after_open = trimmed.strip_prefix("```")?;

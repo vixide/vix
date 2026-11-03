@@ -40,6 +40,10 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 - **Code documentation pass, group 2.** Module docs, rustdoc, example tests and why-comments across `vix-authority`, `vix-git`, `vix-keybindings`, `vix-large-file`, `vix-modal`, `vix-cowork-net`, `vix-diff-view`, `vix-edit-value`, `vix-structural-replace` and 15 small tool/panel crates. Comments only; no change in what the code does. Fixed two stale docs (`vix_authority::install`, `vix_diff_view::build`).
 
+### Changed
+
+- **Code annotations, batch 3 (docs only).** Module, item and inline documentation across 25 crates (`vix-menu`, `vix-editor`, `vix-settings`, `vix-org`, `vix-terminal`, `vix-fhir`, and others); no behavior change.
+
 ### Breaking
 
 - **Typed Slint window errors** (T610, seventh slice): `vix-slint`'s `window::compile` and `window::create` return the `#[non_exhaustive]` `WindowError` (`Compile`, `MissingComponent`, `Create`, `Property`) instead of `String`. `Display` text is unchanged.

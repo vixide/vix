@@ -5,6 +5,13 @@
 //! right location per OS and handles (de)serialization, so this module only
 //! defines the schema and thin load/save wrappers.
 //!
+//! Layering (project file, per-language overrides) lives in the private
+//! `layers` module and the DB/debug/capture data types in `model`; both are
+//! re-exported here. Every new field needs a `#[serde(default)]` (or a group
+//! default) so older config files keep loading.
+//!
+//! Spec: `crates/vix-settings/spec/index.md`.
+//!
 //! ```
 //! use vix_settings::Settings;
 //!
@@ -653,6 +660,8 @@ impl AutoSave {
     }
 }
 
+/// Accepts both the current mode names and the pre-T628 boolean
+/// (`true` -> interval, `false` -> off) so old config files keep loading.
 impl<'de> Deserialize<'de> for AutoSave {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         /// Either spelling `auto_save` has had.

@@ -1,7 +1,17 @@
 //! Tiny URL helpers: origin comparison, loopback detection, percent-encoding.
+//!
+//! Hand-rolled (rather than a URL-parsing dependency) because the crate only
+//! needs three narrow, security-relevant operations: deciding whether a paging
+//! link stays on the profile's server ([`origin`]), whether plain `http` is
+//! tolerable ([`is_loopback`]), and building query strings ([`encode`]). All
+//! helpers are `pub(crate)`; see `crates/vix-fhir/spec/index.md`.
 
 /// `(scheme, host[:port])`, lower-cased, of an absolute `http(s)` URL; `None`
 /// for any other scheme or when the authority carries `user@` credentials.
+///
+/// The port is kept verbatim (no default-port normalization), so
+/// `https://h` and `https://h:443` compare as different origins - the safe
+/// direction for a same-origin check.
 pub(crate) fn origin(url: &str) -> Option<(String, String)> {
     let (scheme, rest) = url.split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();
@@ -16,11 +26,15 @@ pub(crate) fn origin(url: &str) -> Option<(String, String)> {
     Some((scheme, authority.to_ascii_lowercase()))
 }
 
-/// Whether the URL's host is the local machine.
+/// Whether the URL's host is the local machine (`localhost`, `::1`, or any
+/// `127.*`). Matching is on the whole host, so `localhost.evil.com` is not
+/// loopback. `false` for anything [`origin`] rejects.
 pub(crate) fn is_loopback(url: &str) -> bool {
     let Some((_, authority)) = origin(url) else {
         return false;
     };
+    // Bracketed IPv6 (`[::1]:80`) must be unwrapped before splitting off the
+    // port, since the address itself contains colons.
     let host = if let Some(stripped) = authority.strip_prefix('[') {
         stripped.split(']').next().unwrap_or("")
     } else {
@@ -30,6 +44,9 @@ pub(crate) fn is_loopback(url: &str) -> bool {
 }
 
 /// Percent-encode `s`, keeping RFC 3986 unreserved characters and `keep`.
+///
+/// Works per UTF-8 byte, so non-ASCII text becomes multi-byte `%XX` runs;
+/// `keep` is a set of extra ASCII bytes left literal (e.g. `,` in a list value).
 pub(crate) fn encode(s: &str, keep: &str) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(s.len());

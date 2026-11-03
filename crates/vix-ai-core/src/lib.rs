@@ -16,6 +16,11 @@
 //! `vix-lsp` and `vix-db`'s `ai`/`app.rs` already use elsewhere in this
 //! workspace.
 //!
+//! The [`fim`] module is separate from the provider modules: it builds the
+//! prompt for ghost-text (fill-in-the-middle) completion and cleans the reply,
+//! and rides on the same [`complete`] call. Errors from every provider are the
+//! one [`AiError`] type. The owning spec is `crates/vix-ai-core/spec/index.md`.
+//!
 //! [`Settings::ai_command`]: https://docs.rs/vix-settings (see `crates/vix-settings/src/lib.rs`)
 
 pub mod anthropic;
@@ -99,6 +104,8 @@ impl Provider {
         matches!(self, Provider::Anthropic | Provider::OpenAi)
     }
 
+    // The three private helpers below only dispatch to the matching provider
+    // module, keeping `complete` provider-agnostic.
     fn request_body(self, model: &str, instruction: &str, input: &str) -> serde_json::Value {
         match self {
             Provider::Anthropic => anthropic::request_body(model, instruction, input),
@@ -125,6 +132,9 @@ impl Provider {
 }
 
 /// Why an AI request failed (T673).
+///
+/// [`Display`](std::fmt::Display) yields the bare message (no prefix), ready to
+/// show in a status line. `#[non_exhaustive]`: match with a wildcard arm.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum AiError {
@@ -175,6 +185,8 @@ pub fn complete(
     instruction: &str,
     input: &str,
 ) -> Result<String, AiError> {
+    // Build the body first: it is pure and cannot fail, so all failure modes
+    // below are about the network or the reply.
     let body = provider.request_body(model, instruction, input);
     // A provider's HTTP error status carries a JSON error body that
     // `parse_response` reports, so a status is not a transport error.
@@ -189,6 +201,8 @@ pub fn complete(
     for (name, value) in provider.headers(api_key) {
         req = req.header(name, &value);
     }
+    // With `http_status_as_error(false)` a non-2xx reply arrives as `Ok`, so
+    // `Err` here really is a transport-level failure.
     let json = match req.send(body.to_string()) {
         Ok(mut resp) => resp
             .body_mut()

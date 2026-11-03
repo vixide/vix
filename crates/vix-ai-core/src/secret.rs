@@ -6,6 +6,9 @@
 //! connection, an AI request has no natural place to pause and ask) — a
 //! request that needs a key and finds none simply fails with a clear reason
 //! instead.
+//!
+//! Keys are never logged or stored by Vix itself; this module only reads them
+//! at request time. See `crates/vix-ai-core/spec/index.md`.
 
 use std::process::{Command, Stdio};
 
@@ -26,6 +29,8 @@ fn run(program: &str, args: &[&str]) -> Option<String> {
     if !output.status.success() {
         return None;
     }
+    // Lossy decode: a key with invalid UTF-8 is not a usable key anyway, and
+    // trimming drops the trailing newline most commands print.
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if text.is_empty() { None } else { Some(text) }
 }
@@ -67,6 +72,8 @@ pub fn keyring_get(provider: &str) -> Option<String> {
 #[must_use]
 pub fn resolve(provider: &str, api_key_command: &str) -> Option<String> {
     let command = api_key_command.trim();
+    // A failing or empty command falls through to the keyring instead of
+    // aborting, so a misconfigured command does not hide a stored key.
     if !command.is_empty()
         && let Some(key) = run("sh", &["-c", command]).filter(|key| !key.is_empty())
     {

@@ -2,7 +2,8 @@
 //!
 //! Supports the common operators and modifiers: child `>`, sibling `+`, multiply
 //! `*N`, id `#id`, classes `.a.b`, literal text `{text}`, and `$` numbering inside
-//! text within a multiplied element. For example:
+//! text, ids and class names within a multiplied element (the 1-based copy
+//! index replaces each `$`). For example:
 //!
 //! ```
 //! let html = vix_emmet::expand("ul>li.item*2").unwrap();
@@ -11,6 +12,20 @@
 //! ```
 //!
 //! Grouping with `()` is not supported; such input returns `None`.
+//!
+//! # Behavior notes
+//!
+//! - An omitted tag name defaults to `div` (`.box` is `<div class="box">`).
+//! - Every element gets an explicit closing tag (no void-element special
+//!   casing), and `{text}` is emitted verbatim, **not** HTML-escaped.
+//! - `{text}` is only rendered on a *leaf* element; on an element with children
+//!   it is parsed but dropped.
+//! - `*0` renders the element once (the count is clamped to at least 1).
+//! - Output is bounded by `MAX_NODES` elements so hostile input cannot hang
+//!   the editor.
+//!
+//! Parsing builds a small arena tree (`Node`); `>` descends, `+` adds a
+//! sibling of the previous element. Spec: `crates/vix-emmet/spec/index.md`.
 
 /// Upper bound on the total number of elements a single abbreviation may expand
 /// to. A multiply operator (`*N`) — and nested multiplies, which compound —
@@ -19,18 +34,35 @@
 /// this budget returns `None` rather than attempting the allocation.
 const MAX_NODES: usize = 100_000;
 
-/// One element node in the parsed abbreviation tree.
+/// One element node in the parsed abbreviation tree. Nodes live in an arena
+/// (`Parser::nodes`) and refer to each other by index.
 struct Node {
+    /// Tag name (defaults to `div` when the abbreviation omitted it).
     tag: String,
+    /// `#id` value, which may contain `$` numbering.
     id: Option<String>,
+    /// `.class` values in source order (may contain `$`).
     classes: Vec<String>,
+    /// `{text}` content (leaf elements only are rendered with it).
     text: Option<String>,
+    /// `*N` multiplier; 1 when absent.
     count: usize,
+    /// Arena index of the parent element, `None` for a root.
     parent: Option<usize>,
+    /// Arena indices of child elements, in order.
     children: Vec<usize>,
 }
 
-/// Expand an Emmet `abbr` into indented HTML, or `None` if it can't be parsed.
+/// Expand an Emmet `abbr` into indented HTML (two spaces per level, one element
+/// per line), or `None` if it can't be parsed, has unconsumed trailing input,
+/// or would exceed the `MAX_NODES` budget.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_emmet::expand("p.note{Hi}").unwrap(), "<p class=\"note\">Hi</p>\n");
+/// assert_eq!(vix_emmet::expand("ul>li*2").unwrap().matches("<li>").count(), 2);
+/// assert!(vix_emmet::expand("(a+b)*2").is_none());
+/// ```
 #[must_use]
 pub fn expand(abbr: &str) -> Option<String> {
     let abbr = abbr.trim();
@@ -55,13 +87,18 @@ pub fn expand(abbr: &str) -> Option<String> {
     Some(out)
 }
 
+/// Cursor over the abbreviation's chars plus the node arena being built.
 struct Parser {
+    /// The abbreviation, as chars (positions are char indices).
     chars: Vec<char>,
+    /// Index of the next unread char.
     pos: usize,
+    /// Arena of parsed element nodes.
     nodes: Vec<Node>,
 }
 
 impl Parser {
+    /// The next unread char without consuming it.
     fn peek(&self) -> Option<char> {
         self.chars.get(self.pos).copied()
     }
