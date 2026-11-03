@@ -100,7 +100,7 @@ impl Launched {
 
 /// The three ZeroMQ sockets the worker uses: `shell` and `control` request/reply (dealers) and `iopub` the broadcast subscription.
 struct Sockets {
-    /// Shell channel: execute and kernel_info requests and replies.
+    /// Shell channel: execute and `kernel_info` requests and replies.
     shell: DealerSocket,
     /// Control channel: interrupt and shutdown.
     control: DealerSocket,
