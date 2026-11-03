@@ -73,9 +73,11 @@ mod jupyter_off;
 use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
 use jupyter_off as jupyter_state;
+pub(crate) mod chooser;
 mod debug_panel;
 mod keymap;
 mod overlays;
+use chooser::ChooserSlot;
 pub(crate) use overlays::OverlayId;
 mod large_file;
 mod lsp_dap;
@@ -1235,7 +1237,7 @@ pub struct EncodingChooser {
 }
 
 /// Stand-in for the script chooser in a build without the `script` feature;
-/// never constructed (`App::script_chooser` stays `None`).
+/// never constructed (`App::chooser` stays `None`).
 #[cfg(not(feature = "script"))]
 pub enum ScriptChooser {}
 
@@ -1253,7 +1255,7 @@ pub struct ScriptChooser {
 }
 
 /// Stand-in for the plugin chooser in a build without the `script` feature;
-/// never constructed (`App::plugin_chooser` stays `None`).
+/// never constructed (`App::chooser` stays `None`).
 #[cfg(not(feature = "script"))]
 pub enum PluginChooser {}
 
@@ -2122,17 +2124,14 @@ pub struct App {
     pub(crate) context_menu: Option<ContextMenu>,
     /// Git changes panel (stage/unstage/commit), when open.
     pub(crate) git_panel: Option<GitPanel>,
-    /// Git branch switcher, when open.
-    pub(crate) branch_chooser: Option<BranchChooser>,
+    /// The open list chooser (branch, stash, recent files, ...), if any. One slot
+    /// for all of them: two choosers cannot be open at once (T611 step 2).
+    pub(crate) chooser: Option<chooser::Chooser>,
     /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
     /// **File History**), when open.
     pub(crate) git_log: Option<crate::git::LogPanel>,
     /// The interactive Git graph overlay (T681), when open.
     pub(crate) git_graph: Option<crate::git_graph::Panel>,
-    /// The stash chooser (T634: **Git → Stash List…**), when open.
-    pub(crate) stash_chooser: Option<StashChooser>,
-    /// The worktree chooser (T634: **Git → Worktree**), when open.
-    pub(crate) worktree_chooser: Option<WorktreeChooser>,
     /// The interactive rebase todo overlay (T633: **Git → Rebase →
     /// Interactive Rebase…**), when open.
     pub(crate) git_rebase: Option<crate::git::RebaseTodo>,
@@ -2142,8 +2141,6 @@ pub struct App {
     pub(crate) im: im::ImState,
     /// An IM dialog (account picker, share or clear confirm), when open.
     pub(crate) im_dialog: Option<im::ImDialog>,
-    /// Task chooser overlay (Tools → Tasks…), when open.
-    pub(crate) task_chooser: Option<TaskChooser>,
     /// The problem matcher the next `run_command_in` uses (a `tasks.toml`
     /// task's `matcher`), else `auto` (T632).
     pending_matcher: Option<crate::tasks::matcher::MatcherSpec>,
@@ -2152,12 +2149,6 @@ pub struct App {
     /// The last scanned run's problems, walked by Go → Next/Previous Error
     /// (T632).
     pub(crate) task_problems: crate::tasks::matcher::ProblemList,
-    /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
-    pub(crate) macro_chooser: Option<MacroChooser>,
-    /// The File → Reopen / Save with Encoding chooser (T661).
-    pub(crate) encoding_chooser: Option<EncodingChooser>,
-    /// The HTTP environment chooser, when open.
-    pub(crate) http_env_chooser: Option<HttpEnvChooser>,
     /// The Rhai scripting engine (`crates/vix-script`), built once at
     /// startup. Loading/reloading scripts rebuilds `scripts`, not this.
     #[cfg(feature = "script")]
@@ -2174,10 +2165,6 @@ pub struct App {
     /// `App::resolve_key_overrides`, consulted by `App::override_key`,
     /// the `on_key` choke point every keymap's own dispatch runs after.
     key_overrides: std::collections::HashMap<String, String>,
-    /// Script-command chooser overlay (Tools → Scripts → Run…), when open.
-    pub(crate) script_chooser: Option<ScriptChooser>,
-    /// Plugin chooser overlay (Vix → Plugins…, T637), when open.
-    pub(crate) plugin_chooser: Option<PluginChooser>,
     /// Where plugins and `plugins.lock` live. `None` — the normal case —
     /// uses the user's config directory; set via [`App::with_plugin_paths`]
     /// to keep a run out of it (tests, embedders). When set, its
@@ -2191,22 +2178,10 @@ pub struct App {
     /// Recent clipboard entries (copies/cuts), most-recent first, for the
     /// paste-from-history picker.
     pub(crate) clipboard_ring: Vec<String>,
-    /// Clipboard-history picker overlay (Edit → Paste from History…), when open.
-    pub(crate) clipboard_chooser: Option<ClipboardChooser>,
-    /// Recent-projects chooser overlay (File → Switch Project…), when open.
-    pub(crate) workspace_chooser: Option<WorkspaceChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
     pub(crate) diff_view: Option<DiffViewState>,
     /// File browser overlay (File → Open…), when open.
     pub(crate) file_browser: Option<crate::file_browser_panel::Panel>,
-    /// Recent-files chooser overlay, when open.
-    pub(crate) recent_chooser: Option<RecentChooser>,
-    /// Recent-locations (jump list) chooser overlay, when open.
-    pub(crate) location_chooser: Option<LocationChooser>,
-    /// Org-capture template chooser overlay, when open.
-    pub(crate) capture_chooser: Option<CaptureChooser>,
-    /// Org refile-target chooser overlay, when open.
-    pub(crate) refile_chooser: Option<RefileChooser>,
     /// State for an in-progress Org-capture wizard, while its prompts are
     /// being answered.
     pending_capture: Option<PendingCapture>,
@@ -2881,42 +2856,28 @@ impl App {
             spell_suggest: None,
             context_menu: None,
             git_panel: None,
-            branch_chooser: None,
+            chooser: None,
             git_log: None,
             git_graph: None,
-            stash_chooser: None,
-            worktree_chooser: None,
             git_rebase: None,
             oc: None,
             im: im::ImState::new(&settings),
             im_dialog: None,
-            task_chooser: None,
             pending_matcher: None,
             task_scan: None,
             task_problems: crate::tasks::matcher::ProblemList::default(),
-            macro_chooser: None,
-            encoding_chooser: None,
-            http_env_chooser: None,
             #[cfg(feature = "script")]
             script_runtime: vix_script::Runtime::new(),
             #[cfg(feature = "script")]
             scripts: Vec::new(),
             key_overrides: std::collections::HashMap::new(),
-            script_chooser: None,
-            plugin_chooser: None,
             #[cfg(feature = "script")]
             plugin_paths: None,
             #[cfg(feature = "script")]
             pending_script_prompt: None,
             clipboard_ring: Vec::new(),
-            clipboard_chooser: None,
-            workspace_chooser: None,
             diff_view: None,
             file_browser: None,
-            recent_chooser: None,
-            location_chooser: None,
-            capture_chooser: None,
-            refile_chooser: None,
             pending_capture: None,
             capture_review: None,
             nerd_palette: None,
@@ -5991,31 +5952,31 @@ impl App {
             self.status = t!("status.no_tasks").to_string();
             return;
         }
-        self.task_chooser = Some(TaskChooser { tasks, selected: 0 });
+        self.chooser.open_task(TaskChooser { tasks, selected: 0 });
     }
 
     fn tasks_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.task_chooser.as_mut() {
+                if let Some(c) = self.chooser.task_mut() {
                     let n = c.tasks.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.task_chooser.as_mut() {
+                if let Some(c) = self.chooser.task_mut() {
                     c.selected = (c.selected + 1) % c.tasks.len();
                 }
             }
             KeyCode::Enter => self.run_selected_task(),
-            KeyCode::Esc => self.task_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     fn tasks_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.task_chooser.as_mut()
+            && let Some(c) = self.chooser.task_mut()
             && idx < c.tasks.len()
         {
             c.selected = idx;
@@ -6029,7 +5990,7 @@ impl App {
     /// whichever chooser it came from (Tools → Tasks… or Project → Run
     /// Task…) — one code path, so the two never drift.
     fn run_selected_task(&mut self) {
-        let Some(c) = self.task_chooser.take() else {
+        let Some(c) = self.chooser.take_task() else {
             return;
         };
         if let Some(task) = c.tasks.get(c.selected) {
@@ -6724,7 +6685,7 @@ impl App {
             self.status = t!("status.no_tasks").to_string();
             return;
         }
-        self.task_chooser = Some(TaskChooser {
+        self.chooser.open_task(TaskChooser {
             tasks: merged,
             selected: 0,
         });
@@ -7261,7 +7222,7 @@ impl App {
             self.status = t!("status.clipboard_empty").to_string();
             return;
         }
-        self.clipboard_chooser = Some(ClipboardChooser {
+        self.chooser.open_clipboard(ClipboardChooser {
             entries: self.clipboard_ring.clone(),
             selected: 0,
         });
@@ -7270,25 +7231,25 @@ impl App {
     fn clipboard_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.clipboard_chooser.as_mut() {
+                if let Some(c) = self.chooser.clipboard_mut() {
                     let n = c.entries.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.clipboard_chooser.as_mut() {
+                if let Some(c) = self.chooser.clipboard_mut() {
                     c.selected = (c.selected + 1) % c.entries.len();
                 }
             }
             KeyCode::Enter => self.paste_selected_clipboard(),
-            KeyCode::Esc => self.clipboard_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     fn clipboard_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.clipboard_chooser.as_mut()
+            && let Some(c) = self.chooser.clipboard_mut()
             && idx < c.entries.len()
         {
             c.selected = idx;
@@ -7299,7 +7260,7 @@ impl App {
     /// Insert the highlighted clipboard-history entry at the cursor and close the
     /// picker (also promoting it to the front of the ring).
     fn paste_selected_clipboard(&mut self) {
-        let Some(c) = self.clipboard_chooser.take() else {
+        let Some(c) = self.chooser.take_clipboard() else {
             return;
         };
         let Some(text) = c.entries.get(c.selected).cloned() else {
@@ -7321,7 +7282,7 @@ impl App {
             self.status = t!("status.no_macros").to_string();
             return;
         }
-        self.macro_chooser = Some(MacroChooser {
+        self.chooser.open_macros(MacroChooser {
             macros,
             selected: 0,
         });
@@ -7330,25 +7291,25 @@ impl App {
     fn macro_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.macro_chooser.as_mut() {
+                if let Some(c) = self.chooser.macros_mut() {
                     let n = c.macros.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.macro_chooser.as_mut() {
+                if let Some(c) = self.chooser.macros_mut() {
                     c.selected = (c.selected + 1) % c.macros.len();
                 }
             }
             KeyCode::Enter => self.run_selected_macro(),
-            KeyCode::Esc => self.macro_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     fn macro_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.macro_chooser.as_mut()
+            && let Some(c) = self.chooser.macros_mut()
             && idx < c.macros.len()
         {
             c.selected = idx;
@@ -7358,7 +7319,7 @@ impl App {
 
     /// Load the highlighted saved macro into the active macro buffer and play it.
     fn run_selected_macro(&mut self) {
-        let Some(c) = self.macro_chooser.take() else {
+        let Some(c) = self.chooser.take_macros() else {
             return;
         };
         if let Some(mac) = c.macros.get(c.selected) {
@@ -7384,31 +7345,32 @@ impl App {
             .iter()
             .position(|c| *c == current)
             .unwrap_or(0);
-        self.encoding_chooser = Some(EncodingChooser { action, selected });
+        self.chooser
+            .open_encoding(EncodingChooser { action, selected });
     }
 
     fn encoding_key(&mut self, key: KeyEvent) {
         let n = crate::encoding::CHOICES.len();
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.encoding_chooser.as_mut() {
+                if let Some(c) = self.chooser.encoding_mut() {
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.encoding_chooser.as_mut() {
+                if let Some(c) = self.chooser.encoding_mut() {
                     c.selected = (c.selected + 1) % n;
                 }
             }
             KeyCode::Enter => self.apply_selected_encoding(),
-            KeyCode::Esc => self.encoding_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     fn encoding_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.encoding_chooser.as_mut()
+            && let Some(c) = self.chooser.encoding_mut()
             && idx < crate::encoding::CHOICES.len()
         {
             c.selected = idx;
@@ -7418,7 +7380,7 @@ impl App {
 
     /// Reopen the file as, or save it in, the highlighted encoding.
     fn apply_selected_encoding(&mut self) {
-        let Some(c) = self.encoding_chooser.take() else {
+        let Some(c) = self.chooser.take_encoding() else {
             return;
         };
         let Some(encoding) = crate::encoding::CHOICES
@@ -7473,7 +7435,7 @@ impl App {
 
     /// Switch to the highlighted recent project.
     fn switch_to_selected_workspace(&mut self) {
-        let Some(c) = self.workspace_chooser.take() else {
+        let Some(c) = self.chooser.take_workspace() else {
             return;
         };
         let Some(root) = c.roots.get(c.selected).cloned() else {
@@ -8957,7 +8919,7 @@ impl App {
         }
         let mut entries = self.bookmarks.clone();
         entries.sort_by(|a, b| a.path.cmp(&b.path).then(a.line.cmp(&b.line)));
-        self.location_chooser = Some(LocationChooser {
+        self.chooser.open_location(LocationChooser {
             entries,
             selected: 0,
         });
@@ -9205,10 +9167,9 @@ impl App {
         panel!(help, help_mouse);
         panel!(keybinding_editor, keybinding_editor_mouse);
         panel!(file_browser, file_browser_mouse);
-        panel!(recent_chooser, recent_mouse);
-        panel!(location_chooser, location_mouse);
-        panel!(capture_chooser, capture_chooser_mouse);
-        panel!(refile_chooser, refile_chooser_mouse);
+        if self.chooser_mouse(mouse) {
+            return true;
+        }
         panel!(nerd_palette, nerd_mouse);
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
@@ -9239,21 +9200,10 @@ impl App {
         panel!(contacts, contacts_mouse);
         panel!(spell_suggest, spell_suggest_mouse);
         panel!(git_panel, git_panel_mouse);
-        panel!(branch_chooser, branch_mouse);
         panel!(git_log, git_log_mouse);
         panel!(git_graph, git_graph_mouse);
-        panel!(stash_chooser, stash_chooser_mouse);
-        panel!(worktree_chooser, worktree_chooser_mouse);
         panel!(git_rebase, git_rebase_mouse);
         panel!(oc, oc_mouse);
-        panel!(task_chooser, tasks_mouse);
-        panel!(macro_chooser, macro_mouse);
-        panel!(encoding_chooser, encoding_mouse);
-        panel!(http_env_chooser, http_env_mouse);
-        panel!(script_chooser, script_chooser_mouse);
-        panel!(plugin_chooser, plugin_chooser_mouse);
-        panel!(clipboard_chooser, clipboard_mouse);
-        panel!(workspace_chooser, workspace_chooser_mouse);
         panel!(outline, outline_mouse);
         panel!(conflict_list, conflict_list_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
@@ -9288,7 +9238,7 @@ impl App {
             || self.unsaved.is_some()
             || self.spell_suggest.is_some()
             || self.git_panel.is_some()
-            || self.branch_chooser.is_some()
+            || self.chooser.branch().is_some()
             || self.dashboard.is_some()
             || self.outline.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
@@ -10826,7 +10776,7 @@ impl App {
             self.status = t!("status.no_recent").to_string();
             return;
         }
-        self.recent_chooser = Some(RecentChooser {
+        self.chooser.open_recent(RecentChooser {
             entries,
             selected: 0,
         });
@@ -10835,19 +10785,19 @@ impl App {
     fn recent_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(rc) = self.recent_chooser.as_mut() {
+                if let Some(rc) = self.chooser.recent_mut() {
                     let n = rc.entries.len();
                     rc.selected = (rc.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(rc) = self.recent_chooser.as_mut() {
+                if let Some(rc) = self.chooser.recent_mut() {
                     rc.selected = (rc.selected + 1) % rc.entries.len();
                 }
             }
             KeyCode::Enter => self.open_selected_recent(),
             KeyCode::Esc => {
-                self.recent_chooser = None;
+                self.chooser = None;
             }
             _ => {}
         }
@@ -10855,7 +10805,7 @@ impl App {
 
     /// Open the highlighted recent file and close the chooser.
     fn open_selected_recent(&mut self) {
-        if let Some(rc) = self.recent_chooser.take()
+        if let Some(rc) = self.chooser.take_recent()
             && let Some(path) = rc.entries.get(rc.selected).map(|e| e.path.clone())
         {
             self.with_jump(|s| {
@@ -10867,7 +10817,7 @@ impl App {
 
     fn recent_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(rc) = self.recent_chooser.as_mut()
+            && let Some(rc) = self.chooser.recent_mut()
             && idx < rc.entries.len()
         {
             // A click selects the row and opens it (no live preview to
@@ -10890,7 +10840,7 @@ impl App {
             self.status = t!("status.no_recent_locations").to_string();
             return;
         }
-        self.location_chooser = Some(LocationChooser {
+        self.chooser.open_location(LocationChooser {
             entries,
             selected: 0,
         });
@@ -10899,19 +10849,19 @@ impl App {
     fn location_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(lc) = self.location_chooser.as_mut() {
+                if let Some(lc) = self.chooser.location_mut() {
                     let n = lc.entries.len();
                     lc.selected = (lc.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(lc) = self.location_chooser.as_mut() {
+                if let Some(lc) = self.chooser.location_mut() {
                     lc.selected = (lc.selected + 1) % lc.entries.len();
                 }
             }
             KeyCode::Enter => self.open_selected_location(),
             KeyCode::Esc => {
-                self.location_chooser = None;
+                self.chooser = None;
             }
             _ => {}
         }
@@ -10919,7 +10869,7 @@ impl App {
 
     /// Jump to the highlighted location and close the chooser.
     fn open_selected_location(&mut self) {
-        if let Some(lc) = self.location_chooser.take()
+        if let Some(lc) = self.chooser.take_location()
             && let Some(loc) = lc.entries.get(lc.selected).cloned()
         {
             self.navigate_to(&loc);
@@ -10928,7 +10878,7 @@ impl App {
 
     fn location_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(lc) = self.location_chooser.as_mut()
+            && let Some(lc) = self.chooser.location_mut()
             && idx < lc.entries.len()
         {
             lc.selected = idx;
@@ -16117,7 +16067,7 @@ mod tests {
             t.editor.set_cursor_line(1);
         }
         app.run_action("org.refile");
-        let Some(chooser) = app.refile_chooser.as_ref() else {
+        let Some(chooser) = app.chooser.refile() else {
             return;
         };
         // Candidates exclude the subtree being moved.
@@ -16125,7 +16075,7 @@ mod tests {
         assert_eq!(labels, ["One", "Two"], "source subtree excluded");
         app.refile_chooser_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.refile_chooser_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert!(app.refile_chooser.is_none(), "chooser closed");
+        assert!(app.chooser.refile().is_none(), "chooser closed");
         let text = app.editor.active_tab().unwrap().text();
         let two = text.find("* Two").expect("target present");
         let task = text.find("** Task").expect("subtree present");

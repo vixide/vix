@@ -10,6 +10,7 @@
 
 use vix_input::KeyEvent;
 
+use super::chooser::ChooserSlot;
 use super::{App, ConfirmKind, Visible};
 
 /// Which layer a row stands for. The discriminant is the row's index in
@@ -249,6 +250,21 @@ macro_rules! unit {
     };
 }
 
+/// A row for a list chooser: open while `app.chooser` holds that variant, and
+/// its `App::$handler` takes every key.
+macro_rules! chooser {
+    ($id:ident, $accessor:ident, $handler:ident) => {
+        Overlay {
+            id: OverlayId::$id,
+            open: |a| a.chooser.$accessor().is_some(),
+            key: Key::Handler(|a, k| {
+                a.$handler(k);
+                true
+            }),
+        }
+    };
+}
+
 /// A row for a layer that is drawn but never takes keys.
 macro_rules! draw_only {
     ($id:ident, $field:ident) => {
@@ -308,17 +324,17 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(SpellSuggest, spell_suggest, spell_suggest_key),
     unit!(ContextMenu, context_menu, context_menu_key),
     unit!(GitPanel, git_panel, git_panel_key),
-    unit!(BranchChooser, branch_chooser, branch_key),
-    unit!(TaskChooser, task_chooser, tasks_key),
-    unit!(StashChooser, stash_chooser, stash_chooser_key),
-    unit!(WorktreeChooser, worktree_chooser, worktree_chooser_key),
-    unit!(ScriptChooser, script_chooser, script_chooser_key),
-    unit!(PluginChooser, plugin_chooser, plugin_chooser_key),
+    chooser!(BranchChooser, branch, branch_key),
+    chooser!(TaskChooser, task, tasks_key),
+    chooser!(StashChooser, stash, stash_chooser_key),
+    chooser!(WorktreeChooser, worktree, worktree_chooser_key),
+    chooser!(ScriptChooser, script, script_chooser_key),
+    chooser!(PluginChooser, plugin, plugin_chooser_key),
     unit!(DiffView, diff_view, diff_view_key),
-    unit!(LocationChooser, location_chooser, location_key),
-    unit!(CaptureChooser, capture_chooser, capture_chooser_key),
-    unit!(RefileChooser, refile_chooser, refile_chooser_key),
-    unit!(RecentChooser, recent_chooser, recent_key),
+    chooser!(LocationChooser, location, location_key),
+    chooser!(CaptureChooser, capture, capture_chooser_key),
+    chooser!(RefileChooser, refile, refile_chooser_key),
+    chooser!(RecentChooser, recent, recent_key),
     unit!(FileBrowser, file_browser, file_browser_key),
     unit!(NerdPalette, nerd_palette, nerd_key),
     unit!(AsciiPanel, ascii_panel, ascii_key),
@@ -384,16 +400,16 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(TodoTree, todo_tree, todo_tree_key),
     unit!(FhirBundle, fhir_bundle, fhir_bundle_key),
     unit!(Hl7Panel, hl7_panel, hl7_key),
-    unit!(HttpEnvChooser, http_env_chooser, http_env_key),
+    chooser!(HttpEnvChooser, http_env, http_env_key),
     unit!(ChoiceList, choice_list, choice_list_key),
     unit!(StructuralReplace, structural_replace, sr_key),
     unit!(EditSql, edit_sql, edit_sql_key),
     unit!(Db, db, db_key),
     unit!(MediaTypePanel, media_type_panel, media_type_key),
-    unit!(EncodingChooser, encoding_chooser, encoding_key),
-    unit!(MacroChooser, macro_chooser, macro_key),
-    unit!(ClipboardChooser, clipboard_chooser, clipboard_key),
-    unit!(WorkspaceChooser, workspace_chooser, workspace_chooser_key),
+    chooser!(EncodingChooser, encoding, encoding_key),
+    chooser!(MacroChooser, macros, macro_key),
+    chooser!(ClipboardChooser, clipboard, clipboard_key),
+    chooser!(WorkspaceChooser, workspace, workspace_chooser_key),
     unit!(SystemInfo, system_info, system_info_key),
     unit!(LspStatus, lsp_status, lsp_status_key),
     unit!(FileInfo, file_info, file_info_key),
@@ -529,5 +545,69 @@ mod tests {
             drawn_only,
             [OverlayId::WhichKey, OverlayId::Completion, OverlayId::Hover]
         );
+    }
+
+    fn branch_chooser() -> crate::app::BranchChooser {
+        crate::app::BranchChooser {
+            branches: vec![String::from("main")],
+            selected: 0,
+            merge: false,
+            gutter: false,
+        }
+    }
+
+    fn stash_chooser() -> crate::app::StashChooser {
+        crate::app::StashChooser {
+            entries: Vec::new(),
+            selected: 0,
+        }
+    }
+
+    #[test]
+    fn two_choosers_cannot_be_open_together() {
+        let mut a = app();
+        a.chooser.open_branch(branch_chooser());
+        a.chooser.open_stash(stash_chooser());
+        let open: Vec<OverlayId> = a.open_overlays().map(|o| o.id).collect();
+        assert_eq!(
+            open,
+            [OverlayId::StashChooser],
+            "the newer chooser replaced the older"
+        );
+        assert!(a.chooser.branch().is_none());
+        assert!(a.chooser.stash().is_some());
+    }
+
+    #[test]
+    fn taking_one_chooser_leaves_a_different_one_open() {
+        let mut a = app();
+        a.chooser.open_stash(stash_chooser());
+        assert!(a.chooser.take_branch().is_none());
+        assert!(
+            a.chooser.stash().is_some(),
+            "taking an absent chooser is a no-op"
+        );
+        a.chooser.open_branch(branch_chooser());
+        assert!(a.chooser.take_branch().is_some());
+        assert!(a.chooser.is_none());
+    }
+
+    #[test]
+    fn a_chooser_row_is_open_only_for_its_own_variant() {
+        let mut a = app();
+        a.chooser.open_encoding(crate::app::EncodingChooser {
+            action: crate::app::EncodingAction::Reopen,
+            selected: 0,
+        });
+        let mut chooser_rows = OVERLAYS
+            .iter()
+            .filter(|o| (o.open)(&a))
+            .map(|o| o.id)
+            .collect::<Vec<_>>();
+        chooser_rows.sort_by_key(|id| *id as usize);
+        assert_eq!(chooser_rows, [OverlayId::EncodingChooser]);
+        // Esc reaches the chooser's handler through the table and closes it.
+        a.route_overlay_key(esc());
+        assert!(a.chooser.is_none());
     }
 }

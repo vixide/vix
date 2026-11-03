@@ -7,6 +7,7 @@
 // Test setup casts small counts to `u16` cell coordinates and builds fixture
 // strings by collecting `format!`; both are fine in tests.
 
+pub(crate) use crate::app::chooser::ChooserSlot;
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
 // Used by `wait_until` in every build, not only with `ai` (T605's helper).
@@ -209,8 +210,8 @@ pub(crate) fn arm_script_trust(app: &mut App) {
 #[cfg(feature = "script")]
 pub(crate) fn loaded_script_command_count(app: &mut App) -> usize {
     app.run_action("script.run");
-    let n = app.script_chooser.as_ref().map_or(0, |c| c.commands.len());
-    app.script_chooser = None;
+    let n = app.chooser.script().map_or(0, |c| c.commands.len());
+    app.chooser = None;
     n
 }
 

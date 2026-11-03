@@ -6,6 +6,7 @@
 //! across the file rather than one contiguous block. An inherent `impl App`
 //! block can live in any module of the crate.
 
+use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -246,7 +247,7 @@ impl App {
         );
         let current = crate::git::GutterBase::parse(&self.settings.git_gutter_base).as_setting();
         let selected = rows.iter().position(|r| *r == current).unwrap_or(0);
-        self.branch_chooser = Some(BranchChooser {
+        self.chooser.open_branch(BranchChooser {
             branches: rows,
             selected,
             merge: false,
@@ -1442,7 +1443,7 @@ impl App {
             self.status = t!("status.git_no_branches").into();
             return;
         }
-        self.branch_chooser = Some(BranchChooser {
+        self.chooser.open_branch(BranchChooser {
             branches,
             selected: 0,
             merge,
@@ -1453,25 +1454,25 @@ impl App {
     pub(super) fn branch_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.branch_chooser.as_mut() {
+                if let Some(c) = self.chooser.branch_mut() {
                     let n = c.branches.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.branch_chooser.as_mut() {
+                if let Some(c) = self.chooser.branch_mut() {
                     c.selected = (c.selected + 1) % c.branches.len();
                 }
             }
             KeyCode::Enter => self.checkout_selected_branch(),
-            KeyCode::Esc => self.branch_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn branch_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.branch_chooser.as_mut()
+            && let Some(c) = self.chooser.branch_mut()
             && idx < c.branches.len()
         {
             c.selected = idx;
@@ -1482,7 +1483,7 @@ impl App {
     /// Apply the highlighted branch and close the chooser: merge it into the
     /// current branch (merge mode) or check it out.
     fn checkout_selected_branch(&mut self) {
-        let Some(c) = self.branch_chooser.take() else {
+        let Some(c) = self.chooser.take_branch() else {
             return;
         };
         let Some(branch) = c.branches.get(c.selected).cloned() else {

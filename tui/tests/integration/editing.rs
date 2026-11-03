@@ -351,7 +351,7 @@ fn clipboard_history_records_copies_and_pastes_from_it() {
     app.on_key(keycode(KeyCode::Right));
     app.on_key(keycode(KeyCode::End));
     app.run_action("edit.paste_from_history");
-    assert!(app.clipboard_chooser.is_some(), "history picker opens");
+    assert!(app.chooser.clipboard().is_some(), "history picker opens");
     app.on_key(keycode(KeyCode::Enter));
     assert!(
         app.editor
@@ -421,10 +421,10 @@ fn http_environment_chooser_picks_and_remembers_the_active_environment() {
     assert!(!app.status.contains("curl"), "status: {}", app.status);
     // Choose `dev` (row 0 is "no environment").
     app.run_action("tools.http_environment");
-    assert!(app.http_env_chooser.is_some());
+    assert!(app.chooser.http_env().is_some());
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.http_env_chooser.is_none());
+    assert!(app.chooser.http_env().is_none());
     assert_eq!(
         std::fs::read_to_string(dir.join(".vix/http-env.active")).unwrap(),
         "dev"
@@ -434,7 +434,7 @@ fn http_environment_chooser_picks_and_remembers_the_active_environment() {
     // Without an environments file the chooser says so instead of opening.
     std::fs::remove_file(dir.join(".vix/http-env.json")).unwrap();
     app.run_action("tools.http_environment");
-    assert!(app.http_env_chooser.is_none());
+    assert!(app.chooser.http_env().is_none());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1041,7 +1041,7 @@ fn bookmarks_toggle_and_list() {
     app.run_action("bookmark.toggle");
     assert_eq!(app.bookmarks.len(), 1, "bookmark added");
     app.run_action("bookmark.list");
-    assert!(app.location_chooser.is_some(), "bookmark list opened");
+    assert!(app.chooser.location().is_some(), "bookmark list opened");
     app.on_key(esc());
     app.run_action("bookmark.toggle"); // same line → removes
     assert!(app.bookmarks.is_empty(), "bookmark removed");
@@ -2063,7 +2063,7 @@ fn new_overlays_render_without_panicking() {
         .recent_files
         .push(dir.join("a.txt").display().to_string());
     app.run_action("file.open_recent");
-    assert!(app.recent_chooser.is_some());
+    assert!(app.chooser.recent().is_some());
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
 
     fs::remove_dir_all(&dir).ok();
@@ -3270,14 +3270,14 @@ fn branch_chooser_switches_branches() {
     app.refresh_git();
     let start = app.git_branch.clone();
     app.run_action("git.switch_branch");
-    let chooser = app.branch_chooser.as_ref().expect("branch chooser opens");
+    let chooser = app.chooser.branch().expect("branch chooser opens");
     let idx = chooser
         .branches
         .iter()
         .position(|b| Some(b) != start.as_ref())
         .unwrap();
     let target = chooser.branches[idx].clone();
-    app.branch_chooser.as_mut().unwrap().selected = idx;
+    app.chooser.branch_mut().unwrap().selected = idx;
     app.on_key(keycode(KeyCode::Enter));
     app.refresh_git();
     assert_eq!(
@@ -4512,12 +4512,12 @@ fn encoding_choosers_convert_and_reopen() {
 
     // Save with Encoding → UTF-8 (the chooser starts on windows-1252, row 4).
     app.run_action("file.save_with_encoding");
-    assert_eq!(app.encoding_chooser.as_ref().unwrap().selected, 4);
+    assert_eq!(app.chooser.encoding().unwrap().selected, 4);
     for _ in 0..4 {
         app.on_key(keycode(KeyCode::Up));
     }
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.encoding_chooser.is_none());
+    assert!(app.chooser.encoding().is_none());
     assert_eq!(fs::read(&path).unwrap(), "café\n".as_bytes());
 
     // Reopen with Encoding → windows-1252 shows the UTF-8 bytes as mojibake.

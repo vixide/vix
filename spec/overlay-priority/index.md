@@ -1,6 +1,6 @@
 # Overlay priority
 
-**Status:** Shipped (T611, step 1). One table, `OVERLAYS`, orders every modal
+**Status:** Shipped (T611, step 1; step 2 in part: the choosers). One table, `OVERLAYS`, orders every modal
 layer from the bottom of the stack to the top. The frame draws the open rows in
 table order and a key is offered to the open rows in the reverse order, so the
 layer drawn on top is the layer that receives keys.
@@ -62,18 +62,48 @@ this only matters when two layers are open at once. The cases that moved:
 - A host's Cowork share confirmation is its own row (`CoworkConfirm`) just
   above the shared terminal, so it still answers before the terminal.
 
-## Step 2 (later)
+## Step 2: the `Overlay` enum (choosers)
 
-An `Overlay` enum holding the payload of the mutually exclusive modals, so that
-two of them cannot be open at once at all, needs its own spec and is not part of
-this change.
+Step 2 replaces loose `Option<_>` fields with one enum for the modals that are
+mutually exclusive, so that two of them cannot be open at once at all. It is
+done in slices; this slice converts the **list choosers**.
+
+`App::chooser: Option<Chooser>` replaces fifteen fields (`branch_chooser`,
+`stash_chooser`, `worktree_chooser`, `task_chooser`, `script_chooser`,
+`plugin_chooser`, `location_chooser`, `capture_chooser`, `refile_chooser`,
+`recent_chooser`, `encoding_chooser`, `macro_chooser`, `clipboard_chooser`,
+`workspace_chooser`, `http_env_chooser`). `Chooser` has one variant per
+picker, holding that picker's state. Behavior:
+
+- Opening a chooser **replaces** any other chooser (previously the old one
+  stayed in its field, hidden behind or beside the new one, and reappeared
+  when the new one closed). The choosers are single-purpose list pickers
+  reached from the menu bar or palette, which closes first, so no supported
+  flow had two open; the change only removes the impossible state.
+- Each picker still has its own row in `OVERLAYS` (same stacking height, key
+  handler and draw function as before); a row's `open` test is "the slot
+  holds this variant". Drawing, key routing, mouse routing and paste routing
+  are unchanged.
+- `Chooser`'s accessors (`branch`, `branch_mut`, `take_branch`, ...) come from
+  the `ChooserSlot` trait on `Option<Chooser>` so call sites borrow only the
+  `chooser` field, as the per-picker fields did.
+
+**Remaining (later slices):** the other modals still use their own `Option`
+fields. Candidates for the next slices, in rough order of fit: the read-only
+info panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
+`media_type_panel`, `nerd_palette`, `ascii_panel`), then the edit surfaces
+(`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`, `edit_sql`,
+`column_view`). The stacking confirmations (`confirm`, `prompt`, `unsaved`,
+...) are not candidates: they legitimately open over another layer (a reword
+prompt over the rebase overlay, a confirmation over workspace search).
 
 ## Tests
 
 `tui/src/app/overlays.rs` (`tests`): row index equals id; drawing order and key
 offer order are the same open rows in opposite directions; opening the
 palette, help and welcome panels together and pressing `Esc` closes them
-top-down (so the topmost drawn layer really takes the key); the set of
+top-down (so the topmost drawn layer really takes the key); opening one
+chooser while another is open replaces it (only one `Chooser` row is ever open); the set of
 draw-only layers is exactly which-key, completion and hover. The existing
 integration and snapshot suites cover the unchanged single-overlay behavior.
 

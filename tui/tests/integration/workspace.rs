@@ -205,10 +205,7 @@ fn recent_locations_chooser_lists_and_jumps() {
 
     // Alt+J opens the recent-locations chooser, most-recent first.
     app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
-    let lc = app
-        .location_chooser
-        .as_ref()
-        .expect("location chooser opens");
+    let lc = app.chooser.location().expect("location chooser opens");
     assert!(
         lc.entries.len() >= 2,
         "history has multiple locations: {}",
@@ -217,10 +214,10 @@ fn recent_locations_chooser_lists_and_jumps() {
     assert_eq!(lc.entries[0].line, 30, "most recent location first");
 
     // Move the cursor away, then jump to the second entry from the chooser.
-    let target = app.location_chooser.as_ref().unwrap().entries[1].line;
+    let target = app.chooser.location().unwrap().entries[1].line;
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.location_chooser.is_none(), "Enter closes the chooser");
+    assert!(app.chooser.location().is_none(), "Enter closes the chooser");
     assert_eq!(
         app.editor.cursor_1based().0,
         target,
@@ -238,7 +235,10 @@ fn recent_locations_empty_history_reports_status() {
     let mut app = app_at(&dir);
     app.open_initial(&file);
     app.run_action("nav.recent_locations");
-    assert!(app.location_chooser.is_none(), "no chooser without history");
+    assert!(
+        app.chooser.location().is_none(),
+        "no chooser without history"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -266,11 +266,11 @@ fn open_recent_records_dedups_and_reopens() {
 
     // The chooser lists the entries; Down + Enter opens the second.
     app.run_action("file.open_recent");
-    assert_eq!(app.recent_chooser.as_ref().unwrap().entries.len(), 2);
+    assert_eq!(app.chooser.recent().unwrap().entries.len(), 2);
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
     assert!(
-        app.recent_chooser.is_none(),
+        app.chooser.recent().is_none(),
         "Enter opens and closes the chooser"
     );
     let open = app.editor.active_tab().unwrap().path.clone().unwrap();
@@ -329,7 +329,7 @@ fn open_recent_empty_shows_status_only() {
     assert_eq!(app.settings.recent_files, [] as [std::string::String; 0]);
     app.run_action("file.open_recent");
     assert!(
-        app.recent_chooser.is_none(),
+        app.chooser.recent().is_none(),
         "no chooser when there are no recent files"
     );
 }
@@ -345,7 +345,7 @@ fn click_recent_row_opens_file() {
     app.layout.chooser = Rect::new(10, 5, 34, 1);
     app.on_mouse(click(12, 5));
     assert!(
-        app.recent_chooser.is_none(),
+        app.chooser.recent().is_none(),
         "a click opens and closes the chooser"
     );
     let open = app.editor.active_tab().unwrap().path.clone().unwrap();

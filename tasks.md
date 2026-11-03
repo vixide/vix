@@ -7107,6 +7107,18 @@ new action.
     box is ticked for step 1 only. Key order now follows the old drawing
     order where the two disagreed (only visible with two layers open); the
     cases are listed in the spec.
+  - Step 2, slice 1 done 2026-11-03: the 15 list choosers (branch, stash,
+    worktree, task, script, plugin, location, capture, refile, recent,
+    encoding, macro, clipboard, workspace, HTTP env) are one
+    `App::chooser: Option<Chooser>` (`tui/src/app/chooser.rs`, typed access
+    through `ChooserSlot`); opening one replaces another. Spec:
+    `spec/overlay-priority/index.md`, "Step 2". **Remaining slices**: the
+    info panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
+    `media_type_panel`, `nerd_palette`, `ascii_panel`), then the edit
+    surfaces (`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`,
+    `edit_sql`, `column_view`). Stacking confirmations (`confirm`,
+    `prompt`, `unsaved`, ...) are not candidates. The box stays ticked for
+    step 1; step 2 is open until those slices land.
 
 - [x] **T639 — `password_prompt_gates_server_connections` does a real OS
   keyring lookup, so it flakes under load.** Found 2026-10-22 while

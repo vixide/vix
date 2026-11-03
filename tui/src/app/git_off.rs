@@ -7,6 +7,7 @@
 //! data types (`FileStatus`, `LogPanel`, `Change`, …) live there and `App`'s
 //! fields use them, but nothing here ever calls into its process-spawning code.
 
+use crate::app::chooser::ChooserSlot;
 use std::path::Path;
 
 use vix_input::{KeyEvent, MouseEvent};
@@ -65,12 +66,12 @@ impl App {
 
     /// The branch chooser can't be open.
     pub(super) fn branch_key(&mut self, _key: KeyEvent) {
-        debug_assert!(self.branch_chooser.is_none());
+        debug_assert!(self.chooser.branch().is_none());
     }
 
     /// The branch chooser can't be open.
     pub(super) fn branch_mouse(&mut self, _mouse: MouseEvent) {
-        debug_assert!(self.branch_chooser.is_none());
+        debug_assert!(self.chooser.branch().is_none());
     }
 
     /// The Git log can't be open.
@@ -95,12 +96,12 @@ impl App {
 
     /// The stash chooser can't be open.
     pub(super) fn stash_chooser_key(&mut self, _key: KeyEvent) {
-        debug_assert!(self.stash_chooser.is_none());
+        debug_assert!(self.chooser.stash().is_none());
     }
 
     /// The stash chooser can't be open.
     pub(super) fn stash_chooser_mouse(&mut self, _mouse: MouseEvent) {
-        debug_assert!(self.stash_chooser.is_none());
+        debug_assert!(self.chooser.stash().is_none());
     }
 
     /// The interactive rebase overlay can't be open.
@@ -115,12 +116,12 @@ impl App {
 
     /// The worktree chooser can't be open.
     pub(super) fn worktree_chooser_key(&mut self, _key: KeyEvent) {
-        debug_assert!(self.worktree_chooser.is_none());
+        debug_assert!(self.chooser.worktree().is_none());
     }
 
     /// The worktree chooser can't be open.
     pub(super) fn worktree_chooser_mouse(&mut self, _mouse: MouseEvent) {
-        debug_assert!(self.worktree_chooser.is_none());
+        debug_assert!(self.chooser.worktree().is_none());
     }
 
     /// The conflict list can't be open.

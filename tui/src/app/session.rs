@@ -9,6 +9,7 @@
 //! key/mouse handlers, `open_settings_file`). `App::new`/`build_core`
 //! (the constructor itself) deliberately stayed in `app.rs`.
 
+use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -362,31 +363,32 @@ impl App {
             self.status = t!("status.no_recent_projects").to_string();
             return;
         }
-        self.workspace_chooser = Some(WorkspaceChooser { roots, selected: 0 });
+        self.chooser
+            .open_workspace(WorkspaceChooser { roots, selected: 0 });
     }
 
     pub(super) fn workspace_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.workspace_chooser.as_mut() {
+                if let Some(c) = self.chooser.workspace_mut() {
                     let n = c.roots.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.workspace_chooser.as_mut() {
+                if let Some(c) = self.chooser.workspace_mut() {
                     c.selected = (c.selected + 1) % c.roots.len();
                 }
             }
             KeyCode::Enter => self.switch_to_selected_workspace(),
-            KeyCode::Esc => self.workspace_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn workspace_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.workspace_chooser.as_mut()
+            && let Some(c) = self.chooser.workspace_mut()
             && idx < c.roots.len()
         {
             c.selected = idx;

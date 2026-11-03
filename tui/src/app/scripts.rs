@@ -8,6 +8,7 @@
 //! here with the keybinding-editor code (T204), which stays in `app.rs`
 //! for now (not one of this epic's named slices).
 
+use crate::app::chooser::ChooserSlot;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
@@ -149,9 +150,10 @@ impl App {
                 state: vix_script::plugins::state(&paths, e),
             })
             .collect();
-        let selected = self.plugin_chooser.as_ref().map_or(0, |c| c.selected);
-        self.plugin_chooser = Some(super::PluginChooser { rows, selected });
-        if let Some(c) = self.plugin_chooser.as_mut() {
+        let selected = self.chooser.plugin().map_or(0, |c| c.selected);
+        self.chooser
+            .open_plugin(super::PluginChooser { rows, selected });
+        if let Some(c) = self.chooser.plugin_mut() {
             c.selected = c.selected.min(c.rows.len() - 1);
         }
     }
@@ -159,25 +161,25 @@ impl App {
     pub(super) fn plugin_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.plugin_chooser.as_mut() {
+                if let Some(c) = self.chooser.plugin_mut() {
                     let n = c.rows.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.plugin_chooser.as_mut() {
+                if let Some(c) = self.chooser.plugin_mut() {
                     c.selected = (c.selected + 1) % c.rows.len();
                 }
             }
             KeyCode::Enter => self.toggle_selected_plugin(),
-            KeyCode::Esc => self.plugin_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn plugin_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.plugin_chooser.as_mut()
+            && let Some(c) = self.chooser.plugin_mut()
             && idx < c.rows.len()
         {
             c.selected = idx;
@@ -194,8 +196,8 @@ impl App {
             return;
         };
         let Some((name, state)) = self
-            .plugin_chooser
-            .as_ref()
+            .chooser
+            .plugin()
             .and_then(|c| c.rows.get(c.selected))
             .map(|r| (r.name.clone(), r.state))
         else {
@@ -272,7 +274,7 @@ impl App {
             self.status = t!("status.no_scripts").to_string();
             return;
         }
-        self.script_chooser = Some(ScriptChooser {
+        self.chooser.open_script(ScriptChooser {
             commands,
             selected: 0,
         });
@@ -281,25 +283,25 @@ impl App {
     pub(super) fn script_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.script_chooser.as_mut() {
+                if let Some(c) = self.chooser.script_mut() {
                     let n = c.commands.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.script_chooser.as_mut() {
+                if let Some(c) = self.chooser.script_mut() {
                     c.selected = (c.selected + 1) % c.commands.len();
                 }
             }
             KeyCode::Enter => self.run_selected_script_command(),
-            KeyCode::Esc => self.script_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn script_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.script_chooser.as_mut()
+            && let Some(c) = self.chooser.script_mut()
             && idx < c.commands.len()
         {
             c.selected = idx;
@@ -310,7 +312,7 @@ impl App {
     /// Run the highlighted command from `App::script_chooser` (Tools →
     /// Scripts → Run…).
     fn run_selected_script_command(&mut self) {
-        let Some(c) = self.script_chooser.take() else {
+        let Some(c) = self.chooser.take_script() else {
             return;
         };
         if let Some((stem, cmd)) = c.commands.get(c.selected) {

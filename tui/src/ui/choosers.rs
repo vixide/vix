@@ -4,6 +4,7 @@
 //! right-click context menu, and the spell-check suggestion popup.
 
 use super::ClampFit;
+use crate::app::chooser::ChooserSlot;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -12,7 +13,7 @@ use crate::app::App;
 use crate::theme::{self, icon};
 
 pub(super) fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.branch_chooser.as_ref() else {
+    let Some(c) = app.chooser.branch() else {
         return;
     };
     let (title, hint) = if c.gutter {
@@ -25,7 +26,7 @@ pub(super) fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 
 /// **Git → Stash List…** (T634): one row per stash, `stash@{N}  message`.
 pub(super) fn draw_stash_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.stash_chooser.as_ref() else {
+    let Some(c) = app.chooser.stash() else {
         return;
     };
     let labels: Vec<String> = c
@@ -47,7 +48,7 @@ pub(super) fn draw_stash_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
 /// **Git → Worktree** (T634): one row per worktree — path, branch (or a
 /// detached/bare tag), and its current/locked/missing marks.
 pub(super) fn draw_worktree_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.worktree_chooser.as_ref() else {
+    let Some(c) = app.chooser.worktree() else {
         return;
     };
     let current = c.current(&app.root);
@@ -249,7 +250,7 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub(super) fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.workspace_chooser.as_ref() else {
+    let Some(c) = app.chooser.workspace() else {
         return;
     };
     let hint = t!("ui.projects_hint");
@@ -258,7 +259,7 @@ pub(super) fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rec
 }
 
 pub(super) fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.macro_chooser.as_ref() else {
+    let Some(c) = app.chooser.macros() else {
         return;
     };
     let labels: Vec<String> = c
@@ -273,7 +274,7 @@ pub(super) fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
 
 /// File → Reopen / Save with Encoding (T661): one row per encoding label.
 pub(super) fn draw_encoding_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.encoding_chooser.as_ref() else {
+    let Some(c) = app.chooser.encoding() else {
         return;
     };
     let labels: Vec<String> = crate::encoding::CHOICES
@@ -290,7 +291,7 @@ pub(super) fn draw_encoding_chooser(app: &mut App, frame: &mut Frame, area: Rect
 
 /// Tools → HTTP Environment…: "none" plus one row per environment name.
 pub(super) fn draw_http_env_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.http_env_chooser.as_ref() else {
+    let Some(c) = app.chooser.http_env() else {
         return;
     };
     let mut labels = vec![t!("ui.http_env_none").to_string()];
@@ -301,7 +302,7 @@ pub(super) fn draw_http_env_chooser(app: &mut App, frame: &mut Frame, area: Rect
 }
 
 pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.clipboard_chooser.as_ref() else {
+    let Some(c) = app.chooser.clipboard() else {
         return;
     };
     // Show a one-line preview of each entry (newlines/tabs flattened).
@@ -319,7 +320,7 @@ pub(super) fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rec
 }
 
 pub(super) fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.task_chooser.as_ref() else {
+    let Some(c) = app.chooser.task() else {
         return;
     };
     // Show "name — command" so the action is clear before running it.
@@ -335,7 +336,7 @@ pub(super) fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
 
 #[cfg(feature = "script")]
 pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.script_chooser.as_ref() else {
+    let Some(c) = app.chooser.script() else {
         return;
     };
     // Script-authored label first (shown verbatim), the owning script's file
@@ -354,7 +355,7 @@ pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 /// state, short commit.
 #[cfg(feature = "script")]
 pub(super) fn draw_plugin_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.plugin_chooser.as_ref() else {
+    let Some(c) = app.chooser.plugin() else {
         return;
     };
     let labels: Vec<String> = c
@@ -732,7 +733,7 @@ fn draw_list_chooser_sized(
 /// created at, modified at — with the highlighted row opened by Enter or a
 /// click. Records the data-row rectangle for mouse hit-testing.
 pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(rc) = app.recent_chooser.as_ref() else {
+    let Some(rc) = app.chooser.recent() else {
         return;
     };
     let width = 100u16.min(area.width);
@@ -827,7 +828,7 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 }
 
 pub(super) fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(lc) = app.location_chooser.as_ref() else {
+    let Some(lc) = app.chooser.location() else {
         return;
     };
     let selected = lc.selected;
@@ -858,7 +859,7 @@ pub(super) fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect
 /// Template…): every configured `org_capture_templates` entry as
 /// `<description> (<key>)`.
 pub(super) fn draw_capture_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(cc) = app.capture_chooser.as_ref() else {
+    let Some(cc) = app.chooser.capture() else {
         return;
     };
     let selected = cc.selected;
@@ -882,7 +883,7 @@ pub(super) fn draw_capture_chooser(app: &mut App, frame: &mut Frame, area: Rect)
 /// The Org refile-target chooser (Org → Edit Structure → Refile Subtree…):
 /// every candidate headline, indented by level.
 pub(super) fn draw_refile_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.refile_chooser.as_ref() else {
+    let Some(c) = app.chooser.refile() else {
         return;
     };
     let selected = c.selected;

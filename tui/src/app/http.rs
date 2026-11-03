@@ -1,6 +1,7 @@
 //! HTTP client: send the active `.http`-style buffer and poll the response.
 
 use super::{App, Focus, HttpEnvChooser};
+use crate::app::chooser::ChooserSlot;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 /// The local zone's offset from UTC, in minutes, at `now_ms`.
@@ -124,30 +125,31 @@ impl App {
         let selected = env::read_active(&self.root)
             .and_then(|a| names.iter().position(|n| *n == a))
             .map_or(0, |i| i + 1);
-        self.http_env_chooser = Some(HttpEnvChooser { names, selected });
+        self.chooser
+            .open_http_env(HttpEnvChooser { names, selected });
     }
 
     pub(super) fn http_env_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.http_env_chooser.as_mut() {
+                if let Some(c) = self.chooser.http_env_mut() {
                     c.selected = c.selected.saturating_sub(1);
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.http_env_chooser.as_mut() {
+                if let Some(c) = self.chooser.http_env_mut() {
                     c.selected = (c.selected + 1).min(c.names.len());
                 }
             }
             KeyCode::Enter => self.apply_http_env(),
-            KeyCode::Esc => self.http_env_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn http_env_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.http_env_chooser.as_mut()
+            && let Some(c) = self.chooser.http_env_mut()
             && idx <= c.names.len()
         {
             c.selected = idx;
@@ -158,7 +160,7 @@ impl App {
     /// Make the highlighted row the workspace's active environment (row 0
     /// clears it) and remember it in `.vix/http-env.active`.
     fn apply_http_env(&mut self) {
-        let Some(c) = self.http_env_chooser.take() else {
+        let Some(c) = self.chooser.take_http_env() else {
             return;
         };
         let name = c.selected.checked_sub(1).and_then(|i| c.names.get(i));

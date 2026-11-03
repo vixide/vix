@@ -21,6 +21,7 @@
 //! `wrap_text`, `smart_toggle`) sit interleaved in the original range but
 //! aren't org-specific, so they stayed in `app.rs`.
 
+use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -434,7 +435,7 @@ impl App {
             self.status = t!("status.org_no_refile_target").to_string();
             return;
         }
-        self.refile_chooser = Some(RefileChooser {
+        self.chooser.open_refile(RefileChooser {
             targets,
             selected: 0,
         });
@@ -443,19 +444,19 @@ impl App {
     pub(super) fn refile_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.refile_chooser.as_mut() {
+                if let Some(c) = self.chooser.refile_mut() {
                     let n = c.targets.len();
                     c.selected = (c.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.refile_chooser.as_mut() {
+                if let Some(c) = self.chooser.refile_mut() {
                     c.selected = (c.selected + 1) % c.targets.len();
                 }
             }
             KeyCode::Enter => self.accept_refile_chooser(),
             KeyCode::Esc => {
-                self.refile_chooser = None;
+                self.chooser = None;
             }
             _ => {}
         }
@@ -463,7 +464,7 @@ impl App {
 
     pub(super) fn refile_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.refile_chooser.as_mut()
+            && let Some(c) = self.chooser.refile_mut()
             && idx < c.targets.len()
         {
             c.selected = idx;
@@ -473,7 +474,7 @@ impl App {
 
     /// Refile the subtree under the chooser's highlighted headline.
     fn accept_refile_chooser(&mut self) {
-        let Some(c) = self.refile_chooser.take() else {
+        let Some(c) = self.chooser.take_refile() else {
             return;
         };
         let Some(&(target, _)) = c.targets.get(c.selected) else {
@@ -1115,7 +1116,7 @@ impl App {
             self.status = t!("status.org_capture_no_templates").to_string();
             return;
         }
-        self.capture_chooser = Some(CaptureChooser { selected: 0 });
+        self.chooser.open_capture(CaptureChooser { selected: 0 });
     }
 
     /// Begin capturing with `template`: queue its `%^{}` field prompts (and a
@@ -1746,19 +1747,19 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 let n = self.settings.org_capture_templates.len();
-                if let Some(cc) = self.capture_chooser.as_mut() {
+                if let Some(cc) = self.chooser.capture_mut() {
                     cc.selected = (cc.selected + n - 1) % n;
                 }
             }
             KeyCode::Down => {
                 let n = self.settings.org_capture_templates.len();
-                if let Some(cc) = self.capture_chooser.as_mut() {
+                if let Some(cc) = self.chooser.capture_mut() {
                     cc.selected = (cc.selected + 1) % n;
                 }
             }
             KeyCode::Enter => self.accept_capture_chooser(),
             KeyCode::Esc => {
-                self.capture_chooser = None;
+                self.chooser = None;
             }
             _ => {}
         }
@@ -1766,7 +1767,7 @@ impl App {
 
     /// Start capturing with the highlighted template and close the chooser.
     fn accept_capture_chooser(&mut self) {
-        if let Some(cc) = self.capture_chooser.take()
+        if let Some(cc) = self.chooser.take_capture()
             && let Some(template) = self
                 .settings
                 .org_capture_templates
@@ -1779,7 +1780,7 @@ impl App {
 
     pub(super) fn capture_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(cc) = self.capture_chooser.as_mut()
+            && let Some(cc) = self.chooser.capture_mut()
             && idx < self.settings.org_capture_templates.len()
         {
             cc.selected = idx;

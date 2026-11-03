@@ -49,29 +49,29 @@ fn plugin_chooser_enables_and_disables_a_plugin() {
     app.load_scripts();
     app.run_action("script.run");
     assert!(
-        app.script_chooser.is_none(),
+        app.chooser.script().is_none(),
         "a disabled plugin loads nothing"
     );
 
     app.run_action("script.plugins");
-    let chooser = app.plugin_chooser.as_ref().expect("plugin chooser opens");
+    let chooser = app.chooser.plugin().expect("plugin chooser opens");
     assert_eq!(chooser.rows.len(), 1);
     assert_eq!(chooser.rows[0].name, "caseplug");
     assert_eq!(chooser.rows[0].state, PluginState::Disabled);
 
     app.on_key(keycode(KeyCode::Enter)); // enable
     assert_eq!(
-        app.plugin_chooser.as_ref().unwrap().rows[0].state,
+        app.chooser.plugin().unwrap().rows[0].state,
         PluginState::Enabled
     );
     let lock = Lockfile::load(&lock_path).unwrap();
     assert!(lock.get("caseplug").unwrap().trusted.is_some());
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.plugin_chooser.is_none());
+    assert!(app.chooser.plugin().is_none());
     app.run_action("script.run");
     let commands = &app
-        .script_chooser
-        .as_ref()
+        .chooser
+        .script()
         .expect("plugin command loaded")
         .commands;
     assert_eq!(commands[0].0, "caseplug/up");
@@ -84,7 +84,7 @@ fn plugin_chooser_enables_and_disables_a_plugin() {
     app.on_key(keycode(KeyCode::Esc));
     app.run_action("script.run");
     assert!(
-        app.script_chooser.is_none(),
+        app.chooser.script().is_none(),
         "disabled again: nothing loads"
     );
     fs::remove_dir_all(&dir).ok();
@@ -134,7 +134,7 @@ fn plugin_translations_reach_the_label_and_the_handler() {
     let mut app = app_at(&dir).with_plugin_paths(&scripts, &lock_path);
     app.load_scripts();
     app.run_action("script.run");
-    let chooser = app.script_chooser.as_ref().expect("plugin command loaded");
+    let chooser = app.chooser.script().expect("plugin command loaded");
     assert_eq!(chooser.commands[0].0, "trplug/up");
     assert_eq!(chooser.commands[0].1.label, "Translated Up");
     app.on_key(keycode(KeyCode::Esc));
@@ -191,13 +191,13 @@ fn project_script_registers_and_runs_a_command() {
 
     // Tools → Scripts → Run… lists every loaded script's commands.
     app.run_action("script.run");
-    let chooser = app.script_chooser.as_ref().expect("chooser should open");
+    let chooser = app.chooser.script().expect("chooser should open");
     assert_eq!(chooser.commands.len(), 1);
     assert_eq!(chooser.commands[0].0, "greet"); // script file stem
     assert_eq!(chooser.commands[0].1.label, "Greet"); // shown verbatim
 
     app.on_key(keycode(KeyCode::Enter)); // run the highlighted command
-    assert!(app.script_chooser.is_none());
+    assert!(app.chooser.script().is_none());
     assert_eq!(app.editor.active_tab().unwrap().text(), "hello from script");
     fs::remove_dir_all(&dir).ok();
 }
@@ -242,7 +242,7 @@ fn script_reload_picks_up_a_script_added_after_startup() {
     load_scripts_trusted(&mut app); // no-op: no scripts exist yet
     app.run_action("script.run");
     assert!(
-        app.script_chooser.is_none(),
+        app.chooser.script().is_none(),
         "no scripts yet: chooser shouldn't open"
     );
 
@@ -254,10 +254,7 @@ fn script_reload_picks_up_a_script_added_after_startup() {
     app.run_action("script.reload"); // itself re-checks trust and queues the prompt
     trust_scripts_if_prompted(&mut app);
     app.run_action("script.run");
-    let chooser = app
-        .script_chooser
-        .as_ref()
-        .expect("chooser should open now");
+    let chooser = app.chooser.script().expect("chooser should open now");
     assert_eq!(chooser.commands[0].1.id, "late");
     fs::remove_dir_all(&dir).ok();
 }

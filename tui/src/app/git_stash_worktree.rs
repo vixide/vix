@@ -3,6 +3,7 @@
 //! runners, which build their process through the workspace authority, so a
 //! remote workspace stashes and lists worktrees on its own host.
 
+use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -40,17 +41,17 @@ impl App {
     fn load_stash_chooser(&mut self, selected: usize) -> bool {
         let entries = crate::git::stash_list(&self.root);
         if entries.is_empty() {
-            self.stash_chooser = None;
+            self.chooser = None;
             return false;
         }
         let selected = selected.min(entries.len() - 1);
-        self.stash_chooser = Some(StashChooser { entries, selected });
+        self.chooser.open_stash(StashChooser { entries, selected });
         true
     }
 
     /// The highlighted stash's `(index, message)`.
     fn selected_stash(&self) -> Option<(usize, String)> {
-        let c = self.stash_chooser.as_ref()?;
+        let c = self.chooser.stash()?;
         let e = c.entries.get(c.selected)?;
         Some((e.index, e.message.clone()))
     }
@@ -58,12 +59,12 @@ impl App {
     pub(super) fn stash_chooser_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.stash_chooser.as_mut() {
+                if let Some(c) = self.chooser.stash_mut() {
                     c.selected = vix_list_state::up(c.selected);
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.stash_chooser.as_mut() {
+                if let Some(c) = self.chooser.stash_mut() {
                     c.selected = vix_list_state::down(c.selected, c.entries.len());
                 }
             }
@@ -72,14 +73,14 @@ impl App {
             KeyCode::Char('a') => self.apply_selected_stash(false),
             KeyCode::Char('p') => self.apply_selected_stash(true),
             KeyCode::Char('d') | KeyCode::Delete => self.confirm_drop_selected_stash(),
-            KeyCode::Esc => self.stash_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn stash_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.stash_chooser.as_mut()
+            && let Some(c) = self.chooser.stash_mut()
             && idx < c.entries.len()
         {
             c.selected = idx;
@@ -99,7 +100,7 @@ impl App {
                 .error(t!("msg.git_stash_show_failed", stash = name).to_string());
             return;
         };
-        self.stash_chooser = None;
+        self.chooser = None;
         self.open_readonly_text_tab(&name, &patch);
     }
 
@@ -108,7 +109,7 @@ impl App {
         let Some((index, _)) = self.selected_stash() else {
             return;
         };
-        self.stash_chooser = None;
+        self.chooser = None;
         self.open_review(&crate::git::stash_ref(index));
     }
 
@@ -135,7 +136,7 @@ impl App {
                 if pop {
                     self.load_stash_chooser(index);
                 } else {
-                    self.stash_chooser = None;
+                    self.chooser = None;
                 }
             }
             Err(e) => self
@@ -151,7 +152,7 @@ impl App {
             return;
         };
         let name = crate::git::stash_ref(index);
-        self.stash_chooser = None;
+        self.chooser = None;
         self.confirm = Some(Confirm {
             message: t!("confirm.git_stash_drop", stash = name, message = message).to_string(),
             paths: vec![PathBuf::from(name)],
@@ -195,7 +196,7 @@ impl App {
         if !self.require_git_repo() {
             return;
         }
-        self.worktree_chooser = None;
+        self.chooser = None;
         self.prompt = Some(Prompt::new(
             PromptKind::GitWorktreeAdd,
             t!("prompt.git_worktree_add").to_string(),
@@ -235,14 +236,14 @@ impl App {
     fn load_worktree_chooser(&mut self, remove: bool, selected: Option<usize>) -> bool {
         let worktrees = crate::git::worktree_list(&self.root);
         if worktrees.is_empty() {
-            self.worktree_chooser = None;
+            self.chooser = None;
             return false;
         }
         let selected = selected
             .or_else(|| WorktreeChooser::current_in(&worktrees, &self.root))
             .unwrap_or(0)
             .min(worktrees.len() - 1);
-        self.worktree_chooser = Some(WorktreeChooser {
+        self.chooser.open_worktree(WorktreeChooser {
             worktrees,
             selected,
             remove,
@@ -251,29 +252,29 @@ impl App {
     }
 
     pub(super) fn worktree_chooser_key(&mut self, key: KeyEvent) {
-        let remove = self.worktree_chooser.as_ref().is_some_and(|c| c.remove);
+        let remove = self.chooser.worktree().is_some_and(|c| c.remove);
         match key.code {
             KeyCode::Up => {
-                if let Some(c) = self.worktree_chooser.as_mut() {
+                if let Some(c) = self.chooser.worktree_mut() {
                     c.selected = vix_list_state::up(c.selected);
                 }
             }
             KeyCode::Down => {
-                if let Some(c) = self.worktree_chooser.as_mut() {
+                if let Some(c) = self.chooser.worktree_mut() {
                     c.selected = vix_list_state::down(c.selected, c.worktrees.len());
                 }
             }
             KeyCode::Enter => self.activate_selected_worktree(),
             KeyCode::Char('d') | KeyCode::Delete => self.confirm_remove_selected_worktree(),
             KeyCode::Char('a') if !remove => self.begin_worktree_add(),
-            KeyCode::Esc => self.worktree_chooser = None,
+            KeyCode::Esc => self.chooser = None,
             _ => {}
         }
     }
 
     pub(super) fn worktree_chooser_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
-            && let Some(c) = self.worktree_chooser.as_mut()
+            && let Some(c) = self.chooser.worktree_mut()
             && idx < c.worktrees.len()
         {
             c.selected = idx;
@@ -284,7 +285,7 @@ impl App {
     /// `Enter` (or a click): remove the highlighted worktree in remove mode,
     /// switch to it otherwise.
     fn activate_selected_worktree(&mut self) {
-        if self.worktree_chooser.as_ref().is_some_and(|c| c.remove) {
+        if self.chooser.worktree().is_some_and(|c| c.remove) {
             self.confirm_remove_selected_worktree();
         } else {
             self.switch_to_selected_worktree();
@@ -293,7 +294,7 @@ impl App {
 
     /// The highlighted worktree, its index, and whether it holds the root.
     fn selected_worktree(&self) -> Option<(usize, crate::git::Worktree, bool)> {
-        let c = self.worktree_chooser.as_ref()?;
+        let c = self.chooser.worktree()?;
         let w = c.worktrees.get(c.selected)?.clone();
         let current = c.current(&self.root) == Some(c.selected);
         Some((c.selected, w, current))
@@ -314,7 +315,7 @@ impl App {
             self.status = t!("status.git_worktree_unavailable").into();
             return;
         }
-        self.worktree_chooser = None;
+        self.chooser = None;
         self.switch_workspace(&w.path, &[]);
     }
 
@@ -333,7 +334,7 @@ impl App {
             self.status = t!("status.git_worktree_current").into();
             return;
         }
-        self.worktree_chooser = None;
+        self.chooser = None;
         self.confirm = Some(Confirm {
             message: t!("confirm.git_worktree_remove", path = w.path.display()).to_string(),
             paths: vec![w.path],

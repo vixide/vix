@@ -1028,34 +1028,34 @@ fn git_stash_list_chooser_shows_pops_and_drops_after_confirming() {
     app.run_action("git.stash");
 
     app.run_action("git.stash_list");
-    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 2);
+    assert_eq!(app.chooser.stash().unwrap().entries.len(), 2);
 
     // `d` asks; `n` keeps the stash and brings the chooser back.
     app.on_key(key('d'));
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     assert_eq!(
         app.confirm.as_ref().map(|c| c.kind),
         Some(vix::app::ConfirmKind::GitStashDrop)
     );
     app.on_key(key('n'));
     assert!(app.confirm.is_none());
-    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 2);
+    assert_eq!(app.chooser.stash().unwrap().entries.len(), 2);
 
     // `d` then `y` drops the newest ("three").
     app.on_key(key('d'));
     app.on_key(key('y'));
-    assert_eq!(app.stash_chooser.as_ref().unwrap().entries.len(), 1);
+    assert_eq!(app.chooser.stash().unwrap().entries.len(), 1);
 
     // `a` applies the remaining one and keeps it.
     app.on_key(key('a'));
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
     t634_git(&dir, &["checkout", "--", "a.txt"]);
 
     // Enter shows its diff in a read-only tab.
     app.run_action("git.stash_list");
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     let tab = app.editor.active_tab().unwrap();
     assert_eq!(tab.path.as_deref(), Some(Path::new("stash@{0}")));
     assert!(tab.text().contains("+two"));
@@ -1064,12 +1064,12 @@ fn git_stash_list_chooser_shows_pops_and_drops_after_confirming() {
     // chooser closes.
     app.run_action("git.stash_list");
     app.on_key(key('p'));
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
 
     // No stashes: the chooser doesn't open.
     app.run_action("git.stash_list");
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
 
@@ -1091,7 +1091,7 @@ fn git_worktree_add_list_switch_and_remove() {
     assert!(wt.join("a.txt").is_file(), "{}", app.status);
 
     app.run_action("git.worktree_list");
-    let c = app.worktree_chooser.as_ref().unwrap();
+    let c = app.chooser.worktree().unwrap();
     assert_eq!(c.worktrees.len(), 2);
     assert_eq!(c.selected, 0, "the current worktree is highlighted");
     assert_eq!(c.worktrees[1].branch(), Some("wt-one"));
@@ -1101,7 +1101,7 @@ fn git_worktree_add_list_switch_and_remove() {
     assert!(app.confirm.is_none());
 
     // Remove mode: Enter asks, `y` removes, and the list comes back.
-    app.worktree_chooser = None;
+    app.chooser = None;
     app.run_action("git.worktree_remove");
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
@@ -1111,8 +1111,8 @@ fn git_worktree_add_list_switch_and_remove() {
     );
     app.on_key(key('y'));
     assert!(!wt.exists());
-    assert_eq!(app.worktree_chooser.as_ref().unwrap().worktrees.len(), 1);
-    app.worktree_chooser = None;
+    assert_eq!(app.chooser.worktree().unwrap().worktrees.len(), 1);
+    app.chooser = None;
 
     // Add another and switch to it through the project-switch path.
     app.run_action("git.worktree_add");
@@ -1123,7 +1123,7 @@ fn git_worktree_add_list_switch_and_remove() {
     app.run_action("git.worktree_list");
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.worktree_chooser.is_none());
+    assert!(app.chooser.worktree().is_none());
     let two = dir.parent().unwrap().join("wt-two").canonicalize().unwrap();
     assert_eq!(app.root.canonicalize().unwrap(), two);
     fs::remove_dir_all(dir.parent().unwrap()).ok();
@@ -1192,13 +1192,13 @@ fn gutter_base_changes_what_the_gutter_marks() {
     // The chooser lists head, index, disk and the branches, preselecting the
     // current base; choosing a row applies it.
     app.run_action("git.gutter_base");
-    let c = app.branch_chooser.as_ref().expect("chooser opens");
+    let c = app.chooser.branch().expect("chooser opens");
     assert!(c.gutter);
     assert_eq!(&c.branches[..3], ["head", "index", "disk"]);
     assert_eq!(c.branches[c.selected], "branch:base-branch");
     app.on_key(keycode(KeyCode::Up));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.branch_chooser.is_none());
+    assert!(app.chooser.branch().is_none());
     assert_ne!(app.settings.git_gutter_base, "branch:base-branch");
     fs::remove_dir_all(&dir).ok();
 }
@@ -1574,7 +1574,7 @@ fn stash_chooser_r_opens_the_stash_in_review() {
     app.run_action("git.stash");
     app.run_action("git.stash_list");
     app.on_key(key('r'));
-    assert!(app.stash_chooser.is_none());
+    assert!(app.chooser.stash().is_none());
     let state = app.review.as_ref().expect("the stash opens in review");
     assert_eq!(state.review.range, "stash@{0}");
     assert_eq!(state.review.files[0].path, "a.txt");
