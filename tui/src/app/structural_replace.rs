@@ -128,7 +128,7 @@ impl App {
 
     /// Apply one confirm-flow `decision` to the highlighted match: Quit clears the marks and
     /// ends; Skip moves to the next match; Replace rewrites this match (shifting the search
-    /// bounds by the size change) then moves on; ReplaceRest rewrites every remaining match.
+    /// bounds by the size change) then moves on; `ReplaceRest` rewrites every remaining match.
     /// Ends the session with a count status when no further match remains.
     fn sr_apply(&mut self, decision: Decision) {
         let area = self.editor_view();
