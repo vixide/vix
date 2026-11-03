@@ -179,7 +179,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 - **Code documentation for the App shell.** Rustdoc and inline comments were added across
   `tui/src/app.rs` and `tui/src/app/` (chooser, panel and Cowork handlers, search and
   query-replace, explorer and mouse routing). Documentation only; no behavior change.
-- **Code documentation pass (group 0).** Module, item and inline documentation (plus doctests) for `vix-editor-core`, `vix-im`, `vix-mcp-server`, `vix-oci`, `vix-project-env`, `vix-roam`, `vix-encoding`, `vix-input` and 14 smaller crates; no behavior change. Fixed several stale docs (for example `vix_roam::slugify`, `vix-column-view`'s `Outcome::Close`).
+- **Code documentation pass (group 0).** Module, item and inline documentation (plus runnable examples) for `vix-editor-core`, `vix-im`, `vix-mcp-server`, `vix-oci`, `vix-project-env`, `vix-roam`, `vix-encoding`, `vix-input` and 14 smaller crates; no behavior change. Fixed several stale docs (for example `vix_roam::slugify`, `vix-column-view`'s `Outcome::Close`).
 - **Code documentation pass, group 2.** Module docs, rustdoc, example tests and why-comments across `vix-authority`, `vix-git`, `vix-keybindings`, `vix-large-file`, `vix-modal`, `vix-cowork-net`, `vix-diff-view`, `vix-edit-value`, `vix-structural-replace` and 15 small tool/panel crates. Comments only; no change in what the code does. Fixed two stale docs (`vix_authority::install`, `vix_diff_view::build`).
 - **Code annotations, batch 3 (docs only).** Module, item and inline documentation across 25 crates (`vix-menu`, `vix-editor`, `vix-settings`, `vix-org`, `vix-terminal`, `vix-fhir`, and others); no behavior change.
 
