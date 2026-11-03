@@ -6,16 +6,45 @@
 //! text: [`matches()`], [`next_match`], [`replace_all`], [`replace_one`], and the
 //! replacement-template [`unescape`]. All operate on `&str` with **character**
 //! offsets; the host owns the buffer and applies the returned text.
+//!
+//! # Character vs byte offsets
+//!
+//! The `regex` crate reports byte offsets; the editor addresses text by
+//! character. Every public function here takes and returns *character*
+//! offsets and converts internally ([`matches()`] in one pass, the others via
+//! prefix counting), so callers never see byte positions and multi-byte text
+//! cannot split a character.
+//!
+//! # Replacement templates
+//!
+//! In regex mode a replacement is a `regex` template: `$1` / `${name}` expand
+//! to capture groups, and [`unescape`] first turns `\n`, `\t`, `\r`, `\\`
+//! into the real characters. In literal mode the replacement is inserted
+//! verbatim (no `$` expansion, no escapes).
+//!
+//! Spec: `crates/vix-find-panel/spec/index.md`.
 
 use regex::Regex;
 
 /// Byte offset of character index `ch` in `text` (or `text.len()` if past the end).
+/// O(n) in `ch`; callers needing many conversions build a table instead (see
+/// [`matches()`]).
 fn char_to_byte(text: &str, ch: usize) -> usize {
     text.char_indices().nth(ch).map_or(text.len(), |(b, _)| b)
 }
 
 /// All matches of `re` in `text`, as `(char_start, char_end)` ranges in
 /// ascending order. Byte→char conversion is done with one pass over the text.
+///
+/// Zero-width matches (e.g. `^`) yield empty ranges.
+///
+/// # Examples
+///
+/// ```
+/// let re = regex::Regex::new("é").unwrap();
+/// // Character offsets, not bytes: `é` is two bytes in UTF-8.
+/// assert_eq!(vix_find_panel::matches("aéé", &re), [(1, 2), (2, 3)]);
+/// ```
 #[must_use]
 pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
     // Byte offset where each character starts; `partition_point` maps byte→char.
@@ -28,6 +57,17 @@ pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
 
 /// The first match of `re` at or after character offset `from_char`, as a
 /// `(char_start, char_end)` range, or `None` if there is none.
+///
+/// "At or after" compares the match *start*: a match straddling `from_char` is
+/// skipped. No wrap-around; the host retries from 0 for wrapping search.
+///
+/// # Examples
+///
+/// ```
+/// let re = regex::Regex::new("ab").unwrap();
+/// assert_eq!(vix_find_panel::next_match("ab ab", &re, 1), Some((3, 5)));
+/// assert_eq!(vix_find_panel::next_match("ab ab", &re, 4), None);
+/// ```
 #[must_use]
 pub fn next_match(text: &str, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
     let from_byte = char_to_byte(text, from_char);
@@ -41,8 +81,18 @@ pub fn next_match(text: &str, re: &Regex, from_char: usize) -> Option<(usize, us
 /// Replace every match of `re` in `text`. In `regex_mode` the `replacement` is
 /// [`unescape`]d and `$group` references expand; otherwise it is inserted
 /// literally. Returns the new text and the number of replacements.
+///
+/// # Examples
+///
+/// ```
+/// let re = regex::Regex::new("a").unwrap();
+/// let (out, n) = vix_find_panel::replace_all("banana", &re, false, "$1");
+/// assert_eq!((out.as_str(), n), ("b$1n$1n$1", 3)); // literal: no expansion
+/// ```
 #[must_use]
 pub fn replace_all(text: &str, re: &Regex, regex_mode: bool, replacement: &str) -> (String, usize) {
+    // Counted separately because `Regex::replace_all` does not report how many
+    // substitutions it made.
     let count = re.find_iter(text).count();
     let new = if regex_mode {
         let rep = unescape(replacement);
@@ -59,6 +109,19 @@ pub fn replace_all(text: &str, re: &Regex, regex_mode: bool, replacement: &str) 
 /// `$group` references expand, otherwise it is inserted literally. Returns the
 /// new text and the char offset just past the inserted text (where searching
 /// should resume), or `None` if no match starts at `at_char`.
+///
+/// The resume offset is measured in the *new* text and lands after the
+/// replacement, so replacing with text that itself contains the pattern does
+/// not loop forever.
+///
+/// # Examples
+///
+/// ```
+/// let re = regex::Regex::new("o").unwrap();
+/// let (out, resume) = vix_find_panel::replace_one("foo", &re, false, "00", 1).unwrap();
+/// assert_eq!((out.as_str(), resume), ("f00o", 3));
+/// assert!(vix_find_panel::replace_one("foo", &re, false, "x", 0).is_none());
+/// ```
 #[must_use]
 pub fn replace_one(
     text: &str,
@@ -71,6 +134,8 @@ pub fn replace_one(
     for caps in re.captures_iter(text) {
         let m = caps.get(0)?;
         if m.start() == at_byte {
+            // `caps.expand` is what makes `$1` work; it needs the captures, which
+            // is why this walks `captures_iter` rather than `find_iter`.
             let mut exp = String::new();
             if regex_mode {
                 caps.expand(template, &mut exp);
@@ -84,6 +149,7 @@ pub fn replace_one(
             let resume = at_char + exp.chars().count();
             return Some((new, resume));
         }
+        // Matches are ordered by start, so once past `at_byte` none can match.
         if m.start() > at_byte {
             break;
         }
@@ -93,6 +159,15 @@ pub fn replace_one(
 
 /// Interpret `\n`, `\t`, `\r`, `\\` escapes in a regex replacement template,
 /// leaving `$group` references intact for the regex engine to expand.
+///
+/// An unrecognised escape (`\q`) or a trailing lone backslash keeps the
+/// backslash as-is.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(vix_find_panel::unescape(r"a\tb\n$1\q"), "a\tb\n$1\\q");
+/// ```
 #[must_use]
 pub fn unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -177,8 +252,19 @@ pub enum Field {
 
 /// A path filter for workspace-wide search: optional include and exclude regexes
 /// tested against a file path. Empty patterns mean "no constraint".
+///
+/// # Examples
+///
+/// ```
+/// let f = vix_find_panel::PathFilter::new(r"\.rs$", "target/");
+/// assert!(f.allows("src/main.rs"));
+/// assert!(!f.allows("target/debug/x.rs"));
+/// assert!(!f.allows("README.md"));
+/// ```
 pub struct PathFilter {
+    /// Paths must match this to pass; `None` when unset or invalid.
     include: Option<Regex>,
+    /// Paths matching this are rejected; `None` when unset or invalid.
     exclude: Option<Regex>,
 }
 
@@ -188,6 +274,7 @@ impl PathFilter {
     /// half-typed regex never hides every file.
     #[must_use]
     pub fn new(include: &str, exclude: &str) -> Self {
+        // Regex::new(..).ok() swallows the error on purpose (see doc above).
         let compile = |p: &str| (!p.is_empty()).then(|| Regex::new(p).ok()).flatten();
         PathFilter {
             include: compile(include),
@@ -321,6 +408,24 @@ impl SearchBar {
 
     /// Build the effective regex pattern from the query and the toggles.
     /// Returns `None` for an empty query.
+    ///
+    /// Literal queries are `regex::escape`d; regex queries are used as typed
+    /// (and may fail to compile while half-typed -- compiling is the host's
+    /// job). Whole-word wraps the result in `\b..\b`, and case-insensitivity is
+    /// applied last as a `(?i)` prefix.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_find_panel::{Flags, SearchBar};
+    ///
+    /// let mut bar = SearchBar::new(false);
+    /// bar.query = "a.b".into();
+    /// assert_eq!(bar.pattern().as_deref(), Some(r"(?i)a\.b")); // smart-case, no capitals
+    /// bar.query = "A.b".into();
+    /// bar.flags.insert(Flags::WHOLE_WORD);
+    /// assert_eq!(bar.pattern().as_deref(), Some(r"\bA\.b\b")); // capital -> sensitive
+    /// ```
     #[must_use]
     pub fn pattern(&self) -> Option<String> {
         if self.query.is_empty() {

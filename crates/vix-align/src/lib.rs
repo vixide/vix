@@ -1,9 +1,16 @@
 //! Align lines on a delimiter (`=`, `:`, `,`, `|`, …).
 //!
 //! Each line's first occurrence of the delimiter is padded so every delimiter
-//! lands in the same column, with exactly one space before it and the text after
-//! it preserved. Lines without the delimiter are left unchanged. Leading
-//! indentation is preserved.
+//! lands in the same column, with at least one space before it and exactly one
+//! space after it (whitespace that followed the delimiter is collapsed to that
+//! one space; the rest of the line, including trailing whitespace, is kept).
+//! Lines without the delimiter are left unchanged. Leading indentation is
+//! preserved and counts toward the alignment width.
+//!
+//! This is a pure string transform with no editor state; the editor's
+//! "Align" action calls it on the selected lines. Widths are measured in
+//! `char`s, not display columns, so wide (CJK) or combining characters can
+//! look off by a cell. See `crates/vix-align/spec/index.md` for the spec.
 //!
 //! ```
 //! let out = vix_align::on_delimiter("a = 1\nbbb = 2\n", '=');
@@ -12,8 +19,22 @@
 
 /// Align every line of `text` that contains `delim` so the (first) delimiter sits
 /// in a common column. Preserves a trailing newline if present.
+///
+/// Only the first `delim` on a line splits it; later occurrences are ordinary
+/// text. Lines lacking `delim` are copied through verbatim and do not
+/// contribute to the column width. If no line contains `delim` the input is
+/// returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// let out = vix_align::on_delimiter("x: 1\n# note\nyyy: 2", ':');
+/// assert_eq!(out, "x   : 1\n# note\nyyy : 2");
+/// ```
 #[must_use]
 pub fn on_delimiter(text: &str, delim: char) -> String {
+    // `split('\n')` yields a final empty piece for a trailing newline and
+    // `join` restores it, so the check below is belt-and-braces for that case.
     let had_trailing_newline = text.ends_with('\n');
     let lines: Vec<&str> = text.split('\n').collect();
 
@@ -32,6 +53,7 @@ pub fn on_delimiter(text: &str, delim: char) -> String {
         match part {
             Some((left, right)) => {
                 let left = left.trim_end();
+                // `width` is the max over all split lines, so this never underflows.
                 let pad = " ".repeat(width - left.chars().count());
                 out.push(format!("{left}{pad} {delim} {}", right.trim_start()));
             }

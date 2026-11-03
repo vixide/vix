@@ -7,19 +7,43 @@
 //! `--import-settings`) runs before any `App` exists, so [`collect`] and
 //! [`apply`] work from a bare [`vix_settings::Settings`] value and real
 //! filesystem paths only.
+//!
+//! # Flow
+//!
+//! Export: [`collect`] gathers the files that exist into a [`Bundle`] and
+//! [`write()`] saves it as JSON. Import: [`read()`] parses the JSON and [`apply`]
+//! writes each entry back, backing up any file it replaces. A bundle may be
+//! shared between users, so [`apply`] treats it as untrusted input (T558): entry
+//! names are validated and the command-bearing settings are never imported.
+//!
+//! # Examples
+//! ```no_run
+//! // `no_run`: touches the real per-user config directory.
+//! use vix_settings::Settings;
+//! let bundle = vix_settings_bundle::collect(&Settings::load());
+//! vix_settings_bundle::write(&bundle, std::path::Path::new("vix-settings.json"))?;
+//! # Ok::<(), std::io::Error>(())
+//! ```
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use vix_settings::Settings;
 
+/// Bundle schema version stamped into every [`Bundle`]. Written on export; note
+/// that [`read()`] does not currently check it, so it is reserved for a future
+/// migration rather than enforced today.
 const FORMAT: u32 = 1;
 
 /// A settings bundle: every collected file's bundle-relative name mapped to
 /// its full text content.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Bundle {
+    /// Schema version (see `FORMAT`).
     format: u32,
+    /// Bundle-relative name (`config.toml`, `macros.toml`, `keybindings.toml`,
+    /// `user_dictionary.txt`, or `theme/<file>.json`) to file text. A `BTreeMap`
+    /// keeps the JSON output and [`apply`] order deterministic.
     entries: BTreeMap<String, String>,
 }
 
@@ -90,7 +114,8 @@ fn active_theme_file(settings: &Settings) -> Option<(String, String)> {
     None
 }
 
-/// Serialize `bundle` as pretty-printed JSON to `path`.
+/// Serialize `bundle` as pretty-printed JSON to `path` (overwriting it; unlike
+/// [`apply`] no backup is made).
 ///
 /// # Errors
 /// Returns an [`std::io::Error`] if `path` can't be written.
@@ -130,7 +155,9 @@ pub enum EntryOutcome {
 /// command-bearing fields were preserved rather than imported (T558 --
 /// always `false` except for a `config.toml` entry whose `ai_command`/
 /// `ai_api_key_command`/`test_command`/`lsp_servers` differ from the
-/// current settings; see `sanitize_config_toml` for why). In the
+/// current settings; see `sanitize_config_toml` for why; the incoming
+/// `config.toml` is re-serialized, so its comments and formatting are not
+/// preserved). In the
 /// bundle's own key order. See the crate spec for the backup-before-
 /// overwrite policy.
 #[must_use]
@@ -196,6 +223,13 @@ fn preserve_command_fields(current: &Settings, mut incoming: Settings) -> (Setti
     (incoming, differs)
 }
 
+/// Write one already-sanitized entry to its destination.
+///
+/// An existing destination is first renamed aside to `<file>.bak` (replacing
+/// any older `.bak`, since `rename` overwrites); if that rename fails the write
+/// still proceeds and the outcome is plain `Written`. Failure to create the
+/// parent directory is ignored here because the following write then fails and
+/// reports [`EntryOutcome::Skipped`].
 fn apply_one(name: &str, content: &str) -> EntryOutcome {
     let Some(dest) = destination_for(name) else {
         return EntryOutcome::Skipped;

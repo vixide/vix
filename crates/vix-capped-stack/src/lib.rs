@@ -10,12 +10,29 @@
 //! (that's each crate's own `Snapshot`/`restore` logic) — so it doesn't
 //! collide in name or purpose with `vix-undo-store` (persistent, per-file
 //! undo history saved to disk, a genuinely different feature).
+//!
+//! The eviction is `Vec::remove(0)`, O(n) in the cap; acceptable because the
+//! callers' caps are small (a few hundred snapshots) and pushes are
+//! user-action-rate. See `crates/vix-capped-stack/spec/index.md`.
 
 /// Push `item` onto `stack`, evicting the oldest entry (index `0`) first if
 /// that would grow `stack` past `cap` entries. `cap == 0` degenerates to "the
 /// stack never holds anything" rather than panicking or growing unbounded.
+///
+/// At most one entry is evicted per call (an `if`, not a `while`), so a stack
+/// that already exceeds `cap` by more than one stays over cap; callers keep it
+/// at or under `cap` by always pushing through this function.
+///
+/// # Examples
+///
+/// ```
+/// let mut stack = vec![1, 2, 3];
+/// vix_capped_stack::push_capped(&mut stack, 4, 3);
+/// assert_eq!(stack, [2, 3, 4]);
+/// ```
 pub fn push_capped<T>(stack: &mut Vec<T>, item: T, cap: usize) {
     stack.push(item);
+    // With `cap == 0` the item just pushed is immediately evicted again.
     if stack.len() > cap {
         stack.remove(0);
     }

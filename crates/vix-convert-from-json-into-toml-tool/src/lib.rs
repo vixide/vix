@@ -3,8 +3,24 @@
 //! The JSON document is parsed into a generic value and re-serialized as TOML.
 //! TOML documents must be a table at the top level, so a JSON array or scalar
 //! input is reported as an error.
+//!
+//! Like its sibling convert tools this is a thin adapter exposing the uniform
+//! `convert(&str) -> Result<String, ConvertError>` shape; error construction is
+//! shared via `vix_convert_tabular::ConvertError`. Spec:
+//! `crates/vix-convert-from-json-into-toml-tool/spec/index.md`.
 
 /// Convert JSON `input` to TOML.
+///
+/// The output is pretty-printed. JSON `null` has no TOML equivalent, so a
+/// document containing one is rejected by the TOML serializer (surfaced as a
+/// render error) rather than silently dropped.
+///
+/// # Examples
+/// ```
+/// let toml = vix_convert_from_json_into_toml_tool::convert(r#"{"n":3}"#).unwrap();
+/// assert!(toml.contains("n = 3"));
+/// assert!(vix_convert_from_json_into_toml_tool::convert("[1]").is_err());
+/// ```
 ///
 /// # Errors
 /// Returns an error when the input is not valid JSON, or when it is not a

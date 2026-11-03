@@ -4,6 +4,8 @@
 //! Defined here so `Settings` round-trips every section in every build — a
 //! build without a capability must still load and re-save that capability's
 //! config verbatim. `vix-db`, `vix-dap` and `vix-org-capture` re-export them.
+//!
+//! Spec: `crates/vix-settings/spec/index.md`.
 
 use serde::{Deserialize, Serialize};
 

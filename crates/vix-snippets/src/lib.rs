@@ -5,6 +5,22 @@
 //! `spec/index.md`) gathered from four scopes: bundled, global,
 //! media-type, and project. The tabstop syntax in a snippet body is parsed by
 //! [`vix_snippet_tool::parse`]; this module handles the files and the merge.
+//!
+//! Precedence, lowest to highest: bundled (added by the caller), global,
+//! media-type (config dir, then project `config/`), project file. [`merge`]
+//! lets a later snippet shadow an earlier one **by name**. I/O is lenient on
+//! read (missing or malformed files yield no snippets, never an error) and
+//! strict on write ([`save_file`] returns `io::Result`). The [`postfix`] module
+//! adds expression-wrapping completion (`expr.if`). Spec:
+//! `crates/vix-snippets/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_snippets::{parse_json, Scope};
+//! let json = r#"{"Log": {"prefix": "log", "body": ["println!(\"{}\", $1);"]}}"#;
+//! let s = parse_json(json, &Scope::Global);
+//! assert_eq!(s[0].prefixes, ["log"]);
+//! ```
 
 pub mod postfix;
 
@@ -17,9 +33,11 @@ pub enum Scope {
     Bundled,
     /// `<config>/global/snippets/snippets.json`.
     Global,
-    /// `<config>/media-types/<type>/snippets/snippets.json` for the given type.
+    /// Snippet files under `<config>/media-types/<type>/<subtype>/snippets/` (and
+    /// the project's `config/` equivalent) for the given media type; see
+    /// [`media_type_rel`] and [`load_scoped`].
     MediaType(String),
-    /// The project's snippet file.
+    /// The project's configured snippet file (see [`project_file`]).
     Project,
 }
 
@@ -54,6 +72,9 @@ pub struct Snippet {
 
 /// Parse a snippet JSON document into snippets tagged with `scope`. Tolerant: a
 /// malformed document yields an empty list; entries missing a `body` are skipped.
+///
+/// `body` and `prefix` may each be a string or an array (body lines are joined
+/// with `\n`), as in VS Code snippet files. The result is sorted by name.
 #[must_use]
 pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
     let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(json) else {
@@ -81,14 +102,16 @@ pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
             scope: scope.clone(),
         });
     }
-    // Stable order by name so the picker is deterministic.
+    // Stable order by name so the picker is deterministic (JSON object order is
+    // not guaranteed to be meaningful).
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
 }
 
 /// Serialize `snippets` back to the same JSON shape [`parse_json`] reads:
 /// `{"Name": {"prefix": ..., "body": [...], "description": "..."}}` (T205).
-/// `scope`/`name` collisions aren't resolved here — the caller decides
+/// Bodies are always written as an array of lines; a lone prefix is written as a
+/// plain string. `scope`/`name` collisions aren't resolved here — the caller decides
 /// whether a later entry overwrites an earlier one before calling this.
 #[must_use]
 pub fn to_json(snippets: &[Snippet]) -> String {
@@ -168,6 +191,7 @@ pub fn bundled() -> Vec<Snippet> {
 }
 
 /// Vix's config directory (e.g. `~/.config/vix/`), or `None` if undeterminable.
+/// Derived as the parent of the settings file so snippets live beside it.
 #[must_use]
 pub fn config_dir() -> Option<PathBuf> {
     vix_settings::Settings::config_path().and_then(|p| p.parent().map(Path::to_path_buf))
@@ -222,7 +246,8 @@ pub fn save_file(path: &Path, snippets: &[Snippet]) -> std::io::Result<()> {
 }
 
 /// Load every `*.json` file in `dir` (sorted by name), parsing each with `scope`.
-/// A missing directory yields `[]`.
+/// A missing directory yields `[]`. Files are read in path order so that when
+/// two files define the same name the result is deterministic.
 #[must_use]
 pub fn load_dir(dir: &Path, scope: &Scope) -> Vec<Snippet> {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -287,7 +312,8 @@ pub fn merge(mut base: Vec<Snippet>, extra: Vec<Snippet>) -> Vec<Snippet> {
     base
 }
 
-/// Find the first snippet whose prefix exactly matches `word`.
+/// Find the first snippet (in library order) whose prefix exactly matches `word`
+/// (case-sensitive; this is the Tab-expansion lookup).
 #[must_use]
 pub fn find_by_prefix<'a>(snippets: &'a [Snippet], word: &str) -> Option<&'a Snippet> {
     snippets
@@ -297,6 +323,10 @@ pub fn find_by_prefix<'a>(snippets: &'a [Snippet], word: &str) -> Option<&'a Sni
 
 /// Filter + selection state for the Snippets picker (indices into a library
 /// `&[Snippet]` held by the host).
+///
+/// The picker never owns the library: every method that needs it takes
+/// `&[Snippet]`, so the host can reload snippets without invalidating the state.
+/// `selected` and `scroll` index the *filtered* list, not the library.
 #[derive(Default)]
 pub struct Picker {
     /// Case-insensitive filter over name, prefix, and description.
@@ -353,7 +383,7 @@ impl Picker {
         self.scroll = 0;
     }
 
-    /// Move the highlight up `n`, clamped.
+    /// Move the highlight up `n` rows, clamped at the top.
     pub fn up(&mut self, n: usize) {
         self.selected = vix_list_state::page_up(self.selected, n);
     }

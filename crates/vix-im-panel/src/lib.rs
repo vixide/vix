@@ -3,6 +3,17 @@
 //! what Enter does. Drawing lives in the App shell (`tui/src/ui/`); this
 //! crate never draws, sends or opens anything. [`Panel::key`] turns a key
 //! into an [`Outcome`] for the App to carry out.
+//!
+//! # Design
+//!
+//! The panel owns *view* state only; the conversations themselves live in the
+//! [`Inbox`], which every method that needs messages takes by reference. That
+//! keeps one source of truth and means the panel can never show a stale
+//! message list -- but it also means the stored `selected` / `message`
+//! indices can fall out of range when the inbox shrinks, which is what
+//! [`Panel::clamp`] repairs. Index arithmetic is saturating throughout.
+//!
+//! Spec: `crates/vix-im-panel/spec/index.md`.
 
 use vix_im::{CodeRef, Command, CommandError, Conversation, ConversationId, Inbox, Input};
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
@@ -50,13 +61,32 @@ pub enum Outcome {
 }
 
 /// The panel's state.
+///
+/// # Examples
+///
+/// ```
+/// use vix_im_panel::Panel;
+///
+/// let mut panel = Panel::new();
+/// panel.insert_str("hello");
+/// assert_eq!(panel.input(), "hello");
+/// panel.left();
+/// panel.backspace();
+/// assert_eq!(panel.input(), "helo");
+/// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Panel {
+    /// Index of the selected conversation in the inbox.
     selected: usize,
+    /// Whether the input line or the message list has the keyboard.
     focus: Focus,
+    /// Highlighted message index; meaningful only while `focus` is `Messages`.
     message: usize,
+    /// First visible message row, written by `ensure_visible`.
     scroll: usize,
+    /// The input line (never contains control characters or newlines).
     input: String,
+    /// Cursor position as a byte offset; invariant: always on a char boundary.
     cursor: usize,
 }
 
@@ -95,6 +125,9 @@ impl Panel {
         true
     }
 
+    /// Select the conversation at `at` (must be in range): mark it read, focus
+    /// the input and put the highlight on its newest message. Shared by every
+    /// way of changing conversation so they behave identically.
     fn select_index(&mut self, inbox: &mut Inbox, at: usize) {
         self.selected = at;
         self.focus = Focus::Input;
@@ -110,6 +143,7 @@ impl Panel {
         if len == 0 {
             return None;
         }
+        // `min(len - 1)` first: `selected` may be stale after removals.
         self.select_index(inbox, (self.selected.min(len - 1) + 1) % len);
         self.selected_id(inbox).cloned()
     }
@@ -121,6 +155,7 @@ impl Panel {
         if len == 0 {
             return None;
         }
+        // `+ len - 1` is `-1` mod `len` without underflowing at index 0.
         self.select_index(inbox, (self.selected.min(len - 1) + len - 1) % len);
         self.selected_id(inbox).cloned()
     }
@@ -234,6 +269,8 @@ impl Panel {
     pub fn insert_str(&mut self, text: &str) {
         let clean = vix_im::sanitize(text);
         self.focus = Focus::Input;
+        // Sanitizing collapses to a single line, so the input never holds a
+        // newline; `clean.len()` (bytes) keeps `cursor` on a boundary.
         self.input.insert_str(self.cursor, &clean);
         self.cursor += clean.len();
     }
@@ -283,6 +320,7 @@ impl Panel {
         self.cursor = 0;
     }
 
+    /// Byte offset of the character before the cursor, if any.
     fn prev_boundary(&self) -> Option<usize> {
         self.input[..self.cursor]
             .char_indices()
@@ -290,6 +328,7 @@ impl Panel {
             .map(|(i, _)| i)
     }
 
+    /// Byte offset just past the character under the cursor, if any.
     fn next_boundary(&self) -> Option<usize> {
         self.input[self.cursor..]
             .chars()
@@ -306,7 +345,9 @@ impl Panel {
         let result = match vix_im::parse_input(&self.input) {
             Ok(Input::Text(text)) => Submit::Send(text),
             Ok(Input::Command(command)) => Submit::Command(command),
+            // `Input` is non-exhaustive; any future variant is treated as nothing to do.
             Ok(_) => Submit::Nothing,
+            // Return before `clear_input` so the bad command stays editable.
             Err(error) => return Submit::Error(error),
         };
         self.clear_input();
@@ -322,12 +363,15 @@ impl Panel {
     /// edit the input (typing in the list moves to the input first); `Esc`
     /// gives focus back to the editor.
     pub fn key(&mut self, key: KeyEvent, inbox: &mut Inbox) -> Outcome {
+        // Kitty-protocol terminals report releases too; acting on them would
+        // double every keystroke.
         if key.is_release() {
             return Outcome::None;
         }
         let selected = |id: Option<ConversationId>| id.map_or(Outcome::None, Outcome::Selected);
         match key.code {
             KeyCode::Esc => return Outcome::Close,
+            // Terminals deliver Shift+Tab either as `BackTab` or as `Tab` + SHIFT.
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 return selected(self.prev_conversation(inbox));
             }
@@ -349,6 +393,7 @@ impl Panel {
             KeyCode::End => self.end(),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
+            // Ctrl/Alt chords are not text; leave them for the host's keymap.
             KeyCode::Char(c)
                 if !key
                     .modifiers

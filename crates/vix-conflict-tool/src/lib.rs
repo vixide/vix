@@ -11,6 +11,21 @@
 //! [`find`] locates the block containing a given line; the host then replaces
 //! that line range with the chosen side (ours / theirs / both) via
 //! [`Resolution`].
+//!
+//! Two scanners share one marker grammar: [`find`] returns a single block
+//! (the one under, or next after, the cursor) and [`find_all`] returns every
+//! block, feeding the [`List`] state of the Conflict overlay (T556).
+//!
+//! # Marker grammar and limits
+//!
+//! A marker is recognised by its line *starting with* seven `<`, `=` or `>`
+//! (trailing whitespace trimmed first), so labels after the marker are
+//! ignored. Nesting is not supported. An unterminated block (missing `=======`
+//! or `>>>>>>>`) ends the scan: that block and anything after it are not
+//! reported. `diff3`-style `|||||||` base sections are not recognised; the
+//! base lines end up inside [`Conflict::ours`].
+//!
+//! Spec: `crates/vix-conflict-tool/spec/index.md`.
 
 /// Which side of a conflict to keep.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -23,8 +38,8 @@ pub enum Resolution {
     Both,
 }
 
-/// A located conflict block: the inclusive-exclusive line range it spans and the
-/// two sides' text (with line endings).
+/// A located conflict block: the half-open line range `start..end` it spans
+/// (both marker lines included) and the two sides' text (with line endings).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Conflict {
     /// First line (0-based) — the `<<<<<<<` marker.
@@ -41,6 +56,8 @@ impl Conflict {
     /// The replacement text for a given resolution.
     #[must_use]
     pub fn resolved(&self, how: Resolution) -> String {
+        // Each side keeps its own line endings, so `Both` is a plain concat: a
+        // final line lacking a newline would run into the next side's first line.
         match how {
             Resolution::Ours => self.ours.clone(),
             Resolution::Theirs => self.theirs.clone(),
@@ -51,6 +68,18 @@ impl Conflict {
 
 /// Find every conflict block in `text`, in source order (T556, the Conflict
 /// overlay). [`find`]'s single-block scan, generalized.
+///
+/// Scanning stops at the first unterminated block (see the module docs).
+///
+/// # Examples
+///
+/// ```
+/// let text = "a\n<<<<<<< HEAD\nmine\n=======\nyours\n>>>>>>> b\nz\n";
+/// let all = vix_conflict_tool::find_all(text);
+/// assert_eq!(all.len(), 1);
+/// assert_eq!((all[0].start, all[0].end), (1, 6));
+/// assert_eq!(all[0].ours, "mine\n");
+/// ```
 #[must_use]
 pub fn find_all(text: &str) -> Vec<Conflict> {
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
@@ -164,7 +193,16 @@ impl List {
 
 /// Find the conflict block containing line `at` (0-based). When `at` is not
 /// inside a block, returns the first block at or after it (so a single action
-/// resolves the next conflict).
+/// resolves the next conflict). Returns `None` when there is no such block
+/// (including when every later block is unterminated).
+///
+/// # Examples
+///
+/// ```
+/// let text = "<<<<<<< HEAD\nmine\n=======\nyours\n>>>>>>> b\n";
+/// let c = vix_conflict_tool::find(text, 2).unwrap();
+/// assert_eq!(c.resolved(vix_conflict_tool::Resolution::Theirs), "yours\n");
+/// ```
 #[must_use]
 pub fn find(text: &str, at: usize) -> Option<Conflict> {
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
@@ -184,7 +222,7 @@ pub fn find(text: &str, at: usize) -> Option<Conflict> {
                 ours: lines[start + 1..sep].concat(),
                 theirs: lines[sep + 1..endm].concat(),
             };
-            // The block containing `at` wins; otherwise remember the first block
+            // Same scan as `find_all`, but returns early: the block containing `at` wins; otherwise remember the first block
             // beginning at/after `at` as the fallback ("next conflict").
             if at >= conflict.start && at < conflict.end {
                 return Some(conflict);

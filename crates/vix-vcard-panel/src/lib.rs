@@ -6,6 +6,12 @@
 //! readable labels, appending `TYPE` parameters (e.g. `Phone (work)`), and
 //! flattening structured `N`/`ADR` values. Pure data; the host renders the rows
 //! and inserts the selected value into the editor.
+//!
+//! Parsing is not done here: [`vix_vcard_parser`] produces the [`Vcard`]; this
+//! crate only maps it to display rows and tracks selection via the shared
+//! `vix-list-state` helpers (the same ones the other list panels use).
+//!
+//! Spec: `crates/vix-vcard-panel/spec/index.md`.
 
 use vix_vcard_parser::Vcard;
 
@@ -19,6 +25,9 @@ pub struct Row {
 }
 
 /// A readable label for a vCard property name, or empty to use the raw name.
+///
+/// Names are matched upper-case exactly as the parser stores them; unknown
+/// and `X-` extension properties fall through to the raw name in [`rows`].
 fn label_for(name: &str) -> &'static str {
     match name {
         "FN" => "Name",
@@ -44,6 +53,8 @@ fn label_for(name: &str) -> &'static str {
 }
 
 /// Properties not worth showing as a row (binary blobs and bookkeeping).
+/// `PHOTO`/`LOGO`/`SOUND`/`KEY` are base64 payloads that would swamp the table;
+/// `PRODID`/`REV`/`UID` are machine metadata of no use to someone browsing.
 fn is_hidden(name: &str) -> bool {
     matches!(
         name,
@@ -52,6 +63,22 @@ fn is_hidden(name: &str) -> bool {
 }
 
 /// Build display rows for `vcard`.
+///
+/// One row per visible property, in file order. The label is the friendly
+/// name (or the raw property name if unknown) with any `TYPE` parameter
+/// appended in parentheses. `N` and `ADR` values are structured
+/// `;`-separated components: empty components are dropped and the rest are
+/// joined with `", "`. Other values have newlines replaced by spaces so each
+/// row stays on one line.
+///
+/// # Examples
+///
+/// ```
+/// let v = vix_vcard_parser::parse("FN:Ada\nTEL;TYPE=work:555\n");
+/// let rows = vix_vcard_panel::rows(&v);
+/// assert_eq!(rows[0].label, "Name");
+/// assert_eq!(rows[1].label, "Phone (work)");
+/// ```
 #[must_use]
 pub fn rows(vcard: &Vcard) -> Vec<Row> {
     let mut rows = Vec::new();
@@ -85,6 +112,9 @@ pub fn rows(vcard: &Vcard) -> Vec<Row> {
 }
 
 /// Selection + scroll state for a single-vCard view.
+///
+/// `rows` is computed once in [`Panel::open`] and is not re-derived if
+/// `vcard` is mutated afterwards.
 pub struct Panel {
     /// The parsed vCard.
     pub vcard: Vcard,

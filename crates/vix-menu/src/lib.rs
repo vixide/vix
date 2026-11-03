@@ -1,10 +1,41 @@
-//! Top menu bar with keyboard-navigable dropdowns (one level of submenus).
+//! Top menu bar with keyboard-navigable dropdowns (a dropdown plus up to two
+//! nested submenu levels).
 //!
 //! Menu items carry an `action` string that `App::run_action` dispatches; the
 //! command palette reuses the very same action names. Display text is stored as
 //! an i18n key (see `locales/`) and translated at render time via [`Item::label`]
 //! and [`MenuDef::title`], so the bar follows the active locale. An item may
 //! instead open a nested submenu (e.g. View → Editor, Edit → Find).
+//!
+//! # Structure
+//!
+//! * The menu *data* is a tree of `const &[Item]` slices (one per dropdown or
+//!   submenu, e.g. `FILE`, `TOOLS_INSERT_SQL`) wired together by
+//!   parent entries whose `submenu` points at the child slice. Only the few menus whose contents are
+//!   known at run time (View → Theme / Locale / Time Zone) are built in
+//!   `build_menus` and leaked to `'static`, so every [`Item`] can stay `Copy`
+//!   and hold `&'static` data.
+//! * [`menus`] returns the cached bar; [`menus_without_ai`] is the same bar
+//!   minus `ai.*` items (the runtime `ai = "off"` switch). A build that
+//!   compiles a capability out installs [`set_action_filter`] so its leaves
+//!   (and any menu left empty) disappear.
+//! * [`Menu`] is the pure open/highlight state machine the host drives from
+//!   key and mouse events: [`Menu::left`]/[`Menu::right`]/[`Menu::up`]/
+//!   [`Menu::down`]/[`Menu::enter`]/[`Menu::type_ahead`]. It never runs an
+//!   action itself; [`Menu::enter`] hands back the action id for the host.
+//!   Rendering lives in the App shell's `src/ui.rs`, not here.
+//!
+//! # Invariants
+//!
+//! * Every leaf `action` must have exactly one `run_action` arm, and label
+//!   keys must exist in `crates/vix-i18n/locales/*.yml`; tests in the App
+//!   shell and `vix-action-catalog` guard both.
+//! * Separators ([`SEPARATOR`]) are never selectable: all navigation helpers
+//!   skip them.
+//! * [`Menu`] indices always refer to [`Menu::defs`], which depends on
+//!   [`Menu::ai_hidden`].
+//!
+//! The owning spec is `crates/vix-menu/spec/index.md`.
 
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
@@ -114,6 +145,8 @@ impl Item {
 /// itself for a missing translation, so a result equal to the looked-up key means
 /// "no help defined". Shared by [`Item::help`] and [`MenuDef::help`].
 #[must_use]
+// `t!` returns the key itself for a missing translation, hence the comparison
+// below; this keeps help text optional per item without a separate registry.
 fn help_text(key: &str) -> Option<String> {
     let help_key = format!("{key}.help");
     let text = t!(&help_key).to_string();
@@ -153,6 +186,8 @@ impl MenuDef {
     }
 }
 
+/// The File menu: new/open (recent, large, remote), workspaces, save (as, all,
+/// encodings), rename/revert/local history, and close.
 const FILE: &[Item] = &[
     Item::leaf("menu.item.file.new", "file.new", "Ctrl N"),
     Item::leaf("menu.item.file.scratch", "file.scratch", ""),
@@ -317,6 +352,8 @@ const EDIT_TRANSPOSE: &[Item] = &[
     ),
 ];
 
+/// The Edit menu: undo/redo, clipboard, find/replace, selection, line and case
+/// operations, macros, and the structured-editor modes, mostly via submenus.
 const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl Z"),
     Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl Shift Z"),
@@ -507,8 +544,9 @@ const GO: &[Item] = &[
     Item::leaf("menu.go.byte", "nav.goto_byte", ""),
 ];
 
-/// Line-move commands, grouped under Edit → Move.
-/// Line operations, grouped under Edit → Lines.
+/// Line operations (move, duplicate, join, sort, dedupe, trim, pipe through a
+/// command, line endings), grouped under Edit → Lines. The `EDIT_MOVE` name is
+/// historical: it began as just the move-line pair.
 const EDIT_MOVE: &[Item] = &[
     Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt ↑"),
     Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt ↓"),
@@ -688,7 +726,6 @@ const VIEW_LAYOUT: &[Item] = &[
     Item::leaf("menu.item.view.zen", "view.zen", ""),
 ];
 
-/// Editor display toggles, grouped under View → Editor.
 /// Terminal font-zoom commands, grouped under View → Zoom. Best-effort: works on
 /// terminals that honor a font-resize escape (xterm/urxvt); others zoom via their
 /// own keybindings.
@@ -698,6 +735,7 @@ const VIEW_ZOOM: &[Item] = &[
     Item::leaf("menu.item.view.zoom_reset", "view.zoom_reset", ""),
 ];
 
+/// Editor display toggles, grouped under View → Editor.
 const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.line_numbers", "view.line_numbers", ""),
     Item::leaf(
@@ -762,6 +800,7 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.sublime", "view.keymap:sublime", ""),
 ];
 
+/// The Vix (application) menu: About, License, Website.
 const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.about", "vix.about", ""),
     Item::leaf("menu.item.vix.license", "vix.license", ""),
@@ -906,7 +945,6 @@ const TOOLS_INSERT_DATETIME: &[Item] = &[
     ),
 ];
 
-/// Insert helpers, grouped under Tools → Insert.
 /// SQL (`PostgreSQL`) snippets, grouped under Tools → Insert → SQL. Each inserts a
 /// ready-to-edit statement at the cursor.
 const TOOLS_INSERT_SQL: &[Item] = &[
@@ -1195,6 +1233,7 @@ const TOOLS_INSERT_BLOCK: &[Item] = &[
     ),
 ];
 
+/// Insert helpers, grouped under Tools → Insert: one submenu per snippet family.
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
@@ -1399,6 +1438,9 @@ const TOOLS_TERMINAL: &[Item] = &[
     Item::leaf("menu.item.terminal.close", "terminal.close", ""),
 ];
 
+/// The Tools menu: palette, insert/convert/format/checksum helpers, panels,
+/// terminal, LSP, Cowork. Its large submenu tree is built from the
+/// `TOOLS_*` slices above.
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::leaf("menu.item.tools.palette_resume", "palette.resume", ""),
@@ -1584,6 +1626,9 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.show_log", "lsp.show_log", ""),
 ];
 
+/// The AI menu (`ai.*` actions): chat, selection helpers, edit-with-instruction,
+/// doc-comment generation and the agent controls. Hidden at run time
+/// when the `ai = "off"` setting is on (see [`menus_without_ai`]).
 const AI: &[Item] = &[
     Item::leaf("menu.item.ai.chat", "ai.chat", ""),
     SEP,
@@ -1698,6 +1743,8 @@ const GIT_PULL: &[Item] = &[
     Item::leaf("menu.item.git.pull_squash", "git.pull_squash", ""),
 ];
 
+/// The Git menu: init/clone, status/stage/commit, and the Log, Branch, Resolve,
+/// Worktree, Rebase and Pull submenus. Output streams into the bottom dock.
 const GIT: &[Item] = &[
     Item::leaf("menu.item.git.init", "git.init", ""),
     Item::leaf("menu.item.git.clone", "git.clone", ""),
@@ -2497,6 +2544,8 @@ const PROJECT: &[Item] = &[
     ),
 ];
 
+/// The Help menu: welcome, shortcuts, tutorial, license, issue reporting,
+/// privacy, and the environment doctor.
 const HELP: &[Item] = &[
     Item::leaf("menu.item.help.welcome", "help.welcome", ""),
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
@@ -2553,6 +2602,8 @@ pub fn is_ai_action(action: &str) -> bool {
 /// filter still applies.
 #[must_use]
 pub fn menus_without_ai() -> &'static [MenuDef] {
+    // `MenuDef` is not `Clone`, so rebuild the (cheap) top-level list from the
+    // already-filtered `menus()`; only the item slices are shared.
     MENUS_NO_AI_CELL
         .get_or_init(|| {
             let all = menus()
@@ -2736,6 +2787,13 @@ const RUN_JUPYTER: &[Item] = &[
     ),
 ];
 
+// The `view_items` Vec is leaked (`Box::leak`) so the dropdown can be a
+// `&'static [Item]` like the const menus. This runs at most once per process
+// (cached in `MENUS_CELL`), so the leak is bounded. Order here is the bar's
+// left-to-right order, and Alt-mnemonic indices in the host depend on it: add
+// a menu at the end of its group deliberately.
+/// Assemble the top-level menu bar in display order, splicing in the
+/// runtime-built View submenus. Called once, by [`menus`].
 fn build_menus() -> Vec<MenuDef> {
     let view_items: &'static [Item] = Box::leak(
         vec![
@@ -2869,7 +2927,12 @@ fn prev_selectable(items: &[Item], from: usize) -> usize {
     j
 }
 
-/// Open/highlight state for the menu bar, including a one-level submenu.
+/// Open/highlight state for the menu bar, including up to two nested submenu
+/// levels (dropdown, submenu, sub-submenu).
+///
+/// Invariant: `sub`/`sub_open` are only meaningful while `item` is a submenu
+/// parent, and `subsub`/`subsub_open` only while `sub` is one. The mutators
+/// below reset the deeper levels whenever a shallower one changes.
 #[derive(Default)]
 pub struct Menu {
     /// Which top-level menu is open, if any.
@@ -3015,6 +3078,8 @@ impl Menu {
     /// Move to the next top-level menu; or, if the highlighted item has a closed
     /// submenu, open it (without highlighting any item yet). Works at every depth.
     pub fn right(&mut self) {
+        // At the deepest level there is nowhere further right to go, so the
+        // key is a no-op rather than switching menus out from under the user.
         let Some(i) = self.open else { return };
         if self.subsub_open {
             return;
@@ -3156,7 +3221,8 @@ impl Menu {
                 self.item = Some(j);
             }
         } else if let Some(j) = label_starting(items, items.len().saturating_sub(1), c) {
-            // Start the search just before index 0 so the first match from the
+            // Nothing highlighted: search "from the last row" so the wrap-around
+            // makes index 0 the first candidate and the first match from the
             // top wins.
             self.item = Some(j);
         }

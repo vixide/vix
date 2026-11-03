@@ -6,6 +6,19 @@
 //! to replace and the snippet body (tabstop syntax, see
 //! [`vix_snippet_tool::parse`]) to put there. Templates are chosen by a
 //! coarse [`Family`] derived from the file extension.
+//!
+//! The expression to the left of the dot is found by scanning backward over
+//! identifier/path characters and balanced `()`/`[]` groups. It is inserted into
+//! the template with snippet metacharacters escaped, so an expression containing
+//! `$` can never be misread as a tabstop. Spec: `crates/vix-snippets/spec/index.md`.
+//!
+//! # Examples
+//! ```
+//! use vix_snippets::postfix::{expand, Family};
+//! let e = expand("ready.if", Family::Rust).unwrap();
+//! assert_eq!(e.replace_chars, "ready.if".len());
+//! assert_eq!(e.body, "if ready {\n\t$0\n}");
+//! ```
 
 /// The language family a template set is written for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,7 +68,9 @@ pub fn keys(family: Family) -> Vec<&'static str> {
 }
 
 /// `(key, template)` pairs; `$EXPR` marks where the expression goes, `$ITEM`
-/// the singular loop variable derived from it.
+/// the singular loop variable derived from it. The remaining `$N` markers are
+/// ordinary snippet tabstops. `$EXPR`/`$ITEM` are substituted textually by
+/// [`expand`] before the body is handed to the snippet parser.
 fn templates(family: Family) -> &'static [(&'static str, &'static str)] {
     match family {
         Family::Rust => &[
@@ -113,12 +128,17 @@ fn templates(family: Family) -> &'static [(&'static str, &'static str)] {
 }
 
 /// Characters that may appear in the expression to the left of the dot.
+/// `-` and `>` are admitted only to support `->` paths; [`expression_before`]
+/// rejects a bare `-` or `>` (subtraction / comparison).
 fn is_expr_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '$' | '-' | '>')
 }
 
 /// The expression ending at the end of `s`: identifier/path characters plus
 /// balanced `()` / `[]` groups (so `foo(a, b).bar` and `xs[0]` are one unit).
+///
+/// Returns the expression's length in chars (`0` if there is none). An
+/// unbalanced closing bracket ends the scan.
 fn expression_before(s: &[char]) -> usize {
     let mut i = s.len();
     while i > 0 {
@@ -133,6 +153,8 @@ fn expression_before(s: &[char]) -> usize {
                 if cj == close {
                     depth += 1;
                 } else if cj == open {
+                    // Safe: `depth` is already >= 1 here because the first char
+                    // examined is always the `close` bracket checked above.
                     depth -= 1;
                     if depth == 0 {
                         matched = true;
@@ -182,7 +204,9 @@ fn escape(s: &str) -> String {
 
 /// Expand a postfix template at the end of `before` (the text of the line up
 /// to the cursor). `None` when the text does not end in `expr.key` for a key
-/// of `family`.
+/// of `family`, or when there is no expression before the dot.
+///
+/// `replace_chars` counts chars (expression + `.` + key) back from the cursor.
 #[must_use]
 pub fn expand(before: &str, family: Family) -> Option<Expansion> {
     let chars: Vec<char> = before.chars().collect();
@@ -205,6 +229,8 @@ pub fn expand(before: &str, family: Family) -> Option<Expansion> {
         return None;
     }
     let expr: String = head[head.len() - expr_len..].iter().collect();
+    // Substitute `$ITEM` first: its text is derived from the expression, and
+    // both are escaped so they cannot introduce tabstops of their own.
     let body = template
         .replace("$ITEM", &escape(&item_name(&expr)))
         .replace("$EXPR", &escape(&expr));

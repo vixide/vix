@@ -1,4 +1,11 @@
 //! The server profile (`.vix/fhir.json`) and the token request it can produce.
+//!
+//! The profile file lives inside a project and may therefore be attacker
+//! controlled (a cloned repository). Validation in [`Profile::parse`] is the
+//! trust boundary: unknown fields are rejected (so a literal secret cannot be
+//! smuggled in or silently ignored), secret variable names are confined to the
+//! `FHIR_` prefix, and any authenticated profile must use `https` (or
+//! loopback). Spec: `crates/vix-fhir/spec/index.md`.
 
 use serde::Deserialize;
 
@@ -35,10 +42,14 @@ pub enum Auth {
     },
 }
 
+/// The on-disk shape of the profile, before validation. Private: callers get a
+/// validated [`Profile`] from [`Profile::parse`] instead.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Raw {
+    /// Server base URL as written (trimmed and de-slashed during parsing).
     base_url: String,
+    /// Authentication scheme; absent means [`Auth::None`].
     #[serde(default)]
     auth: Auth,
 }
@@ -53,6 +64,10 @@ pub struct Profile {
 }
 
 /// Check that `name` may be read as a secret: `FHIR_` + `[A-Z0-9_]`.
+///
+/// This is what stops a project file from naming an unrelated secret such as
+/// `AWS_SECRET_ACCESS_KEY` and having it sent to the configured server. The bare
+/// prefix `FHIR_` (nothing after it) is rejected too.
 fn check_env_name(name: &str) -> Result<(), FhirError> {
     let ok = name.len() > "FHIR_".len()
         && name.starts_with("FHIR_")
@@ -66,7 +81,9 @@ fn check_env_name(name: &str) -> Result<(), FhirError> {
     }
 }
 
-/// Read a named secret through `env`.
+/// Read a named secret through `env`, after the `FHIR_` name check. Surrounding
+/// whitespace is trimmed (a trailing newline from a secrets file is common) and
+/// a blank value counts as unset.
 fn read_env(name: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<Secret, FhirError> {
     check_env_name(name)?;
     match env(name) {
@@ -77,6 +94,17 @@ fn read_env(name: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<Secret, 
 
 impl Profile {
     /// Parse and validate the text of `.vix/fhir.json`.
+    ///
+    /// A trailing `/` on `base_url` is stripped. No environment variable is read
+    /// here - only the *names* are validated; values are resolved lazily by
+    /// [`Profile::bearer`] / [`Profile::token_request`].
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_fhir::Profile;
+    /// let p = Profile::parse(r#"{"base_url":"https://fhir.example.com/r4/"}"#).unwrap();
+    /// assert_eq!(p.base_url, "https://fhir.example.com/r4");
+    /// ```
     ///
     /// # Errors
     /// [`FhirError::ProfileSyntax`] for malformed JSON or unknown fields,
@@ -133,7 +161,7 @@ impl Profile {
     }
 
     /// The token request for [`Auth::SmartBackend`]; `None` for the other
-    /// schemes.
+    /// schemes. Resolves both credential variables immediately.
     ///
     /// # Errors
     /// [`FhirError::EnvMissing`] when a credential variable is unset or empty.
@@ -161,7 +189,9 @@ impl Profile {
     }
 }
 
-/// Authenticated traffic must be encrypted, except to the local machine.
+/// Authenticated traffic must be encrypted, except to the local machine: `Ok`
+/// for `https` or a loopback host, [`FhirError::InsecureUrl`] otherwise
+/// (including unparseable URLs).
 fn require_secure(url: &str) -> Result<(), FhirError> {
     match origin(url) {
         Some((scheme, _)) if scheme == "https" || is_loopback(url) => Ok(()),
@@ -183,7 +213,9 @@ pub struct TokenRequest {
 }
 
 impl TokenRequest {
-    /// The `application/x-www-form-urlencoded` body.
+    /// The `application/x-www-form-urlencoded` body: the client-credentials
+    /// grant plus the percent-encoded `scope`. Credentials are *not* in the body;
+    /// they travel in the Basic `Authorization` header.
     #[must_use]
     pub fn form_body(&self) -> String {
         let mut body = String::from("grant_type=client_credentials");

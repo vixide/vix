@@ -13,6 +13,26 @@
 //!
 //! The pure parts (key and mouse encoding, scrolling a bare parser, selection
 //! text, the tab set) are unit-tested here without a PTY.
+//!
+//! # Threading model
+//!
+//! Each [`Terminal`] has one detached reader thread (started in `spawn_pty`)
+//! that blocks on the PTY master, scans the bytes for OSC 7 working-directory
+//! announcements and then feeds them to the shared parser under its mutex.
+//! The UI thread only ever *locks* the parser to read the screen
+//! ([`Terminal::lock`]); writes to the shell go straight to the PTY writer from
+//! the UI thread. The thread exits on EOF/error and clears
+//! [`Terminal::alive`]; dropping the `Terminal` kills and reaps the child,
+//! which is what produces that EOF. A poisoned mutex is recovered rather than
+//! propagated -- a panic in one consumer must not freeze the terminal.
+//!
+//! # Coordinates
+//!
+//! Selections, mouse events and [`Terminal::row_text`] use *view* coordinates:
+//! (row, col) cells of what is currently displayed, which moves when the view
+//! is scrolled back. That is why scrolling and resizing clear the selection.
+//!
+//! Spec: `crates/vix-terminal/spec/index.md`.
 
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,14 +61,25 @@ pub fn clamp_scrollback(lines: usize) -> usize {
 
 /// A running integrated terminal: the PTY master, the child shell, and the shared
 /// `vt100` parser holding the screen state.
+///
+/// Dropping it kills and reaps the child (see the `Drop` impl).
 pub struct Terminal {
+    /// Screen state, shared with the reader thread (which writes) and the UI
+    /// (which reads via [`Terminal::lock`]).
     parser: Arc<Mutex<vt100::Parser>>,
+    /// Input side of the PTY: bytes written here reach the shell's stdin.
     writer: Box<dyn Write + Send>,
+    /// The PTY master, kept for resizing (and so the slave stays valid).
     master: Box<dyn portable_pty::MasterPty + Send>,
+    /// The shell process, killed and reaped on drop/restart.
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// Cleared by the reader thread on EOF; see [`Terminal::alive`].
     alive: Arc<AtomicBool>,
+    /// Current grid height; always at least 1.
     rows: u16,
+    /// Current grid width; always at least 1.
     cols: u16,
+    /// Mouse selection in view coordinates; cleared whenever the view moves.
     selection: Option<Selection>,
     /// What was spawned, so [`Terminal::restart`] can run it again (T666).
     spawn: SpawnSpec,
@@ -65,16 +96,25 @@ pub struct Terminal {
 /// The command a [`Terminal`] runs, kept for [`Terminal::restart`].
 #[derive(Debug, Clone)]
 struct SpawnSpec {
+    /// Executable to run (a shell, or e.g. `ssh`).
     program: std::ffi::OsString,
+    /// Arguments passed to `program`.
     args: Vec<std::ffi::OsString>,
+    /// Directory the process starts in; also the fallback for [`Terminal::cwd`].
     cwd: std::path::PathBuf,
 }
 
-/// The live half of a terminal: the PTY and its child.
+/// The live half of a terminal: the PTY and its child. Split out so
+/// [`Terminal::restart`] can build a complete replacement before touching the
+/// old one (a failed spawn then leaves the terminal as it was).
 struct Pty {
+    /// See `Terminal::writer`.
     writer: Box<dyn Write + Send>,
+    /// See `Terminal::master`.
     master: Box<dyn portable_pty::MasterPty + Send>,
+    /// See `Terminal::child`.
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// See `Terminal::alive`.
     alive: Arc<AtomicBool>,
 }
 
@@ -103,8 +143,12 @@ fn spawn_pty(
         Some(value) => cmd.env(key, value),
         None => cmd.env_remove(key),
     });
+    // Set after the project env so a venv/direnv `TERM` cannot downgrade what
+    // `vt100` and `encode_key` are written against.
     cmd.env("TERM", "xterm-256color");
     let child = pair.slave.spawn_command(cmd).map_err(|e| to_io(&e))?;
+    // Close our copy of the slave: otherwise the reader never sees EOF when the
+    // child exits, because we would still hold the slave end open.
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().map_err(|e| to_io(&e))?;
     let writer = pair.master.take_writer().map_err(|e| to_io(&e))?;
@@ -119,11 +163,15 @@ fn spawn_pty(
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
+                    // Scan before parsing; `vt100` ignores OSC 7 itself, so this is
+                    // the only place the announced directory is seen.
                     if let Some(dir) = osc.feed(&buf[..n]) {
                         *reader_cwd
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(dir);
                     }
+                    // `Ok` only: on a poisoned lock the output is dropped rather
+                    // than panicking the reader and silently killing the terminal.
                     if let Ok(mut p) = reader_parser.lock() {
                         p.process(&buf[..n]);
                     }
@@ -223,6 +271,10 @@ impl Terminal {
     /// Returns an error if the new PTY cannot be created, in which case the
     /// terminal is left as it was.
     pub fn restart(&mut self, marker: &str) -> std::io::Result<()> {
+        // Spawn the replacement first so an error leaves the old shell running.
+        // The old reader thread keeps feeding the same parser until the kill
+        // below makes it hit EOF; its `alive` flag is a separate Arc, so it
+        // cannot mark the new shell dead.
         let pty = spawn_pty(
             &self.spawn,
             self.rows,
@@ -243,7 +295,10 @@ impl Terminal {
             } else {
                 ""
             };
+            // Mouse-tracking modes off (1000/1002/1003) and SGR encoding off (1006),
+            // plus an attribute reset, so the old child's leftovers do not leak.
             let reset = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[0m";
+            // Strip control characters so `marker` cannot inject escape sequences.
             let line = marker.replace(['\r', '\n', '\x1b'], " ");
             parser.process(format!("{leave_alt}{reset}\r\n{line}\r\n").as_bytes());
         }
@@ -273,6 +328,7 @@ impl Terminal {
     /// `true` once for a shell that has exited: the host reports it, and the
     /// tab stays (so it can be restarted) instead of being dropped.
     pub fn take_exit_notice(&mut self) -> bool {
+        // `exit_noted` is reset by `restart`, so a revived shell can be reported again.
         if self.alive() || self.exit_noted {
             return false;
         }
@@ -334,14 +390,18 @@ impl Terminal {
         (self.rows, self.cols)
     }
 
-    /// Lock the parser to read its screen for rendering.
+    /// Lock the parser to read its screen for rendering. Hold the guard briefly:
+    /// the reader thread blocks on the same mutex while it is held. A poisoned
+    /// lock is recovered, not propagated.
     pub fn lock(&self) -> MutexGuard<'_, vt100::Parser> {
         self.parser
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Forward a key event to the shell (no-op encoding does nothing).
+    /// Forward a key event to the shell (an event that [`encode_key`] has no
+    /// sequence for does nothing). Write errors are ignored: a dead shell shows
+    /// up through [`Terminal::alive`] instead.
     pub fn send_key(&mut self, key: KeyEvent) {
         let bytes = encode_key(key);
         if !bytes.is_empty() {
@@ -445,7 +505,9 @@ impl Terminal {
         !bytes.is_empty()
     }
 
-    /// Resize the PTY and parser to `rows`×`cols` if it changed.
+    /// Resize the PTY and parser to `rows`×`cols` if it changed (both clamped to
+    /// at least 1). The selection is cleared because its cells no longer map to
+    /// the same text.
     pub fn resize(&mut self, rows: u16, cols: u16) {
         let rows = rows.max(1);
         let cols = cols.max(1);
@@ -461,6 +523,8 @@ impl Terminal {
             pixel_width: 0,
             pixel_height: 0,
         };
+        // Resizing the master delivers SIGWINCH to the shell; the parser grid is
+        // resized separately because `vt100` knows nothing about the PTY.
         let _ = self.master.resize(size);
         if let Ok(mut p) = self.parser.lock() {
             p.screen_mut().set_size(rows, cols);
@@ -474,6 +538,19 @@ const ENTER: u8 = b'\r';
 /// The bytes that send `text` to a shell as a pasted command and press
 /// Enter: inside bracketed-paste markers when `bracketed`, else with every
 /// newline sent as a carriage return (what Enter types).
+///
+/// Trailing newlines of `text` are dropped first so exactly one Enter ends the
+/// paste.
+///
+/// # Examples
+///
+/// ```
+/// use vix_terminal::paste_bytes;
+///
+/// assert_eq!(paste_bytes("ls\n", false), b"ls\r");
+/// assert_eq!(paste_bytes("a\nb", false), b"a\rb\r");
+/// assert_eq!(paste_bytes("ls", true), b"\x1b[200~ls\x1b[201~\r");
+/// ```
 #[must_use]
 pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
     let text = text.trim_end_matches(['\r', '\n']);
@@ -490,8 +567,19 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
 }
 
 /// The whitespace-delimited word of `line` that covers character column
-/// `col`, with surrounding quotes, brackets and trailing `,;.` trimmed;
-/// `None` on blank space. The pure half of [`Terminal::word_at`].
+/// `col`, with surrounding quotes and brackets (and `,` / `;`) trimmed from both
+/// ends and trailing `.` trimmed from the end; `None` on blank space. The pure
+/// half of [`Terminal::word_at`]. Used to turn a click on `path/to/file.rs:12,`
+/// into something openable.
+///
+/// # Examples
+///
+/// ```
+/// use vix_terminal::word_in;
+///
+/// assert_eq!(word_in("see (src/lib.rs), ok", 6).as_deref(), Some("src/lib.rs"));
+/// assert_eq!(word_in("a  b", 2), None); // blank cell
+/// ```
 #[must_use]
 pub fn word_in(line: &str, col: usize) -> Option<String> {
     let chars: Vec<char> = line.chars().collect();
@@ -523,6 +611,9 @@ pub fn word_in(line: &str, col: usize) -> Option<String> {
 /// scanner only watches.
 #[derive(Debug, Default)]
 pub struct Osc7Scanner {
+    /// Unconsumed tail of the stream: a partial marker or an unterminated body,
+    /// kept so a sequence split across two reads is still recognised. Bounded
+    /// by [`OSC7_MAX`].
     carry: Vec<u8>,
 }
 
@@ -535,6 +626,16 @@ const OSC7_MAX: usize = 4096;
 impl Osc7Scanner {
     /// Feed the next chunk of output; returns the last directory announced in
     /// it (or completed by it), if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut scan = vix_terminal::Osc7Scanner::default();
+    /// // The sequence arrives split across two reads.
+    /// assert_eq!(scan.feed(b"out\x1b]7;file://host/tm"), None);
+    /// let dir = scan.feed(b"p/x\x07more").unwrap();
+    /// assert_eq!(dir, std::path::PathBuf::from("/tmp/x"));
+    /// ```
     pub fn feed(&mut self, bytes: &[u8]) -> Option<std::path::PathBuf> {
         self.carry.extend_from_slice(bytes);
         let mut found = None;
@@ -542,7 +643,8 @@ impl Osc7Scanner {
         loop {
             let rest = &self.carry[pos..];
             let Some(at) = find_sub(rest, OSC7) else {
-                // Keep a possible start of the marker split across chunks.
+                // Keep a possible start of the marker split across chunks (the
+                // longest proper prefix of `OSC7` that ends the data), discard the rest.
                 let keep = (1..OSC7.len())
                     .rev()
                     .find(|&k| rest.ends_with(&OSC7[..k]))
@@ -558,7 +660,8 @@ impl Osc7Scanner {
                 }
                 pos = body_at + len + term;
             } else {
-                // Unterminated: wait for more, unless it is hopeless.
+                // Unterminated: wait for more, unless it is hopeless. Past
+                // `OSC7_MAX` the sequence is junk; drop it all so `carry` stays bounded.
                 pos = if body.len() > OSC7_MAX {
                     self.carry.len()
                 } else {
@@ -591,7 +694,11 @@ fn osc_end(body: &[u8]) -> Option<(usize, usize)> {
 fn parse_file_uri(uri: &[u8]) -> Option<std::path::PathBuf> {
     let uri = std::str::from_utf8(uri).ok()?;
     let rest = uri.strip_prefix("file://")?;
+    // Everything before the first `/` after the scheme is the host; ignored,
+    // since the terminal is always local to this process.
     let path = &rest[rest.find('/')?..];
+    // Percent-decode into raw bytes first and validate UTF-8 once at the end, so
+    // multi-byte characters encoded as `%XX%XX` decode correctly.
     let mut bytes = Vec::with_capacity(path.len());
     let raw = path.as_bytes();
     let mut i = 0;
@@ -618,7 +725,8 @@ fn parse_file_uri(uri: &[u8]) -> Option<std::path::PathBuf> {
 
 /// Scroll `parser`'s view `delta` lines back (negative: forward), clamped to
 /// its scrollback; returns the new offset. The pure half of
-/// [`Terminal::scroll_by`].
+/// [`Terminal::scroll_by`]. `vt100` clamps `set_scrollback` to the lines it
+/// actually holds, so the returned value is read back rather than computed.
 pub fn scroll_parser(parser: &mut vt100::Parser, delta: isize) -> usize {
     let now = parser.screen().scrollback();
     parser
@@ -647,7 +755,8 @@ impl Selection {
         }
     }
 
-    /// The two ends in reading order: (start, end), end inclusive.
+    /// The two ends in reading order: (start, end), end inclusive. Tuples compare
+    /// row-major, so (row, col) ordering is reading order.
     #[must_use]
     pub fn ordered(&self) -> ((u16, u16), (u16, u16)) {
         if self.anchor <= self.head {
@@ -698,6 +807,9 @@ pub fn encode_mouse(
         MouseButton::Right => 2,
     };
     // (button code, whether it is a release)
+    // Arm order matters: presses and the wheel are reported in every mode but
+    // `None`; the `Mode::Press` guard then rejects releases and motion; the rest
+    // depend on the finer modes.
     let (mut code, release) = match (mode, kind) {
         (Mode::None, _) => return Vec::new(),
         (_, MouseEventKind::Down(b)) => (button(b), false),
@@ -709,6 +821,7 @@ pub fn encode_mouse(
         (Mode::AnyMotion, MouseEventKind::Moved) => (3 + 32, false),
         _ => return Vec::new(),
     };
+    // xterm modifier bits: Shift 4, Meta/Alt 8, Control 16.
     if modifiers.contains(KeyModifiers::SHIFT) {
         code += 4;
     }
@@ -718,6 +831,7 @@ pub fn encode_mouse(
     if modifiers.contains(KeyModifiers::CONTROL) {
         code += 16;
     }
+    // Protocol coordinates are 1-based; ours are 0-based cells.
     let (x, y) = (u32::from(col) + 1, u32::from(row) + 1);
     if encoding == vt100::MouseProtocolEncoding::Sgr {
         let end = if release { 'm' } else { 'M' };
@@ -728,6 +842,9 @@ pub fn encode_mouse(
         code |= 3;
     }
     let mut out = b"\x1b[M".to_vec();
+    // Legacy encodings add 32 to every field so it is a printable byte. The
+    // default encoding saturates at 255 (cells past column 222 are
+    // unrepresentable); UTF-8 extends to 2047.
     for v in [code, x, y] {
         let v = v + 32;
         if encoding == vt100::MouseProtocolEncoding::Utf8 {
@@ -747,6 +864,23 @@ fn to_io(e: &anyhow::Error) -> std::io::Error {
 }
 
 /// Encode a key event into the byte sequence a terminal expects.
+///
+/// Covers printable characters (UTF-8), Ctrl+letter control bytes, Alt as an
+/// `ESC` prefix, the cursor/editing keys and F1-F12 in xterm's normal (not
+/// application-cursor) form. Unmapped keys encode to an empty `Vec`. Shift and
+/// other modifiers on non-character keys are not encoded.
+///
+/// # Examples
+///
+/// ```
+/// use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+/// use vix_terminal::encode_key;
+///
+/// let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+/// assert_eq!(encode_key(ctrl_c), [0x03]);
+/// let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+/// assert_eq!(encode_key(up), b"\x1b[A");
+/// ```
 #[must_use]
 pub fn encode_key(key: KeyEvent) -> Vec<u8> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
@@ -755,6 +889,8 @@ pub fn encode_key(key: KeyEvent) -> Vec<u8> {
         KeyCode::Char(c) => {
             if ctrl {
                 // Control combos collapse to the low control byte (Ctrl-A = 0x01).
+                // The `as u8` truncation is only meaningful for ASCII letters and
+                // `@[\]^_`; other characters produce an arbitrary control byte.
                 let b = (c.to_ascii_uppercase() as u8).wrapping_sub(b'@') & 0x7f;
                 vec![b]
             } else {
@@ -780,7 +916,8 @@ pub fn encode_key(key: KeyEvent) -> Vec<u8> {
         KeyCode::F(n) => function_key(n),
         _ => Vec::new(),
     };
-    // Alt prefixes the sequence with ESC, the usual "meta" convention.
+    // Alt prefixes the sequence with ESC, the usual "meta" convention. Bare
+    // Esc is exempt: `ESC ESC` would read as a different key to most programs.
     if alt && !out.is_empty() && !matches!(key.code, KeyCode::Esc) {
         let mut prefixed = vec![0x1b];
         prefixed.append(&mut out);

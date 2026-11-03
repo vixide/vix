@@ -56,6 +56,7 @@ pub use export::{to_html, to_ics, to_latex, to_markdown};
 
 /// The TODO keywords Org cycles through (besides the empty state).
 const TODO: &str = "TODO";
+/// The terminal state of the TODO cycle.
 const DONE: &str = "DONE";
 
 /// The number of leading `*` of a headline (followed by a space), or `None` for
@@ -220,6 +221,7 @@ fn set_headline_keyword(headline: &str, keyword: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Shared fixture document for the structural-edit tests below.
     const DOC: &str = "#+title: T\n* One :old:\nbody\n** Child B\n** Child A\n* Two\nSCHEDULED: <2026-08-05 Wed>\n";
 
     #[test]

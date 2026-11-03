@@ -399,14 +399,18 @@ fn parse_headline_parts(line: &str) -> (String, String, String) {
     (kw.to_string(), prio, title.trim().to_string())
 }
 
+/// The `ITEM` column value: the headline title with stars, TODO keyword,
+/// priority cookie and tags stripped.
 fn item_text(lines: &[&str], h: usize) -> String {
     parse_headline_parts(lines[h]).2
 }
 
+/// The `TODO` column value: the leading keyword (`""` if none).
 fn item_keyword(line: &str) -> String {
     parse_headline_parts(line).0
 }
 
+/// The `PRIORITY` column value, rendered as `[#A]` (`""` if none).
 fn item_priority(lines: &[&str], h: usize) -> String {
     parse_headline_parts(lines[h]).1
 }
@@ -629,6 +633,8 @@ fn entry_value(
     }
 }
 
+/// Whether `name` is one of Org's computed special properties (case-insensitive),
+/// as opposed to an entry property read from a `:PROPERTIES:` drawer.
 fn is_special_property(name: &str) -> bool {
     SPECIAL_PROPERTIES
         .iter()
@@ -666,6 +672,8 @@ pub fn columns_spec_anchor(text: &str, line: usize) -> Option<usize> {
 
 // ----- Summary types --------------------------------------------------------
 
+/// The children's values that parse as `f64`; non-numeric/blank cells are
+/// skipped so they do not poison a rollup.
 fn numeric_values(values: &[&str]) -> Vec<f64> {
     values
         .iter()
@@ -673,6 +681,8 @@ fn numeric_values(values: &[&str]) -> Vec<f64> {
         .collect()
 }
 
+/// Default number rendering for summaries (Rust `Display`, so `3` stays `3`
+/// and `1.5` stays `1.5`).
 fn format_plain_number(n: f64) -> String {
     format!("{n}")
 }
@@ -690,11 +700,14 @@ fn format_printf_float(fmt: &str, value: f64) -> String {
     format_plain_number(value)
 }
 
+/// `+` / `+;FORMAT` / `$`: the sum of numeric children, optionally printf-formatted.
+/// Unlike min/max/mean, an all-non-numeric set sums to `0` rather than blank.
 fn sum_numeric(values: &[&str], fmt: Option<&str>) -> String {
     let sum: f64 = numeric_values(values).iter().sum();
     fmt.map_or_else(|| format_plain_number(sum), |f| format_printf_float(f, sum))
 }
 
+/// Fold the numeric children with `f` (used for `min`/`max`); empty when none parse.
 fn numeric_reduce(values: &[&str], f: impl Fn(f64, f64) -> f64) -> String {
     let nums = numeric_values(values);
     if nums.is_empty() {
@@ -703,6 +716,7 @@ fn numeric_reduce(values: &[&str], f: impl Fn(f64, f64) -> f64) -> String {
     format_plain_number(nums.into_iter().reduce(f).unwrap_or(0.0))
 }
 
+/// `mean`: arithmetic mean of numeric children; empty when none parse.
 fn numeric_mean(values: &[&str]) -> String {
     let nums = numeric_values(values);
     if nums.is_empty() {
@@ -712,12 +726,15 @@ fn numeric_mean(values: &[&str]) -> String {
     format_plain_number(nums.iter().sum::<f64>() / f64::from(len))
 }
 
+/// `(checked, total)` over all children. The total counts every child, not just
+/// those that carry a checkbox, so a non-checkbox child counts as unchecked.
 fn checkbox_counts(values: &[&str]) -> (usize, usize) {
     let total = values.len();
     let done = values.iter().filter(|v| v.trim() == "[X]").count();
     (done, total)
 }
 
+/// `X`: `[X]` only when every child is checked, else `[ ]`; empty with no children.
 fn checkbox_all(values: &[&str]) -> String {
     if values.is_empty() {
         return String::new();
@@ -729,11 +746,13 @@ fn checkbox_all(values: &[&str]) -> String {
     }
 }
 
+/// `X/`: `[done/total]`.
 fn checkbox_fraction(values: &[&str]) -> String {
     let (done, total) = checkbox_counts(values);
     format!("[{done}/{total}]")
 }
 
+/// `X%`: `[pct%]`, integer-truncated; `[0%]` with no children (no divide-by-zero).
 fn checkbox_percent(values: &[&str]) -> String {
     let (done, total) = checkbox_counts(values);
     let pct = (done * 100).checked_div(total).unwrap_or(0);
@@ -846,6 +865,7 @@ fn format_duration_minutes(total: i64) -> String {
     }
 }
 
+/// Reduction applied by `time_reduce` to time-column (`:`, `:min`, ...) values.
 enum TimeOp {
     Sum,
     Min,
@@ -853,6 +873,8 @@ enum TimeOp {
     Mean,
 }
 
+/// Reduce time-column children (parsed as minutes) with `op`, formatted by
+/// `format_duration_minutes`; empty when no child parses.
 fn time_reduce(values: &[&str], op: &TimeOp) -> String {
     let mins: Vec<i64> = values
         .iter()
@@ -905,12 +927,16 @@ fn format_age_seconds(total: i64) -> String {
     }
 }
 
+/// Reduction applied by `age_reduce` to age-column (`@min`, `@max`, `@mean`) values.
+/// There is no sum: summing ages is not meaningful in Org.
 enum AgeOp {
     Min,
     Max,
     Mean,
 }
 
+/// Reduce age-column children (parsed as seconds) with `op`, formatted by
+/// `format_age_seconds`; empty when no child parses.
 fn age_reduce(values: &[&str], op: &AgeOp) -> String {
     let secs: Vec<i64> = values.iter().filter_map(|v| parse_age_seconds(v)).collect();
     if secs.is_empty() {
@@ -957,6 +983,9 @@ fn est_combine(values: &[&str]) -> String {
     format!("{:.1}-{:.1}", mean_sum - spread, mean_sum + spread)
 }
 
+/// Dispatch a summary-type `token` (the `{...}` part of a column spec) over the
+/// children's `child_values`. An unknown token yields the empty string, so a
+/// typo renders a blank rollup rather than an error.
 fn apply_summary(token: &str, child_values: &[&str]) -> String {
     match token {
         "+" => sum_numeric(child_values, None),
@@ -1145,6 +1174,8 @@ pub fn build_column_table(
 
 // ----- Single-cell edits ----------------------------------------------------
 
+/// Rewrite a headline's title, preserving its stars, TODO keyword, priority
+/// cookie and trailing tags. `None` if `line` is out of range or not a headline.
 fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let original = lines.get(line)?.clone();
@@ -1171,6 +1202,8 @@ fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+/// Replace (or, with an empty `new_keyword`, remove) a headline's TODO keyword,
+/// leaving the rest of the line untouched. `None` if `line` is not a headline.
 fn set_item_todo(text: &str, line: usize, new_keyword: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let original = *lines.get(line)?;
@@ -1190,6 +1223,8 @@ fn set_item_todo(text: &str, line: usize, new_keyword: &str) -> Option<String> {
     Some(out.join("\n"))
 }
 
+/// Set the priority from a cell value (`A` or `[#A]`); an empty value clears it.
+/// Delegates to [`crate::set_priority`].
 fn set_item_priority(text: &str, line: usize, new_value: &str) -> Option<String> {
     let v = new_value.trim();
     if v.is_empty() {
@@ -1203,6 +1238,9 @@ fn set_item_priority(text: &str, line: usize, new_value: &str) -> Option<String>
     crate::set_priority(text, line, ch)
 }
 
+/// Route a single-cell edit to the right writer by column property. Read-only
+/// computed properties return `None`; any other name is an entry property
+/// written into the `:PROPERTIES:` drawer.
 fn write_single_field(
     text: &str,
     row_line: usize,
@@ -1670,6 +1708,7 @@ mod tests {
         );
     }
 
+    /// Build a `ColumnsSpec` from `(property, summary)` pairs for tests.
     fn spec_of(cols: &[(&str, Option<&str>)]) -> ColumnsSpec {
         ColumnsSpec {
             columns: cols
