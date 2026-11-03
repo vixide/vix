@@ -12,7 +12,7 @@ use super::trunc;
 use crate::app::App;
 use crate::theme::{self, icon};
 
-// Pad or truncate `s` to exactly `w` display columns (by character count).
+/// Pad or truncate `s` to exactly `w` display columns (by character count).
 fn fit(s: &str, w: usize) -> String {
     let mut out: String = s.chars().take(w).collect();
     let len = out.chars().count();
@@ -22,7 +22,7 @@ fn fit(s: &str, w: usize) -> String {
     out
 }
 
-// Per-column display width: the widest cell (incl. header), clamped to [3, 24].
+/// Per-column display width: the widest cell (incl. header), clamped to [3, 24].
 fn column_widths(grid: &crate::edit_table::Grid) -> Vec<usize> {
     (0..grid.col_count())
         .map(|c| {
@@ -35,7 +35,7 @@ fn column_widths(grid: &crate::edit_table::Grid) -> Vec<usize> {
         .collect()
 }
 
-// First column to show so the selected column is visible within `avail` columns.
+/// First column to show so the selected column is visible within `avail` columns.
 fn first_visible_col(grid: &crate::edit_table::Grid, widths: &[usize], avail: usize) -> usize {
     let sel = grid.col();
     let mut first = grid.col_scroll().min(sel);
@@ -51,7 +51,7 @@ fn first_visible_col(grid: &crate::edit_table::Grid, widths: &[usize], avail: us
     first
 }
 
-// The column indices that fit in `avail` columns starting from the scroll offset.
+/// The column indices that fit in `avail` columns starting from the scroll offset.
 fn visible_cols(grid: &crate::edit_table::Grid, widths: &[usize], avail: usize) -> Vec<usize> {
     let mut out = Vec::new();
     let mut used = 0usize;
@@ -66,7 +66,7 @@ fn visible_cols(grid: &crate::edit_table::Grid, widths: &[usize], avail: usize) 
     out
 }
 
-// Build one rendered grid line for row `r` over the visible `cols`.
+/// Build one rendered grid line for row `r` over the visible `cols`.
 fn table_row_line(
     grid: &crate::edit_table::Grid,
     r: usize,
@@ -96,7 +96,7 @@ fn table_row_line(
     Line::from(spans)
 }
 
-// The bottom status/hint line: position, plus the find query, edit notice, or hint.
+/// The bottom status/hint line: position, plus the find query, edit notice, or hint.
 fn table_status_line(grid: &crate::edit_table::Grid) -> Line<'static> {
     let info = if grid.is_finding() {
         format!("/{}", grid.find_buffer())
@@ -118,8 +118,8 @@ fn table_status_line(grid: &crate::edit_table::Grid) -> Line<'static> {
     ])
 }
 
-// Render the table editor overlay: pinned header, scrolling body with the
-// selected cell highlighted, and a status/hint line.
+/// Render the table editor overlay: pinned header, scrolling body with the
+/// selected cell highlighted, and a status/hint line.
 pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.edit_table.is_none() {
         return;
@@ -189,16 +189,16 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.edit_table = chunks[1];
 }
 
-// Per-column display width for the visible span, from `ColumnView::column_width`.
+/// Per-column display width for the visible span, from `ColumnView::column_width`.
 fn column_view_widths(view: &crate::column_view::ColumnView) -> Vec<usize> {
     (0..view.col_count())
         .map(|c| view.column_width(c).min(40))
         .collect()
 }
 
-// The column indices that fit in `avail` columns, keeping the selected column
-// in view (no persistent scroll memory — recomputed fresh each frame from the
-// current selection, since `ColumnView` does not track a horizontal offset).
+/// The column indices that fit in `avail` columns, keeping the selected column
+/// in view (no persistent scroll memory — recomputed fresh each frame from the
+/// current selection, since `ColumnView` does not track a horizontal offset).
 fn column_view_visible_cols(
     view: &crate::column_view::ColumnView,
     widths: &[usize],
@@ -228,8 +228,8 @@ fn column_view_visible_cols(
     out
 }
 
-// Build one rendered Column View line: the header row (`r`/`is_header` unused
-// for headers) or data row `r`, over the visible `cols`.
+/// Build one rendered Column View line: the header row (`r`/`is_header` unused
+/// for headers) or data row `r`, over the visible `cols`.
 fn column_view_row_line(
     view: &crate::column_view::ColumnView,
     is_header: bool,
@@ -262,8 +262,8 @@ fn column_view_row_line(
     Line::from(spans)
 }
 
-// The bottom status/hint line: field position, plus the allowed-value edit
-// notice, the raw-value edit notice, or the key hint.
+/// The bottom status/hint line: field position, plus the allowed-value edit
+/// notice, the raw-value edit notice, or the key hint.
 fn column_view_status_line(view: &crate::column_view::ColumnView) -> Line<'static> {
     let info = if view.is_editing() {
         t!("ui.column_view_editing").to_string()
@@ -289,8 +289,8 @@ fn column_view_status_line(view: &crate::column_view::ColumnView) -> Line<'stati
     ])
 }
 
-// Render the interactive Column View overlay: a pinned header row, a
-// scrolling body with the selected field highlighted, and a status/hint line.
+/// Render the interactive Column View overlay: a pinned header row, a
+/// scrolling body with the selected field highlighted, and a status/hint line.
 pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.column_view.is_none() {
         return;
@@ -344,7 +344,7 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.column_view = chunks[1];
 }
 
-// One rendered outline line: indentation, a fold marker (▾/▸/·), and the text.
+/// One rendered outline line: indentation, a fold marker (▾/▸/·), and the text.
 fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> Line<'static> {
     let marker = if tree.has_children(i) {
         if tree.is_collapsed(i) { "▸ " } else { "▾ " }
@@ -360,8 +360,10 @@ fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> L
     Line::from(Span::styled(text, style))
 }
 
-// Render the outline editor overlay: a scrolling tree of items with the selected
-// item highlighted, and a status/hint line.
+/// Render the SQL snippet-library editor overlay: one row per statement (its
+/// kind, then a truncated preview) with the selected row highlighted, an
+/// empty-state line when there are none, and a hint line. Records the body rect
+/// in `app.layout.edit_sql` for mouse hit-testing.
 #[cfg(feature = "sql")]
 pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.edit_sql.is_none() {
@@ -492,7 +494,7 @@ pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.edit_outline = chunks[0];
 }
 
-// One rendered row of the structured-value (JSON/YAML) tree.
+/// One rendered row of the structured-value (JSON/YAML) tree.
 fn value_line(tree: &crate::edit_value::Tree, i: usize, editing: bool) -> Line<'static> {
     let selected = i == tree.sel();
     let marker = if tree.is_container(i) {
@@ -579,7 +581,7 @@ pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.edit_value = chunks[0];
 }
 
-// One rendered hex-dump row: offset, hex byte pairs, and the ASCII gutter.
+/// One rendered hex-dump row: offset, hex byte pairs, and the ASCII gutter.
 fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
     use crate::edit_bytes::COLS;
     let off = row * COLS;

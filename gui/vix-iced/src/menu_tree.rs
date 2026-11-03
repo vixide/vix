@@ -93,6 +93,7 @@ fn nodes(entries: &[Item]) -> Vec<Node> {
 mod tests {
     use super::*;
 
+    /// Collect the action ids of a node tree's leaves, depth first.
     fn leaf_ids(items: &[Node], out: &mut Vec<&'static str>) {
         for it in items {
             match it {
@@ -103,6 +104,7 @@ mod tests {
         }
     }
 
+    /// Collect the action ids of the menu model's leaves, depth first, skipping separators.
     fn model_ids(items: &[Item], out: &mut Vec<&'static str>) {
         for it in items {
             if let Some(sub) = it.submenu {
@@ -113,6 +115,7 @@ mod tests {
         }
     }
 
+    /// The tree has every menu-model leaf, in the model's order.
     #[test]
     fn every_model_leaf_becomes_a_node_in_order() {
         let tree = tree();
@@ -126,6 +129,7 @@ mod tests {
         }
     }
 
+    /// The File menu additionally carries the native Open dialog entry.
     #[test]
     fn file_menu_gains_the_native_open_dialog() {
         let tree = tree();

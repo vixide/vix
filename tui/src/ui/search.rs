@@ -70,6 +70,8 @@ pub(super) fn draw_preview(
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
+/// Draw the command palette, with a side preview when the screen is at least
+/// `palette::MIN_PREVIEW_WIDTH` wide and the entry has one.
 pub(super) fn draw_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     let preview = if area.width >= crate::palette::MIN_PREVIEW_WIDTH && app.palette_has_preview() {
         Some(app.palette_preview())
@@ -134,6 +136,8 @@ pub(super) fn draw_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), rows[2]);
 }
 
+/// Draw the workspace-search overlay, with a result preview when the screen is
+/// wide enough (`palette::MIN_PREVIEW_WIDTH`).
 pub(super) fn draw_workspace_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let preview = if area.width >= crate::palette::MIN_PREVIEW_WIDTH {
         app.workspace_search_preview()
@@ -271,6 +275,8 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
     clippy::too_many_lines,
     reason = "a single linear frame-drawing routine for one overlay"
 )]
+/// Draw the in-file find (and replace) bar near the top of `area`; it grows
+/// from 4 to 6 rows while replacing.
 pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let replacing = s.flags.contains(SearchFlags::REPLACING);
@@ -452,6 +458,8 @@ fn draw_search_options(app: &mut App, frame: &mut Frame, row: Rect, options: &[(
     app.layout.search_scope = rects[5];
 }
 
+/// One labelled input row of the find bar; the focused field gets a marker
+/// and the title style.
 fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
     let marker = if focused { "\u{276f}" } else { " " };
     let lstyle = if focused {
@@ -525,6 +533,9 @@ fn search_case_regex_hint(case_sensitive: bool, regex: bool) -> String {
     .to_string()
 }
 
+/// Draw the generic text prompt. The workspace-to-dock search prompt adds
+/// case/regex toggles on a second line, and multi-line kinds (Git commit,
+/// Org capture fields) accept Alt+Enter for a newline.
 pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
     // The workspace→dock search prompt shows case/regex toggles on a second line.

@@ -114,6 +114,8 @@ pub fn doctor_check(env: &TermEnv<'_>) -> vix_doctor::Check {
 mod tests {
     use super::*;
 
+    /// Detection is driven by an injected [`TermEnv`], never the real process
+    /// environment, so these cases are deterministic.
     #[test]
     fn detects_depth_and_hyperlinks_from_a_fake_environment() {
         let apple = TermEnv {
@@ -144,6 +146,8 @@ mod tests {
         );
     }
 
+    /// An `App` built without a terminal draws in truecolor with plain
+    /// (non-hyperlink) URLs.
     #[test]
     fn the_default_is_truecolor_without_hyperlinks() {
         let caps = TerminalCaps::default();
@@ -151,6 +155,7 @@ mod tests {
         assert!(!caps.hyperlinks);
     }
 
+    /// The `doctor` row passes and shows both the depth and the `TERM` value.
     #[test]
     fn doctor_row_names_the_depth() {
         let env = TermEnv {

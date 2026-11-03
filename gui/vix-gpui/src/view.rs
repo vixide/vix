@@ -197,6 +197,8 @@ impl VixView {
         )
     }
 
+    /// Convert a pixel position to a grid cell and forward the mouse event to the
+    /// `App` (the same entry point the terminal's `Event::Mouse` uses).
     fn mouse(&mut self, kind: MouseEventKind, pos: Point<Pixels>, mods: KeyModifiers) {
         let (column, row) = self.cell_at(pos);
         self.app.on_mouse(MouseEvent {
@@ -207,6 +209,8 @@ impl VixView {
         });
     }
 
+    /// Convert a key press to a `vix-input` key event and give it to the `App`;
+    /// the event is consumed so gpui does not also dispatch it.
     fn on_key_down(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
         if let Some(key) = keys::key_event(ks) {
@@ -216,6 +220,7 @@ impl VixView {
         }
     }
 
+    /// Forward a mouse-button press to the `App`; unmapped buttons are ignored.
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(b) = keys::mouse_button(ev.button) {
             let mods = keys::modifiers(ev.modifiers);
@@ -224,6 +229,7 @@ impl VixView {
         }
     }
 
+    /// Forward a mouse-button release to the `App`; unmapped buttons are ignored.
     fn on_mouse_up(&mut self, ev: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(b) = keys::mouse_button(ev.button) {
             let mods = keys::modifiers(ev.modifiers);
@@ -232,6 +238,7 @@ impl VixView {
         }
     }
 
+    /// Forward pointer motion to the `App` as a drag (a button is held) or plain move.
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         let mods = keys::modifiers(ev.modifiers);
         let kind = match ev.pressed_button.and_then(keys::mouse_button) {
@@ -248,6 +255,8 @@ impl VixView {
         self.after_input(cx);
     }
 
+    /// Turn wheel/trackpad scrolling into whole scroll steps for the `App`, keeping
+    /// the fractional remainder in `scroll_accum` between events.
     fn on_scroll(&mut self, ev: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
         let dy = match ev.delta {
             ScrollDelta::Lines(p) => p.y,
@@ -272,6 +281,7 @@ impl VixView {
         }
     }
 
+    /// Run a native-menu action by its action id.
     fn on_run_action(&mut self, action: &RunAction, _: &mut Window, cx: &mut Context<Self>) {
         self.app.run_action(action.id);
         self.after_input(cx);
@@ -294,6 +304,7 @@ impl VixView {
         .detach();
     }
 
+    /// Open each chosen path in the `App`, then refresh the window.
     fn open_paths(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
         for path in paths {
             self.app.open_initial(path);
@@ -315,6 +326,8 @@ fn cell_index(v: f32, len: u16) -> u16 {
 }
 
 impl Render for VixView {
+    /// Build the window's element tree: size the grid to the viewport, draw the
+    /// `App` into it and paint the resulting cells.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let m = self.metrics(window);
         let vp = self

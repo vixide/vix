@@ -8,6 +8,9 @@
 // When we build for MUSL static, use faster memory allocator.
 #[cfg(target_env = "musl")]
 #[global_allocator]
+/// The process-wide allocator for static MUSL builds, whose default malloc is
+/// slow. Declared here (not in the library) so it applies exactly once to the
+/// whole program; a second `#[global_allocator]` would fail to link.
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::io::{self, Write};
@@ -124,6 +127,15 @@ fn run_early_modes(cli: &Cli) -> bool {
     false
 }
 
+/// Binary entry point: parse the command line, run the headless modes
+/// ([`run_early_modes`], the plugin and settings-bundle commands) and, if none
+/// consumed the invocation, set up the terminal, build the [`App`] and hand
+/// control to [`run`].
+///
+/// Ordering matters: the early modes run before any settings load or
+/// terminal/clipboard/keyring access so that `--version` and the agent/server
+/// modes have no side effects. The system clipboard and keyring are opted into
+/// only after that point, so library tests never touch them.
 fn main() -> io::Result<()> {
     let mut cli = Cli::parse();
 
@@ -317,6 +329,15 @@ fn draw(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()
     drawn
 }
 
+/// The event loop: tick background work, draw, then wait (bounded by
+/// `App::poll_interval`) for one terminal event and forward it to the app.
+/// Returns when `AppFlags::SHOULD_QUIT` is set; a pending
+/// `AppFlags::SUSPEND_REQUESTED` is serviced last, after the event, so the
+/// suspend happens between frames rather than mid-draw.
+///
+/// # Errors
+///
+/// Propagates terminal I/O failures from drawing, polling or reading events.
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
         // Background work shared with the GUI front end (`App::tick`).

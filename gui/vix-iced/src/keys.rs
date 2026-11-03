@@ -60,6 +60,7 @@ pub fn key_name(key: &Key) -> Option<String> {
 
 /// The number of a function key (`F1` → 1), or `None` for any other key.
 fn function_key(named: Named) -> Option<u8> {
+    /// The function keys, in order; `F1` is index 0.
     const KEYS: [Named; 24] = [
         Named::F1,
         Named::F2,

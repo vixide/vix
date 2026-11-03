@@ -121,6 +121,10 @@ impl Capability {
     /// core actions.
     #[must_use]
     pub fn for_action(action: &str) -> Option<Capability> {
+        // Action-id prefixes that belong to an optional capability. The first
+        // `starts_with` match wins, so order matters if prefixes ever overlap
+        // (today none do). Entries without a trailing `.` are deliberately
+        // exact-ish ids or id stems rather than whole families.
         const PREFIXES: &[(&str, Capability)] = &[
             ("db.", Capability::Sql),
             ("tools.edit_sql", Capability::Sql),
@@ -218,6 +222,8 @@ pub fn doctor_check() -> vix_doctor::Check {
 mod tests {
     use super::*;
 
+    /// Representative action ids resolve to the right capability, and core
+    /// ids (or look-alikes such as `gitx.`) resolve to none.
     #[test]
     fn prefixes_map_to_their_capability() {
         assert_eq!(
@@ -263,12 +269,14 @@ mod tests {
         assert_eq!(Capability::for_action("gitx.thing"), None);
     }
 
+    /// `cowork` is opt-in: it tracks the Cargo feature exactly.
     #[test]
     fn cowork_is_off_unless_asked_for() {
         assert_eq!(Capability::Cowork.enabled(), cfg!(feature = "cowork"));
         assert_eq!(is_available("cowork.host"), cfg!(feature = "cowork"));
     }
 
+    /// `jupyter` is opt-in too: its actions map to it and follow the feature.
     #[test]
     fn jupyter_is_off_unless_asked_for() {
         assert_eq!(
@@ -279,6 +287,7 @@ mod tests {
         assert_eq!(is_available("jupyter.start"), cfg!(feature = "jupyter"));
     }
 
+    /// `enabled_names` lists exactly the capabilities that are compiled in.
     #[test]
     fn default_build_has_every_capability() {
         if cfg!(feature = "sql") {

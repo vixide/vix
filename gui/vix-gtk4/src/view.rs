@@ -204,6 +204,8 @@ impl View {
         self.window.present();
     }
 
+    /// Install the draw callback that renders the `App` and keeps the IME
+    /// candidate window next to the text cursor.
     fn connect_drawing(&self) {
         let state = Rc::clone(&self.state);
         let im = self.im.clone();
@@ -221,6 +223,7 @@ impl View {
         });
     }
 
+    /// Install the keyboard controller that feeds key presses to the `App`.
     fn connect_keys(&self) {
         let keys = gtk4::EventControllerKey::new();
         let v = self.clone();
@@ -295,6 +298,8 @@ impl View {
         self.after_input();
     }
 
+    /// Install the click, motion and vertical-scroll controllers that feed the
+    /// pointer to the `App`.
     fn connect_mouse(&self) {
         let click = gtk4::GestureClick::new();
         click.set_button(0);
@@ -540,6 +545,7 @@ fn without_alt(
 mod tests {
     use super::*;
 
+    /// A pixel offset becomes a cell index clamped into `0..max`.
     #[test]
     fn cell_index_clamps() {
         assert_eq!(cell_index(-3.0, 10), 0);
@@ -547,6 +553,7 @@ mod tests {
         assert_eq!(cell_index(99.0, 10), 9);
     }
 
+    /// GDK button numbers 1, 2 and 3 map to left, middle and right; others are ignored.
     #[test]
     fn mouse_buttons() {
         assert_eq!(mouse_button(1), Some(MouseButton::Left));

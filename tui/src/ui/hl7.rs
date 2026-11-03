@@ -21,6 +21,8 @@ fn overlay_rect(area: Rect) -> Rect {
     }
 }
 
+/// Draw the HL7 message view overlay (Tools -> HL7 View): a filter line, the
+/// numbered segment/field rows and a hint line. No-op when none is open.
 pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.hl7_panel.is_none() {
         return;

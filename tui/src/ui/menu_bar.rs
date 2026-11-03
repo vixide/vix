@@ -15,6 +15,8 @@ use super::{draw_scrollbar, dropdown_scroll};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the top menu bar, highlighting the open menu and honouring a
+/// mirrored layout.
 pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
     let mirrored = super::layout_mirrored(app);
     frame.render_widget(
@@ -175,6 +177,9 @@ fn render_dropdown(
     }
 }
 
+/// Draw the open menu's dropdown and, to its right, the open submenu (which
+/// may be open with nothing highlighted yet). Positions come from
+/// `app.layout.menu_dropdown`.
 pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let Some(i) = app.menu.open else { return };
     let area = app.layout.menu_dropdown;

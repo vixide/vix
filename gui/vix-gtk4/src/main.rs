@@ -43,6 +43,8 @@ use crate::view::View;
 /// The GTK application id.
 const APP_ID: &str = "io.github.vixide.Vix";
 
+/// Parse the command line, load settings and the initial files through
+/// `startup::load`, then run the GTK application; returns its exit code.
 fn main() -> glib::ExitCode {
     // Vix's own command line, parsed before GTK sees anything; GTK is then
     // given only argv[0], so it never tries to open the file arguments.

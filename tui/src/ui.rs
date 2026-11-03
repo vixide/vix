@@ -139,6 +139,10 @@ pub fn layout_mirrored(app: &App) -> bool {
 /// Width (columns) of the IM dock panel (T752), clamped like the other docks.
 const IM_DOCK_WIDTH: u16 = 40;
 
+/// Split the body row into the explorer, centre and message-dock columns.
+///
+/// Column widths come from the settings, with the docks clamped so the centre
+/// keeps at least 20 columns; a mirrored layout reverses the left-to-right order.
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
     use crate::app::Visible;
     let dock_max = body.width.saturating_sub(20).max(12);
@@ -554,6 +558,9 @@ fn unix_secs_label(secs: Option<i64>) -> String {
         .unwrap_or_default()
 }
 
+/// Left edge (in columns) of each top-level menu title in the menu bar.
+///
+/// Each title is padded by two columns, matching [`menu_title_width`].
 fn menu_offsets(defs: &[MenuDef]) -> Vec<u16> {
     let mut offsets = Vec::new();
     let mut pos: u16 = 0;
@@ -816,6 +823,10 @@ fn trunc(s: &str, max: usize) -> String {
     }
 }
 
+/// A rectangle `pct_x` percent wide and `pct_y` percent tall, centred in `area`.
+///
+/// Both percentages must be at most 100 (the margin arithmetic subtracts them
+/// from 100).
 fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
     let v = Layout::default()
         .direction(Direction::Vertical)

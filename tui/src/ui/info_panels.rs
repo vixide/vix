@@ -16,6 +16,7 @@ use super::draw_scrollbar;
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the contacts list panel, sized to its row count.
 pub(super) fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(total) = app.contacts.as_ref().map(crate::contact_panel::Panel::len) else {
         return;
@@ -101,6 +102,7 @@ pub(super) fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the vCard viewer panel, titled with the card's name.
 pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(total) = app.vcard.as_ref().map(crate::vcard_panel::Panel::len) else {
         return;
@@ -180,6 +182,7 @@ pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the snippet browser panel.
 pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.snippets.is_none() {
         return;
@@ -285,6 +288,8 @@ pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.snippets = row_area;
 }
 
+/// Draw the Markdown preview as a large centred reading pane (at most 80
+/// columns wide).
 pub(super) fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(panel) = app.markdown_preview.as_mut() else {
         return;
@@ -406,6 +411,7 @@ pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+/// Draw the text-information panel (counts and statistics for the buffer).
 pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
         .text_info
@@ -468,6 +474,7 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the file-information panel for the active file.
 pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
         .file_info
@@ -536,6 +543,7 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the system-information panel.
 pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
         .system_info

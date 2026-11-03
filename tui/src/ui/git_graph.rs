@@ -53,6 +53,8 @@ fn footer(p: &Panel) -> String {
     }
 }
 
+/// Draw the commit-graph overlay (up to 120 columns wide, nearly full height).
+/// No-op when none is open.
 pub(super) fn draw_git_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.git_graph.is_none() {
         return;

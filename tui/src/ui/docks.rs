@@ -10,6 +10,8 @@ use crate::app::{App, Focus};
 use crate::messages::Level;
 use crate::theme::{self, icon};
 
+/// Draw the test-results panel in the right dock, titled with the
+/// pass/fail/ignored tally.
 pub(super) fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::test_runner::Status;
     let (pass, fail, ignore) = crate::test_runner::tally(&app.test_results);
@@ -57,6 +59,7 @@ pub(super) fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
+/// Draw the debugger (DAP) panel in the right dock: its sections and rows.
 pub(super) fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::dap::view::{RowKind, Section};
     let focused = app.focus == Focus::Debug;
@@ -145,6 +148,7 @@ fn debug_row_line(row: &crate::dap::view::Row) -> Line<'static> {
     ])
 }
 
+/// Draw the symbol-outline panel in the right dock.
 pub(super) fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default()
         .style(theme::region_base(theme::Region::RightDock))
@@ -201,6 +205,8 @@ fn register_message_links(app: &mut App, list_area: Rect) {
     }
 }
 
+/// Draw the messages panel in the right dock. The right dock keeps only its top
+/// and left borders.
 pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Messages;
     let block = Block::default()

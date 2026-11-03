@@ -105,6 +105,7 @@ fn installed_families() -> Vec<String> {
 /// The horizontal advance of one cell of `font` at [`FONT_SIZE`], measured
 /// over a run of glyphs so rounding in the shaper does not accumulate.
 fn advance(font: Font) -> f32 {
+    /// How many glyphs to measure in one run when computing the cell advance.
     const GLYPHS: u16 = 100;
     let sample = "M".repeat(usize::from(GLYPHS));
     let paragraph = Paragraph::with_text(text::Text {

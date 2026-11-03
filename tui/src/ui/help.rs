@@ -10,6 +10,7 @@ use super::{centered, trunc};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the keyboard-shortcut help overlay.
 pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::keyboard_shortcut_panel::Column;
     let Some(h) = app.help.as_ref() else {
@@ -127,6 +128,7 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     clippy::too_many_lines,
     reason = "one linear layout pass over the editor overlay; splitting it would only shuffle locals"
 )]
+/// Draw the keybinding editor overlay.
 pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rect) {
     use vix_keybinding_editor_panel::Column;
     let Some(p) = app.keybinding_editor.as_ref() else {

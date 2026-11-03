@@ -10,6 +10,7 @@ use super::draw_scrollbar;
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// Draw the Pomodoro timer; the label and hint differ between work and break phases.
 pub(super) fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::pomodoro_tool::Phase;
     let Some(timer) = app.pomodoro.as_ref() else {
@@ -76,6 +77,7 @@ pub(super) fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Draw the welcome screen. No-op once it is dismissed.
 pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.welcome.is_none() {
         return;
@@ -154,6 +156,8 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.welcome = body;
 }
 
+/// Draw the generic modal dialog (About, Website, Email): title, body and an
+/// OK button, sized to its content.
 pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let (title, body, has_editor) = match app.dialog.as_ref() {
         Some(d) => (d.title.clone(), d.body.clone(), d.editor.is_some()),
@@ -207,6 +211,7 @@ pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Draw the colour converter tool with its editable fields.
 pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::color_converter_tool::Field;
     let Some(conv) = app.color_converter.as_ref() else {
@@ -274,6 +279,7 @@ pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect)
     );
 }
 
+/// Draw the regex tester: pattern and sample fields plus the match outcome.
 pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::regex_tool::{Field, Outcome};
     let Some(t) = app.regex_tester.as_ref() else {
@@ -360,6 +366,7 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Draw the calculator tool: expression input and result.
 pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::calculator_tool::{Focus, Outcome};
     let Some(calc) = app.calculator.as_ref() else {
@@ -480,6 +487,7 @@ fn mirror_calculator(app: &mut App, frame: &mut Frame, inner: Rect) {
     reflection.shift(&mut app.layout.calculator_rects[2]);
 }
 
+/// Draw the unit converter with its from/to unit and value fields.
 pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::unit_converter_tool::{Focus, UNITS};
     let Some(conv) = app.unit_converter.as_ref() else {
