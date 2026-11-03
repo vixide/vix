@@ -202,7 +202,8 @@
     </ul>
     <p class="small-print">
       2.0 is not released yet; the current release is 1.8.
-      <a href="/features/#new">Everything new in 2.0</a>.
+      <a href="/whats-new/">What’s new in 2.0</a>, or
+      <a href="/features/#new">the complete list</a>.
     </p>
   </div>
 </section>

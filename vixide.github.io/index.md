@@ -24,7 +24,9 @@ by default), a copyable install command, a real screenshot, a six-card
 "Why Vix" grid, a short "Coming in 2.0" list, recorded demos, the keys to
 start with, links to the documentation's `for-*-users` guides and feature
 comparison, the desktop GUIs, and the open-source/licensing facts.
-`/features/` is the grouped feature list with an on-page contents nav, a
+`/whats-new/` is the 2.0 launch page (T745): highlights, upgrading notes and
+an honest "not in 2.0 yet" list, drawn only from `CHANGELOG.md` and `tasks.md`
+and labelled as not released until 2.0 ships. `/features/` is the grouped feature list with an on-page contents nav, a
 "New in 2.0" section, a theme gallery and every demo; `/install/` has every
 published install route (Homebrew, installer script, Linux packages,
 PowerShell, npm, cargo, direct download, the minimal build, the desktop
@@ -111,6 +113,7 @@ pnpm run check     # svelte-check
 
 - `/` — home
 - `/features/` — the grouped feature list and every demo
+- `/whats-new/` — what is new in the unreleased 2.0: highlights, upgrading, and what is not done yet (launch kit, T745)
 - `/install/` — every install option, the minimal build, desktop GUIs, and first run
 
 ## License

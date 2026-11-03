@@ -156,3 +156,4 @@
 - [AI Statement](contributing-ai-statement.md)
 - [Security Policy](contributing-security.md)
 - [Changelog](changelog.md)
+- [What's new in 2.0](whats-new-2-0/index.md)

@@ -46,6 +46,9 @@ human and AI contributors — read it first. The workspace version is 2.0.0
 - [IDE parity features](https://github.com/vixide/vix/blob/main/docs/ide-parity/index.md): Local History, Search
   Everywhere, Refactor… and Organize Imports, run configurations, peek
   definition, CodeLens, postfix completion
+- [What's new in 2.0](https://github.com/vixide/vix/blob/main/docs/whats-new-2-0/index.md): user-facing release notes for
+  the unreleased 2.0 — highlights, upgrading, what is not done
+- [Launch kit](https://github.com/vixide/vix/blob/main/docs/launch/index.md): announcement drafts for 2.0 (never posted)
 - [Remote editing](https://github.com/vixide/vix/blob/main/docs/remote-editing/index.md): open a folder over SSH
   (experimental) — search, git, language servers, terminal, remote agent
 - [Cowork](https://github.com/vixide/vix/blob/main/docs/cowork/index.md): real-time co-editing, opt-in `cowork`
