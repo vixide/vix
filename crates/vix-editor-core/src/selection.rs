@@ -1,3 +1,9 @@
+//! Selection value types: [`Selection`] (a start/end character range) and
+//! [`SelectionSnap`] (how a mouse drag extends it). All offsets are *character*
+//! offsets into the rope buffer (not bytes, not display columns). The editor
+//! widget in [`crate::editor`] owns the live selection state; this module is
+//! pure data. See `crates/vix-editor-core/spec/index.md`.
+
 #[derive(Debug, Clone, Copy)]
 /// How a drag selection snaps to text units as the cursor moves.
 pub enum SelectionSnap {
@@ -16,6 +22,21 @@ pub enum SelectionSnap {
 }
 
 /// A selected text range between two character offsets.
+///
+/// The fields are public, so a value built by struct literal is *not*
+/// guaranteed ordered (`start > end` is representable); use [`Selection::new`]
+/// or [`Selection::from_anchor_and_cursor`] to get ordered ends, or
+/// [`Selection::sorted`] to normalize.
+///
+/// # Examples
+///
+/// ```
+/// use vix_editor_core::selection::Selection;
+///
+/// let s = Selection::new(7, 2);
+/// assert_eq!((s.start, s.end), (2, 7));
+/// assert!(s.is_active() && s.contains(2) && !s.contains(7));
+/// ```
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Selection {
     /// Start character offset (inclusive).
@@ -56,7 +77,8 @@ impl Selection {
         self.start != self.end
     }
 
-    /// Return `true` if the selection is empty (start equals end).
+    /// Return `true` if the selection is empty (start equals end); the exact
+    /// complement of [`Selection::is_active`], and order-insensitive.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.start.max(self.end) == self.start.min(self.end)
@@ -68,7 +90,8 @@ impl Selection {
         index >= self.start && index < self.end
     }
 
-    /// Return the (lower, higher) offsets of the selection.
+    /// Return the (lower, higher) offsets of the selection, even if the public
+    /// fields were set out of order.
     #[must_use]
     pub fn sorted(&self) -> (usize, usize) {
         if self.start <= self.end {

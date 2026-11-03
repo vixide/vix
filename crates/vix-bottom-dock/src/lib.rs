@@ -3,6 +3,16 @@
 //!
 //! Pure data — the host (the `vix` app) renders the dock and routes keys/clicks;
 //! this crate owns the line buffer and its scroll offset.
+//!
+//! Scroll model: `scroll` is the index of the first visible line, but the value
+//! `lines.len()` is used as a "pinned to the bottom" sentinel that
+//! [`BottomDock::visible`] clamps to the last full window. That lets the dock
+//! follow streamed output without knowing the viewport height at `push` time.
+//! The `follow` flag records whether the user is at the bottom: scrolling up
+//! clears it (so streamed lines do not yank the view away from what is being
+//! read), and scrolling back down to the bottom restores it.
+//!
+//! Spec: `crates/vix-bottom-dock/spec/index.md`.
 
 /// Default scrollback: maximum lines retained before the oldest are dropped.
 pub const DEFAULT_SCROLLBACK: usize = 1_000;
@@ -55,7 +65,9 @@ impl BottomDock {
         self.trim();
     }
 
-    /// Drop the oldest lines past the cap, keeping `scroll` aligned.
+    /// Drop the oldest lines past the cap, keeping `scroll` aligned: every
+    /// retained line moved up by `drop` positions, so the offset shifts with it
+    /// (saturating at 0 when the scrolled-to line itself was dropped).
     fn trim(&mut self) {
         if self.lines.len() > self.cap {
             let drop = self.lines.len() - self.cap;
@@ -107,9 +119,11 @@ impl BottomDock {
     /// bottom resumes following.
     pub fn scroll_down(&mut self, n: usize, viewport: usize) {
         let len = self.lines.len();
+        // Largest first-visible index that still fills the viewport.
         let max_start = len.saturating_sub(viewport.max(1));
         self.scroll = (self.scroll.min(len) + n).min(len);
         if self.scroll >= max_start {
+            // At (or past) the last full window: snap to the bottom sentinel.
             self.scroll = len;
             self.follow = true;
         } else {
@@ -130,10 +144,11 @@ impl BottomDock {
     }
 
     /// The lines visible in a `height`-row viewport, given the current scroll,
-    /// keeping the view within range.
+    /// keeping the view within range. A `height` of 0 is treated as 1.
     #[must_use]
     pub fn visible(&self, height: usize) -> &[String] {
         let height = height.max(1);
+        // Clamp so a bottom-pinned `scroll == len` shows the last full window.
         let max_start = self.lines.len().saturating_sub(height);
         let start = self.scroll.min(max_start).min(self.lines.len());
         let end = (start + height).min(self.lines.len());

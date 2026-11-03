@@ -11,6 +11,12 @@
 //! the cost does not grow with the buffer; with no tree yet (a large buffer
 //! whose first parse is still running in the background) every lookup
 //! returns `None`.
+//!
+//! All public entry points are methods on [`Code`] (character offsets in and
+//! out); the query runs in byte offsets internally, converted at the edges
+//! with `byte_to_char`/`char_to_byte`. Queries are compiled once per language
+//! and cached by `compiled_query`. Editor-level commands (select-around,
+//! jump to next function) are in [`crate::editor`] and the host's keymap.
 
 use crate::code::{Code, LangAssets, RopeProvider, compiled_query};
 use std::rc::Rc;
@@ -88,6 +94,8 @@ impl Code {
     /// Every `kind` textobject with a node intersecting the byte window
     /// `start..end`, as byte ranges `(around, inside)`, in no set order.
     fn textobjects_in(&self, kind: TextObjectKind, start: usize, end: usize) -> Vec<RawMatch> {
+        // No tree yet (large buffer still parsing) or no query for this
+        // language: degrade to "no textobjects" rather than blocking.
         let (Some(tree), Some(query)) = (self.syntax_tree(), self.textobject_query()) else {
             return Vec::new();
         };
@@ -119,6 +127,8 @@ impl Code {
                 // nodes in one match: the object spans all of them.
                 *slot = Some(slot.map_or(range, |(s, e)| (s.min(range.0), e.max(range.1))));
             }
+            // A query that captures only `.inside` is still usable: treat the
+            // interior as the whole object so it can be found and selected.
             match (around, inside) {
                 (Some(a), i) => out.push((a, i)),
                 (None, Some(i)) => out.push((i, None)),
@@ -216,12 +226,16 @@ impl Code {
         }
         let byte = self.char_to_byte(pos);
         let total = self.len_bytes();
+        // A one-byte window at `pos` is enough: any object containing `pos`
+        // intersects it, so the query touches only the nodes on that path.
         let mut found: Vec<TextObject> = self
             .textobjects_in(kind, byte, (byte + 1).min(total).max(byte))
             .into_iter()
             .map(|(a, i)| self.finish_textobject(kind, a, i))
             .filter(|o| o.around.0 <= pos && pos < o.around.1)
             .collect();
+        // Smallest span first == innermost first (containing ranges nest).
+        // Dedup because several query patterns can describe the same node.
         found.sort_by_key(|o| (o.around.1 - o.around.0, o.around.0));
         found.dedup();
         found
@@ -261,6 +275,8 @@ impl Code {
         let total = self.len_bytes();
         let byte = self.char_to_byte(pos.min(self.len_chars()));
         let found = match dir {
+            // Search past the cursor first, then wrap to the whole buffer so
+            // "next" from the last object lands on the first.
             TextObjectDir::Next => self
                 .nearest_start(kind, byte, total, |s| s > byte, true)
                 .or_else(|| self.nearest_start(kind, 0, total, |_| true, true)),
@@ -298,6 +314,7 @@ impl Code {
             if best.is_some() {
                 return best;
             }
+            // The window already covers the whole range: nothing more to find.
             if ws == lo && we == hi {
                 return None;
             }

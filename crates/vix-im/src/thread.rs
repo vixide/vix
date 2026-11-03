@@ -6,6 +6,21 @@
 //! verbatim, nearest the old line; then the place where the most context
 //! lines still match; otherwise the thread is outdated. Threads are stored
 //! one per file as `.vix/im/threads/<id>.json`.
+//!
+//! Everything here is pure: the App reads and writes the JSON files and lays
+//! the markers out in the gutter. Thread files are shared through the
+//! repository, so [`Thread::from_json`] treats them as untrusted input.
+//! Owning spec: `crates/vix-im/spec/index.md` and the repo-level
+//! `spec/instant-message`.
+//!
+//! ```
+//! use vix_im::{reanchor, Anchor, Thread};
+//! let before = ["a", "b", "c", "d"];
+//! let thread = Thread::new("t1", "x.rs", &before, 3, 3);
+//! // Two lines were inserted above: the anchor is found again, now at 5.
+//! let after = ["new", "new", "a", "b", "c", "d"];
+//! assert_eq!(reanchor(&thread, &after), Anchor::Exact(5));
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -176,6 +191,8 @@ impl Thread {
         (self.start_line..=self.end_line.max(self.start_line)).contains(&line)
     }
 
+    /// The anchored text split back into its lines (never empty: an empty
+    /// anchor yields one empty line).
     fn anchor_lines(&self) -> Vec<&str> {
         self.anchor_text.split('\n').collect()
     }
@@ -227,10 +244,12 @@ pub fn step(lines: &[u32], from: u32, forward: bool) -> Option<u32> {
     }
 }
 
+/// A 1-based line to a 0-based index (0 is treated as line 1).
 fn to_index(line: u32) -> usize {
     usize::try_from(line.max(1) - 1).unwrap_or(usize::MAX)
 }
 
+/// A 0-based index to a 1-based line, saturating at `u32::MAX`.
 fn to_line(index: usize) -> u32 {
     u32::try_from(index).map_or(u32::MAX, |i| i.saturating_add(1))
 }
@@ -251,6 +270,8 @@ pub fn reanchor<S: AsRef<str>>(thread: &Thread, file_lines: &[S]) -> Anchor {
     let anchor: Vec<&str> = thread.anchor_lines().iter().map(|l| l.trim_end()).collect();
     let old = to_index(thread.start_line);
     let n = anchor.len();
+    // Pass 1: the anchored text verbatim (trailing whitespace ignored, so
+    // an editor stripping it does not orphan threads).
     if n <= lines.len()
         && let Some(at) = nearest(
             (0..=lines.len() - n).filter(|&i| lines[i..i + n] == anchor[..]),
@@ -267,6 +288,9 @@ fn nearest(candidates: impl Iterator<Item = usize>, old: usize) -> Option<usize>
     candidates.min_by_key(|&i| (i.abs_diff(old), i))
 }
 
+/// The best start line for `thread` judged by its context lines alone, or
+/// `None` when no candidate scores enough. `n` is the anchor's line count and
+/// `old` the stored 0-based start, used to break ties toward the old place.
 fn by_context(thread: &Thread, lines: &[&str], n: usize, old: usize) -> Option<usize> {
     let before: Vec<&str> = thread.context_before.iter().map(|l| l.trim_end()).collect();
     let after: Vec<&str> = thread.context_after.iter().map(|l| l.trim_end()).collect();
@@ -278,9 +302,14 @@ fn by_context(thread: &Thread, lines: &[&str], n: usize, old: usize) -> Option<u
     if available == 0 {
         return None;
     }
+    // Two matching context lines are required unless fewer were stored, so
+    // a single coincidental line cannot relocate a thread.
     let needed = available.min(2);
     let stretch = MAX_STRETCH;
     let mut best: Option<(usize, usize)> = None; // (score, start)
+    // Try every start line. The lines above must match where they sit; the
+    // lines below are tried at every plausible anchor length, because edits
+    // inside the anchor can grow or shrink it by up to `MAX_STRETCH` lines.
     for start in 0..=lines.len() {
         let above = matching(lines, &before, start.checked_sub(before.len()));
         let below = (n.saturating_sub(stretch)..=n + stretch)
@@ -288,6 +317,8 @@ fn by_context(thread: &Thread, lines: &[&str], n: usize, old: usize) -> Option<u
             .max()
             .unwrap_or(0);
         let score = above + below;
+        // `start == lines.len()` is a legal position for scoring but not a
+        // real line to anchor on.
         if score < needed || start >= lines.len() {
             continue;
         }

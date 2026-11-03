@@ -1,4 +1,8 @@
 //! Starting `direnv`/`mise` (behind the `process` feature).
+//!
+//! This is the only file in the crate that starts a process (it is listed in
+//! `tui/tests/spawn_sites.rs`, which audits spawn sites). Owning spec:
+//! `crates/vix-project-env/spec/index.md`.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -19,6 +23,8 @@ pub(crate) fn run_tool(program: &str, args: &[&str], dir: &Path) -> Option<Strin
         .spawn()
         .ok()?;
     let mut stdout = child.stdout.take()?;
+    // Drain stdout on a thread while we poll for exit: otherwise a tool
+    // printing more than a pipe buffer would block on write and look hung.
     let reader = std::thread::spawn(move || {
         let mut buf = String::new();
         std::io::Read::read_to_string(&mut stdout, &mut buf)
@@ -26,6 +32,7 @@ pub(crate) fn run_tool(program: &str, args: &[&str], dir: &Path) -> Option<Strin
             .map(|_| buf)
     });
     let start = Instant::now();
+    // No `wait_timeout` in std, so poll `try_wait` at a short interval.
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -35,6 +42,8 @@ pub(crate) fn run_tool(program: &str, args: &[&str], dir: &Path) -> Option<Strin
             Ok(None) if start.elapsed() < TOOL_TIMEOUT => {
                 std::thread::sleep(Duration::from_millis(10));
             }
+            // Timed out (or `try_wait` failed): kill, reap, and give up. The
+            // reader thread ends when the pipe closes with the child.
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();

@@ -1,5 +1,12 @@
 //! Bracket matching: find the partner of the bracket at (or just before) the
 //! cursor. Vix-owned code, held to the crate's `clippy::pedantic`.
+//!
+//! Only `()`, `[]`, `{}` are matched, by a plain depth-counting scan over the
+//! rope: it is *not* syntax-aware, so brackets inside strings and comments
+//! count. The scan is capped at [`SCAN_LIMIT`] characters so a lone bracket in
+//! a huge buffer cannot stall a frame. Used for the bracket-highlight in
+//! [`crate::render`] and the jump-to-partner command. See
+//! `crates/vix-editor-core/spec/index.md`.
 
 use crate::editor::Editor;
 
@@ -23,6 +30,8 @@ impl Editor {
     /// or no partner is found within [`SCAN_LIMIT`].
     #[must_use]
     pub(crate) fn matching_bracket(&self) -> Option<usize> {
+        // Prefer the bracket *under* the cursor, then the one just before it
+        // (the usual "cursor after the closing paren" position).
         let cur = self.cursor.min(self.code_ref().len_chars());
         if let Some(c) = self.char_at(cur)
             && let Some(m) = self.bracket_partner(cur, c)
@@ -38,6 +47,7 @@ impl Editor {
         None
     }
 
+    /// The character at char offset `i`, or `None` past the end of the buffer.
     pub(crate) fn char_at(&self, i: usize) -> Option<char> {
         let code = self.code_ref();
         if i >= code.len_chars() {
@@ -46,6 +56,9 @@ impl Editor {
         code.char_slice(i, i + 1).chars().next()
     }
 
+    /// Partner of the bracket `c` found at `pos`: scan forward for an opener,
+    /// backward for a closer; `None` if `c` is not one of [`PAIRS`] or has no
+    /// partner in range.
     fn bracket_partner(&self, pos: usize, c: char) -> Option<usize> {
         if let Some(&(_, close)) = PAIRS.iter().find(|&&(open, _)| open == c) {
             return self.scan_forward(pos, c, close);
@@ -56,7 +69,10 @@ impl Editor {
         None
     }
 
+    /// Scan right from the opener at `pos` for its balanced `close`, tracking
+    /// nesting depth; gives up after [`SCAN_LIMIT`] characters.
     fn scan_forward(&self, pos: usize, open: char, close: char) -> Option<usize> {
+        // Clamp to the buffer so the loop bound is also the end-of-text guard.
         let end = (pos + SCAN_LIMIT).min(self.code_ref().len_chars());
         let mut depth = 1usize;
         let mut i = pos + 1;
@@ -76,6 +92,8 @@ impl Editor {
         None
     }
 
+    /// Mirror of [`Self::scan_forward`]: scan left from the closer at `pos`
+    /// for its balanced `open`.
     fn scan_backward(&self, pos: usize, close: char, open: char) -> Option<usize> {
         let start = pos.saturating_sub(SCAN_LIMIT);
         let mut depth = 1usize;

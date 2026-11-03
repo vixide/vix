@@ -28,6 +28,10 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 - **Project environment activation** (T667): new `vix-project-env` crate. Vix detects a project's `.venv`/`venv` (`pyvenv.cfg`), direnv (`.envrc`) or mise (`mise.toml`, `.mise.toml`, `.tool-versions`) and applies its variables to language servers, tasks/commands and the integrated terminal, with the source shown in the status bar. `direnv export json` and `mise env --json` run project-controlled code, so they run only in a workspace you trusted (the existing T132 trust decision); an untrusted workspace falls back to the file-only `.venv` source and says so. New action `project.reload_env` (Project → Reload Environment). Already-running servers keep their old environment until restarted. Custom detectors are not implemented.
 - **Safe saving (T663).** Saving a file with several hard links, or one owned by another user, now writes in place instead of renaming a temp file over it, so the links and the owner survive. Every in-place save first copies the original to the recovery directory (`~/.local/state/vix/recovery`) and removes the copy once the write is flushed; a copy left behind by an interrupted save is reported at the next start. (The Restore / Diff / Discard prompt is not built yet.)
 
+### Changed
+
+- **Code documentation pass (group 0).** Module, item and inline documentation (plus doctests) for `vix-editor-core`, `vix-im`, `vix-mcp-server`, `vix-oci`, `vix-project-env`, `vix-roam`, `vix-encoding`, `vix-input` and 14 smaller crates; no behavior change. Fixed several stale docs (for example `vix_roam::slugify`, `vix-column-view`'s `Outcome::Close`).
+
 ### Breaking
 
 - **Typed Slint window errors** (T610, seventh slice): `vix-slint`'s `window::compile` and `window::create` return the `#[non_exhaustive]` `WindowError` (`Compile`, `MissingComponent`, `Create`, `Property`) instead of `String`. `Display` text is unchanged.

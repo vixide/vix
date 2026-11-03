@@ -7,6 +7,13 @@
 //! which the host calls with the number of whole seconds elapsed since the last
 //! tick. Keeping the clock out of this crate makes every transition
 //! deterministic and unit-testable.
+//!
+//! State diagram: `Idle --start--> Work --(remaining == 0)--> Break
+//! --(remaining == 0)--> Idle`; [`Timer::stop`] returns to `Idle` from any phase.
+//! The host owns the wall clock, the bell, and rendering (it shows
+//! [`Timer::label`], and an alert while [`Timer::is_break`]).
+//!
+//! Spec: `crates/vix-pomodoro-tool/spec/index.md`.
 
 /// Default work length, in minutes.
 pub const DEFAULT_WORK_MINUTES: u64 = 25;
@@ -38,7 +45,8 @@ pub enum Tick {
 /// A Pomodoro timer.
 #[derive(Debug, Clone)]
 pub struct Timer {
-    /// Configured work length, in minutes (1–180).
+    /// Configured work length, in minutes (1–180). Kept in range by
+    /// [`Timer::adjust_minutes`]; writing the field directly bypasses the clamp.
     pub work_minutes: u64,
     /// The current phase.
     pub phase: Phase,
@@ -66,15 +74,27 @@ impl Timer {
 
     /// Change the work length by `delta` minutes, clamped to 1–180. Only allowed
     /// while idle (a running countdown ignores it).
+    ///
+    /// # Examples
+    /// ```
+    /// let mut t = vix_pomodoro_tool::Timer::new();
+    /// t.adjust_minutes(5);
+    /// assert_eq!(t.work_minutes, 30);
+    /// t.adjust_minutes(-1000); // clamped to the 1-minute floor
+    /// assert_eq!(t.work_minutes, 1);
+    /// ```
     pub fn adjust_minutes(&mut self, delta: i64) {
         if self.phase == Phase::Idle {
+            // Widen to i64 so a negative `delta` can't underflow the u64 field;
+            // saturating_add guards against an extreme `delta` overflowing i64.
             let current = i64::try_from(self.work_minutes).unwrap_or(i64::MAX);
             let adjusted = current.saturating_add(delta).clamp(1, 180);
             self.work_minutes = u64::try_from(adjusted).unwrap_or(1);
         }
     }
 
-    /// Start the work countdown from the configured length.
+    /// Start the work countdown from the configured length. Restarts from the
+    /// full length if a countdown (even a break) was already running.
     pub fn start(&mut self) {
         self.phase = Phase::Work;
         self.remaining = self.work_minutes * 60;
@@ -100,12 +120,29 @@ impl Timer {
 
     /// Advance the countdown by `secs` whole seconds, performing phase
     /// transitions, and report what happened.
+    ///
+    /// A single tick causes at most one transition: if `secs` overshoots the
+    /// end of the work interval, the surplus is discarded and the break starts
+    /// from its full length. Ticking while idle does nothing.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_pomodoro_tool::{Tick, Timer};
+    ///
+    /// let mut t = Timer::new();
+    /// t.start();
+    /// assert_eq!(t.tick(10), Tick::None);
+    /// assert_eq!(t.label(), "24:50");
+    /// assert_eq!(t.tick(25 * 60), Tick::BreakStarted);
+    /// assert!(t.is_break());
+    /// ```
     pub fn tick(&mut self, secs: u64) -> Tick {
         match self.phase {
             Phase::Idle => Tick::None,
             Phase::Work => {
                 if secs >= self.remaining {
-                    // Work finished: roll into the break.
+                    // Work finished: roll into the break. Any overshoot in `secs`
+                    // is intentionally dropped rather than carried into the break.
                     self.phase = Phase::Break;
                     self.remaining = BREAK_MINUTES * 60;
                     Tick::BreakStarted
@@ -116,6 +153,7 @@ impl Timer {
             }
             Phase::Break => {
                 if secs >= self.remaining {
+                    // Break finished: back to Idle at the configured work length.
                     self.stop();
                     Tick::Finished
                 } else {
@@ -136,7 +174,8 @@ impl Timer {
         }
     }
 
-    /// The display formatted as `MM:SS`.
+    /// The display formatted as `MM:SS`. Minutes are not capped at two digits,
+    /// so the 180-minute maximum renders as `180:00`.
     #[must_use]
     pub fn label(&self) -> String {
         let s = self.display_seconds();

@@ -6,6 +6,21 @@
 //! readers are deliberately tolerant: key names are matched case-insensitively
 //! (Docker says `ID`, Podman `Id` or `id`), a name may be a string or an array,
 //! and a field an engine does not report is left empty rather than an error.
+//!
+//! Tolerance is the point: engine output formats drift between versions, and
+//! a panel that shows a blank column is better than one that shows nothing.
+//! Only structurally invalid JSON is an [`OciError::Parse`]. Owning spec:
+//! `crates/vix-oci/spec/index.md`.
+//!
+//! ```
+//! use vix_oci::parse;
+//! // Docker style: one object per line.
+//! let docker = parse::volumes("{\"Name\":\"data\",\"Driver\":\"local\"}\n").unwrap();
+//! // Podman style: one array.
+//! let podman = parse::volumes("[{\"Name\":\"data\",\"Driver\":\"local\"}]").unwrap();
+//! assert_eq!(docker, podman);
+//! assert_eq!(docker[0].name, "data");
+//! ```
 
 use crate::OciError;
 use serde_json::Value;
@@ -19,6 +34,8 @@ pub fn records(text: &str) -> Result<Vec<Value>, OciError> {
     if text.is_empty() {
         return Ok(Vec::new());
     }
+    // A leading `[` means Podman-style single array (or `inspect` output);
+    // otherwise it is NDJSON, one record per non-blank line.
     if text.starts_with('[') {
         return match serde_json::from_str::<Value>(text) {
             Ok(Value::Array(items)) => Ok(items),
@@ -33,7 +50,8 @@ pub fn records(text: &str) -> Result<Vec<Value>, OciError> {
         .collect()
 }
 
-/// The first present key of `keys`, matched case-insensitively.
+/// The first present key of `keys`, matched case-insensitively. A JSON `null`
+/// counts as absent so a later alias can supply the value.
 fn field<'a>(v: &'a Value, keys: &[&str]) -> Option<&'a Value> {
     let obj = v.as_object()?;
     keys.iter().find_map(|k| {
@@ -71,6 +89,9 @@ fn created(v: &Value, keys: &[&str]) -> String {
 
 /// `YYYY-MM-DD` for Unix seconds (proleptic Gregorian, UTC).
 fn iso_date(secs: i64) -> String {
+    // Howard Hinnant's `civil_from_days` algorithm: days since 1970-01-01 are
+    // shifted to 0000-03-01 so leap days fall at the end of the "year", then
+    // split into 400-year eras. Avoids a date-library dependency.
     let z = secs.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -86,6 +107,8 @@ fn iso_date(secs: i64) -> String {
 /// A byte count as `12.3MB` (decimal units, as Docker prints).
 fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+    // Work in tenths of a unit to get one decimal place with integers only;
+    // `>= 10_000` means "at least 1000.0 of this unit", so step up.
     let mut tenths = bytes.saturating_mul(10);
     let mut unit = 0;
     while tenths >= 10_000 && unit + 1 < UNITS.len() {
@@ -134,13 +157,18 @@ impl Container {
     }
 
     /// The shortened id engines display (12 characters).
+    ///
+    /// Container ids are hexadecimal, so slicing by byte is safe for real
+    /// engine output; a non-ASCII id from a hostile source could in theory
+    /// split a character, which would panic.
     #[must_use]
     pub fn short_id(&self) -> &str {
         &self.id[..self.id.len().min(12)]
     }
 }
 
-/// Docker's `0.0.0.0:8080->80/tcp, :::8080->80/tcp` as host port numbers.
+/// Docker's `0.0.0.0:8080->80/tcp, :::8080->80/tcp` as host port numbers,
+/// deduplicated (IPv4 and IPv6 bindings repeat the same port).
 fn host_ports_from_text(s: &str) -> Vec<u16> {
     let mut out = Vec::new();
     for part in s.split(',') {
@@ -166,6 +194,8 @@ pub fn containers(out: &str) -> Result<Vec<Container>, OciError> {
                 Some(Value::String(s)) => (s.clone(), host_ports_from_text(s)),
                 Some(Value::Array(items)) => {
                     // Podman: [{"host_port":8080,"container_port":80,"protocol":"tcp"}]
+                    // Entries missing either port (an unpublished port) are
+                    // skipped.
                     let mut shown = Vec::new();
                     let mut hosts = Vec::new();
                     for p in items {
@@ -232,6 +262,8 @@ impl Image {
 }
 
 /// Split `registry/name:tag` at the tag colon (the last `:` after the last `/`).
+/// The `/` rule keeps a registry port (`localhost:5000/app`) from being read
+/// as a tag; a reference with no tag gets `latest`.
 fn split_reference(r: &str) -> (String, String) {
     let slash = r.rfind('/').map_or(0, |i| i + 1);
     match r[slash..].rfind(':') {
@@ -250,6 +282,8 @@ pub fn images(out: &str) -> Result<Vec<Image>, OciError> {
         .map(|r| {
             let (repository, tag) = {
                 let repo = text(r, &["Repository"]);
+                // Docker reports Repository/Tag columns; Podman reports full
+                // references instead.
                 if repo.is_empty() {
                     // Podman: Names / RepoTags hold full references.
                     let first = field(r, &["Names", "RepoTags"])

@@ -11,6 +11,33 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor or a
 //! filesystem.
+//!
+//! # Layout
+//!
+//! * Node primitives: [`slugify`], [`node_title`], [`node_id`], [`new_node`],
+//!   [`node_link`], [`transclusion`], [`nodeify`], [`all_ids`].
+//! * Dailies: [`DAILIES_DIR`], [`is_valid_daily_date`], [`daily_filename`],
+//!   [`daily_template`], [`daily_entry`].
+//! * File-level edits: [`append_property`], [`add_filetag`].
+//! * Cross-node views, each returning a ready-to-show Org buffer:
+//!   [`backlinks`], [`graph`], [`index`], [`dead_links`]. These take
+//!   `&[(String, String)]` slices of `(file name, file content)` so the host
+//!   decides which directory to scan.
+//!
+//! The parsing here is line-oriented and deliberately forgiving rather than a
+//! full Org parser: it only understands the shapes org-roam itself writes.
+//!
+//! Specs: `crates/vix-roam/spec/index.md` and its sub-specs `dailies-calendar`,
+//! `live-backlinks` and `wiki-link-completion`.
+//!
+//! # Examples
+//! ```
+//! use vix_roam::{new_node, node_id, node_title};
+//!
+//! let note = new_node("My Note", "ABC-123");
+//! assert_eq!(node_title(&note).as_deref(), Some("My Note"));
+//! assert_eq!(node_id(&note).as_deref(), Some("ABC-123"));
+//! ```
 
 #![warn(clippy::string_slice)]
 
@@ -25,6 +52,17 @@ pub const DAILIES_DIR: &str = "daily";
 /// Turn a node title into a filesystem-safe slug: lowercase, runs of
 /// non-alphanumeric characters collapsed to a single `-`, with no leading or
 /// trailing `-`. An all-punctuation title slugs to `"node"`.
+///
+/// "Alphanumeric" means ASCII only: accented and non-Latin letters are treated
+/// as separators (`"café_2024"` becomes `"caf-2024"`), and a title with no ASCII
+/// alphanumerics at all (e.g. entirely CJK) therefore slugs to `"node"`. This
+/// keeps filenames portable across filesystems.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_roam::slugify("Hello, World!"), "hello-world");
+/// assert_eq!(vix_roam::slugify("!!!"), "node");
+/// ```
 #[must_use]
 pub fn slugify(title: &str) -> String {
     let mut out = String::with_capacity(title.len());
@@ -47,11 +85,16 @@ pub fn slugify(title: &str) -> String {
 }
 
 /// The value of the first `#+title:` keyword (case-insensitive), trimmed.
+///
+/// Leading whitespace before `#+title:` is tolerated. Returns `None` if there is
+/// no title line; an empty `#+title:` yields `Some("")`.
 #[must_use]
 pub fn node_title(content: &str) -> Option<String> {
     for line in content.lines() {
         let lower = line.trim_start().to_ascii_lowercase();
         if let Some(rest) = lower.strip_prefix("#+title:") {
+            // Index into the *original* line (to keep the user's casing) by
+            // measuring how much of the lowercased copy is left after the key.
             let start = line.len() - rest.len();
             #[expect(
                 clippy::string_slice,
@@ -65,12 +108,18 @@ pub fn node_title(content: &str) -> Option<String> {
 }
 
 /// The `:ID:` value from the file-level property drawer, if any.
+///
+/// Scanning stops at the first `:END:` line, so only the top drawer is
+/// consulted; use [`all_ids`] to include per-headline drawers.
 #[must_use]
 pub fn node_id(content: &str) -> Option<String> {
     property(content, "ID")
 }
 
 /// The value of a `:KEY:` line in the file-level property drawer.
+///
+/// `key` is matched case-insensitively. Stops at the first `:END:` (the drawer
+/// close) so later headline drawers are not read.
 fn property(content: &str, key: &str) -> Option<String> {
     let want = format!(":{}:", key.to_ascii_uppercase());
     for line in content.lines() {
@@ -93,6 +142,8 @@ fn property(content: &str, key: &str) -> Option<String> {
 }
 
 /// A fresh node file: a property drawer holding `id`, then the `#+title:`.
+///
+/// Neither argument is escaped; callers pass a single-line title.
 #[must_use]
 pub fn new_node(title: &str, id: &str) -> String {
     format!(":PROPERTIES:\n:ID:       {id}\n:END:\n#+title: {title}\n")
@@ -111,7 +162,8 @@ pub fn transclusion(id: &str, title: &str) -> String {
 }
 
 /// The number of leading `*` on a headline line (followed by a space), else
-/// `None`. Mirrors `org::headline_level` so this module stays self-contained.
+/// `None`. Mirrors `org::headline_level` so this module stays self-contained
+/// (this crate must not depend on the Org crate).
 fn headline_stars(line: &str) -> Option<usize> {
     let stars = line.len() - line.trim_start_matches('*').len();
     #[expect(
@@ -126,6 +178,17 @@ fn headline_stars(line: &str) -> Option<usize> {
 /// already has a property drawer, the `:ID:` is inserted into it; otherwise a new
 /// drawer is created directly beneath the headline. Returns `None` if `line` is
 /// not a headline or already carries an `:ID:`.
+///
+/// `line` is a 0-based index into `text` split on `\n`; the line ending style
+/// of the rest of the text is preserved apart from joins on `\n`.
+///
+/// # Examples
+/// ```
+/// let out = vix_roam::nodeify("* Heading\nbody\n", 0, "NID").unwrap();
+/// assert_eq!(out, "* Heading\n:PROPERTIES:\n:ID:       NID\n:END:\nbody\n");
+/// // Not a headline: nothing to do.
+/// assert!(vix_roam::nodeify("plain\n", 0, "NID").is_none());
+/// ```
 #[must_use]
 pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
@@ -140,10 +203,15 @@ pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
             if lines[i].trim().to_ascii_uppercase().starts_with(":ID:") {
                 return None; // already a node
             }
+            // (An unterminated drawer just runs to end of file; the ID is then
+            // inserted right after `:PROPERTIES:`, which is still valid.)
             i += 1;
         }
         lines.insert(line + 2, format!(":ID:       {id}"));
     } else {
+        // Three inserts at the same index, in reverse, build the drawer in
+        // order: `:PROPERTIES:`, `:ID:`, `:END:` end up directly below the
+        // headline.
         lines.insert(line + 1, ":END:".to_string());
         lines.insert(line + 1, format!(":ID:       {id}"));
         lines.insert(line + 1, ":PROPERTIES:".to_string());
@@ -152,7 +220,9 @@ pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
 }
 
 /// Every `:ID:` value declared anywhere in `content` (file-level or per-subtree
-/// property drawers).
+/// property drawers), in document order, empty values skipped.
+///
+/// Used by [`dead_links`] to decide which `id:` link targets exist.
 #[must_use]
 pub fn all_ids(content: &str) -> Vec<String> {
     content
@@ -181,9 +251,19 @@ pub fn all_ids(content: &str) -> Vec<String> {
 /// the exact `YYYY-MM-DD` shape here stops path traversal — e.g. a prompt of
 /// `../../../../tmp/pwned` would otherwise create/overwrite a file far outside
 /// the notes directory.
+///
+/// Only the shape is checked, not calendar validity: `2026-99-99` passes.
+///
+/// # Examples
+/// ```
+/// assert!(vix_roam::is_valid_daily_date("2026-07-12"));
+/// assert!(!vix_roam::is_valid_daily_date("../../etc/passwd"));
+/// ```
 #[must_use]
 pub fn is_valid_daily_date(date: &str) -> bool {
     let b = date.as_bytes();
+    // The length check short-circuits first, so the `b[4]`/`b[7]` indexing
+    // below can never panic.
     b.len() == 10
         && b[4] == b'-'
         && b[7] == b'-'
@@ -196,18 +276,29 @@ pub fn is_valid_daily_date(date: &str) -> bool {
 /// The filename for the daily note of `date` (a `YYYY-MM-DD` string). Returns
 /// `None` when `date` is not a valid `YYYY-MM-DD`, so a crafted date can't be
 /// turned into a traversal path.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vix_roam::daily_filename("2026-06-28").as_deref(), Some("2026-06-28.org"));
+/// assert_eq!(vix_roam::daily_filename("../x"), None);
+/// ```
 #[must_use]
 pub fn daily_filename(date: &str) -> Option<String> {
     is_valid_daily_date(date).then(|| format!("{date}.org"))
 }
 
-/// A fresh daily-note file titled with its date (no `:ID:` — the host fills it).
+/// A fresh daily-note file titled with its date, with `id` in its property
+/// drawer.
+///
+/// The caller supplies the `id` (the host generates it); `date` should already
+/// have passed [`is_valid_daily_date`].
 #[must_use]
 pub fn daily_template(date: &str, id: &str) -> String {
     format!(":PROPERTIES:\n:ID:       {id}\n:END:\n#+title: {date}\n")
 }
 
-/// A timestamped daily-note entry: a `* HH:MM text` headline.
+/// A timestamped daily-note entry: a `* HH:MM text` headline, newline
+/// terminated, ready to append to a daily file.
 #[must_use]
 pub fn daily_entry(time: &str, text: &str) -> String {
     format!("* {time} {text}\n")
@@ -215,7 +306,9 @@ pub fn daily_entry(time: &str, text: &str) -> String {
 
 /// Locate (start, end) line indices of the file-level property drawer — the
 /// `:PROPERTIES:` … `:END:` block at the very top (allowing leading blank lines).
-/// Returns the half-open line range covering both delimiters.
+/// Returns the half-open line range covering both delimiters, so `end - 1` is the
+/// index of the `:END:` line. `None` if the file does not open with a drawer or
+/// the drawer is unterminated.
 fn drawer_range(lines: &[&str]) -> Option<(usize, usize)> {
     let mut i = 0;
     while i < lines.len() && lines[i].trim().is_empty() {
@@ -239,6 +332,17 @@ fn drawer_range(lines: &[&str]) -> Option<(usize, usize)> {
 /// drawer at the top if absent). If a line for `key` already exists, `value` is
 /// appended to it separated by a space (org-roam stores multi-valued properties
 /// such as `ROAM_ALIASES` / `ROAM_REFS` this way).
+///
+/// `key` is upper-cased. Existing-key matching is by prefix (`:KEY:`), and the
+/// caller is responsible for any quoting `value` needs (e.g. `"alias"`).
+///
+/// # Examples
+/// ```
+/// let note = vix_roam::new_node("N", "I1");
+/// let note = vix_roam::append_property(&note, "ROAM_ALIASES", "\"alt\"");
+/// let note = vix_roam::append_property(&note, "ROAM_ALIASES", "\"two\"");
+/// assert!(note.contains(":ROAM_ALIASES: \"alt\" \"two\""));
+/// ```
 #[must_use]
 pub fn append_property(content: &str, key: &str, value: &str) -> String {
     let key = key.to_ascii_uppercase();
@@ -261,6 +365,15 @@ pub fn append_property(content: &str, key: &str, value: &str) -> String {
 /// Add `tag` to the file's `#+filetags:` line (Org's `:tag1:tag2:` form),
 /// creating the line just after `#+title:` (or at the top) if absent. A tag
 /// already present is left untouched.
+///
+/// Surrounding colons and whitespace on `tag` are ignored; an empty tag returns
+/// `content` unchanged.
+///
+/// # Examples
+/// ```
+/// let note = vix_roam::add_filetag("#+title: N\n", "work");
+/// assert_eq!(note, "#+title: N\n#+filetags: :work:\n");
+/// ```
 #[must_use]
 pub fn add_filetag(content: &str, tag: &str) -> String {
     let tag = tag.trim().trim_matches(':');
@@ -274,6 +387,8 @@ pub fn add_filetag(content: &str, tag: &str) -> String {
             if line.split(':').any(|t| t == tag) {
                 return content.to_string();
             }
+            // Tags are `:a:b:`; make sure the existing list is closed before
+            // appending, since hand-written lines may omit the trailing colon.
             if !line.trim_end().ends_with(':') {
                 line.push(':');
             }
@@ -291,6 +406,9 @@ pub fn add_filetag(content: &str, tag: &str) -> String {
     lines.join("\n")
 }
 
+/// Matches the opening of an `[[id:<id>]` link and captures `<id>`. The closing
+/// `]` of the link target is required but the description part is not matched,
+/// so `[[id:X]]` and `[[id:X][label]]` both work.
 #[expect(
     clippy::expect_used,
     reason = "fixed regex literal, compiled once and covered by tests"
@@ -303,6 +421,11 @@ static ID_LINK: LazyLock<Regex> =
 /// `[[id:<target_id>]…]` links, listing each linking file with the line that
 /// contains the link. Also lists *unlinked references*: files that mention
 /// `target_title` in text but do not link to it.
+///
+/// Matching is plain substring search: links via `id:{target_id}]`, unlinked
+/// mentions via a case-insensitive (ASCII) title search that skips `#+title:`
+/// lines. A file with at least one link is never also listed as unlinked. An
+/// empty id or title disables the corresponding section.
 #[must_use]
 pub fn backlinks(target_id: &str, target_title: &str, files: &[(String, String)]) -> String {
     let mut linked: Vec<(String, String)> = Vec::new();
@@ -343,9 +466,25 @@ pub fn backlinks(target_id: &str, target_title: &str, files: &[(String, String)]
 /// both an `:ID:` and a `#+title:`, with an edge for every `[[id:…]]` link that
 /// resolves to another node. Wrap the result in an Org `#+begin_src mermaid`
 /// block so it renders in tools that support it.
+///
+/// Node labels are sanitised so a crafted title cannot inject Mermaid syntax
+/// (see the inline comment and the `graph_label_cannot_break_out...` test).
+/// Duplicate ids keep only the first file; self-links are not drawn.
+///
+/// # Examples
+/// ```
+/// let files = vec![
+///     ("a.org".to_string(), ":PROPERTIES:\n:ID: A\n:END:\n#+title: Alpha\n[[id:B][Beta]]\n".to_string()),
+///     ("b.org".to_string(), ":PROPERTIES:\n:ID: B\n:END:\n#+title: Beta\n".to_string()),
+/// ];
+/// let g = vix_roam::graph(&files);
+/// assert!(g.contains("n0 --> n1"));
+/// ```
 #[must_use]
 pub fn graph(files: &[(String, String)]) -> String {
-    // Assign a stable index per id, in file order.
+    // Assign a stable index per id, in file order. Mermaid node names are
+    // `n<index>` rather than the ids themselves, since ids may contain
+    // characters Mermaid rejects in identifiers.
     let mut ids: Vec<(String, String)> = Vec::new(); // (id, title)
     for (_, content) in files {
         if let (Some(id), Some(title)) = (node_id(content), node_title(content))
@@ -389,6 +528,10 @@ pub fn graph(files: &[(String, String)]) -> String {
 
 /// Compile a node **index**: a sortable Org table of every node's title, file,
 /// and `#+filetags:`. Files without a `#+title:` are skipped.
+///
+/// Rows are sorted by `(title, file, tags)` (byte-wise, so uppercase sorts
+/// before lowercase). Unlike [`graph`], a file need not have an `:ID:` to be
+/// listed.
 #[must_use]
 pub fn index(files: &[(String, String)]) -> String {
     let mut rows: Vec<(String, String, String)> = Vec::new();
@@ -428,6 +571,9 @@ pub fn index(files: &[(String, String)]) -> String {
 /// Report **dead `id:` links**: `[[id:…]]` links whose target ID is not declared
 /// by any node in `files`. Lists each broken link with its file and the line it
 /// appears on, into an Org buffer.
+///
+/// A link is "dead" when its id is not declared by *any* `:ID:` line in the
+/// scanned files, including per-headline drawers (via [`all_ids`]).
 #[must_use]
 pub fn dead_links(files: &[(String, String)]) -> String {
     let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();

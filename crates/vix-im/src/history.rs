@@ -3,6 +3,16 @@
 //! Decoding is tolerant: a line that is blank or not a message is skipped,
 //! so one damaged line (a crash mid-write) never loses the rest. Decoded
 //! text is sanitized, since history files live outside Vix's control.
+//!
+//! Pure string-in/string-out: the App reads and writes the files and supplies
+//! the clock for [`prune`]. Owning spec: `crates/vix-im/spec/index.md`.
+//!
+//! ```
+//! use vix_im::{history, Message};
+//! let messages = vec![Message::text("ana", 1, "hi")];
+//! let text = history::encode(&messages).unwrap();
+//! assert_eq!(history::decode(&text), messages);
+//! ```
 
 use crate::Message;
 
@@ -18,7 +28,8 @@ pub fn encode_line(message: &Message) -> Result<String, serde_json::Error> {
     serde_json::to_string(message)
 }
 
-/// Many messages as JSONL, each line ending in `'\n'`.
+/// Many messages as JSONL, each line ending in `'\n'` (so the result can be
+/// appended to an existing history file as-is).
 ///
 /// # Errors
 ///
@@ -48,7 +59,12 @@ pub fn decode(text: &str) -> Vec<Message> {
 
 /// Drop messages older than `days` days before `now_ms` (Unix
 /// milliseconds), keeping order. Returns how many were dropped.
+///
+/// A message exactly at the cutoff is kept. Arithmetic saturates, so a huge
+/// `days` simply keeps everything.
 pub fn prune(messages: &mut Vec<Message>, now_ms: i64, days: u32) -> usize {
+    // Saturating, so absurd retention settings cannot overflow into a cutoff
+    // in the future (which would silently delete all history).
     let cutoff = now_ms.saturating_sub(i64::from(days).saturating_mul(DAY_MS));
     let before = messages.len();
     messages.retain(|m| m.time_utc >= cutoff);

@@ -1,3 +1,19 @@
+//! The undo **tree**: every edit batch ever applied to a buffer, kept as nodes
+//! in an arena so that editing after an undo adds a branch instead of
+//! discarding the redo history.
+//!
+//! [`History`] only stores and navigates [`EditBatch`]es; it never touches the
+//! text. The owning [`crate::editor::Editor`] applies (or inverts) the batch a
+//! call returns. It is `serde`-serializable so the persistent-undo feature can
+//! save it next to the file (the `vix-undo-store` crate), which is why the node
+//! timestamp is `#[serde(default)]` for histories written before T638.
+//!
+//! Invariants: node `0` is the root and is never pruned; `current` always
+//! indexes a live node; every live node's `parent`/`children` point at live
+//! nodes. Pruning ([`History::new`]'s `max_items`) only removes off-path
+//! leaves, so the root-to-current path is always intact. See
+//! `crates/vix-editor-core/spec/index.md`.
+
 use std::collections::HashSet;
 
 use crate::code::EditBatch;
@@ -63,7 +79,26 @@ pub struct History {
 
 impl History {
     /// Create an empty history (just the root state) keeping at most `max_items`
-    /// live nodes.
+    /// live nodes (`0` means unlimited).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_editor_core::code::{Edit, EditBatch, EditKind};
+    /// use vix_editor_core::history::History;
+    ///
+    /// let mut batch = EditBatch::new();
+    /// batch.edits.push(Edit {
+    ///     kind: EditKind::Insert { offset: 0, text: "hi".to_string() },
+    /// });
+    ///
+    /// let mut history = History::new(100);
+    /// assert!(history.undo().is_none()); // at the root there is nothing to undo
+    /// history.push(batch);
+    /// assert!(history.redo().is_none()); // a fresh edit is the tip
+    /// assert!(history.undo().is_some());
+    /// assert!(history.redo().is_some()); // the branch we left is the redo path
+    /// ```
     #[must_use]
     pub fn new(max_items: usize) -> Self {
         let root = Node {
@@ -83,6 +118,8 @@ impl History {
     /// Record `batch` as a new state branching from the current one, and move to
     /// it. Existing sibling branches are kept (not discarded).
     pub fn push(&mut self, batch: EditBatch) {
+        // Node ids are arena indices and slots are tombstoned, never reused,
+        // so `seq` stays a stable id for the life of the history.
         let new = self.nodes.len();
         self.nodes.push(Some(Node {
             batch: Some(batch),
@@ -102,6 +139,7 @@ impl History {
     /// Step back to the parent state, returning the batch to invert (or `None` at
     /// the root). The branch just left becomes the parent's active redo branch.
     pub fn undo(&mut self) -> Option<EditBatch> {
+        // `?` on the root (no parent/batch) makes undo-at-root a clean `None`.
         let node = self.nodes[self.current].as_ref()?;
         let parent = node.parent?;
         let batch = node.batch.clone()?;
@@ -131,6 +169,7 @@ impl History {
         if node.children.len() < 2 {
             return false;
         }
+        // With no explicit active child, start the cycle from the first one.
         let active = node.active_child.unwrap_or(node.children[0]);
         let pos = node.children.iter().position(|&c| c == active).unwrap_or(0);
         let next = node.children[(pos + 1) % node.children.len()];
@@ -192,7 +231,7 @@ impl History {
     }
 
     /// The set of nodes on the path from the root to the current state (never
-    /// pruned).
+    /// pruned: pruning them would make undo lose the way back to the root).
     fn protected(&self) -> HashSet<usize> {
         let mut set = HashSet::new();
         let mut cur = Some(self.current);
@@ -215,16 +254,21 @@ impl History {
                 return;
             }
             let protected = self.protected();
+            // Lowest index == oldest. Only leaves go, so no node is ever
+            // orphaned and the tree stays connected.
             let victim = self.nodes.iter().enumerate().find_map(|(i, n)| {
                 n.as_ref()
                     .filter(|nd| nd.children.is_empty() && !protected.contains(&i))
                     .map(|_| i)
             });
+            // Everything left is on the current path or has children: the cap
+            // is soft, so give up rather than break the tree.
             let Some(v) = victim else { return };
             if let Some(parent) = self.nodes[v].as_ref().and_then(|n| n.parent)
                 && let Some(p) = self.nodes[parent].as_mut()
             {
                 p.children.retain(|&c| c != v);
+                // Keep `active_child` pointing at a live node.
                 if p.active_child == Some(v) {
                     p.active_child = p.children.last().copied();
                 }

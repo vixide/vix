@@ -4,6 +4,17 @@
 //! `/follow` and `/clear`. Command names are matched without regard to ASCII case. An
 //! unknown command is an error and is never sent as text; to send text that
 //! starts with `/`, double it (`//etc/hosts` sends `/etc/hosts`).
+//!
+//! Parsing is purely syntactic: whether a room exists, a nick is taken or a
+//! `/follow` target is real is the App's business. Failures are returned as
+//! [`CommandError`] values (never text) so the App can translate them. Owning
+//! spec: `crates/vix-im/spec/index.md`.
+//!
+//! ```
+//! use vix_im::{parse_input, Command, Input};
+//! assert_eq!(parse_input("/me waves"), Ok(Input::Command(Command::Me("waves".into()))));
+//! assert_eq!(parse_input("//etc/hosts"), Ok(Input::Text("/etc/hosts".into())));
+//! ```
 
 use crate::Presence;
 
@@ -79,9 +90,12 @@ pub enum CommandError {
 /// [`CommandError`] for an unknown command, a missing argument or a bad
 /// `/status` value. Text that does not start with `/` always parses.
 pub fn parse_input(line: &str) -> Result<Input, CommandError> {
+    // Only a `/` in column 0 starts a command; leading whitespace makes the
+    // line ordinary text (so pasted indented `/path` text is not a command).
     let Some(rest) = line.strip_prefix('/') else {
         return Ok(Input::Text(line.to_string()));
     };
+    // `//x` is the escape for text that really starts with a slash.
     if rest.starts_with('/') {
         return Ok(Input::Text(rest.to_string()));
     }
@@ -99,6 +113,8 @@ pub fn parse_input(line: &str) -> Result<Input, CommandError> {
         }
         "part" => {
             let (first, more) = split_word(args);
+            // IRC channel prefixes. Anything else is the start of a reason
+            // for leaving the selected room, so `/part bye all` works.
             if first.starts_with(['#', '&', '+', '!']) {
                 Command::Part {
                     room: Some(first.to_string()),
@@ -134,6 +150,7 @@ pub fn parse_input(line: &str) -> Result<Input, CommandError> {
     Ok(Input::Command(command))
 }
 
+/// `args` if non-empty, else [`CommandError::MissingArgument`] for `name`.
 fn required<'a>(name: &'static str, args: &'a str) -> Result<&'a str, CommandError> {
     if args.is_empty() {
         Err(CommandError::MissingArgument(name))
