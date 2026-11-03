@@ -84,6 +84,8 @@ impl App {
         });
     }
 
+    /// Handle a key in the undo-tree panel: movement keys select a state and live-preview it in
+    /// the buffer; Enter commits the previewed state; Esc cancels and restores the original.
     pub(super) fn undo_tree_key(&mut self, key: KeyEvent) {
         let page = (self.layout.undo_tree.height as usize).max(1);
         let Some(state) = self.undo_tree.as_mut() else {
@@ -110,6 +112,8 @@ impl App {
         self.preview_undo_tree();
     }
 
+    /// Handle a mouse event in the undo-tree panel: a left click on a row selects and previews
+    /// that state.
     pub(super) fn undo_tree_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;

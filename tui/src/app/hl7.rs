@@ -48,6 +48,8 @@ impl App {
         self.hl7_panel = Some(crate::hl7::Panel::open(&msg, self.editor.cursor_line()));
     }
 
+    /// Handle a key in the HL7 segment panel: move/page, filter-by-typing (Backspace edits the
+    /// filter), Enter jumps the editor to the segment's line, Esc closes.
     pub(super) fn hl7_key(&mut self, key: KeyEvent) {
         let page = (self.layout.hl7_panel.height as usize).max(1);
         let Some(p) = self.hl7_panel.as_mut() else {
@@ -66,6 +68,8 @@ impl App {
         }
     }
 
+    /// Handle a mouse event in the HL7 panel: a left click on a row selects it and jumps to its
+    /// location.
     pub(super) fn hl7_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;

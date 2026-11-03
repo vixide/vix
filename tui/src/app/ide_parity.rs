@@ -430,6 +430,8 @@ impl App {
     /// best files, commands, symbols of the open file and workspace symbols,
     /// in that order, each capped so one kind cannot crowd out the rest.
     pub(super) fn everywhere_entries(&self, query: &str) -> Vec<Entry> {
+        // Per-kind caps for the mixed Search Everywhere list: files first, then commands, then
+        // symbols.
         const FILES: usize = 12;
         const COMMANDS: usize = 8;
         const SYMBOLS: usize = 6;
@@ -837,6 +839,7 @@ fn format_time_ms(ms: u64) -> String {
 
 /// A short size such as `812 B` or `3.4 KB`.
 fn format_bytes(n: u64) -> String {
+    // Binary (1024-based) units, matching how file sizes are shown elsewhere in the UI.
     const KB: u64 = 1024;
     if n < KB {
         format!("{n} B")

@@ -88,6 +88,8 @@ impl App {
         }
     }
 
+    /// Handle a key in the commit-graph panel, dispatching on its current mode (browse,
+    /// confirm, new-branch prompt), then load more commits if the selection needs them.
     pub(super) fn git_graph_key(&mut self, key: KeyEvent) {
         let mode = self
             .git_graph
@@ -101,6 +103,10 @@ impl App {
         self.git_graph_load_more();
     }
 
+    /// Browse-mode keys: arrows/paging move; Tab/Shift-Tab cycle the shown reference (and
+    /// reload); Enter opens the commit diff; typing filters (Backspace edits the filter);
+    /// Ctrl+O checks out, Ctrl+P cherry-picks, Ctrl+B creates a branch, Ctrl+Y copies the hash;
+    /// Esc closes.
     fn git_graph_browse_key(&mut self, key: KeyEvent) {
         let page = (self.layout.git_graph.height as usize).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
@@ -146,6 +152,8 @@ impl App {
         };
     }
 
+    /// Confirm-mode keys: `y`/Enter runs the pending checkout or cherry-pick on `sha`; any
+    /// other key cancels. Always returns the panel to browse mode first.
     fn git_graph_confirm_key(&mut self, key: KeyEvent, action: Action, sha: &str) {
         let yes = matches!(key.code, KeyCode::Char('y' | 'Y') | KeyCode::Enter);
         if let Some(p) = self.git_graph.as_mut() {
@@ -160,6 +168,9 @@ impl App {
         }
     }
 
+    /// New-branch prompt keys: Esc cancels, Enter creates the branch `name` at `sha` (an empty
+    /// name only reports a status message), Backspace/characters edit the name. Returns to
+    /// browse mode after Esc/Enter.
     fn git_graph_branch_key(&mut self, key: KeyEvent, sha: &str, mut name: String) {
         match key.code {
             KeyCode::Esc => {
@@ -204,6 +215,8 @@ impl App {
         }
     }
 
+    /// Check out the commit: its branch when it has one, else a detached HEAD. Refreshes
+    /// everything on success; reports git's error as a message on failure.
     fn git_graph_checkout(&mut self, sha: &str) {
         let Some(commit) = self
             .git_graph
@@ -228,6 +241,8 @@ impl App {
         }
     }
 
+    /// Cherry-pick commit `sha` onto the current branch, then refresh; a failure (including
+    /// conflicts) is reported as an error message.
     fn git_graph_cherry_pick(&mut self, sha: &str) {
         let abbrev = self
             .git_graph
@@ -268,6 +283,7 @@ impl App {
         self.git_graph_reload();
     }
 
+    /// Copy the selected commit's full hash into the clipboard.
     fn git_graph_copy_hash(&mut self) {
         let Some(sha) = self
             .git_graph

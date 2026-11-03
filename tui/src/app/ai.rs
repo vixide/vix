@@ -211,6 +211,7 @@ impl App {
     pub(super) fn ai_generate_doc_comment(&mut self) {
         // A generous but bounded context window -- enough for a typical
         // function/type/impl block without risking sending the whole file.
+        // Lines of surrounding text sent to the assistant with the doc-comment prompt.
         const CONTEXT_LINES: usize = 40;
         if self.ai_replace.is_some() {
             self.status = t!("status.ai_busy").to_string();
@@ -350,6 +351,12 @@ impl App {
         clippy::expect_used,
         reason = "stdout was configured as piped when the child was spawned"
     )]
+    /// Spawn the configured assistant CLI (`ai_command`) in a background thread and return the
+    /// receiver its output streams over.
+    ///
+    /// Returns `None` (with a status message set) when the private temp input file cannot be
+    /// written. `prompt` is the instruction and `text` the buffer or selection text passed to
+    /// the command through a temp file.
     pub(super) fn spawn_ai_cli(
         &mut self,
         prompt: &str,

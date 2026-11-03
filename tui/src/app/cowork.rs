@@ -46,6 +46,8 @@ const FILE_LIST_REUSE: Duration = Duration::from_secs(5);
 /// refused, so a guest cannot make the host open every file in the project.
 const MAX_SHARED_BUFFERS: usize = 32;
 
+/// The host half of a session: the listener that accepts guests, the `vix-cowork` session
+/// state, one network link per admitted guest, and the address advertised in invites.
 struct Host {
     listener: Listener,
     session: HostSession,
@@ -53,6 +55,7 @@ struct Host {
     advertise: String,
 }
 
+/// The guest half of a session: the `vix-cowork` guest state and the single link to the host.
 struct Guest {
     session: GuestSession,
     link: Link,
@@ -136,6 +139,8 @@ fn remote_rel(tab: &crate::editor::Tab) -> Option<SharedPath> {
     SharedPath::parse(p).ok()
 }
 
+/// Convert the CRDT's `BufferEdit`s into the editor core's `Splice` form (same
+/// offset/delete/insert triple) so they can be applied to a buffer.
 fn splices(edits: &[BufferEdit]) -> Vec<Splice> {
     edits
         .iter()
@@ -279,10 +284,14 @@ fn roster_row(entry: &RosterEntry) -> String {
     row
 }
 
+/// The IM conversation id of the session chat (`SESSION`), which doubles as the Cowork chat
+/// room.
 fn session_id() -> ConversationId {
     ConversationId::new(SESSION)
 }
 
+/// The word shown to users for a permission level; any level beyond view/edit is shown as
+/// `terminal`.
 fn level_name(p: Permission) -> &'static str {
     match p {
         Permission::View => "view",
@@ -291,6 +300,8 @@ fn level_name(p: Permission) -> &'static str {
     }
 }
 
+/// Parse a permission word typed at a prompt (`view`, `edit`, `terminal`, case-insensitive)
+/// into a [`Permission`]; anything else is `None`.
 fn parse_level(word: &str) -> Option<Permission> {
     match word.trim().to_ascii_lowercase().as_str() {
         "view" => Some(Permission::View),
@@ -300,6 +311,7 @@ fn parse_level(word: &str) -> Option<Permission> {
     }
 }
 
+/// The name shown to other participants: `$USER`, else `$USERNAME`, else `guest`.
 fn display_name() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
@@ -332,17 +344,22 @@ impl App {
         true
     }
 
+    /// Report a Cowork failure as an error message.
     fn cowork_error(&mut self, error: impl std::fmt::Display) {
         self.messages
             .error(t!("msg.cowork_error", error = error.to_string()).to_string());
     }
 
+    /// Whether a session is hosted, joined, or a join is still connecting; a second host/join
+    /// request is then answered with the peer list instead.
     fn cowork_busy(&self) -> bool {
         self.cowork.host.is_some() || self.cowork.guest.is_some() || self.cowork.joining.is_some()
     }
 
     // ----- user actions -----------------------------------------------------
 
+    /// Start hosting: ask for the address to bind (default `127.0.0.1:0`, an OS-chosen port).
+    /// If a session is already open, show its peers instead.
     fn cowork_begin_host(&mut self) {
         if self.cowork_busy() {
             self.cowork_peers();
@@ -354,6 +371,9 @@ impl App {
         );
     }
 
+    /// Bind the listener and open the host session. `input` is `bind` or `bind=advertise`,
+    /// where the optional `advertise` address is what invites carry (for NAT or port-forwarded
+    /// setups). Opens the session chat and shows a first invite.
     fn cowork_start_host(&mut self, input: &str) {
         let (bind, advertise) = match input.trim().split_once('=') {
             Some((b, a)) => (b.trim(), Some(a.trim().to_string())),
@@ -382,6 +402,8 @@ impl App {
         self.cowork_invite();
     }
 
+    /// Create a fresh invite (valid for `INVITE_TTL`) and show it in a text dialog; reports
+    /// when this instance is not hosting.
     fn cowork_invite(&mut self) {
         let Some(host) = self.cowork.host.as_ref() else {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -423,6 +445,9 @@ impl App {
         self.cowork_rel(tab.path.as_ref()?)
     }
 
+    /// Share the active file with the guests: seed a CRDT document from its text and start
+    /// logging the buffer's edits so they can be pumped to guests. Refuses unsaved, remote,
+    /// image or private files.
     fn cowork_share(&mut self) {
         if self.cowork.host.is_none() {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -457,6 +482,7 @@ impl App {
         }
     }
 
+    /// Stop sharing the active file.
     fn cowork_unshare(&mut self) {
         let Some(rel) = self.cowork_active_rel() else {
             return;
@@ -464,6 +490,7 @@ impl App {
         self.cowork_unshare_path(&rel);
     }
 
+    /// Stop sharing `rel`: tell the guests, stop its edit log and forget its last-sent cursor.
     fn cowork_unshare_path(&mut self, rel: &SharedPath) {
         let out = self.cowork.host.as_mut().map(|h| h.session.unshare(rel));
         let Some(out) = out else {
@@ -479,6 +506,8 @@ impl App {
         self.status = t!("status.cowork_unshared", path = rel.as_str()).to_string();
     }
 
+    /// Start joining: ask for an invite string. If a session is already open, show its peers
+    /// instead.
     fn cowork_begin_join(&mut self) {
         if self.cowork_busy() {
             self.cowork_peers();
@@ -490,6 +519,9 @@ impl App {
         ));
     }
 
+    /// Parse the invite and connect on a background thread (the handshake and the host's
+    /// consent wait can take minutes); the result arrives on `State::joining` and is picked up
+    /// by `cowork_poll_join`.
     fn cowork_start_join(&mut self, input: &str) {
         let invite = match input.parse::<Invite>() {
             Ok(i) => i,
@@ -511,6 +543,8 @@ impl App {
         self.cowork.joining = Some(rx);
     }
 
+    /// Show the session's participants (with the host's view of each guest's permission) in a
+    /// text dialog.
     fn cowork_peers(&mut self) {
         let mut lines = Vec::new();
         if let Some(h) = self.cowork.host.as_ref() {
@@ -532,6 +566,7 @@ impl App {
         self.open_text_dialog(t!("menu.item.cowork.peers").to_string(), &lines.join("\n"));
     }
 
+    /// Host only: ask which guest to change and to what level (`<id> view|edit|terminal`).
     fn cowork_begin_permissions(&mut self) {
         if self.cowork.host.is_none() {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -543,6 +578,8 @@ impl App {
         ));
     }
 
+    /// Apply a permission change typed as `<peer id> <level>` and tell the affected guest; an
+    /// unknown guest or level only sets a status message.
     fn cowork_set_permission(&mut self, input: &str) {
         let mut words = input.split_whitespace();
         let id = words.next().and_then(|w| w.parse::<u64>().ok()).map(PeerId);
@@ -568,6 +605,10 @@ impl App {
         .to_string();
     }
 
+    /// Leave or end the session. A host says goodbye to every guest and closes the listener; a
+    /// guest says goodbye to the host. Either way shared buffers stop logging edits and shared-
+    /// in ones become ordinary local copies; presence, follow, terminal and chat state are
+    /// cleared.
     fn cowork_leave(&mut self) {
         if let Some(host) = self.cowork.host.take() {
             for link in host.links.values() {
@@ -626,6 +667,9 @@ impl App {
         }
     }
 
+    /// Host: answer the consent prompt for a knocking guest. `input` is the permission level to
+    /// grant; anything else declines. On success the guest is admitted, its link gets a reader
+    /// thread feeding `State::rx`, and everyone is told.
     fn cowork_answer_consent(&mut self, input: &str) {
         let Some(knock) = self.cowork.knock.take() else {
             return;
@@ -679,6 +723,8 @@ impl App {
         }
     }
 
+    /// The host-side tab index for a shared path: the real file's tab (also matched through a
+    /// differently spelled but equivalent path), or the `cowork:` tab for the session notes.
     fn cowork_host_tab(&self, rel: &SharedPath) -> Option<usize> {
         if rel.is_session_notes() {
             // The notes are not a file: the host's tab is a `cowork:` one.
@@ -700,6 +746,7 @@ impl App {
             })
     }
 
+    /// The tab index of the shared-in (`cowork:`) buffer for `rel`, if open.
     fn cowork_guest_tab(&self, rel: &SharedPath) -> Option<usize> {
         let want = PathBuf::from(format!("{REMOTE_PATH_PREFIX}{}", rel.as_str()));
         self.editor
@@ -881,6 +928,8 @@ impl App {
 
     // ----- follow mode (T693) ---------------------------------------------------
 
+    /// The presence board and this instance's own peer id (`PeerId::HOST` when hosting); `None`
+    /// when no session is open.
     fn cowork_board_and_me(&self) -> Option<(&PresenceBoard, PeerId)> {
         if let Some(h) = self.cowork.host.as_ref() {
             Some((h.session.board(), PeerId::HOST))
@@ -892,6 +941,9 @@ impl App {
         }
     }
 
+    /// Ask which participant to follow. The input is prefilled with the first other
+    /// participant's id, or left empty when already following (submitting empty stops
+    /// following).
     fn cowork_begin_follow(&mut self) {
         let Some((board, me)) = self.cowork_board_and_me() else {
             self.status = t!("status.cowork_inactive").to_string();
@@ -916,6 +968,8 @@ impl App {
         );
     }
 
+    /// Start following the participant whose id was typed, or stop following when the input is
+    /// empty. Your own id and unknown ids are rejected.
     fn cowork_set_follow(&mut self, input: &str) {
         if input.trim().is_empty() {
             self.cowork.follow.stop();
@@ -983,6 +1037,8 @@ impl App {
 
     // ----- workspace sharing (T696) -----------------------------------------------
 
+    /// Host only: toggle whether guests may list and request any (non-private) file under the
+    /// project root, not just buffers the host shared explicitly (T696).
     fn cowork_toggle_workspace(&mut self) {
         let Some(host) = self.cowork.host.as_mut() else {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -998,6 +1054,8 @@ impl App {
         .to_string();
     }
 
+    /// Guest: ask the host for the list of files it offers; the answer arrives as
+    /// `GuestEvent::Files` and opens the palette over them.
     fn cowork_files(&mut self) {
         let Some(guest) = self.cowork.guest.as_ref() else {
             self.status = t!("status.cowork_not_guest").to_string();
@@ -1133,6 +1191,8 @@ impl App {
     // per-tick differences), and the shell keeps running on the host only.
     // Sharing and allowing input are each the host's explicit, confirmed act.
 
+    /// Host: stop sharing the terminal, or (after an explicit confirmation naming the number of
+    /// guests) start sharing the active terminal tab. Refuses when no terminal is open.
     fn cowork_toggle_terminal_share(&mut self) {
         let Some(host) = self.cowork.host.as_mut() else {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -1158,6 +1218,8 @@ impl App {
         });
     }
 
+    /// Host: revoke guests' terminal typing, or (after an explicit confirmation) allow it. The
+    /// terminal must be shared first.
     fn cowork_toggle_terminal_input(&mut self) {
         let Some(host) = self.cowork.host.as_mut() else {
             self.status = t!("status.cowork_not_hosting").to_string();
@@ -1209,6 +1271,8 @@ impl App {
         }
     }
 
+    /// Share the active terminal tab: send guests its full rendered screen, remember it as the
+    /// baseline for later diffs and pin the shared tab by id (T631).
     fn cowork_share_terminal_now(&mut self) {
         // The active tab is the one shared (T631), pinned by id.
         let Some((id, screen)) = self.terminals.active_id().zip(
@@ -1297,6 +1361,8 @@ impl App {
         self.cowork.term_sent = Some(screen);
     }
 
+    /// Host: the shared terminal is gone (closed or unshared); tell guests and forget the
+    /// baseline screen and tab id.
     fn cowork_stop_terminal_share(&mut self) {
         let out = self
             .cowork
@@ -1323,6 +1389,7 @@ impl App {
         }
     }
 
+    /// Guest: report whether this guest may type into the shared terminal or only watch.
     fn cowork_terminal_input_status(&mut self) {
         let can = self
             .cowork
@@ -1337,6 +1404,8 @@ impl App {
         .to_string();
     }
 
+    /// Guest: open or close the shared-terminal overlay (which takes every key while open).
+    /// Needs a session and a terminal the host has shared.
     fn cowork_toggle_terminal_view(&mut self) {
         if self.cowork.guest.is_none() {
             self.status = t!("status.cowork_not_guest").to_string();
@@ -1551,6 +1620,8 @@ impl App {
             .collect()
     }
 
+    /// Build the participant roster from the presence board: each participant's current file,
+    /// You/host tags and mute state.
     fn cowork_roster_entries(&self) -> Vec<RosterEntry> {
         let Some((board, me)) = self.cowork_board_and_me() else {
             return Vec::new();
@@ -1772,6 +1843,8 @@ impl App {
         self.cowork_follow_tick();
     }
 
+    /// Pick up the result of a background join: on success become a guest (start its reader
+    /// thread and the session chat), otherwise report the error.
     fn cowork_poll_join(&mut self) {
         let Some(rx) = self.cowork.joining.as_ref() else {
             return;
@@ -1800,6 +1873,9 @@ impl App {
         }
     }
 
+    /// Host: surface the next authenticated guest that is waiting for approval as a consent
+    /// prompt (default answer `view`). A pending guest whose consent prompt was dismissed is
+    /// declined; nothing is shown while another prompt is open.
     fn cowork_poll_knock(&mut self) {
         // A consent prompt dismissed with Esc is a refusal.
         let prompting = self
@@ -1831,6 +1907,11 @@ impl App {
             Some(Prompt::new(PromptKind::CoworkConsent, label).with_input("view".to_string()));
     }
 
+    /// Feed locally made edits into the session. The host drains the edit log of every shared
+    /// buffer (and the session notes) into its document and broadcasts; a closed shared tab
+    /// stops being shared, and a failed edit stops sharing that buffer because buffer and
+    /// document could no longer agree. A guest does the same for shared-in buffers, leaving the
+    /// session if its document rejects an edit.
     fn cowork_pump_local(&mut self) {
         // Host: every shared buffer, and the session notes when open.
         for rel in self.cowork_host_paths() {
@@ -1914,6 +1995,8 @@ impl App {
         }
     }
 
+    /// Guest: the connection to the host is gone. Close it, turn shared-in tabs into local
+    /// copies and clear terminal and chat state.
     fn cowork_guest_lost(&mut self) {
         if let Some(g) = self.cowork.guest.take() {
             g.link.close();
@@ -1924,6 +2007,8 @@ impl App {
         self.status = t!("status.cowork_left").to_string();
     }
 
+    /// Drain the network events queued by the reader threads and route each message (or closed
+    /// link) to the host or guest handler.
     fn cowork_pump_remote(&mut self) {
         while let Ok((peer, event)) = self.cowork.rx.try_recv() {
             match event {
@@ -1945,6 +2030,8 @@ impl App {
         }
     }
 
+    /// Host: a guest's link closed. Drop its session state and link, tell the rest and announce
+    /// it in the chat.
     fn cowork_drop_guest(&mut self, peer: PeerId) {
         let Some(host) = self.cowork.host.as_mut() else {
             return;
@@ -1968,6 +2055,11 @@ impl App {
         }
     }
 
+    /// Host: handle one guest message through the session, then carry out its results: forward
+    /// replies, apply the guest's edits to the host buffers, save files the guest asked to save
+    /// (after which the saver is notified), answer file-list and open requests, forward
+    /// terminal keystrokes to the shared tab, show chat, and close links of peers the session
+    /// dropped.
     fn cowork_host_message(&mut self, peer: PeerId, msg: Message) {
         // Its name, while the session still knows it: a guest that leaves
         // (or is dropped for misbehaving) is gone after `handle`.
@@ -2036,6 +2128,9 @@ impl App {
         }
     }
 
+    /// Guest: handle one host message through the session and apply each resulting event
+    /// (open/close/edit shared buffers, permission changes, file lists, terminal mirror
+    /// updates, chat, presence). A protocol error ends the session.
     fn cowork_guest_message(&mut self, msg: Message) {
         let events = match self.cowork.guest.as_mut().map(|g| g.session.handle(msg)) {
             Some(Ok(events)) => events,
@@ -2138,6 +2233,9 @@ impl App {
         }
     }
 
+    /// Guest: open (or refresh) the shared-in buffer for `rel` from the host's snapshot `text`.
+    /// It is read-only unless the guest may edit; the first shared buffer and ones this guest
+    /// asked for take the focus. The session notes only open when their tab already exists.
     fn cowork_open_remote(&mut self, rel: &SharedPath, text: &str) {
         if rel.is_session_notes() && self.cowork_guest_tab(rel).is_none() {
             // The notes wait in the session until Session Notes opens them:
@@ -2184,6 +2282,9 @@ impl App {
         }
     }
 
+    /// Publish this participant's caret/selection in each shared buffer when it changed, and
+    /// refresh every shared buffer's remote carets from the presence board, with colors checked
+    /// for contrast against the editor background.
     fn cowork_pump_presence(&mut self) {
         // Background color for contrast-checked peer colors.
         let bg = match crate::theme::region_base(crate::theme::Region::Editor).bg {
@@ -2230,6 +2331,8 @@ impl App {
         }
     }
 
+    /// Send this participant's cursor for `rel` to the others: the host broadcasts it, a guest
+    /// sends it to the host (a failed send ends the session).
     fn cowork_send_cursor(&mut self, rel: &SharedPath, head: usize, anchor: Option<usize>) {
         if let Some(host) = self.cowork.host.as_ref() {
             let out = host.session.local_cursor(rel, head, anchor);
@@ -2242,6 +2345,8 @@ impl App {
         }
     }
 
+    /// The other participants' carets in `rel`, resolved against the current document and
+    /// colored for contrast against `bg`.
     fn cowork_carets(&self, rel: &SharedPath, bg: Rgb) -> Vec<RemoteCaret> {
         let (board, doc, me) = if let Some(h) = self.cowork.host.as_ref() {
             (h.session.board(), h.session.doc(rel), PeerId::HOST)

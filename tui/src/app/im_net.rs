@@ -286,6 +286,10 @@ impl App {
         clippy::too_many_arguments,
         reason = "the fields of one Event::Message, passed through as they are"
     )]
+    /// Deliver one incoming IRC message or `/me` action. A channel `target` routes to that
+    /// channel's conversation, anything else (a private message) to the sender's. A `verified`
+    /// sender is remembered as authenticated for that conversation; a missing server `time`
+    /// defaults to now.
     fn im_irc_message(
         &mut self,
         account: &str,

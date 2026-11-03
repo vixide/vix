@@ -506,14 +506,17 @@ impl App {
             .map_or(&[], |c| c.bindings)
     }
 
+    /// Whether `key` carries the Control modifier.
     pub(super) fn ctrl(key: &KeyEvent) -> bool {
         key.modifiers.contains(KeyModifiers::CONTROL)
     }
 
+    /// Whether `key` carries the Alt modifier.
     pub(super) fn alt(key: &KeyEvent) -> bool {
         key.modifiers.contains(KeyModifiers::ALT)
     }
 
+    /// Whether `key` carries the Shift modifier.
     pub(super) fn shift(key: &KeyEvent) -> bool {
         key.modifiers.contains(KeyModifiers::SHIFT)
     }
@@ -844,6 +847,8 @@ impl App {
         Some(token)
     }
 
+    /// Move focus between the explorer and the editor; going to the explorer first makes the
+    /// explorer pane visible if it was hidden.
     pub(super) fn toggle_focus_explorer_editor(&mut self) {
         self.focus = if self.focus == Focus::Explorer {
             Focus::Editor

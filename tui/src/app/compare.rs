@@ -85,6 +85,7 @@ impl App {
         self.editor.active_tab().and_then(|t| t.path.clone())
     }
 
+    /// Index of the open tab whose file path equals `path`, if any.
     fn tab_index_of(&self, path: &Path) -> Option<usize> {
         self.editor
             .tabs

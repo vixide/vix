@@ -57,6 +57,9 @@ impl App {
         }
     }
 
+    /// Handle a key in the interactive-rebase todo editor: Up/Down move, Alt+Up/Alt+Down
+    /// reorder the entry, `r` prompts for a new message (reword), another verb key sets that
+    /// action, Enter runs the rebase, Esc cancels it.
     pub(super) fn git_rebase_key(&mut self, key: KeyEvent) {
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         match key.code {
