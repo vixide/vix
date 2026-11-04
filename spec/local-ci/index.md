@@ -6,7 +6,8 @@ describes how to make the **local machine the primary authority** and the
 forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
-Status: **proposed**. Nothing here changes the gate itself; it changes where
+Status: **proposed**, except option 3 (trim hosted CI, T762), which is
+implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
 the gate runs and who has to trust whom.
 
 ## Why
@@ -63,7 +64,7 @@ Measured or observed, not assumed:
 | - | ---- | ----- | ---- | ------- |
 | 1 | **Gate tiers** (`fast`, `push`, `full`) so most pushes do not pay for each-feature, semver and mutation work | local time, remote minutes | low | **Do first.** |
 | 2 | **Signed gate attestation + `pre-push` hook**; forge CI verifies it instead of re-running | almost all remote minutes on trusted pushes | medium: self-reported, so needs principle 4 | **Do second.** |
-| 3 | **Trim hosted CI**: macOS/Windows and `cargo hack`, mutants and chaos only on schedule or tags; path filters; cancel superseded runs | most of the paid minutes | low | **Do alongside 1.** |
+| 3 | **Trim hosted CI**: macOS/Windows and `cargo hack`, mutants and chaos only on schedule or tags; path filters; cancel superseded runs | most of the paid minutes | low | **Done (T762).** |
 | 4 | **Self-hosted runner** on the maintainer's Mac: a [Forgejo runner](https://forgejo.org/docs/latest/admin/actions/) (host-mode label) for Codeberg, a GitHub or GitLab runner for the others | all hosted minutes, native macOS | medium: runs code on a personal machine | **Spike** (needs the maintainer's call on hardware and always-on). |
 | 5 | **Build caching** (shared `CARGO_TARGET_DIR`, `sccache`) | local time | low, but the `kache` wrappers are known to cause bogus linker and rustdoc failures in the gate | **Decide**: fix or retire `kache` for the gate; document the clean-room environment. |
 | 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Do** a Linux container script; Windows stays hosted but on tags and nightly only. |
