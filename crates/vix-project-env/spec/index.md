@@ -29,6 +29,9 @@ name = "nix"                 # shown in diagnostics, at most 64 characters
 detect = ["flake.nix"]       # the detector applies when ANY of these exists in the root
 command = ["nix-env-json"]   # program and arguments, run directly (no shell) in the root
 timeout_secs = 30            # optional: 1 to 60 seconds, default 5
+
+[detector.env]               # optional: extra variables for this command only
+NIX_CONFIG = "experimental-features = flakes"
 ```
 
 The command prints the same JSON object `direnv export json` does (string
@@ -45,6 +48,27 @@ nothing runs.
 JSON from `direnv`/`mise`/custom detectors must be an object of string values (`null` means
 "unset"); anything else, including keys with `=` or NUL bytes, is rejected
 whole. `direnv` and `mise` are killed after 5 seconds; a detector after its `timeout_secs` (default 5, at most 60). Stdin is closed.
+
+### Detector environment variables
+
+A detector's optional `env` table adds variables to **its own command's**
+environment, on top of the inherited one. They are not applied to language
+servers, tasks or the terminal (only the variables the command prints are).
+Values are plain strings: no shell, `$VAR` or `~` expansion. Rules, all
+all-or-nothing like the rest of the file (one bad entry invalidates it):
+
+- a name is `[A-Za-z_][A-Za-z0-9_]*`, at most 128 bytes;
+- names starting with `LD_` or `DYLD_` (any case; dynamic-loader injection)
+  are denied;
+- a value is at most 4096 bytes with no NUL; at most 32 entries per detector;
+- `PATH` is allowed deliberately: it controls how the command's own program
+  is found, and a trusted workspace could run any program anyway. Everything
+  else not denied is the author's responsibility.
+
+The gate is unchanged: the command (and so its `env`) is started only for a
+trusted workspace. The names (never the values, which may be secrets) of the
+variables are shown after **Project → Reload Environment**
+(`status.project_env_active_extra`); `ProjectEnv::command_env` carries them.
 
 ## User-level detectors
 
@@ -85,8 +109,4 @@ processes are unaffected; `project.reload_env` re-resolves for later spawns
 
 `crates/vix-project-env/src/lib.rs`: `resolve`, `resolve_with` (injectable
 `Runner`, used by the tests to prove nothing runs when untrusted),
-`set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`load_user_detectors`/`needs_trust` (project and user detectors), `ProjectEnv::label`, `Detector::timeout_secs`; `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
-
-## Not built
-
-Per-detector extra environment variables.
+`set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`load_user_detectors`/`needs_trust` (project and user detectors), `ProjectEnv::label`, `Detector::timeout_secs`/`env`, `env_name_allowed`, `ProjectEnv::command_env`; `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.

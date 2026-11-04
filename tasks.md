@@ -8154,8 +8154,10 @@ widgets, and a markup-hiding Markdown "compose" mode.
   config now raises the trust prompt. Leftovers done
   2026-11-03 (`feat/t667-leftovers`): the status bar shows the detector's
   own name, a user-level `env.toml` beside the settings file, and a
-  per-detector `timeout_secs`. Still not done: per-detector extra
-  environment variables.
+  per-detector `timeout_secs`. Per-detector extra environment
+  variables done 2026-11-04 (`feat/t667-detector-env`): an `env` table per
+  detector, command-only, `LD_*`/`DYLD_*` denied, names shown on reload.
+  Nothing remains.
   - **Problem.** Python and Node language servers, tasks and the
     terminal start with Vix's own environment. A project's `.venv`,
     direnv `.envrc`, mise/asdf, pipenv or poetry environment is ignored,

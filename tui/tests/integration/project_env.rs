@@ -99,3 +99,21 @@ fn user_detector_is_blocked_until_trusted_and_raises_the_prompt() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn detector_env_with_a_loader_variable_invalidates_the_file() {
+    let dir = unique_dir("env-custom-deny");
+    fs::create_dir_all(dir.join(".vix")).unwrap();
+    fs::write(
+        dir.join(".vix/env.toml"),
+        "[[detector]]\nname = \"x\"\ndetect = [\"marker\"]\ncommand = [\"/nonexistent/x\"]\n[detector.env]\nLD_PRELOAD = \"/tmp/evil.so\"\n",
+    )
+    .unwrap();
+    fs::write(dir.join("marker"), "").unwrap();
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(isolated_session_path());
+    // The whole file is ignored, so it does not even raise the trust prompt.
+    app.maybe_prompt_script_trust();
+    assert!(app.script_trust.is_none());
+    fs::remove_dir_all(&dir).ok();
+}

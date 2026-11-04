@@ -29,6 +29,11 @@ impl App {
         let resolved =
             vix_project_env::resolve(&self.root, self.workspace_trusted(), user_file.as_deref());
         self.project_env_source = resolved.env.as_ref().map(|e| e.source);
+        self.project_env_extra = resolved
+            .env
+            .as_ref()
+            .map(|e| e.command_env.keys().cloned().collect::<Vec<_>>().join(", "))
+            .unwrap_or_default();
         self.project_env_label = resolved.env.as_ref().map(|e| e.label().to_string());
         vix_project_env::set_active(resolved.env);
         resolved.blocked
@@ -49,6 +54,12 @@ impl App {
             (_, Some(source)) => {
                 t!("status.project_env_untrusted", source = source.label()).to_string()
             }
+            (Some(_), None) if !self.project_env_extra.is_empty() => t!(
+                "status.project_env_active_extra",
+                source = label,
+                names = self.project_env_extra
+            )
+            .to_string(),
             (Some(_), None) => t!("status.project_env_active", source = label).to_string(),
             (None, None) => t!("status.project_env_none").to_string(),
         };

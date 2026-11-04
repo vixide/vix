@@ -100,7 +100,7 @@ selection through a shell command; and an opt-in Jupyter kernel
 **Project environments.** Vix detects a `.venv`, direnv or mise environment and
 applies it to language servers, tasks and the terminal. direnv and mise run only
 in a workspace you have trusted, and a project can add its own detectors in
-`.vix/env.toml`.
+`.vix/env.toml`, optionally with extra variables for the detector's own command.
 
 **Packaging.** From 2.0, Windows on ARM gets its own `.zip` and `.msi`. Since
 1.8.0 every release also carries `.deb`, `.rpm` and Arch packages. See

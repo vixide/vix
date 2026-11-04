@@ -9,15 +9,17 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// Run `program args` in `dir` with stdin closed, capturing stdout, killed
-/// after `timeout`. `None` on any failure.
+/// after `timeout`, with `env` added to the inherited environment. `None` on any failure.
 pub(crate) fn run_tool(
     program: &str,
     args: &[&str],
     dir: &Path,
     timeout: Duration,
+    env: &[(String, String)],
 ) -> Option<String> {
     let mut child = Command::new(program)
         .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .current_dir(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

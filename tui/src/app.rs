@@ -2093,6 +2093,9 @@ pub struct App {
     pub(crate) project_env_source: Option<vix_project_env::Source>,
     /// The active environment's display label (a user detector's own name).
     pub(crate) project_env_label: Option<String>,
+    /// Names of the extra variables the active detector's command ran with
+    /// (comma-separated; empty for built-in sources).
+    pub(crate) project_env_extra: String,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub(crate) script_trust: Option<ScriptTrustPrompt>,
     /// When [`App::script_trust`] last opened. Keys arriving sooner than
@@ -2839,6 +2842,7 @@ impl App {
             save_as_overwrite: None,
             project_env_source: None,
             project_env_label: None,
+            project_env_extra: String::new(),
             script_trust: None,
             script_trust_opened_at: None,
             project_settings: None,
