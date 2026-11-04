@@ -29,13 +29,14 @@
 //!
 //! ```
 //! use std::path::Path;
+//! use std::time::Duration;
 //! use vix_project_env::resolve_with;
 //!
 //! // An empty directory has no environment; nothing is run.
-//! let never = |_: &str, _: &[&str], _: &Path| -> Option<String> { unreachable!() };
+//! let never = |_: &str, _: &[&str], _: &Path, _: Duration| -> Option<String> { unreachable!() };
 //! let dir = std::env::temp_dir().join("vix-project-env-doctest");
 //! std::fs::create_dir_all(&dir).unwrap();
-//! let resolved = resolve_with(&dir, false, &never, None);
+//! let resolved = resolve_with(&dir, false, None, &never, None);
 //! assert!(resolved.env.is_none() && resolved.blocked.is_none());
 //! ```
 
