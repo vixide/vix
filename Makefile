@@ -18,6 +18,7 @@
 #   make release    Build all three release binaries (skips tests).
 #   make build-macos / build-windows / build-linux
 #                   Build a single platform's release binary.
+#   make hooks      Install the pre-push hook (gate attestation, T761).
 #   make clean      Remove the target/ build directory.
 #   make github-pages
 #                   Publish vixide.github.io/ to the read-only GitHub Pages
@@ -75,7 +76,7 @@ LINUX_TARGET   ?= x86_64-unknown-linux-musl
 # These targets are commands, not files, so declare them PHONY: make will run
 # their recipes unconditionally and never skip one because a same-named file
 # happens to exist or look "up to date".
-.PHONY: all test check release build-macos build-windows build-linux clean github-pages
+.PHONY: all test check hooks release build-macos build-windows build-linux clean github-pages
 
 # Tests first, then the release builds. make evaluates prerequisites left to
 # right and aborts on the first failure, so `test` failing means no build runs.
@@ -89,6 +90,14 @@ test:
 # Same as scripts/check; run before pushing.
 check:
 	./scripts/check
+
+# Install the repository hooks (T761): sets core.hooksPath so the pre-push hook
+# refuses to push main or a tag without a valid full-tier gate attestation
+# (scripts/attest). It only sets git config; `git config --unset core.hooksPath`
+# removes it.
+hooks:
+	git config core.hooksPath scripts/hooks
+	@echo "hooks installed: core.hooksPath = scripts/hooks"
 
 # Build every platform. Each build-* recipe is independent and self-contained.
 release: build-macos build-windows build-linux

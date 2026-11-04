@@ -9605,12 +9605,19 @@ the maintainer's decisions.
   guessed. Spec first in `spec/ci` and `spec/local-ci`. **Medium.**
   Done: `fast` also scopes clippy to the changed crates; root/lock changes
   fall back to the whole workspace; `fast`/`push` end in `OK (tier …)` lines.
-- [ ] **T761 — Signed gate attestation and `pre-push` hook.** `scripts/attest`
+- [x] **T761 — Signed gate attestation and `pre-push` hook.** `scripts/attest`
   runs a tier and writes a signed note under `refs/notes/vix-gate` bound to
   the tree hash; `make hooks` installs a `pre-push` hook that refuses a push
   to `main` without a passing `full` note for the tip tree; the forge `verify`
   job checks signature, tree and gate version. Needs T760. Never bypasses
   commit signing. **Large.**
+  Done 2026-11-04: payload signed with `ssh-keygen -Y sign` (namespace
+  `vix-gate`; `git notes` cannot sign its commits); `scripts/attest --verify`
+  is the read-only forge check; `make hooks` sets `core.hooksPath` to
+  `scripts/hooks`; `VIX_ALLOW_UNATTESTED=1` works for non-main branches only.
+  Wiring a verify job into the forge workflows is left to T767; there is no
+  committed allowed-signers file yet (set `VIX_ALLOWED_SIGNERS`).
+  `scripts/test-attest` covers it.
 - [x] **T762 — Slim the hosted CI.** Keep one Linux job (fmt, clippy, test) on
   push; move the macOS/Windows matrix, `cargo hack --each-feature`, mutants,
   chaos and `gui.yml` to a schedule and to version tags; add path filters and

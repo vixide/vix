@@ -1,0 +1,193 @@
+#!/bin/sh
+# Tests for scripts/attest and scripts/hooks/pre-push (T761).
+#
+#     scripts/test-attest
+#
+# Everything happens in one private temporary directory that is removed on exit:
+# a throwaway git repository, a generated ed25519 key (no passphrase) and its own
+# allowed-signers file, with HOME and the global git config pointed away. It
+# never reads or writes ~/.ssh, your git config or the real repository, and it
+# does not run the real gate (the throwaway repository has a stub scripts/check).
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+export HOME="$work/home"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$HOME"
+
+fails=0
+checks=0
+ok() {
+	checks=$((checks + 1))
+	echo "  ok   $1"
+}
+bad() {
+	checks=$((checks + 1))
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+# expect_pass NAME CMD... / expect_fail NAME CMD...
+expect_pass() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then ok "$name"; else
+		bad "$name"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+expect_fail() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then
+		bad "$name (unexpectedly passed)"
+	else ok "$name"; fi
+}
+expect_msg() {
+	if grep -q "$1" "$work/out"; then ok "message mentions '$1'"; else
+		bad "message mentions '$1'"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+
+ssh-keygen -q -t ed25519 -N '' -C test -f "$work/key" || exit 1
+ssh-keygen -q -t ed25519 -N '' -C other -f "$work/other" || exit 1
+echo "tester $(cat "$work/key.pub")" >"$work/allowed"
+export VIX_ALLOWED_SIGNERS="$work/allowed"
+export VIX_ATTEST_KEY="$work/key"
+
+repo="$work/repo"
+git init -q -b main "$repo" || exit 1
+cd "$repo" || exit 1
+git config user.email t@example.com
+git config user.name Tester
+git config commit.gpgsign false
+mkdir -p scripts/hooks
+cp "$src/attest" scripts/attest
+cp "$src/hooks/pre-push" scripts/hooks/pre-push
+# A stub gate: records its arguments, passes unless a file named FAIL exists.
+cat >scripts/check <<'EOF'
+#!/bin/sh
+echo "$@" >>"$STUB_LOG"
+[ ! -e "$STUB_FAIL" ]
+EOF
+chmod +x scripts/attest scripts/hooks/pre-push scripts/check
+export STUB_LOG="$work/stub.log" STUB_FAIL="$work/FAIL"
+echo one >file
+git add -A
+git commit -q -m one
+hook="$repo/scripts/hooks/pre-push"
+
+echo "attest and verify"
+expect_fail "verify with no note fails" scripts/attest --verify
+expect_msg "no gate attestation"
+
+touch "$STUB_FAIL"
+expect_fail "a failing gate records nothing" scripts/attest
+expect_fail "and verify still fails" scripts/attest --verify
+rm "$STUB_FAIL"
+
+echo dirty >>file
+expect_fail "a dirty tree is refused" scripts/attest
+expect_msg "not clean"
+git checkout -q file
+
+expect_pass "a passing gate is attested" scripts/attest
+grep -qx -- "--tier full" "$STUB_LOG" && ok "attest ran the full tier" || bad "attest ran the full tier"
+expect_pass "verify passes for HEAD" scripts/attest --verify
+expect_pass "verify passes by revision" scripts/attest --verify main
+
+echo "tree binding"
+git commit -q --amend -m "same tree, new commit hash"
+expect_pass "same tree, different commit still verifies" scripts/attest --verify
+echo two >file
+git commit -q -am two
+expect_fail "new content has no attestation" scripts/attest --verify
+git reset -q --hard HEAD~1
+
+echo "forged and tampered records"
+tree=$(git rev-parse 'HEAD^{tree}')
+gate=$(git rev-parse HEAD:scripts/check)
+# forge TREE TIER RESULT GATE KEY: write a signed note with those fields.
+forge() {
+	{
+		echo "vix-gate-attestation v1"
+		echo "tree=$1"
+		echo "tier=$2"
+		echo "gate-version=$4"
+		echo "result=$3"
+		echo "finished=2026-01-01T00:00:00Z"
+	} >"$work/p"
+	rm -f "$work/p.sig"
+	ssh-keygen -Y sign -f "$5" -n vix-gate "$work/p" >/dev/null 2>&1
+	cat "$work/p" "$work/p.sig" >"$work/n"
+	git notes --ref=vix-gate add -f -F "$work/n" "$tree" 2>/dev/null
+}
+forge "$tree" full pass "$gate" "$work/key"
+expect_pass "a correctly forged-by-hand record is the same as a real one" scripts/attest --verify
+forge "$tree" push pass "$gate" "$work/key"
+expect_fail "tier push does not satisfy" scripts/attest --verify
+expect_msg "only the full tier"
+forge "$tree" fast pass "$gate" "$work/key"
+expect_fail "tier fast does not satisfy" scripts/attest --verify
+forge "$tree" full fail "$gate" "$work/key"
+expect_fail "result fail does not satisfy" scripts/attest --verify
+forge "$tree" full pass "0000000000000000000000000000000000000000" "$work/key"
+expect_fail "a stale gate version is refused" scripts/attest --verify
+expect_msg "gate-version is stale"
+forge "$tree" full pass "$gate" "$work/other"
+expect_fail "a signature from a key not in allowed-signers is refused" scripts/attest --verify
+expect_msg "not from a key"
+forge "$tree" full pass "$gate" "$work/key"
+git notes --ref=vix-gate show "$tree" | sed 's/^finished=.*/finished=2030-01-01T00:00:00Z/' >"$work/n"
+git notes --ref=vix-gate add -f -F "$work/n" "$tree" 2>/dev/null
+expect_fail "a tampered payload fails the signature" scripts/attest --verify
+expect_msg "bad signature"
+# unsigned
+printf 'vix-gate-attestation v1\ntree=%s\ntier=full\nresult=pass\ngate-version=%s\n' "$tree" "$gate" >"$work/n"
+git notes --ref=vix-gate add -f -F "$work/n" "$tree" 2>/dev/null
+expect_fail "an unsigned note is refused" scripts/attest --verify
+expect_msg "unsigned"
+git notes --ref=vix-gate remove "$tree" >/dev/null 2>&1
+expect_pass "re-attest after cleanup" scripts/attest
+expect_pass "and it verifies" scripts/attest --verify
+
+echo "pre-push hook"
+tip=$(git rev-parse HEAD)
+zero=0000000000000000000000000000000000000000
+run_hook() { # LOCAL_SHA REMOTE_REF
+	printf '%s %s %s %s\n' "$2" "$1" "$3" "$zero" | "$hook" origin url
+}
+expect_pass "attested main may be pushed" run_hook "$tip" x refs/heads/main
+git checkout -q -b feature
+echo three >file
+git commit -q -am three
+unatt=$(git rev-parse HEAD)
+expect_fail "unattested main is refused" run_hook "$unatt" x refs/heads/main
+expect_fail "VIX_ALLOW_UNATTESTED never applies to main" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $unatt refs/heads/main $zero
+EOF
+expect_fail "an unattested non-main branch is refused" run_hook "$unatt" x refs/heads/feature
+expect_pass "the escape works on a non-main branch" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $unatt refs/heads/feature $zero
+EOF
+expect_fail "the escape does not apply to tags" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $unatt refs/tags/v9 $zero
+EOF
+expect_fail "main is refused even when pushed from a feature branch name" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+refs/heads/feature $unatt refs/heads/main $zero
+EOF
+expect_pass "an attested tag may be pushed" run_hook "$tip" x refs/tags/v1
+expect_pass "deleting a ref is not gated" run_hook "$zero" x refs/heads/feature
+expect_pass "the notes ref is not gated" run_hook "$unatt" x refs/notes/vix-gate
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "OK: scripts/test-attest: $checks checks passed"
+else
+	echo "FAILED: $fails of $checks checks"
+	exit 1
+fi

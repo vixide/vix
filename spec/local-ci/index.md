@@ -6,8 +6,8 @@ describes how to make the **local machine the primary authority** and the
 forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
-Status: **proposed**, except tiers (T760) and option 3 (trim hosted CI, T762),
-which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
+Status: **proposed**, except tiers (T760), the attestation (T761) and option 3
+(trim hosted CI, T762), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
 the gate runs and who has to trust whom.
 
 ## Why
@@ -98,27 +98,89 @@ Woodpecker versus Forgejo Actions: a Forgejo runner reuses the existing
 ([discussion](https://45.148.62.229.sslip.io/Codeberg/Documentation/issues/743)).
 Garnix and Buildbot were not verified and are not recommended on that basis.
 
-## The attestation (option 2)
+## The attestation (option 2, T761, implemented)
 
-`scripts/attest` runs the chosen tier and, on success, writes a record bound
-to the **tree**, not the commit, so a rebase or `--no-ff` merge of identical
-content stays valid:
+`scripts/attest` runs `scripts/check --tier full` and, only if it passes,
+records a signed note bound to the **tree** of `HEAD`, not the commit, so a
+signed merge, rebase or fast-forward of identical content stays valid:
 
 ```text
-tree=<git tree hash>  tier=full  toolchain=<rustc -V>  os=<uname -sm>
-result=pass  finished=<UTC>  gate-version=<hash of scripts/check>
+vix-gate-attestation v1
+tree=<git tree hash>
+tier=full
+gate-version=<git blob hash of scripts/check>
+toolchain=<rustc -V>
+os=<uname -sm>
+result=pass
+duration-secs=<seconds>
+finished=<UTC timestamp>
+-----BEGIN SSH SIGNATURE-----
 ```
 
-It is stored as a git note under `refs/notes/vix-gate` and signed with the same
-SSH key that signs commits. A `pre-push` hook (installed by `make hooks`, which
-sets `core.hooksPath`) refuses a push to `main` whose tip tree has no passing
-`full` record, unless `VIX_SKIP_ATTEST=1` is set deliberately. The forge `verify`
-job fetches the note, checks the signature against the allowed-signers file
-already in the repository, checks the tree hash, and passes in seconds.
+It is stored as a git note under `refs/notes/vix-gate`, keyed by the tree
+hash. It refuses to run on a dirty working tree and refuses to record if the
+tree changed while the gate ran. The tier is always `full`; `fast` and `push`
+runs never produce a record, and a record whose `tier` is not `full` or whose
+`result` is not `pass` never verifies.
+
+**Signing.** The note is signed with `ssh-keygen -Y sign -n vix-gate` over the
+exact payload text, using `$VIX_ATTEST_KEY` or, by default, the key named by
+`git config user.signingkey` (the key that already signs commits; a key file,
+or a public key when an SSH agent holds the private half). `git notes` writes
+its own commits and cannot sign them, and a signed notes commit would vouch
+for the whole notes history rather than one payload, so the payload is signed
+directly. The separate namespace `vix-gate` means the signature cannot be
+replayed as a commit signature (or the reverse). Commit signing itself is
+never changed or bypassed.
+
+**Verifying.** `scripts/attest --verify [rev]` (default `HEAD`) is read-only,
+needs only git and `ssh-keygen`, and makes no network call. It exits 0 only if
+all of these hold, and otherwise exits 1 with a one-line `VERIFY FAILED: ...`
+reason:
+
+1. a note exists for the tree of `rev`;
+2. its signature is valid and from a key in the allowed-signers file
+   (`$VIX_ALLOWED_SIGNERS`, else `gpg.ssh.allowedSignersFile`, else
+   `.allowed_signers` in the repository root);
+3. the `tree` field equals the tree of `rev`;
+4. `tier=full` and `result=pass`;
+5. `gate-version` equals the hash of `scripts/check` in `rev`. (The tree hash
+   already covers the script, so this is a second, readable check that the
+   record was made by the gate the tree contains.)
+
+**The pre-push hook.** `scripts/hooks/pre-push` is installed by `make hooks`,
+which only runs `git config core.hooksPath scripts/hooks`. For each branch or
+tag being pushed it runs `scripts/attest --verify <pushed sha>`. A push of
+`refs/heads/main` or of any tag without a valid attestation is refused, and no
+setting overrides that. Another branch is also refused, unless the explicit,
+documented escape `VIX_ALLOW_UNATTESTED=1` is set for that push (it prints a
+warning). Deleting a ref and pushing other refs (such as
+`refs/notes/vix-gate`) are not gated. `git push --no-verify` skips every hook,
+which is why the forge job below also exists.
+
+**Sharing the notes.** Notes are not pushed or fetched by default. Push them
+beside `main` with `git push origin refs/notes/vix-gate`, and fetch them with
+`git fetch origin refs/notes/vix-gate:refs/notes/vix-gate`. To fetch them on
+every `git fetch`, add `fetch = +refs/notes/vix-gate:refs/notes/vix-gate` under
+the remote in `.git/config`. `scripts/attest` itself never pushes.
+
+**The forge `verify` job.** After fetching `refs/notes/vix-gate`, a forge job
+runs `VIX_ALLOWED_SIGNERS=<file> scripts/attest --verify "$SHA"`. It is
+read-only, takes seconds and needs no toolchain, only git and OpenSSH. The
+allowed-signers file must come from a trusted place (a committed
+`.allowed_signers` that only the maintainer can change, or a CI variable), not
+from the pushed content under test. Wiring the job into the workflows is left
+to T767, so no forge file changes with T761.
 
 What the attestation does **not** prove: that the machine was clean, or that a
 different operating system passes. That is what the independent Codeberg job
-and the scheduled cross-OS jobs are for.
+and the scheduled cross-OS jobs are for. It is also self-reported: whoever
+holds the signing key can attest without running the gate, so the key is the
+trust root, and it is the same key that signs commits.
+
+`scripts/test-attest` tests all of this against a throwaway repository with a
+generated ed25519 key and a stub gate (it never touches real keys or the real
+repository), and runs in the `push` tier and above.
 
 ## Non-goals
 

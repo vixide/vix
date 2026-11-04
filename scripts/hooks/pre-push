@@ -1,0 +1,44 @@
+#!/bin/sh
+# pre-push hook (T761). Installed by `make hooks` (sets core.hooksPath).
+#
+# Refuses to push a branch or tag whose tip tree has no valid full-tier gate
+# attestation (scripts/attest --verify). refs/heads/main and every tag are
+# ALWAYS gated: nothing bypasses that here, and commit signing is never touched.
+# Another branch may be pushed unattested with the explicit escape:
+#
+#   VIX_ALLOW_UNATTESTED=1 git push origin my-branch     (non-main branches only)
+#
+# Deleting a ref, and pushing other refs (such as refs/notes/vix-gate), is not
+# gated. `git push --no-verify` skips every hook; the forge's verify job is what
+# catches that.
+top=$(git rev-parse --show-toplevel) || exit 1
+status=0
+while read -r _ local_sha remote_ref _; do
+	case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+	case "$remote_ref" in
+	refs/heads/* | refs/tags/*) ;;
+	*) continue ;;
+	esac
+	if "$top/scripts/attest" --verify "$local_sha" >/dev/null 2>&1; then
+		continue
+	fi
+	case "$remote_ref" in
+	refs/heads/main | refs/tags/*)
+		echo "pre-push: refusing to push $remote_ref: no valid full-tier attestation for $local_sha." >&2
+		"$top/scripts/attest" --verify "$local_sha" >&2 || true
+		echo "pre-push: run scripts/attest on a clean checkout of that commit (VIX_ALLOW_UNATTESTED does not apply to main or tags)." >&2
+		status=1
+		;;
+	*)
+		if [ "${VIX_ALLOW_UNATTESTED:-}" = 1 ]; then
+			echo "pre-push: pushing $remote_ref UNATTESTED (VIX_ALLOW_UNATTESTED=1, non-main branch)." >&2
+		else
+			echo "pre-push: refusing to push $remote_ref: no valid full-tier attestation for $local_sha." >&2
+			"$top/scripts/attest" --verify "$local_sha" >&2 || true
+			echo "pre-push: run scripts/attest, or VIX_ALLOW_UNATTESTED=1 for a non-main branch." >&2
+			status=1
+		fi
+		;;
+	esac
+done
+exit $status
