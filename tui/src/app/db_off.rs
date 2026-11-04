@@ -22,7 +22,9 @@ impl App {
     }
 
     /// The SQL editor can't be open, so it never takes a key.
-    pub(super) fn edit_sql_key(&mut self, _key: KeyEvent) {}
+    pub(super) fn edit_sql_key(&mut self, _key: KeyEvent) {
+        debug_assert!(self.db.is_none());
+    }
 
     /// No background DB query to drain.
     pub fn poll_db_query(&mut self) {}
