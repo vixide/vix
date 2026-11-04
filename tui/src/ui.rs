@@ -366,9 +366,12 @@ fn draw_side_docks(app: &mut App, frame: &mut Frame, rects: [Option<Rect>; 6]) {
     if let Some(r) = test {
         draw_test_panel(app, frame, r);
     }
+    #[cfg(feature = "ai")]
     if let Some(r) = agent_plan {
         ai::draw_agent_plan_dock(app, frame, r);
     }
+    #[cfg(not(feature = "ai"))]
+    let _ = agent_plan;
 }
 
 /// A single-color theme repaints the whole finished frame in its one color,
