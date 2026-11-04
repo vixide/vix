@@ -2087,6 +2087,8 @@ pub struct App {
     /// The source of the project environment now applied to spawned
     /// processes (T667), shown in the status bar.
     pub(crate) project_env_source: Option<vix_project_env::Source>,
+    /// The active environment's display label (a user detector's own name).
+    pub(crate) project_env_label: Option<String>,
     /// Pending "trust this workspace's scripts?" prompt (T132), when active.
     pub(crate) script_trust: Option<ScriptTrustPrompt>,
     /// When [`App::script_trust`] last opened. Keys arriving sooner than
@@ -2840,6 +2842,7 @@ impl App {
             confirm: None,
             save_as_overwrite: None,
             project_env_source: None,
+            project_env_label: None,
             script_trust: None,
             script_trust_opened_at: None,
             project_settings: None,

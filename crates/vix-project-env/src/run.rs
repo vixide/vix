@@ -8,12 +8,14 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// How long `direnv`/`mise` get before they are killed.
-const TOOL_TIMEOUT: Duration = Duration::from_secs(5);
-
 /// Run `program args` in `dir` with stdin closed, capturing stdout, killed
-/// after [`TOOL_TIMEOUT`]. `None` on any failure.
-pub(crate) fn run_tool(program: &str, args: &[&str], dir: &Path) -> Option<String> {
+/// after `timeout`. `None` on any failure.
+pub(crate) fn run_tool(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    timeout: Duration,
+) -> Option<String> {
     let mut child = Command::new(program)
         .args(args)
         .current_dir(dir)
@@ -39,7 +41,7 @@ pub(crate) fn run_tool(program: &str, args: &[&str], dir: &Path) -> Option<Strin
                 let text = reader.join().ok().flatten();
                 return if status.success() { text } else { None };
             }
-            Ok(None) if start.elapsed() < TOOL_TIMEOUT => {
+            Ok(None) if start.elapsed() < timeout => {
                 std::thread::sleep(Duration::from_millis(10));
             }
             // Timed out (or `try_wait` failed): kill, reap, and give up. The

@@ -17,8 +17,7 @@ Tried in this order; the first that yields variables wins. User-defined detector
 | direnv | `.envrc` | `direnv export json` in the root | yes |
 | mise   | `.mise.toml`, `mise.toml`, `.tool-versions` | `mise env --json` in the root | yes |
 | venv   | `.venv/pyvenv.cfg` or `venv/pyvenv.cfg` | `VIRTUAL_ENV` set, `<venv>/bin` (`Scripts` on Windows) prefixed onto `PATH`, `PYTHONHOME` removed | no, reads files only |
-
-| custom | a `[[detector]]` in `.vix/env.toml` | its own `command`, no shell | yes |
+| custom | a `[[detector]]` in `.vix/env.toml` or the user-level `env.toml` | its own `command`, no shell | yes |
 
 ## User-defined detectors
 
@@ -29,14 +28,15 @@ A project adds its own sources in `.vix/env.toml`:
 name = "nix"                 # shown in diagnostics, at most 64 characters
 detect = ["flake.nix"]       # the detector applies when ANY of these exists in the root
 command = ["nix-env-json"]   # program and arguments, run directly (no shell) in the root
+timeout_secs = 30            # optional: 1 to 60 seconds, default 5
 ```
 
 The command prints the same JSON object `direnv export json` does (string
 values, `null` = unset). Detectors are tried in file order; the first whose
 files exist and whose command yields a non-empty object wins and reports as
-`custom` in the status bar. At most 16 detectors; a detector with an empty
+the detector's own `name` in the status bar (`ProjectEnv::label`; `custom` is only the source's generic label). At most 16 detectors; a detector with an empty
 name, no `detect` entries, an empty or NUL-containing `command`, or a `detect`
-entry that is absolute or contains `..` makes the whole file invalid and it is
+entry that is absolute or contains `..`, or a `timeout_secs` outside 1 to 60 makes the whole file invalid and it is
 ignored (never partially applied). A detector runs project-controlled code, so
 it is gated exactly like `direnv`/`mise`: only for a trusted workspace;
 otherwise it is reported in `Resolved::blocked` as `Source::Custom` and
@@ -44,7 +44,18 @@ nothing runs.
 
 JSON from `direnv`/`mise`/custom detectors must be an object of string values (`null` means
 "unset"); anything else, including keys with `=` or NUL bytes, is rejected
-whole. Each tool is killed after 5 seconds, and its stdin is closed.
+whole. `direnv` and `mise` are killed after 5 seconds; a detector after its `timeout_secs` (default 5, at most 60). Stdin is closed.
+
+## User-level detectors
+
+The same `[[detector]]` format in `env.toml` beside the settings file
+(`~/.config/vix/env.toml` on Linux) defines detectors for every workspace.
+Project detectors are tried first, so a project can override a personal one.
+The file is the user's own, but a detector's `detect` files are workspace
+content and its command may read the workspace, so user-level detectors are
+gated by workspace trust exactly like project ones (blocked as
+`Source::Custom` when untrusted, and `needs_trust` raises the trust prompt).
+A missing or invalid file is ignored whole.
 
 ## Trust
 
@@ -74,10 +85,8 @@ processes are unaffected; `project.reload_env` re-resolves for later spawns
 
 `crates/vix-project-env/src/lib.rs`: `resolve`, `resolve_with` (injectable
 `Runner`, used by the tests to prove nothing runs when untrusted),
-`set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`needs_trust` (user detectors); `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
+`set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`load_user_detectors`/`needs_trust` (project and user detectors), `ProjectEnv::label`, `Detector::timeout_secs`; `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
 
 ## Not built
 
-The status bar shows `custom` rather than the detector's own `name`; no
-user-level (outside the project) detector file; no per-detector timeout or
-extra environment.
+Per-detector extra environment variables.
