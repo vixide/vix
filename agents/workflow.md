@@ -45,6 +45,13 @@ the full pass line. Run all of it right before
   the feature boundary stays in history, then delete the branch. Push only
   when the maintainer asks (`git push origin main` reaches GitHub, GitLab
   and Codeberg at once).
+- **Attest before pushing (T761).** `scripts/attest` runs the `full` gate on a
+  clean checkout and records a signed note (`refs/notes/vix-gate`) bound to the
+  tree. `make hooks` installs a `pre-push` hook that refuses to push `main` or
+  a tag without a valid attestation (`scripts/attest --verify`); a non-main
+  branch may use `VIX_ALLOW_UNATTESTED=1`, `main` and tags never. Push the
+  notes beside `main` with `git push origin refs/notes/vix-gate`. Commit
+  signing is never bypassed. See [`spec/local-ci`](../spec/local-ci/index.md).
 - **Several agents share one checkout.** Work in your own git worktree
   (`.claude/worktrees/<name>`), and merge large branches in a separate
   worktree rather than switching the shared checkout's branch under another

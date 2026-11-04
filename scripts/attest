@@ -1,0 +1,147 @@
+#!/bin/sh
+# Signed gate attestation (T761; spec/local-ci, "The attestation").
+#
+#   scripts/attest                 run `scripts/check --tier full`; on a pass,
+#                                  record a signed note for the tree of HEAD
+#   scripts/attest --verify [rev]  read-only: check that REV (default HEAD) has
+#                                  a valid, signed, passing, full-tier record
+#
+# The record is a git note under refs/notes/vix-gate, keyed by the TREE hash of
+# the commit (not the commit), so a signed merge or fast-forward that yields
+# identical content stays valid. It is plain text, then an SSH signature:
+#
+#   vix-gate-attestation v1
+#   tree=<hash>  tier=full  gate-version=<blob hash of scripts/check>
+#   toolchain=<rustc -V>  os=<uname -sm>  result=pass
+#   duration-secs=<n>  finished=<UTC>
+#   -----BEGIN SSH SIGNATURE----- ...
+#
+# Why `ssh-keygen -Y sign` and not a signed notes commit: `git notes` makes its
+# commits itself and does not sign them, and a signed notes commit would bind
+# the whole notes history, not this one payload. Signing the payload directly
+# uses the same SSH key and allowed-signers file that commit signing already
+# uses (namespace "vix-gate", so it cannot be replayed as a commit signature),
+# and `--verify` needs only git and ssh-keygen.
+#
+# Keys: signing key = $VIX_ATTEST_KEY, else `git config user.signingkey` (a key
+# file, or "key::<public key>" / a literal public key when an agent holds it).
+# Allowed signers = $VIX_ALLOWED_SIGNERS, else `git config
+# gpg.ssh.allowedSignersFile`, else `.allowed_signers` in the repository root.
+#
+# This never touches commit signing and never pushes. To share the record:
+#   git push origin refs/notes/vix-gate
+#   git fetch origin refs/notes/vix-gate:refs/notes/vix-gate
+set -eu
+
+ref=vix-gate
+ns=vix-gate
+die() {
+	echo "scripts/attest: $*" >&2
+	exit 1
+}
+
+top=$(git rev-parse --show-toplevel) || die "not in a git repository"
+cd "$top"
+
+allowed_file() {
+	f=${VIX_ALLOWED_SIGNERS:-$(git config gpg.ssh.allowedSignersFile || true)}
+	if [ -z "$f" ] && [ -f .allowed_signers ]; then f=.allowed_signers; fi
+	[ -n "$f" ] || die "no allowed-signers file (set VIX_ALLOWED_SIGNERS or gpg.ssh.allowedSignersFile)"
+	case "$f" in "~/"*) f="$HOME/${f#\~/}" ;; esac
+	[ -f "$f" ] || die "allowed-signers file not found: $f"
+	printf '%s' "$f"
+}
+
+# field NAME PAYLOAD-FILE: the value of the first NAME=... line.
+field() {
+	grep -m1 "^$1=" "$2" | sed "s/^$1=//"
+}
+
+verify() {
+	rev=${1:-HEAD}
+	commit=$(git rev-parse --verify --quiet "$rev^{commit}" 2>/dev/null) ||
+		die "VERIFY FAILED: '$rev' is not a commit"
+	tree=$(git rev-parse "$commit^{tree}")
+	gate=$(git rev-parse "$commit:scripts/check" 2>/dev/null) ||
+		die "VERIFY FAILED: $rev has no scripts/check"
+	allowed=$(allowed_file)
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' EXIT
+	git notes --ref="$ref" show "$tree" >"$tmp/note" 2>/dev/null ||
+		die "VERIFY FAILED: no gate attestation for tree $tree ($rev); run scripts/attest (fetch refs/notes/$ref first if it was made elsewhere)"
+	awk -v p="$tmp/payload" -v s="$tmp/sig" '
+		/^-----BEGIN SSH SIGNATURE-----/ { insig = 1 }
+		{ print > (insig ? s : p) }' "$tmp/note"
+	[ -s "$tmp/sig" ] || die "VERIFY FAILED: attestation for tree $tree is unsigned"
+	principal=$(ssh-keygen -Y find-principals -f "$allowed" -s "$tmp/sig" 2>/dev/null | head -n1 || true)
+	[ -n "$principal" ] ||
+		die "VERIFY FAILED: signature on tree $tree is not from a key in $allowed"
+	ssh-keygen -Y verify -f "$allowed" -I "$principal" -n "$ns" -s "$tmp/sig" <"$tmp/payload" >/dev/null 2>&1 ||
+		die "VERIFY FAILED: bad signature on the attestation for tree $tree"
+	[ "$(head -n1 "$tmp/payload")" = "vix-gate-attestation v1" ] ||
+		die "VERIFY FAILED: unrecognized attestation format"
+	[ "$(field tree "$tmp/payload")" = "$tree" ] ||
+		die "VERIFY FAILED: attestation is for tree '$(field tree "$tmp/payload")', not $tree"
+	[ "$(field tier "$tmp/payload")" = full ] ||
+		die "VERIFY FAILED: tier is '$(field tier "$tmp/payload")'; only the full tier counts"
+	[ "$(field result "$tmp/payload")" = pass ] ||
+		die "VERIFY FAILED: result is '$(field result "$tmp/payload")', not pass"
+	[ "$(field gate-version "$tmp/payload")" = "$gate" ] ||
+		die "VERIFY FAILED: gate-version is stale (scripts/check is $gate, attested $(field gate-version "$tmp/payload"))"
+	echo "scripts/attest: OK tree $tree attested full-tier by $principal at $(field finished "$tmp/payload")"
+}
+
+attest() {
+	[ -z "$(git status --porcelain)" ] ||
+		die "working tree is not clean; the attestation is bound to the committed tree of HEAD"
+	[ -x scripts/check ] || die "scripts/check not found"
+	tree=$(git rev-parse 'HEAD^{tree}')
+	gate=$(git rev-parse HEAD:scripts/check)
+	key=${VIX_ATTEST_KEY:-$(git config user.signingkey || true)}
+	[ -n "$key" ] || die "no signing key (set VIX_ATTEST_KEY or git config user.signingkey)"
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' EXIT
+	keyfile=$key
+	case "$key" in
+	key::*)
+		printf '%s\n' "${key#key::}" >"$tmp/key.pub"
+		keyfile=$tmp/key.pub
+		;;
+	ssh-* | ecdsa-* | sk-*)
+		printf '%s\n' "$key" >"$tmp/key.pub"
+		keyfile=$tmp/key.pub
+		;;
+	"~/"*) keyfile="$HOME/${key#\~/}" ;;
+	esac
+
+	start=$(date +%s)
+	echo "scripts/attest: running scripts/check --tier full on tree $tree"
+	scripts/check --tier full || die "the gate failed; nothing was attested"
+	end=$(date +%s)
+	{ [ "$(git rev-parse 'HEAD^{tree}')" = "$tree" ] && [ -z "$(git status --porcelain)" ]; } ||
+		die "the tree changed while the gate ran; nothing was attested"
+
+	{
+		echo "vix-gate-attestation v1"
+		echo "tree=$tree"
+		echo "tier=full"
+		echo "gate-version=$gate"
+		echo "toolchain=$(rustc -V 2>/dev/null || echo unknown)"
+		echo "os=$(uname -sm)"
+		echo "result=pass"
+		echo "duration-secs=$((end - start))"
+		echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	} >"$tmp/payload"
+	ssh-keygen -Y sign -f "$keyfile" -n "$ns" "$tmp/payload" >/dev/null ||
+		die "could not sign the attestation (is the key usable? nothing was recorded)"
+	cat "$tmp/payload" "$tmp/payload.sig" >"$tmp/note"
+	git notes --ref="$ref" add -f -F "$tmp/note" "$tree"
+	echo "scripts/attest: recorded in refs/notes/$ref for tree $tree (not pushed)"
+}
+
+case "${1:-}" in
+"") attest ;;
+--verify) verify "${2:-HEAD}" ;;
+-h | --help) sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;
+*) die "usage: scripts/attest [--verify [rev]]" ;;
+esac

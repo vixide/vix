@@ -286,6 +286,10 @@ if in_tier push; then
 	step_begin "scripts/check-docs"
 	python3 "$(dirname "$0")/check-docs"
 	step_end
+
+	step_begin "scripts/test-attest (T761)"
+	sh "$(dirname "$0")/test-attest"
+	step_end
 fi
 
 if in_tier full; then

@@ -85,7 +85,10 @@ change every forge's config with it. See [`spec/ci/index.md`](spec/ci/index.md).
 iterate (`fast`: fmt, clippy and tests of changed crates; `push`: the whole
 workspace plus docs; `full`, the default, is the landing bar). Only the `full`
 tier proves a change is ready; the others print their own distinct `OK (tier …)`
-line, and every step reports its wall-clock time.
+line, and every step reports its wall-clock time. `scripts/attest` (T761) runs
+the `full` tier and records a signed git note (`refs/notes/vix-gate`) for the
+tree; `make hooks` installs a `pre-push` hook that refuses `main` and tags
+without one (see [`spec/local-ci`](spec/local-ci/index.md)).
 
 ## Hard rules enforced by the build
 

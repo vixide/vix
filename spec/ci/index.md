@@ -33,6 +33,13 @@ the default `full` tier, which is the list above plus the feature, semver,
 packaging and license steps. `fast` and `push` print `OK (tier …)` lines and are
 never a substitute.
 
+`scripts/attest` (T761) runs the `full` tier and records a signed git note
+under `refs/notes/vix-gate`, bound to the tree hash, that a `pre-push` hook
+(`make hooks`) and a read-only `scripts/attest --verify` check; only `full`
+counts. A forge job may use `--verify` to confirm that the gate already passed
+for exactly this tree instead of re-running it; the forge workflows do not do
+so yet. See [`spec/local-ci`](../local-ci/index.md), "The attestation".
+
 Nothing merges that does not pass all nine. Run `scripts/check` (or
 `make check`) locally first; CI should only ever confirm what the local gate
 already said.
