@@ -937,11 +937,11 @@ mod tests {
         );
         let none = c.handle(&json!({"id":7,"method":"terminal/create","params":{
             "sessionId":"S","command":"  "}}));
-        assert!(none.events.is_empty());
+        assert_eq!(none.events.len(), 0);
         assert_eq!(none.out[0]["error"]["code"], -32602);
         let foreign = c.handle(&json!({"id":8,"method":"terminal/create","params":{
             "sessionId":"X","command":"ls"}}));
-        assert!(foreign.events.is_empty());
+        assert_eq!(foreign.events.len(), 0);
         let made = Client::answer_terminal_created(&json!(5), "t1");
         assert_eq!(made["result"]["terminalId"], "t1");
         let done = TerminalExit {
