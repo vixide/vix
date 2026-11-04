@@ -5,6 +5,12 @@ pushes to all three (`git remote -v` shows the three push URLs). Each forge
 therefore carries its own CI configuration, and all of them enforce the same
 gate: **the bar in [`scripts/check`](../../scripts/check)**.
 
+> **Proposed direction:** make the local gate the authority and the forges a
+> verifier — see [`spec/local-ci`](../local-ci/index.md).
+
+> **Proposed direction:** make the local gate the authority and the forges a
+> verifier — see [`spec/local-ci`](../local-ci/index.md).
+
 ## The gate
 
 Every forge runs, in this order:

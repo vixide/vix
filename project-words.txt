@@ -767,3 +767,8 @@ pyvenv
 PYTHONHOME
 # T620 (call hierarchy)
 callees
+# Run T (local-first CI)
+Buildbot
+Garnix
+kache
+sccache

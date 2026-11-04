@@ -582,6 +582,33 @@ services are out of scope.
 
 Tasks: **Run S, T750–T759.**
 
+## Run T — local-first CI and CD (proposed 2026-11-04)
+
+Hosted CI has become the weakest part of the delivery chain: GitLab has had no
+usable pipeline since 2026-08-29 (`ci_quota_exceeded`), GitHub is the only
+forge that runs the macOS and Windows matrix and is the part that costs money,
+and the four hand-kept copies of the gate drift. Meanwhile the real bar,
+`scripts/check`, already runs locally before every landing. The plan is to make
+that the authority and the forges a cheap verifier:
+
+1. **Tier the gate** (`fast` / `push` / `full`) and time every step (T760).
+2. **Sign the result.** A gate attestation bound to the tree hash, enforced by a
+   `pre-push` hook and verified in seconds by a forge job (T761).
+3. **Trim hosted CI** to one Linux job per push, with the OS matrix,
+   `cargo hack`, mutants and chaos on a schedule or tags (T762).
+4. **Decide caching** (`kache` versus a shared target dir or `sccache`) (T764).
+5. **Cover other operating systems locally where possible** (T765), and run a
+   spike on a self-hosted Forgejo runner for native macOS (T763).
+6. **Release from the maintainer's machine**, signed, with the workflow as the
+   fallback (T766), and **one CI entrypoint** for every forge (T767).
+7. **Evaluate** `act`, Dagger, `nix flake check` and Woodpecker once (T768).
+
+Risks: a self-reported pass is not proof (keep one independent Linux job on a
+forge that does not bill Vix); a self-hosted runner executes whatever a
+workflow says (no fork pull requests); GitHub's self-hosted runner charge was
+postponed, not cancelled. Full assessment and the option table:
+[`spec/local-ci`](spec/local-ci/index.md). Tasks: T760–T768 in `tasks.md`.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on
