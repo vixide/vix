@@ -7,6 +7,7 @@
 use crate::column_view::ColumnView;
 use crate::edit_bytes::Hex;
 use crate::edit_outline::Tree as OutlineTree;
+#[cfg(feature = "sql")]
 use crate::edit_sql::Editor as SqlEditor;
 use crate::edit_table::Grid;
 use crate::edit_value::Tree as ValueTree;
@@ -24,45 +25,54 @@ pub(crate) enum EditSurface {
     /// The byte (hex) editor.
     EditBytes(Hex),
     /// The SQL statement editor.
+    #[cfg(feature = "sql")]
     EditSql(SqlEditor),
 }
 
 /// Declares [`EditSlot`] and its impl for `Option<EditSurface>` from one list
 /// of `variant, type, getter, getter_mut, opener, closer` rows.
 macro_rules! edit_slot {
-    ($($var:ident, $ty:ty, $get:ident, $get_mut:ident, $open:ident, $close:ident;)*) => {
+    ($($(#[$m:meta])* $var:ident, $ty:ty, $get:ident, $get_mut:ident, $open:ident, $close:ident;)*) => {
         /// Typed access to the slot that holds the open [`EditSurface`], so a
         /// call site borrows only the `edit` field.
         pub(crate) trait EditSlot {
             $(
                 /// The editor, if that is the open one.
+                $(#[$m])*
                 fn $get(&self) -> Option<&$ty>;
                 /// The editor, mutably, if that is the open one.
+                $(#[$m])*
                 fn $get_mut(&mut self) -> Option<&mut $ty>;
                 /// Opens the editor, replacing any other open edit surface.
+                $(#[$m])*
                 fn $open(&mut self, e: $ty);
                 /// Closes the editor if it is the open one; any other stays.
+                $(#[$m])*
                 fn $close(&mut self);
             )*
         }
 
         impl EditSlot for Option<EditSurface> {
             $(
+                $(#[$m])*
                 fn $get(&self) -> Option<&$ty> {
                     match self {
                         Some(EditSurface::$var(e)) => Some(e),
                         _ => None,
                     }
                 }
+                $(#[$m])*
                 fn $get_mut(&mut self) -> Option<&mut $ty> {
                     match self {
                         Some(EditSurface::$var(e)) => Some(e),
                         _ => None,
                     }
                 }
+                $(#[$m])*
                 fn $open(&mut self, e: $ty) {
                     *self = Some(EditSurface::$var(e));
                 }
+                $(#[$m])*
                 fn $close(&mut self) {
                     if matches!(self, Some(EditSurface::$var(_))) {
                         *self = None;
@@ -79,5 +89,6 @@ edit_slot! {
     EditOutline, OutlineTree, edit_outline, edit_outline_mut, open_edit_outline, close_edit_outline;
     EditValue, ValueTree, edit_value, edit_value_mut, open_edit_value, close_edit_value;
     EditBytes, Hex, edit_bytes, edit_bytes_mut, open_edit_bytes, close_edit_bytes;
+    #[cfg(feature = "sql")]
     EditSql, SqlEditor, edit_sql, edit_sql_mut, open_edit_sql, close_edit_sql;
 }

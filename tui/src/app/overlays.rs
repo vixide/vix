@@ -433,7 +433,17 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     chooser!(HttpEnvChooser, http_env, http_env_key),
     unit!(ChoiceList, choice_list, choice_list_key),
     unit!(StructuralReplace, structural_replace, sr_key),
+    #[cfg(feature = "sql")]
     edit_surface!(EditSql, edit_sql, edit_sql_key),
+    #[cfg(not(feature = "sql"))]
+    Overlay {
+        id: OverlayId::EditSql,
+        open: |_| false,
+        key: Key::Handler(|a, k| {
+            a.edit_sql_key(k);
+            true
+        }),
+    },
     unit!(Db, db, db_key),
     info_panel!(MediaTypePanel, media_type_panel, media_type_key),
     chooser!(EncodingChooser, encoding, encoding_key),
@@ -687,25 +697,25 @@ mod tests {
         a.edit
             .open_edit_table(crate::edit_table::Grid::from_text("a,b\n1,2\n", false));
         a.edit
-            .open_edit_sql(crate::edit_sql::Editor::from_text("select 1"));
+            .open_edit_outline(crate::edit_outline::Tree::from_text("a"));
         let open: Vec<OverlayId> = a.open_overlays().map(|o| o.id).collect();
         assert_eq!(
             open,
-            [OverlayId::EditSql],
+            [OverlayId::EditOutline],
             "the newer editor replaced the older"
         );
         assert!(a.edit.edit_table().is_none());
-        assert!(a.edit.edit_sql().is_some());
+        assert!(a.edit.edit_outline().is_some());
     }
 
     #[test]
     fn closing_an_edit_surface_that_is_not_open_is_a_no_op() {
         let mut a = app();
         a.edit
-            .open_edit_sql(crate::edit_sql::Editor::from_text("select 1"));
+            .open_edit_outline(crate::edit_outline::Tree::from_text("a"));
         a.edit.close_edit_table();
-        assert!(a.edit.edit_sql().is_some(), "a different editor stays");
-        a.edit.close_edit_sql();
+        assert!(a.edit.edit_outline().is_some(), "a different editor stays");
+        a.edit.close_edit_outline();
         assert!(a.edit.is_none());
     }
 }

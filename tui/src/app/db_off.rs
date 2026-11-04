@@ -7,7 +7,6 @@
 use vix_input::KeyEvent;
 
 use super::App;
-use super::edit_surface::EditSlot;
 
 impl App {
     /// No `db.*` actions in this build (they are also refused up front by
@@ -23,9 +22,7 @@ impl App {
     }
 
     /// The SQL editor can't be open, so it never takes a key.
-    pub(super) fn edit_sql_key(&mut self, _key: KeyEvent) {
-        debug_assert!(self.edit.edit_sql().is_none());
-    }
+    pub(super) fn edit_sql_key(&mut self, _key: KeyEvent) {}
 
     /// No background DB query to drain.
     pub fn poll_db_query(&mut self) {}
