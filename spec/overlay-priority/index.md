@@ -1,6 +1,6 @@
 # Overlay priority
 
-**Status:** Shipped (T611, step 1; step 2 in part: the choosers). One table, `OVERLAYS`, orders every modal
+**Status:** Shipped (T611, step 1; step 2 complete: the choosers, info panels and edit surfaces). One table, `OVERLAYS`, orders every modal
 layer from the bottom of the stack to the top. The frame draws the open rows in
 table order and a key is offered to the open rows in the reverse order, so the
 layer drawn on top is the layer that receives keys.
@@ -66,7 +66,7 @@ this only matters when two layers are open at once. The cases that moved:
 
 Step 2 replaces loose `Option<_>` fields with one enum for the modals that are
 mutually exclusive, so that two of them cannot be open at once at all. It is
-done in slices. Slice 1 converted the **list choosers**; slice 2 converted the **info panels** (below).
+done in slices. Slice 1 converted the **list choosers**; slice 2 converted the **info panels**; slice 3 converted the **edit surfaces** (below).
 
 `App::chooser: Option<Chooser>` replaces fifteen fields (`branch_chooser`,
 `stash_chooser`, `worktree_chooser`, `task_chooser`, `script_chooser`,
@@ -111,11 +111,28 @@ Behavior:
   and draw routing are unchanged.
 - The panels' layout rectangles (`Layout::nerd_palette`, ...) are unchanged.
 
-**Remaining (later slices):** the edit surfaces (`edit_table`, `edit_outline`,
-`edit_value`, `edit_bytes`, `edit_sql`, `column_view`). The stacking
-confirmations (`confirm`, `prompt`, `unsaved`, ...) are not candidates: they
-legitimately open over another layer (a reword prompt over the rebase overlay,
-a confirmation over workspace search).
+### Slice 3: the edit surfaces
+
+`App::edit: Option<EditSurface>` replaces six fields (`edit_table`,
+`edit_outline`, `edit_value`, `edit_bytes`, `edit_sql`, `column_view`);
+`EditSurface` has one variant per editor, in `tui/src/app/edit_surface.rs`,
+with typed access through the `EditSlot` trait on `Option<EditSurface>`
+(`edit_table()`, `edit_table_mut()`, `open_edit_table(e)`,
+`close_edit_table()`, and the same for each editor). Behavior:
+
+- Opening an edit surface **replaces** any other edit surface. Each is opened
+  from the menu bar or palette, which closes first, so no supported flow had
+  two open; the change removes the impossible state.
+- `close_*` closes an editor only if it is the open one.
+- Each editor keeps its own row in `OVERLAYS` (same height, key handler and
+  draw function); a row is open when the slot holds its variant. Key, mouse
+  and draw routing and the layout rectangles are unchanged. The byte editor's
+  `edit_bytes_file` (the file it edits directly) stays a separate `App` field.
+
+With this slice step 2 is complete. The stacking confirmations (`confirm`,
+`prompt`, `unsaved`, ...) are not candidates: they legitimately open over
+another layer (a reword prompt over the rebase overlay, a confirmation over
+workspace search).
 
 ## Tests
 
@@ -123,7 +140,7 @@ a confirmation over workspace search).
 offer order are the same open rows in opposite directions; opening the
 palette, help and welcome panels together and pressing `Esc` closes them
 top-down (so the topmost drawn layer really takes the key); opening one
-chooser while another is open replaces it (only one `Chooser` row is ever open); opening one info panel while another is open replaces it (only one `InfoPanel` row is ever open), and closing a panel that is not the open one is a no-op; the set of
+chooser while another is open replaces it (only one `Chooser` row is ever open); opening one info panel while another is open replaces it (only one `InfoPanel` row is ever open), and closing a panel that is not the open one is a no-op; opening one edit surface while another is open replaces it (only one `EditSurface` row is ever open), and closing an editor that is not the open one is a no-op; the set of
 draw-only layers is exactly which-key, completion and hover. The existing
 integration and snapshot suites cover the unchanged single-overlay behavior.
 

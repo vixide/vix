@@ -10,6 +10,7 @@ use super::draw_scrollbar;
 #[cfg(feature = "sql")]
 use super::trunc;
 use crate::app::App;
+use crate::app::edit_surface::EditSlot;
 use crate::theme::{self, icon};
 
 /// Pad or truncate `s` to exactly `w` display columns (by character count).
@@ -121,13 +122,13 @@ fn table_status_line(grid: &crate::edit_table::Grid) -> Line<'static> {
 /// Render the table editor overlay: pinned header, scrolling body with the
 /// selected cell highlighted, and a status/hint line.
 pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.edit_table.is_none() {
+    if app.edit.edit_table().is_none() {
         return;
     }
     frame.render_widget(Clear, area);
     let dirty = if app
-        .edit_table
-        .as_ref()
+        .edit
+        .edit_table()
         .is_some_and(crate::edit_table::Grid::is_dirty)
     {
         " *"
@@ -157,19 +158,19 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let Some(grid) = app.edit_table.as_ref() else {
+    let Some(grid) = app.edit.edit_table() else {
         return;
     };
     let widths = column_widths(grid);
     let avail = usize::from(chunks[1].width);
     let first = first_visible_col(grid, &widths, avail);
     let body_h = usize::from(chunks[1].height);
-    if let Some(g) = app.edit_table.as_mut() {
+    if let Some(g) = app.edit.edit_table_mut() {
         g.set_col_scroll(first);
         g.ensure_row_visible(body_h);
     }
 
-    let Some(grid) = app.edit_table.as_ref() else {
+    let Some(grid) = app.edit.edit_table() else {
         return;
     };
     let cols = visible_cols(grid, &widths, avail);
@@ -292,7 +293,7 @@ fn column_view_status_line(view: &crate::column_view::ColumnView) -> Line<'stati
 /// Render the interactive Column View overlay: a pinned header row, a
 /// scrolling body with the selected field highlighted, and a status/hint line.
 pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.column_view.is_none() {
+    if app.edit.column_view().is_none() {
         return;
     }
     frame.render_widget(Clear, area);
@@ -314,18 +315,18 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let Some(view) = app.column_view.as_ref() else {
+    let Some(view) = app.edit.column_view() else {
         return;
     };
     let widths = column_view_widths(view);
     let avail = usize::from(chunks[1].width);
     let cols = column_view_visible_cols(view, &widths, avail);
     let body_h = usize::from(chunks[1].height);
-    if let Some(v) = app.column_view.as_mut() {
+    if let Some(v) = app.edit.column_view_mut() {
         v.ensure_row_visible(body_h);
     }
 
-    let Some(view) = app.column_view.as_ref() else {
+    let Some(view) = app.edit.column_view() else {
         return;
     };
     frame.render_widget(
@@ -366,13 +367,13 @@ fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> L
 /// in `app.layout.edit_sql` for mouse hit-testing.
 #[cfg(feature = "sql")]
 pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.edit_sql.is_none() {
+    if app.edit.edit_sql().is_none() {
         return;
     }
     frame.render_widget(Clear, area);
     let dirty = if app
-        .edit_sql
-        .as_ref()
+        .edit
+        .edit_sql()
         .is_some_and(crate::edit_sql::Editor::is_dirty)
     {
         " *"
@@ -394,10 +395,10 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let body_h = usize::from(chunks[0].height);
-    if let Some(e) = app.edit_sql.as_mut() {
+    if let Some(e) = app.edit.edit_sql_mut() {
         e.ensure_visible(body_h);
     }
-    let Some(editor) = app.edit_sql.as_ref() else {
+    let Some(editor) = app.edit.edit_sql() else {
         return;
     };
     let total = editor.len();
@@ -437,13 +438,13 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
 
 /// Render the prose outline editor overlay.
 pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.edit_outline.is_none() {
+    if app.edit.edit_outline().is_none() {
         return;
     }
     frame.render_widget(Clear, area);
     let dirty = if app
-        .edit_outline
-        .as_ref()
+        .edit
+        .edit_outline()
         .is_some_and(crate::edit_outline::Tree::is_dirty)
     {
         " *"
@@ -470,10 +471,10 @@ pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let body_h = usize::from(chunks[0].height);
-    if let Some(t) = app.edit_outline.as_mut() {
+    if let Some(t) = app.edit.edit_outline_mut() {
         t.ensure_visible(body_h);
     }
-    let Some(tree) = app.edit_outline.as_ref() else {
+    let Some(tree) = app.edit.edit_outline() else {
         return;
     };
     let vis = tree.visible();
@@ -526,13 +527,13 @@ fn value_line(tree: &crate::edit_value::Tree, i: usize, editing: bool) -> Line<'
 
 /// Render the structured-value editor overlay (Edit JSON / Edit YAML).
 pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(format) = app.edit_value.as_ref().map(crate::edit_value::Tree::format) else {
+    let Some(format) = app.edit.edit_value().map(crate::edit_value::Tree::format) else {
         return;
     };
     frame.render_widget(Clear, area);
     let dirty = if app
-        .edit_value
-        .as_ref()
+        .edit
+        .edit_value()
         .is_some_and(crate::edit_value::Tree::is_dirty)
     {
         " *"
@@ -558,10 +559,10 @@ pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let body_h = usize::from(chunks[0].height);
-    if let Some(t) = app.edit_value.as_mut() {
+    if let Some(t) = app.edit.edit_value_mut() {
         t.ensure_visible(body_h);
     }
-    let Some(tree) = app.edit_value.as_ref() else {
+    let Some(tree) = app.edit.edit_value() else {
         return;
     };
     let editing = tree.is_editing();
@@ -622,13 +623,13 @@ fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
 
 /// Render the byte (hex) editor overlay.
 pub(super) fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
-    if app.edit_bytes.is_none() {
+    if app.edit.edit_bytes().is_none() {
         return;
     }
     frame.render_widget(Clear, area);
     let dirty = if app
-        .edit_bytes
-        .as_ref()
+        .edit
+        .edit_bytes()
         .is_some_and(crate::edit_bytes::Hex::is_dirty)
     {
         " *"
@@ -655,10 +656,10 @@ pub(super) fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let body_h = usize::from(chunks[0].height);
-    if let Some(h) = app.edit_bytes.as_mut() {
+    if let Some(h) = app.edit.edit_bytes_mut() {
         h.ensure_visible(body_h);
     }
-    let Some(hex) = app.edit_bytes.as_ref() else {
+    let Some(hex) = app.edit.edit_bytes() else {
         return;
     };
     let start = hex.scroll();

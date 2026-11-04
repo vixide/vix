@@ -75,10 +75,12 @@ use jupyter as jupyter_state;
 use jupyter_off as jupyter_state;
 pub(crate) mod chooser;
 mod debug_panel;
+pub(crate) mod edit_surface;
 pub(crate) mod info_panel;
 mod keymap;
 mod overlays;
 use chooser::ChooserSlot;
+use edit_surface::EditSlot;
 use info_panel::InfoSlot;
 pub(crate) use overlays::OverlayId;
 mod large_file;
@@ -2140,6 +2142,10 @@ pub struct App {
     /// system info, LSP status, file info, text info), if any. One slot for all of
     /// them: two cannot be open at once (T611 step 2).
     pub(crate) info: Option<info_panel::InfoPanel>,
+    /// The open full-screen edit surface (table, outline, JSON/YAML, byte, SQL
+    /// editor or Org Column View), if any. One slot for all of them: two cannot
+    /// be open at once (T611 step 2).
+    pub(crate) edit: Option<edit_surface::EditSurface>,
     /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
     /// **File History**), when open.
     pub(crate) git_log: Option<crate::git::LogPanel>,
@@ -2201,23 +2207,11 @@ pub struct App {
     /// The template awaiting the final review-buffer step of a capture, while
     /// that prompt is open.
     capture_review: Option<vix_org_capture::CaptureTemplate>,
-    /// Table editor (CSV/TSV spreadsheet) overlay, when open.
-    pub edit_table: Option<crate::edit_table::Grid>,
-    /// Interactive Org Column View overlay, when open.
-    pub(crate) column_view: Option<crate::column_view::ColumnView>,
-    /// Outline editor (prose hierarchy) overlay, when open.
-    pub(crate) edit_outline: Option<crate::edit_outline::Tree>,
-    /// Structured-value editor (JSON/YAML tree) overlay, when open.
-    pub(crate) edit_value: Option<crate::edit_value::Tree>,
-    /// Byte editor (hex view) overlay, when open.
-    pub(crate) edit_bytes: Option<crate::edit_bytes::Hex>,
     /// The file the byte editor edits directly (a binary file opened from the
     /// confirmation, T571), or `None` when it edits the active text buffer.
     edit_bytes_file: Option<PathBuf>,
     /// The Large File Viewer overlay (T733), when open.
     pub(crate) large_file: Option<crate::large_file::Viewer>,
-    /// SQL statement editor overlay, when open.
-    pub(crate) edit_sql: Option<crate::edit_sql::Editor>,
     /// DB workbench overlay (`spec/db`), when open.
     pub db: Option<crate::db::Browser>,
     /// X11 color palette overlay, when open.
@@ -2858,6 +2852,7 @@ impl App {
             git_panel: None,
             chooser: None,
             info: None,
+            edit: None,
             git_log: None,
             git_graph: None,
             git_rebase: None,
@@ -2881,14 +2876,8 @@ impl App {
             file_browser: None,
             pending_capture: None,
             capture_review: None,
-            edit_table: None,
-            column_view: None,
-            edit_outline: None,
-            edit_value: None,
-            edit_bytes: None,
             edit_bytes_file: None,
             large_file: None,
-            edit_sql: None,
             db: None,
             qrcode: None,
             x11_panel: None,
@@ -8733,7 +8722,8 @@ impl App {
             crate::authority::current().read_limited(path, crate::fileops::HARD_MAX_TEXT_BYTES + 1);
         match read {
             Ok(bytes) if (bytes.len() as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
-                self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(bytes));
+                self.edit
+                    .open_edit_bytes(crate::edit_bytes::Hex::from_bytes(bytes));
                 self.edit_bytes_file = Some(path.to_path_buf());
             }
             Ok(_) => self.messages.error(
@@ -11039,7 +11029,8 @@ impl App {
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("tsv"));
         let text = tab.text();
-        self.edit_table = Some(crate::edit_table::Grid::from_text(&text, tsv));
+        self.edit
+            .open_edit_table(crate::edit_table::Grid::from_text(&text, tsv));
     }
 
     /// Route a key to the open table editor and act on its outcome.
@@ -11047,12 +11038,12 @@ impl App {
         let page = usize::from(self.layout.edit_table.height)
             .saturating_sub(1)
             .max(1);
-        let outcome = match self.edit_table.as_mut() {
+        let outcome = match self.edit.edit_table_mut() {
             Some(grid) => grid.handle_key(key, page),
             None => return,
         };
         match outcome {
-            crate::edit_table::Outcome::Close => self.edit_table = None,
+            crate::edit_table::Outcome::Close => self.edit.close_edit_table(),
             crate::edit_table::Outcome::Save => self.save_edit_table(),
             crate::edit_table::Outcome::Consumed => {}
         }
@@ -11061,18 +11052,14 @@ impl App {
     /// Serialize the table editor back into the active buffer and save it,
     /// reusing the normal file-save flow (which handles Save As when untitled).
     fn save_edit_table(&mut self) {
-        let Some(text) = self
-            .edit_table
-            .as_ref()
-            .map(crate::edit_table::Grid::to_text)
-        else {
+        let Some(text) = self.edit.edit_table().map(crate::edit_table::Grid::to_text) else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(grid) = self.edit_table.as_mut() {
+        if let Some(grid) = self.edit.edit_table_mut() {
             grid.mark_saved();
         }
         self.run_action("file.save");
@@ -11092,7 +11079,8 @@ impl App {
             return;
         }
         let text = tab.text();
-        self.edit_outline = Some(crate::edit_outline::Tree::from_text(&text));
+        self.edit
+            .open_edit_outline(crate::edit_outline::Tree::from_text(&text));
     }
 
     /// Route a key to the open outline editor and act on its outcome.
@@ -11100,12 +11088,12 @@ impl App {
         let page = usize::from(self.layout.edit_outline.height)
             .saturating_sub(1)
             .max(1);
-        let outcome = match self.edit_outline.as_mut() {
+        let outcome = match self.edit.edit_outline_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
         };
         match outcome {
-            crate::edit_outline::Outcome::Close => self.edit_outline = None,
+            crate::edit_outline::Outcome::Close => self.edit.close_edit_outline(),
             crate::edit_outline::Outcome::Save => self.save_edit_outline(),
             crate::edit_outline::Outcome::Consumed => {}
         }
@@ -11115,8 +11103,8 @@ impl App {
     /// reusing the normal file-save flow (which handles Save As when untitled).
     fn save_edit_outline(&mut self) {
         let Some(text) = self
-            .edit_outline
-            .as_ref()
+            .edit
+            .edit_outline()
             .map(crate::edit_outline::Tree::to_text)
         else {
             return;
@@ -11125,7 +11113,7 @@ impl App {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(tree) = self.edit_outline.as_mut() {
+        if let Some(tree) = self.edit.edit_outline_mut() {
             tree.mark_saved();
         }
         self.run_action("file.save");
@@ -11158,7 +11146,8 @@ impl App {
             return;
         }
         let text = tab.text();
-        self.edit_sql = Some(crate::edit_sql::Editor::from_text(&text));
+        self.edit
+            .open_edit_sql(crate::edit_sql::Editor::from_text(&text));
     }
 
     /// Route a key to the open SQL editor and act on its outcome.
@@ -11167,12 +11156,12 @@ impl App {
         let page = usize::from(self.layout.edit_sql.height)
             .saturating_sub(1)
             .max(1);
-        let outcome = match self.edit_sql.as_mut() {
+        let outcome = match self.edit.edit_sql_mut() {
             Some(editor) => editor.handle_key(key, page),
             None => return,
         };
         match outcome {
-            crate::edit_sql::Outcome::Close => self.edit_sql = None,
+            crate::edit_sql::Outcome::Close => self.edit.close_edit_sql(),
             crate::edit_sql::Outcome::Save => self.save_edit_sql(),
             crate::edit_sql::Outcome::Consumed => {}
         }
@@ -11181,14 +11170,14 @@ impl App {
     /// Serialize the SQL editor back into the active buffer and save it.
     #[cfg(feature = "sql")]
     fn save_edit_sql(&mut self) {
-        let Some(text) = self.edit_sql.as_ref().map(crate::edit_sql::Editor::to_text) else {
+        let Some(text) = self.edit.edit_sql().map(crate::edit_sql::Editor::to_text) else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(editor) = self.edit_sql.as_mut() {
+        if let Some(editor) = self.edit.edit_sql_mut() {
             editor.mark_saved();
         }
         self.run_action("file.save");
@@ -11208,7 +11197,7 @@ impl App {
             return;
         }
         match crate::edit_value::Tree::from_text(&tab.text(), format) {
-            Ok(tree) => self.edit_value = Some(tree),
+            Ok(tree) => self.edit.open_edit_value(tree),
             Err(e) => self
                 .messages
                 .warn(t!("msg.edit_value_parse", error = e.to_string()).to_string()),
@@ -11220,12 +11209,12 @@ impl App {
         let page = usize::from(self.layout.edit_value.height)
             .saturating_sub(1)
             .max(1);
-        let outcome = match self.edit_value.as_mut() {
+        let outcome = match self.edit.edit_value_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
         };
         match outcome {
-            crate::edit_value::Outcome::Close => self.edit_value = None,
+            crate::edit_value::Outcome::Close => self.edit.close_edit_value(),
             crate::edit_value::Outcome::Save => self.save_edit_value(),
             crate::edit_value::Outcome::Consumed => {}
         }
@@ -11233,18 +11222,14 @@ impl App {
 
     /// Serialize the structured-value editor back into the active buffer and save.
     fn save_edit_value(&mut self) {
-        let Some(text) = self
-            .edit_value
-            .as_ref()
-            .map(crate::edit_value::Tree::to_text)
-        else {
+        let Some(text) = self.edit.edit_value().map(crate::edit_value::Tree::to_text) else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(tree) = self.edit_value.as_mut() {
+        if let Some(tree) = self.edit.edit_value_mut() {
             tree.mark_saved();
         }
         self.run_action("file.save");
@@ -11263,7 +11248,8 @@ impl App {
                 .warn(t!("msg.edit_bytes_no_buffer").to_string());
             return;
         }
-        self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(tab.text().into_bytes()));
+        self.edit
+            .open_edit_bytes(crate::edit_bytes::Hex::from_bytes(tab.text().into_bytes()));
         self.edit_bytes_file = None;
     }
 
@@ -11272,13 +11258,13 @@ impl App {
         let page = usize::from(self.layout.edit_bytes.height)
             .saturating_sub(1)
             .max(1);
-        let outcome = match self.edit_bytes.as_mut() {
+        let outcome = match self.edit.edit_bytes_mut() {
             Some(hex) => hex.handle_key(key, page),
             None => return,
         };
         match outcome {
             crate::edit_bytes::Outcome::Close => {
-                self.edit_bytes = None;
+                self.edit.close_edit_bytes();
                 self.edit_bytes_file = None;
             }
             crate::edit_bytes::Outcome::Save => self.save_edit_bytes(),
@@ -11289,7 +11275,7 @@ impl App {
     /// Write the byte editor's bytes back into the active buffer and save. Bytes
     /// are decoded lossily to UTF-8 for the text buffer.
     fn save_edit_bytes(&mut self) {
-        let Some(bytes) = self.edit_bytes.as_ref().map(|h| h.to_bytes().to_vec()) else {
+        let Some(bytes) = self.edit.edit_bytes().map(|h| h.to_bytes().to_vec()) else {
             return;
         };
         // A binary file opened straight into the byte editor is written back byte
@@ -11297,7 +11283,7 @@ impl App {
         if let Some(path) = self.edit_bytes_file.clone() {
             match crate::authority::current().write_atomic(&path, &bytes) {
                 Ok(()) => {
-                    if let Some(hex) = self.edit_bytes.as_mut() {
+                    if let Some(hex) = self.edit.edit_bytes_mut() {
                         hex.mark_saved();
                     }
                     self.status = t!("status.saved", path = path.display()).to_string();
@@ -11313,7 +11299,7 @@ impl App {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(hex) = self.edit_bytes.as_mut() {
+        if let Some(hex) = self.edit.edit_bytes_mut() {
             hex.mark_saved();
         }
         self.run_action("file.save");
@@ -16517,7 +16503,7 @@ mod tests {
         app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
         let tabs_before = app.editor.tabs.len();
         app.run_action("org.column_view");
-        assert!(app.column_view.is_some(), "overlay opened");
+        assert!(app.edit.column_view().is_some(), "overlay opened");
         assert_eq!(app.editor.tabs.len(), tabs_before, "no new tab created");
 
         // Move to the Sub row's TODO column and cycle it: the key must edit
@@ -16529,7 +16515,7 @@ mod tests {
         assert!(text.contains("** TODO Sub"), "{text:?}");
 
         app.column_view_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
-        assert!(app.column_view.is_none(), "q closes the overlay");
+        assert!(app.edit.column_view().is_none(), "q closes the overlay");
     }
 
     #[test]
@@ -16538,7 +16524,7 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.editor.new_tab_with_content("plain text\n");
         app.run_action("org.column_view");
-        assert!(app.column_view.is_none());
+        assert!(app.edit.column_view().is_none());
     }
 
     #[test]

@@ -11,6 +11,7 @@
 use vix_input::KeyEvent;
 
 use super::chooser::ChooserSlot;
+use super::edit_surface::EditSlot;
 use super::info_panel::InfoSlot;
 use super::{App, ConfirmKind, Visible};
 
@@ -280,6 +281,20 @@ macro_rules! info_panel {
     };
 }
 
+/// A row for an edit surface: open while `app.edit` holds that variant.
+macro_rules! edit_surface {
+    ($id:ident, $accessor:ident, $handler:ident) => {
+        Overlay {
+            id: OverlayId::$id,
+            open: |a| a.edit.$accessor().is_some(),
+            key: Key::Handler(|a, k| {
+                a.$handler(k);
+                true
+            }),
+        }
+    };
+}
+
 /// A row for a layer that is drawn but never takes keys.
 macro_rules! draw_only {
     ($id:ident, $field:ident) => {
@@ -353,11 +368,11 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(FileBrowser, file_browser, file_browser_key),
     info_panel!(NerdPalette, nerd_palette, nerd_key),
     info_panel!(AsciiPanel, ascii_panel, ascii_key),
-    unit!(EditTable, edit_table, edit_table_key),
-    unit!(ColumnView, column_view, column_view_key),
-    unit!(EditOutline, edit_outline, edit_outline_key),
-    unit!(EditValue, edit_value, edit_value_key),
-    unit!(EditBytes, edit_bytes, edit_bytes_key),
+    edit_surface!(EditTable, edit_table, edit_table_key),
+    edit_surface!(ColumnView, column_view, column_view_key),
+    edit_surface!(EditOutline, edit_outline, edit_outline_key),
+    edit_surface!(EditValue, edit_value, edit_value_key),
+    edit_surface!(EditBytes, edit_bytes, edit_bytes_key),
     unit!(LargeFile, large_file, large_file_key),
     unit!(Qrcode, qrcode, qrcode_key),
     unit!(AiPanel, ai_panel, ai_panel_key),
@@ -418,7 +433,7 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     chooser!(HttpEnvChooser, http_env, http_env_key),
     unit!(ChoiceList, choice_list, choice_list_key),
     unit!(StructuralReplace, structural_replace, sr_key),
-    unit!(EditSql, edit_sql, edit_sql_key),
+    edit_surface!(EditSql, edit_sql, edit_sql_key),
     unit!(Db, db, db_key),
     info_panel!(MediaTypePanel, media_type_panel, media_type_key),
     chooser!(EncodingChooser, encoding, encoding_key),
@@ -664,5 +679,33 @@ mod tests {
         // Esc reaches the panel's handler through the table and closes it.
         a.route_overlay_key(esc());
         assert!(a.info.is_none());
+    }
+
+    #[test]
+    fn two_edit_surfaces_cannot_be_open_together() {
+        let mut a = app();
+        a.edit
+            .open_edit_table(crate::edit_table::Grid::from_text("a,b\n1,2\n", false));
+        a.edit
+            .open_edit_sql(crate::edit_sql::Editor::from_text("select 1"));
+        let open: Vec<OverlayId> = a.open_overlays().map(|o| o.id).collect();
+        assert_eq!(
+            open,
+            [OverlayId::EditSql],
+            "the newer editor replaced the older"
+        );
+        assert!(a.edit.edit_table().is_none());
+        assert!(a.edit.edit_sql().is_some());
+    }
+
+    #[test]
+    fn closing_an_edit_surface_that_is_not_open_is_a_no_op() {
+        let mut a = app();
+        a.edit
+            .open_edit_sql(crate::edit_sql::Editor::from_text("select 1"));
+        a.edit.close_edit_table();
+        assert!(a.edit.edit_sql().is_some(), "a different editor stays");
+        a.edit.close_edit_sql();
+        assert!(a.edit.is_none());
     }
 }

@@ -1356,7 +1356,7 @@ fn edit_table_opens_edits_and_saves_csv() {
 
     app.run_action("tools.edit_table");
     assert!(
-        app.edit_table.is_some(),
+        app.edit.edit_table().is_some(),
         "table editor opened on the CSV buffer"
     );
 
@@ -1382,7 +1382,10 @@ fn edit_table_opens_edits_and_saves_csv() {
 
     // Esc closes the editor.
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.edit_table.is_none(), "Esc closes the table editor");
+    assert!(
+        app.edit.edit_table().is_none(),
+        "Esc closes the table editor"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -1403,7 +1406,7 @@ fn edit_outline_opens_indents_and_saves() {
 
     app.run_action("tools.edit_outline");
     assert!(
-        app.edit_outline.is_some(),
+        app.edit.edit_outline().is_some(),
         "outline editor opened on the buffer"
     );
 
@@ -1421,7 +1424,10 @@ fn edit_outline_opens_indents_and_saves() {
 
     // Esc closes the editor.
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.edit_outline.is_none(), "Esc closes the outline editor");
+    assert!(
+        app.edit.edit_outline().is_none(),
+        "Esc closes the outline editor"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -1435,7 +1441,7 @@ fn edit_json_opens_edits_and_saves() {
     let mut app = app_at(&dir);
     app.open_initial(&file);
     app.run_action("tools.edit_json");
-    assert!(app.edit_value.is_some(), "JSON editor opened");
+    assert!(app.edit.edit_value().is_some(), "JSON editor opened");
 
     app.on_key(keycode(KeyCode::Down)); // select "a"
     app.on_key(keycode(KeyCode::Enter)); // edit value
@@ -1451,7 +1457,10 @@ fn edit_json_opens_edits_and_saves() {
     );
 
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.edit_value.is_none(), "Esc closes the JSON editor");
+    assert!(
+        app.edit.edit_value().is_none(),
+        "Esc closes the JSON editor"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1466,7 +1475,7 @@ fn edit_json_parse_failure_names_the_real_problem() {
     let mut app = app_at(&dir);
     app.open_initial(&file);
     app.run_action("tools.edit_json");
-    assert!(app.edit_value.is_none(), "the editor did not open");
+    assert!(app.edit.edit_value().is_none(), "the editor did not open");
     let text = app
         .messages
         .items
@@ -1490,7 +1499,7 @@ fn edit_bytes_opens_overwrites_and_saves() {
     let mut app = app_at(&dir);
     app.open_initial(&file);
     app.run_action("tools.edit_bytes");
-    assert!(app.edit_bytes.is_some(), "byte editor opened");
+    assert!(app.edit.edit_bytes().is_some(), "byte editor opened");
 
     // Overwrite the first byte 'h' (0x68) with 0x41 = 'A' by typing "41".
     app.on_key(key('4'));
@@ -1504,7 +1513,10 @@ fn edit_bytes_opens_overwrites_and_saves() {
     );
 
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.edit_bytes.is_none(), "Esc closes the byte editor");
+    assert!(
+        app.edit.edit_bytes().is_none(),
+        "Esc closes the byte editor"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4191,7 +4203,7 @@ fn a_binary_file_opens_in_the_byte_editor_and_saves_byte_for_byte() {
         Some(ConfirmKind::OpenBinary)
     );
     app.on_key(key('y'));
-    let hex = app.edit_bytes.as_ref().expect("the byte editor opened");
+    let hex = app.edit.edit_bytes().expect("the byte editor opened");
     assert_eq!(hex.to_bytes(), original.as_slice());
 
     // Save without changing anything: the file must be identical.

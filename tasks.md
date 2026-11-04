@@ -7121,8 +7121,12 @@ new action.
     panels (`system_info`, `lsp_status`, `file_info`, `text_info`,
     `media_type_panel`, `nerd_palette`, `ascii_panel`) are one
     `App::info: Option<InfoPanel>` (`tui/src/app/info_panel.rs`, `InfoSlot`);
-    opening one replaces another. **Remaining**: only the edit surfaces
-    above.
+    opening one replaces another.
+  - Step 2, slice 3 done 2026-11-04 (`feat/t611-edit-surfaces`): the 6 edit
+    surfaces (`edit_table`, `edit_outline`, `edit_value`, `edit_bytes`,
+    `edit_sql`, `column_view`) are one `App::edit: Option<EditSurface>`
+    (`tui/src/app/edit_surface.rs`, `EditSlot`); opening one replaces another.
+    **Step 2 is complete.** Stacking confirmations stay separate on purpose.
 
 - [x] **T639 — `password_prompt_gates_server_connections` does a real OS
   keyring lookup, so it flakes under load.** Found 2026-10-22 while

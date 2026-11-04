@@ -15,6 +15,7 @@
 
 use vix_input::{KeyCode, KeyEvent};
 
+use super::edit_surface::EditSlot;
 use super::{App, Focus, Prompt, PromptKind};
 
 impl App {
@@ -608,18 +609,19 @@ impl App {
             .active_path()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
         let today = Self::today_ymd();
-        self.column_view = Some(crate::column_view::ColumnView::open(
-            &text, line, today, file_name,
-        ));
+        self.edit
+            .open_column_view(crate::column_view::ColumnView::open(
+                &text, line, today, file_name,
+            ));
     }
 
     /// Route a key to the open Column View overlay and act on its outcome.
     pub(super) fn column_view_key(&mut self, key: KeyEvent) {
         let Some(mut text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
-            self.column_view = None;
+            self.edit.close_column_view();
             return;
         };
-        let Some(view) = self.column_view.as_mut() else {
+        let Some(view) = self.edit.column_view_mut() else {
             return;
         };
         let outcome = view.handle_key(key, &mut text);
@@ -634,7 +636,7 @@ impl App {
             tab.dirty = true;
         }
         match outcome {
-            crate::column_view::Outcome::Close => self.column_view = None,
+            crate::column_view::Outcome::Close => self.edit.close_column_view(),
             crate::column_view::Outcome::NeedsColumnPrompt => {
                 self.prompt = Some(Prompt::new(
                     PromptKind::OrgColumnsInsertColumn,
@@ -655,7 +657,7 @@ impl App {
         let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
             return;
         };
-        if let Some(view) = self.column_view.as_mut() {
+        if let Some(view) = self.edit.column_view_mut() {
             view.insert_column_before(property, &text);
         }
     }

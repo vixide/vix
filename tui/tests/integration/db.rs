@@ -18,7 +18,7 @@ fn edit_sql_lists_formats_and_saves_statements() {
     type_str(&mut app, "select 1;\ninsert into t values (1)");
     app.run_action("tools.edit_sql");
     assert!(
-        app.edit_sql.is_some(),
+        app.edit.edit_sql().is_some(),
         "Edit → Mode → SQL opens the SQL editor"
     );
 
@@ -34,7 +34,7 @@ fn edit_sql_lists_formats_and_saves_statements() {
 
     // q closes the editor.
     app.on_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
-    assert!(app.edit_sql.is_none());
+    assert!(app.edit.edit_sql().is_none());
 }
 
 #[test]

@@ -8,6 +8,7 @@
 // strings by collecting `format!`; both are fine in tests.
 
 pub(crate) use crate::app::chooser::ChooserSlot;
+pub(crate) use crate::app::edit_surface::EditSlot;
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
 // Used by `wait_until` in every build, not only with `ai` (T605's helper).
