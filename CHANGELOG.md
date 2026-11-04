@@ -14,15 +14,11 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
-<<<<<<< HEAD
 - **ACP leftovers (T635).** **AI → Resume Agent** now works after Vix restarts: the last agent command and its session id are saved per workspace in `session.toml` (`acp_agent`, `acp_session`), and the command must still be in `ai_agents`. **AI → Toggle Agent Plan Pane** (`ai.agent_plan_dock`) docks the agent's live plan and tool calls beside the editor. The agent may ask to run a command through the ACP `terminal/*` methods: each `terminal/create` opens a prompt naming the full command line and runs only on `y`, in a directory inside the workspace, as argv with no shell, with output capped (default 1 MiB) and at most 8 terminals open. Spec: [`crates/vix-acp/spec`](crates/vix-acp/spec/index.md).
-||||||| 955ba1a6
-=======
 - **Local-first CI and CD proposal.** New `spec/local-ci` assesses moving the
   gate's authority to the local machine (tiers, a signed attestation, slimmer
   hosted CI, a self-hosted runner spike, a local release path); `plan.md` and
   `tasks.md` gain Run T (T760-T768).
->>>>>>> main
 - **2.0 launch kit (T745).** A `/whats-new/` page on the website, user-facing release notes in [`docs/whats-new-2-0`](docs/whats-new-2-0/index.md), and announcement drafts in [`docs/launch/`](docs/launch/index.md) (never posted). All are labelled as not released until 2.0 ships.
 - **Install-channel tooling and CI wiring (T742).** New `scripts/packaging` (`check`, part of `scripts/check`, keeps the winget, Scoop and AUR templates, the `cargo binstall` metadata and the Nix flake consistent; `render <version>` rewrites the templates from a release's `.sha256` files, adding Windows ARM when the asset exists) and `.github/workflows/packaging.yml`, which renders and verifies the templates after a release (`nix build`, `winget validate`, `makepkg`) and has publish jobs for winget-pkgs, a Scoop bucket and the AUR that do nothing unless `PACKAGING_PUBLISH` is `true` and a placeholder secret exists. Spec: [`spec/packaging`](spec/packaging/index.md). **Nothing is published and the workflow has not run**; the channels stay listed as "not yet published" until each is verified on a real machine.
 - **Review follow-ups (T665).** In a branch review, **Git → Stage Review Hunk** stages the hunk under the cursor and **Discard Review Hunk…** undoes it in the working tree after a confirmation (both via `git apply`; git's reason is shown when the hunk no longer fits). `r` in **Git → Stash List…** opens the highlighted stash in a review.
