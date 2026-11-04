@@ -23,6 +23,13 @@
     { href: '/install/', label: 'Install' }
   ];
 
+  // The link picker lists every page, plus the docs and the repository.
+  const pickerLinks = [
+    ...navLinks.map((l) => ({ href: l.href, label: l.label })),
+    { href: 'https://vixide.github.io/vix/', label: 'Docs' },
+    { href: 'https://github.com/vixide/vix', label: 'GitHub' }
+  ];
+
   // The Vix documentation (the main repo's docs/, built with mdBook) is
   // published at /vix/ on this same host. PickerBar's search box sends its
   // query there: mdBook opens its own search with the terms from a
@@ -147,17 +154,15 @@
         <a href="https://github.com/vixide/vix">GitHub</a>
       </NavigationMenu>
       <!--
-        themes/sizes are deliberately not passed — PickerBar defaults to
-        DEFAULT_THEMES (all 57 Lily reference themes, alphabetical, UK/US
-        government themes grouped last) and DEFAULT_SIZES (the 7-step text
-        size scale), which is exactly the "Lily default themes/sizes, not
-        any application-specific custom set" this header is required to use.
-        The bar's optional link picker (`links`) and time-zone picker
-        (`timeZoneProps.locale`) are left off: the nav beside it already
-        lists every page, and nothing on this site shows a time.
+        The full PickerBar: link (home icon, leftmost), search, theme, locale,
+        time zone, text size and share. themes/sizes are deliberately not
+        passed — PickerBar defaults to DEFAULT_THEMES (all Lily reference
+        themes) and DEFAULT_SIZES (the 7-step scale).
       -->
       <PickerBar
         labels={{
+          link: 'Site pages',
+          timeZone: 'Time zone',
           search: 'Search the documentation',
           searchInput: 'Search terms',
           searchSubmit: 'Search',
@@ -167,6 +172,9 @@
           share: 'Share this page'
         }}
         searchProps={{ action: docsUrl, navigate: searchDocs, placeholder: 'Search the docs…' }}
+        links={pickerLinks}
+        linkProps={{ navigate: (href: string) => location.assign(href) }}
+        timeZoneProps={{ locale: 'en' }}
         themesUrl="/assets/themes/"
         locales={siteLocales}
         shareTargets={shareTargets}
