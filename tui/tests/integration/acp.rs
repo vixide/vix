@@ -478,3 +478,69 @@ fn the_plan_can_be_docked_beside_the_editor() {
     app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_terminal_runs_only_after_the_user_says_yes() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-yes");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    let marker = dir.join("made-by-agent");
+    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    tick_until(&mut app, |a| {
+        a.prompt
+            .as_ref()
+            .is_some_and(|p| p.kind == PromptKind::AcpPermission)
+    });
+    let asked = app.prompt.as_ref().unwrap().title.clone();
+    assert!(
+        asked.contains("touch"),
+        "the prompt names the command: {asked}"
+    );
+    assert!(!marker.exists(), "nothing runs before the answer");
+    type_str(&mut app, "y");
+    app.on_key(keycode(KeyCode::Enter));
+    tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
+    assert!(marker.exists(), "the approved command ran");
+    assert!(log_text(&log).contains("TERM exit {\"exitCode\": 0"));
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_denied_terminal_runs_nothing() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-no");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    let marker = dir.join("made-by-agent");
+    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    tick_until(&mut app, |a| a.prompt.is_some());
+    app.on_key(esc());
+    tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
+    assert!(!marker.exists(), "a declined command never starts");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_terminal_cannot_run_outside_the_workspace() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-cwd");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    send_prompt(&mut app, "termin / touch /should-never-exist");
+    tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
+    assert!(
+        app.prompt.is_none(),
+        "an escaping directory is refused without even asking"
+    );
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}

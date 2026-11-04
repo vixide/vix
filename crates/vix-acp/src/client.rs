@@ -57,6 +57,23 @@ pub struct PlanEntry {
     pub status: String,
 }
 
+/// How a terminal's command ended.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TerminalExit {
+    /// The exit code, when it exited normally.
+    pub code: Option<u32>,
+    /// The signal that ended it, when it was killed by one.
+    pub signal: Option<String>,
+}
+
+impl TerminalExit {
+    /// The ACP `TerminalExitStatus` object.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        json!({"exitCode": self.code, "signal": self.signal})
+    }
+}
+
 /// Something the host should show or answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
@@ -108,6 +125,51 @@ pub enum Event {
         path: String,
         /// The full new text.
         content: String,
+    },
+    /// The agent asks to run a command in a terminal; answer with
+    /// [`Client::answer_terminal_created`] or [`Client::answer_denied`]. The
+    /// host must ask the user first: nothing here is checked.
+    TerminalCreate {
+        /// The request id to answer.
+        req_id: Value,
+        /// The program to run (no shell is involved).
+        command: String,
+        /// Its arguments.
+        args: Vec<String>,
+        /// The working directory it named (unchecked), if any.
+        cwd: Option<String>,
+        /// Extra environment variables as `(name, value)`.
+        env: Vec<(String, String)>,
+        /// The most output bytes to keep, if it named a limit.
+        output_limit: Option<u64>,
+    },
+    /// The agent wants a terminal's output so far.
+    TerminalOutput {
+        /// The request id to answer.
+        req_id: Value,
+        /// The terminal it named (unchecked).
+        terminal_id: String,
+    },
+    /// The agent waits for a terminal to exit; the host answers when it does.
+    TerminalWait {
+        /// The request id to answer.
+        req_id: Value,
+        /// The terminal it named (unchecked).
+        terminal_id: String,
+    },
+    /// The agent wants a terminal's command killed (the terminal stays).
+    TerminalKill {
+        /// The request id to answer.
+        req_id: Value,
+        /// The terminal it named (unchecked).
+        terminal_id: String,
+    },
+    /// The agent is done with a terminal: kill it and forget it.
+    TerminalRelease {
+        /// The request id to answer.
+        req_id: Value,
+        /// The terminal it named (unchecked).
+        terminal_id: String,
     },
     /// A prompt turn finished.
     TurnEnded {
@@ -227,9 +289,10 @@ impl Client {
 
     /// Begin: the `initialize` request to write first.
     ///
-    /// Advertises only the `fs` read/write capabilities (no terminal), so the
-    /// agent cannot ask the client to run commands. Returns nothing if already
-    /// started.
+    /// Advertises the `fs` read/write capabilities and `terminal`. The terminal
+    /// capability lets the agent *ask* to run a command; the host still asks
+    /// the user before every one (see the crate spec). Returns nothing if
+    /// already started.
     pub fn start(&mut self) -> Vec<Value> {
         if self.phase != Phase::Idle {
             return Vec::new();
@@ -237,7 +300,10 @@ impl Client {
         self.phase = Phase::Initializing;
         let params = json!({
             "protocolVersion": PROTOCOL_VERSION,
-            "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}},
+            "clientCapabilities": {
+                "fs": {"readTextFile": true, "writeTextFile": true},
+                "terminal": true,
+            },
         });
         vec![self.send("initialize", &params, Pending::Initialize)]
     }
@@ -300,6 +366,48 @@ impl Client {
             Ok(()) => wire::response(req_id, &Value::Null),
             Err(e) => wire::error_response(req_id, -32602, e),
         }
+    }
+
+    /// Answer a [`Event::TerminalCreate`] with the new terminal's id.
+    #[must_use]
+    pub fn answer_terminal_created(req_id: &Value, terminal_id: &str) -> Value {
+        wire::response(req_id, &json!({"terminalId": terminal_id}))
+    }
+
+    /// Answer a [`Event::TerminalOutput`]: the output kept so far, whether the
+    /// front of it was dropped for the byte limit, and the exit status once the
+    /// command has ended.
+    #[must_use]
+    pub fn answer_terminal_output(
+        req_id: &Value,
+        output: &str,
+        truncated: bool,
+        exit: Option<&TerminalExit>,
+    ) -> Value {
+        let mut result = json!({"output": output, "truncated": truncated});
+        if let Some(e) = exit {
+            result["exitStatus"] = e.to_json();
+        }
+        wire::response(req_id, &result)
+    }
+
+    /// Answer a [`Event::TerminalWait`] once the command has exited.
+    #[must_use]
+    pub fn answer_terminal_exit(req_id: &Value, exit: &TerminalExit) -> Value {
+        wire::response(req_id, &exit.to_json())
+    }
+
+    /// Answer a kill or release request: success with no payload.
+    #[must_use]
+    pub fn answer_unit(req_id: &Value) -> Value {
+        wire::response(req_id, &Value::Null)
+    }
+
+    /// Refuse a request (a declined terminal, an unknown terminal id, a
+    /// command that would not start).
+    #[must_use]
+    pub fn answer_denied(req_id: &Value, reason: &str) -> Value {
+        wire::error_response(req_id, -32000, reason)
     }
 
     /// Feed one decoded message from the agent.
@@ -484,7 +592,14 @@ impl Client {
     fn on_request(&self, id: &Value, method: &str, params: &Value, step: &mut Step) {
         let known = matches!(
             method,
-            "session/request_permission" | "fs/read_text_file" | "fs/write_text_file"
+            "session/request_permission"
+                | "fs/read_text_file"
+                | "fs/write_text_file"
+                | "terminal/create"
+                | "terminal/output"
+                | "terminal/wait_for_exit"
+                | "terminal/kill"
+                | "terminal/release"
         );
         if !known {
             step.out
@@ -520,6 +635,40 @@ impl Client {
                     .out
                     .push(wire::error_response(id, -32602, "missing path")),
             },
+            "terminal/create" => match terminal_create(id, params) {
+                Some(event) => step.events.push(event),
+                None => step
+                    .out
+                    .push(wire::error_response(id, -32602, "missing command")),
+            },
+            "terminal/output" | "terminal/wait_for_exit" | "terminal/kill" | "terminal/release" => {
+                match s("terminalId") {
+                    Some(terminal_id) => {
+                        let req_id = id.clone();
+                        step.events.push(match method {
+                            "terminal/output" => Event::TerminalOutput {
+                                req_id,
+                                terminal_id,
+                            },
+                            "terminal/wait_for_exit" => Event::TerminalWait {
+                                req_id,
+                                terminal_id,
+                            },
+                            "terminal/kill" => Event::TerminalKill {
+                                req_id,
+                                terminal_id,
+                            },
+                            _ => Event::TerminalRelease {
+                                req_id,
+                                terminal_id,
+                            },
+                        });
+                    }
+                    None => step
+                        .out
+                        .push(wire::error_response(id, -32602, "missing terminalId")),
+                }
+            }
             _ => match (s("path"), s("content")) {
                 (Some(path), Some(content)) => step.events.push(Event::WriteFile {
                     req_id: id.clone(),
@@ -532,6 +681,52 @@ impl Client {
             },
         }
     }
+}
+
+/// Parse a `terminal/create` request, or `None` without a command.
+fn terminal_create(id: &Value, params: &Value) -> Option<Event> {
+    let command = params
+        .get("command")
+        .and_then(Value::as_str)
+        .filter(|c| !c.trim().is_empty())?
+        .to_string();
+    let strings = |k: &str| -> Vec<String> {
+        params
+            .get(k)
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let env = params
+        .get("env")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|e| {
+                    Some((
+                        e.get("name")?.as_str()?.to_string(),
+                        e.get("value")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(Event::TerminalCreate {
+        req_id: id.clone(),
+        command,
+        args: strings("args"),
+        cwd: params
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        env,
+        output_limit: params.get("outputByteLimit").and_then(Value::as_u64),
+    })
 }
 
 /// Parse the `options` array of a permission request, dropping entries with an
@@ -708,9 +903,58 @@ mod tests {
     #[test]
     fn unknown_agent_request_gets_method_not_found() {
         let mut c = ready();
-        let s = c.handle(&json!({"id":"r","method":"terminal/create","params":{}}));
+        let s = c.handle(&json!({"id":"r","method":"editor/launch","params":{}}));
         assert_eq!(s.out[0]["error"]["code"], -32601);
         assert_eq!(s.out[0]["id"], "r");
+    }
+
+    #[test]
+    fn terminal_requests_become_events_and_answers_carry_the_ids() {
+        let mut c = ready();
+        let s = c.handle(&json!({"id":5,"method":"terminal/create","params":{
+            "sessionId":"S","command":"cargo","args":["test","-q"],
+            "env":[{"name":"A","value":"1"},{"name":"B"}],
+            "cwd":"/w/sub","outputByteLimit":100}}));
+        assert_eq!(
+            s.events,
+            vec![Event::TerminalCreate {
+                req_id: json!(5),
+                command: "cargo".into(),
+                args: vec!["test".into(), "-q".into()],
+                cwd: Some("/w/sub".into()),
+                env: vec![("A".into(), "1".into())],
+                output_limit: Some(100),
+            }]
+        );
+        let s = c.handle(&json!({"id":6,"method":"terminal/wait_for_exit",
+            "params":{"sessionId":"S","terminalId":"t1"}}));
+        assert_eq!(
+            s.events,
+            vec![Event::TerminalWait {
+                req_id: json!(6),
+                terminal_id: "t1".into()
+            }]
+        );
+        let none = c.handle(&json!({"id":7,"method":"terminal/create","params":{
+            "sessionId":"S","command":"  "}}));
+        assert!(none.events.is_empty());
+        assert_eq!(none.out[0]["error"]["code"], -32602);
+        let foreign = c.handle(&json!({"id":8,"method":"terminal/create","params":{
+            "sessionId":"X","command":"ls"}}));
+        assert!(foreign.events.is_empty());
+        let made = Client::answer_terminal_created(&json!(5), "t1");
+        assert_eq!(made["result"]["terminalId"], "t1");
+        let done = TerminalExit {
+            code: Some(3),
+            signal: None,
+        };
+        let out = Client::answer_terminal_output(&json!(9), "hi", true, Some(&done));
+        assert_eq!(out["result"]["exitStatus"]["exitCode"], 3);
+        assert_eq!(out["result"]["truncated"], true);
+        assert_eq!(
+            Client::answer_denied(&json!(1), "no")["error"]["code"],
+            -32000
+        );
     }
 
     #[test]
