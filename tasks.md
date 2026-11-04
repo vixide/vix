@@ -9576,6 +9576,62 @@ free-floating chat does not; never pop up on your own.
   drawn beside its caret; the roster shows your own file only for a shared
   buffer that is the active tab.
 
+
+## Run T — local-first CI and CD (proposed 2026-11-04)
+
+Make the local `scripts/check` the primary authority and the forges a cheap
+verifier, because hosted CI is unreliable (GitLab has had no usable pipeline
+since 2026-08-29) and costs money. Design and assessment:
+[`spec/local-ci`](spec/local-ci/index.md). Order: T760 → T761 → T762 in
+parallel with T764, then T767, T765, T766; T763 and T768 are spikes that need
+the maintainer's decisions.
+
+- [ ] **T760 — Gate tiers.** `scripts/check --tier fast|push|full` (default
+  `full`, so nothing changes for anyone who does not opt in): `fast` is fmt +
+  clippy + the tests of changed crates; `push` adds build, the full test
+  suite and docs; `full` adds each-feature, semver, packaging and the license
+  check. Print the timing of every step so slow steps are measured, not
+  guessed. Spec first in `spec/ci` and `spec/local-ci`. **Medium.**
+- [ ] **T761 — Signed gate attestation and `pre-push` hook.** `scripts/attest`
+  runs a tier and writes a signed note under `refs/notes/vix-gate` bound to
+  the tree hash; `make hooks` installs a `pre-push` hook that refuses a push
+  to `main` without a passing `full` note for the tip tree; the forge `verify`
+  job checks signature, tree and gate version. Needs T760. Never bypasses
+  commit signing. **Large.**
+- [ ] **T762 — Slim the hosted CI.** Keep one Linux job (fmt, clippy, test) on
+  push; move the macOS/Windows matrix, `cargo hack --each-feature`, mutants,
+  chaos and `gui.yml` to a schedule and to version tags; add path filters and
+  `concurrency` cancel-in-progress. Do the same on the Forgejo file; give
+  GitLab a one-line note that its pipeline is paused (quota) rather than
+  silently failing. **Small.**
+- [ ] **T763 — Self-hosted runner spike.** Stand up a Forgejo runner with a
+  host-mode macOS label for Codeberg; write the threat model (no fork pull
+  requests, ephemeral workspace, no secrets in the runner's environment);
+  decide whether a GitHub or GitLab runner is worth it given that GitHub's
+  self-hosted charge was postponed, not cancelled. **Waits on the
+  maintainer's decision about hardware and an always-on machine.** **Medium.**
+- [ ] **T764 — Build caching decision.** Decide whether to fix or retire the
+  `kache` wrappers for the gate (they cause bogus linker and rustdoc failures
+  today, so the gate is run with them stripped), and whether a shared
+  `CARGO_TARGET_DIR` or `sccache` replaces them; document the clean-room
+  environment in `scripts/check` so every agent uses the same one.
+  **Small.**
+- [ ] **T765 — Local Linux and Windows coverage.** A `scripts/check-linux`
+  that runs the `push` tier in a container (Docker, Colima or OrbStack) for
+  the Linux-only behavior a Mac misses; a documented Windows VM recipe;
+  hosted Windows stays on tags and nightly. **Medium.**
+- [ ] **T766 — Local release path.** `scripts/release-local` builds the three
+  targets (the `Makefile` already does so from a Mac), checksums them,
+  SSH-signs the checksums and uploads with `gh` and `tea`; `release.yml`
+  stays as the manual fallback. Cutting a tag remains the user's decision.
+  **Large.**
+- [ ] **T767 — One CI entrypoint.** Every forge file calls `scripts/ci <job>`
+  instead of carrying its own command list; revise `spec/ci`, which now says
+  the copies are deliberately duplicated. **Medium.**
+- [ ] **T768 — Tool evaluation spike.** Try `act`, Dagger, `nix flake check`
+  against the existing `flake.nix`, and a Woodpecker instance on one real
+  workflow each; record what each cannot do (`act` cannot run macOS or
+  Windows jobs) and whether any beats T760–T767. **Small.**
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
 T759 wait for Cowork on `main`; T758 last.
 
@@ -9812,6 +9868,10 @@ CI-discovered rounds to get genuinely right on Windows).
 19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
     then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
     last. **T750–T756 and T759 are done**; T757 and T758 are open.
+
+20. **Run T (local-first CI, 2026-11-04):** T760 → T761 → T762 (with T764),
+    then T767, T765, T766; T763 and T768 are spikes. See
+    [`spec/local-ci`](spec/local-ci/index.md).
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
