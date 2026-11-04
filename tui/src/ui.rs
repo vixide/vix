@@ -116,6 +116,20 @@ struct BodyColumns {
     agent_plan: Option<Rect>,
 }
 
+impl BodyColumns {
+    /// The side docks in draw order (see [`draw_side_docks`]).
+    fn docks(&self) -> [Option<Rect>; 6] {
+        [
+            self.messages,
+            self.im,
+            self.outline,
+            self.debug,
+            self.test,
+            self.agent_plan,
+        ]
+    }
+}
+
 /// `clamp` that never panics: where `min > max` (a terminal smaller than a
 /// popup's preferred minimum) the result is `max`, so the popup just shrinks to
 /// fit. `Ord::clamp` asserts `min <= max`, which a tiny window breaks (T575).
@@ -264,16 +278,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         (rows[1], None)
     };
 
-    let BodyColumns {
-        explorer: explorer_rect,
-        center: center_rect,
-        messages: messages_rect,
-        im: im_rect,
-        outline: outline_rect,
-        debug: debug_rect,
-        test: test_rect,
-        agent_plan: agent_plan_rect,
-    } = body_columns(app, body);
+    let cols = body_columns(app, body);
+    let docks = cols.docks();
+    let (explorer_rect, center_rect, messages_rect) = (cols.explorer, cols.center, cols.messages);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
     let (tabs_rect, breadcrumb_rect, editor_cell) = center_split(
@@ -317,18 +324,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     frame.render_widget(editor_block, editor_cell);
     draw_editor_region(app, frame, editor_inner);
-    draw_side_docks(
-        app,
-        frame,
-        [
-            messages_rect,
-            im_rect,
-            outline_rect,
-            debug_rect,
-            test_rect,
-            agent_plan_rect,
-        ],
-    );
+    draw_side_docks(app, frame, docks);
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
         draw_bottom_dock(app, frame, r);

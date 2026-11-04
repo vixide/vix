@@ -610,6 +610,44 @@ impl App {
         }
     }
 
+    /// Queue an agent's `terminal/create` for the user. The command only runs
+    /// on a yes; where it would run is checked now, so the prompt never offers
+    /// an escape from the workspace.
+    fn acp_terminal_create(
+        &mut self,
+        host: &mut AcpHost,
+        req_id: Value,
+        (command, args, env): (String, Vec<String>, Vec<(String, String)>),
+        cwd: Option<&str>,
+        limit: Option<u64>,
+    ) {
+        let dir = match cwd {
+            None => Ok(self.root.clone()),
+            Some(c) => policy::contain_on_disk(&self.root, c).map_err(|_| c),
+        };
+        match dir {
+            Ok(cwd) if cwd.is_dir() => {
+                let mut line = vec![command];
+                line.extend(args);
+                host.queue.push_back(Ask::Terminal {
+                    req_id,
+                    run: TermRun {
+                        argv: line,
+                        cwd,
+                        env,
+                        limit,
+                    },
+                });
+            }
+            other => {
+                let shown = other.err().unwrap_or(".").to_string();
+                self.status = t!("status.acp_refused", path = shown).to_string();
+                let msg = Client::answer_denied(&req_id, "the directory is outside the workspace");
+                host.send_all([&msg]);
+            }
+        }
+    }
+
     /// React to one protocol event.
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
         match event {
@@ -659,38 +697,13 @@ impl App {
                 cwd,
                 env,
                 output_limit,
-            } => {
-                // The command is only queued for the user. Where it would run
-                // is checked now, so the prompt never offers an escape.
-                let dir = match cwd.as_deref() {
-                    None => Ok(self.root.clone()),
-                    Some(c) => policy::contain_on_disk(&self.root, c).map_err(|_| c),
-                };
-                match dir {
-                    Ok(cwd) if cwd.is_dir() => {
-                        let mut argv = vec![command];
-                        argv.extend(args);
-                        host.queue.push_back(Ask::Terminal {
-                            req_id,
-                            run: TermRun {
-                                argv,
-                                cwd,
-                                env,
-                                limit: output_limit,
-                            },
-                        });
-                    }
-                    other => {
-                        let shown = other.err().unwrap_or(".").to_string();
-                        self.status = t!("status.acp_refused", path = shown).to_string();
-                        let msg = Client::answer_denied(
-                            &req_id,
-                            "the directory is outside the workspace",
-                        );
-                        host.send_all([&msg]);
-                    }
-                }
-            }
+            } => self.acp_terminal_create(
+                host,
+                req_id,
+                (command, args, env),
+                cwd.as_deref(),
+                output_limit,
+            ),
             e @ (Event::TerminalOutput { .. }
             | Event::TerminalWait { .. }
             | Event::TerminalKill { .. }
