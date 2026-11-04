@@ -24,10 +24,14 @@ fn fake_agent_command(log: &Path) -> String {
 /// An app rooted at `dir` whose only configured agent is the fake one,
 /// with this workspace recorded as trusted when `trusted`.
 fn agent_app(dir: &Path, trusted: bool) -> (App, PathBuf) {
+    agent_app_with_session(dir, trusted, isolated_session_path())
+}
+
+/// [`agent_app`] on a given session file, so a second app can share it.
+fn agent_app_with_session(dir: &Path, trusted: bool, session: PathBuf) -> (App, PathBuf) {
     let log = dir.join("agent.log");
     let mut settings = Settings::default();
     settings.ai_agents = vec![fake_agent_command(&log)];
-    let session = isolated_session_path();
     if trusted {
         let mut s = vix_session::Session::default();
         let key = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
@@ -406,5 +410,26 @@ fn resume_requires_a_still_configured_agent() {
     app.settings.ai_agents.clear();
     app.run_action("ai.agent_resume");
     assert!(!app.acp_running());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_session_id_survives_a_restart() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-persist");
+    let session = isolated_session_path();
+    let (mut app, log) = agent_app_with_session(&dir, true, session.clone());
+    start(&mut app, &log);
+    app.run_action("ai.agent_stop");
+    drop(app);
+    // A brand new App (a restart) on the same session file.
+    let (mut app, log) = agent_app_with_session(&dir, false, session);
+    app.run_action("ai.agent_resume");
+    assert!(app.acp_running());
+    tick_until(&mut app, |_| log_text(&log).contains("session/load"));
+    assert!(log_text(&log).contains("\"sessionId\":\"S1\""));
+    app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }

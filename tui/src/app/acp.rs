@@ -144,7 +144,13 @@ impl App {
             self.status = t!("status.acp_untrusted").to_string();
             return;
         }
-        let Some((command, session)) = self.acp_last_session.clone() else {
+        let Some((command, session)) = self.acp_last_session.clone().or_else(|| {
+            // After a restart the in-memory copy is empty: read the one saved
+            // for this workspace (see `acp_remember_session`).
+            let saved = self.load_session();
+            let ws = saved.workspace(&self.session_key())?;
+            Some((ws.acp_agent.clone()?, ws.acp_session.clone()?))
+        }) else {
             self.status = t!("status.acp_no_session").to_string();
             return;
         };
@@ -197,6 +203,16 @@ impl App {
         });
         self.open_ai_panel();
         self.status = t!("status.acp_started", name = name).to_string();
+    }
+
+    /// Remember the agent and session id, in memory and in the workspace's
+    /// saved session so **Resume Agent** works after Vix restarts.
+    fn acp_remember_session(&mut self, command: &str, session_id: &str) {
+        self.acp_last_session = Some((command.to_string(), session_id.to_string()));
+        let key = self.session_key();
+        let mut session = self.load_session();
+        session.set_acp_session(&key, command, session_id);
+        self.store_session_or_warn(&session);
     }
 
     /// The agent's plan and tool calls as the text of the plan tab.
@@ -422,7 +438,7 @@ impl App {
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
         match event {
             Event::Ready { session_id } => {
-                self.acp_last_session = Some((host.command.clone(), session_id));
+                self.acp_remember_session(&host.command, &session_id);
                 self.status = if host.client.resumed() {
                     t!("status.acp_resumed").to_string()
                 } else {

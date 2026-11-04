@@ -97,16 +97,20 @@ panel still gets the transcript lines.
 
 ## Resume
 
-The host remembers the last started command and its session id for the
-running Vix process. `ai.agent_resume` starts that command again (only if it is
-still an entry of `ai_agents`, and only in a trusted workspace) via
-`Client::resuming`.
+When an agent reports its session (`Event::Ready`) the host remembers the
+command and session id, in memory and in the workspace's entry of
+`session.toml` (`acp_agent`, `acp_session`; see
+[`vix-session`](../../vix-session/spec/index.md)). The saved pair survives
+restarts and later workspace saves. `ai.agent_resume` starts that command again
+(only if it is still an entry of `ai_agents`, and only in a trusted workspace)
+via `Client::resuming`. A saved id never widens what may run: the command is
+re-checked against the current setting, and an agent that has forgotten the id
+degrades to a fresh session.
 
 ## Not yet done
 
-The session id is not persisted across Vix restarts (it lives in memory, so
-Resume works only after a Stop in the same run), the plan is a tab rather than
-a docked pane, and ACP terminal capabilities are not offered.
+The plan is a tab rather than a docked pane, and ACP terminal capabilities are
+not offered.
 
 ## Implemented by
 
