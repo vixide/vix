@@ -24,10 +24,14 @@ fn fake_agent_command(log: &Path) -> String {
 /// An app rooted at `dir` whose only configured agent is the fake one,
 /// with this workspace recorded as trusted when `trusted`.
 fn agent_app(dir: &Path, trusted: bool) -> (App, PathBuf) {
+    agent_app_with_session(dir, trusted, isolated_session_path())
+}
+
+/// [`agent_app`] on a given session file, so a second app can share it.
+fn agent_app_with_session(dir: &Path, trusted: bool, session: PathBuf) -> (App, PathBuf) {
     let log = dir.join("agent.log");
     let mut settings = Settings::default();
     settings.ai_agents = vec![fake_agent_command(&log)];
-    let session = isolated_session_path();
     if trusted {
         let mut s = vix_session::Session::default();
         let key = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
@@ -406,5 +410,137 @@ fn resume_requires_a_still_configured_agent() {
     app.settings.ai_agents.clear();
     app.run_action("ai.agent_resume");
     assert!(!app.acp_running());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_session_id_survives_a_restart() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-persist");
+    let session = isolated_session_path();
+    let (mut app, log) = agent_app_with_session(&dir, true, session.clone());
+    start(&mut app, &log);
+    app.run_action("ai.agent_stop");
+    drop(app);
+    // A brand new App (a restart) on the same session file.
+    let (mut app, log) = agent_app_with_session(&dir, false, session);
+    app.run_action("ai.agent_resume");
+    assert!(app.acp_running());
+    tick_until(&mut app, |_| log_text(&log).contains("session/load"));
+    assert!(log_text(&log).contains("\"sessionId\":\"S1\""));
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+fn screen(app: &mut App) -> String {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(140, 30)).unwrap();
+    term.draw(|f| crate::ui::draw(app, f)).unwrap();
+    term.backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect()
+}
+
+#[test]
+fn the_plan_can_be_docked_beside_the_editor() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-dock");
+    let (mut app, log) = agent_app(&dir, true);
+    app.run_action("ai.agent_plan_dock");
+    assert!(
+        screen(&mut app).contains("No agent is running"),
+        "the dock opens even with no agent, saying so"
+    );
+    start(&mut app, &log);
+    send_prompt(&mut app, "plain");
+    tick_until(&mut app, |a| transcript(a).contains("step one"));
+    let shown = screen(&mut app);
+    assert!(
+        shown.contains("step one") && shown.contains("Reading"),
+        "the plan and tool calls are docked: {shown}"
+    );
+    assert!(
+        app.editor
+            .tabs
+            .iter()
+            .all(|t| t.path.as_deref() != Some(Path::new("*agent plan*"))),
+        "docking does not open a tab"
+    );
+    app.run_action("ai.agent_plan_dock");
+    assert!(!screen(&mut app).contains("Agent plan"), "toggled off");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_terminal_runs_only_after_the_user_says_yes() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-yes");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    let marker = dir.join("made-by-agent");
+    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    tick_until(&mut app, |a| {
+        a.prompt
+            .as_ref()
+            .is_some_and(|p| p.kind == PromptKind::AcpPermission)
+    });
+    let asked = app.prompt.as_ref().unwrap().title.clone();
+    assert!(
+        asked.contains("touch"),
+        "the prompt names the command: {asked}"
+    );
+    assert!(!marker.exists(), "nothing runs before the answer");
+    type_str(&mut app, "y");
+    app.on_key(keycode(KeyCode::Enter));
+    tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
+    assert!(marker.exists(), "the approved command ran");
+    assert!(log_text(&log).contains("TERM exit {\"exitCode\": 0"));
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_denied_terminal_runs_nothing() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-no");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    let marker = dir.join("made-by-agent");
+    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    tick_until(&mut app, |a| a.prompt.is_some());
+    app.on_key(esc());
+    tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
+    assert!(!marker.exists(), "a declined command never starts");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_terminal_cannot_run_outside_the_workspace() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-term-cwd");
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    send_prompt(&mut app, "termin / touch /should-never-exist");
+    tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
+    assert!(
+        app.prompt.is_none(),
+        "an escaping directory is refused without even asking"
+    );
+    app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }

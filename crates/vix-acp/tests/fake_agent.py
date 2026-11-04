@@ -10,6 +10,9 @@ chooses the behavior:
   perm           ask permission, log the outcome, end the turn
   write PATH TXT ask the client to write TXT to PATH (via fs/write_text_file)
   read PATH      ask the client to read PATH, stream what came back
+  termin DIR CMD ARGS  like term, with DIR as the working directory
+  term CMD ARGS  ask the client for a terminal running CMD ARGS, wait for it to
+                 exit, fetch its output, release it, and log every reply
 """
 import json
 import sys
@@ -79,6 +82,25 @@ for line in sys.stdin:
             r = call("fs/write_text_file",
                      {"sessionId": sid, "path": word[1], "content": word[2]})
             log.write("WRITE " + ("error" if "error" in r else "ok") + "\n")
+        elif word[0] in ("term", "termin"):
+            argv = text.split(" ")[1:]
+            params = {"sessionId": sid}
+            if word[0] == "termin":
+                params["cwd"] = argv.pop(0)
+            params["command"] = argv[0]
+            params["args"] = argv[1:]
+            r = call("terminal/create", params)
+            if "error" in r:
+                log.write("TERM denied " + r["error"]["message"] + "\n")
+            else:
+                tid = r["result"]["terminalId"]
+                w = call("terminal/wait_for_exit",
+                         {"sessionId": sid, "terminalId": tid})
+                o = call("terminal/output", {"sessionId": sid, "terminalId": tid})
+                log.write("TERM exit " + json.dumps(w["result"]) + "\n")
+                log.write("TERM output " + json.dumps(o["result"]["output"]) + "\n")
+                call("terminal/release", {"sessionId": sid, "terminalId": tid})
+                log.write("TERM released\n")
         elif word[0] == "read":
             r = call("fs/read_text_file", {"sessionId": sid, "path": word[1]})
             body = r.get("result", {}).get("content", "ERROR")

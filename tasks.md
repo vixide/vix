@@ -7567,6 +7567,15 @@ new action.
   Still open (so T635 stays `[ ]`): persisting the session id across Vix
   restarts, a docked (non-tab) plan pane, the terminal capability, and
   Windows coverage of the fake-agent tests.
+  **Follow-ups 2026-11-04 (`feat/t635-leftovers-2`):** done: the session id
+  persists in `session.toml` (`acp_agent`, `acp_session`) so **Resume Agent**
+  works after a restart; `ai.agent_plan_dock` toggles a docked read-only plan
+  pane (`Visible::AGENT_PLAN`); the ACP terminal capability (`terminal/create`,
+  `output`, `wait_for_exit`, `kill`, `release`) behind a per-command yes/no
+  prompt, workspace-contained cwd, argv with no shell, capped output, at most 8
+  terminals. Deferred, so T635 stays `[ ]`: Windows coverage of the fake-agent
+  tests (needs a Windows machine), and live display of terminal output in the UI
+  (the user sees the approved command only).
 - [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a

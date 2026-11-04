@@ -14,10 +14,15 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+<<<<<<< HEAD
+- **ACP leftovers (T635).** **AI → Resume Agent** now works after Vix restarts: the last agent command and its session id are saved per workspace in `session.toml` (`acp_agent`, `acp_session`), and the command must still be in `ai_agents`. **AI → Toggle Agent Plan Pane** (`ai.agent_plan_dock`) docks the agent's live plan and tool calls beside the editor. The agent may ask to run a command through the ACP `terminal/*` methods: each `terminal/create` opens a prompt naming the full command line and runs only on `y`, in a directory inside the workspace, as argv with no shell, with output capped (default 1 MiB) and at most 8 terminals open. Spec: [`crates/vix-acp/spec`](crates/vix-acp/spec/index.md).
+||||||| 955ba1a6
+=======
 - **Local-first CI and CD proposal.** New `spec/local-ci` assesses moving the
   gate's authority to the local machine (tiers, a signed attestation, slimmer
   hosted CI, a self-hosted runner spike, a local release path); `plan.md` and
   `tasks.md` gain Run T (T760-T768).
+>>>>>>> main
 - **2.0 launch kit (T745).** A `/whats-new/` page on the website, user-facing release notes in [`docs/whats-new-2-0`](docs/whats-new-2-0/index.md), and announcement drafts in [`docs/launch/`](docs/launch/index.md) (never posted). All are labelled as not released until 2.0 ships.
 - **Install-channel tooling and CI wiring (T742).** New `scripts/packaging` (`check`, part of `scripts/check`, keeps the winget, Scoop and AUR templates, the `cargo binstall` metadata and the Nix flake consistent; `render <version>` rewrites the templates from a release's `.sha256` files, adding Windows ARM when the asset exists) and `.github/workflows/packaging.yml`, which renders and verifies the templates after a release (`nix build`, `winget validate`, `makepkg`) and has publish jobs for winget-pkgs, a Scoop bucket and the AUR that do nothing unless `PACKAGING_PUBLISH` is `true` and a placeholder secret exists. Spec: [`spec/packaging`](spec/packaging/index.md). **Nothing is published and the workflow has not run**; the channels stay listed as "not yet published" until each is verified on a real machine.
 - **Review follow-ups (T665).** In a branch review, **Git → Stage Review Hunk** stages the hunk under the cursor and **Discard Review Hunk…** undoes it in the working tree after a confirmation (both via `git apply`; git's reason is shown when the hunk no longer fits). `r` in **Git → Stash List…** opens the highlighted stash in a review.
@@ -159,6 +164,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Changed
 
+- **ACP `initialize` advertises the terminal capability (T635).** The client now sends `clientCapabilities.terminal = true`; every command an agent asks to run still needs the user's yes.
 - **Code annotations, group 4.** Module docs, private-item rustdoc, WHY comments and runnable examples for 25 crates (calendar, choice-list, civil-date, contact-panel, the two convert tools, cowork, doctor, editorconfig, file-browser-panel, fileops, format-tool, commit graph, html-character-picker, markdown-preview, nerd-font-picker, palette, review, script, tasks, text-information-panel, theme-model, time-zone-model, uuid-tool, workspace-dashboard-panel). Documentation only; no behavior change. `vix-theme-model::to_json` no longer claims a `# Panics` section (it returns an empty string on the impossible failure).
 - **Rustdoc and comment pass over the App shell's drawing and entry points.** `tui/src/ui.rs` and `ui/`, the binary and its CLI modules, and the desktop front ends under `gui/` gain rustdoc on previously undocumented items and a few why-comments; a stale comment on the SQL editor's renderer was corrected. Documentation only, no behavior change.
 - **Dependency refresh.** Both lockfiles (`Cargo.lock`, `gui/Cargo.lock`) updated to the latest releases compatible with Rust 1.97 (`crc32fast`, `encoding_rs`, `log`, `pulldown-cmark`, `sysinfo`, `unicode-properties`, plus `unicode-script` in the GUI workspace), and `vix-egui` moves to `fontique` 0.12. `evalexpr` (AGPL from 12.0), `vt100` 0.18 and `keyring` 4 (both need call-site migrations) stay where they are.

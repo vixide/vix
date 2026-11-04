@@ -5,7 +5,8 @@ protocol Zed defined so an editor can drive a coding agent (Claude Code,
 Gemini CLI, Codex, ...) that runs as a child process. Actions:
 `ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Agent Prompt…),
 `ai.agent_stop` (AI → Stop Agent), `ai.agent_resume` (AI → Resume Agent),
-`ai.agent_plan` (AI → Agent Plan). The agents come from the `ai_agents`
+`ai.agent_plan` (AI → Agent Plan), `ai.agent_plan_dock` (AI → Toggle Agent
+Plan Pane). The agents come from the `ai_agents`
 setting.
 
 The crate is split so the protocol is pure and the process is optional:
@@ -16,6 +17,7 @@ The crate is split so the protocol is pure and the process is optional:
 | `client`  | no | `Client`, a state machine: no IO, no clock, no threads |
 | `policy`  | no | Path containment, and picking a rejecting permission option |
 | `process` | yes | `AgentProcess`: spawn, stdin writer, stdout reader thread |
+| `terminal` | yes | `Terminal`: one approved agent command, merged capped output, exit status |
 
 ## Framing
 
@@ -28,7 +30,7 @@ a line that is not JSON is skipped and counted, never fatal.
 ## Conversation
 
 1. `Client::start` produces `initialize` (protocol version 1; we advertise
-   `fs.readTextFile` and `fs.writeTextFile`).
+   `fs.readTextFile`, `fs.writeTextFile` and `terminal`).
 2. The initialize response makes the client send `session/new` with the
    workspace root as `cwd` and no MCP servers.
    With a session to resume (`Client::resuming`) and an agent that advertised
@@ -44,7 +46,8 @@ a line that is not JSON is skipped and counted, never fatal.
    `tool_call_update`, `plan`. They surface as events. An update whose
    `sessionId` is not ours is ignored.
 5. The agent may call back: `session/request_permission`,
-   `fs/read_text_file`, `fs/write_text_file`. They surface as events that the
+   `fs/read_text_file`, `fs/write_text_file`, and the `terminal/*` methods
+   (`create`, `output`, `wait_for_exit`, `kill`, `release`). They surface as events that the
    host must answer (`answer_permission`, `answer_read`, `answer_write`). Any
    other agent request is answered `-32601` (method not found) by the client
    itself, so an unknown method never hangs the agent.
@@ -76,6 +79,21 @@ Agents can write files and run commands, so:
   - Paths must be absolute and lexically inside the workspace root (no `..`),
     and on disk must also canonicalize inside it, so a symlink cannot lead out.
     Reads prefer the open buffer's unsaved text.
+- **Terminals run only on a yes.** `terminal/create` asks to run a command.
+  The host checks the working directory (absolute, inside the workspace, an
+  existing directory; none given means the root) and refuses an escaping one
+  without asking. Otherwise it opens the same prompt as a permission request,
+  naming the full command line (`prompt.acp_terminal`); only `y`/`yes` starts
+  it, and Esc, anything else, or the agent stopping answers with an error and
+  starts nothing. The command is the program plus its arguments, executed as
+  argv with no shell and no stdin; stdout and stderr merge into one buffer kept
+  to the newest `outputByteLimit` bytes (default 1 MiB, never above 8 MiB, the
+  cut moved to a character boundary). At most 8 terminals are open at once.
+  `terminal/output` and `terminal/wait_for_exit` (answered when the command
+  ends) work only on terminals the user approved; `kill` ends the command and
+  keeps the output; `release`, stopping the agent, or dropping the host kills
+  and forgets it. An unknown terminal id is an error. The spawn site
+  (`terminal.rs`) is listed in `tui/tests/spawn_sites.rs` beside `process.rs`.
 - The agent's stderr is discarded. Dropping or stopping the agent kills the
   process.
 
@@ -95,22 +113,34 @@ the agent's latest plan and every tool call with its status (updates merge by
 tool-call id). While the tab is open it is rewritten as events arrive. The AI
 panel still gets the transcript lines.
 
+`ai.agent_plan_dock` toggles the same content as a docked, read-only side pane
+(`Visible::AGENT_PLAN`, a fixed 36 columns beside the editor like the IM dock;
+drawn by `draw_agent_plan_dock` in `tui/src/ui/ai.rs`): the plan, then the tool
+calls with their status, newest last, following the agent live. With no agent
+running it says so rather than staying blank. It is display only: no key or
+click does anything in it.
+
 ## Resume
 
-The host remembers the last started command and its session id for the
-running Vix process. `ai.agent_resume` starts that command again (only if it is
-still an entry of `ai_agents`, and only in a trusted workspace) via
-`Client::resuming`.
+When an agent reports its session (`Event::Ready`) the host remembers the
+command and session id, in memory and in the workspace's entry of
+`session.toml` (`acp_agent`, `acp_session`; see
+[`vix-session`](../../vix-session/spec/index.md)). The saved pair survives
+restarts and later workspace saves. `ai.agent_resume` starts that command again
+(only if it is still an entry of `ai_agents`, and only in a trusted workspace)
+via `Client::resuming`. A saved id never widens what may run: the command is
+re-checked against the current setting, and an agent that has forgotten the id
+degrades to a fresh session.
 
 ## Not yet done
 
-The session id is not persisted across Vix restarts (it lives in memory, so
-Resume works only after a Stop in the same run), the plan is a tab rather than
-a docked pane, and ACP terminal capabilities are not offered.
+Windows coverage of the fake-agent tests (they need `python3` and Unix tools such
+as `touch`), and any `terminal` output shown live in the UI (the agent sees the
+output; the user sees the command that was approved and its tool-call lines).
 
 ## Implemented by
 
-`crates/vix-acp/src/{wire,client,policy,process}.rs`; the host is
+`crates/vix-acp/src/{wire,client,policy,process,terminal}.rs`; the host is
 `tui/src/app/acp.rs`. Tests: unit tests in each module,
 `crates/vix-acp/tests/fake_agent.rs` (a scripted fake agent over real pipes),
 and `tui/tests/integration/acp.rs`.

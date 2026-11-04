@@ -10,6 +10,8 @@ pub mod client;
 pub mod policy;
 #[cfg(feature = "process")]
 pub mod process;
+#[cfg(feature = "process")]
+pub mod terminal;
 pub mod wire;
 
-pub use client::{Client, Event, OptionKind, PermOption, Phase, PlanEntry, Step};
+pub use client::{Client, Event, OptionKind, PermOption, Phase, PlanEntry, Step, TerminalExit};

@@ -1881,6 +1881,8 @@ bitflags::bitflags! {
         const COVERAGE = 1 << 13;
         /// The bottom dock shows live backlinks for the active node.
         const BACKLINKS_FOLLOW = 1 << 14;
+        /// The docked agent plan pane (T635, `ai.agent_plan_dock`).
+        const AGENT_PLAN = 1 << 15;
     }
 }
 

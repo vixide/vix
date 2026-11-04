@@ -1654,6 +1654,7 @@ const AI: &[Item] = &[
     Item::leaf("menu.item.ai.agent_prompt", "ai.agent_prompt", ""),
     Item::leaf("menu.item.ai.agent_resume", "ai.agent_resume", ""),
     Item::leaf("menu.item.ai.agent_plan", "ai.agent_plan", ""),
+    Item::leaf("menu.item.ai.agent_plan_dock", "ai.agent_plan_dock", ""),
     Item::leaf("menu.item.ai.agent_stop", "ai.agent_stop", ""),
 ];
 

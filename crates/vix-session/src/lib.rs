@@ -161,6 +161,18 @@ pub struct WorkspaceSession {
     /// workspace's own kernelspecs (`.venv/share/jupyter/kernels`) be used.
     #[serde(default)]
     pub jupyter_trusted: Option<bool>,
+
+    // ----- ACP agent session (T635) -----------------------------------------
+    /// The `ai_agents` command line of the last Agent Client Protocol agent
+    /// started here. Paired with [`Self::acp_session`]; the command is
+    /// re-checked against the current `ai_agents` before it is ever run.
+    #[serde(default)]
+    pub acp_agent: Option<String>,
+    /// That agent's session id, so **AI → Resume Agent** can reload the
+    /// conversation after Vix restarts. An id is not a secret and grants
+    /// nothing by itself.
+    #[serde(default)]
+    pub acp_session: Option<String>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -337,6 +349,28 @@ impl Session {
         }
     }
 
+    /// Record the last ACP agent `command` and its `session` id for `root`
+    /// (T635). Like [`Self::set_scripts_trusted`], it creates a minimal entry
+    /// for a root with no saved session yet and leaves everything else alone.
+    pub fn set_acp_session(&mut self, root: &str, command: &str, session: &str) {
+        let (command, session) = (Some(command.to_string()), Some(session.to_string()));
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.root == root) {
+            ws.acp_agent = command;
+            ws.acp_session = session;
+        } else {
+            self.workspaces.insert(
+                0,
+                WorkspaceSession {
+                    root: root.to_string(),
+                    acp_agent: command,
+                    acp_session: session,
+                    ..Default::default()
+                },
+            );
+            self.workspaces.truncate(MAX_WORKSPACES);
+        }
+    }
+
     /// Put `name` (a canonical `ssh://` name) at the front of
     /// [`Session::recent_remotes`], dropping an older copy and anything past
     /// [`MAX_RECENT_REMOTES`].
@@ -367,6 +401,10 @@ impl Session {
             ws.scripts_trusted = ws.scripts_trusted.or(old.scripts_trusted);
             ws.remote_trusted = ws.remote_trusted.or(old.remote_trusted);
             ws.jupyter_trusted = ws.jupyter_trusted.or(old.jupyter_trusted);
+            if ws.acp_session.is_none() {
+                ws.acp_agent.clone_from(&old.acp_agent);
+                ws.acp_session.clone_from(&old.acp_session);
+            }
         }
         self.workspaces.retain(|w| w.root != ws.root);
         self.workspaces.insert(0, ws);
@@ -408,6 +446,27 @@ mod tests {
             root: root.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_acp_session_survives_a_later_workspace_save_and_a_reload() {
+        let mut s = Session::default();
+        s.set_acp_session("/a", "agent --acp", "S9");
+        s.set_workspace(ws("/a"));
+        let saved = s.workspace("/a").unwrap();
+        assert_eq!(saved.acp_agent.as_deref(), Some("agent --acp"));
+        assert_eq!(saved.acp_session.as_deref(), Some("S9"));
+        let text = toml::to_string(&s).unwrap();
+        let back: Session = toml::from_str(&text).unwrap();
+        assert_eq!(
+            back.workspace("/a").unwrap().acp_session.as_deref(),
+            Some("S9")
+        );
+        s.set_acp_session("/a", "agent --acp", "S10");
+        assert_eq!(
+            s.workspace("/a").unwrap().acp_session.as_deref(),
+            Some("S10")
+        );
     }
 
     #[test]

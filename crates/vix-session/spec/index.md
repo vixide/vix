@@ -48,6 +48,12 @@ first.Leaf = 0
 second.Leaf = 1
 ```
 
+`acp_agent` and `acp_session` (both optional strings, T635) hold the last Agent
+Client Protocol agent command started in the workspace and its session id, so
+**AI → Resume Agent** works after a restart; see
+[`vix-acp`](../../vix-acp/spec/index.md). Saving the workspace never forgets
+them.
+
 `scrolls` (the first visible line per file) and `split` (the pane-tree layout) are
 optional — older session files without them still load (`#[serde(default)]`). The
 split is restored only when every file reopened cleanly, so the recorded leaf

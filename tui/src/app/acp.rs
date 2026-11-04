@@ -6,10 +6,12 @@
 //! file writes arrive as a pending `vix-ai-diff` review and never touch the disk;
 //! paths outside the workspace root are refused.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 
 use serde_json::Value;
 use vix_acp::process::AgentProcess;
+use vix_acp::terminal::Terminal;
 use vix_acp::{Client, Event, PermOption, PlanEntry, policy};
 
 use super::{AiTarget, App, Prompt, PromptKind};
@@ -20,6 +22,52 @@ const MAX_READ: u64 = 8 * 1024 * 1024;
 
 /// The synthetic path (so title) of the read-only plan tab.
 const PLAN_TAB: &str = "*agent plan*";
+
+/// The most terminals one agent may have open at once.
+const MAX_TERMINALS: usize = 8;
+
+/// A command the agent asked to run, already checked against the workspace.
+struct TermRun {
+    /// Program then arguments; never passed through a shell.
+    argv: Vec<String>,
+    /// The working directory, inside the workspace.
+    cwd: PathBuf,
+    /// Extra environment variables.
+    env: Vec<(String, String)>,
+    /// The output byte limit the agent asked for.
+    limit: Option<u64>,
+}
+
+/// Something the user must answer before the agent proceeds.
+enum Ask {
+    /// A permission request with the agent's own options.
+    Permission {
+        /// The request to answer.
+        req_id: Value,
+        /// What the agent wants to do.
+        title: String,
+        /// The choices it offered.
+        options: Vec<PermOption>,
+    },
+    /// A request to run a command; nothing starts unless the user says yes.
+    Terminal {
+        /// The request to answer.
+        req_id: Value,
+        /// The command.
+        run: TermRun,
+    },
+}
+
+impl Ask {
+    /// The text the prompt shows for this request.
+    fn title(&self) -> String {
+        let text = match self {
+            Self::Permission { title, .. } => t!("prompt.acp_permission", title = title),
+            Self::Terminal { run, .. } => t!("prompt.acp_terminal", command = run.argv.join(" ")),
+        };
+        text.to_string()
+    }
+}
 
 /// A running agent and the conversation state around it.
 pub(super) struct AcpHost {
@@ -35,10 +83,16 @@ pub(super) struct AcpHost {
     client: Client,
     /// Reply text streamed so far, flushed to the panel as one turn.
     reply: String,
-    /// The permission request currently shown as a prompt.
-    asking: Option<(Value, Vec<PermOption>)>,
-    /// Permission requests waiting for the prompt to be free.
-    queue: VecDeque<(Value, String, Vec<PermOption>)>,
+    /// The request currently shown as a prompt.
+    asking: Option<Ask>,
+    /// Requests waiting for the prompt to be free.
+    queue: VecDeque<Ask>,
+    /// The terminals the user allowed, by id.
+    terminals: HashMap<String, Terminal>,
+    /// The next terminal id number.
+    next_terminal: u32,
+    /// `terminal/wait_for_exit` requests not yet answered: `(request, terminal)`.
+    waits: Vec<(Value, String)>,
 }
 
 impl AcpHost {
@@ -50,18 +104,121 @@ impl AcpHost {
         }
     }
 
-    /// Answer the open permission request: `allow` picks an allow-once option,
-    /// anything else rejects (or cancels).
+    /// Answer the open request: `allow` picks an allow-once option (or starts
+    /// the command), anything else rejects (or cancels, or refuses).
     fn answer_permission(&mut self, allow: bool) {
-        let Some((id, options)) = self.asking.take() else {
+        let Some(ask) = self.asking.take() else {
             return;
         };
-        let choice = if allow {
-            policy::allow_once_option(&options)
-        } else {
-            policy::reject_option(&options)
+        let msg = match ask {
+            Ask::Permission {
+                req_id, options, ..
+            } => {
+                let choice = if allow {
+                    policy::allow_once_option(&options)
+                } else {
+                    policy::reject_option(&options)
+                };
+                Client::answer_permission(&req_id, &options, choice)
+            }
+            Ask::Terminal { req_id, run } if allow => self.start_terminal(&req_id, &run),
+            Ask::Terminal { req_id, .. } => {
+                Client::answer_denied(&req_id, "the user declined to run the command")
+            }
         };
-        let msg = Client::answer_permission(&id, &options, choice);
+        self.send_all([&msg]);
+    }
+
+    /// Start an approved command and answer with its terminal id (or why not).
+    fn start_terminal(&mut self, req_id: &Value, run: &TermRun) -> Value {
+        if self.terminals.len() >= MAX_TERMINALS {
+            return Client::answer_denied(req_id, "too many terminals are open");
+        }
+        match Terminal::spawn(&run.argv, &run.cwd, &run.env, run.limit) {
+            Ok(term) => {
+                self.next_terminal += 1;
+                let id = format!("term-{}", self.next_terminal);
+                self.terminals.insert(id.clone(), term);
+                Client::answer_terminal_created(req_id, &id)
+            }
+            Err(e) => Client::answer_denied(req_id, &format!("could not start: {e}")),
+        }
+    }
+
+    /// Answer every `terminal/wait_for_exit` whose command has now exited.
+    fn answer_waits(&mut self) {
+        let mut ready = Vec::new();
+        self.waits.retain(|(req, tid)| {
+            match self.terminals.get_mut(tid).and_then(Terminal::try_exit) {
+                Some(exit) => {
+                    ready.push(Client::answer_terminal_exit(req, &exit));
+                    false
+                }
+                None => true,
+            }
+        });
+        self.send_all(&ready);
+    }
+
+    /// Handle a `terminal/output|wait_for_exit|kill|release` request.
+    fn terminal_request(&mut self, event: Event) {
+        let msg = match event {
+            Event::TerminalOutput {
+                req_id,
+                terminal_id,
+            } => match self.terminals.get_mut(&terminal_id) {
+                Some(t) => {
+                    let (out, truncated) = t.output();
+                    let exit = t.try_exit();
+                    Client::answer_terminal_output(&req_id, &out, truncated, exit.as_ref())
+                }
+                None => Client::answer_denied(&req_id, "unknown terminal"),
+            },
+            Event::TerminalWait {
+                req_id,
+                terminal_id,
+            } => {
+                if self.terminals.contains_key(&terminal_id) {
+                    self.waits.push((req_id, terminal_id));
+                    self.answer_waits();
+                    return;
+                }
+                Client::answer_denied(&req_id, "unknown terminal")
+            }
+            Event::TerminalKill {
+                req_id,
+                terminal_id,
+            } => match self.terminals.get_mut(&terminal_id) {
+                Some(t) => {
+                    t.kill();
+                    Client::answer_unit(&req_id)
+                }
+                None => Client::answer_denied(&req_id, "unknown terminal"),
+            },
+            Event::TerminalRelease {
+                req_id,
+                terminal_id,
+            } => {
+                // Dropping the terminal kills the command; a waiter is told so.
+                let gone = self.terminals.remove(&terminal_id).is_some();
+                let mut dropped = Vec::new();
+                self.waits.retain(|(r, tid)| {
+                    if *tid == terminal_id {
+                        dropped.push(Client::answer_denied(r, "terminal released"));
+                        false
+                    } else {
+                        true
+                    }
+                });
+                self.send_all(&dropped);
+                if gone {
+                    Client::answer_unit(&req_id)
+                } else {
+                    Client::answer_denied(&req_id, "unknown terminal")
+                }
+            }
+            _ => return,
+        };
         self.send_all([&msg]);
     }
 }
@@ -73,6 +230,7 @@ impl App {
             "ai.agent_start" => self.acp_start(),
             "ai.agent_resume" => self.acp_resume(),
             "ai.agent_plan" => self.acp_show_plan(),
+            "ai.agent_plan_dock" => self.visible.toggle(super::Visible::AGENT_PLAN),
             "ai.agent_prompt" => self.acp_begin_prompt(),
             "ai.agent_stop" => self.acp_stop(),
             _ => return false,
@@ -144,7 +302,13 @@ impl App {
             self.status = t!("status.acp_untrusted").to_string();
             return;
         }
-        let Some((command, session)) = self.acp_last_session.clone() else {
+        let Some((command, session)) = self.acp_last_session.clone().or_else(|| {
+            // After a restart the in-memory copy is empty: read the one saved
+            // for this workspace (see `acp_remember_session`).
+            let saved = self.load_session();
+            let ws = saved.workspace(&self.session_key())?;
+            Some((ws.acp_agent.clone()?, ws.acp_session.clone()?))
+        }) else {
             self.status = t!("status.acp_no_session").to_string();
             return;
         };
@@ -194,9 +358,22 @@ impl App {
             reply: String::new(),
             asking: None,
             queue: VecDeque::new(),
+            terminals: HashMap::new(),
+            next_terminal: 0,
+            waits: Vec::new(),
         });
         self.open_ai_panel();
         self.status = t!("status.acp_started", name = name).to_string();
+    }
+
+    /// Remember the agent and session id, in memory and in the workspace's
+    /// saved session so **Resume Agent** works after Vix restarts.
+    fn acp_remember_session(&mut self, command: &str, session_id: &str) {
+        self.acp_last_session = Some((command.to_string(), session_id.to_string()));
+        let key = self.session_key();
+        let mut session = self.load_session();
+        session.set_acp_session(&key, command, session_id);
+        self.store_session_or_warn(&session);
     }
 
     /// The agent's plan and tool calls as the text of the plan tab.
@@ -216,6 +393,23 @@ impl App {
         );
         lines.push(String::new());
         lines.join("\n")
+    }
+
+    /// The docked plan pane's content as `[plan lines, tool-call lines]`, or
+    /// `None` when no agent is running. Tool calls are listed oldest first.
+    #[must_use]
+    pub fn acp_plan_sections(&self) -> Option<[Vec<String>; 2]> {
+        let host = self.acp.as_ref()?;
+        Some([
+            host.plan
+                .iter()
+                .map(|e| format!("[{}] {}", e.status, e.content))
+                .collect(),
+            host.tools
+                .iter()
+                .map(|(_, title, status)| format!("[{status}] {title}"))
+                .collect(),
+        ])
     }
 
     /// Open (or refresh) the read-only plan tab: the plan and every tool call.
@@ -380,15 +574,13 @@ impl App {
             self.status = t!("status.acp_exited").to_string();
             return;
         }
+        host.answer_waits();
         if host.asking.is_none()
             && self.prompt.is_none()
-            && let Some((id, title, options)) = host.queue.pop_front()
+            && let Some(ask) = host.queue.pop_front()
         {
-            self.prompt = Some(Prompt::new(
-                PromptKind::AcpPermission,
-                t!("prompt.acp_permission", title = title).to_string(),
-            ));
-            host.asking = Some((id, options));
+            self.prompt = Some(Prompt::new(PromptKind::AcpPermission, ask.title()));
+            host.asking = Some(ask);
             self.acp_park_panel();
         }
         self.acp = Some(host);
@@ -418,11 +610,49 @@ impl App {
         }
     }
 
+    /// Queue an agent's `terminal/create` for the user. The command only runs
+    /// on a yes; where it would run is checked now, so the prompt never offers
+    /// an escape from the workspace.
+    fn acp_terminal_create(
+        &mut self,
+        host: &mut AcpHost,
+        req_id: Value,
+        (command, args, env): (String, Vec<String>, Vec<(String, String)>),
+        cwd: Option<&str>,
+        limit: Option<u64>,
+    ) {
+        let dir = match cwd {
+            None => Ok(self.root.clone()),
+            Some(c) => policy::contain_on_disk(&self.root, c).map_err(|_| c),
+        };
+        match dir {
+            Ok(cwd) if cwd.is_dir() => {
+                let mut line = vec![command];
+                line.extend(args);
+                host.queue.push_back(Ask::Terminal {
+                    req_id,
+                    run: TermRun {
+                        argv: line,
+                        cwd,
+                        env,
+                        limit,
+                    },
+                });
+            }
+            other => {
+                let shown = other.err().unwrap_or(".").to_string();
+                self.status = t!("status.acp_refused", path = shown).to_string();
+                let msg = Client::answer_denied(&req_id, "the directory is outside the workspace");
+                host.send_all([&msg]);
+            }
+        }
+    }
+
     /// React to one protocol event.
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
         match event {
             Event::Ready { session_id } => {
-                self.acp_last_session = Some((host.command.clone(), session_id));
+                self.acp_remember_session(&host.command, &session_id);
                 self.status = if host.client.resumed() {
                     t!("status.acp_resumed").to_string()
                 } else {
@@ -455,7 +685,29 @@ impl App {
                 req_id,
                 title,
                 options,
-            } => host.queue.push_back((req_id, title, options)),
+            } => host.queue.push_back(Ask::Permission {
+                req_id,
+                title,
+                options,
+            }),
+            Event::TerminalCreate {
+                req_id,
+                command,
+                args,
+                cwd,
+                env,
+                output_limit,
+            } => self.acp_terminal_create(
+                host,
+                req_id,
+                (command, args, env),
+                cwd.as_deref(),
+                output_limit,
+            ),
+            e @ (Event::TerminalOutput { .. }
+            | Event::TerminalWait { .. }
+            | Event::TerminalKill { .. }
+            | Event::TerminalRelease { .. }) => host.terminal_request(e),
             Event::ReadFile {
                 req_id,
                 path,
