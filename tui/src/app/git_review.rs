@@ -38,6 +38,7 @@ impl App {
             "git.review_next" => self.review_goto_hunk(true),
             "git.review_prev" => self.review_goto_hunk(false),
             "git.review_stage_hunk" => self.review_stage_hunk(),
+            "git.review_stage_all" => self.review_stage_all(),
             "git.review_discard_hunk" => self.begin_review_discard_hunk(),
             _ => return false,
         }
@@ -287,11 +288,53 @@ impl App {
                 self.status = t!("status.git_review_staged", path = file_name).to_string();
                 self.refresh_git();
                 self.refresh_git_gutter();
+                self.rediff_review();
             }
             Err(e) => self
                 .messages
                 .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
         }
+    }
+
+    /// **Git → Stage All Review Hunks**: stage every text hunk of the open
+    /// review at once (for a stash, the whole stash).
+    fn review_stage_all(&mut self) {
+        let Some(state) = self.active_review() else {
+            self.status = t!("status.git_review_none").to_string();
+            return;
+        };
+        let range = state.review.range.clone();
+        let Some(diff_text) = state.review.full_patch() else {
+            self.status = t!("status.git_review_no_hunk").to_string();
+            return;
+        };
+        match crate::git::apply_patch(&self.root, &diff_text, crate::git::ApplyTarget::Index) {
+            Ok(()) => {
+                self.status = t!("status.git_review_staged_all", range = range).to_string();
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.rediff_review();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
+        }
+    }
+
+    /// After a stage or discard, diff the range again and redraw the review
+    /// with the new diff, keeping its comments. When git cannot diff the range
+    /// any more the buffer is left as it was.
+    fn rediff_review(&mut self) {
+        let Some(range) = self.review.as_ref().map(|s| s.review.range.clone()) else {
+            return;
+        };
+        let Some(diff) = crate::git::review_diff(&self.root, &range) else {
+            return;
+        };
+        if let Some(s) = self.review.as_mut() {
+            s.review.replace_diff(&diff);
+        }
+        self.redraw_review();
     }
 
     /// **Git → Discard Review Hunk…**: ask before undoing the hunk under the
@@ -335,6 +378,7 @@ impl App {
                 self.reload_clean_buffers();
                 self.refresh_git();
                 self.refresh_git_gutter();
+                self.rediff_review();
             }
             Err(e) => self
                 .messages

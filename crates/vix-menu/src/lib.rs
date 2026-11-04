@@ -1777,6 +1777,7 @@ const GIT: &[Item] = &[
         "git.review_stage_hunk",
         "",
     ),
+    Item::leaf("menu.item.git.review_stage_all", "git.review_stage_all", ""),
     Item::leaf(
         "menu.item.git.review_discard_hunk",
         "git.review_discard_hunk",

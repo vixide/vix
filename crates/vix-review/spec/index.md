@@ -5,15 +5,14 @@ with line comments that are saved per repository and exported as Markdown.
 
 **Status:** Mostly shipped (improvement plan T665). Shipped: the multi-file
 buffer, hunk navigation, saved line comments, the Markdown/JSON export,
-stage/discard of the hunk under the cursor, and `r` in the stash chooser.
-Not shipped: the two-pane view (T660's model could be added later); the review
-buffer is not re-diffed after a stage or discard; a hunk that depends on a
-"No newline at end of file" marker is refused by git because the parser does
-not keep the marker; a whole stash is not staged or discarded as one.
+stage/discard of the hunk under the cursor, staging every hunk at once (a
+whole stash), `r` in the stash chooser, re-diffing after a stage or discard,
+and `\ No newline at end of file` markers. Not shipped: the two-pane view
+(T660's model could be added later) and discarding a whole review at once.
 
 ## Actions
 
-All seven are in **Git** and in the command palette.
+All eight are in **Git** and in the command palette.
 
 | Action | Menu item | Does |
 | --- | --- | --- |
@@ -23,10 +22,23 @@ All seven are in **Git** and in the command palette.
 | `git.review_prev` | Previous Review Hunk | Moves to the previous `@@` header, wrapping to the last. |
 | `git.review_export` | Export Review Comments | Writes the open review's comments to `.vix/review/<range>.md` and `.json`. |
 | `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor: `Review::hunk_patch` rebuilds a one-hunk patch (file headers use `/dev/null` for a new or deleted file) and `vix_git::apply_patch(.., ApplyTarget::Index)` feeds it to `git apply --cached`. A binary file, or a cursor outside a hunk, only says so in the status line. |
+| `git.review_stage_all` | Stage All Review Hunks | `Review::full_patch` joins every hunk of every text file (one header per file, binary files skipped) and `apply_patch(.., ApplyTarget::Index)` stages it in one call; for a stash review that is the whole stash. Says so in the status line when there is nothing to stage. |
 | `git.review_discard_hunk` | Discard Review Hunk… | Same patch, after a yes/no (`ConfirmKind::GitReviewDiscard`), through `git apply --reverse` on the working tree. |
 
-The next, previous, comment, export, stage and discard actions work only in the review tab
+The next, previous, comment, export, stage, stage-all and discard actions work only in the review tab
 (they say so in the status line elsewhere).
+
+After a successful stage (one hunk or all) or discard, the host runs the
+range's diff again, `Review::replace_diff` swaps the files in (comments are
+kept) and the buffer is redrawn with the cursor row kept. If git cannot diff
+the range any more the buffer is left as it was. A committed range does not
+change when the index does, so the re-diff matters for ranges that involve the
+working tree or a moved ref.
+
+A line that git marks `\ No newline at end of file` carries
+`DiffLine::no_newline`; the buffer shows the marker on its own row right after
+the line, and `hunk_patch`/`full_patch` write it back so `git apply` accepts
+the hunk.
 
 ## Ranges
 

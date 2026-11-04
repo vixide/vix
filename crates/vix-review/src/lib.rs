@@ -60,6 +60,8 @@ pub struct DiffLine {
     pub old: Option<usize>,
     /// 1-based line number in the new file (not for removed lines).
     pub new: Option<usize>,
+    /// Git printed `\ No newline at end of file` right after this line.
+    pub no_newline: bool,
 }
 
 /// One `@@` hunk.
@@ -290,6 +292,9 @@ impl Review {
                             line: n,
                         },
                     );
+                    if l.no_newline {
+                        push(NO_NEWLINE, Target::None);
+                    }
                     for (ci, c) in self.comments_at(&f.path, side, n) {
                         push(
                             &format!("    >> {}", c.text.replace('\n', " ")),
@@ -306,8 +311,8 @@ impl Review {
     /// and its lines. A hunk that starts at `-0,0` is a new file
     /// (`--- /dev/null`) and one that ends at `+0,0` a deletion
     /// (`+++ /dev/null`). `None` for a binary file or an index out of range.
-    /// A `\ No newline at end of file` marker is not kept by [`parse`], so a
-    /// hunk that depends on one may be refused by `git apply`.
+    /// A `\ No newline at end of file` marker is kept after the line it
+    /// follows, so such a hunk applies.
     #[must_use]
     pub fn hunk_patch(&self, file: usize, hunk: usize) -> Option<String> {
         let f = self.files.get(file)?;
@@ -315,30 +320,34 @@ impl Review {
             return None;
         }
         let h = f.hunks.get(hunk)?;
-        let words: Vec<&str> = h.header.split_whitespace().collect();
-        let is_new = words.get(1).is_some_and(|w| w.starts_with("-0,0"));
-        let is_gone = words.get(2).is_some_and(|w| w.starts_with("+0,0"));
-        let old = if is_new {
-            "/dev/null".to_string()
-        } else {
-            format!("a/{}", f.path)
-        };
-        let new = if is_gone {
-            "/dev/null".to_string()
-        } else {
-            format!("b/{}", f.path)
-        };
-        let mut out = format!("--- {old}\n+++ {new}\n{}\n", h.header);
-        for l in &h.lines {
-            out.push(match l.kind {
-                LineKind::Context => ' ',
-                LineKind::Added => '+',
-                LineKind::Removed => '-',
-            });
-            out.push_str(&l.text);
-            out.push('\n');
-        }
+        let mut out = patch_header(&f.path, h);
+        push_hunk(&mut out, h);
         Some(out)
+    }
+
+    /// One patch holding every hunk of every text file (binary files and
+    /// files without hunks are skipped), for staging a whole stash or range
+    /// at once. `None` when there is nothing to apply.
+    #[must_use]
+    pub fn full_patch(&self) -> Option<String> {
+        let mut out = String::new();
+        for f in self.files.iter().filter(|f| !f.binary) {
+            let Some(first) = f.hunks.first() else {
+                continue;
+            };
+            out.push_str(&patch_header(&f.path, first));
+            for h in &f.hunks {
+                push_hunk(&mut out, h);
+            }
+        }
+        (!out.is_empty()).then_some(out)
+    }
+
+    /// Replace the diff with a freshly computed one for the same range
+    /// (after a stage or discard), keeping every comment. Comments whose line
+    /// is gone stay stored but are not shown.
+    pub fn replace_diff(&mut self, diff: &str) {
+        self.files = parse(diff);
     }
 
     /// The code text of a [`Target::Line`], for storing with a comment.
@@ -445,6 +454,46 @@ pub fn store_name(range: &str) -> String {
     }
 }
 
+/// The marker git prints after a line that has no trailing newline.
+const NO_NEWLINE: &str = "\\ No newline at end of file";
+
+/// The `---`/`+++` file header for a patch whose first hunk is `h`.
+fn patch_header(path: &str, h: &Hunk) -> String {
+    let words: Vec<&str> = h.header.split_whitespace().collect();
+    let is_new = words.get(1).is_some_and(|w| w.starts_with("-0,0"));
+    let is_gone = words.get(2).is_some_and(|w| w.starts_with("+0,0"));
+    let old = if is_new {
+        "/dev/null".to_string()
+    } else {
+        format!("a/{path}")
+    };
+    let new = if is_gone {
+        "/dev/null".to_string()
+    } else {
+        format!("b/{path}")
+    };
+    format!("--- {old}\n+++ {new}\n")
+}
+
+/// Append hunk `h` (header, lines, no-newline markers) to a patch.
+fn push_hunk(out: &mut String, h: &Hunk) {
+    out.push_str(&h.header);
+    out.push('\n');
+    for l in &h.lines {
+        out.push(match l.kind {
+            LineKind::Context => ' ',
+            LineKind::Added => '+',
+            LineKind::Removed => '-',
+        });
+        out.push_str(&l.text);
+        out.push('\n');
+        if l.no_newline {
+            out.push_str(NO_NEWLINE);
+            out.push('\n');
+        }
+    }
+}
+
 /// Parse a unified diff (`git diff` output) into files and hunks.
 #[must_use]
 pub fn parse(diff: &str) -> Vec<FileDiff> {
@@ -480,7 +529,13 @@ pub fn parse(diff: &str) -> Vec<FileDiff> {
                 Some(("+", t)) => (LineKind::Added, t),
                 Some(("-", t)) => (LineKind::Removed, t),
                 Some((" ", t)) => (LineKind::Context, t),
-                // "\ No newline at end of file" and anything unexpected.
+                // "\ No newline at end of file" marks the line before it.
+                Some(("\\", _)) => {
+                    if let Some(last) = hunk.lines.last_mut() {
+                        last.no_newline = true;
+                    }
+                    continue;
+                }
                 _ => continue,
             };
             let (old, new) = match kind {
@@ -499,6 +554,7 @@ pub fn parse(diff: &str) -> Vec<FileDiff> {
                 text: text.to_string(),
                 old,
                 new,
+                no_newline: false,
             });
         } else if line.starts_with("Binary files") || line.starts_with("GIT binary patch") {
             file.binary = true;
@@ -638,6 +694,54 @@ mod tests {
                 .hunk_patch(0, 0)
                 .unwrap()
                 .starts_with("--- /dev/null\n+++ b/n.txt\n")
+        );
+    }
+
+    const NO_NL: &str = "diff --git a/n.txt b/n.txt\n--- a/n.txt\n+++ b/n.txt\n@@ -1,2 +1,2 @@\n keep\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n";
+
+    #[test]
+    fn no_newline_markers_are_kept_rendered_and_patched() {
+        let review = Review::new("a..b", NO_NL);
+        let l = &review.files[0].hunks[0].lines;
+        assert_eq!(
+            l.iter().map(|x| x.no_newline).collect::<Vec<_>>(),
+            [false, true, true]
+        );
+        let out = review.render();
+        assert_eq!(out.text.lines().count(), out.targets.len());
+        assert_eq!(out.text.matches("No newline at end of file").count(), 2);
+        let patch = review.hunk_patch(0, 0).unwrap();
+        assert!(
+            patch.ends_with(
+                "-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n"
+            )
+        );
+    }
+
+    #[test]
+    fn full_patch_holds_every_text_hunk_and_skips_binary() {
+        let review = Review::new("stash@{0}", DIFF);
+        let patch = review.full_patch().unwrap();
+        assert_eq!(
+            patch.matches("--- a/src/a.rs").count(),
+            1,
+            "one header per file"
+        );
+        assert_eq!(patch.matches("@@ -").count(), 2);
+        assert!(!patch.contains("img.png"));
+        assert!(Review::new("x", "").full_patch().is_none());
+    }
+
+    #[test]
+    fn replace_diff_keeps_comments_and_drops_staged_hunks() {
+        let mut review = Review::new("a..b", DIFF);
+        review.set_comment("src/a.rs", Side::New, 11, "more", "keep me");
+        review.replace_diff("diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n@@ -10,1 +10,2 @@\n ctx\n+more\n");
+        assert_eq!(review.files.len(), 1);
+        assert_eq!(review.files[0].hunks.len(), 1);
+        assert_eq!(
+            review.comment_text("src/a.rs", Side::New, 11),
+            Some("keep me")
         );
     }
 }

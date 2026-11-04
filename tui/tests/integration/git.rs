@@ -1581,3 +1581,52 @@ fn stash_chooser_r_opens_the_stash_in_review() {
     assert!(app.editor.active_tab().unwrap().text().contains("+two"));
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
+
+/// T665 leftovers: Stage All Review Hunks stages a whole stash, and the
+/// review is re-diffed afterwards (the stash itself is unchanged, so the
+/// buffer still shows it with its comments).
+#[test]
+fn review_stage_all_stages_a_whole_stash() {
+    let dir = t634_repo("t665all");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    fs::write(dir.join("b.txt"), "bee\n").unwrap();
+    t665_run(&dir, &["add", "b.txt"]);
+    app.run_action("git.stash");
+    assert!(!t665_cached(&dir).contains("+two"));
+    app.run_action("git.stash_list");
+    app.on_key(key('r'));
+    assert!(app.review.is_some());
+    app.run_action("git.review_stage_all");
+    let cached = t665_cached(&dir);
+    assert!(cached.contains("+two"), "{cached}");
+    assert!(
+        app.review.is_some(),
+        "the review stays open after re-diffing"
+    );
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// T665 leftovers: a hunk that touches a line with no trailing newline keeps
+/// git's marker, so staging it applies.
+#[test]
+fn review_stages_a_hunk_with_a_no_newline_marker() {
+    let dir = t634_repo("t665nonl");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "one").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("No newline")
+    );
+    let hunk_row = app.review.as_ref().unwrap().rendered.hunk_rows()[0];
+    app.editor.goto(hunk_row + 2, None, app.layout.editor);
+    app.run_action("git.review_stage_hunk");
+    assert!(t665_cached(&dir).contains("No newline"));
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}

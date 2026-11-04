@@ -8094,9 +8094,14 @@ widgets, and a markup-hiding Markdown "compose" mode.
   - **Follow-ups done** (`feat/t665-review-followups`): Git → Stage Review
     Hunk and Discard Review Hunk… (`git apply --cached` / `--reverse` of the
     cursor's hunk; discard confirms), and `r` in the Stash List chooser
-    opens the stash in a review. **Still not done:** re-diffing the buffer
-    after a stage/discard, and `\ No newline` markers (the parser drops
-    them, so git may refuse such a hunk).
+    opens the stash in a review.
+  - **Leftovers done** (`feat/t665-leftovers`): the buffer is re-diffed
+    after a stage/discard (comments kept); `\ No newline` markers are
+    parsed, shown and written back into patches; Git → Stage All Review
+    Hunks (`git.review_stage_all`) stages a whole stash or range.
+    **Deferred:** the two-pane (side-by-side) view, which needs T660's
+    two-pane model and new rendering under `tui/src/ui/`; and a
+    "discard all hunks" action (stage-all covers the whole-stash case).
 - [x] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632
@@ -9685,7 +9690,7 @@ complete. What is open, by run:
 - **Run O:** T659-T667 and T671 are done, three of them in part. T663: the
   Restore / Diff / Discard prompt for an interrupted save is not built (the
   copy is kept and a startup notice counts it). T665: stage/discard and the
-  stash-chooser review are built; the review is not re-diffed afterwards. T667: user-defined
+  stash-chooser review, re-diffing, no-newline markers and stage-all are built; only the two-pane view is open. T667: user-defined
   detectors and the `.envrc`/mise trust prompt are now done; the detector's
   own name is not yet shown in the status bar. T668 is done. The late findings T669 (apt/dnf repositories)
   and T670 (the musl release build crashes) are open: T670's fix (static
