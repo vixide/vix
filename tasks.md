@@ -8129,8 +8129,11 @@ widgets, and a markup-hiding Markdown "compose" mode.
   run for an untrusted workspace; tested at crate and app level). Follow-up
   done 2026-11-02 (`feat/t667-user-detectors`): user-defined detectors in
   `.vix/env.toml` (trust-gated like `direnv`), and `.envrc`/mise/detector
-  config now raises the trust prompt. Still not done: the status bar shows
-  `custom` instead of the detector's name; no user-level detector file.
+  config now raises the trust prompt. Leftovers done
+  2026-11-03 (`feat/t667-leftovers`): the status bar shows the detector's
+  own name, a user-level `env.toml` beside the settings file, and a
+  per-detector `timeout_secs`. Still not done: per-detector extra
+  environment variables.
   - **Problem.** Python and Node language servers, tasks and the
     terminal start with Vix's own environment. A project's `.venv`,
     direnv `.envrc`, mise/asdf, pipenv or poetry environment is ignored,

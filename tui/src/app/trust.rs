@@ -62,7 +62,7 @@ impl App {
         }
         let count = self.project_script_count();
         let settings = vix_settings::project_settings_path(&self.root).is_file();
-        let env = vix_project_env::needs_trust(&self.root);
+        let env = vix_project_env::needs_trust(&self.root, Self::user_env_file().as_deref());
         if count > 0 || settings || env {
             self.script_trust = Some(ScriptTrustPrompt {
                 count,

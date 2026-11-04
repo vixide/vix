@@ -22,6 +22,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 
 /// Where an environment came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,9 +60,13 @@ impl Source {
 
 /// A resolved environment: variable overrides for spawned processes.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ProjectEnv {
     /// Where it came from.
     pub source: Source,
+    /// The `name` of the user-defined detector that produced it (only for
+    /// [`Source::Custom`]).
+    pub name: Option<String>,
     /// Variables to set (`Some`) or remove (`None`), in a stable order.
     pub vars: BTreeMap<String, Option<String>>,
 }
@@ -76,9 +81,34 @@ pub struct Resolved {
     pub blocked: Option<Source>,
 }
 
-/// Runs an external program in a directory and returns its stdout. A seam so
-/// tests can prove nothing is executed for an untrusted workspace.
-pub type Runner<'a> = &'a dyn Fn(&str, &[&str], &Path) -> Option<String>;
+impl ProjectEnv {
+    /// A new environment with no detector name.
+    #[must_use]
+    pub fn new(source: Source, vars: BTreeMap<String, Option<String>>) -> ProjectEnv {
+        ProjectEnv {
+            source,
+            name: None,
+            vars,
+        }
+    }
+
+    /// The status-bar label: the user detector's own name, else the source's.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        self.name.as_deref().unwrap_or_else(|| self.source.label())
+    }
+}
+
+/// Runs an external program in a directory, killed after the given time, and
+/// returns its stdout. A seam so tests can prove nothing is executed for an
+/// untrusted workspace.
+pub type Runner<'a> = &'a dyn Fn(&str, &[&str], &Path, Duration) -> Option<String>;
+
+/// How long a tool gets before it is killed unless a detector says otherwise.
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The longest per-detector `timeout_secs` accepted.
+pub const MAX_TIMEOUT_SECS: u64 = 60;
 
 /// The most detectors one `.vix/env.toml` may define.
 pub const MAX_DETECTORS: usize = 16;
@@ -94,6 +124,10 @@ pub struct Detector {
     /// Program and arguments, run directly (no shell) in the root; prints the
     /// same JSON object as `direnv export json`.
     pub command: Vec<String>,
+    /// Seconds the command may run before it is killed (1 to
+    /// [`MAX_TIMEOUT_SECS`]); [`DEFAULT_TIMEOUT`] when absent.
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 /// The `.vix/env.toml` file shape.
@@ -122,6 +156,15 @@ impl Detector {
             && !self.command.is_empty()
             && self.command.iter().all(|a| !a.contains('\0'))
             && !self.command[0].is_empty()
+            && self
+                .timeout_secs
+                .is_none_or(|t| (1..=MAX_TIMEOUT_SECS).contains(&t))
+    }
+
+    /// How long the command may run.
+    fn timeout(&self) -> Duration {
+        self.timeout_secs
+            .map_or(DEFAULT_TIMEOUT, Duration::from_secs)
     }
 
     /// Whether any of the detector's files exists under `root`.
@@ -151,12 +194,32 @@ pub fn load_detectors(root: &Path) -> Vec<Detector> {
         .unwrap_or_default()
 }
 
+/// The valid detectors of a user-level detector file (empty when it is absent
+/// or invalid). Same format as `.vix/env.toml`.
+#[must_use]
+pub fn load_user_detectors(user_file: Option<&Path>) -> Vec<Detector> {
+    user_file
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|t| parse_detectors(&t))
+        .unwrap_or_default()
+}
+
+/// The project's detectors followed by the user-level ones: the project wins.
+fn all_detectors(root: &Path, user_file: Option<&Path>) -> Vec<Detector> {
+    let mut all = load_detectors(root);
+    all.extend(load_user_detectors(user_file));
+    all
+}
+
 /// Whether the workspace has any config that makes a code-running source
 /// applicable (so deserves a trust prompt): an `.envrc`, a mise config, or a
-/// valid user detector whose files exist.
+/// valid project or user-level detector whose files exist.
 #[must_use]
-pub fn needs_trust(root: &Path) -> bool {
-    detect_code_source(root).is_some() || load_detectors(root).iter().any(|d| d.applies(root))
+pub fn needs_trust(root: &Path, user_file: Option<&Path>) -> bool {
+    detect_code_source(root).is_some()
+        || all_detectors(root, user_file)
+            .iter()
+            .any(|d| d.applies(root))
 }
 
 /// Which code-running source a workspace has config for, by file presence.
@@ -209,10 +272,7 @@ pub fn venv_env(venv: &Path, current_path: Option<&OsString>) -> ProjectEnv {
     }
     // Like `activate`, drop PYTHONHOME so the venv interpreter is not confused.
     vars.insert("PYTHONHOME".to_string(), None);
-    ProjectEnv {
-        source: Source::Venv,
-        vars,
-    }
+    ProjectEnv::new(Source::Venv, vars)
 }
 
 /// Parse `direnv export json` / `mise env --json` output: an object of
@@ -243,11 +303,13 @@ pub fn parse_env_json(text: &str) -> Option<BTreeMap<String, Option<String>>> {
 /// Resolve the workspace's environment with the real `direnv`/`mise`.
 ///
 /// `trusted` must be the workspace-trust decision; see the module docs.
+/// `user_file` is the optional user-level detector file.
 #[must_use]
-pub fn resolve(root: &Path, trusted: bool) -> Resolved {
+pub fn resolve(root: &Path, trusted: bool, user_file: Option<&Path>) -> Resolved {
     resolve_with(
         root,
         trusted,
+        user_file,
         &real_runner,
         std::env::var_os("PATH").as_ref(),
     )
@@ -258,21 +320,24 @@ pub fn resolve(root: &Path, trusted: bool) -> Resolved {
 pub fn resolve_with(
     root: &Path,
     trusted: bool,
+    user_file: Option<&Path>,
     runner: Runner<'_>,
     current_path: Option<&OsString>,
 ) -> Resolved {
     let mut out = Resolved::default();
-    if let Some(d) = load_detectors(root).into_iter().find(|d| d.applies(root)) {
+    if let Some(d) = all_detectors(root, user_file)
+        .into_iter()
+        .find(|d| d.applies(root))
+    {
         if trusted {
             let args: Vec<&str> = d.command[1..].iter().map(String::as_str).collect();
-            if let Some(vars) = runner(&d.command[0], &args, root)
+            if let Some(vars) = runner(&d.command[0], &args, root, d.timeout())
                 .and_then(|t| parse_env_json(&t))
                 .filter(|v| !v.is_empty())
             {
-                out.env = Some(ProjectEnv {
-                    source: Source::Custom,
-                    vars,
-                });
+                let mut env = ProjectEnv::new(Source::Custom, vars);
+                env.name = Some(d.name.clone());
+                out.env = Some(env);
                 return out;
             }
         } else {
@@ -282,15 +347,15 @@ pub fn resolve_with(
     if let Some(source) = detect_code_source(root) {
         if trusted {
             let text = match source {
-                Source::Direnv => runner("direnv", &["export", "json"], root),
-                _ => runner("mise", &["env", "--json"], root),
+                Source::Direnv => runner("direnv", &["export", "json"], root, DEFAULT_TIMEOUT),
+                _ => runner("mise", &["env", "--json"], root, DEFAULT_TIMEOUT),
             };
             // direnv prints nothing when already loaded/empty; treat as no env.
             if let Some(vars) = text
                 .and_then(|t| parse_env_json(&t))
                 .filter(|v| !v.is_empty())
             {
-                out.env = Some(ProjectEnv { source, vars });
+                out.env = Some(ProjectEnv::new(source, vars));
                 return out;
             }
         } else if out.blocked.is_none() {
@@ -338,13 +403,13 @@ pub fn apply_to(mut set: impl FnMut(&str, Option<&str>)) {
 
 /// The runner [`resolve`] uses: the real tool, or nothing without `process`.
 #[cfg(feature = "process")]
-fn real_runner(program: &str, args: &[&str], dir: &Path) -> Option<String> {
-    run::run_tool(program, args, dir)
+fn real_runner(program: &str, args: &[&str], dir: &Path, timeout: Duration) -> Option<String> {
+    run::run_tool(program, args, dir, timeout)
 }
 
 /// Without the `process` feature no external tool is ever started.
 #[cfg(not(feature = "process"))]
-fn real_runner(_program: &str, _args: &[&str], _dir: &Path) -> Option<String> {
+fn real_runner(_program: &str, _args: &[&str], _dir: &Path, _timeout: Duration) -> Option<String> {
     None
 }
 
@@ -387,11 +452,11 @@ mod tests {
             let dir = Dir::new("untrusted");
             fs::write(dir.path().join(file), "x").unwrap();
             let calls = Cell::new(0);
-            let runner = |_: &str, _: &[&str], _: &Path| {
+            let runner = |_: &str, _: &[&str], _: &Path, _: Duration| {
                 calls.set(calls.get() + 1);
                 Some(r#"{"EVIL":"1"}"#.to_string())
             };
-            let r = resolve_with(dir.path(), false, &runner, None);
+            let r = resolve_with(dir.path(), false, None, &runner, None);
             assert_eq!(calls.get(), 0, "{file}: nothing may run");
             assert!(r.env.is_none());
             assert!(r.blocked.is_some());
@@ -402,11 +467,11 @@ mod tests {
     fn trusted_workspace_runs_direnv_and_uses_its_json() {
         let dir = Dir::new("direnv");
         fs::write(dir.path().join(".envrc"), "x").unwrap();
-        let runner = |p: &str, a: &[&str], _: &Path| {
+        let runner = |p: &str, a: &[&str], _: &Path, _: Duration| {
             assert_eq!((p, a), ("direnv", &["export", "json"][..]));
             Some(r#"{"FOO":"bar","GONE":null}"#.to_string())
         };
-        let r = resolve_with(dir.path(), true, &runner, None);
+        let r = resolve_with(dir.path(), true, None, &runner, None);
         let env = r.env.unwrap();
         assert_eq!(env.source, Source::Direnv);
         assert_eq!(env.vars["FOO"].as_deref(), Some("bar"));
@@ -418,11 +483,11 @@ mod tests {
     fn mise_is_used_when_there_is_no_envrc() {
         let dir = Dir::new("mise");
         fs::write(dir.path().join("mise.toml"), "").unwrap();
-        let runner = |p: &str, _: &[&str], _: &Path| {
+        let runner = |p: &str, _: &[&str], _: &Path, _: Duration| {
             assert_eq!(p, "mise");
             Some(r#"{"A":"1"}"#.to_string())
         };
-        let r = resolve_with(dir.path(), true, &runner, None);
+        let r = resolve_with(dir.path(), true, None, &runner, None);
         assert_eq!(r.env.unwrap().source, Source::Mise);
     }
 
@@ -430,10 +495,11 @@ mod tests {
     fn venv_works_untrusted_and_without_running_anything() {
         let dir = Dir::new("venv");
         make_venv(dir.path());
-        let runner =
-            |_: &str, _: &[&str], _: &Path| -> Option<String> { panic!("must not run anything") };
+        let runner = |_: &str, _: &[&str], _: &Path, _: Duration| -> Option<String> {
+            panic!("must not run anything")
+        };
         let base = std::env::join_paths(["/usr/bin"]).unwrap();
-        let r = resolve_with(dir.path(), false, &runner, Some(&base));
+        let r = resolve_with(dir.path(), false, None, &runner, Some(&base));
         let env = r.env.unwrap();
         assert_eq!(env.source, Source::Venv);
         let venv = dir.path().join(".venv");
@@ -453,7 +519,7 @@ mod tests {
         let dir = Dir::new("fallback");
         fs::write(dir.path().join(".envrc"), "x").unwrap();
         make_venv(dir.path());
-        let r = resolve_with(dir.path(), false, &|_, _, _| None, None);
+        let r = resolve_with(dir.path(), false, None, &|_, _, _, _| None, None);
         assert_eq!(r.blocked, Some(Source::Direnv));
         assert_eq!(r.env.unwrap().source, Source::Venv);
     }
@@ -462,11 +528,11 @@ mod tests {
     fn failed_tool_falls_back_and_empty_dir_is_empty() {
         let dir = Dir::new("empty");
         assert_eq!(
-            resolve_with(dir.path(), true, &|_, _, _| None, None),
+            resolve_with(dir.path(), true, None, &|_, _, _, _| None, None),
             Resolved::default()
         );
         fs::write(dir.path().join(".envrc"), "x").unwrap();
-        let r = resolve_with(dir.path(), true, &|_, _, _| None, None);
+        let r = resolve_with(dir.path(), true, None, &|_, _, _, _| None, None);
         assert!(r.env.is_none() && r.blocked.is_none());
     }
 
@@ -483,11 +549,13 @@ mod tests {
         write_detectors(dir.path(), NIX);
         fs::write(dir.path().join(".envrc"), "x").unwrap();
         fs::write(dir.path().join("flake.nix"), "").unwrap();
-        let runner = |p: &str, a: &[&str], _: &Path| {
+        let runner = |p: &str, a: &[&str], _: &Path, _: Duration| {
             assert_eq!((p, a), ("nix-env-json", &["--all"][..]));
             Some(r#"{"NIXY":"1"}"#.to_string())
         };
-        let env = resolve_with(dir.path(), true, &runner, None).env.unwrap();
+        let env = resolve_with(dir.path(), true, None, &runner, None)
+            .env
+            .unwrap();
         assert_eq!(env.source, Source::Custom, "custom wins over direnv");
         assert_eq!(env.vars["NIXY"].as_deref(), Some("1"));
     }
@@ -496,17 +564,18 @@ mod tests {
     fn user_detector_never_runs_untrusted_or_without_its_files() {
         let dir = Dir::new("custom-untrusted");
         write_detectors(dir.path(), NIX);
-        let runner =
-            |_: &str, _: &[&str], _: &Path| -> Option<String> { panic!("must not run anything") };
+        let runner = |_: &str, _: &[&str], _: &Path, _: Duration| -> Option<String> {
+            panic!("must not run anything")
+        };
         // No flake.nix: not applicable, even trusted.
         assert_eq!(
-            resolve_with(dir.path(), true, &runner, None),
+            resolve_with(dir.path(), true, None, &runner, None),
             Resolved::default()
         );
-        assert!(!needs_trust(dir.path()));
+        assert!(!needs_trust(dir.path(), None));
         fs::write(dir.path().join("flake.nix"), "").unwrap();
-        assert!(needs_trust(dir.path()));
-        let r = resolve_with(dir.path(), false, &runner, None);
+        assert!(needs_trust(dir.path(), None));
+        let r = resolve_with(dir.path(), false, None, &runner, None);
         assert!(r.env.is_none());
         assert_eq!(r.blocked, Some(Source::Custom));
     }
@@ -517,7 +586,7 @@ mod tests {
         write_detectors(dir.path(), NIX);
         fs::write(dir.path().join("flake.nix"), "").unwrap();
         make_venv(dir.path());
-        let r = resolve_with(dir.path(), true, &|_, _, _| None, None);
+        let r = resolve_with(dir.path(), true, None, &|_, _, _, _| None, None);
         assert_eq!(r.env.unwrap().source, Source::Venv);
     }
 
@@ -541,6 +610,85 @@ mod tests {
     }
 
     #[test]
+    fn custom_env_carries_the_detector_name_as_its_label() {
+        let dir = Dir::new("custom-name");
+        write_detectors(dir.path(), NIX);
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        let runner = |_: &str, _: &[&str], _: &Path, _: Duration| Some(r#"{"A":"1"}"#.to_string());
+        let env = resolve_with(dir.path(), true, None, &runner, None)
+            .env
+            .unwrap();
+        assert_eq!((env.source, env.label()), (Source::Custom, "nix"));
+        assert_eq!(
+            ProjectEnv::new(Source::Venv, BTreeMap::new()).label(),
+            "venv"
+        );
+    }
+
+    #[test]
+    fn per_detector_timeout_is_passed_to_the_runner_and_validated() {
+        let dir = Dir::new("timeout");
+        write_detectors(dir.path(), &format!("{NIX}timeout_secs = 30\n"));
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        let seen = Cell::new(Duration::ZERO);
+        let runner = |_: &str, _: &[&str], _: &Path, t: Duration| {
+            seen.set(t);
+            Some(r#"{"A":"1"}"#.to_string())
+        };
+        assert!(
+            resolve_with(dir.path(), true, None, &runner, None)
+                .env
+                .is_some()
+        );
+        assert_eq!(seen.get(), Duration::from_secs(30));
+        write_detectors(dir.path(), NIX);
+        let _ = resolve_with(dir.path(), true, None, &runner, None);
+        assert_eq!(seen.get(), DEFAULT_TIMEOUT);
+        for bad in ["0", "61"] {
+            let text = format!("{NIX}timeout_secs = {bad}\n");
+            assert!(parse_detectors(&text).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn user_level_detector_file_applies_after_the_project_one() {
+        let dir = Dir::new("user-file");
+        let user = dir.path().join("user-env.toml");
+        fs::write(
+            &user,
+            "[[detector]]\nname=\"mine\"\ndetect=[\"flake.nix\"]\ncommand=[\"mine-env\"]\n",
+        )
+        .unwrap();
+        let root = dir.path().join("proj");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("flake.nix"), "").unwrap();
+        let runner =
+            |p: &str, _: &[&str], _: &Path, _: Duration| Some(format!(r#"{{"FROM":"{p}"}}"#));
+        assert!(needs_trust(&root, Some(&user)));
+        assert!(!needs_trust(&root, None));
+        let env = resolve_with(&root, true, Some(&user), &runner, None)
+            .env
+            .unwrap();
+        assert_eq!(env.label(), "mine");
+        // Untrusted: never runs, reported as blocked.
+        let blocked = resolve_with(&root, false, Some(&user), &|_, _, _, _| panic!("no"), None);
+        assert_eq!(blocked.blocked, Some(Source::Custom));
+        // A project detector beats the user-level one.
+        write_detectors(&root, NIX);
+        let env = resolve_with(&root, true, Some(&user), &runner, None)
+            .env
+            .unwrap();
+        assert_eq!(env.label(), "nix");
+        // A missing or invalid user file is ignored.
+        assert_eq!(
+            load_user_detectors(Some(&dir.path().join("absent.toml"))),
+            Vec::new()
+        );
+        fs::write(&user, "not = [toml").unwrap();
+        assert_eq!(load_user_detectors(Some(&user)), Vec::new());
+    }
+
+    #[test]
     fn parse_rejects_malformed_and_hostile_json() {
         assert!(parse_env_json("not json").is_none());
         assert!(parse_env_json("[]").is_none());
@@ -557,10 +705,7 @@ mod tests {
         let mut vars = BTreeMap::new();
         vars.insert("VIX_T667".to_string(), Some("1".to_string()));
         vars.insert("VIX_T667_GONE".to_string(), None);
-        set_active(Some(ProjectEnv {
-            source: Source::Venv,
-            vars,
-        }));
+        set_active(Some(ProjectEnv::new(Source::Venv, vars)));
         let mut seen = Vec::new();
         apply_to(|k, v| seen.push((k.to_string(), v.map(str::to_string))));
         assert!(seen.contains(&("VIX_T667".to_string(), Some("1".to_string()))));
