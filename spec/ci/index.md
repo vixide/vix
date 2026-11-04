@@ -59,38 +59,67 @@ See [`spec/test/index.md`](../test/index.md) for how the layers fit together.
 | -------- | --------------------------- | ------------------------------- | ---------------------------------- |
 | GitHub   | `.github/workflows/ci.yml`  | `.github/workflows/release.yml` | `.github/workflows/security.yml`   |
 | GitLab   | `.gitlab-ci.yml`            | `release` stage of the same file | `deny` job of the same file       |
-| Codeberg | `.forgejo/workflows/ci.yml` | `.forgejo/workflows/release.yml` | `.forgejo/workflows/security.yml` |
+| Codeberg | `.forgejo/workflows/ci.yml`, `docs.yml` | `.forgejo/workflows/release.yml` | `.forgejo/workflows/security.yml` |
 
 When the gate changes, change all four files plus `scripts/check` together.
 They are deliberately duplicated rather than abstracted: each forge's syntax is
 different enough that a shared script would hide more than it saves.
 
+## Slim hosted CI (T762)
+
+Hosted CI is deliberately thin, because the local `scripts/check` is the
+authoritative gate ([`spec/local-ci`](../local-ci/index.md)) and hosted minutes
+cost money or, on GitLab, are exhausted. Two tiers:
+
+- **Every push to `main` and every pull request:** one Linux job that runs the
+  fast gate (fmt, clippy, build, test, headless examples, rustdoc, generated
+  references, binary licenses), plus the documentation checks (`check-docs`,
+  lychee, mdBook). A **docs-only** change (only `*.md` and files under
+  `docs/`, `spec/` or `agents/`, and not the generated `docs/reference/` or
+  `tui/man/`) skips the Rust job but still runs the docs checks.
+- **Weekly schedule, version tags and `workflow_dispatch`:** everything else.
+  The macOS and Windows test matrix, `cargo hack --each-feature` and the other
+  feature combinations, semver, offline tests, coverage, MSRV, binary size,
+  the GUI matrix (`gui.yml`), mutation testing (`mutants.yml`) and the chaos
+  monkey (`chaos.yml`, nightly) all run here. **No check was removed, only
+  moved**: a regression they would catch surfaces on the next scheduled run or
+  at the latest on the release tag.
+
+Every workflow uses `concurrency` with `cancel-in-progress: true`, so a newer
+push to the same ref cancels the superseded run; the scheduled run has its own
+group so it cannot cancel a push to `main`. GitLab and Codeberg follow the
+same split (Codeberg: `ci.yml` skips docs-only changes via `paths-ignore` and
+runs the feature-combination step only on schedule, tags and dispatch;
+`docs.yml` always runs the docs checks). GitLab is unchanged apart from a note
+at the top of `.gitlab-ci.yml`: its pipeline is paused by CI-minute quota
+(`ci_quota_exceeded` since 2026-08-29), so a red run there means no quota.
+
 ## GitHub
 
-Three jobs, so a formatting failure is visible without waiting for the tests:
+Jobs in `ci.yml`. `plan` decides what this run needs (`full`: schedule, tag or
+dispatch; `rust`: not a docs-only change).
 
-- **lint** — `fmt`, `clippy`, `doc` on `ubuntu-latest`. These findings are
-  platform-independent, so they run once rather than per matrix entry.
-- **test** — `build` + `test` on `ubuntu-latest`, `macos-latest`, and
-  `windows-latest` (T547, `tasks.md`). Windows joined the matrix because the
+- **check** — the one per-push Linux job: `fmt`, `clippy`, `build`,
+  `nextest`, headless examples, `doc`, generated references and the binary
+  license check. Needs `rust`.
+- **docs-check**, **docs-links**, **docs-build** (+ **docs-deploy** on `main`) —
+  the documentation checks, on every push and pull request.
+- **test** — *full runs only.* `build` + `test` on `macos-latest` and
+  `windows-latest` (T547, `tasks.md`; Linux is `check`). Windows joined the matrix because the
   release workflow's cross-builds only compile for distribution (via `dist`,
   on version tags) — they never run `cargo test`, so they can't catch an
   OS-specific runtime bug (e.g. shelling out via a hardcoded POSIX `sh`,
-  T547's own finding). Most of the suite is genuinely terminal-independent
-  and this roughly doubles wall time for that part, but it's the only way to
-  get real signal on the part that isn't. The job's default shell is `bash`
+  T547's own finding). The job's default shell is `bash`
   (Git-Bash, preinstalled on the `windows-latest` runner image) rather than
-  the platform-default PowerShell, so the same POSIX-syntax steps (e.g. the
-  headless-examples run, `T505`) work unmodified on every OS in the matrix.
-  GitLab and Codeberg stay Linux-only (see below) — they never had macOS
-  coverage either, so this doesn't widen an existing three-way parity gap,
-  just this pre-existing GitHub-only one.
-- **msrv** — `cargo check` on the toolchain floor declared by
-  `workspace.package.rust-version` in `Cargo.toml`. Bump the matrix entry when
-  that floor moves.
+  the platform-default PowerShell, so the same POSIX-syntax steps work
+  unmodified on every OS in the matrix. GitLab and Codeberg stay Linux-only.
+- **offline-test**, **feature-combos**, **semver**, **coverage**, **msrv**,
+  **binary-size** — *full runs only.* **msrv** is `cargo check` on the toolchain floor declared by
+  `workspace.package.rust-version` in `Cargo.toml`; bump the matrix entry when
+  that floor moves. **binary-size** records its baseline from the scheduled run
+  on `main`; its pull-request comment step no longer fires.
 
-Caching is `Swatinem/rust-cache`; runs are cancelled when superseded on the
-same ref.
+Caching is `Swatinem/rust-cache`.
 
 Releases are produced by [`dist`](https://opensource.axo.dev/cargo-dist/)
 (config in `dist-workspace.toml`): pushing a version tag builds the seven
@@ -168,8 +197,7 @@ denied over all features, and the unit tests, all via `--manifest-path gui/Cargo
 --locked`. On macOS it also runs each front end's real render (the `screenshot` feature:
 open the window, type into the command palette, save a PNG) and uploads the images. Linux
 installs the windowing/font system libraries, GTK 4 and OpenGL/EGL first; macOS installs
-Homebrew's `gtk4`; Windows runners have no GTK, so `vix-gtk4` is excluded there. It is advisory (`continue-on-error`) and
-path-filtered to changes that can affect the GUIs. The matrix also includes
+Homebrew's `gtk4`; Windows runners have no GTK, so `vix-gtk4` is excluded there. It is advisory (`continue-on-error`) and runs weekly, on version tags and on demand (T762), no longer on every push or PR. The matrix also includes
 `ubuntu-22.04` and `ubuntu-22.04-arm`, the runners `release.yml` builds the GUIs on: dist
 releases `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` (not `vix-gtk4`) from the same tag as `vix-tui` (T645; `dist-workspace.toml`
 members `cargo:.` and `cargo:gui`), so a GUI that does not build there fails the whole release.
@@ -301,7 +329,9 @@ with three differences that shape these files:
 
 Codeberg's runners are a donated, shared resource, so CI is a **single job**
 that runs the whole gate rather than several jobs that each recompile the
-workspace.
+workspace. Since T762 the docs checks (`check-docs`, lychee) live in their own
+`docs.yml` so a docs-only change, which `ci.yml` skips, still gets them, and the
+slow feature-combination step runs only on schedule, tags and dispatch.
 
 Releases mirror GitLab's: a static musl binary plus checksum, published with
 `https://code.forgejo.org/actions/forgejo-release@v2`. It authenticates with

@@ -9609,12 +9609,15 @@ the maintainer's decisions.
   to `main` without a passing `full` note for the tip tree; the forge `verify`
   job checks signature, tree and gate version. Needs T760. Never bypasses
   commit signing. **Large.**
-- [ ] **T762 — Slim the hosted CI.** Keep one Linux job (fmt, clippy, test) on
+- [x] **T762 — Slim the hosted CI.** Keep one Linux job (fmt, clippy, test) on
   push; move the macOS/Windows matrix, `cargo hack --each-feature`, mutants,
   chaos and `gui.yml` to a schedule and to version tags; add path filters and
   `concurrency` cancel-in-progress. Do the same on the Forgejo file; give
   GitLab a one-line note that its pipeline is paused (quota) rather than
   silently failing. **Small.**
+  Done 2026-11-04: one `check` job plus docs checks on push/PR (docs-only
+  skips Rust), the rest on a weekly schedule/tags/dispatch; Codeberg split
+  into `ci.yml` + `docs.yml`; GitLab got a quota note only.
 - [ ] **T763 — Self-hosted runner spike.** Stand up a Forgejo runner with a
   host-mode macOS label for Codeberg; write the threat model (no fork pull
   requests, ephemeral workspace, no secrets in the runner's environment);

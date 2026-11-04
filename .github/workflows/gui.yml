@@ -9,26 +9,14 @@
 
 name: GUI
 
+# T762 (spec/local-ci): not on every push or PR any more -- weekly, on version
+# tags (the release builds the GUIs from the same tag) and on demand.
 on:
+  schedule:
+    # Weekly, Tuesday 05:30 UTC.
+    - cron: "30 5 * * 2"
   push:
-    branches: [main]
-    paths:
-      - "gui/**"
-      - "tui/**"
-      - "crates/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/gui.yml"
-      - "dist-workspace.toml"
-  pull_request:
-    paths:
-      - "gui/**"
-      - "tui/**"
-      - "crates/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/gui.yml"
-      - "dist-workspace.toml"
+    tags: ['**[0-9]+.[0-9]+.[0-9]+*']
   workflow_dispatch:
 
 concurrency:

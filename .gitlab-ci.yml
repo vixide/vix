@@ -11,6 +11,11 @@
 #
 # Keep the four in step — see spec/ci/index.md.
 #
+# NOTE (T762): this pipeline is effectively paused. Every pipeline has failed
+# with `ci_quota_exceeded` (out of CI minutes) since 2026-08-29, so a red
+# GitLab run means no quota, not a broken change. The jobs below are kept as
+# they are; GitHub and Codeberg verify.
+#
 # The `release` stage runs only for tag pipelines: it builds a statically
 # linked Linux binary, publishes the tarball to the project's generic package
 # registry, and creates a GitLab Release pointing at it. It needs no secrets —

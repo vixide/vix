@@ -1,0 +1,69 @@
+# Documentation checks for Codeberg (codeberg.org/vixide/vix), split out of
+# ci.yml by T762 (spec/local-ci) so that a docs-only change, which ci.yml skips
+# via `paths-ignore`, still gets them. No Rust toolchain: check-docs is Python
+# plus the pinned CSpell, and lychee is a pinned, checksummed binary.
+# Same checks as `docs-check` / `docs-links` in .github/workflows/ci.yml.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    tags: ['**[0-9]+.[0-9]+.[0-9]+*']
+  pull_request:
+  schedule:
+    # Weekly, Tuesday 05:00 UTC.
+    - cron: "0 5 * * 2"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep in sync with the same two variables in .github/workflows/ci.yml and
+  # .gitlab-ci.yml.
+  LYCHEE_VERSION: "0.24.2"
+  LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
+
+jobs:
+  docs:
+    name: check-docs + links
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+
+      # The specs are living documentation, gated like code. Mirrors
+      # `scripts/check`; see spec/test/index.md.
+      # check-docs also spell-checks the markdown with CSpell; the runner
+      # image has Node, so install the pinned release and make it required.
+      - name: install CSpell
+        run: npm install -g cspell@10.4.0
+      - name: scripts/check-docs
+        env:
+          VIX_REQUIRE_CSPELL: "1"
+        run: python3 scripts/check-docs
+      # Broken-link gate for the docs (T002, spec/ci/index.md), pinned and
+      # checksummed like cargo-deny in security.yml.
+      - name: Install lychee ${{ env.LYCHEE_VERSION }}
+        run: |
+          tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+          echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
+            "lychee-x86_64-unknown-linux-musl/lychee"
+      - name: lychee (offline links)
+        run: |
+          lychee --offline --no-progress \
+            --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+      # External URLs go stale independently of any change in this tree, so
+      # this reports without failing the job. CHANGELOG.md is included here
+      # (unlike the offline step): a URL it names should still resolve even
+      # though a local path it names may not (exempt above).
+      - name: lychee (external links, advisory)
+        continue-on-error: true
+        run: |
+          lychee --no-progress --scheme https --scheme http \
+            --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
