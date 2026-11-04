@@ -433,3 +433,48 @@ fn the_session_id_survives_a_restart() {
     app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }
+
+fn screen(app: &mut App) -> String {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(140, 30)).unwrap();
+    term.draw(|f| crate::ui::draw(app, f)).unwrap();
+    term.backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect()
+}
+
+#[test]
+fn the_plan_can_be_docked_beside_the_editor() {
+    if !python_available() {
+        return;
+    }
+    let dir = unique_dir("acp-dock");
+    let (mut app, log) = agent_app(&dir, true);
+    app.run_action("ai.agent_plan_dock");
+    assert!(
+        screen(&mut app).contains("No agent is running"),
+        "the dock opens even with no agent, saying so"
+    );
+    start(&mut app, &log);
+    send_prompt(&mut app, "plain");
+    tick_until(&mut app, |a| transcript(a).contains("step one"));
+    let shown = screen(&mut app);
+    assert!(
+        shown.contains("step one") && shown.contains("Reading"),
+        "the plan and tool calls are docked: {shown}"
+    );
+    assert!(
+        app.editor
+            .tabs
+            .iter()
+            .all(|t| t.path.as_deref() != Some(Path::new("*agent plan*"))),
+        "docking does not open a tab"
+    );
+    app.run_action("ai.agent_plan_dock");
+    assert!(!screen(&mut app).contains("Agent plan"), "toggled off");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(&dir).ok();
+}

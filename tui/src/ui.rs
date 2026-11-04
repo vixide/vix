@@ -113,6 +113,7 @@ struct BodyColumns {
     outline: Option<Rect>,
     debug: Option<Rect>,
     test: Option<Rect>,
+    agent_plan: Option<Rect>,
 }
 
 /// `clamp` that never panics: where `min > max` (a terminal smaller than a
@@ -138,6 +139,9 @@ pub fn layout_mirrored(app: &App) -> bool {
 
 /// Width (columns) of the IM dock panel (T752), clamped like the other docks.
 const IM_DOCK_WIDTH: u16 = 40;
+
+/// Width (columns) of the docked agent plan pane (T635).
+const AGENT_PLAN_WIDTH: u16 = 36;
 
 /// Split the body row into the explorer, centre and message-dock columns.
 ///
@@ -177,6 +181,12 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     if app.visible.contains(Visible::TEST_PANEL) {
         order.push(('t', Constraint::Length(st.test_width.clamp(12, dock_max))));
     }
+    if app.visible.contains(Visible::AGENT_PLAN) {
+        order.push((
+            'a',
+            Constraint::Length(AGENT_PLAN_WIDTH.clamp(12, dock_max)),
+        ));
+    }
     if layout_mirrored(app) {
         order.reverse();
     }
@@ -193,6 +203,7 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
         outline: at('o'),
         debug: at('d'),
         test: at('t'),
+        agent_plan: at('a'),
     }
 }
 
@@ -261,6 +272,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         outline: outline_rect,
         debug: debug_rect,
         test: test_rect,
+        agent_plan: agent_plan_rect,
     } = body_columns(app, body);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
@@ -308,7 +320,14 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     draw_side_docks(
         app,
         frame,
-        [messages_rect, im_rect, outline_rect, debug_rect, test_rect],
+        [
+            messages_rect,
+            im_rect,
+            outline_rect,
+            debug_rect,
+            test_rect,
+            agent_plan_rect,
+        ],
     );
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
@@ -333,9 +352,9 @@ fn end_of_frame_passes(app: &App, frame: &mut Frame) {
 }
 
 /// The docks beside the editor, each only when shown: messages, IM, outline,
-/// debugger, tests.
-fn draw_side_docks(app: &mut App, frame: &mut Frame, rects: [Option<Rect>; 5]) {
-    let [messages, im, outline, debug, test] = rects;
+/// debugger, tests, agent plan.
+fn draw_side_docks(app: &mut App, frame: &mut Frame, rects: [Option<Rect>; 6]) {
+    let [messages, im, outline, debug, test, agent_plan] = rects;
     if let Some(r) = messages {
         draw_messages(app, frame, r);
     }
@@ -350,6 +369,9 @@ fn draw_side_docks(app: &mut App, frame: &mut Frame, rects: [Option<Rect>; 5]) {
     }
     if let Some(r) = test {
         draw_test_panel(app, frame, r);
+    }
+    if let Some(r) = agent_plan {
+        ai::draw_agent_plan_dock(app, frame, r);
     }
 }
 

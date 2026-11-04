@@ -73,6 +73,7 @@ impl App {
             "ai.agent_start" => self.acp_start(),
             "ai.agent_resume" => self.acp_resume(),
             "ai.agent_plan" => self.acp_show_plan(),
+            "ai.agent_plan_dock" => self.visible.toggle(super::Visible::AGENT_PLAN),
             "ai.agent_prompt" => self.acp_begin_prompt(),
             "ai.agent_stop" => self.acp_stop(),
             _ => return false,
@@ -232,6 +233,23 @@ impl App {
         );
         lines.push(String::new());
         lines.join("\n")
+    }
+
+    /// The docked plan pane's content as `[plan lines, tool-call lines]`, or
+    /// `None` when no agent is running. Tool calls are listed oldest first.
+    #[must_use]
+    pub fn acp_plan_sections(&self) -> Option<[Vec<String>; 2]> {
+        let host = self.acp.as_ref()?;
+        Some([
+            host.plan
+                .iter()
+                .map(|e| format!("[{}] {}", e.status, e.content))
+                .collect(),
+            host.tools
+                .iter()
+                .map(|(_, title, status)| format!("[{status}] {title}"))
+                .collect(),
+        ])
     }
 
     /// Open (or refresh) the read-only plan tab: the plan and every tool call.

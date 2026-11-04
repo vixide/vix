@@ -5,7 +5,8 @@ protocol Zed defined so an editor can drive a coding agent (Claude Code,
 Gemini CLI, Codex, ...) that runs as a child process. Actions:
 `ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Agent Prompt…),
 `ai.agent_stop` (AI → Stop Agent), `ai.agent_resume` (AI → Resume Agent),
-`ai.agent_plan` (AI → Agent Plan). The agents come from the `ai_agents`
+`ai.agent_plan` (AI → Agent Plan), `ai.agent_plan_dock` (AI → Toggle Agent
+Plan Pane). The agents come from the `ai_agents`
 setting.
 
 The crate is split so the protocol is pure and the process is optional:
@@ -95,6 +96,13 @@ the agent's latest plan and every tool call with its status (updates merge by
 tool-call id). While the tab is open it is rewritten as events arrive. The AI
 panel still gets the transcript lines.
 
+`ai.agent_plan_dock` toggles the same content as a docked, read-only side pane
+(`Visible::AGENT_PLAN`, a fixed 36 columns beside the editor like the IM dock;
+drawn by `draw_agent_plan_dock` in `tui/src/ui/ai.rs`): the plan, then the tool
+calls with their status, newest last, following the agent live. With no agent
+running it says so rather than staying blank. It is display only: no key or
+click does anything in it.
+
 ## Resume
 
 When an agent reports its session (`Event::Ready`) the host remembers the
@@ -109,8 +117,7 @@ degrades to a fresh session.
 
 ## Not yet done
 
-The plan is a tab rather than a docked pane, and ACP terminal capabilities are
-not offered.
+ACP terminal capabilities are not offered.
 
 ## Implemented by
 

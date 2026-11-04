@@ -194,3 +194,34 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     ));
     frame.render_widget(Paragraph::new(hint), chunks[2]);
 }
+
+/// The docked agent plan pane (T635, `ai.agent_plan_dock`): the agent's plan,
+/// then its tool calls with their status. Read-only; it follows the agent live.
+pub(super) fn draw_agent_plan_dock(app: &mut App, frame: &mut Frame, area: Rect) {
+    use ratatui::widgets::Wrap;
+    let block = Block::default()
+        .style(theme::region_base(theme::Region::RightDock))
+        .borders(Borders::TOP | Borders::LEFT)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::region_title(theme::Region::RightDock, false))
+        .title(format!(" {} ", t!("ui.acp_plan_dock_title")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some([plan, tools]) = app.acp_plan_sections() else {
+        let hint = Paragraph::new(t!("ui.acp_plan_dock_idle").to_string())
+            .style(theme::dim())
+            .wrap(Wrap { trim: true });
+        frame.render_widget(hint, inner);
+        return;
+    };
+    let heading = |key: String| Line::styled(key, theme::dim().add_modifier(Modifier::BOLD));
+    let mut lines = vec![heading(t!("ui.acp_plan_heading").to_string())];
+    lines.extend(plan.into_iter().map(Line::from));
+    lines.push(Line::default());
+    lines.push(heading(t!("ui.acp_tools_heading").to_string()));
+    lines.extend(tools.into_iter().map(Line::from));
+    // Keep the newest lines in view when the content outgrows the pane.
+    let overflow = lines.len().saturating_sub(inner.height as usize);
+    let shown: Vec<Line> = lines.into_iter().skip(overflow).collect();
+    frame.render_widget(Paragraph::new(shown).wrap(Wrap { trim: false }), inner);
+}
