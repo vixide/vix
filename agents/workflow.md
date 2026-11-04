@@ -29,7 +29,11 @@ implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
    pedantic with `-D warnings`, tests, feature combinations, headless
    examples, `cargo doc` with warnings denied, generated reference docs and
    man page current, semver, `scripts/check-docs` with CSpell, per-binary
-   licenses). It ends with `OK: … all passed`. Run all of it right before
+   licenses). It ends with `OK: … all passed`. While iterating,
+`scripts/check --tier fast` (fmt, clippy and tests of the crates changed
+since `main`) or `--tier push` is quicker, but only the default `full` tier
+counts as the landing gate; the shorter tiers end in `OK (tier …)`, never
+the full pass line. Run all of it right before
    every commit you intend to land, not a hand-picked subset: `cargo doc`,
    the reference-docs diff and `check-docs` catch things clippy and the tests
    never see.

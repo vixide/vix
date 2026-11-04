@@ -81,6 +81,11 @@ grammars are feature-gated: `--features syntax-all` for every grammar,
 clippy, tests, `cargo doc`, and the documentation checks. CI enforces the same gate on all
 three forges Vix is pushed to (GitHub, GitLab, Codeberg); when the gate changes,
 change every forge's config with it. See [`spec/ci/index.md`](spec/ci/index.md).
+`scripts/check --tier fast|push|full` (T760) picks how much to run while you
+iterate (`fast`: fmt, clippy and tests of changed crates; `push`: the whole
+workspace plus docs; `full`, the default, is the landing bar). Only the `full`
+tier proves a change is ready; the others print their own distinct `OK (tier …)`
+line, and every step reports its wall-clock time.
 
 ## Hard rules enforced by the build
 

@@ -14,6 +14,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Added
 
+- **Gate tiers (T760).** `scripts/check --tier fast|push|full` (default `full`, unchanged): `fast` runs fmt, clippy and tests of the crates changed since `main`; `push` adds the whole workspace, build, `cargo doc`, generated docs and man page, and `scripts/check-docs`; `full` adds feature combinations, headless examples, chaos smoke, semver, packaging and license checks. Every step prints its wall-clock time and a summary table closes the run; `fast` and `push` end in distinct `OK (tier …)` lines so they are never mistaken for a full pass. Spec: [`spec/local-ci`](spec/local-ci/index.md).
 <<<<<<< HEAD
 - **ACP leftovers (T635).** **AI → Resume Agent** now works after Vix restarts: the last agent command and its session id are saved per workspace in `session.toml` (`acp_agent`, `acp_session`), and the command must still be in `ai_agents`. **AI → Toggle Agent Plan Pane** (`ai.agent_plan_dock`) docks the agent's live plan and tool calls beside the editor. The agent may ask to run a command through the ACP `terminal/*` methods: each `terminal/create` opens a prompt naming the full command line and runs only on `y`, in a directory inside the workspace, as argv with no shell, with output capped (default 1 MiB) and at most 8 terminals open. Spec: [`crates/vix-acp/spec`](crates/vix-acp/spec/index.md).
 ||||||| 955ba1a6

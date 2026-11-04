@@ -9595,12 +9595,14 @@ since 2026-08-29) and costs money. Design and assessment:
 parallel with T764, then T767, T765, T766; T763 and T768 are spikes that need
 the maintainer's decisions.
 
-- [ ] **T760 — Gate tiers.** `scripts/check --tier fast|push|full` (default
+- [x] **T760 — Gate tiers.** `scripts/check --tier fast|push|full` (default
   `full`, so nothing changes for anyone who does not opt in): `fast` is fmt +
   clippy + the tests of changed crates; `push` adds build, the full test
   suite and docs; `full` adds each-feature, semver, packaging and the license
   check. Print the timing of every step so slow steps are measured, not
   guessed. Spec first in `spec/ci` and `spec/local-ci`. **Medium.**
+  Done: `fast` also scopes clippy to the changed crates; root/lock changes
+  fall back to the whole workspace; `fast`/`push` end in `OK (tier …)` lines.
 - [ ] **T761 — Signed gate attestation and `pre-push` hook.** `scripts/attest`
   runs a tier and writes a signed note under `refs/notes/vix-gate` bound to
   the tree hash; `make hooks` installs a `pre-push` hook that refuses a push

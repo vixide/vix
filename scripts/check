@@ -6,102 +6,297 @@
 # hard rule), runs the full test suite (unit + integration + doctests), builds
 # the rustdoc pages with warnings denied, and checks that the documentation
 # still matches the tree it describes.
-# Stops at the first failure. See spec/rust-cargo-fmt and spec/ci.
+# Stops at the first failure. See spec/rust-cargo-fmt, spec/ci and spec/local-ci.
+#
+# Usage: scripts/check [--tier fast|push|full]      (T760; default: full)
+#   fast  fmt + clippy + tests of the crates changed since the merge base with main
+#   push  clippy and tests on the whole workspace, plus build, doc, the generated
+#         reference docs and man page, check-docs
+#   full  push plus feature combinations, headless examples, chaos smoke,
+#         semver, packaging and license checks -- the bar a landing needs
+# Every step prints its wall-clock time and a summary table closes the run.
 set -e
 
-echo "==> cargo fmt --check"
+usage() {
+	echo "usage: scripts/check [--tier fast|push|full]" >&2
+	echo "  fast  fmt + clippy + tests of changed crates" >&2
+	echo "  push  adds build, full tests, doc, generated docs, check-docs" >&2
+	echo "  full  adds feature combinations, examples, semver, packaging, licenses (default)" >&2
+}
+
+tier=full
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--tier)
+		if [ $# -lt 2 ]; then
+			echo "scripts/check: --tier needs a value" >&2
+			usage
+			exit 2
+		fi
+		tier=$2
+		shift 2
+		;;
+	--tier=*)
+		tier=${1#--tier=}
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "scripts/check: unknown argument '$1'" >&2
+		usage
+		exit 2
+		;;
+	esac
+done
+case "$tier" in
+fast) want=1 ;;
+push) want=2 ;;
+full) want=3 ;;
+*)
+	echo "scripts/check: unknown tier '$tier'" >&2
+	usage
+	exit 2
+	;;
+esac
+
+# A step runs when its tier is at or below the chosen one.
+in_tier() {
+	case "$1" in fast) r=1 ;; push) r=2 ;; *) r=3 ;; esac
+	[ "$r" -le "$want" ]
+}
+
+# Timing: every step records "seconds<TAB>name"; the table prints at the end
+# (and on failure, so a slow failing step still shows).
+tab=$(printf '\t')
+timings=""
+step_name=""
+step_start=0
+total_start=$(date +%s)
+step_begin() {
+	step_name=$1
+	step_start=$(date +%s)
+	echo "==> $1"
+}
+step_end() {
+	elapsed=$(($(date +%s) - step_start))
+	echo "    [${step_name}: ${elapsed}s]"
+	timings="${timings}${elapsed}${tab}${step_name}
+"
+	step_name=""
+}
+print_summary() {
+	echo
+	echo "==> timing summary (tier $tier)"
+	printf '%s' "$timings" | while IFS="$tab" read -r secs name; do
+		[ -n "$name" ] && printf '  %6ss  %s\n' "$secs" "$name"
+	done
+	printf '  %6ss  total\n' "$(($(date +%s) - total_start))"
+}
+on_exit() {
+	status=$?
+	if [ "$status" -ne 0 ]; then
+		if [ -n "$step_name" ]; then
+			elapsed=$(($(date +%s) - step_start))
+			timings="${timings}${elapsed}${tab}${step_name} (FAILED)
+"
+		fi
+		print_summary
+	fi
+	exit "$status"
+}
+trap on_exit EXIT
+
+# fast tier: the workspace packages whose files changed since the merge base
+# with main (committed, staged, unstaged or untracked). Prints "ALL" when a
+# root/toolchain/lock file changed or there is no base, else " -p name" words
+# (empty when no crate changed).
+changed_crates() {
+	base=$(git merge-base HEAD main 2>/dev/null || true)
+	if [ -z "$base" ]; then
+		echo ALL
+		return
+	fi
+	files=$(
+		git diff --name-only "$base"
+		git ls-files --others --exclude-standard
+	)
+	pkgs=""
+	for f in $(printf '%s\n' "$files" | sort -u); do
+		case "$f" in
+		Cargo.toml | Cargo.lock | rust-toolchain* | clippy.toml | rustfmt.toml | .rustfmt.toml | deny.toml | .cargo/* | scripts/check)
+			echo ALL
+			return
+			;;
+		esac
+		d=$(dirname "$f")
+		while [ "$d" != "." ] && [ "$d" != "/" ] && [ ! -f "$d/Cargo.toml" ]; do
+			d=$(dirname "$d")
+		done
+		[ "$d" != "." ] || continue
+		[ -f "$d/Cargo.toml" ] || continue
+		name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$d/Cargo.toml" | head -n1)
+		[ -n "$name" ] || continue
+		case " $pkgs " in
+		*" -p $name "*) ;;
+		*) pkgs="$pkgs -p $name" ;;
+		esac
+	done
+	echo "$pkgs"
+}
+
+scope=""
+if [ "$tier" = fast ]; then
+	scope=$(changed_crates)
+	if [ "$scope" = ALL ]; then
+		echo "==> fast tier: root or toolchain file changed (or no main) -- using the whole workspace"
+		scope="--workspace"
+	elif [ -z "$scope" ]; then
+		echo "==> fast tier: no crate changed since the merge base with main"
+	else
+		echo "==> fast tier: changed crates:$scope"
+	fi
+fi
+
+step_begin "cargo fmt --check"
 cargo fmt --check
+step_end
 
-echo "==> cargo build"
-cargo build --workspace --all-targets
+if in_tier push; then
+	step_begin "cargo build"
+	cargo build --workspace --all-targets
+	step_end
+fi
 
-echo "==> cargo clippy (pedantic, -D warnings)"
-cargo clippy --workspace --all-targets -- -D warnings
+step_begin "cargo clippy (pedantic, -D warnings)"
+if in_tier push; then
+	cargo clippy --workspace --all-targets -- -D warnings
+elif [ -n "$scope" ]; then
+	# shellcheck disable=SC2086 # $scope is a word list of -p flags
+	cargo clippy $scope --all-targets -- -D warnings
+else
+	echo "    (no changed crates)"
+fi
+step_end
 
-echo "==> cargo test"
+step_begin "cargo test"
 # T604: nextest (VIX_NEXTEST=1) is parallel across binaries and isolates each
 # test in its own process -- a win on Linux CI, but on macOS every one of the
 # ~2000 process spawns is scanned by XProtect/syspolicyd and it measured ~2x
 # *slower* than `cargo test` (2117 s vs 1026 s), so it is opt-in here.
-if [ "${VIX_NEXTEST:-0}" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
-	cargo nextest run --workspace
-	cargo test --workspace --doc # nextest does not run doctests
-else
-	cargo test --workspace
-fi
-
-echo "==> feature combinations (T587)"
-cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
-cargo test -p vix-tui --no-default-features
-# Every grammar's textobjects query (T616): compile them all and run the
-# per-language fixtures, which the default grammar set would skip.
-cargo test -p vix-editor-core --features syntax-all --lib textobject
-# The opt-in `cowork` feature is in no default build: lint and test it here.
-cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
-cargo test -p vix-tui --features cowork --lib cowork
-# The opt-in `jupyter` feature likewise (T734c): its unit tests, and the App
-# against an in-process fake kernel (no Python needed).
-cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
-cargo test -p vix-tui --features jupyter --lib jupyter
-cargo test -p vix-tui --features jupyter --test jupyter
-if command -v cargo-hack >/dev/null 2>&1; then
-	cargo hack check -p vix-tui --each-feature --no-dev-deps
-else
-	echo "    (skipping each-feature check: 'cargo install cargo-hack --locked' to enable)"
-fi
-
-echo "==> run headless examples (T505)"
-cargo run --example list_commands >/dev/null
-cargo run --example headless_edit >/dev/null
-cargo run --example render_frame -- index.md >/dev/null
-cargo run --example textops_pipeline -- index.md >/dev/null
-cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
-# T575: a tiny fixed-seed smoke of the chaos monkey, so the driver cannot rot. The
-# long randomized runs are the nightly `chaos.yml` workflow, not this gate.
-cargo run --example chaos_monkey -- --seed 1 --iterations 3 --events 150 >/dev/null
-
-echo "==> cargo doc (warnings denied)"
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
-
-echo "==> generated reference docs current? (T305)"
-cargo run --example list_commands -- --write >/dev/null
-git diff --exit-code -- docs/reference/ || {
-	echo "FAIL: docs/reference/ is stale — run 'cargo run --example list_commands -- --write' and commit the result" >&2
-	exit 1
-}
-
-echo "==> man page current? (T307)"
-cargo run --example generate_man >/dev/null
-git diff --exit-code -- tui/man/ || {
-	echo "FAIL: tui/man/vix.1 is stale — run 'cargo run --example generate_man' and commit the result" >&2
-	exit 1
-}
-
-echo "==> semver (T602)"
-# Older cargo-semver-checks can't read the rustdoc JSON of a current toolchain
-# (0.47 stops at format v57, rustc 1.99 writes v61), so require 0.51 or newer.
-semver_ok=no
-if command -v cargo-semver-checks >/dev/null 2>&1; then
-	semver_v=$(cargo semver-checks --version | awk '{print $2}')
-	if [ "$(printf '%s\n0.51.0\n' "$semver_v" | sort -V | head -n1)" = "0.51.0" ]; then
-		semver_ok=yes
+if in_tier push; then
+	if [ "${VIX_NEXTEST:-0}" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
+		cargo nextest run --workspace
+		cargo test --workspace --doc # nextest does not run doctests
+	else
+		cargo test --workspace
 	fi
-fi
-if [ "$semver_ok" = yes ]; then
-	# A crate with no crates.io release yet has no baseline to compare against:
-	# add `--exclude <crate>` until its first publish.
-	cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
+elif [ -n "$scope" ]; then
+	# shellcheck disable=SC2086
+	cargo test $scope
 else
-	echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
+	echo "    (no changed crates)"
+fi
+step_end
+
+if in_tier full; then
+	step_begin "feature combinations (T587)"
+	cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
+	cargo test -p vix-tui --no-default-features
+	# Every grammar's textobjects query (T616): compile them all and run the
+	# per-language fixtures, which the default grammar set would skip.
+	cargo test -p vix-editor-core --features syntax-all --lib textobject
+	# The opt-in `cowork` feature is in no default build: lint and test it here.
+	cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+	cargo test -p vix-tui --features cowork --lib cowork
+	# The opt-in `jupyter` feature likewise (T734c): its unit tests, and the App
+	# against an in-process fake kernel (no Python needed).
+	cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
+	cargo test -p vix-tui --features jupyter --lib jupyter
+	cargo test -p vix-tui --features jupyter --test jupyter
+	if command -v cargo-hack >/dev/null 2>&1; then
+		cargo hack check -p vix-tui --each-feature --no-dev-deps
+	else
+		echo "    (skipping each-feature check: 'cargo install cargo-hack --locked' to enable)"
+	fi
+	step_end
+
+	step_begin "run headless examples (T505)"
+	cargo run --example list_commands >/dev/null
+	cargo run --example headless_edit >/dev/null
+	cargo run --example render_frame -- index.md >/dev/null
+	cargo run --example textops_pipeline -- index.md >/dev/null
+	cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
+	# T575: a tiny fixed-seed smoke of the chaos monkey, so the driver cannot rot. The
+	# long randomized runs are the nightly `chaos.yml` workflow, not this gate.
+	cargo run --example chaos_monkey -- --seed 1 --iterations 3 --events 150 >/dev/null
+	step_end
 fi
 
-echo "==> packaging templates (T742)"
-python3 "$(dirname "$0")/packaging" check
+if in_tier push; then
+	step_begin "cargo doc (warnings denied)"
+	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+	step_end
 
-echo "==> scripts/check-docs"
-python3 "$(dirname "$0")/check-docs"
+	step_begin "generated reference docs current? (T305)"
+	cargo run --example list_commands -- --write >/dev/null
+	git diff --exit-code -- docs/reference/ || {
+		echo "FAIL: docs/reference/ is stale — run 'cargo run --example list_commands -- --write' and commit the result" >&2
+		exit 1
+	}
+	step_end
 
-echo "==> per-binary licenses (T648)"
-python3 "$(dirname "$0")/check-binary-licenses"
+	step_begin "man page current? (T307)"
+	cargo run --example generate_man >/dev/null
+	git diff --exit-code -- tui/man/ || {
+		echo "FAIL: tui/man/vix.1 is stale — run 'cargo run --example generate_man' and commit the result" >&2
+		exit 1
+	}
+	step_end
+fi
 
-echo "OK: build + clippy + tests + doc + docs all passed"
+if in_tier full; then
+	step_begin "semver (T602)"
+	# Older cargo-semver-checks can't read the rustdoc JSON of a current toolchain
+	# (0.47 stops at format v57, rustc 1.99 writes v61), so require 0.51 or newer.
+	semver_ok=no
+	if command -v cargo-semver-checks >/dev/null 2>&1; then
+		semver_v=$(cargo semver-checks --version | awk '{print $2}')
+		if [ "$(printf '%s\n0.51.0\n' "$semver_v" | sort -V | head -n1)" = "0.51.0" ]; then
+			semver_ok=yes
+		fi
+	fi
+	if [ "$semver_ok" = yes ]; then
+		# A crate with no crates.io release yet has no baseline to compare against:
+		# add `--exclude <crate>` until its first publish.
+		cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
+	else
+		echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
+	fi
+	step_end
+
+	step_begin "packaging templates (T742)"
+	python3 "$(dirname "$0")/packaging" check
+	step_end
+fi
+
+if in_tier push; then
+	step_begin "scripts/check-docs"
+	python3 "$(dirname "$0")/check-docs"
+	step_end
+fi
+
+if in_tier full; then
+	step_begin "per-binary licenses (T648)"
+	python3 "$(dirname "$0")/check-binary-licenses"
+	step_end
+fi
+
+print_summary
+case "$tier" in
+full) echo "OK: build + clippy + tests + doc + docs all passed" ;;
+push) echo "OK (tier push): build + clippy + tests + doc + docs passed; feature combinations, examples, semver, packaging and licenses NOT run -- not a full pass" ;;
+*) echo "OK (tier fast): fmt + clippy + tests of changed crates passed; NOT a full pass" ;;
+esac

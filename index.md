@@ -349,7 +349,7 @@ lives in [`plan.md`](plan.md) and [`tasks.md`](tasks.md).
 ```sh
 cargo test
 cargo clippy --workspace --all-targets -- -D warnings
-scripts/check    # the full local gate that CI runs
+scripts/check    # the full local gate that CI runs (--tier fast|push for quicker iteration)
 ```
 
 Runnable examples live in [`tui/examples/`](tui/examples/) — for instance

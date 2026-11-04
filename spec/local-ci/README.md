@@ -6,8 +6,8 @@ describes how to make the **local machine the primary authority** and the
 forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
-Status: **proposed**. Nothing here changes the gate itself; it changes where
-the gate runs and who has to trust whom.
+Status: **proposed**, except tiers (T760), which are implemented. Nothing here
+weakens the gate; it changes where the gate runs and who has to trust whom.
 
 ## Why
 
@@ -38,6 +38,26 @@ Measured or observed, not assumed:
 - **Four hand-kept copies of the gate** (GitHub, GitLab, Forgejo, `Makefile`)
   drift. `spec/ci` calls this deliberate; it is also a standing maintenance
   cost.
+
+## Gate tiers (T760, implemented)
+
+`scripts/check --tier fast|push|full` runs a prefix-nested subset of the one
+gate. The default is `full`, exactly the pre-tier behavior, so nobody who does
+not opt in sees a change. An unknown tier prints usage and exits 2.
+
+| Tier | Runs | For |
+| ---- | ---- | --- |
+| `fast` | `cargo fmt --check`, clippy (pedantic, `-D warnings`) and `cargo test` on only the packages with files changed since the merge base with `main` (committed, staged, unstaged or untracked, mapped to the nearest `Cargo.toml`). If a root `Cargo.toml`, `Cargo.lock`, toolchain, lint config, `.cargo/` file or `scripts/check` changed, or there is no `main`, it uses the whole workspace; if no crate changed it skips clippy and tests. | the edit loop |
+| `push` | `fast`'s checks on the whole workspace, plus `cargo build`, the full test suite, `cargo doc`, the generated reference docs and man page, and `scripts/check-docs`. | before a push to a branch |
+| `full` | `push` plus the feature combinations (`--no-default-features`, `syntax-all`, `cowork`, `jupyter`, each-feature), the headless examples and chaos smoke, semver, packaging templates and the per-binary license check. | the landing bar |
+
+Every step prints its wall-clock time and the run ends with a summary table
+(also printed when a step fails), so slow steps are measured rather than
+guessed. The final line is distinct per tier: `full` ends with exactly
+`OK: build + clippy + tests + doc + docs all passed`; `push` and `fast` end in
+`OK (tier push): …` and `OK (tier fast): …`, which say they are not a full pass
+so they cannot be mistaken for one. A signed attestation (T761) must accept
+only `full`.
 
 ## Principles
 

@@ -8,9 +8,6 @@ gate: **the bar in [`scripts/check`](../../scripts/check)**.
 > **Proposed direction:** make the local gate the authority and the forges a
 > verifier — see [`spec/local-ci`](../local-ci/index.md).
 
-> **Proposed direction:** make the local gate the authority and the forges a
-> verifier — see [`spec/local-ci`](../local-ci/index.md).
-
 ## The gate
 
 Every forge runs, in this order:
@@ -29,6 +26,12 @@ cargo run --example list_commands -- --write && git diff --exit-code -- docs/ref
 cargo run --example generate_man && git diff --exit-code -- tui/man/          # T307: man page current?
 python3 scripts/check-docs                               # documentation integrity
 ```
+
+`scripts/check` also takes `--tier fast|push|full` (T760, see
+[`spec/local-ci`](../local-ci/index.md)); the forges and a landing always mean
+the default `full` tier, which is the list above plus the feature, semver,
+packaging and license steps. `fast` and `push` print `OK (tier …)` lines and are
+never a substitute.
 
 Nothing merges that does not pass all nine. Run `scripts/check` (or
 `make check`) locally first; CI should only ever confirm what the local gate
