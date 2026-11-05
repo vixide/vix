@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::lsp_core::file_ops::{FileOp, FileOpItem};
 use vix_fileops::dir_edit::{self, DiffError, Listed, Plan, Step};
 use vix_input::{KeyCode, KeyEvent};
 
@@ -34,6 +35,32 @@ pub(crate) struct DirEditConfirm {
     pub(crate) scroll: usize,
     /// The ordered filesystem steps to run on confirm.
     steps: Vec<Step>,
+}
+
+impl DirEditConfirm {
+    /// The file operation each step amounts to (T623), one per step in order,
+    /// with folder-ness read now (before a delete or rename changes it).
+    pub(super) fn step_ops(&self, dir: &Path) -> Vec<(FileOp, FileOpItem)> {
+        self.steps
+            .iter()
+            .map(|step| match step {
+                Step::Delete { name, is_dir } => {
+                    (FileOp::Delete, FileOpItem::single(&dir.join(name), *is_dir))
+                }
+                Step::Rename { from, to } => {
+                    let old = dir.join(from);
+                    let is_dir = old.is_dir();
+                    (
+                        FileOp::Rename,
+                        FileOpItem::renamed(&old, &dir.join(to), is_dir),
+                    )
+                }
+                Step::Create { name, is_dir } => {
+                    (FileOp::Create, FileOpItem::single(&dir.join(name), *is_dir))
+                }
+            })
+            .collect()
+    }
 }
 
 impl App {
@@ -207,6 +234,22 @@ impl App {
         let Some(dir) = self.dir_edit.as_ref().map(|s| s.dir.clone()) else {
             return;
         };
+        // T623: servers may want to rewrite references before the renames,
+        // creates and deletes happen.
+        let groups = super::lsp_file_ops::group_ops(confirm.step_ops(&dir));
+        if self.ask_servers_before(&groups) {
+            self.hold_file_op(super::lsp_file_ops::FileOpCont::DirEdit(confirm));
+            return;
+        }
+        self.apply_dir_edit_plan(&confirm);
+    }
+
+    /// Run the steps of `confirm` now and tell language servers what was done.
+    pub(super) fn apply_dir_edit_plan(&mut self, confirm: &DirEditConfirm) {
+        let Some(dir) = self.dir_edit.as_ref().map(|s| s.dir.clone()) else {
+            return;
+        };
+        let ops = confirm.step_ops(&dir);
         let auth = crate::authority::current();
         let canon_dir = auth.canonicalize(&dir).unwrap_or_else(|_| dir.clone());
         let mut done = 0usize;
@@ -219,6 +262,8 @@ impl App {
             done += 1;
         }
         let complete = done == confirm.steps.len();
+        let applied = super::lsp_file_ops::group_ops(ops.into_iter().take(done));
+        self.announce_file_ops(&applied);
         self.explorer.rebuild();
         self.open_dir_edit_refresh(&dir);
         self.status = if complete {

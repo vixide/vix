@@ -56,7 +56,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
 | Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). A server that offers `diagnosticProvider` is also asked per document (`textDocument/diagnostic`, T619, § Pull diagnostics), so a pull-only server (such as Roslyn) underlines too. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
-| Document colors and links | automatic; `lsp.open_link`, Ctrl+click | `textDocument/documentColor` swatches and `textDocument/documentLink` links (T621, § Document colors and links). |
+| Document colors and links | automatic; `lsp.open_link`, Ctrl+click, `lsp.edit_color` | `textDocument/documentColor` swatches, `textDocument/documentLink` links and `textDocument/colorPresentation` color rewriting (T621, § Document colors and links). |
 | Progress | automatic | `$/progress` work-done reports (T123d, T732) are tracked per server and token: `begin` adds a task, `report` updates its message/percentage, `end` removes it. While any task is in flight the status bar shows the newest one (`Lsp::progress_line`, e.g. `"rust: Indexing: 3/10 crates (30%) +1"`) and clears it on `end`; `LspEvent::Progress` is still emitted for `begin`/`report`. |
 | LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
@@ -347,33 +347,70 @@ silent.
   the system opener (`open`, `xdg-open` or `cmd /c start`); any other scheme
   is refused with a message. A link with no `target` is dropped
   (`documentLink/resolve` is not used).
-- **Not done.** `textDocument/colorPresentation`, to write a color picked in
-  the color picker back into the buffer in the server's notation, is left
-  open.
+- **Editing a color.** `lsp.edit_color` (Tools → Language Server → Edit
+  Color…) sends `textDocument/colorPresentation` for the color under the cursor
+  (or the only color on its line) with the server's own unrounded red, green,
+  blue and alpha, and the color's range. The reply opens the shared pick-one
+  list (`ChoicePurpose::ColorPresentation`), one row per presentation label.
+  Enter applies the row: its `textEdit`, or, when it has none, its label over
+  the color's range, plus its `additionalTextEdits`, in one step through the
+  same document-tied edit path as formatting, so a buffer edited since the
+  request was sent drops the edit instead of corrupting text. No color at the
+  cursor, no server that offers `colorProvider`, or an empty reply each say so
+  in the status line. A server error is shown like any other request failure.
+  Sending a color chosen in `vix-x11-color-picker` through this request is not
+  done: the list shows the server's own formats of the color already there.
 - **Protocol.** The client declares `textDocument.colorProvider` and
   `textDocument.documentLink`. Pure parsing lives in
   `vix_lsp_core::document_extras` (`parse_colors`, `parse_links`,
-  `target_kind`); the requests are `Lsp::refresh_document_extras`, with
-  replies as `LspEvent::DocumentColors` and `LspEvent::DocumentLinks`. The
+  `parse_color_presentations`, `color_presentation_params`, `target_kind`);
+  the requests are `Lsp::refresh_document_extras` and
+  `Lsp::request_color_presentation`, with replies as `LspEvent::DocumentColors`,
+  `LspEvent::DocumentLinks` and `LspEvent::ColorPresentations`. The
   host is `tui/src/app/doc_links.rs`; `tui/tests/lsp_smoke.rs` drives a mock
   server end to end.
 
-## File renames and watched files (T623)
+## File operations and watched files (T623)
+
+Servers say which file operations they want in `initialize`
+(`capabilities.workspace.fileOperations.{will,did}{Create,Rename,Delete}`,
+each with optional glob filters whose `matches` is `file` or `folder`), and
+which files they watch in `client/registerCapability`
+(`workspace/didChangeWatchedFiles`). Both are honored per server; a server that
+named nothing is sent nothing.
 
 | Event | What Vix does |
 |---|---|
-| File → Rename (`file.rename`) of a file a server wants (`capabilities.workspace.fileOperations.willRename`, glob-filtered) | sends `workspace/willRenameFiles` and holds the rename; each server's returned `WorkspaceEdit` (import updates) is applied through the usual workspace-edit path ([`LspEvent::WillRenameFiles`]); once every asked server has answered, or 3 seconds pass, the file is renamed. A server error or empty reply never blocks the rename. |
-| the rename succeeds | the old document is closed on the servers and the tab reopens under its new path; servers with `didRename` filters that match get `workspace/didRenameFiles` |
+| File → Rename (`file.rename`), an explorer cut-and-paste (move) of a file or folder, or a rename in the directory editor (`explorer.edit_directory`), of a path a server wants (`willRename`, file or folder per the filter) | sends `workspace/willRenameFiles` (only the matching paths, one request per server) and holds the operation; each server's returned `WorkspaceEdit` (import updates) is applied through the usual workspace-edit path ([`LspEvent::WillFileOperations`]); once every asked server has answered, or 3 seconds pass, the operation runs. A server error or empty reply never blocks it. |
+| the directory editor creates a file or folder | the same hold with `workspace/willCreateFiles` |
+| an explorer delete or trash, or a directory-editor delete, of a file or folder | the same hold with `workspace/willDeleteFiles`; whether each path is a folder is read before it goes away |
+| any of these succeeded (and an explorer copy-and-paste, which creates) | servers whose `did*` filters match get `workspace/didRenameFiles`, `didCreateFiles` or `didDeleteFiles` (a move or copy per path; a directory-editor plan per operation, only for the steps that succeeded). A renamed open file is closed on the servers and its tab reopens under the new path. |
 | `client/registerCapability` for `workspace/didChangeWatchedFiles` | the watchers (glob, optional `WatchKind`) are kept per registration id; `client/unregisterCapability` drops them. Other dynamic registrations are acknowledged and ignored. |
-| a file changes on disk | the existing once-a-second external-change poll forwards `workspace/didChangeWatchedFiles` to servers whose watchers match: open files whose mtime moved, plus the workspace-root manifests `Cargo.toml`, `Cargo.lock`, `package.json`, `tsconfig.json`, `pyproject.toml`, `go.mod`, `go.sum` and `deno.json` (created, changed or deleted), whether or not they are open. A rename is also sent as a delete and a create. A server that registered no watchers is sent nothing. |
+| a file changes on disk | the existing once-a-second external-change poll forwards `workspace/didChangeWatchedFiles` to servers whose watchers match: open files whose mtime moved, plus the workspace-root manifests `Cargo.toml`, `Cargo.lock`, `package.json`, `tsconfig.json`, `pyproject.toml`, `go.mod`, `go.sum` and `deno.json` (created, changed or deleted), whether or not they are open. A server that registered no watchers is sent nothing. |
+| a watcher glob names files nobody has open | **recursive watching.** While some server has watchers, every 3 seconds Vix walks the workspace folders for files a watcher glob covers (`vix_lsp_core::file_ops::scan_watched`: at most 10 000 directory entries, 16 levels deep, no symlinks, skipping `.git`, `.hg`, `.svn`, `target` and `node_modules`, remembering mtime and length of covered files only) and forwards the created, changed and deleted ones. The first scan only records the baseline; a walk cut short by its budget reports no deletions. Changes Vix made itself and already announced (file creates, deletes and renames through the operations above) are not reported again. There is no OS watcher (`notify` is not a dependency), so this is a poll with that latency. |
 
-Limits: only the file rename Vix itself performs is announced (not creates or
-deletes, `willCreateFiles`/`willDeleteFiles`); directory renames from the
-explorer are not wired; there is no recursive watcher, so a watcher glob for
-other files only fires for open files and the manifests above. Pattern
-`RelativePattern` bases are ignored (the glob is matched against absolute and
-workspace-relative paths). `tui/tests/lsp_file_ops.rs` drives a mock server end
-to end.
+Notes and limits:
+
+- Only one operation is held at a time; one started while another waits goes
+  ahead without waiting. Everything the host does on a held operation (the
+  paste, the delete, the directory-editor plan) is parked and resumed, so
+  nothing is half done while servers answer.
+- Operations Vix does not perform through these paths are not announced:
+  creating a file by saving an untitled buffer (Save As), the nested files
+  inside a copied or moved folder (the folder itself is announced, once, with
+  `matches: "folder"`), and anything done by the integrated terminal or an
+  external program (the scan reports those to watchers, not as file
+  operations).
+- A folder operation produces no `didChangeWatchedFiles` of its own (the
+  watchers here are file globs); the files below it appear, deleted or
+  created, in the next scan.
+- Pattern `RelativePattern` bases are ignored (the glob is matched against
+  absolute and workspace-relative paths).
+- Tests: `tui/tests/lsp_file_ops.rs` (protocol and scan, mock server over local
+  pipes) and `tui/tests/integration/lsp_file_ops.rs` (explorer delete, move and
+  copy through a real `App`); the mock is
+  `tui/tests/fixtures/mock_lsp_file_ops.py`. The host is
+  `tui/src/app/lsp_file_ops.rs`.
 
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 

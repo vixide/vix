@@ -957,42 +957,6 @@ impl App {
         self.status = t!("status.renamed_in", n = files).to_string();
     }
 
-    /// How long a file rename waits for language servers' `willRenameFiles`
-    /// answers before renaming anyway (T623).
-    const RENAME_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
-
-    /// A server answered `willRenameFiles` (T623): apply its edits, and once
-    /// every server has answered, do the rename that was waiting.
-    pub(super) fn on_will_rename_reply(&mut self, edits: &[crate::lsp::FileEdits], last: bool) {
-        if self.pending_rename.is_none() {
-            return;
-        }
-        if !edits.is_empty() {
-            self.apply_workspace_edit(edits);
-        }
-        if last {
-            self.run_pending_rename();
-        }
-    }
-
-    /// Rename anyway when servers have not answered within [`Self::RENAME_WAIT`].
-    pub(super) fn expire_pending_rename(&mut self) {
-        if self
-            .pending_rename
-            .as_ref()
-            .is_some_and(|(_, _, since)| since.elapsed() >= Self::RENAME_WAIT)
-        {
-            self.run_pending_rename();
-        }
-    }
-
-    /// Carry out the rename that was waiting on language servers.
-    fn run_pending_rename(&mut self) {
-        if let Some((old, new, _)) = self.pending_rename.take() {
-            self.finish_rename(&old, &new);
-        }
-    }
-
     /// Tell language servers about workspace manifests and open files that
     /// changed on disk (T623, `workspace/didChangeWatchedFiles`). `changed`
     /// holds open files whose mtime moved; manifests are stat'ed here whether
@@ -1013,6 +977,7 @@ impl App {
             "deno.json",
         ];
         if !self.lsp.watches_files() {
+            self.reset_watch_scan();
             return;
         }
         let mut events: Vec<(PathBuf, crate::lsp_core::file_ops::FileChangeType)> = changed
@@ -1036,6 +1001,8 @@ impl App {
                 events.push((path, kind));
             }
         }
+        // Registered glob watchers see files nobody has open, too (bounded scan).
+        self.scan_watched_files(&mut events);
         if !events.is_empty() {
             self.lsp.did_change_watched_files(&events);
         }

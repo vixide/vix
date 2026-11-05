@@ -33,7 +33,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
-use vix_lsp_core::file_ops::{self, FileChangeType};
+use vix_lsp_core::file_ops::{self, FileChangeType, FileOp, FileOpItem};
 use vix_lsp_core::sync::{self, SyncKind};
 use vix_lsp_core::{Diagnostic, Encoding, Range, frame, message};
 use vix_settings::LspServer as ServerConfig;
@@ -88,6 +88,9 @@ enum Pending {
     DocumentColor,
     /// `textDocument/documentLink` (T621): silent on error, routed by path.
     DocumentLink,
+    /// `textDocument/colorPresentation` (T621): user-initiated, so an error is
+    /// surfaced; routed by path and dropped once the document moved on.
+    ColorPresentation,
     /// `textDocument/prepareCallHierarchy` (T620).
     PrepareCallHierarchy,
     /// `callHierarchy/incomingCalls` (T620).
@@ -102,9 +105,9 @@ enum Pending {
     Subtypes,
     /// `textDocument/prepareRename`; a `null` result is a meaningful "cannot rename here" answer.
     PrepareRename,
-    /// `workspace/willRenameFiles` (T623): always answered with a
-    /// [`LspEvent::WillRenameFiles`], even on error or an empty reply.
-    WillRenameFiles,
+    /// `workspace/will{Create,Rename,Delete}Files` (T623): always answered with
+    /// a [`LspEvent::WillFileOperations`], even on error or an empty reply.
+    WillFileOperations,
     /// `workspace/diagnostic` (T619): ambient, silent on error.
     WorkspaceDiagnostics,
     /// `textDocument/diagnostic` (T619): silent on error, routed by its target.
@@ -211,10 +214,11 @@ pub enum LspEvent {
     SignatureHelp(String),
     /// A rename response: per-file edits to apply.
     WorkspaceEdit(Vec<FileEdits>),
-    /// One server's answer to `workspace/willRenameFiles` (T623): the edits
-    /// (e.g. import updates) to apply before the rename, empty when it had
-    /// none or failed. `last` is true once no other server is still owed.
-    WillRenameFiles {
+    /// One server's answer to a `workspace/will{Create,Rename,Delete}Files`
+    /// request (T623): the edits (e.g. import updates) to apply before the
+    /// file operation, empty when it had none or failed. `last` is true once
+    /// no other server is still owed.
+    WillFileOperations {
         /// Per-file edits to apply before touching the file system.
         edits: Vec<FileEdits>,
         /// Whether every server asked has now answered.
@@ -289,6 +293,16 @@ pub enum LspEvent {
         path: PathBuf,
         /// The links, in server order.
         links: Vec<vix_lsp_core::document_extras::DocLink>,
+    },
+    /// A `textDocument/colorPresentation` reply for `path` (T621): the ways the
+    /// server offers to write the color that was asked about; empty means
+    /// "none". Only a reply for the document version the server still holds is
+    /// delivered.
+    ColorPresentations {
+        /// The file the color is in, as the host passed it in.
+        path: PathBuf,
+        /// The presentations, in server order.
+        presentations: Vec<vix_lsp_core::document_extras::ColorPresentation>,
     },
     /// The server asked the client to re-request every code lens
     /// (`workspace/codeLens/refresh`, T726).
@@ -546,11 +560,9 @@ struct Server {
     /// Per document, the `resultId` of its last pull-diagnostic report
     /// (T619), sent back as `previousResultId`.
     diagnostic_result_ids: HashMap<String, String>,
-    /// Which renames it wants `willRenameFiles` for (T623); `None` when it
-    /// does not offer the operation.
-    will_rename: Option<file_ops::FileOpFilters>,
-    /// Which renames it wants `didRenameFiles` for (T623).
-    did_rename: Option<file_ops::FileOpFilters>,
+    /// Which file creations, renames and deletions it wants to hear about,
+    /// before (`will*`) or after (`did*`) they happen (T623).
+    file_ops: file_ops::FileOpCaps,
     /// File watchers it registered dynamically (T623), by registration id.
     watchers: HashMap<String, Vec<file_ops::Watcher>>,
     /// Whether `initialize` has completed and `initialized` been sent.
@@ -636,7 +648,7 @@ pub struct Lsp {
     /// Debounced pull-diagnostic requests (T619): `(language, uri)` and when
     /// the pull is due, sent by [`Lsp::poll`].
     pull_due: HashMap<(String, String), Instant>,
-    /// How many servers still owe a `willRenameFiles` reply (T623).
+    /// How many `will*Files` replies are still owed (T623).
     rename_waiting: usize,
 }
 
@@ -1384,6 +1396,47 @@ impl Lsp {
         sent
     }
 
+    /// Ask the first server handling `path` that offers `colorProvider` for the
+    /// ways to write `color` (T621, `textDocument/colorPresentation`); the
+    /// reply arrives as [`LspEvent::ColorPresentations`]. Returns whether a
+    /// request was sent (no server, document not open, or no such capability:
+    /// `false`).
+    pub fn request_color_presentation(
+        &mut self,
+        path: &Path,
+        color: &vix_lsp_core::document_extras::DocColor,
+    ) -> bool {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            if !server.ready || !server.capabilities.iter().any(|n| n == "color") {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::ColorPresentation);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            server.send(message::request(
+                id,
+                "textDocument/colorPresentation",
+                &vix_lsp_core::document_extras::color_presentation_params(&uri, color),
+            ));
+            return true;
+        }
+        false
+    }
+
     /// Whether a server handling `path` resolves code lenses lazily
     /// (`codeLens/resolve`, T726).
     #[must_use]
@@ -1595,27 +1648,38 @@ impl Lsp {
         );
     }
 
-    /// Ask every running server that wants it for the edits a rename of
-    /// `old` to `new` implies (T623, `workspace/willRenameFiles`). Returns
-    /// whether any request was sent; if so, one [`LspEvent::WillRenameFiles`]
-    /// per server follows, the last carrying `last: true`. The host applies
-    /// the edits and only then renames, then calls [`Lsp::did_rename_files`].
-    pub fn will_rename_files(&mut self, old: &Path, new: &Path) -> bool {
-        self.rename_waiting = 0;
-        let is_dir = old.is_dir();
-        let params = file_ops::rename_files_params(&path_to_uri(old), &path_to_uri(new));
+    /// The `files` of a file-operation message for `items`, as URIs.
+    fn file_op_files(items: &[&FileOpItem]) -> Vec<(String, Option<String>)> {
+        items
+            .iter()
+            .map(|i| (path_to_uri(&i.path), i.new_path.as_deref().map(path_to_uri)))
+            .collect()
+    }
+
+    /// Ask every running server that wants it for the edits the file
+    /// operations in `groups` imply (T623, `workspace/willCreateFiles`,
+    /// `willRenameFiles`, `willDeleteFiles`). Each server is sent, per
+    /// operation, only the items its registered filters match (files and
+    /// folders alike). Returns whether any request was sent; if so, one
+    /// [`LspEvent::WillFileOperations`] per request follows, the last carrying
+    /// `last: true`. The host applies the edits and only then performs the
+    /// operations, then calls [`Lsp::did_file_operations`].
+    pub fn will_file_operations(&mut self, groups: &[(FileOp, Vec<FileOpItem>)]) -> bool {
         let roots = self.folders.clone();
         let mut sent = 0;
-        for server in self.servers.values_mut() {
-            let wanted = server.ready
-                && server
-                    .will_rename
-                    .as_ref()
-                    .is_some_and(|f| f.matches(old, is_dir, &roots));
-            if wanted {
+        for (op, items) in groups {
+            for server in self.servers.values_mut() {
+                if !server.ready {
+                    continue;
+                }
+                let wanted = server.file_ops.wanted(*op, true, items, &roots);
+                if wanted.is_empty() {
+                    continue;
+                }
+                let params = file_ops::file_operation_params(&Self::file_op_files(&wanted));
                 let id = server.alloc_id();
-                server.pending.insert(id, Pending::WillRenameFiles);
-                server.send(message::request(id, "workspace/willRenameFiles", &params));
+                server.pending.insert(id, Pending::WillFileOperations);
+                server.send(message::request(id, op.will_method(), &params));
                 sent += 1;
             }
         }
@@ -1623,27 +1687,77 @@ impl Lsp {
         sent > 0
     }
 
-    /// Tell every server that wants it a rename happened (T623,
-    /// `workspace/didRenameFiles`). A rename also counts as a watched-file
-    /// delete and create for servers that registered watchers.
-    pub fn did_rename_files(&mut self, old: &Path, new: &Path) {
-        let is_dir = new.is_dir();
-        let params = file_ops::rename_files_params(&path_to_uri(old), &path_to_uri(new));
+    /// Tell every server that wants it the file operations in `groups`
+    /// happened (T623, `workspace/didCreateFiles`, `didRenameFiles`,
+    /// `didDeleteFiles`), filtered like [`Lsp::will_file_operations`]. Each
+    /// file also counts as a watched-file create, delete (or both, for a
+    /// rename) for servers that registered watchers. Returns those file
+    /// changes, so the host can tell its own later directory scan not to report
+    /// them again.
+    pub fn did_file_operations(
+        &mut self,
+        groups: &[(FileOp, Vec<FileOpItem>)],
+    ) -> Vec<(PathBuf, FileChangeType)> {
         let roots = self.folders.clone();
-        for server in self.servers.values_mut() {
-            let wanted = server.ready
-                && server
-                    .did_rename
-                    .as_ref()
-                    .is_some_and(|f| f.matches(new, is_dir, &roots));
-            if wanted {
-                server.send(message::notification("workspace/didRenameFiles", &params));
+        let mut changes = Vec::new();
+        for (op, items) in groups {
+            for server in self.servers.values_mut() {
+                if !server.ready {
+                    continue;
+                }
+                let wanted = server.file_ops.wanted(*op, false, items, &roots);
+                if !wanted.is_empty() {
+                    let params = file_ops::file_operation_params(&Self::file_op_files(&wanted));
+                    server.send(message::notification(op.did_method(), &params));
+                }
+            }
+            for item in items.iter().filter(|i| !i.is_dir) {
+                match (op, &item.new_path) {
+                    (FileOp::Create, _) => {
+                        changes.push((item.path.clone(), FileChangeType::Created));
+                    }
+                    (FileOp::Delete, _) => {
+                        changes.push((item.path.clone(), FileChangeType::Deleted));
+                    }
+                    (FileOp::Rename, new) => {
+                        changes.push((item.path.clone(), FileChangeType::Deleted));
+                        if let Some(new) = new {
+                            changes.push((new.clone(), FileChangeType::Created));
+                        }
+                    }
+                }
             }
         }
-        self.did_change_watched_files(&[
-            (old.to_path_buf(), FileChangeType::Deleted),
-            (new.to_path_buf(), FileChangeType::Created),
-        ]);
+        self.did_change_watched_files(&changes);
+        changes
+    }
+
+    /// [`Lsp::will_file_operations`] for one rename of `old` to `new`.
+    pub fn will_rename_files(&mut self, old: &Path, new: &Path) -> bool {
+        let item = FileOpItem::renamed(old, new, old.is_dir());
+        self.will_file_operations(&[(FileOp::Rename, vec![item])])
+    }
+
+    /// [`Lsp::did_file_operations`] for one rename of `old` to `new`.
+    pub fn did_rename_files(&mut self, old: &Path, new: &Path) {
+        let item = FileOpItem::renamed(old, new, new.is_dir());
+        self.did_file_operations(&[(FileOp::Rename, vec![item])]);
+    }
+
+    /// Whether any running server's registered file watchers cover `path`
+    /// (T623), so a directory scan knows which files are worth remembering.
+    #[must_use]
+    pub fn watch_covers(&self, path: &Path) -> bool {
+        self.servers
+            .values()
+            .flat_map(|s| s.watchers.values().flatten())
+            .any(|w| w.covers(path, &self.folders))
+    }
+
+    /// The workspace folders a recursive watcher scan walks (T623).
+    #[must_use]
+    pub fn watch_roots(&self) -> Vec<PathBuf> {
+        self.folders.clone()
     }
 
     /// Forward file changes to every server whose registered watchers
@@ -2139,7 +2253,7 @@ impl Lsp {
             events.push(LspEvent::RenamePrepared(outcome));
             return;
         }
-        if matches!(kind, Pending::WillRenameFiles) {
+        if matches!(kind, Pending::WillFileOperations) {
             let edits = message::parse_workspace_edit(result)
                 .into_iter()
                 .map(|(uri, e)| (uri_to_path(&uri), e))
@@ -2198,6 +2312,7 @@ impl Lsp {
                 | Pending::InlineCompletion
                 | Pending::DocumentColor
                 | Pending::DocumentLink
+                | Pending::ColorPresentation
         ) {
             if let Some((target, true)) = target {
                 Self::lens_reply(kind, target.path, result, events);
@@ -2249,8 +2364,8 @@ impl Lsp {
             events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
             return;
         }
-        // T623: a failed `willRenameFiles` must not block the rename itself.
-        if matches!(kind, Pending::WillRenameFiles) {
+        // T623: a failed `will*Files` must not block the file operation itself.
+        if matches!(kind, Pending::WillFileOperations) {
             self.finish_will_rename(Vec::new(), events);
             return;
         }
@@ -2330,6 +2445,14 @@ impl Lsp {
         if matches!(kind, Pending::DocumentColor) {
             let colors = vix_lsp_core::document_extras::parse_colors(result);
             events.push(LspEvent::DocumentColors { path, colors });
+            return;
+        }
+        if matches!(kind, Pending::ColorPresentation) {
+            let presentations = vix_lsp_core::document_extras::parse_color_presentations(result);
+            events.push(LspEvent::ColorPresentations {
+                path,
+                presentations,
+            });
             return;
         }
         if matches!(kind, Pending::DocumentLink) {
@@ -2541,8 +2664,7 @@ impl Lsp {
             server.execute_commands = message::parse_execute_commands(result);
             server.diagnostic_provider = message::parse_diagnostic_provider(result);
             server.capabilities = message::parse_capability_names(result);
-            server.will_rename = file_ops::parse_file_operation(result, "willRename");
-            server.did_rename = file_ops::parse_file_operation(result, "didRename");
+            server.file_ops = file_ops::FileOpCaps::from_initialize(result);
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -2557,10 +2679,10 @@ impl Lsp {
         }
     }
 
-    /// Record one `willRenameFiles` answer and say whether it was the last.
+    /// Record one `will*Files` answer and say whether it was the last.
     fn finish_will_rename(&mut self, edits: Vec<FileEdits>, events: &mut Vec<LspEvent>) {
         self.rename_waiting = self.rename_waiting.saturating_sub(1);
-        events.push(LspEvent::WillRenameFiles {
+        events.push(LspEvent::WillFileOperations {
             edits,
             last: self.rename_waiting == 0,
         });
@@ -2816,8 +2938,7 @@ fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> O
         execute_commands: Vec::new(),
         diagnostic_provider: false,
         diagnostic_result_ids: HashMap::new(),
-        will_rename: None,
-        did_rename: None,
+        file_ops: file_ops::FileOpCaps::default(),
         watchers: HashMap::new(),
         ready: false,
         queue: Vec::new(),

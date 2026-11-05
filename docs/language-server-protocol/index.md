@@ -50,6 +50,8 @@ Most actions live under **Tools → Language Server** and the command palette
 | **Code folding** | Fold/unfold ranges the server reports (▾/▸ in the gutter; **View → Editor**). | `foldingRange` |
 | **Inlay hints** | Inline type/parameter annotations (toggle in **View → Editor**). | `inlayHint` |
 | **Linked editing** | Edit linked ranges (e.g. an open/close tag pair) together. | `linkedEditingRange` |
+| **Colors and links** | Colors the server finds get a `■` swatch; **Edit Color…** (`lsp.edit_color`) lists the formats the server can write the color under the cursor in and applies the one you pick. **Open Link** (or Ctrl/Cmd+click) opens a link. | `documentColor`, `colorPresentation`, `documentLink` |
+| **File changes** | Renaming (**File → Rename**), moving, copying, creating or deleting files and folders in the explorer or the directory editor first asks servers that want it for edits such as import updates (waiting at most 3 seconds), applies them, then tells the server. Servers that register file watchers are also told about outside changes to matching files anywhere in the workspace (a bounded scan every few seconds). | `willRenameFiles`, `didRenameFiles`, `willCreateFiles`, `didCreateFiles`, `willDeleteFiles`, `didDeleteFiles`, `didChangeWatchedFiles` |
 
 Lifecycle (`initialize`/`initialized`/`shutdown`/`exit`) and document sync
 (`didOpen`/`didChange`/`didClose`/`didSave`) are handled automatically. A server

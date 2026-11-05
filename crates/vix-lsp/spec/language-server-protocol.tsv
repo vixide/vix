@@ -26,7 +26,11 @@ textDocument/rename	Rename symbol across files via workspace edits
 textDocument/selectionRange	Smart expand/shrink selection
 textDocument/signatureHelp	Parameter hints on ( and ,
 textDocument/typeDefinition	Jump to type definition
-workspace/didChangeWatchedFiles	Outside edits to open files and workspace manifests, for servers that registered watchers
-workspace/didRenameFiles	Told after File > Rename succeeds
+workspace/didChangeWatchedFiles	Outside edits to open files, workspace manifests and (bounded recursive scan) any file a registered glob watcher covers
+workspace/didCreateFiles	Told after a file or folder is created or copied in the explorer or the directory editor (server filters honored)
+workspace/didDeleteFiles	Told after the explorer or directory editor deletes a file or folder (server filters honored)
+workspace/didRenameFiles	Told after a rename or explorer move succeeds, folders included (server filters honored)
 workspace/symbol	Search symbols across the project
-workspace/willRenameFiles	Import updates applied before File > Rename moves the file
+workspace/willCreateFiles	Edits applied before the directory editor creates a file or folder
+workspace/willDeleteFiles	Edits applied before the explorer or directory editor deletes a file or folder
+workspace/willRenameFiles	Import updates applied before File > Rename, an explorer move or a directory-editor rename

@@ -1520,6 +1520,16 @@ while True:
     elif method == 'textDocument/documentColor':
         send({'jsonrpc':'2.0','id':mid,'result':[
             {'range':rng(0,7,14),'color':{'red':1.0,'green':0.0,'blue':0.0,'alpha':1.0}}]})
+    elif method == 'textDocument/colorPresentation':
+        p = msg['params']
+        log('color %.2f %.2f %.2f %d:%d-%d' % (p['color']['red'], p['color']['green'],
+            p['color']['blue'], p['range']['start']['line'],
+            p['range']['start']['character'], p['range']['end']['character']))
+        send({'jsonrpc':'2.0','id':mid,'result':[
+            {'label':'#ff0000'},
+            {'label':'rgb(255, 0, 0)',
+             'textEdit':{'range':rng(0,7,14),'newText':'rgb(255, 0, 0)'},
+             'additionalTextEdits':[{'range':rng(2,0,0),'newText':'X'}]}]})
     elif method == 'textDocument/documentLink':
         send({'jsonrpc':'2.0','id':mid,'result':[
             {'range':rng(1,4,8),'target':'file://' + ROOT + '/b.rs#L2'},
@@ -1629,6 +1639,85 @@ fn document_colors_and_links_are_drawn_and_opened_in_a_live_app() {
     }
     assert_eq!(active_file(&app).as_deref(), Some(target.as_path()));
     assert_eq!(app.editor.cursor_1based().0, 2, "jumped to #L2");
+
+    app.lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// T621: `lsp.edit_color` sends `textDocument/colorPresentation` with the
+/// color's own floats and range, lists the presentations, and applies the
+/// picked one's `textEdit` and `additionalTextEdits`.
+#[test]
+fn edit_color_applies_the_picked_color_presentation() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-colpres-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_DOC_EXTRAS).unwrap();
+    let log = root.join("requests.log");
+    let file = root.join("a.rs");
+    std::fs::write(&file, "color: #ff0000\nsee link here\nrun me now\n").unwrap();
+
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            log.to_string_lossy().into_owned(),
+            root.to_string_lossy().into_owned(),
+        ],
+    });
+    let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+    app.open_initial(&file);
+
+    let log_text = || std::fs::read_to_string(&log).unwrap_or_default();
+    let swatches = |app: &App| {
+        app.editor.active_tab().map_or(0, |t| {
+            t.editor
+                .eol_texts(vix::editor_core::virtual_text::VirtualTextLayer::ColorSwatches)
+                .len()
+        })
+    };
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && swatches(&app) != 1 {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(swatches(&app), 1, "the color was found first");
+
+    // On a line with no color there is nothing to ask.
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.run_action("lsp.edit_color");
+    assert!(!log_text().contains("colorPresentation"), "{}", app.status);
+    app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+
+    app.run_action("lsp.edit_color");
+    while Instant::now() < deadline && !log_text().contains("color 1.00 0.00 0.00 0:7-14") {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        log_text().contains("color 1.00 0.00 0.00 0:7-14"),
+        "{}",
+        log_text()
+    );
+    for _ in 0..10 {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Second row: its own textEdit plus an additional edit on line 2.
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let text = app.editor.active_tab().unwrap().editor.get_content();
+    assert_eq!(text, "color: rgb(255, 0, 0)\nsee link here\nXrun me now\n");
 
     app.lsp.shutdown();
     let _ = std::fs::remove_dir_all(&root);

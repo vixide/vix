@@ -1602,6 +1602,7 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.code_lens", "lsp.code_lens", ""),
     Item::leaf("menu.item.lsp.code_lens_run", "lsp.code_lens_run", ""),
     Item::leaf("menu.item.lsp.open_link", "lsp.open_link", ""),
+    Item::leaf("menu.item.lsp.edit_color", "lsp.edit_color", ""),
     SEP,
     Item::leaf("menu.item.lsp.highlight", "lsp.highlight", ""),
     SEP,

@@ -36,6 +36,9 @@ pub(crate) struct DocExtras {
     seen_rev: Option<u64>,
     /// Retries spent on an unsendable request.
     retries: u8,
+    /// Where the color whose `colorPresentation` is in flight is written
+    /// (T621), so the reply's edits can default to replacing it.
+    pending_color: Option<crate::lsp_core::Range>,
 }
 
 impl DocExtras {
@@ -91,9 +94,107 @@ impl App {
     pub(super) fn run_doc_link_action(&mut self, action: &str) -> bool {
         match action {
             "lsp.open_link" => self.open_link_at_cursor(),
+            "lsp.edit_color" => self.edit_color_at_cursor(),
             _ => return false,
         }
         true
+    }
+
+    /// The color of the active file covering char offset `offset`, or, when
+    /// none does, the only color on `line`.
+    fn color_at(&self, offset: usize, line: usize) -> Option<DocColor> {
+        let path = self.active_path()?;
+        let st = self.doc_extras.get(&path)?;
+        let enc = self.lsp.encoding_for(&path);
+        let code = self.editor.active_tab()?.editor.code_ref();
+        let covering = st.colors.iter().find(|c| {
+            let s = super::lsp_pos_to_char(code, c.range.start.line, c.range.start.character, enc);
+            let e = super::lsp_pos_to_char(code, c.range.end.line, c.range.end.character, enc);
+            (s..e).contains(&offset)
+        });
+        if let Some(c) = covering {
+            return Some(*c);
+        }
+        let mut on_line = st
+            .colors
+            .iter()
+            .filter(|c| c.range.start.line as usize == line);
+        let first = on_line.next()?;
+        on_line.next().is_none().then_some(*first)
+    }
+
+    /// `lsp.edit_color`: ask the server how it can write the color under the
+    /// cursor (or the only one on its line); the answer opens a chooser.
+    fn edit_color_at_cursor(&mut self) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        };
+        let Some((offset, line)) = self
+            .editor
+            .active_tab()
+            .map(|t| (t.editor.get_cursor(), t.editor.cursor_line()))
+        else {
+            return;
+        };
+        let Some(color) = self.color_at(offset, line) else {
+            self.status = t!("status.color_none").to_string();
+            return;
+        };
+        if !self.lsp.handles(&path) || !self.lsp.request_color_presentation(&path, &color) {
+            self.status = t!("status.color_unsupported").to_string();
+            return;
+        }
+        if let Some(st) = self.doc_extras.get_mut(&path) {
+            st.pending_color = Some(color.range);
+        }
+        self.status = t!("status.color_asking").to_string();
+    }
+
+    /// A `colorPresentation` reply: list the presentations (each applies its
+    /// `textEdit` and `additionalTextEdits`), or say there are none.
+    pub(crate) fn on_color_presentations(
+        &mut self,
+        path: &Path,
+        presentations: &[crate::lsp_core::document_extras::ColorPresentation],
+    ) {
+        let Some(range) = self
+            .doc_extras
+            .get_mut(path)
+            .and_then(|st| st.pending_color.take())
+        else {
+            return;
+        };
+        if presentations.is_empty() {
+            self.status = t!("status.color_presentations_none").to_string();
+            return;
+        }
+        let rows = presentations.iter().map(|p| p.label.clone()).collect();
+        let edits = presentations.iter().map(|p| p.edits(range)).collect();
+        self.choice_list = Some(super::ide_parity::ChoiceList {
+            panel: vix_choice_list::Panel::new(
+                t!("menu.item.lsp.edit_color").to_string(),
+                t!("ui.run_config_hint").to_string(),
+                rows,
+            ),
+            purpose: super::ide_parity::ChoicePurpose::ColorPresentation {
+                path: path.to_path_buf(),
+                edits,
+            },
+        });
+    }
+
+    /// The user picked presentation `row`: apply its edits to `path`.
+    pub(super) fn apply_color_presentation(
+        &mut self,
+        path: &Path,
+        edits: &[Vec<(crate::lsp_core::Range, String)>],
+        row: usize,
+    ) {
+        if let Some(e) = edits.get(row) {
+            self.apply_lsp_edits(path, e);
+            self.status = t!("status.color_applied").to_string();
+        }
     }
 
     /// Per-tick upkeep for the active buffer: notice edits and re-request
