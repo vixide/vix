@@ -68,9 +68,64 @@ See [`spec/test/index.md`](../test/index.md) for how the layers fit together.
 | GitLab   | `.gitlab-ci.yml`            | `release` stage of the same file | `deny` job of the same file       |
 | Codeberg | `.forgejo/workflows/ci.yml`, `docs.yml` | `.forgejo/workflows/release.yml` | `.forgejo/workflows/security.yml` |
 
-When the gate changes, change all four files plus `scripts/check` together.
-They are deliberately duplicated rather than abstracted: each forge's syntax is
-different enough that a shared script would hide more than it saves.
+Since T767 the forge files no longer carry their own command lists: they all
+call the one entrypoint `scripts/ci` (next section). When the gate changes,
+change `scripts/ci` and `scripts/check` together; the forge files change only
+for forge-specific reasons (triggers, runners, tool installation, caching).
+
+## One CI entrypoint (T767)
+
+`scripts/ci <job>` is the single definition of what each CI job runs, and
+`scripts/ci list` prints the job names. GitHub, Codeberg and GitLab are thin
+wrappers: check out, install a toolchain or a pinned tool, cache, then call a
+job. This replaces the earlier arrangement in which the same commands were
+deliberately copied into each file, which is a standing risk of drift.
+
+| Job | What it runs |
+| --- | --- |
+| `fmt`, `clippy`, `build`, `test` | `cargo fmt --check`; pedantic clippy `-D warnings`; build all targets; the tests (nextest plus doc tests when `cargo-nextest` is installed, else `cargo test`) |
+| `examples`, `doc`, `reference-docs`, `man-page`, `licenses` | the headless examples (T505); rustdoc with warnings denied; the generated references and man page are current (T305, T307); the per-binary license check (T648) |
+| `check` | all of the above in order: the one Linux job on every push (T762) |
+| `feature-combos` | every feature combination (T587), run on the schedule and on tags |
+| `docs-check`, `docs-links`, `docs-links-external`, `docs` | `scripts/check-docs`; lychee offline (blocking); lychee http(s) (advisory, marked so by the workflow); the first two together |
+| `verify` | the signed gate attestation for the pushed tip (below) |
+
+What deliberately stays in a workflow file: triggers and path filters,
+`concurrency`, runner images, installing Rust, CSpell, lychee, cargo-hack or
+nextest, caching, and the jobs that are not part of the gate (`security`,
+`release`, packaging, GUI, mutants, chaos, container, binary size, the mdBook
+build and deploy, semver, offline tests, coverage, MSRV). Those are either
+forge-specific or already a single named tool invocation. Moving them behind
+`scripts/ci` is possible later but was not done in T767.
+
+**`verify`.** It fetches `refs/notes/vix-gate` from `origin` and runs
+`scripts/attest --verify` against the pushed tip (`VIX_CI_SHA`, else `HEAD`).
+The allowed-signers file is the trust root and is supplied from outside the
+pushed tree: the text of a repository secret or variable
+(`VIX_ALLOWED_SIGNERS_DATA`, exposed from `secrets.VIX_ALLOWED_SIGNERS` on
+GitHub and Codeberg and from the CI/CD variable of the same name on GitLab), or
+a file path in `VIX_ALLOWED_SIGNERS`. A committed `.allowed_signers` and
+`gpg.ssh.allowedSignersFile` are never consulted, because a push could replace
+them. The job is **advisory first**: unless the variable `VIX_VERIFY_REQUIRED`
+is `1`, a missing secret, a missing notes ref or a failed verification prints
+`WARNING` and exits 0; with it set, each of those fails the job. Switch it to
+required once a few attested pushes have verified cleanly. It runs only for
+pushes (GitHub and Codeberg: `github.event_name == 'push'`; GitLab: the default
+branch), because a pull request's merge commit has a tree nobody attested. The
+verifier code (`scripts/ci`, `scripts/attest`) comes from the pushed tree, so
+the real guard is review of changes to those files and branch protection on the
+default branch; that is a limit of any in-repository check.
+
+**What was and was not verified.** `scripts/test-ci` (in the `push` tier) tests
+the job table with `VIX_CI_DRY_RUN=1`, checks that every `scripts/ci <job>` named
+in the four forge files exists and that the old inline command lists have not
+reappeared, and runs `verify` against a throwaway repository with a local bare
+remote (valid, wrong signer, unattested tree, missing notes, signers from data
+and from a file, committed `.allowed_signers` ignored, advisory versus required).
+The forge workflows themselves **cannot be run locally**: the YAML was parsed
+and the jobs they call were run, but the first real run on each forge is the
+first test of the glue (checkout credentials for the notes fetch, secret
+exposure, the GitLab job's `ssh-keygen`).
 
 ## Slim hosted CI (T762)
 
@@ -296,6 +351,9 @@ MSRV — see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.
 `workflow.rules` block runs pipelines for merge requests, the default branch,
 and tags, but never a duplicate branch pipeline beside an open merge request.
 Cargo's registry and `target/` are cached per ref.
+
+Its jobs call `scripts/ci` (see "One CI entrypoint"); the `verify` job is
+advisory and default-branch only.
 
 The `test` job's shared runner has, more than once, exhausted disk mid-link
 building the workspace's test binary (`ld terminated with signal 7 [Bus

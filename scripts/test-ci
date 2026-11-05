@@ -1,0 +1,174 @@
+#!/bin/sh
+# Tests for scripts/ci (T767), and the no-drift check on the forge files.
+#
+#     scripts/test-ci
+#
+# The job table is checked with VIX_CI_DRY_RUN=1 (nothing is built). `verify` is
+# exercised against a throwaway repository with a local bare "remote", a
+# generated ed25519 key and its own allowed-signers data, with HOME and the
+# global git config pointed away; no network, and it never touches ~/.ssh, your
+# git config or the real repository. Like scripts/test-attest, the throwaway
+# repository carries a stub scripts/check. The real workflow files are only
+# read (they cannot be run locally -- see spec/ci).
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$src")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+export HOME="$work/home"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$HOME"
+
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+	[ -f "$work/out" ] && sed 's/^/       /' "$work/out"
+}
+# pass NAME CMD... / fail NAME CMD...
+pass() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then ok "$name"; else bad "$name"; fi
+}
+fail() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then bad "$name (unexpectedly passed)"; else ok "$name"; fi
+}
+has() {
+	if grep -q -- "$1" "$work/out"; then ok "output has '$1'"; else bad "output has '$1'"; fi
+}
+lacks() {
+	if grep -q -- "$1" "$work/out"; then bad "output lacks '$1'"; else ok "output lacks '$1'"; fi
+}
+
+echo "== job table (dry run)"
+export VIX_CI_DRY_RUN=1
+cd "$root" || exit 1
+fail "no job is a usage error" scripts/ci
+fail "unknown job is rejected" scripts/ci nonsense
+has "unknown job"
+pass "list works" scripts/ci list
+for j in fmt clippy build test examples doc reference-docs man-page licenses check feature-combos docs-check docs-links docs-links-external docs verify; do
+	if grep -qx "$j" "$work/out"; then ok "list names $j"; else bad "list names $j"; fi
+done
+pass "fmt" scripts/ci fmt
+has "cargo fmt --all --check"
+pass "clippy is pedantic-denied" scripts/ci clippy
+has "clippy --workspace --all-targets -- -D warnings"
+pass "check runs the whole Linux gate" scripts/ci check
+for c in "cargo fmt" "cargo build" "cargo clippy" "cargo doc" "generate_man" "list_commands -- --write" check-binary-licenses; do has "$c"; done
+pass "feature-combos" scripts/ci feature-combos
+has "cargo hack check -p vix-tui --each-feature"
+pass "docs = check-docs + offline links" scripts/ci docs
+has "scripts/check-docs"
+has "lychee --offline"
+pass "external links are not offline" scripts/ci docs-links-external
+lacks "--offline"
+unset VIX_CI_DRY_RUN
+
+echo "== no drift: forge files call scripts/ci with real jobs"
+scripts/ci list >"$work/jobs"
+for f in .github/workflows/ci.yml .forgejo/workflows/ci.yml .forgejo/workflows/docs.yml .gitlab-ci.yml; do
+	used=$(grep -v '^[[:space:]]*#' "$f" | grep -o 'scripts/ci [a-z-]*' | awk '{print $2}' | sort -u)
+	if [ -z "$used" ]; then
+		bad "$f calls scripts/ci"
+		continue
+	fi
+	ok "$f calls scripts/ci"
+	for j in $used; do
+		if grep -qx "$j" "$work/jobs"; then ok "$f: job '$j' exists"; else bad "$f: job '$j' does not exist"; fi
+	done
+done
+# The command lists that moved into scripts/ci must not reappear in a wrapper.
+for f in .github/workflows/ci.yml .forgejo/workflows/ci.yml .forgejo/workflows/docs.yml .gitlab-ci.yml; do
+	for pat in 'cargo clippy --workspace' 'cargo fmt --all' 'cargo doc --workspace' 'generate_man' 'lychee --offline' 'python3 scripts/check-docs' 'cargo hack check'; do
+		if grep -v '^[[:space:]]*#' "$f" | grep -q -- "$pat"; then bad "$f: no inline '$pat'"; else ok "$f: no inline '$pat'"; fi
+	done
+done
+
+echo "== verify (throwaway repository)"
+ssh-keygen -q -t ed25519 -N '' -C test -f "$work/key" || exit 1
+ssh-keygen -q -t ed25519 -N '' -C other -f "$work/other" || exit 1
+echo "tester $(cat "$work/key.pub")" >"$work/allowed"
+echo "attacker $(cat "$work/other.pub")" >"$work/attacker-allowed"
+
+git init -q --bare "$work/remote.git" || exit 1
+repo="$work/repo"
+git init -q -b main "$repo" || exit 1
+cd "$repo" || exit 1
+git config user.email t@example.com
+git config user.name Tester
+git config commit.gpgsign false
+mkdir -p scripts
+cp "$src/attest" scripts/attest
+cp "$src/ci" scripts/ci
+printf '#!/bin/sh\nexit 0\n' >scripts/check
+chmod +x scripts/attest scripts/ci scripts/check
+echo one >file
+git add -A
+git commit -q -m one
+git remote add origin "$work/remote.git"
+
+# Attest with the real key (stub gate passes).
+VIX_ALLOWED_SIGNERS="$work/allowed" VIX_ATTEST_KEY="$work/key" sh scripts/attest >/dev/null 2>&1 || {
+	echo "  FAIL setup: could not attest"
+	exit 1
+}
+git push -q origin refs/notes/vix-gate main || exit 1
+# Forget the local note so verify must fetch it, as a fresh CI checkout would.
+git update-ref -d refs/notes/vix-gate
+
+v() { env -u VIX_ALLOWED_SIGNERS -u VIX_ALLOWED_SIGNERS_DATA "$@" sh scripts/ci verify; }
+
+pass "advisory, no signers: warns, exits 0" v
+has "WARNING"
+fail "required, no signers: fails" v VIX_VERIFY_REQUIRED=1
+has "no trusted allowed-signers"
+pass "signers from a variable (data): verifies" v VIX_ALLOWED_SIGNERS_DATA="$(cat "$work/allowed")" VIX_VERIFY_REQUIRED=1
+has "OK tree"
+git update-ref -d refs/notes/vix-gate
+pass "signers from a file path: verifies" v VIX_ALLOWED_SIGNERS="$work/allowed" VIX_VERIFY_REQUIRED=1
+git update-ref -d refs/notes/vix-gate
+fail "required, wrong signer: fails" v VIX_ALLOWED_SIGNERS="$work/attacker-allowed" VIX_VERIFY_REQUIRED=1
+has "FAILED (required)"
+git update-ref -d refs/notes/vix-gate
+pass "advisory, wrong signer: warns, exits 0" v VIX_ALLOWED_SIGNERS="$work/attacker-allowed"
+has "WARNING"
+
+# A pushed .allowed_signers (the content under verification) is never trusted.
+cp "$work/allowed" .allowed_signers
+git config gpg.ssh.allowedSignersFile "$work/allowed"
+git update-ref -d refs/notes/vix-gate
+fail "required: committed .allowed_signers and git config are ignored" v VIX_VERIFY_REQUIRED=1
+has "no trusted allowed-signers"
+rm .allowed_signers
+git config --unset gpg.ssh.allowedSignersFile
+
+# A new commit with a different tree has no attestation.
+echo two >file
+git commit -q -am two
+git update-ref -d refs/notes/vix-gate
+fail "required: unattested tree fails" v VIX_ALLOWED_SIGNERS="$work/allowed" VIX_VERIFY_REQUIRED=1
+has "no gate attestation"
+pass "advisory: unattested tree warns, exits 0" v VIX_ALLOWED_SIGNERS="$work/allowed"
+
+# No notes on the remote at all.
+git push -q origin main
+git push -q origin :refs/notes/vix-gate
+git update-ref -d refs/notes/vix-gate
+fail "required: missing notes ref on the remote fails" v VIX_ALLOWED_SIGNERS="$work/allowed" VIX_VERIFY_REQUIRED=1
+pass "advisory: missing notes ref warns, exits 0" v VIX_ALLOWED_SIGNERS="$work/allowed"
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "scripts/test-ci: all checks passed"
+else
+	echo "scripts/test-ci: $fails check(s) FAILED"
+	exit 1
+fi
