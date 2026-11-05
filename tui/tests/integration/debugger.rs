@@ -470,7 +470,9 @@ while True:
         // `b` on a variable that cannot be watched changes nothing.
         app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 1])); // p
         app.on_key(key('b'));
-        wait(&mut app, |_| requests(&log, "dataBreakpointInfo").len() == 1);
+        wait(&mut app, |_| {
+            requests(&log, "dataBreakpointInfo").len() == 1
+        });
         assert_eq!(
             requests(&log, "dataBreakpointInfo")[0],
             serde_json::json!({ "variablesReference": 5, "name": "p" })
@@ -484,14 +486,18 @@ while True:
         app.on_key(key('b'));
         wait(&mut app, |a| a.dap.data_breakpoints().len() == 1);
         assert_eq!(app.dap.data_breakpoints()[0].data_id, "d-x");
-        wait(&mut app, |_| requests(&log, "setDataBreakpoints").len() == 1);
+        wait(&mut app, |_| {
+            requests(&log, "setDataBreakpoints").len() == 1
+        });
         assert_eq!(
             requests(&log, "setDataBreakpoints")[0],
             serde_json::json!({ "breakpoints": [{ "dataId": "d-x", "accessType": "write" }] })
         );
         app.run_action("run.data_breakpoint");
         wait(&mut app, |a| a.dap.data_breakpoints().is_empty());
-        wait(&mut app, |_| requests(&log, "setDataBreakpoints").len() == 2);
+        wait(&mut app, |_| {
+            requests(&log, "setDataBreakpoints").len() == 2
+        });
         app.run_action("run.stop");
         fs::remove_dir_all(&dir).ok();
     }

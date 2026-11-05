@@ -9,7 +9,10 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use vix_dap::{Dap, DapEvent, DataBreakpoint, DebugAdapter, FunctionBreakpoint, InstructionBreakpoint, SourceBreakpoint, StartMode};
+use vix_dap::{
+    Dap, DapEvent, DataBreakpoint, DebugAdapter, FunctionBreakpoint, InstructionBreakpoint,
+    SourceBreakpoint, StartMode,
+};
 
 const MOCK_ADAPTER: &str = r"
 import sys, json
