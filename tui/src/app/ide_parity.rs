@@ -48,6 +48,13 @@ pub(crate) enum ChoicePurpose {
         /// The lens per row.
         lenses: Vec<super::code_lens::Lens>,
     },
+    /// Color presentations (T621), one per row: Enter applies its edits.
+    ColorPresentation {
+        /// The file the color is in.
+        path: PathBuf,
+        /// The edits of each row (its `textEdit`, then `additionalTextEdits`).
+        edits: Vec<Vec<(crate::lsp_core::Range, String)>>,
+    },
     /// **File → Open Remote…** (T713): row 0 types a new name, the rest are
     /// the recent remote names.
     RecentRemote {
@@ -195,6 +202,11 @@ impl App {
                     && let Some(lens) = lenses.get(row)
                 {
                     self.run_lens(lens);
+                }
+            }
+            ChoicePurpose::ColorPresentation { path, edits } => {
+                if matches!(action, ChoiceAction::Primary) {
+                    self.apply_color_presentation(&path, &edits, row);
                 }
             }
             ChoicePurpose::RecentRemote { names } => {

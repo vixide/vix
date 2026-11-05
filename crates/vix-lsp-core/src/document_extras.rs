@@ -2,15 +2,48 @@
 //! reply parsers behind color swatches and openable links.
 
 use crate::{Position, Range};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// One color a server found in a document.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct DocColor {
     /// Where the color is written.
     pub range: Range,
     /// The color as opaque 8-bit red, green and blue (alpha is ignored).
     pub rgb: (u8, u8, u8),
+    /// The server's own red, green, blue and alpha, each clamped to 0.0-1.0,
+    /// quoted back unrounded in a `textDocument/colorPresentation` request.
+    pub rgba: [f64; 4],
+}
+
+/// One way a server offers to write a color (`ColorPresentation`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ColorPresentation {
+    /// The text shown in the picker; also what replaces the color when the
+    /// server gave no `textEdit`.
+    pub label: String,
+    /// The server's `textEdit`, if any.
+    pub edit: Option<(Range, String)>,
+    /// The server's `additionalTextEdits` (for example an import).
+    pub additional: Vec<(Range, String)>,
+}
+
+impl ColorPresentation {
+    /// The edits that apply this presentation to a color written at `color`:
+    /// the `textEdit` (or, with none, the label over the color) first, then
+    /// the additional edits.
+    #[must_use]
+    pub fn edits(&self, color: Range) -> Vec<(Range, String)> {
+        let main = self
+            .edit
+            .clone()
+            .unwrap_or_else(|| (color, self.label.clone()));
+        std::iter::once(main)
+            .chain(self.additional.iter().cloned())
+            .collect()
+    }
 }
 
 /// One link a server found in a document.
@@ -60,6 +93,11 @@ fn channel(v: &Value, key: &str) -> Option<u8> {
     Some((0..=255u8).find(|b| f64::from(*b) >= scaled).unwrap_or(255))
 }
 
+/// A channel as the server wrote it, clamped to 0.0-1.0.
+fn unit(v: &Value, key: &str) -> Option<f64> {
+    Some(v.get(key)?.as_f64()?.clamp(0.0, 1.0))
+}
+
 /// Parse a `textDocument/documentColor` result (`ColorInformation[]`).
 /// Malformed entries are skipped.
 #[must_use]
@@ -77,6 +115,60 @@ pub fn parse_colors(result: &Value) -> Vec<DocColor> {
                             channel(color, "green")?,
                             channel(color, "blue")?,
                         ),
+                        rgba: [
+                            unit(color, "red")?,
+                            unit(color, "green")?,
+                            unit(color, "blue")?,
+                            unit(color, "alpha").unwrap_or(1.0),
+                        ],
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The params of `textDocument/colorPresentation` for `color` in document `uri`.
+#[must_use]
+pub fn color_presentation_params(uri: &str, color: &DocColor) -> Value {
+    let [red, green, blue, alpha] = color.rgba;
+    json!({
+        "textDocument": { "uri": uri },
+        "color": { "red": red, "green": green, "blue": blue, "alpha": alpha },
+        "range": {
+            "start": { "line": color.range.start.line, "character": color.range.start.character },
+            "end": { "line": color.range.end.line, "character": color.range.end.character },
+        },
+    })
+}
+
+/// Parse one `TextEdit` object.
+fn text_edit(v: &Value) -> Option<(Range, String)> {
+    Some((
+        range(v.get("range")?)?,
+        v.get("newText")?.as_str()?.to_string(),
+    ))
+}
+
+/// Parse a `textDocument/colorPresentation` result (`ColorPresentation[]`).
+/// Entries without a `label` are skipped; malformed edits are dropped.
+#[must_use]
+pub fn parse_color_presentations(result: &Value) -> Vec<ColorPresentation> {
+    result
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| {
+                    let label = p.get("label")?.as_str()?.to_string();
+                    let additional = p
+                        .get("additionalTextEdits")
+                        .and_then(Value::as_array)
+                        .map(|e| e.iter().filter_map(text_edit).collect())
+                        .unwrap_or_default();
+                    Some(ColorPresentation {
+                        label,
+                        edit: p.get("textEdit").and_then(text_edit),
+                        additional,
                     })
                 })
                 .collect()
@@ -135,6 +227,53 @@ pub fn target_kind(target: &str) -> TargetKind {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn presentations_parse_and_resolve_to_edits() {
+        let r = json!([
+            {"label": "#ff0000"},
+            {"label": "rgb(255, 0, 0)",
+             "textEdit": {"range": {"start": {"line": 0, "character": 1},
+                                    "end": {"line": 0, "character": 4}}, "newText": "red"},
+             "additionalTextEdits": [{"range": {"start": {"line": 0, "character": 0},
+                                                "end": {"line": 0, "character": 0}},
+                                       "newText": "use x;\n"}]},
+            {"nolabel": true}
+        ]);
+        let ps = parse_color_presentations(&r);
+        assert_eq!(ps.len(), 2);
+        let at = Range {
+            start: Position {
+                line: 3,
+                character: 2,
+            },
+            end: Position {
+                line: 3,
+                character: 9,
+            },
+        };
+        let plain = ps[0].edits(at);
+        assert_eq!(plain, vec![(at, "#ff0000".to_string())]);
+        let full = ps[1].edits(at);
+        assert_eq!(full.len(), 2);
+        assert_eq!(full[0].1, "red");
+        assert_eq!(full[0].0.start.character, 1);
+        assert_eq!(full[1].1, "use x;\n");
+        assert_eq!(parse_color_presentations(&Value::Null), vec![]);
+    }
+
+    #[test]
+    fn presentation_params_quote_the_unrounded_color() {
+        let c = parse_colors(&json!([
+            {"range": {"start": {"line": 1, "character": 2}, "end": {"line": 1, "character": 9}},
+             "color": {"red": 0.5, "green": 0.25, "blue": 1.0, "alpha": 0.5}}
+        ]));
+        let p = color_presentation_params("file:///a.css", &c[0]);
+        assert_eq!(p["textDocument"]["uri"], "file:///a.css");
+        assert_eq!(p["color"]["red"], 0.5);
+        assert_eq!(p["color"]["alpha"], 0.5);
+        assert_eq!(p["range"]["end"]["character"], 9);
+    }
 
     #[test]
     fn colors_parse_and_clamp() {

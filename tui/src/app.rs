@@ -7767,6 +7767,10 @@ impl App {
             crate::lsp::LspEvent::DocumentLinks { path, links } => {
                 self.on_document_links(&path, links);
             }
+            crate::lsp::LspEvent::ColorPresentations {
+                path,
+                presentations,
+            } => self.on_color_presentations(&path, &presentations),
             _ => {}
         }
     }
@@ -7827,8 +7831,7 @@ impl App {
                 }
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
-                ev @ (crate::lsp::LspEvent::DocumentColors { .. }
-                | crate::lsp::LspEvent::DocumentLinks { .. }) => self.on_document_extras_event(ev),
+                ev if is_doc_extras_event(&ev) => self.on_document_extras_event(ev),
                 ev @ (crate::lsp::LspEvent::CodeLensUpdate { .. }
                 | crate::lsp::LspEvent::CodeLensResolved { .. }
                 | crate::lsp::LspEvent::CodeLensRefresh) => self.on_code_lens_event(ev),
@@ -14983,6 +14986,18 @@ fn apply_edits_to_text(
         }
     }
     chars.into_iter().collect()
+}
+
+/// Whether `event` is a document-colors, document-links or color-presentation
+/// reply (handled by `App::on_document_extras_event`).
+fn is_doc_extras_event(event: &crate::lsp::LspEvent) -> bool {
+    use crate::lsp::LspEvent;
+    matches!(
+        event,
+        LspEvent::DocumentColors { .. }
+            | LspEvent::DocumentLinks { .. }
+            | LspEvent::ColorPresentations { .. }
+    )
 }
 
 /// Convert a buffer char offset to an LSP `(line, character)` in `enc` units.

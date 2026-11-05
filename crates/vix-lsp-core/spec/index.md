@@ -98,7 +98,11 @@ value is present and not `false`, with a trailing `Provider` dropped
 
 `document_extras::parse_colors` reads a `textDocument/documentColor` result
 (`ColorInformation[]`, channels as 0.0-1.0 floats) into `DocColor { range,
-rgb }` with `rgb` clamped to bytes; `parse_links` reads a
+rgb, rgba }` with `rgb` clamped to bytes and `rgba` the server's unrounded
+floats; `parse_color_presentations` reads a `textDocument/colorPresentation`
+result into `ColorPresentation { label, edit, additional }` (`edits(color)`
+resolves it to the edits to apply) and `color_presentation_params` builds the
+request; `parse_links` reads a
 `textDocument/documentLink` result into `DocLink { range, target }`, dropping
 links with no `target`; `target_kind` classifies a target as a file (with an
 optional line), an external URL, or unsupported. `initialize_params` declares

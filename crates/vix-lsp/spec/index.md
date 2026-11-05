@@ -56,7 +56,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
 | Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. The message is also shown inline at the end of its line and in the status line when the cursor reaches it (T614, § Inline diagnostics). A server that offers `diagnosticProvider` is also asked per document (`textDocument/diagnostic`, T619, § Pull diagnostics), so a pull-only server (such as Roslyn) underlines too. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
-| Document colors and links | automatic; `lsp.open_link`, Ctrl+click | `textDocument/documentColor` swatches and `textDocument/documentLink` links (T621, § Document colors and links). |
+| Document colors and links | automatic; `lsp.open_link`, Ctrl+click, `lsp.edit_color` | `textDocument/documentColor` swatches, `textDocument/documentLink` links and `textDocument/colorPresentation` color rewriting (T621, § Document colors and links). |
 | Progress | automatic | `$/progress` work-done reports (T123d, T732) are tracked per server and token: `begin` adds a task, `report` updates its message/percentage, `end` removes it. While any task is in flight the status bar shows the newest one (`Lsp::progress_line`, e.g. `"rust: Indexing: 3/10 crates (30%) +1"`) and clears it on `end`; `LspEvent::Progress` is still emitted for `begin`/`report`. |
 | LSP Status | View → LSP Status… (`lsp.status`) | T732 — see "Server status (T732)" below. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
@@ -347,14 +347,26 @@ silent.
   the system opener (`open`, `xdg-open` or `cmd /c start`); any other scheme
   is refused with a message. A link with no `target` is dropped
   (`documentLink/resolve` is not used).
-- **Not done.** `textDocument/colorPresentation`, to write a color picked in
-  the color picker back into the buffer in the server's notation, is left
-  open.
+- **Editing a color.** `lsp.edit_color` (Tools → Language Server → Edit
+  Color…) sends `textDocument/colorPresentation` for the color under the cursor
+  (or the only color on its line) with the server's own unrounded red, green,
+  blue and alpha, and the color's range. The reply opens the shared pick-one
+  list (`ChoicePurpose::ColorPresentation`), one row per presentation label.
+  Enter applies the row: its `textEdit`, or, when it has none, its label over
+  the color's range, plus its `additionalTextEdits`, in one step through the
+  same document-tied edit path as formatting, so a buffer edited since the
+  request was sent drops the edit instead of corrupting text. No color at the
+  cursor, no server that offers `colorProvider`, or an empty reply each say so
+  in the status line. A server error is shown like any other request failure.
+  Sending a color chosen in `vix-x11-color-picker` through this request is not
+  done: the list shows the server's own formats of the color already there.
 - **Protocol.** The client declares `textDocument.colorProvider` and
   `textDocument.documentLink`. Pure parsing lives in
   `vix_lsp_core::document_extras` (`parse_colors`, `parse_links`,
-  `target_kind`); the requests are `Lsp::refresh_document_extras`, with
-  replies as `LspEvent::DocumentColors` and `LspEvent::DocumentLinks`. The
+  `parse_color_presentations`, `color_presentation_params`, `target_kind`);
+  the requests are `Lsp::refresh_document_extras` and
+  `Lsp::request_color_presentation`, with replies as `LspEvent::DocumentColors`,
+  `LspEvent::DocumentLinks` and `LspEvent::ColorPresentations`. The
   host is `tui/src/app/doc_links.rs`; `tui/tests/lsp_smoke.rs` drives a mock
   server end to end.
 

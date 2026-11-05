@@ -88,6 +88,9 @@ enum Pending {
     DocumentColor,
     /// `textDocument/documentLink` (T621): silent on error, routed by path.
     DocumentLink,
+    /// `textDocument/colorPresentation` (T621): user-initiated, so an error is
+    /// surfaced; routed by path and dropped once the document moved on.
+    ColorPresentation,
     /// `textDocument/prepareCallHierarchy` (T620).
     PrepareCallHierarchy,
     /// `callHierarchy/incomingCalls` (T620).
@@ -289,6 +292,16 @@ pub enum LspEvent {
         path: PathBuf,
         /// The links, in server order.
         links: Vec<vix_lsp_core::document_extras::DocLink>,
+    },
+    /// A `textDocument/colorPresentation` reply for `path` (T621): the ways the
+    /// server offers to write the color that was asked about; empty means
+    /// "none". Only a reply for the document version the server still holds is
+    /// delivered.
+    ColorPresentations {
+        /// The file the color is in, as the host passed it in.
+        path: PathBuf,
+        /// The presentations, in server order.
+        presentations: Vec<vix_lsp_core::document_extras::ColorPresentation>,
     },
     /// The server asked the client to re-request every code lens
     /// (`workspace/codeLens/refresh`, T726).
@@ -1384,6 +1397,47 @@ impl Lsp {
         sent
     }
 
+    /// Ask the first server handling `path` that offers `colorProvider` for the
+    /// ways to write `color` (T621, `textDocument/colorPresentation`); the
+    /// reply arrives as [`LspEvent::ColorPresentations`]. Returns whether a
+    /// request was sent (no server, document not open, or no such capability:
+    /// `false`).
+    pub fn request_color_presentation(
+        &mut self,
+        path: &Path,
+        color: &vix_lsp_core::document_extras::DocColor,
+    ) -> bool {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(&version) = server.docs.get(&uri) else {
+                continue;
+            };
+            if !server.ready || !server.capabilities.iter().any(|n| n == "color") {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::ColorPresentation);
+            server.targets.insert(
+                id,
+                Target {
+                    path: path.to_path_buf(),
+                    uri: uri.clone(),
+                    version,
+                },
+            );
+            server.send(message::request(
+                id,
+                "textDocument/colorPresentation",
+                &vix_lsp_core::document_extras::color_presentation_params(&uri, color),
+            ));
+            return true;
+        }
+        false
+    }
+
     /// Whether a server handling `path` resolves code lenses lazily
     /// (`codeLens/resolve`, T726).
     #[must_use]
@@ -2198,6 +2252,7 @@ impl Lsp {
                 | Pending::InlineCompletion
                 | Pending::DocumentColor
                 | Pending::DocumentLink
+                | Pending::ColorPresentation
         ) {
             if let Some((target, true)) = target {
                 Self::lens_reply(kind, target.path, result, events);
@@ -2330,6 +2385,14 @@ impl Lsp {
         if matches!(kind, Pending::DocumentColor) {
             let colors = vix_lsp_core::document_extras::parse_colors(result);
             events.push(LspEvent::DocumentColors { path, colors });
+            return;
+        }
+        if matches!(kind, Pending::ColorPresentation) {
+            let presentations = vix_lsp_core::document_extras::parse_color_presentations(result);
+            events.push(LspEvent::ColorPresentations {
+                path,
+                presentations,
+            });
             return;
         }
         if matches!(kind, Pending::DocumentLink) {
