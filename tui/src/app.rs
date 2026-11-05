@@ -9991,6 +9991,11 @@ impl App {
     /// preview tab; everything else is passed to the editor core (selection, drag, wheel).
     fn editor_mouse(&mut self, mouse: MouseEvent) {
         self.focus = Focus::Editor;
+        // The review's two-pane view maps pointer rows onto its own rows.
+        #[cfg(feature = "git")]
+        if self.review_mouse(mouse) {
+            return;
+        }
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             self.flags.insert(AppFlags::EDITOR_DRAG);
         }

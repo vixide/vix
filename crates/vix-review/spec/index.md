@@ -88,7 +88,21 @@ when `ReviewState::side_by_side` is on and the text area is at least
 `MIN_SIDE_BY_SIDE_WIDTH` (60) columns; narrower, the inline buffer is drawn
 and the choice is kept. The view starts at `SideBySide::row_for_inline` of the
 buffer's top line and moves just far enough to keep the cursor's row visible,
-so both views scroll together; the cursor's row is bold and underlined. The
+so both views scroll together; the cursor's row is bold and underlined.
+`SideBySide::view_start` is that computation (pure, shared by drawing and the
+mouse), `halves(width)` the pane widths, `inline_at(row, Half)` the inline row
+a click on a half stands for (each `Cell` records its own `inline` row) and
+`top_for_row(row)` the inline top line that makes a row the first shown.
+
+**Mouse.** While the two-pane view is drawn, `App::review_mouse` takes the
+editor's mouse events (the inline buffer and other tabs keep the ordinary
+handling): a left click moves the cursor to `inline_at(row, half)` without
+scrolling the hidden inline buffer; the wheel moves the first row by one, sets
+the inline top line with `top_for_row`, and moves the cursor to the nearest
+visible row when it would leave the view (so the keep-the-cursor-in-view rule
+does not snap the scroll back); drags and releases are swallowed rather than
+selecting text in the hidden buffer. Both panes share the rows, so a click or
+the wheel means the same thing on either side. The
 `review_view` setting (`"inline"` or `"side_by_side"`, anything else is
 inline) picks the view a review opens in.
 

@@ -53,6 +53,8 @@ mod panels;
 #[cfg(feature = "tasks")]
 mod project_env;
 mod project_settings;
+#[cfg(feature = "git")]
+mod review_panes;
 mod save;
 #[cfg(feature = "script")]
 mod scripting;

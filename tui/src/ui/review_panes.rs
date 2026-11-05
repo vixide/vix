@@ -26,7 +26,7 @@ pub(super) fn draw_review_panes(app: &App, frame: &mut Frame, area: Rect) -> boo
     }
     let cursor = app.editor.cursor_line();
     let top_inline = app.editor.top_visible_line();
-    let first = visible_start(panes, top_inline, cursor, usize::from(area.height));
+    let first = panes.view_start(top_inline, cursor, usize::from(area.height));
     let lines: Vec<Line> = panes
         .rows
         .iter()
@@ -41,24 +41,6 @@ pub(super) fn draw_review_panes(app: &App, frame: &mut Frame, area: Rect) -> boo
     true
 }
 
-/// The first two-pane row to show: the one for the buffer's top line, moved
-/// only as far as needed to keep the cursor's row inside `height` rows.
-pub(super) fn visible_start(
-    panes: &SideBySide,
-    top_inline: usize,
-    cursor: usize,
-    height: usize,
-) -> usize {
-    let mut first = panes.row_for_inline(top_inline);
-    let selected = panes.row_for_inline(cursor);
-    if selected < first {
-        first = selected;
-    } else if height > 0 && selected >= first + height {
-        first = selected + 1 - height;
-    }
-    first
-}
-
 /// One painted row, `width` columns wide.
 fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
     let mark = if here {
@@ -68,8 +50,7 @@ fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
     };
     match &row.kind {
         PaneKind::Pair { left, right } => {
-            let half = width.saturating_sub(1) / 2;
-            let rest = width.saturating_sub(1) - half;
+            let (half, rest) = SideBySide::halves(width);
             Line::from(vec![
                 cell_span(left.as_ref(), half, mark),
                 Span::styled("│", theme::dim()),
@@ -139,9 +120,9 @@ mod tests {
         let panes = Review::new("r", DIFF).side_by_side();
         let last = panes.rows.last().unwrap().last;
         // Top of the buffer, cursor at the end, three rows of room.
-        let first = visible_start(&panes, 0, last, 3);
+        let first = panes.view_start(0, last, 3);
         assert_eq!(first, panes.rows.len() - 3);
         // Cursor already in view: the view stays where the buffer's top is.
-        assert_eq!(visible_start(&panes, 0, 0, 3), 0);
+        assert_eq!(panes.view_start(0, 0, 3), 0);
     }
 }

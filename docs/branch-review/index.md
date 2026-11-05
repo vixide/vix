@@ -67,6 +67,11 @@ views scroll together. When the editor is narrower than 60 columns the inline
 view shows instead. The `review_view` setting (`"inline"`, the default, or
 `"side_by_side"`) chooses the view a review opens in.
 
+The mouse works on the rows you see. A click on the left half puts the cursor
+on that old line, a click on the right half on the new line (a click on a blank
+half uses the other side's line). The wheel scrolls one row at a time and
+carries the cursor along when it would otherwise leave the view.
+
 See the specification at `crates/vix-review/spec/index.md`.
 
 ---

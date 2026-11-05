@@ -98,6 +98,19 @@ pub struct Cell {
     /// How the line changed: [`LineKind::Removed`] on the left,
     /// [`LineKind::Added`] on the right, [`LineKind::Context`] on both.
     pub kind: LineKind,
+    /// The row of the inline buffer ([`Review::render`]) this line is on,
+    /// which is where a click on the cell puts the cursor.
+    pub inline: usize,
+}
+
+/// One half of a two-pane row: where a click landed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Half {
+    /// The old text.
+    Left,
+    /// The new text.
+    Right,
 }
 
 /// What a two-pane row shows.
@@ -154,6 +167,60 @@ impl SideBySide {
             .iter()
             .position(|r| r.last >= inline)
             .unwrap_or_else(|| self.rows.len().saturating_sub(1))
+    }
+
+    /// The widths of the left and right panes in a view `width` columns wide:
+    /// one column goes to the divider, the right pane takes the odd one.
+    #[must_use]
+    pub fn halves(width: usize) -> (usize, usize) {
+        let usable = width.saturating_sub(1);
+        let left = usable / 2;
+        (left, usable - left)
+    }
+
+    /// The first row to show in a view `height` rows tall: the row for the
+    /// buffer's top line `top_inline`, moved only as far as needed to keep the
+    /// row of `cursor` (an inline row) inside the view.
+    #[must_use]
+    pub fn view_start(&self, top_inline: usize, cursor: usize, height: usize) -> usize {
+        let mut first = self.row_for_inline(top_inline);
+        let selected = self.row_for_inline(cursor);
+        if selected < first {
+            first = selected;
+        } else if height > 0 && selected >= first + height {
+            first = selected + 1 - height;
+        }
+        first
+    }
+
+    /// The inline buffer's top line that makes row `index` the first one
+    /// [`Self::row_for_inline`] finds, so that scrolling the two-pane view can
+    /// move the inline buffer's offset. Paired rows overlap in inline rows, so
+    /// this is one past the largest `last` of the rows above, or that row's
+    /// own `last` when that is not possible.
+    #[must_use]
+    pub fn top_for_row(&self, index: usize) -> usize {
+        let Some(row) = self.rows.get(index) else {
+            return self.rows.last().map_or(0, |r| r.last);
+        };
+        let above = self.rows[..index].iter().map(|r| r.last + 1).max();
+        above.map_or(0, |a| a.min(row.last))
+    }
+
+    /// The inline row a click on `half` of row `index` stands for: that cell's
+    /// own line, the other cell's when this one is blank, and the row's first
+    /// inline row for a heading or comment. `None` past the last row.
+    #[must_use]
+    pub fn inline_at(&self, index: usize, half: Half) -> Option<usize> {
+        let row = self.rows.get(index)?;
+        let PaneKind::Pair { left, right } = &row.kind else {
+            return Some(row.first);
+        };
+        let (want, other) = match half {
+            Half::Left => (left, right),
+            Half::Right => (right, left),
+        };
+        Some(want.as_ref().or(other.as_ref()).map_or(row.first, |c| c.inline))
     }
 }
 
@@ -442,6 +509,7 @@ impl Review {
                 number,
                 text: l.text.clone(),
                 kind: l.kind,
+                inline: at,
             };
             // Inline, a line's comments sit right under it (and its marker).
             let mut here = Vec::new();
@@ -997,6 +1065,54 @@ mod tests {
                 (None, Some("more")),
             ]
         );
+    }
+
+    #[test]
+    fn two_pane_geometry_maps_clicks_and_scrolls() {
+        let sbs = Review::new("a..b", DIFF).side_by_side();
+        assert_eq!(SideBySide::halves(81), (40, 40));
+        assert_eq!(SideBySide::halves(0), (0, 0));
+        // The `-old` / `+new` pair: each half maps to its own inline row.
+        let i = sbs
+            .rows
+            .iter()
+            .position(
+                |r| matches!(&r.kind, PaneKind::Pair { left: Some(c), .. } if c.text == "old"),
+            )
+            .unwrap();
+        let (a, b) = (
+            sbs.inline_at(i, Half::Left).unwrap(),
+            sbs.inline_at(i, Half::Right).unwrap(),
+        );
+        assert_eq!(b, a + 1);
+        let out = Review::new("a..b", DIFF).render();
+        assert!(matches!(
+            out.targets[a],
+            Target::Line {
+                side: Side::Old,
+                ..
+            }
+        ));
+        assert!(matches!(
+            out.targets[b],
+            Target::Line {
+                side: Side::New,
+                ..
+            }
+        ));
+        // A blank side falls back to the other cell.
+        let more = sbs.rows.len() - 1;
+        assert_eq!(
+            sbs.inline_at(more, Half::Left),
+            sbs.inline_at(more, Half::Right)
+        );
+        assert_eq!(sbs.inline_at(sbs.rows.len(), Half::Left), None);
+        // top_for_row makes each row the one the view starts at.
+        assert_eq!(sbs.top_for_row(0), 0);
+        for idx in 0..sbs.rows.len() {
+            assert!(sbs.row_for_inline(sbs.top_for_row(idx)) <= idx);
+        }
+        assert_eq!(sbs.row_for_inline(sbs.top_for_row(i)), i);
     }
 
     #[test]

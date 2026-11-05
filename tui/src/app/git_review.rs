@@ -496,6 +496,78 @@ impl App {
         true
     }
 
+    /// A mouse event over the editor while the two-pane view is drawn (T665):
+    /// a left click puts the cursor on the inline row of the clicked cell
+    /// (left half is the old line, right half the new one), the wheel scrolls
+    /// the rows by one, dragging the cursor along when it would leave the
+    /// view. `true` when the event was taken; the inline buffer (and any other
+    /// tab) is left to the ordinary editor handling.
+    pub(super) fn review_mouse(&mut self, mouse: vix_input::MouseEvent) -> bool {
+        use vix_input::{MouseButton, MouseEventKind};
+        let area = self.layout.editor;
+        let Some(state) = self.active_review() else {
+            return false;
+        };
+        if !state.side_by_side || area.width < vix_review::MIN_SIDE_BY_SIDE_WIDTH {
+            return false;
+        }
+        let panes = &state.panes;
+        let height = usize::from(area.height);
+        let (top, cursor) = (self.editor.top_visible_line(), self.editor.cursor_line());
+        let first = panes.view_start(top, cursor, height);
+        // The target: a cursor inline row and the inline top to scroll to.
+        let (new_cursor, new_top) = match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                let inside = mouse.column >= area.x
+                    && mouse.column < area.x + area.width
+                    && mouse.row >= area.y
+                    && mouse.row < area.y + area.height;
+                if !inside {
+                    return true;
+                }
+                let index = first + usize::from(mouse.row - area.y);
+                let (left, _) = vix_review::SideBySide::halves(usize::from(area.width));
+                let half = if usize::from(mouse.column - area.x) < left {
+                    vix_review::Half::Left
+                } else {
+                    vix_review::Half::Right
+                };
+                let Some(line) = panes.inline_at(index, half) else {
+                    return true;
+                };
+                (line, top)
+            }
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                let last_first = panes.rows.len().saturating_sub(height.max(1));
+                let moved = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                    first.saturating_sub(1)
+                } else {
+                    (first + 1).min(last_first)
+                };
+                // Keep the cursor's row inside the new view.
+                let selected = panes.row_for_inline(cursor);
+                let clamped = selected.clamp(moved, (moved + height.max(1) - 1).max(moved));
+                let line = if clamped == selected {
+                    cursor
+                } else {
+                    panes
+                        .inline_at(clamped, vix_review::Half::Right)
+                        .unwrap_or(cursor)
+                };
+                (line, panes.top_for_row(moved))
+            }
+            // Drags and releases would select text in the hidden buffer.
+            _ => return true,
+        };
+        if let Some(t) = self.editor.active_tab_mut() {
+            let off = t.editor.code_ref().offset(new_cursor, 0);
+            t.editor.set_cursor(off);
+            t.editor.set_offset_y(new_top);
+        }
+        self.focus = super::Focus::Editor;
+        true
+    }
+
     /// The two-pane layout to draw into a text area `width` columns wide, or
     /// `None` when the inline buffer shows instead: the view is off, `width`
     /// is under [`vix_review::MIN_SIDE_BY_SIDE_WIDTH`], or the active tab is
