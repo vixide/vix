@@ -7,7 +7,7 @@ forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
 Status: **proposed**, except tiers (T760), the attestation (T761), option 3
-(trim hosted CI, T762) and option 8 (one entrypoint, T767), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
+(trim hosted CI, T762), option 6 (local Linux and Windows coverage, T765) and option 8 (one entrypoint, T767), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
 the gate runs and who has to trust whom.
 
 ## Why
@@ -88,7 +88,7 @@ only `full`.
 | 3 | **Trim hosted CI**: macOS/Windows and `cargo hack`, mutants and chaos only on schedule or tags; path filters; cancel superseded runs | most of the paid minutes | low | **Done (T762).** |
 | 4 | **Self-hosted runner** on the maintainer's Mac: a [Forgejo runner](https://forgejo.org/docs/latest/admin/actions/) (host-mode label) for Codeberg, a GitHub or GitLab runner for the others | all hosted minutes, native macOS | medium: runs code on a personal machine | **Spike** (needs the maintainer's call on hardware and always-on). |
 | 5 | **Build caching** (shared `CARGO_TARGET_DIR`, `sccache`) | local time | low, but the `kache` wrappers are known to cause bogus linker and rustdoc failures in the gate | **Decide**: fix or retire `kache` for the gate; document the clean-room environment. |
-| 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Do** a Linux container script; Windows stays hosted but on tags and nightly only. |
+| 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Done (T765).** A Linux container script and a documented Windows VM recipe; hosted Windows and macOS stay on tags and the weekly schedule. |
 | 7 | **Local release path**: build the three targets, checksum, SSH-sign and upload from the maintainer's machine; `release.yml` remains the manual fallback | release minutes, and release depends on no hosted queue | medium: cutting a tag stays the user's decision | **Do** after 1 and 2. |
 | 8 | **One entrypoint** (`scripts/ci <job>`) that every forge file calls | drift | low | **Done (T767).** `spec/ci` revised. |
 | 9 | **Evaluate** `act` (run GitHub workflows locally), Dagger, the existing `flake.nix` (`nix flake check`) and a Woodpecker instance | unknown | n/a | **Spike only.** Not researched deeply: `act` cannot run macOS or Windows jobs; Woodpecker is a separate server to operate. |
@@ -97,6 +97,63 @@ Woodpecker versus Forgejo Actions: a Forgejo runner reuses the existing
 `.forgejo/workflows/` files and is lighter to deploy than a Woodpecker server
 ([discussion](https://45.148.62.229.sslip.io/Codeberg/Documentation/issues/743)).
 Garnix and Buildbot were not verified and are not recommended on that basis.
+
+## Local Linux and Windows coverage (option 6, T765, implemented)
+
+**Linux.** `scripts/check-linux [--tier fast|push|full] [--shell]` runs
+`scripts/check --tier <tier>` (default `push`) inside a Linux container, for
+what a Mac misses: case-sensitive paths, glibc, anything that only builds with
+Linux tools.
+
+- *CLI.* It uses the `docker` command (`VIX_CONTAINER_CLI` overrides it).
+  Docker Desktop, Colima and OrbStack all provide it. With no CLI, or no
+  reachable daemon, it exits 1 and prints how to install or start Colima,
+  OrbStack or Docker. It installs nothing.
+- *Image.* Built locally from a generated Dockerfile on stdin (no build
+  context, so nothing of the repository enters the image): the official
+  `rust:<version>-bookworm`, where `<version>` is `rust-version` in the root
+  `Cargo.toml` (the MSRV; `VIX_LINUX_RUST` or `VIX_LINUX_IMAGE` override it),
+  plus clippy, rustfmt, python3, git and a C++ compiler. Hosted CI tracks
+  stable, so a lint added after the MSRV may differ; use `VIX_LINUX_RUST` to
+  match stable.
+- *Mounts.* The repository is bind-mounted read-only at `/src` and copied into
+  the named volume `vix-check-linux-work`, where a throwaway git repository
+  (no branch called `main`, so `fast` checks everything) lets the gate's
+  `git diff` checks on generated docs run. `target/` and the cargo home are the
+  named volumes `vix-check-linux-target` and `vix-check-linux-cargo`, so reruns
+  are incremental. There is exactly one host bind mount.
+- *Isolation.* Runs as the caller's uid and gid, never root, with all
+  capabilities dropped and `no-new-privileges`. It never mounts `~/.ssh`, git
+  or other credentials, or the container socket, and passes no secret
+  environment. The only run-time network use is cargo fetching crates; the
+  one-time image build also reaches apt and rustup.
+- *Dry run.* `VIX_CI_DRY_RUN=1` prints the Dockerfile and the `docker run`
+  command.
+- *Not an attestation.* A pass is a Linux confidence check. `scripts/attest`
+  still requires a full run on the maintainer's machine, and an `aarch64`
+  container on Apple Silicon is not the `x86_64` that hosted CI runs.
+
+`scripts/test-check-linux` (part of the `push` tier and above) needs no
+Docker: it checks argument handling and the generated command (the MSRV image,
+non-root user, named volumes, a single read-only bind mount, no credential
+paths, `VIX_*` overrides) in dry-run mode, and the two failure messages with
+a stub CLI. The container itself is exercised only when someone runs the
+script with a real daemon.
+
+**Windows.** There is no Windows script, by design: a Windows VM cannot be
+driven from `sh` portably. [`docs/local-ci`](../../docs/local-ci/index.md)
+gives the recipe: a Windows 11 VM (UTM, Parallels or VMware Fusion on Apple
+Silicon, which tests the `aarch64` target; or a cloud `x86_64` VM, which
+matches the hosted job), install Git, Python, the MSVC build tools and rustup
+with `winget`, set `core.autocrlf false`, and run `scripts/ci build`,
+`scripts/ci test` and `scripts/ci examples` in Git Bash, the same three steps
+as the hosted Windows job. **The recipe has not been run by its author on real
+Windows hardware** and says so.
+
+**What stays hosted.** Hosted Windows and macOS keep running, but only on
+version tags, the weekly schedule and manual dispatch (T762,
+[`spec/ci`](../ci/index.md), "Slim hosted CI"), never on every push. These two
+local routes are how an OS-specific failure is found before a tag does.
 
 ## The attestation (option 2, T761, implemented)
 
