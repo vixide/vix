@@ -778,3 +778,4 @@ Colima
 OrbStack
 Parallels
 bookworm
+Rustlang
