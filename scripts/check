@@ -294,6 +294,10 @@ if in_tier push; then
 	step_begin "scripts/test-ci (T767)"
 	sh "$(dirname "$0")/test-ci"
 	step_end
+
+	step_begin "scripts/test-release-local (T766)"
+	sh "$(dirname "$0")/test-release-local"
+	step_end
 fi
 
 if in_tier full; then

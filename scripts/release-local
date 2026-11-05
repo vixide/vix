@@ -1,0 +1,270 @@
+#!/bin/sh
+# Local release path (T766; spec/local-ci, "The local release path").
+#
+#   scripts/release-local VERSION [--dry-run] [--out DIR]
+#   scripts/release-local VERSION --publish [--out DIR]
+#   scripts/release-local VERSION --tag
+#   scripts/release-local --verify-dir DIR
+#
+# 1. Preconditions, each of which refuses (nothing is built or written):
+#    clean tree on main; HEAD's tree has a valid full-tier attestation
+#    (scripts/attest --verify); VERSION is the workspace version and has a
+#    "## [VERSION]" section in CHANGELOG.md; every build tool is present.
+# 2. Builds the three Makefile targets with `make build-macos build-windows
+#    build-linux` (not duplicated here), packs each as the asset name the
+#    packaging templates expect (vix-tui-<target>.tar.xz / .zip), writes a
+#    <asset>.sha256 beside each and one SHA256SUMS.
+# 3. SSH-signs SHA256SUMS (ssh-keygen -Y sign, namespace "vix-release") into
+#    SHA256SUMS.sig. `--verify-dir DIR` verifies a downloaded release: the
+#    signature against the allowed signers, then every listed file's hash.
+# 4. Uploads to GitHub (`gh`) and Codeberg (`tea`) ONLY with --publish AND a
+#    typed confirmation line naming the version and both forges. The default and
+#    --dry-run do everything above except tagging and uploading, and print the
+#    exact commands an upload would run.
+#
+# Tags: this script never creates or pushes a git tag, with one exception: the
+# separate --tag flag creates a signed annotated LOCAL tag VERSION on HEAD (after
+# the same preconditions) and does nothing else; it is never pushed. --publish
+# refuses unless VERSION already exists as a tag on each forge, so uploading can
+# never create one (gh gets --verify-tag). Pushing the tag also starts
+# .github/workflows/release.yml, which stays the manual fallback; see
+# docs/release/index.md. Cutting a tag is the maintainer's decision.
+#
+# Keys: signing key = $VIX_RELEASE_KEY, else $VIX_ATTEST_KEY, else `git config
+# user.signingkey` (same forms as scripts/attest). Allowed signers =
+# $VIX_ALLOWED_SIGNERS, else `git config gpg.ssh.allowedSignersFile`, else
+# `.allowed_signers` in the repository root.
+#
+# Environment (all optional): VIX_RELEASE_MAKE (make), VIX_RELEASE_GH (gh),
+# VIX_RELEASE_TEA (tea), VIX_RELEASE_GH_REPO / VIX_RELEASE_TEA_REPO (vixide/vix),
+# VIX_RELEASE_GITHUB_REMOTE / VIX_RELEASE_CODEBERG_REMOTE (remote used to check
+# the tag; default: the matching push URL of origin), MACOS_TARGET,
+# WINDOWS_TARGET, LINUX_TARGET (as in the Makefile), VIX_RELEASE_CONFIRM_FILE
+# (test hook: read the confirmation from this file instead of /dev/tty).
+set -eu
+
+ns=vix-release
+die() {
+	echo "scripts/release-local: $*" >&2
+	exit 1
+}
+usage() { sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+
+version= dry=0 publish=0 tag=0 verifydir= out=
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--dry-run) dry=1 ;;
+	--publish) publish=1 ;;
+	--tag) tag=1 ;;
+	--out)
+		[ $# -ge 2 ] || die "--out needs a directory"
+		out=$2
+		shift
+		;;
+	--verify-dir)
+		[ $# -ge 2 ] || die "--verify-dir needs a directory"
+		verifydir=$2
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-*) die "unknown option $1 (see --help)" ;;
+	*)
+		[ -z "$version" ] || die "one VERSION only"
+		version=$1
+		;;
+	esac
+	shift
+done
+
+top=$(git rev-parse --show-toplevel) || die "not in a git repository"
+cd "$top"
+
+allowed_file() {
+	f=${VIX_ALLOWED_SIGNERS:-$(git config gpg.ssh.allowedSignersFile || true)}
+	if [ -z "$f" ] && [ -f .allowed_signers ]; then f=.allowed_signers; fi
+	[ -n "$f" ] || die "no allowed-signers file (set VIX_ALLOWED_SIGNERS or gpg.ssh.allowedSignersFile)"
+	case "$f" in "~/"*) f="$HOME/${f#\~/}" ;; esac
+	[ -f "$f" ] || die "allowed-signers file not found: $f"
+	printf '%s' "$f"
+}
+
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+}
+
+# ---- --verify-dir -----------------------------------------------------------
+if [ -n "$verifydir" ]; then
+	[ -z "$version$out" ] && [ $dry$publish$tag = 000 ] || die "--verify-dir takes no other arguments"
+	d=$(cd "$verifydir" 2>/dev/null && pwd) || die "no such directory: $verifydir"
+	[ -f "$d/SHA256SUMS" ] || die "VERIFY FAILED: $d/SHA256SUMS is missing"
+	[ -f "$d/SHA256SUMS.sig" ] || die "VERIFY FAILED: $d/SHA256SUMS.sig is missing (unsigned)"
+	allowed=$(allowed_file)
+	principal=$(ssh-keygen -Y find-principals -f "$allowed" -s "$d/SHA256SUMS.sig" 2>/dev/null | head -n1 || true)
+	[ -n "$principal" ] || die "VERIFY FAILED: signature is not from a key in $allowed"
+	ssh-keygen -Y verify -f "$allowed" -I "$principal" -n "$ns" -s "$d/SHA256SUMS.sig" <"$d/SHA256SUMS" >/dev/null 2>&1 ||
+		die "VERIFY FAILED: bad signature on SHA256SUMS"
+	[ -s "$d/SHA256SUMS" ] || die "VERIFY FAILED: SHA256SUMS is empty"
+	(cd "$d" && sha256 -c SHA256SUMS >/dev/null 2>&1) ||
+		die "VERIFY FAILED: a file is missing or does not match SHA256SUMS"
+	echo "scripts/release-local: OK $(wc -l <"$d/SHA256SUMS" | tr -d ' ') file(s) in $d signed by $principal"
+	exit 0
+fi
+
+# ---- release ----------------------------------------------------------------
+[ -n "$version" ] || die "usage: scripts/release-local VERSION [--dry-run|--publish|--tag] (see --help)"
+printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' ||
+	die "VERSION must look like 2.0.0 (no leading v)"
+[ "$dry$publish" != 11 ] || die "--dry-run and --publish are exclusive"
+
+# ---- preconditions ----------------------------------------------------------
+echo "scripts/release-local: checking preconditions for $version"
+[ "$(git rev-parse --abbrev-ref HEAD)" = main ] || die "refusing: not on main"
+[ -z "$(git status --porcelain)" ] || die "refusing: working tree is not clean"
+sh scripts/attest --verify HEAD || die "refusing: HEAD's tree has no valid full-tier attestation (run scripts/attest)"
+wsver=$(awk '/^\[workspace\.package\]/ { p = 1; next } /^\[/ { p = 0 } p && /^version[ ]*=/ { gsub(/[" ]/, "", $0); sub(/^version=/, "", $0); print; exit }' Cargo.toml)
+[ "$wsver" = "$version" ] || die "refusing: workspace version is '$wsver', not $version"
+grep -Eq "^## \[$(printf '%s' "$version" | sed 's/[.]/\\./g')\]" CHANGELOG.md ||
+	die "refusing: CHANGELOG.md has no '## [$version]' section"
+
+macos=${MACOS_TARGET:-aarch64-apple-darwin}
+windows=${WINDOWS_TARGET:-x86_64-pc-windows-gnu}
+linux=${LINUX_TARGET:-x86_64-unknown-linux-musl}
+make_cmd=${VIX_RELEASE_MAKE:-make}
+for tool in rustup cargo tar zip ssh-keygen "$make_cmd"; do
+	command -v "$tool" >/dev/null 2>&1 || die "refusing: '$tool' is not installed, so the targets cannot all be built"
+done
+# The cross linkers named in .cargo/config.toml for the non-native targets.
+for t in "$windows" "$linux"; do
+	linker=$(sed -n "/^\[target\.$t\]/,/^\[[^t]/p" .cargo/config.toml 2>/dev/null | grep '^linker' | head -n1 | sed 's/^[^"]*"\([^"]*\)".*/\1/' || true)
+	if [ -n "$linker" ]; then
+		command -v "$linker" >/dev/null 2>&1 || die "refusing: linker '$linker' for $t is not installed (see the Makefile header)"
+	fi
+done
+
+key=${VIX_RELEASE_KEY:-${VIX_ATTEST_KEY:-$(git config user.signingkey || true)}}
+[ -n "$key" ] || die "refusing: no signing key (set VIX_RELEASE_KEY or git config user.signingkey)"
+allowed=$(allowed_file)
+
+if [ "$tag" = 1 ]; then
+	# --tag is a separate, explicit act: a local signed tag and nothing else.
+	[ "$dry$publish" = 00 ] || die "--tag stands alone; it does not combine with --dry-run or --publish"
+	git rev-parse --verify --quiet "refs/tags/$version" >/dev/null && die "refusing: tag $version already exists"
+	git tag -s -m "Vix $version" "$version" HEAD || die "could not create the signed tag"
+	echo "scripts/release-local: created signed local tag $version on $(git rev-parse --short HEAD); NOT pushed (pushing it also starts release.yml; see docs/release/index.md)"
+	exit 0
+fi
+
+# ---- build, pack, checksum, sign --------------------------------------------
+[ -n "$out" ] || out=target/release-local/$version
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+rm -f "$out"/vix-tui-* "$out/SHA256SUMS" "$out/SHA256SUMS.sig"
+
+echo "scripts/release-local: building (make build-macos build-windows build-linux)"
+MACOS_TARGET=$macos WINDOWS_TARGET=$windows LINUX_TARGET=$linux \
+	"$make_cmd" build-macos build-windows build-linux || die "the build failed; nothing was packed"
+
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+pack() { # TARGET BINARY-NAME EXT
+	bin=target/$1/release/$2
+	[ -f "$bin" ] || die "build produced no $bin"
+	name=vix-tui-$1.$3
+	d=$stage/vix-tui-$1
+	mkdir -p "$d"
+	cp "$bin" "$d/"
+	for extra in LICENSE README.md; do [ -f "$extra" ] && cp "$extra" "$d/"; done
+	case $3 in
+	zip) (cd "$stage" && zip -qr "$out/$name" "vix-tui-$1") ;;
+	*) tar -C "$stage" -cJf "$out/$name" "vix-tui-$1" ;;
+	esac
+	(cd "$out" && sha256 "$name" >"$name.sha256")
+}
+pack "$macos" vix tar.xz
+pack "$windows" vix.exe zip
+pack "$linux" vix tar.xz
+(cd "$out" && sha256 vix-tui-*.tar.xz vix-tui-*.zip >SHA256SUMS)
+
+keyfile=$key
+case "$key" in
+key::*)
+	printf '%s\n' "${key#key::}" >"$stage/key.pub"
+	keyfile=$stage/key.pub
+	;;
+ssh-* | ecdsa-* | sk-*)
+	printf '%s\n' "$key" >"$stage/key.pub"
+	keyfile=$stage/key.pub
+	;;
+"~/"*) keyfile="$HOME/${key#\~/}" ;;
+esac
+ssh-keygen -Y sign -f "$keyfile" -n "$ns" "$out/SHA256SUMS" >/dev/null ||
+	die "could not sign SHA256SUMS (nothing was uploaded)"
+VIX_ALLOWED_SIGNERS=$allowed sh "$0" --verify-dir "$out" >/dev/null ||
+	die "the fresh signature does not verify against $allowed (is the key an allowed signer?)"
+echo "scripts/release-local: built, checksummed and signed in $out:"
+(cd "$out" && ls -1)
+
+# ---- what an upload would do ------------------------------------------------
+gh=${VIX_RELEASE_GH:-gh}
+tea=${VIX_RELEASE_TEA:-tea}
+ghrepo=${VIX_RELEASE_GH_REPO:-vixide/vix}
+tearepo=${VIX_RELEASE_TEA_REPO:-vixide/vix}
+assets="$out/SHA256SUMS $out/SHA256SUMS.sig"
+for f in "$out"/vix-tui-*; do assets="$assets $f"; done
+
+echo "scripts/release-local: an upload would run:"
+echo "  $gh release create $version --repo $ghrepo --verify-tag --title \"Vix $version\" --notes-file <changelog section> $assets"
+echo "    (or, if that release already exists: $gh release upload $version --repo $ghrepo --clobber $assets)"
+echo "  $tea releases create --repo $tearepo --tag $version --title \"Vix $version\" --note <changelog section> --asset <each of the above>"
+echo "  after confirmation of: publish $version to github codeberg; the tag must already exist on both forges"
+echo "  packaging handoff (nothing is published): scripts/packaging render $version --sums $out/SHA256SUMS"
+
+if [ "$publish" = 0 ]; then
+	echo "scripts/release-local: dry run complete; no tag was created and nothing was uploaded."
+	exit 0
+fi
+
+# ---- publish ----------------------------------------------------------------
+forge_url() { # github|codeberg
+	case $1 in
+	github) v=${VIX_RELEASE_GITHUB_REMOTE:-} host=github.com ;;
+	*) v=${VIX_RELEASE_CODEBERG_REMOTE:-} host=codeberg.org ;;
+	esac
+	if [ -n "$v" ]; then printf '%s' "$v"; else git remote get-url --push --all origin 2>/dev/null | grep "$host" | head -n1 || true; fi
+}
+for f in github codeberg; do
+	u=$(forge_url "$f")
+	[ -n "$u" ] || die "refusing: no remote found for $f"
+	git ls-remote --exit-code --tags "$u" "refs/tags/$version" >/dev/null 2>&1 ||
+		die "refusing: tag $version does not exist on $f ($u); this script never creates or pushes tags (see --tag and docs/release/index.md)"
+done
+
+want="publish $version to github codeberg"
+echo "scripts/release-local: about to upload release $version to GitHub and Codeberg."
+echo "Type exactly: $want"
+if [ -n "${VIX_RELEASE_CONFIRM_FILE:-}" ]; then
+	IFS= read -r answer <"$VIX_RELEASE_CONFIRM_FILE" || answer=
+else
+	[ -r /dev/tty ] || die "refusing: no terminal to confirm on; nothing was uploaded"
+	printf '> ' >/dev/tty
+	IFS= read -r answer </dev/tty || answer=
+fi
+[ "$answer" = "$want" ] || die "confirmation did not match; nothing was uploaded"
+
+notes=$stage/notes.md
+awk -v h="## [$version]" 'index($0, h) == 1 { p = 1; next } p && /^## \[/ { exit } p' CHANGELOG.md >"$notes"
+# shellcheck disable=SC2086
+if "$gh" release view "$version" --repo "$ghrepo" >/dev/null 2>&1; then
+	"$gh" release upload "$version" --repo "$ghrepo" --clobber $assets || die "GitHub upload failed"
+else
+	"$gh" release create "$version" --repo "$ghrepo" --verify-tag --title "Vix $version" --notes-file "$notes" $assets ||
+		die "GitHub release failed"
+fi
+set --
+for a in $assets; do set -- "$@" --asset "$a"; done
+"$tea" releases create --repo "$tearepo" --tag "$version" --title "Vix $version" --note "$(cat "$notes")" "$@" ||
+	die "Codeberg release failed"
+echo "scripts/release-local: uploaded $version to GitHub and Codeberg"
