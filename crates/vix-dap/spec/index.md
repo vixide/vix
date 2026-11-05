@@ -149,13 +149,24 @@ directory as before). The debugger waits for trust in an untrusted remote
 workspace (T714). An adapter that listens on a TCP port instead of stdio is not
 supported anywhere yet; remotely it would also need a forwarded port.
 
+## Persistent breakpoints (T617)
+
+Line breakpoints (with their condition, hit condition and log message) and
+function breakpoints are saved per workspace in the session file
+(`vix-session`: `WorkspaceSession::breakpoints` / `function_breakpoints`) when
+Vix exits, and restored at startup (`App::restore_breakpoints`, always, even
+when files are named on the command line or `restore_session` is off). The
+restored breakpoints show in the gutter once their file is open, and every
+debug session started afterwards sends them with its `setBreakpoints` and
+`setFunctionBreakpoints` requests, exactly as breakpoints set in this run.
+The gutter of the file in view is refreshed at startup after the restore.
+Exception-filter choices are about one adapter and are not saved.
+
 ## Limitations
 
 - A single debug session at a time.
 - Breakpoints are line and function breakpoints only (no data or instruction
-  breakpoints: data breakpoints need `dataBreakpointInfo` from a selected
-  variable and a Debug panel key, left for a later change) and none are
-  persisted across runs of Vix.
+  breakpoints yet); both kinds are persisted across runs of Vix.
 - A remembered expansion is matched by names, so two sibling variables with
   the same name share it.
 

@@ -190,6 +190,11 @@ name and toggles a breakpoint that stops when that function is entered, for
 adapters that support them. The Debug panel keeps the variables you expanded
 open as you step.
 
+Line and function breakpoints (with their condition, hit count and log
+message) are saved per workspace when you quit Vix and are back the next time
+you open it, and the next debug session sends them to the adapter like any
+other breakpoint. The exception choices are not saved.
+
 ## Attaching to a running program
 
 Add an `[debug_adapters.attach]` table to the adapter entry, and **Run →

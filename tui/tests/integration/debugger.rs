@@ -172,7 +172,8 @@ while True:
     log.write(json.dumps(req) + '\n')
     log.flush()
     if cmd == 'initialize':
-        ok(req, {'supportsSetVariable': True, 'exceptionBreakpointFilters': [
+        ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
+                 'exceptionBreakpointFilters': [
             {'filter':'raised','label':'Raised','default':False},
             {'filter':'uncaught','label':'Uncaught','default':True}]})
         send({'type':'event','event':'initialized'})
@@ -377,6 +378,73 @@ while True:
             serde_json::json!([{ "line": 1, "condition": "a > 0" }])
         );
         app.run_action("run.stop");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn breakpoints_persist_across_runs_and_reach_the_next_session() {
+        let Some((app, dir, log)) = started("t617-persist") else {
+            return;
+        };
+        let session = dir.join("session.toml");
+        let settings = dir.join("settings.toml");
+        let mut app = app
+            .with_session_path(&session)
+            .with_settings_path(&settings);
+        let adapters = app.settings.debug_adapters.clone();
+        app.run_action("run.toggle_breakpoint"); // line 1
+        app.run_action("cursor_down");
+        app.run_action("run.edit_breakpoint"); // line 2
+        answer(&mut app, "b > 1");
+        answer(&mut app, "");
+        answer(&mut app, "b is {b}");
+        app.run_action("run.function_breakpoint");
+        answer(&mut app, "parse");
+        app.on_exit();
+        drop(app);
+
+        // A fresh run: nothing is set until the saved ones are restored.
+        let file = dir.join("prog.mock");
+        let mut again = app_at_with(&dir, Settings::default())
+            .with_session_path(&session)
+            .with_settings_path(&settings);
+        again.open_initial(&file);
+        assert!(again.active_breakpoints().is_empty());
+        again.restore_breakpoints();
+        assert_eq!(again.active_breakpoints(), vec![1, 2]);
+        let bp = again.active_breakpoint(2).unwrap();
+        assert_eq!(bp.condition.as_deref(), Some("b > 1"));
+        assert_eq!(bp.log_message.as_deref(), Some("b is {b}"));
+        assert_eq!(again.dap.function_breakpoints()[0].name, "parse");
+
+        // They go to the adapter of the next session as ordinary breakpoints.
+        again.settings.debug_adapters = adapters;
+        again.run_action("run.start");
+        wait(&mut again, |a| has_label(a, "p"));
+        let sent = requests(&log, "setBreakpoints");
+        assert_eq!(
+            sent[0]["breakpoints"],
+            serde_json::json!([
+                { "line": 1 },
+                { "line": 2, "condition": "b > 1", "logMessage": "b is {b}" }
+            ])
+        );
+        assert_eq!(
+            requests(&log, "setFunctionBreakpoints")[0]["breakpoints"],
+            serde_json::json!([{ "name": "parse" }])
+        );
+        again.run_action("run.stop");
+
+        // Removing them all is saved too.
+        again.run_action("run.toggle_breakpoint");
+        again.run_action("cursor_down");
+        again.run_action("run.toggle_breakpoint");
+        again.run_action("run.function_breakpoint");
+        answer(&mut again, "parse");
+        again.on_exit();
+        let mut third = app_at_with(&dir, Settings::default()).with_session_path(&session);
+        third.restore_breakpoints();
+        assert!(third.dap.function_breakpoints().is_empty());
         fs::remove_dir_all(&dir).ok();
     }
 }

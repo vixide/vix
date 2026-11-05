@@ -43,6 +43,8 @@ impl App {
         // reads stdin into a scratch buffer instead of opening a file named
         // "-". With no file given, reopen the previous session for this
         // workspace (if enabled).
+        // Debugger breakpoints come back whatever was opened (T617).
+        self.restore_breakpoints();
         if cli.tutor {
             self.open_tutor();
         } else if cli.files.is_empty() {
@@ -65,6 +67,8 @@ impl App {
         {
             self.open_compare_files(old, new);
         }
+        // Show the restored breakpoints in the opened file's gutter.
+        self.refresh_debug_markers();
         // Untitled buffers a crash or forced quit left behind (T629).
         self.offer_untitled_recovery();
         Ok(())

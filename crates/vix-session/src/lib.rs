@@ -173,6 +173,44 @@ pub struct WorkspaceSession {
     /// nothing by itself.
     #[serde(default)]
     pub acp_session: Option<String>,
+
+    // ----- debugger breakpoints (T617) -------------------------------------
+    /// The line breakpoints set in this workspace, so they survive a restart.
+    /// Written on exit from the host's breakpoint table and restored at
+    /// startup; an older `session.toml` loads with none.
+    #[serde(default)]
+    pub breakpoints: Vec<BreakpointRecord>,
+    /// The function breakpoints set in this workspace (see
+    /// [`Self::breakpoints`]).
+    #[serde(default)]
+    pub function_breakpoints: Vec<FunctionBreakpointRecord>,
+}
+
+/// One saved line breakpoint (T617): a file, a 1-based line and the optional
+/// condition, hit condition and log message of the DAP `SourceBreakpoint`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BreakpointRecord {
+    /// Absolute path of the file the breakpoint is in.
+    pub path: String,
+    /// 1-based line.
+    pub line: usize,
+    /// Condition expression, if any.
+    pub condition: Option<String>,
+    /// Hit-count condition, if any.
+    pub hit_condition: Option<String>,
+    /// Log message (makes it a logpoint), if any.
+    pub log_message: Option<String>,
+}
+
+/// One saved function breakpoint (T617).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FunctionBreakpointRecord {
+    /// The function's name, as the adapter resolves it.
+    pub name: String,
+    /// Condition expression, if any.
+    pub condition: Option<String>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -467,6 +505,29 @@ mod tests {
             s.workspace("/a").unwrap().acp_session.as_deref(),
             Some("S10")
         );
+    }
+
+    #[test]
+    fn breakpoints_round_trip_and_an_older_file_loads_without_them() {
+        let mut w = ws("/a");
+        w.breakpoints.push(BreakpointRecord {
+            path: "/a/x.py".into(),
+            line: 7,
+            condition: Some("n > 1".into()),
+            ..Default::default()
+        });
+        w.function_breakpoints.push(FunctionBreakpointRecord {
+            name: "main".into(),
+            condition: None,
+        });
+        let mut s = Session::default();
+        s.set_workspace(w.clone());
+        let back: Session = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+        let saved = back.workspace("/a").unwrap();
+        assert_eq!(saved.breakpoints, w.breakpoints);
+        assert_eq!(saved.function_breakpoints, w.function_breakpoints);
+        let old: Session = toml::from_str("[[workspaces]]\nroot = \"/b\"\n").unwrap();
+        assert!(old.workspace("/b").unwrap().breakpoints.is_empty());
     }
 
     #[test]

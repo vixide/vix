@@ -131,6 +131,18 @@ most recently first (at most `MAX_RECENT_REMOTES`, 10, no duplicates;
 `Session::push_recent_remote`) for **File → Open Remote…**. Names never carry
 a password: `ssh://` names hold only user, host, port and path.
 
+## Debugger breakpoints (T617)
+
+`WorkspaceSession::breakpoints` (`BreakpointRecord`: `path`, 1-based `line`,
+and the optional `condition`, `hit_condition`, `log_message`) and
+`function_breakpoints` (`FunctionBreakpointRecord`: `name`, optional
+`condition`) hold the workspace's debugger breakpoints, so they survive a
+restart. The host writes them from its breakpoint table when it saves the
+session on exit and reads them back at startup, whether or not files were
+given on the command line (see `crates/vix-dap/spec`). An older file loads with
+none (`#[serde(default)]`). Data and instruction breakpoints are tied to one
+running program and are not saved.
+
 ## Roadmap
 
 - Per-workspace "reopen last session" command for the disabled-by-default case.

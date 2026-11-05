@@ -148,6 +148,59 @@ impl App {
         }
     }
 
+    /// Restore this workspace's saved debugger breakpoints (T617): the line
+    /// breakpoints into the breakpoint table and the function breakpoints
+    /// into the debugger. Called at startup whether or not files were named
+    /// on the command line, so saving the session on exit never drops them.
+    pub fn restore_breakpoints(&mut self) {
+        let key = self.session_key();
+        let Some(ws) = self.load_session().workspace(&key).cloned() else {
+            return;
+        };
+        for rec in &ws.breakpoints {
+            let mut bp = crate::dap::SourceBreakpoint::new(rec.line);
+            bp.condition.clone_from(&rec.condition);
+            bp.hit_condition.clone_from(&rec.hit_condition);
+            bp.log_message.clone_from(&rec.log_message);
+            self.breakpoints
+                .entry(PathBuf::from(&rec.path))
+                .or_default()
+                .insert(rec.line, bp);
+        }
+        if !ws.function_breakpoints.is_empty() {
+            let list = ws
+                .function_breakpoints
+                .iter()
+                .map(|r| {
+                    let mut f = crate::dap::FunctionBreakpoint::new(&r.name);
+                    f.condition.clone_from(&r.condition);
+                    f
+                })
+                .collect();
+            self.dap.set_function_breakpoints(list);
+        }
+    }
+
+    /// The breakpoints as session records, in a stable order.
+    fn breakpoint_records(&self) -> Vec<crate::session::BreakpointRecord> {
+        let mut paths: Vec<&PathBuf> = self.breakpoints.keys().collect();
+        paths.sort();
+        paths
+            .into_iter()
+            .flat_map(|path| {
+                self.breakpoints[path]
+                    .values()
+                    .map(|bp| crate::session::BreakpointRecord {
+                        path: path.to_string_lossy().into_owned(),
+                        line: bp.line,
+                        condition: bp.condition.clone(),
+                        hit_condition: bp.hit_condition.clone(),
+                        log_message: bp.log_message.clone(),
+                    })
+            })
+            .collect()
+    }
+
     /// Reopen the files/cursors/active tab described by `ws`, returning how many
     /// files were actually opened. Pure (no config IO) so it can be tested
     /// directly; the fresh app's blank untitled buffer is dropped once at least
@@ -253,6 +306,16 @@ impl App {
             split,
             visits: 0, // filled/incremented by Session::set_workspace
             last_visit: jiff::Zoned::now().timestamp().as_second(),
+            breakpoints: self.breakpoint_records(),
+            function_breakpoints: self
+                .dap
+                .function_breakpoints()
+                .iter()
+                .map(|f| crate::session::FunctionBreakpointRecord {
+                    name: f.name.clone(),
+                    condition: f.condition.clone(),
+                })
+                .collect(),
             // The project.* cache/history fields are filled in by
             // `save_session`, which has the full picture (this run's
             // in-memory copy vs. the prior on-disk save); left at their
