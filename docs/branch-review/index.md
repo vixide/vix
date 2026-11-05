@@ -6,7 +6,7 @@ Markdown.
 
 ## Actions
 
-All five are in the **Git** menu and the command palette.
+All of these are in the **Git** menu and the command palette.
 
 | Action id | Menu item | Does |
 | --------- | --------- | ---- |
@@ -18,8 +18,10 @@ All five are in the **Git** menu and the command palette.
 | `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor (`git apply --cached`). |
 | `git.review_stage_all` | Stage All Review Hunks | Stages every text hunk of the open review at once; for a stash review, the whole stash. |
 | `git.review_discard_hunk` | Discard Review Hunk… | After a yes/no, undoes the hunk under the cursor in the working tree (`git apply --reverse`). |
+| `git.review_discard_all` | Discard All Review Hunks… | Undoes every text hunk of the open review in the working tree, after a confirmation that says how many hunks in how many files. |
+| `git.review_toggle_view` | Review Two-Pane View | Switches between the inline diff and a side-by-side view. `v` in the review does the same. |
 
-The last seven work only in the review tab. Stage and discard hand the hunk's
+The last nine work only in the review tab. Stage and discard hand the hunk's
 patch to `git apply`, so they work when the hunk still fits the index or the
 working tree (for example a review of the working-tree diff); otherwise git's
 reason is shown and nothing changes. In **Git → Stash List…**, `r` opens the
@@ -46,8 +48,24 @@ export but is not shown.
 The Markdown export groups comments by file, ordered by line, each followed
 by its code line, ready to paste into a pull request or an agent prompt.
 
-Not built yet: staging or discarding from the review buffer (use **Stage
-Hunk** from the file itself) and a two-pane view.
+## Discard all
+
+**Discard All Review Hunks…** asks first and names the size of what it will
+undo ("all 7 hunks in 3 files"). It is all or nothing: git applies the whole
+reverse patch or none of it, so if any hunk no longer fits (the file changed
+since the review opened) nothing is discarded and git's reason is shown.
+Binary files are not part of it. After a discard the review is diffed again.
+
+## Two-pane view
+
+Press `v` in the review (or use **Git → Review Two-Pane View**) to see the old
+text on the left and the new text on the right. A run of removed lines is
+lined up with the added lines that replace it; a line with no counterpart
+leaves the other side blank. Comments appear under their group. The cursor,
+hunk navigation, commenting and staging work as in the inline view, and both
+views scroll together. When the editor is narrower than 60 columns the inline
+view shows instead. The `review_view` setting (`"inline"`, the default, or
+`"side_by_side"`) chooses the view a review opens in.
 
 See the specification at `crates/vix-review/spec/index.md`.
 

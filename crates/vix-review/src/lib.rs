@@ -84,6 +84,79 @@ pub struct FileDiff {
     pub hunks: Vec<Hunk>,
 }
 
+/// The narrowest terminal width, in columns, at which the two-pane view is
+/// drawn; below it the host falls back to the inline buffer.
+pub const MIN_SIDE_BY_SIDE_WIDTH: u16 = 60;
+
+/// One side of a two-pane row: a numbered line of the old or new file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cell {
+    /// 1-based line number on this side.
+    pub number: usize,
+    /// The line's text, without the diff marker.
+    pub text: String,
+    /// How the line changed: [`LineKind::Removed`] on the left,
+    /// [`LineKind::Added`] on the right, [`LineKind::Context`] on both.
+    pub kind: LineKind,
+}
+
+/// What a two-pane row shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PaneKind {
+    /// The title, a file heading, a `(binary file)` note or a hunk header:
+    /// one text across the full width.
+    Heading,
+    /// A saved comment, across the full width.
+    Comment,
+    /// A line pair: old text on the left, new text on the right. Either side
+    /// is `None` when the other has no counterpart (a pure addition or
+    /// removal).
+    Pair {
+        /// The old file's line.
+        left: Option<Cell>,
+        /// The new file's line.
+        right: Option<Cell>,
+    },
+}
+
+/// One row of the two-pane view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneRow {
+    /// What the row shows.
+    pub kind: PaneKind,
+    /// The text of a [`PaneKind::Heading`] or [`PaneKind::Comment`] row;
+    /// empty for a pair.
+    pub text: String,
+    /// First row of the inline buffer ([`Review::render`]) this row stands
+    /// for. The inline buffer keeps the cursor, so the two-pane view scrolls
+    /// and highlights by these.
+    pub first: usize,
+    /// Last inline row this row stands for (inclusive).
+    pub last: usize,
+}
+
+/// The review laid out for the two-pane view: old text left, new text right,
+/// aligned hunk by hunk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SideBySide {
+    /// The rows, top to bottom.
+    pub rows: Vec<PaneRow>,
+}
+
+impl SideBySide {
+    /// Index of the first row that covers inline row `inline` or comes after
+    /// it; the last row when `inline` is past the end. This is how the two
+    /// views stay scroll-synced.
+    #[must_use]
+    pub fn row_for_inline(&self, inline: usize) -> usize {
+        self.rows
+            .iter()
+            .position(|r| r.last >= inline)
+            .unwrap_or_else(|| self.rows.len().saturating_sub(1))
+    }
+}
+
 /// What a row of the rendered buffer stands for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -307,6 +380,117 @@ impl Review {
         Rendered { text, targets }
     }
 
+    /// Lay the review out for the two-pane view (see [`SideBySide`]). Within
+    /// a hunk a run of removed lines is paired with the run of added lines
+    /// that follows it, line by line; the longer run leaves blank cells on the
+    /// other side. Context lines show on both sides. Comments follow the pair
+    /// group they belong to. Row counting mirrors [`Self::render`] exactly, so
+    /// every row's `first`/`last` indexes the inline buffer.
+    #[must_use]
+    pub fn side_by_side(&self) -> SideBySide {
+        let mut rows: Vec<PaneRow> = Vec::new();
+        let mut row = 0usize; // next inline row
+        let heading = |rows: &mut Vec<PaneRow>, row: &mut usize, text: String| {
+            rows.push(PaneRow {
+                kind: PaneKind::Heading,
+                text,
+                first: *row,
+                last: *row,
+            });
+            *row += 1;
+        };
+        heading(
+            &mut rows,
+            &mut row,
+            format!(
+                "Review {}: {} files, {} changed lines, {} comments",
+                self.range,
+                self.files.len(),
+                self.changed_lines(),
+                self.comments.len()
+            ),
+        );
+        for f in &self.files {
+            row += 1; // the blank row before the file heading
+            heading(&mut rows, &mut row, format!("=== {}", f.path));
+            if f.binary {
+                heading(&mut rows, &mut row, "(binary file)".to_string());
+            }
+            for h in &f.hunks {
+                heading(&mut rows, &mut row, h.header.clone());
+                self.pane_hunk(f, h, &mut row, &mut rows);
+            }
+        }
+        SideBySide { rows }
+    }
+
+    /// Append the rows of one hunk (see [`Self::side_by_side`]).
+    fn pane_hunk(&self, f: &FileDiff, h: &Hunk, row: &mut usize, rows: &mut Vec<PaneRow>) {
+        // A pending change group: removed and added lines with their inline
+        // rows, plus the comments that follow them.
+        let mut removed: Vec<(Cell, usize)> = Vec::new();
+        let mut added: Vec<(Cell, usize)> = Vec::new();
+        let mut comments: Vec<(String, usize)> = Vec::new();
+        for l in &h.lines {
+            let at = *row;
+            *row += 1 + usize::from(l.no_newline);
+            let (side, n) = match l.kind {
+                LineKind::Removed => (Side::Old, l.old.unwrap_or(0)),
+                _ => (Side::New, l.new.unwrap_or(0)),
+            };
+            let cell = |number: usize| Cell {
+                number,
+                text: l.text.clone(),
+                kind: l.kind,
+            };
+            // Inline, a line's comments sit right under it (and its marker).
+            let mut here = Vec::new();
+            for (_, c) in self.comments_at(&f.path, side, n) {
+                here.push((format!("    >> {}", c.text.replace('\n', " ")), *row));
+                *row += 1;
+            }
+            match l.kind {
+                LineKind::Removed => {
+                    // A removal after additions starts a new group.
+                    if !added.is_empty() {
+                        flush_group(rows, &mut removed, &mut added, &mut comments);
+                    }
+                    removed.push((cell(n), at));
+                    comments.extend(here);
+                }
+                LineKind::Added => {
+                    added.push((cell(n), at));
+                    comments.extend(here);
+                }
+                LineKind::Context => {
+                    flush_group(rows, &mut removed, &mut added, &mut comments);
+                    let c = cell(n);
+                    rows.push(PaneRow {
+                        kind: PaneKind::Pair {
+                            left: Some(Cell {
+                                number: l.old.unwrap_or(0),
+                                ..c.clone()
+                            }),
+                            right: Some(c),
+                        },
+                        text: String::new(),
+                        first: at,
+                        last: at + usize::from(l.no_newline),
+                    });
+                    for (text, r) in here {
+                        rows.push(PaneRow {
+                            kind: PaneKind::Comment,
+                            text,
+                            first: r,
+                            last: r,
+                        });
+                    }
+                }
+            }
+        }
+        flush_group(rows, &mut removed, &mut added, &mut comments);
+    }
+
     /// A one-hunk unified patch for `git apply`: file headers, the hunk header
     /// and its lines. A hunk that starts at `-0,0` is a new file
     /// (`--- /dev/null`) and one that ends at `+0,0` a deletion
@@ -341,6 +525,17 @@ impl Review {
             }
         }
         (!out.is_empty()).then_some(out)
+    }
+
+    /// How many hunks and files [`Self::full_patch`] covers: `(hunks, files)`
+    /// over the text files that have at least one hunk. The discard-all
+    /// confirmation names these.
+    #[must_use]
+    pub fn patch_counts(&self) -> (usize, usize) {
+        self.files
+            .iter()
+            .filter(|f| !f.binary && !f.hunks.is_empty())
+            .fold((0, 0), |(h, n), f| (h + f.hunks.len(), n + 1))
     }
 
     /// Replace the diff with a freshly computed one for the same range
@@ -428,6 +623,38 @@ impl Review {
             }
             Err(_) => false,
         }
+    }
+}
+
+/// Emit the pending change group as aligned rows (removed lines paired with
+/// added ones), then its comments, and clear it.
+fn flush_group(
+    rows: &mut Vec<PaneRow>,
+    removed: &mut Vec<(Cell, usize)>,
+    added: &mut Vec<(Cell, usize)>,
+    comments: &mut Vec<(String, usize)>,
+) {
+    let (rem, add) = (std::mem::take(removed), std::mem::take(added));
+    for i in 0..rem.len().max(add.len()) {
+        let (l, r) = (rem.get(i), add.get(i));
+        let at: Vec<usize> = [l, r].into_iter().flatten().map(|(_, at)| *at).collect();
+        rows.push(PaneRow {
+            kind: PaneKind::Pair {
+                left: l.map(|(c, _)| c.clone()),
+                right: r.map(|(c, _)| c.clone()),
+            },
+            text: String::new(),
+            first: at.iter().copied().min().unwrap_or(0),
+            last: at.iter().copied().max().unwrap_or(0),
+        });
+    }
+    for (text, r) in std::mem::take(comments) {
+        rows.push(PaneRow {
+            kind: PaneKind::Comment,
+            text,
+            first: r,
+            last: r,
+        });
     }
 }
 
@@ -743,5 +970,99 @@ mod tests {
             review.comment_text("src/a.rs", Side::New, 11),
             Some("keep me")
         );
+    }
+
+    #[test]
+    fn side_by_side_pairs_removed_with_added_and_aligns_context() {
+        let r = Review::new("a..b", DIFF);
+        let sbs = r.side_by_side();
+        let pairs: Vec<_> = sbs
+            .rows
+            .iter()
+            .filter_map(|row| match &row.kind {
+                PaneKind::Pair { left, right } => Some((
+                    left.as_ref().map(|c| c.text.as_str()),
+                    right.as_ref().map(|c| c.text.as_str()),
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                (Some("keep"), Some("keep")),
+                (Some("old"), Some("new")),
+                (Some("tail"), Some("tail")),
+                (Some("ctx"), Some("ctx")),
+                (None, Some("more")),
+            ]
+        );
+    }
+
+    #[test]
+    fn side_by_side_leaves_blank_cells_for_uneven_runs() {
+        let diff = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,3 +1,1 @@\n-a\n-b\n-c\n+x\n";
+        let sbs = Review::new("r", diff).side_by_side();
+        let pairs: Vec<_> = sbs
+            .rows
+            .iter()
+            .filter_map(|row| match &row.kind {
+                PaneKind::Pair { left, right } => Some((
+                    left.as_ref().map(|c| c.number),
+                    right.as_ref().map(|c| c.number),
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![(Some(1), Some(1)), (Some(2), None), (Some(3), None)]
+        );
+    }
+
+    #[test]
+    fn side_by_side_rows_index_the_inline_buffer() {
+        let mut r = Review::new("a..b", DIFF);
+        r.set_comment("src/a.rs", Side::New, 2, "new", "why?");
+        r.set_comment("src/a.rs", Side::Old, 2, "old", "gone?");
+        let out = r.render();
+        let sbs = r.side_by_side();
+        for row in &sbs.rows {
+            assert!(row.first <= row.last && row.last < out.targets.len());
+            match &row.kind {
+                PaneKind::Heading => assert!(matches!(
+                    out.targets[row.first],
+                    Target::None | Target::File(_) | Target::Hunk(..)
+                )),
+                PaneKind::Comment => {
+                    assert!(matches!(out.targets[row.first], Target::Comment(_)));
+                    assert_eq!(out.text.lines().nth(row.first), Some(row.text.as_str()));
+                }
+                PaneKind::Pair { .. } => {
+                    assert!(matches!(out.targets[row.first], Target::Line { .. }));
+                }
+            }
+        }
+        assert_eq!(
+            sbs.rows
+                .iter()
+                .filter(|r| r.kind == PaneKind::Comment)
+                .count(),
+            2
+        );
+        assert_eq!(sbs.row_for_inline(0), 0);
+        let hunk_row = out.hunk_rows()[1];
+        let at = sbs.row_for_inline(hunk_row);
+        assert_eq!(sbs.rows[at].first, hunk_row);
+    }
+
+    #[test]
+    fn patch_counts_name_hunks_and_files() {
+        assert_eq!(Review::new("a..b", DIFF).patch_counts(), (2, 1));
+        let none = Review::new(
+            "a..b",
+            "diff --git a/i b/i\nBinary files a/i and b/i differ\n",
+        );
+        assert_eq!(none.patch_counts(), (0, 0));
     }
 }

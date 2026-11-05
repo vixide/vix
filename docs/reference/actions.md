@@ -234,12 +234,14 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.revert_hunk` | Revert Hunk | Menu |
 | `git.review` | Review Range… | Menu |
 | `git.review_comment` | Comment on Review Line… | Menu |
+| `git.review_discard_all` | Discard All Review Hunks… | Menu |
 | `git.review_discard_hunk` | Discard Review Hunk… | Menu |
 | `git.review_export` | Export Review Comments | Menu |
 | `git.review_next` | Next Review Hunk | Menu |
 | `git.review_prev` | Previous Review Hunk | Menu |
 | `git.review_stage_all` | Stage All Review Hunks | Menu |
 | `git.review_stage_hunk` | Stage Review Hunk | Menu |
+| `git.review_toggle_view` | Review Two-Pane View | Menu |
 | `git.stage_hunk` | Stage Hunk | Menu |
 | `git.stash` | Stash | Menu |
 | `git.stash_list` | Stash List… | Menu |
@@ -817,4 +819,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**810 actions.**
+**812 actions.**

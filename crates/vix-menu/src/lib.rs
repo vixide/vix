@@ -1785,6 +1785,16 @@ const GIT: &[Item] = &[
         "git.review_discard_hunk",
         "",
     ),
+    Item::leaf(
+        "menu.item.git.review_discard_all",
+        "git.review_discard_all",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.git.review_toggle_view",
+        "git.review_toggle_view",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
     Item::leaf("menu.item.git.conflict_list", "git.conflict_list", ""),

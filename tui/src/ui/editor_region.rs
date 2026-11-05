@@ -7,6 +7,14 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 
 use super::ghost::draw_ghost;
+#[cfg(feature = "git")]
+use super::review_panes::draw_review_panes;
+
+/// Without the `git` feature there is no branch review to draw.
+#[cfg(not(feature = "git"))]
+fn draw_review_panes(_app: &App, _frame: &mut Frame, _area: Rect) -> bool {
+    false
+}
 use super::scroll_markers;
 use super::{RULER_COLUMN, draw_hscrollbar, draw_minimap, draw_scrollbar_marked};
 use crate::app::App;
@@ -156,6 +164,9 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         }
         return text;
     }
+    if tab_index == app.editor.active && draw_review_panes(app, frame, text) {
+        return text;
+    }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
         frame.render_widget(&tab.editor, text);
         if tab_index == app.editor.active {
@@ -231,6 +242,12 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         {
             render_image(frame, text, proto);
         }
+        return;
+    }
+    // The review's two-pane view replaces the text editor (T665).
+    if draw_review_panes(app, frame, text) {
+        app.editor_hmax = 0;
+        app.layout.editor_hscrollbar = Rect::default();
         return;
     }
     let mut hbar_rect: Option<Rect> = None;

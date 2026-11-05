@@ -899,6 +899,9 @@ pub enum ConfirmKind {
     /// Undo one hunk of the open review in the working tree (T665);
     /// [`Confirm::paths`] holds its file.
     GitReviewDiscard,
+    /// Undo every text hunk of the open review in the working tree (T665);
+    /// the confirmation names how many hunks and files.
+    GitReviewDiscardAll,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -7047,6 +7050,11 @@ impl App {
         if self.org_view_key(key) {
             return;
         }
+        // `v` in a review tab switches inline / two-pane.
+        #[cfg(feature = "git")]
+        if self.review_view_key(key) {
+            return;
+        }
         // Read-only buffers accept navigation but not edits.
         if self.active_read_only() && (Self::is_edit_key(&key) || key.code == KeyCode::Delete) {
             self.status = t!("status.read_only_blocked").to_string();
@@ -8433,6 +8441,7 @@ impl App {
                     | ConfirmKind::GitStashDrop
                     | ConfirmKind::GitWorktreeRemove
                     | ConfirmKind::GitReviewDiscard
+                    | ConfirmKind::GitReviewDiscardAll
             )
         }) {
             self.git_confirm_key(kind, key);

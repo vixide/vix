@@ -32,6 +32,8 @@ mod menu_bar;
 mod minimap;
 mod oc;
 mod picker_panels;
+#[cfg(feature = "git")]
+mod review_panes;
 mod scroll_markers;
 mod search;
 mod status_bar;

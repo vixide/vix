@@ -1630,3 +1630,137 @@ fn review_stages_a_hunk_with_a_no_newline_marker() {
     assert!(t665_cached(&dir).contains("No newline"));
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
+
+/// T665: Discard All Review Hunks names the hunk and file counts in its
+/// confirmation, does nothing on `n`, and on `y` undoes every hunk of every
+/// file in the working tree.
+#[test]
+fn review_discard_all_confirms_with_counts_then_reverts_every_hunk() {
+    let dir = t634_repo("t665discardall");
+    fs::write(dir.join("b.txt"), "x\n").unwrap();
+    t634_git(&dir, &["add", "b.txt"]);
+    t634_git(&dir, &["commit", "-q", "-m", "b"]);
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "ONE\n").unwrap();
+    fs::write(dir.join("b.txt"), "x\ny\n").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    let (hunks, files) = app.review.as_ref().unwrap().review.patch_counts();
+    assert_eq!((hunks, files), (2, 2));
+
+    app.run_action("git.review_discard_all");
+    let confirm = app.confirm.as_ref().expect("asks first");
+    assert_eq!(confirm.kind, vix::app::ConfirmKind::GitReviewDiscardAll);
+    assert!(
+        confirm.message.contains('2'),
+        "the counts are named: {}",
+        confirm.message
+    );
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none());
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "ONE\n");
+
+    app.run_action("git.review_discard_all");
+    app.on_key(key('y'));
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "one\n");
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "x\n");
+    assert!(t665_diff(&dir).is_empty(), "nothing left to discard");
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// T665: when a hunk no longer fits, nothing is discarded (git applies the
+/// patch all or nothing) and git's reason is reported, not swallowed.
+#[test]
+fn review_discard_all_refuses_atomically_when_a_hunk_no_longer_fits() {
+    let dir = t634_repo("t665allfail");
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "ONE\n").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    // The file moves on after the review was opened.
+    fs::write(dir.join("a.txt"), "something else\n").unwrap();
+    let before = app.messages.items.len();
+    app.run_action("git.review_discard_all");
+    app.on_key(key('y'));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "something else\n",
+        "no partial discard"
+    );
+    assert_eq!(
+        app.messages.items.len(),
+        before + 1,
+        "git's reason is reported"
+    );
+    // Outside a review the action only says so.
+    let mut plain = app_at(&dir);
+    plain.run_action("git.review_discard_all");
+    assert!(plain.confirm.is_none());
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// The text of a drawn frame, one string per terminal row.
+fn t665_frame_rows(app: &mut App, width: u16) -> Vec<String> {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(width, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    let buf = term.backend().buffer().clone();
+    (0..buf.area.height)
+        .map(|y| {
+            (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect()
+        })
+        .collect()
+}
+
+/// T665: `v` (and the action) switch the review to the two-pane view: the
+/// old line shows left of the new one on the same screen row. A terminal
+/// that is too narrow falls back to the inline buffer, and the setting
+/// chooses the view a review opens in.
+#[test]
+fn review_two_pane_view_aligns_old_left_new_right_and_falls_back_when_narrow() {
+    let dir = unique_dir("review-panes");
+    let mut app = app_at(&dir);
+    app.open_review_from_diff("a..b", REVIEW_DIFF);
+    let inline = t665_frame_rows(&mut app, 160);
+    assert!(
+        inline.iter().any(|r| r.contains("-old")),
+        "inline shows -old"
+    );
+
+    app.on_key(key('v'));
+    assert!(app.review.as_ref().unwrap().side_by_side);
+    let rows = t665_frame_rows(&mut app, 160);
+    let row = rows
+        .iter()
+        .find(|r| r.contains("old"))
+        .expect("the old line is drawn");
+    let old_at = row.find("old").unwrap();
+    assert!(
+        row.find("new").is_some_and(|n| n > old_at),
+        "new text is right of old on the same row: {row:?}"
+    );
+    assert!(!rows.iter().any(|r| r.contains("-old")), "no inline marker");
+
+    // Too narrow: inline again, though the view stays switched on.
+    let narrow = t665_frame_rows(&mut app, 40);
+    assert!(app.review.as_ref().unwrap().side_by_side);
+    assert!(narrow.iter().any(|r| r.contains("-old")));
+
+    // The action toggles back.
+    app.run_action("git.review_toggle_view");
+    assert!(!app.review.as_ref().unwrap().side_by_side);
+
+    // Outside a review the toggle only says so.
+    let mut plain = app_at(&dir);
+    plain.run_action("git.review_toggle_view");
+    assert!(plain.review.is_none());
+
+    // The setting picks the opening view.
+    let mut set = app_at(&dir);
+    set.settings.review_view = "side_by_side".to_string();
+    set.open_review_from_diff("a..b", REVIEW_DIFF);
+    assert!(set.review.as_ref().unwrap().side_by_side);
+    fs::remove_dir_all(&dir).ok();
+}

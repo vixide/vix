@@ -38,6 +38,9 @@ show_explorer = true
 # trash/Recycle Bin, undoable from there) or "hard" (remove outright, no
 # undo). Any other value falls back to "trash".
 explorer_delete = "trash"
+# The view a branch review opens in: "inline" (default) or "side_by_side"
+# (old text left, new text right). Any other value means "inline".
+review_view = "inline"
 # Remote (SSH) workspaces: use the Vix remote agent when a `vix` of this
 # version is already on the remote machine ("installed", default), also
 # upload this one when it isn't and the platform matches ("upload",

@@ -8121,6 +8121,23 @@ widgets, and a markup-hiding Markdown "compose" mode.
     **Deferred:** the two-pane (side-by-side) view, which needs T660's
     two-pane model and new rendering under `tui/src/ui/`; and a
     "discard all hunks" action (stage-all covers the whole-stash case).
+  - **Two-pane and discard-all done** (`feat/t665-two-pane-discard-all`):
+    Git → Discard All Review Hunks… (`git.review_discard_all`) confirms with
+    the hunk and file counts, then reverses the whole text patch in one
+    `git apply`, which is all or nothing; a hunk that no longer fits leaves
+    the tree untouched and git's reason is shown. Git → Review Two-Pane View
+    (`git.review_toggle_view`, and `v` in the review) shows old text left and
+    new text right, removed/added runs zipped per hunk, comments under their
+    group, scrolling with the inline buffer, inline again below 60 columns;
+    `review_view` sets the opening view. The pairing is `vix_review::
+    SideBySide` (not T660's `vix-diff-view` model, which diffs two texts and
+    has no hunks, so the review's own parsed hunks are paired instead).
+    **Still not done:** mouse clicks and the wheel are not mapped onto the
+    two-pane rows (the keyboard drives it; the cursor still moves through the
+    hidden inline buffer, so commenting on a line goes by the cursor's inline
+    row); no line-level (partial hunk) staging or discard; no word-level
+    highlight inside paired lines; long lines are cut, not wrapped; the
+    two-pane view is drawn for the active pane only.
 - [x] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632

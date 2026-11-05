@@ -108,6 +108,11 @@ pub struct Settings {
     /// value falls back to `"trash"`, the safer default, rather than
     /// silently hard-deleting on a typo.
     pub explorer_delete: String,
+    /// How a branch review (T665) opens: `"inline"` (default, one unified
+    /// diff buffer) or `"side_by_side"` (old text left, new text right).
+    /// Any other value means `"inline"`. **Git → Review Two-Pane View** (or
+    /// `v` in the review) switches the open review without changing this.
+    pub review_view: String,
     /// Whether a remote (SSH) workspace uses the Vix remote agent (T717),
     /// which answers file operations over one connection instead of one
     /// shell command each: `"installed"` (default — use a `vix` of exactly
@@ -903,6 +908,7 @@ impl Default for Settings {
             completion: CompletionSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
+            review_view: "inline".to_string(),
             remote_agent: "installed".to_string(),
             git_gutter_base: "head".to_string(),
             smart_commit: "ask".to_string(),

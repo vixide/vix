@@ -3,16 +3,17 @@
 Review a branch, a commit range, a commit or a stash as one multi-file diff,
 with line comments that are saved per repository and exported as Markdown.
 
-**Status:** Mostly shipped (improvement plan T665). Shipped: the multi-file
-buffer, hunk navigation, saved line comments, the Markdown/JSON export,
-stage/discard of the hunk under the cursor, staging every hunk at once (a
-whole stash), `r` in the stash chooser, re-diffing after a stage or discard,
-and `\ No newline at end of file` markers. Not shipped: the two-pane view
-(T660's model could be added later) and discarding a whole review at once.
+**Status:** Shipped (improvement plan T665): the multi-file buffer, hunk
+navigation, saved line comments, the Markdown/JSON export, stage/discard of
+the hunk under the cursor, staging and discarding every hunk at once, `r` in
+the stash chooser, re-diffing after a stage or discard, `\ No newline at end
+of file` markers, and the two-pane (side-by-side) view. Not shipped: a stash
+chooser as a range source other than `r`, and staging or discarding single
+lines.
 
 ## Actions
 
-All eight are in **Git** and in the command palette.
+All ten are in **Git** and in the command palette.
 
 | Action | Menu item | Does |
 | --- | --- | --- |
@@ -24,8 +25,10 @@ All eight are in **Git** and in the command palette.
 | `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor: `Review::hunk_patch` rebuilds a one-hunk patch (file headers use `/dev/null` for a new or deleted file) and `vix_git::apply_patch(.., ApplyTarget::Index)` feeds it to `git apply --cached`. A binary file, or a cursor outside a hunk, only says so in the status line. |
 | `git.review_stage_all` | Stage All Review Hunks | `Review::full_patch` joins every hunk of every text file (one header per file, binary files skipped) and `apply_patch(.., ApplyTarget::Index)` stages it in one call; for a stash review that is the whole stash. Says so in the status line when there is nothing to stage. |
 | `git.review_discard_hunk` | Discard Review Hunk… | Same patch, after a yes/no (`ConfirmKind::GitReviewDiscard`), through `git apply --reverse` on the working tree. |
+| `git.review_discard_all` | Discard All Review Hunks… | Reverses `Review::full_patch` on the working tree after a yes/no (`ConfirmKind::GitReviewDiscardAll`) whose text names `Review::patch_counts` (hunks, files). `git apply` is all or nothing, so a hunk that no longer fits leaves the tree untouched and git's reason is shown as an error; there is never a silent partial discard. Binary files are skipped (they are not in the patch). Succeeds, then re-diffs like the other discards. |
+| `git.review_toggle_view` | Review Two-Pane View | Flips `ReviewState::side_by_side`; also bound to a plain `v` in the review tab (`App::review_view_key`, ahead of the read-only guard). Outside a review it only says so. |
 
-The next, previous, comment, export, stage, stage-all and discard actions work only in the review tab
+The next, previous, comment, export, stage, stage-all, discard, discard-all and view actions work only in the review tab
 (they say so in the status line elsewhere).
 
 After a successful stage (one hunk or all) or discard, the host runs the
@@ -65,6 +68,30 @@ keeps the cursor row. [`Rendered::targets`] maps every buffer row to what it
 shows (file, hunk, diff line, comment), which is how the cursor row finds the
 line to comment on.
 
+## Two-pane view
+
+`Review::side_by_side()` lays the review out as `SideBySide`, a list of
+`PaneRow`s: `Heading` rows (title, file heading, `(binary file)`, hunk header)
+and `Comment` rows span the width; `Pair` rows hold an optional old `Cell`
+(left) and new `Cell` (right), each with its line number and text. Inside a
+hunk a run of removed lines is zipped with the run of added lines that follows
+it; the longer run leaves `None` on the other side. Context lines are on both
+sides. Comments follow the group they belong to. Every row records the first
+and last row of the inline buffer it stands for (`first`/`last`), computed by
+counting rows exactly as `render` does (a test checks that every row indexes a
+matching `Target`).
+
+The inline buffer stays the source of the cursor, hunk navigation, comments
+and stage/discard, because those all work on its rows. The host (rendering
+only, `tui/src/ui/review_panes.rs`) shows the pairs instead of the buffer text
+when `ReviewState::side_by_side` is on and the text area is at least
+`MIN_SIDE_BY_SIDE_WIDTH` (60) columns; narrower, the inline buffer is drawn
+and the choice is kept. The view starts at `SideBySide::row_for_inline` of the
+buffer's top line and moves just far enough to keep the cursor's row visible,
+so both views scroll together; the cursor's row is bold and underlined. The
+`review_view` setting (`"inline"` or `"side_by_side"`, anything else is
+inline) picks the view a review opens in.
+
 ## Comments
 
 A comment is anchored to a file, a **side** and a line number on that side: a
@@ -96,10 +123,11 @@ the same shape as the storage file.
 - `crates/vix-review/src/lib.rs`: `parse` (unified diff to `FileDiff`/`Hunk`/
   `DiffLine`), `Review` (`render`, `set_comment`, `comment_text`,
   `line_text`, `to_markdown`, `to_json`, `load_json`), `Rendered`
-  (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`, `store_name`. Pure; no I/O.
+  (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`/`full_patch`/`patch_counts`, `Review::side_by_side` (`SideBySide`, `PaneRow`, `PaneKind`, `Cell`), `store_name`. Pure; no I/O.
 - `crates/vix-git/src/lib.rs`: `review_diff`, `apply_patch`/`ApplyTarget`.
 - Stash chooser: `r` closes it and reviews `stash@{N}` (`tui/src/app/git_stash_worktree.rs`). Both git calls go through the workspace authority like every other `vix-git` runner.
-- `tui/src/app/git_review.rs`: the five actions, the `PromptKind::GitReview`
+- `tui/src/ui/review_panes.rs`: paints `SideBySide` (old left, new right).
+- `tui/src/app/git_review.rs`: the review actions, the `PromptKind::GitReview`
   and `GitReviewComment` handlers, and the `ReviewState` kept in `App::review`.
 - Tests: the unit tests in `vix-review`, and `tui/tests/integration/git.rs`
   (comments saved, exported and reloaded; hunk navigation; real git ranges,

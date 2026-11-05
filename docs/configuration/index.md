@@ -22,6 +22,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `soft_wrap`     | bool   | `false`  | Wrap long lines across screen rows instead of scrolling horizontally. |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
+| `review_view` | string | `"inline"` | The view a branch review opens in: `"inline"` or `"side_by_side"` (old text left, new text right; inline is used on a narrow terminal). `v` in the review switches it. Any other value behaves as `"inline"`. See [Branch review](../branch-review/index.md). |
 | `remote_agent` | string | `"installed"` | Remote (SSH) workspaces: `"installed"` uses a `vix` of this exact version already on the remote machine as a faster file helper; `"upload"` also copies this `vix` there when it has none and the platform matches (SHA-256 checked on the remote side first); `"off"` uses shell commands only. Any other value behaves as `"installed"`. See [Remote editing](../remote-editing/index.md#the-remote-agent). |
 | `git_gutter_base` | string | `"head"` | What the editor's change gutter compares against: `"head"` (the last commit), `"index"` (the staged version, so staged hunks stop being marked), `"disk"` (the saved file, so only unsaved edits show) or `"branch:<name>"`. Any other value falls back to `"head"`. Git → Change Gutter Base… sets it. |
 | `smart_commit` | string | `"ask"` | What Git → Commit does when nothing is staged but files changed: `"ask"` (confirm, then stage everything with `git add -A`), `"always"` (stage everything without asking) or `"never"` (refuse). Any other value behaves as `"ask"`. |
@@ -121,6 +122,7 @@ line_numbers = true
 show_whitespace = false
 show_explorer = true
 explorer_delete = "trash"
+review_view = "inline"
 remote_agent = "installed"
 git_gutter_base = "head"
 smart_commit = "ask"

@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use vix_review::{Rendered, Review, Side, Target};
+use vix_review::{Rendered, Review, Side, SideBySide, Target};
 
 use super::git::git_error_text;
 use super::{App, Confirm, ConfirmKind, Prompt, PromptKind};
@@ -26,6 +26,12 @@ pub struct ReviewState {
     pub pending: Option<(usize, Side, usize)>,
     /// The hunk a discard confirmation is open for: file index, hunk index.
     pub pending_hunk: Option<(usize, usize)>,
+    /// Whether the two-pane (side-by-side) view is wanted. It is drawn only
+    /// when the editor is wide enough ([`vix_review::MIN_SIDE_BY_SIDE_WIDTH`]);
+    /// otherwise the inline buffer shows.
+    pub side_by_side: bool,
+    /// The review laid out for the two-pane view, rebuilt with `rendered`.
+    pub panes: SideBySide,
 }
 
 impl App {
@@ -40,6 +46,8 @@ impl App {
             "git.review_stage_hunk" => self.review_stage_hunk(),
             "git.review_stage_all" => self.review_stage_all(),
             "git.review_discard_hunk" => self.begin_review_discard_hunk(),
+            "git.review_discard_all" => self.begin_review_discard_all(),
+            "git.review_toggle_view" => self.review_toggle_view(),
             _ => return false,
         }
         true
@@ -84,6 +92,8 @@ impl App {
         }
         let tab_path = PathBuf::from(format!("review {range}"));
         let rendered = review.render();
+        let panes = review.side_by_side();
+        let side_by_side = self.settings.review_view == "side_by_side";
         self.status = t!(
             "status.git_review_opened",
             range = range,
@@ -98,6 +108,8 @@ impl App {
             tab_path,
             pending: None,
             pending_hunk: None,
+            side_by_side,
+            panes,
         });
     }
 
@@ -206,6 +218,7 @@ impl App {
             return;
         };
         state.rendered = state.review.render();
+        state.panes = state.review.side_by_side();
         let (title, text) = (
             state.tab_path.to_string_lossy().into_owned(),
             state.rendered.text.clone(),
@@ -384,5 +397,112 @@ impl App {
                 .messages
                 .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
         }
+    }
+
+    /// **Git → Discard All Review Hunks…**: ask, naming how many hunks and
+    /// files, before undoing every text hunk of the open review.
+    fn begin_review_discard_all(&mut self) {
+        let Some(state) = self.active_review() else {
+            self.status = t!("status.git_review_none").to_string();
+            return;
+        };
+        let (hunks, files) = state.review.patch_counts();
+        if hunks == 0 {
+            self.status = t!("status.git_review_no_hunk").to_string();
+            return;
+        }
+        self.confirm = Some(Confirm {
+            message: t!(
+                "confirm.git_review_discard_all",
+                hunks = hunks,
+                files = files
+            )
+            .to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::GitReviewDiscardAll,
+        });
+    }
+
+    /// The answer to [`ConfirmKind::GitReviewDiscardAll`]: on yes, reverse the
+    /// whole review patch in one `git apply`, which is all or nothing, so a
+    /// hunk that no longer fits leaves the working tree untouched and git's
+    /// reason is reported.
+    pub(super) fn review_discard_all_answered(&mut self, yes: bool) {
+        if !yes {
+            return;
+        }
+        let Some((patch, range, counts)) = self.review.as_ref().and_then(|s| {
+            Some((
+                s.review.full_patch()?,
+                s.review.range.clone(),
+                s.review.patch_counts(),
+            ))
+        }) else {
+            return;
+        };
+        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::RevertWorktree) {
+            Ok(()) => {
+                self.status = t!(
+                    "status.git_review_discarded_all",
+                    hunks = counts.0,
+                    files = counts.1,
+                    range = range
+                )
+                .to_string();
+                self.reload_clean_buffers();
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.rediff_review();
+            }
+            Err(e) => self.messages.error(
+                t!(
+                    "msg.git_review_discard_all_failed",
+                    error = git_error_text(&e)
+                )
+                .to_string(),
+            ),
+        }
+    }
+
+    /// **Git → Review Two-Pane View** (and `v` in the review): switch the
+    /// open review between the inline buffer and the side-by-side view.
+    fn review_toggle_view(&mut self) {
+        if self.active_review().is_none() {
+            self.status = t!("status.git_review_none").to_string();
+            return;
+        }
+        let Some(state) = self.review.as_mut() else {
+            return;
+        };
+        state.side_by_side = !state.side_by_side;
+        self.status = if state.side_by_side {
+            t!("status.git_review_view_side_by_side")
+        } else {
+            t!("status.git_review_view_inline")
+        }
+        .to_string();
+    }
+
+    /// `v` in the review tab toggles the view. `true` when the key was taken.
+    pub(super) fn review_view_key(&mut self, key: vix_input::KeyEvent) -> bool {
+        use vix_input::{KeyCode, KeyModifiers};
+        if key.code != KeyCode::Char('v')
+            || !(key.modifiers - KeyModifiers::SHIFT).is_empty()
+            || self.active_review().is_none()
+        {
+            return false;
+        }
+        self.review_toggle_view();
+        true
+    }
+
+    /// The two-pane layout to draw into a text area `width` columns wide, or
+    /// `None` when the inline buffer shows instead: the view is off, `width`
+    /// is under [`vix_review::MIN_SIDE_BY_SIDE_WIDTH`], or the active tab is
+    /// not the review.
+    #[must_use]
+    pub fn review_panes_for(&self, width: u16) -> Option<&SideBySide> {
+        let state = self.active_review()?;
+        (state.side_by_side && width >= vix_review::MIN_SIDE_BY_SIDE_WIDTH).then_some(&state.panes)
     }
 }

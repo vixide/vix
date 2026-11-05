@@ -436,6 +436,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.git_review_stage_hunk", "git.review_stage_hunk"),
     ("cmd.git_review_stage_all", "git.review_stage_all"),
     ("cmd.git_review_discard_hunk", "git.review_discard_hunk"),
+    ("cmd.git_review_discard_all", "git.review_discard_all"),
+    ("cmd.git_review_toggle_view", "git.review_toggle_view"),
     ("cmd.git_clone", "git.clone"),
     ("cmd.git_switch_branch", "git.switch_branch"),
     ("cmd.git_new_branch", "git.new_branch"),
