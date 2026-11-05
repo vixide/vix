@@ -110,6 +110,23 @@ pub(crate) struct LensState {
 }
 
 impl LensState {
+    /// Take a `codeLens/resolve` reply for the lens at `range`: drop its
+    /// unresolved entry and add the resolved lens. A reply with no matching
+    /// unresolved entry is a duplicate of an earlier reply (a refresh replaced
+    /// the list while the first resolve was in flight, so the same lens was
+    /// asked for twice) and is ignored; adding it would show the title twice.
+    /// Returns whether the lens was added.
+    fn resolved(&mut self, range: &Value, lens: Lens) -> bool {
+        let before = self.unresolved.len();
+        self.unresolved
+            .retain(|(_, raw, _)| raw.get("range") != Some(range));
+        if self.unresolved.len() == before {
+            return false;
+        }
+        self.lsp.push(lens);
+        true
+    }
+
     /// The lenses to show, by line: the server's, plus a local one only on a
     /// line where the server put none.
     pub(crate) fn shown(&self) -> Vec<Lens> {
@@ -331,10 +348,9 @@ impl App {
                 let Some(st) = self.code_lenses.get_mut(&path) else {
                     return;
                 };
-                st.unresolved
-                    .retain(|(_, raw, _)| raw.get("range") != Some(&range));
-                st.lsp.push(lsp_lens(lens));
-                self.apply_code_lenses(&path);
+                if st.resolved(&range, lsp_lens(lens)) {
+                    self.apply_code_lenses(&path);
+                }
             }
             crate::lsp::LspEvent::CodeLensRefresh => {
                 let now = Instant::now();
@@ -629,6 +645,27 @@ mod tests {
                 (9, "Run test".to_string())
             ]
         );
+    }
+
+    #[test]
+    fn a_duplicate_resolve_reply_does_not_duplicate_the_lens() {
+        let range = json!({"start": {"line": 1, "character": 0}});
+        let lens = || Lens {
+            line: 1,
+            title: "2 references".into(),
+            action: LensAction::Lsp {
+                command: "c".into(),
+                arguments: json!([]),
+            },
+        };
+        let mut st = LensState {
+            unresolved: vec![(1, json!({"range": range}), true)],
+            ..LensState::default()
+        };
+        assert!(st.resolved(&range, lens()));
+        // The second reply for the same lens (a refresh re-asked it).
+        assert!(!st.resolved(&range, lens()));
+        assert_eq!(st.shown().len(), 1);
     }
 
     #[test]
