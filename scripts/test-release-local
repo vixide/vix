@@ -1,0 +1,292 @@
+#!/bin/sh
+# Tests for scripts/release-local (T766).
+#
+#     scripts/test-release-local
+#
+# Everything happens in one private temporary directory that is removed on exit:
+# a throwaway git repository, a generated ed25519 key and allowed-signers file,
+# local bare repositories standing in for the forges, and stub `make`, `rustup`,
+# `cargo`, `gh` and `tea` commands first on PATH that record their argv. HOME and
+# the global git config are pointed away. No network, no real build, no real
+# upload, no real remote, no real key.
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+export HOME="$work/home"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$HOME" "$work/bin"
+
+fails=0
+checks=0
+ok() {
+	checks=$((checks + 1))
+	echo "  ok   $1"
+}
+bad() {
+	checks=$((checks + 1))
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+expect_pass() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then ok "$name"; else
+		bad "$name"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+expect_fail() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then
+		bad "$name (unexpectedly passed)"
+		sed 's/^/       /' "$work/out"
+	else ok "$name"; fi
+}
+expect_msg() {
+	if grep -q -- "$1" "$work/out"; then ok "output mentions '$1'"; else
+		bad "output mentions '$1'"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+expect_log_empty() {
+	if [ ! -s "$2" ]; then ok "$1"; else
+		bad "$1"
+		sed 's/^/       /' "$2"
+	fi
+}
+
+# ---- stubs ------------------------------------------------------------------
+export STUB_LOG="$work/calls.log" GH_LOG="$work/gh.log" TEA_LOG="$work/tea.log"
+: >"$STUB_LOG"
+: >"$GH_LOG"
+: >"$TEA_LOG"
+cat >"$work/bin/make" <<'EOF'
+#!/bin/sh
+echo "make $*" >>"$STUB_LOG"
+for t in "$@"; do
+	case $t in
+	build-macos) triple=aarch64-apple-darwin bin=vix ;;
+	build-windows) triple=x86_64-pc-windows-gnu bin=vix.exe ;;
+	build-linux) triple=x86_64-unknown-linux-musl bin=vix ;;
+	*) exit 2 ;;
+	esac
+	mkdir -p "target/$triple/release"
+	echo "fake $triple" >"target/$triple/release/$bin"
+done
+EOF
+cat >"$work/bin/rustup" <<'EOF'
+#!/bin/sh
+echo "rustup $*" >>"$STUB_LOG"
+EOF
+cat >"$work/bin/cargo" <<'EOF'
+#!/bin/sh
+echo "cargo $*" >>"$STUB_LOG"
+EOF
+cat >"$work/bin/gh" <<'EOF'
+#!/bin/sh
+echo "gh $*" >>"$GH_LOG"
+[ "$1 $2" = "release view" ] && exit 1
+exit 0
+EOF
+cat >"$work/bin/tea" <<'EOF'
+#!/bin/sh
+echo "tea $*" >>"$TEA_LOG"
+EOF
+for l in vixtest-linker-linux vixtest-linker-win; do
+	printf '#!/bin/sh\nexit 0\n' >"$work/bin/$l"
+done
+chmod +x "$work"/bin/*
+PATH="$work/bin:$PATH"
+export PATH
+
+ssh-keygen -q -t ed25519 -N '' -C test -f "$work/key" || exit 1
+ssh-keygen -q -t ed25519 -N '' -C other -f "$work/other" || exit 1
+echo "tester $(cat "$work/key.pub")" >"$work/allowed"
+export VIX_ALLOWED_SIGNERS="$work/allowed"
+export VIX_ATTEST_KEY="$work/key"
+unset VIX_RELEASE_KEY
+
+# ---- throwaway repository ---------------------------------------------------
+repo="$work/repo"
+git init -q -b main "$repo" || exit 1
+cd "$repo" || exit 1
+git config user.email t@example.com
+git config user.name Tester
+git config commit.gpgsign false
+git config tag.gpgsign false
+mkdir -p scripts .cargo
+cp "$src/attest" scripts/attest
+cp "$src/release-local" scripts/release-local
+cat >scripts/check <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x scripts/attest scripts/release-local scripts/check
+cat >Cargo.toml <<'EOF'
+[workspace]
+members = []
+
+[workspace.package]
+version = "2.0.0"
+EOF
+cat >.cargo/config.toml <<'EOF'
+[target.x86_64-unknown-linux-musl]
+linker = "vixtest-linker-linux"
+
+[target.x86_64-pc-windows-gnu]
+linker = "vixtest-linker-win"
+EOF
+printf '# Changelog\n\n## [Unreleased]\n\n## [2.0.0] - 2026-11-05\n\n- first\n\n## [1.8.0]\n\n- old\n' >CHANGELOG.md
+echo "MIT" >LICENSE
+printf 'target/\n' >.gitignore
+git add -A
+git commit -q -m one
+
+# Bare repositories standing in for the forges (no tag yet).
+git clone -q --bare "$repo" "$work/github.git"
+git clone -q --bare "$repo" "$work/codeberg.git"
+export VIX_RELEASE_GITHUB_REMOTE="$work/github.git"
+export VIX_RELEASE_CODEBERG_REMOTE="$work/codeberg.git"
+export VIX_RELEASE_KEY="$work/key"
+rl=scripts/release-local
+
+tags() { git tag -l | wc -l | tr -d ' '; }
+build_count() { grep -c '^make ' "$STUB_LOG" || true; }
+
+echo "refusal paths (nothing is built)"
+expect_fail "no attestation is refused" sh $rl 2.0.0
+expect_msg "attestation"
+[ "$(build_count)" = 0 ] && ok "no attestation: nothing built" || bad "no attestation: nothing built"
+
+sh scripts/attest >/dev/null 2>&1 || {
+	echo "could not attest the throwaway repo"
+	exit 1
+}
+
+echo dirty >>LICENSE
+expect_fail "a dirty tree is refused" sh $rl 2.0.0
+expect_msg "not clean"
+git checkout -q LICENSE
+
+git checkout -q -b topic
+expect_fail "a branch other than main is refused" sh $rl 2.0.0
+expect_msg "not on main"
+git checkout -q main
+git branch -q -D topic
+
+expect_fail "a version that is not the workspace version is refused" sh $rl 2.0.1
+expect_msg "workspace version"
+expect_fail "a v-prefixed version is refused" sh $rl v2.0.0
+expect_fail "no version is refused" sh $rl
+
+sed -i.bak 's/^## \[2.0.0\].*/## [2.0.0-rc]/' CHANGELOG.md && rm CHANGELOG.md.bak
+git commit -q -am "changelog without the section"
+sh scripts/attest >/dev/null 2>&1
+expect_fail "a CHANGELOG without the version section is refused" sh $rl 2.0.0
+expect_msg "CHANGELOG"
+git reset -q --hard HEAD~1
+sh scripts/attest >/dev/null 2>&1
+
+mv "$work/bin/vixtest-linker-win" "$work/gone"
+expect_fail "a missing cross linker is refused" sh $rl 2.0.0
+expect_msg "linker"
+mv "$work/gone" "$work/bin/vixtest-linker-win"
+[ "$(build_count)" = 0 ] && ok "refusals built nothing" || bad "refusals built nothing"
+
+echo "dry run"
+expect_pass "--dry-run succeeds" sh $rl 2.0.0 --dry-run
+expect_msg "gh release create 2.0.0"
+expect_msg "tea releases create"
+expect_msg "scripts/packaging render 2.0.0"
+expect_msg "no tag was created"
+grep -q 'make build-macos build-windows build-linux' "$STUB_LOG" && ok "built via the Makefile targets" || bad "built via the Makefile targets"
+out="$repo/target/release-local/2.0.0"
+for f in vix-tui-aarch64-apple-darwin.tar.xz vix-tui-x86_64-pc-windows-gnu.zip vix-tui-x86_64-unknown-linux-musl.tar.xz; do
+	[ -f "$out/$f" ] && [ -f "$out/$f.sha256" ] && ok "$f and its .sha256 exist" || bad "$f and its .sha256 exist"
+done
+[ -f "$out/SHA256SUMS" ] && [ -f "$out/SHA256SUMS.sig" ] && ok "SHA256SUMS and .sig exist" || bad "SHA256SUMS and .sig exist"
+[ "$(wc -l <"$out/SHA256SUMS" | tr -d ' ')" = 3 ] && ok "SHA256SUMS lists the three assets" || bad "SHA256SUMS lists the three assets"
+expect_log_empty "dry run never ran gh" "$GH_LOG"
+expect_log_empty "dry run never ran tea" "$TEA_LOG"
+[ "$(tags)" = 0 ] && ok "dry run created no tag" || bad "dry run created no tag"
+expect_pass "default (no flags) also uploads nothing" sh $rl 2.0.0
+expect_log_empty "default never ran gh" "$GH_LOG"
+[ "$(tags)" = 0 ] && ok "default created no tag" || bad "default created no tag"
+
+echo "signing and --verify-dir"
+expect_pass "verify-dir accepts the fresh release" sh $rl --verify-dir "$out"
+cp -R "$out" "$work/dl"
+expect_pass "verify-dir accepts a copy" sh $rl --verify-dir "$work/dl"
+echo tamper >>"$work/dl/vix-tui-x86_64-pc-windows-gnu.zip"
+expect_fail "a tampered asset is rejected" sh $rl --verify-dir "$work/dl"
+expect_msg "does not match"
+cp -R "$out" "$work/dl2"
+echo "$(sha256sum /dev/null 2>/dev/null | cut -c1-64 || echo 0)  extra" >>"$work/dl2/SHA256SUMS"
+expect_fail "an edited SHA256SUMS is rejected" sh $rl --verify-dir "$work/dl2"
+expect_msg "bad signature"
+cp -R "$out" "$work/dl3"
+rm "$work/dl3/SHA256SUMS.sig"
+expect_fail "a missing signature is rejected" sh $rl --verify-dir "$work/dl3"
+cp -R "$out" "$work/dl4"
+rm "$work/dl4/SHA256SUMS.sig"
+ssh-keygen -Y sign -f "$work/other" -n vix-release "$work/dl4/SHA256SUMS" >/dev/null 2>&1
+expect_fail "a signature from an unlisted key is rejected" sh $rl --verify-dir "$work/dl4"
+cp -R "$out" "$work/dl5"
+rm "$work/dl5/SHA256SUMS.sig"
+ssh-keygen -Y sign -f "$work/key" -n vix-gate "$work/dl5/SHA256SUMS" >/dev/null 2>&1
+expect_fail "a signature in another namespace is rejected" sh $rl --verify-dir "$work/dl5"
+
+echo "publish"
+expect_fail "--publish with no tag on the forges is refused" sh $rl 2.0.0 --publish
+expect_msg "does not exist on github"
+expect_log_empty "...and ran no gh" "$GH_LOG"
+head=$(git rev-parse HEAD)
+git -C "$work/github.git" tag 2.0.0 "$head"
+git -C "$work/codeberg.git" tag 2.0.0 "$head"
+printf 'nope\n' >"$work/confirm"
+export VIX_RELEASE_CONFIRM_FILE="$work/confirm"
+expect_fail "a wrong confirmation does nothing" sh $rl 2.0.0 --publish
+expect_msg "confirmation did not match"
+expect_log_empty "...no gh" "$GH_LOG"
+expect_log_empty "...no tea" "$TEA_LOG"
+: >"$work/confirm"
+expect_fail "an empty confirmation does nothing" sh $rl 2.0.0 --publish
+expect_log_empty "...no gh (empty)" "$GH_LOG"
+printf 'publish 2.0.0 to github\n' >"$work/confirm"
+expect_fail "a confirmation not naming both forges does nothing" sh $rl 2.0.0 --publish
+expect_log_empty "...no tea (partial)" "$TEA_LOG"
+printf 'publish 2.0.0 to github codeberg\n' >"$work/confirm"
+expect_pass "the exact confirmation uploads" sh $rl 2.0.0 --publish
+grep -q 'release create 2.0.0 --repo vixide/vix --verify-tag' "$GH_LOG" && ok "gh release create with --verify-tag" || bad "gh release create with --verify-tag"
+grep -q 'SHA256SUMS.sig' "$GH_LOG" && ok "gh was given the signature" || bad "gh was given the signature"
+grep -q 'releases create --repo vixide/vix --tag 2.0.0' "$TEA_LOG" && ok "tea releases create" || bad "tea releases create"
+[ "$(tags)" = 0 ] && ok "publish created no tag in the repository" || bad "publish created no tag in the repository"
+unset VIX_RELEASE_CONFIRM_FILE
+
+echo "--tag"
+expect_fail "--tag cannot combine with --publish" sh $rl 2.0.0 --tag --publish
+[ "$(tags)" = 0 ] && ok "a refused --tag created no tag" || bad "a refused --tag created no tag"
+: >"$GH_LOG"
+git config user.signingkey "$work/key"
+git config gpg.format ssh
+git config gpg.ssh.allowedSignersFile "$work/allowed"
+expect_pass "--tag creates a local signed tag" sh $rl 2.0.0 --tag
+[ "$(tags)" = 1 ] && ok "exactly one tag exists" || bad "exactly one tag exists"
+git tag -v 2.0.0 >/dev/null 2>&1 && ok "the tag verifies" || bad "the tag verifies"
+expect_fail "--tag twice is refused" sh $rl 2.0.0 --tag
+expect_log_empty "--tag never ran gh" "$GH_LOG"
+git ls-remote --tags "$work/github.git" | grep -q . && [ "$(git -C "$work/github.git" tag -l | wc -l | tr -d ' ')" = 1 ] &&
+	ok "--tag pushed nothing" || bad "--tag pushed nothing"
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "OK: scripts/test-release-local: $checks checks passed"
+else
+	echo "FAILED: $fails of $checks checks failed"
+	exit 1
+fi

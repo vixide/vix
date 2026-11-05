@@ -219,6 +219,14 @@ tag that triggers the pipeline above — and so the GitHub Release, the
 installers, and the Homebrew tap push — is not covered by either grant and
 still gets confirmed first.
 
+### Local release path (T766)
+
+`scripts/release-local` is the local alternative to the tag-triggered pipeline
+above: it builds the Makefile targets, signs `SHA256SUMS` and, only with
+`--publish` and a typed confirmation, uploads with `gh` and `tea`. It never
+creates or pushes a tag (only `--tag`, a local signed tag), so `release.yml` stays
+the manual fallback. See [`spec/local-ci`](../local-ci/index.md).
+
 ### Offline tests (T573)
 
 GitHub only: an `offline-test` job builds the tests with the network, then

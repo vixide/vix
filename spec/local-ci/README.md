@@ -254,6 +254,35 @@ triggers and path filters are unchanged. The job table, the `verify` trust model
 job table, the forge-file no-drift check and `verify`; the workflow files
 themselves cannot be run locally.
 
+## The local release path (option 7, T766, implemented)
+
+`scripts/release-local VERSION` builds the three Makefile targets (it calls `make
+build-macos build-windows build-linux`, nothing is duplicated), packs each as the
+asset name the packaging templates use, writes a `.sha256` per asset and one
+`SHA256SUMS`, and SSH-signs it (`ssh-keygen -Y sign -n vix-release`, the key and
+allowed-signers handling of `scripts/attest`) into `SHA256SUMS.sig`;
+`--verify-dir DIR` verifies a downloaded release (signature, then every hash).
+
+It refuses unless: the tree is clean and on `main`; `scripts/attest --verify`
+passes for HEAD; VERSION is the workspace version with a `## [VERSION]`
+changelog section; and every build tool and cross linker exists. The default and
+`--dry-run` do all of that and print the exact `gh`/`tea` commands, but upload and
+tag nothing. Uploading needs `--publish` and a typed line, `publish VERSION to
+github codeberg`, and requires the tag to exist already on both forges (`gh
+release create --verify-tag`), so an upload can never create one. A tag is made
+only by the separate `--tag` flag: a signed local tag, never pushed. `release.yml`
+stays the manual fallback; pushing a tag starts it, so the maintainer decides
+which path is the release. `scripts/packaging render VERSION --sums SHA256SUMS`
+consumes the checksums (nothing is published); the templates name the `dist`
+targets, which the Makefile does not build, so the handoff is partial. How-to:
+[`docs/release`](../../docs/release/index.md).
+
+`scripts/test-release-local` tests the refusal paths, the dry run, signing and
+`--verify-dir`, the confirmation, and that no tag appears without `--tag`, in a
+throwaway repository with a generated key and stub `make`, `gh` and `tea` (no
+network); it runs in the `push` tier and above. Honest limits: never run for real,
+and the `tea` flags are from its documentation, not exercised against Codeberg.
+
 ## Non-goals
 
 - Do not weaken the gate, skip steps to save time, or disable commit signing.

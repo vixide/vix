@@ -9710,11 +9710,18 @@ the maintainer's decisions.
   and in-container steps are untested; only the generated command and error
   paths are tested); the Windows recipe has not been run on real Windows
   hardware; the image defaults to the MSRV toolchain, not stable.
-- [ ] **T766 — Local release path.** `scripts/release-local` builds the three
+- [x] **T766 — Local release path.** `scripts/release-local` builds the three
   targets (the `Makefile` already does so from a Mac), checksums them,
   SSH-signs the checksums and uploads with `gh` and `tea`; `release.yml`
   stays as the manual fallback. Cutting a tag remains the user's decision.
   **Large.**
+  Done 2026-11-05: `scripts/release-local` (spec/local-ci, docs/release) with
+  `--dry-run`, `--publish` (typed confirmation, tag must already exist on both
+  forges), `--tag` (signed local tag only) and `--verify-dir`;
+  `scripts/test-release-local` (66 checks, stubbed, push tier). Honest limits:
+  never run for real (the first real use is the maintainer's); the `tea` flags
+  are unexercised; the packaging handoff is partial because the Makefile targets
+  differ from the `dist` ones the templates name.
 - [x] **T767 — One CI entrypoint.** Every forge file calls `scripts/ci <job>`
   instead of carrying its own command list; revise `spec/ci`, which now says
   the copies are deliberately duplicated. **Medium.**
