@@ -59,16 +59,28 @@ capability `textDocument.inlineCompletion` is declared in `initialize`.
 
 ## File operations and watchers (T623)
 
-`file_ops` holds the pure side of `workspace/willRenameFiles`,
-`workspace/didRenameFiles` and `workspace/didChangeWatchedFiles`:
-`parse_file_operation` reads `capabilities.workspace.fileOperations.willRename`
-or `.didRename` into `FileOpFilters` (glob filters with `matches` file/folder,
-`ignoreCase`, `scheme` other than `file` skipped; no filters means every path),
+`file_ops` holds the pure side of `workspace/will{Create,Rename,Delete}Files`,
+`workspace/did{Create,Rename,Delete}Files` and
+`workspace/didChangeWatchedFiles`: `parse_file_operation` reads one
+`capabilities.workspace.fileOperations.<op>` entry into `FileOpFilters` (glob
+filters with `matches` file/folder, `ignoreCase`, `scheme` other than `file`
+skipped; no filters means every path), `FileOpCaps::from_initialize` reads all
+six, and `FileOpCaps::wanted(op, will, items, roots)` picks the `FileOpItem`s
+(path, optional new path, and whether it is a folder, known by the caller
+before a delete) a server's filters match -- a rename's request against the old
+path, its notification against the new one. `FileOp` names the methods and
+capability keys; `file_operation_params` builds the `files` array.
 `parse_registrations`/`parse_unregistrations`/`parse_watchers` decode
-`client/registerCapability` and `client/unregisterCapability`, and
-`rename_files_params`/`watched_files_params` build the params. Globs use
-`globset` with `*` not crossing `/`. `initialize` declares
-`workspace.fileOperations.{willRename,didRename}` and
+`client/registerCapability` and `client/unregisterCapability`;
+`Watcher::covers` says whether a file is one a watcher's glob names, and
+`scan_watched`/`diff_snapshots` are the bounded recursive scan: it visits at
+most `SCAN_MAX_ENTRIES` (10 000) directory entries, descends at most
+`SCAN_MAX_DEPTH` (16) levels, reads each directory in sorted order, follows no
+symlinks, skips `.git`, `.hg`, `.svn`, `target` and `node_modules`, and
+remembers only covered files (mtime and length). `diff_snapshots` yields
+created, changed and deleted files, reporting deletions only when the newer
+walk finished within its budget. Globs use `globset` with `*` not crossing
+`/`. `initialize` declares all six `workspace.fileOperations` entries and
 `workspace.didChangeWatchedFiles.dynamicRegistration`.
 
 ## See also

@@ -85,6 +85,7 @@ use info_panel::InfoSlot;
 pub(crate) use overlays::OverlayId;
 mod large_file;
 mod lsp_dap;
+mod lsp_file_ops;
 mod lsp_status;
 mod modal;
 mod multi_cursor;
@@ -149,6 +150,7 @@ use regex::Regex;
 use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
 use crate::explorer::Explorer;
 use crate::lsp::HierarchyDirection;
+use crate::lsp_core::file_ops::{FileOp, FileOpItem};
 use crate::menu::Menu;
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
@@ -2408,9 +2410,10 @@ pub struct App {
     /// Last-seen mtime of the workspace manifests language servers watch
     /// (`Cargo.toml`, `package.json`, …) whether or not they are open (T623).
     manifest_mtimes: std::collections::HashMap<PathBuf, Option<std::time::SystemTime>>,
-    /// A file rename waiting for language servers' `willRenameFiles` edits
-    /// (T623): `(old, new, when asked)`.
-    pending_rename: Option<(PathBuf, PathBuf, std::time::Instant)>,
+    /// A file operation waiting for language servers' `will*Files` edits (T623).
+    pending_file_op: Option<lsp_file_ops::PendingFileOp>,
+    /// The recursive file-watcher scan's state (T623).
+    watch_scan: lsp_file_ops::WatchState,
     /// The open remote workspace and any background connect (T713, T714).
     pub(crate) remote: remote_session::RemoteState,
     /// Throttle anchor for the external-change poll; `None` until the first poll.
@@ -2968,7 +2971,8 @@ impl App {
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
             manifest_mtimes: std::collections::HashMap::new(),
-            pending_rename: None,
+            pending_file_op: None,
+            watch_scan: lsp_file_ops::WatchState::default(),
             remote: remote_session::RemoteState::default(),
             last_disk_poll: None,
             format_save_pending: None,
@@ -7778,7 +7782,7 @@ impl App {
     /// Drain language-server messages and act on them (diagnostics, hover,
     /// definition jumps, completion). Called once per event-loop iteration.
     pub fn poll_lsp(&mut self) {
-        self.expire_pending_rename();
+        self.expire_pending_file_op();
         if !self.lsp.is_active() {
             self.completion_due = None;
             return;
@@ -7826,8 +7830,8 @@ impl App {
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
-                crate::lsp::LspEvent::WillRenameFiles { edits, last } => {
-                    self.on_will_rename_reply(&edits, last);
+                crate::lsp::LspEvent::WillFileOperations { edits, last } => {
+                    self.on_will_file_ops_reply(&edits, last);
                 }
                 crate::lsp::LspEvent::CodeActions(actions) => self.on_code_actions(actions),
                 crate::lsp::LspEvent::CodeLenses(lenses) => self.on_code_lenses(lenses),
@@ -8020,14 +8024,32 @@ impl App {
                 .map_or_else(|| self.root.clone(), Path::to_path_buf),
             None => self.root.clone(),
         };
+        let cut = self.flags.contains(AppFlags::CLIP_CUT);
+        // T623: a move is a rename servers may want to rewrite imports for.
+        let moves: Vec<FileOpItem> = if cut {
+            self.clip
+                .iter()
+                .filter(|src| src.parent() != Some(target.as_path()))
+                .map(|src| {
+                    let dest = target.join(src.file_name().unwrap_or_default());
+                    FileOpItem::renamed(src, &dest, src.is_dir())
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         self.paste = Some(PasteOp {
             target,
-            cut: self.flags.contains(AppFlags::CLIP_CUT),
+            cut,
             queue: self.clip.clone().into(),
             overwrite_all: false,
             skip_all: false,
             conflict: None,
         });
+        if !moves.is_empty() && self.ask_servers_before(&[(FileOp::Rename, moves)]) {
+            self.hold_file_op(lsp_file_ops::FileOpCont::Paste);
+            return;
+        }
         self.process_paste();
     }
 
@@ -8098,6 +8120,7 @@ impl App {
         // Capture the canonical source before moving (it won't exist after).
         let auth = crate::authority::current();
         let src_canon = auth.canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
+        let is_dir = src.is_dir();
         let res = if cut {
             auth.move_path(src, dest)
         } else {
@@ -8110,6 +8133,16 @@ impl App {
                         .canonicalize(dest)
                         .unwrap_or_else(|_| dest.to_path_buf());
                     self.relocate_buffers(&src_canon, &dest_canon);
+                    self.announce_file_ops(&[(
+                        FileOp::Rename,
+                        vec![FileOpItem::renamed(src, dest, is_dir)],
+                    )]);
+                } else {
+                    // T623: a copy creates a file or folder.
+                    self.announce_file_ops(&[(
+                        FileOp::Create,
+                        vec![FileOpItem::single(dest, is_dir)],
+                    )]);
                 }
             }
             Err(e) => self.messages.error(format!("Paste failed: {e}")),
@@ -8428,12 +8461,25 @@ impl App {
 
     /// Delete (or trash) the confirmed explorer paths, closing their buffers.
     fn delete_confirmed(&mut self, paths: &[PathBuf]) {
+        // T623: servers may want to clean up references first (`willDeleteFiles`).
+        let items: Vec<FileOpItem> = paths.iter().map(|p| lsp_file_ops::item(p)).collect();
+        if self.ask_servers_before(&[(FileOp::Delete, items)]) {
+            self.hold_file_op(lsp_file_ops::FileOpCont::Delete(paths.to_vec()));
+            return;
+        }
+        self.delete_confirmed_now(paths);
+    }
+
+    /// Delete (or trash) the explorer paths now, then tell language servers.
+    fn delete_confirmed_now(&mut self, paths: &[PathBuf]) {
         let use_trash = self.explorer_delete_uses_trash();
         let mut removed = 0;
         let auth = crate::authority::current();
+        let mut gone = Vec::new();
         for path in paths {
             // Canonicalize before removing so buffer paths still match.
             let canon = auth.canonicalize(path).unwrap_or_else(|_| path.clone());
+            let item = lsp_file_ops::item(path);
             let result = if use_trash {
                 auth.trash(path)
             } else {
@@ -8442,12 +8488,16 @@ impl App {
             match result {
                 Ok(()) => {
                     self.close_buffers_under(&canon);
+                    gone.push(item);
                     removed += 1;
                 }
                 Err(e) => self
                     .messages
                     .error(t!("msg.delete_failed", path = path.display(), error = e).to_string()),
             }
+        }
+        if !gone.is_empty() {
+            self.announce_file_ops(&[(FileOp::Delete, gone)]);
         }
         self.explorer.clear_marks();
         self.explorer.rebuild();
@@ -14128,8 +14178,15 @@ impl App {
         }
         // T623: servers may want to rewrite imports first; the rename itself
         // happens once they answer (or `RENAME_WAIT` runs out).
-        if self.pending_rename.is_none() && self.lsp.will_rename_files(&cur, &new_path) {
-            self.pending_rename = Some((cur, new_path, std::time::Instant::now()));
+        let groups = [(
+            FileOp::Rename,
+            vec![FileOpItem::renamed(&cur, &new_path, cur.is_dir())],
+        )];
+        if self.ask_servers_before(&groups) {
+            self.hold_file_op(lsp_file_ops::FileOpCont::Rename {
+                old: cur,
+                new: new_path,
+            });
             return;
         }
         self.finish_rename(&cur, &new_path);
@@ -14151,7 +14208,10 @@ impl App {
                 }
                 self.lsp.did_close(cur);
                 self.lsp_synced.remove(cur);
-                self.lsp.did_rename_files(cur, new_path);
+                self.announce_file_ops(&[(
+                    FileOp::Rename,
+                    vec![FileOpItem::renamed(cur, new_path, new_path.is_dir())],
+                )]);
                 self.status = t!("status.renamed", path = new_path.display()).to_string();
                 self.explorer.rebuild();
                 self.refresh_git();

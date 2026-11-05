@@ -42,6 +42,7 @@ mod keybindings;
 mod keymaps;
 mod large_file;
 mod lsp;
+mod lsp_file_ops;
 mod mcp;
 mod menu;
 mod modal;

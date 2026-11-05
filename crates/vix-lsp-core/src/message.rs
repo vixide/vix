@@ -151,9 +151,14 @@ pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) 
                 // `workspace/didChangeWorkspaceFolders` when the server's own
                 // response asks for it (`changeNotifications`).
                 "workspaceFolders": true,
-                // T623: rename notifications, and watcher registration
-                // (`client/registerCapability`) for `didChangeWatchedFiles`.
-                "fileOperations": { "willRename": true, "didRename": true },
+                // T623: create, rename and delete notifications, and watcher
+                // registration (`client/registerCapability`) for
+                // `didChangeWatchedFiles`.
+                "fileOperations": {
+                    "willCreate": true, "didCreate": true,
+                    "willRename": true, "didRename": true,
+                    "willDelete": true, "didDelete": true
+                },
                 "didChangeWatchedFiles": { "dynamicRegistration": true }
             },
             // T123d: `$/progress` (e.g. an initial index build) is only
