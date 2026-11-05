@@ -3,14 +3,16 @@
   import { Header, NavigationMenu } from '@lilydesignsystem/svelte-headless';
   import PickerBar from '@lilydesignsystem/svelte-picker-bar';
   import type { ShareTarget } from '@lilydesignsystem/svelte-share-picker';
+  import { setLocale } from '#lib/i18n/index.svelte.ts';
 
   let { children } = $props();
 
   // The site's own locale set — the same 15 languages the Vix editor itself
   // ships translations for (locales/*.yml), so the language switcher here
   // never offers a choice the product doesn't actually have. LocalePicker
-  // only sets `lang`/`dir` on <html>; there is no page-content translation
-  // wired up yet — see AGENTS.md.
+  // sets `lang`/`dir` on <html> and reports the choice through `onChange`
+  // (wired to src/lib/i18n below, which swaps the home page's text) — see
+  // AGENTS.md.
   const siteLocales = [
     'ar', 'bn', 'cy', 'de', 'en', 'es', 'fr', 'ga', 'gd', 'hi', 'ja', 'pl', 'pt', 'ru', 'zh'
   ];
@@ -179,7 +181,12 @@
         locales={siteLocales}
         shareTargets={shareTargets}
         themeProps={{ defaultValue: 'light', detectFromSystem: true, storageKey: 'vix:theme' }}
-        localeProps={{ defaultValue: 'en', detectFromNavigator: true, storageKey: 'vix:locale' }}
+        localeProps={{
+          defaultValue: 'en',
+          detectFromNavigator: true,
+          storageKey: 'vix:locale',
+          onChange: setLocale
+        }}
         textSizeProps={{ storageKey: 'vix:text-size' }}
         shareProps={{
           title: pageTitle,

@@ -9425,10 +9425,27 @@ editor by completion, diagnostics and never losing work first.
   requests, and a `good first issue` label with a handful of real
   starter tasks; linked from the README and site. The choice of channel
   is the user's. **Small.**
-- [ ] **T748 — Localized landing page.** The site's language picker sets
+- [x] **T748 — Localized landing page.** The site's language picker sets
   only `lang`/`dir`; translate the home page's text into the editor's 15
   languages, per the [Worldwide](spec/worldwide/index.md) spec, starting
   with the hero, the install block and the FAQ. **Medium.**
+  *(Done 2026-11-05. One JSON catalog per language in
+  `vixide.github.io/src/lib/i18n/locales`, English the source of truth,
+  `t()`/`Rich` helpers in `src/lib`, fed by the picker's `onChange` so
+  detection and storage stay the picker's; prerender and first render are
+  English, other languages swap in after hydration; `scripts/check-i18n.js`
+  runs in `pnpm run check`. Translated, 46 strings x 15 languages: the
+  hero, install note, at-a-glance labels, "Who it's for", the editor-guide
+  headings, the FAQ, the open-source section and the closing call to
+  action. NOT translated: the "Why Vix" cards, "Coming in 2.0", demo
+  captions and alt text, the keys and comparison tables, the desktop
+  section, header nav and PickerBar labels, footer, the copy button's
+  words, the page `<title>`/description/social tags, and the other pages.
+  The translations were written by the assistant from the editor's own
+  locale terminology and have NOT been reviewed by native speakers
+  (Irish, Scottish Gaelic and Welsh most need a look). Not tested in a
+  real browser for the language swap; the build, type check and catalog
+  check pass. Site not deployed.)*
 
 Order: T670 and the Run M daily-driver items first; then T730, T740,
 T732 (small, visible); T742 → T743 → T744 before the 2.0 launch kit

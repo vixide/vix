@@ -12,7 +12,8 @@
     "dev": "node scripts/copy-lily-themes.js && vite dev",
     "build": "node scripts/copy-lily-themes.js && vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check:i18n": "node scripts/check-i18n.js",
+    "check": "node scripts/check-i18n.js && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^4.0.1",

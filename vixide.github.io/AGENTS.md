@@ -39,8 +39,8 @@ editor — see [index.md](index.md) for scope.
   `data-theme` on `<html>`; `src/app.html` pre-renders the default `light`
   `<link>` so the static build ships with real CSS in place.
   LocalePicker's `locales` list is the 15 languages the Vix editor is fully
-  translated into — it only sets `lang`/`dir` on `<html>`, there is no
-  page-content translation wired up.
+  translated into — it sets `lang`/`dir` on `<html>` and its `onChange`
+  feeds `src/lib/i18n` (see "Localized home page" in [index.md](index.md)).
 - **Themes come from the `@lilydesignsystem/themes` package**, never
   vendored: `scripts/copy-lily-themes.js` copies its `dist/*.css` into the
   gitignored `static/assets/themes/` on every `dev`/`build`. Never commit or
@@ -85,6 +85,17 @@ editor — see [index.md](index.md) for scope.
   `docs/performance/index.md`, with its machine and conditions, and no
   comparisons with other editors. Link to mdBook pages only if they are
   in the repo's `docs/SUMMARY.md` (a page missing from it isn't built).
+- **Home-page text is translated** (T748): user-visible plain text on the
+  home page goes through `t('key')` from `#lib/i18n/index.svelte.ts` (use
+  `<Rich text={t(…)} />` when it has `<k>`/`<c>`/`<a>` markup), with the
+  English string in `src/lib/i18n/locales/en.json` and a translation in
+  each of the other 14 files. Add a key to `en.json` first; a language may
+  omit it (the page falls back to English per string), but never add a key
+  to another language that `en.json` lacks. Product names, commands and key
+  names stay untranslated, and use the editor's own wording from
+  `crates/vix-i18n/locales` for shared terms. `pnpm run check` runs
+  `scripts/check-i18n.js`. The translations have not been reviewed by
+  native speakers; other pages are not translated yet.
 - Package manager is **pnpm** (see `packageManager` in `package.json`), not
   npm — `pnpm install`, `pnpm run build`, `pnpm run check`; the deploy
   workflow (`.github/workflows/deploy.yml`) uses `pnpm/action-setup` and

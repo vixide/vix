@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Card } from '@lilydesignsystem/svelte-headless';
   import CopyCommand from '#lib/CopyCommand.svelte';
+  import Rich from '#lib/Rich.svelte';
+  import { t } from '#lib/i18n/index.svelte.ts';
 
   const docs = 'https://vixide.github.io/vix/';
 
@@ -16,12 +18,12 @@
   // At-a-glance facts. Every number is stated in the main repo (README.md,
   // tui/themes/, crates/vix-i18n/locales/, docs/keymaps/).
   const glance = [
-    { value: '1', label: 'binary, nothing to assemble' },
-    { value: '10', label: 'keymaps, switchable live' },
-    { value: '21', label: 'bundled themes' },
-    { value: '15', label: 'interface languages' },
-    { value: '0', label: 'lines of unsafe Rust' }
-  ];
+    { value: '1', label: 'glance.binary' },
+    { value: '10', label: 'glance.keymaps' },
+    { value: '21', label: 'glance.themes' },
+    { value: '15', label: 'glance.languages' },
+    { value: '0', label: 'glance.unsafe' }
+  ] as const;
 
   // Highlights of the unreleased 2.0, from the main repo's CHANGELOG.md
   // ([Unreleased]); the full list is on the features page.
@@ -34,24 +36,8 @@
     { title: 'Containers and more', text: 'an OC menu for Docker, Podman and nerdctl, an MCP server mode, and a switch that turns AI off.' }
   ];
 
-  const audiences = [
-    {
-      heading: 'You live in the terminal but miss your IDE',
-      text: 'Go to definition, rename, a debugger and a Git panel, over SSH or in tmux, without a config project.'
-    },
-    {
-      heading: 'You tried Vim or Helix and bounced off modes',
-      text: 'Vix starts with the shortcuts every other app uses. Switch on the Vi keymap when you want it.'
-    },
-    {
-      heading: 'You came to Emacs for Org mode',
-      text: 'Agenda, tables with formulas, Column View, Org-roam and dailies are built in, with menus to find them.'
-    },
-    {
-      heading: 'You work with data and APIs',
-      text: 'Query a database, send an HTTP request, inspect a container and edit the CSV it produced, in one window.'
-    }
-  ];
+  // Their copy is in the message catalog (who.N.heading / who.N.text).
+  const audiences = [1, 2, 3, 4] as const;
 
   // A short slice of docs/comparison/index.md; the full matrix, with
   // footnotes, lives there.
@@ -65,24 +51,8 @@
     { feature: 'Org mode', marks: ['✓', '✗', '✗', '✗', '✗'] }
   ];
 
-  const faq = [
-    {
-      q: 'Do I have to learn modal editing?',
-      a: 'No. The default keymap uses the same shortcuts as your other apps. Vi and Spacemacs keymaps are one menu choice away if you want them.'
-    },
-    {
-      q: 'Do I need plugins to get started?',
-      a: 'No. Everything on this page ships in the one vix binary. Rhai scripts are there for adding your own commands, not for filling gaps.'
-    },
-    {
-      q: 'Does it work over SSH and in tmux?',
-      a: 'Yes. Vix is a terminal program, so run it on the remote machine as you would any other. Vix 2.0, not released yet, also opens a folder on another machine from your local Vix over SSH (vix ssh://host/path, or File → Open Remote…). That is experimental.'
-    },
-    {
-      q: 'Can my company use it?',
-      a: 'Pick whichever of five licenses suits you: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0. For locked-down machines, the minimal build makes no network connections and starts no other program.'
-    }
-  ];
+  // Their copy is in the message catalog (faq.N.q / faq.N.a).
+  const faq = [1, 2, 3, 4] as const;
 
   // The docs' for-*-users guides, in the main repo's docs/.
   const comingFrom = [
@@ -98,24 +68,16 @@
 </script>
 
 <section class="site-hero" aria-labelledby="hero-heading">
-  <p class="section-heading-eyebrow">Terminal text editor and IDE · Rust · Free and open source</p>
-  <h1 id="hero-heading">The terminal IDE that already knows your keys.</h1>
-  <p class="site-hero-tagline">
-    Save is <kbd>Ctrl+S</kbd>, find is <kbd>Ctrl+F</kbd>, and everything else is
-    in a menu bar or the <kbd>Ctrl+P</kbd> command palette — no modes to learn
-    first. Language servers, a debugger, Git, Org mode and a database workbench
-    are built in, so Vix is useful before you configure anything.
-  </p>
+  <p class="section-heading-eyebrow">{t('hero.eyebrow')}</p>
+  <h1 id="hero-heading">{t('hero.title')}</h1>
+  <p class="site-hero-tagline"><Rich text={t('hero.tagline')} /></p>
   <div class="site-hero-install">
-    <CopyCommand command="brew install vixide/homebrew-tap/vix-tui" label="Copy the Homebrew install command" />
-    <p class="site-hero-install-note">
-      Or use the installer script, PowerShell, npm, or <code>cargo install vix-tui</code> —
-      see <a href="/install/">all install options</a>. The command is <code>vix</code>.
-    </p>
+    <CopyCommand command="brew install vixide/homebrew-tap/vix-tui" label={t('hero.copyBrew')} />
+    <p class="site-hero-install-note"><Rich text={t('hero.installNote')} href="/install/" /></p>
   </div>
   <div class="button-row">
-    <a class="button button-primary" href="/install/">Install Vix</a>
-    <a class="button button-secondary" href="/features/">See all features</a>
+    <a class="button button-primary" href="/install/">{t('hero.install')}</a>
+    <a class="button button-secondary" href="/features/">{t('hero.features')}</a>
     <a class="button button-secondary" href="https://github.com/vixide/vix">GitHub</a>
   </div>
 </section>
@@ -131,10 +93,10 @@
 </figure>
 
 <section class="section" aria-labelledby="glance-heading">
-  <h2 id="glance-heading" class="visually-hidden">Vix at a glance</h2>
+  <h2 id="glance-heading" class="visually-hidden">{t('glance.heading')}</h2>
   <ul class="stat-strip">
     {#each glance as item (item.label)}
-      <li><span class="stat-value">{item.value}</span> <span class="stat-label">{item.label}</span></li>
+      <li><span class="stat-value">{item.value}</span> <span class="stat-label">{t(item.label)}</span></li>
     {/each}
   </ul>
 </section>
@@ -232,13 +194,13 @@
 
 <section class="section" aria-labelledby="who-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Who it's for</p>
-    <h2 id="who-heading">Made for the way you already work</h2>
+    <p class="section-heading-eyebrow">{t('who.eyebrow')}</p>
+    <h2 id="who-heading">{t('who.title')}</h2>
   </header>
   <div class="card-grid">
-    {#each audiences as audience (audience.heading)}
-      <Card heading={audience.heading}>
-        <p class="card-description">{audience.text}</p>
+    {#each audiences as n (n)}
+      <Card heading={t(`who.${n}.heading`)}>
+        <p class="card-description">{t(`who.${n}.text`)}</p>
       </Card>
     {/each}
   </div>
@@ -275,12 +237,12 @@
 
 <section class="section" aria-labelledby="from-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Switching editors?</p>
-    <h2 id="from-heading">Read the guide for where you're coming from</h2>
+    <p class="section-heading-eyebrow">{t('from.eyebrow')}</p>
+    <h2 id="from-heading">{t('from.title')}</h2>
   </header>
   <ul class="link-grid">
     {#each comingFrom as editor (editor.slug)}
-      <li><a href={`${docs}${editor.slug}/index.html`}>Vix for {editor.name} users</a></li>
+      <li><a href={`${docs}${editor.slug}/index.html`}>{t('from.link', { name: editor.name })}</a></li>
     {/each}
   </ul>
 </section>
@@ -336,14 +298,14 @@
 
 <section class="section" aria-labelledby="faq-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Questions</p>
-    <h2 id="faq-heading">Frequently asked</h2>
+    <p class="section-heading-eyebrow">{t('faq.eyebrow')}</p>
+    <h2 id="faq-heading">{t('faq.title')}</h2>
   </header>
   <div class="prose centered faq">
-    {#each faq as item (item.q)}
+    {#each faq as n (n)}
       <details>
-        <summary>{item.q}</summary>
-        <p>{item.a}</p>
+        <summary>{t(`faq.${n}.q`)}</summary>
+        <p><Rich text={t(`faq.${n}.a`)} /></p>
       </details>
     {/each}
   </div>
@@ -351,33 +313,32 @@
 
 <section class="section" aria-labelledby="open-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Open source</p>
-    <h2 id="open-heading">Free, and built in the open</h2>
+    <p class="section-heading-eyebrow">{t('open.eyebrow')}</p>
+    <h2 id="open-heading">{t('open.title')}</h2>
   </header>
   <div class="prose centered">
     <p>
-      Vix's source is licensed under your choice of Apache-2.0, BSD-3-Clause,
-      MIT, GPL-2.0 or GPL-3.0. Development is specification-driven: each of
-      its crates has a spec that the code implements. How the project uses AI
-      assistance is set out in its
-      <a href="https://github.com/vixide/vix/blob/main/AI_STATEMENT.md">AI statement</a>.
+      <Rich
+        text={t('open.text')}
+        href="https://github.com/vixide/vix/blob/main/AI_STATEMENT.md"
+      />
     </p>
     <div class="button-row">
-      <a class="button button-secondary" href="https://github.com/vixide/vix">Source on GitHub</a>
-      <a class="button button-secondary" href={docs}>Documentation</a>
-      <a class="button button-secondary" href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">Changelog</a>
+      <a class="button button-secondary" href="https://github.com/vixide/vix">{t('open.source')}</a>
+      <a class="button button-secondary" href={docs}>{t('open.docs')}</a>
+      <a class="button button-secondary" href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">{t('open.changelog')}</a>
     </div>
   </div>
 </section>
 
 <section class="section cta" aria-labelledby="cta-heading">
-  <h2 id="cta-heading">Try Vix in thirty seconds</h2>
+  <h2 id="cta-heading">{t('cta.title')}</h2>
   <div class="prose centered">
-    <CopyCommand command="brew install vixide/homebrew-tap/vix-tui" label="Copy the Homebrew install command" />
-    <p class="small-print">Then run <code>vix</code> in any folder. Press <kbd>F1</kbd> for every shortcut.</p>
+    <CopyCommand command="brew install vixide/homebrew-tap/vix-tui" label={t('hero.copyBrew')} />
+    <p class="small-print"><Rich text={t('cta.note')} /></p>
   </div>
   <div class="button-row">
-    <a class="button button-primary" href="/install/">All install options</a>
-    <a class="button button-secondary" href="https://github.com/vixide/vix">Star on GitHub</a>
+    <a class="button button-primary" href="/install/">{t('cta.all')}</a>
+    <a class="button button-secondary" href="https://github.com/vixide/vix">{t('cta.star')}</a>
   </div>
 </section>

@@ -80,12 +80,62 @@ The header's controls are one `@lilydesignsystem/svelte-picker-bar`
   site builds no search index of its own.
 - **Theme** — all 57 Lily reference themes (`DEFAULT_THEMES`).
 - **Language** — the 15 languages the Vix editor is fully translated into.
-  It sets `lang`/`dir` on `<html>` only; page content isn't translated.
+  It sets `lang`/`dir` on `<html>` (Arabic gets `dir="rtl"`) and reports
+  its choice to the home page's text, see "Localized home page" below.
 - **Text size** — Lily's seven-step scale (`DEFAULT_SIZES`).
 - **Share** — Email, LinkedIn, Reddit, Bluesky, Mastodon, and Copy Link.
 
 The bar's optional link picker and time-zone picker are not used: the nav
 beside it already lists every page, and the site shows no times.
+
+## Localized home page
+
+The home page's plain text is translated into the editor's 15 languages
+(`ar bn cy de en es fr ga gd hi ja pl pt ru zh`), per the repository's
+Worldwide spec (T748). The page shows the language chosen in the header's
+language picker, and on a first visit the picker's own navigator detection
+(`detectFromNavigator`, stored under `vix:locale`) picks it.
+
+- **Catalogs** — `src/lib/i18n/locales/<code>.json`, flat `key: string`
+  files, one per language. `en.json` is the source of truth and defines
+  every key; another language may omit a key and the page then shows the
+  English string for it (per string, not per page).
+- **Runtime** — `src/lib/i18n/index.svelte.ts` holds the current language
+  in a Svelte 5 `$state` and exports `t(key, params)` (`{name}`
+  placeholders). The layout passes `setLocale` as the picker's `onChange`,
+  which fires when the picker mounts (after navigator/storage detection)
+  and on every later change, so the helper follows exactly the state the
+  picker writes. Text elements call `t()` directly and update reactively.
+- **Inline markup** — a message may contain `<k>…</k>` (rendered as
+  `<kbd>`), `<c>…</c>` (`<code>`) and `<a>…</a>` (a link to the `href` the
+  page passes to `src/lib/Rich.svelte`). Nothing else is interpreted, and
+  the text is never inserted as HTML.
+- **Static prerender** — the state starts as English, so the prerendered
+  HTML and the first client render are identical English (no hydration
+  mismatch, no layout shift for English); other languages swap in after
+  hydration. `<title>`, `<meta>` description and Open Graph tags stay
+  English.
+- **Right-to-left** — Arabic needs no extra code: the picker sets
+  `dir="rtl"` on `<html>` and the page's logical CSS follows it.
+- **Check** — `scripts/check-i18n.js` (run first by `pnpm run check`, or
+  alone as `pnpm run check:i18n`) fails if a catalog has a key `en.json`
+  lacks, a `{placeholder}` or markup tag its English string does not have,
+  an empty string, or a missing or unexpected locale file.
+- **Stays English** — Vix, command names and commands (`brew install …`,
+  `cargo install vix-tui`, `vix ssh://host/path`), key names (`Ctrl+S`),
+  license identifiers and the names of other editors. Menu names inside a
+  sentence use the editor's own translation (`crates/vix-i18n/locales`).
+
+Translated: the hero (eyebrow, heading, tagline, install note, buttons),
+the at-a-glance labels, "Who it's for", the "switching editors" heading and
+link texts, the FAQ, the open-source section and the closing call to
+action. Not translated yet: the six "Why Vix" cards, "Coming in 2.0", the
+demo captions and alt text, the keys table, the comparison table, the
+desktop section, the header navigation and PickerBar labels, the footer,
+the shared copy button's "Copy"/"Copied", and the other pages
+(`/features/`, `/whats-new/`, `/install/`). The translations are the
+editor's terminology in idiomatic prose, but no native speaker has
+reviewed them.
 
 ## Themes
 
@@ -106,7 +156,7 @@ pnpm install
 pnpm run dev       # http://localhost:5173
 pnpm run build     # copies the Lily themes, then prerenders to build/
 pnpm run preview   # serve the prerendered build locally
-pnpm run check     # svelte-check
+pnpm run check     # i18n catalog check, then svelte-check
 ```
 
 ## Routes
