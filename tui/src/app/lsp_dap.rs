@@ -37,6 +37,7 @@ impl App {
             "run.exception_filters" => self.open_exception_filters(),
             "run.function_breakpoint" => self.begin_function_breakpoint(),
             "run.data_breakpoint" => self.begin_data_breakpoint(),
+            "run.instruction_breakpoint" => self.begin_instruction_breakpoint(),
             "run.continue" => self.resume_debugger(crate::dap::Dap::continue_),
             "run.step_over" => self.resume_debugger(crate::dap::Dap::step_over),
             "run.step_into" => self.resume_debugger(crate::dap::Dap::step_into),
@@ -1155,6 +1156,7 @@ impl App {
             | PromptKind::DebugBreakpointLog => self.accept_breakpoint_prompt(kind, expr),
             PromptKind::DebugSetVariable => self.accept_set_variable(expr),
             PromptKind::DebugFunctionBreakpoint => self.accept_function_breakpoint(expr),
+            PromptKind::DebugInstructionBreakpoint => self.accept_instruction_breakpoint(expr),
             PromptKind::DebugRepl if !expr.is_empty() => self.dap.evaluate(expr),
             PromptKind::DebugWatch if !expr.is_empty() => {
                 self.dap_view

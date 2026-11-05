@@ -197,6 +197,12 @@ variable: the status line says when one cannot be watched). Press it again on
 the same variable to remove the breakpoint. Data breakpoints last for one
 debug session only.
 
+**Run → Instruction Breakpoint…** (`run.instruction_breakpoint`) asks for a
+memory reference such as `0x4005d0` and toggles a breakpoint on the machine
+instruction there, for adapters that support instruction breakpoints (mostly
+native debuggers). It is kept for later sessions of this run of Vix, not saved
+to disk.
+
 Line and function breakpoints (with their condition, hit count and log
 message) are saved per workspace when you quit Vix and are back the next time
 you open it, and the next debug session sends them to the adapter like any

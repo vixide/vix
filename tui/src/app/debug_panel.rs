@@ -320,6 +320,54 @@ impl App {
         }
     }
 
+    // ----- instruction breakpoints --------------------------------------------
+
+    /// Run → Instruction Breakpoint…: ask for a memory reference to toggle.
+    pub(super) fn begin_instruction_breakpoint(&mut self) {
+        // With a session the adapter must support them; with none, they are
+        // only kept for the next session (which sends them if it can).
+        if self
+            .dap
+            .capabilities()
+            .is_some_and(|c| !c.supports_instruction_breakpoints)
+        {
+            self.status = t!("status.debug_instruction_breakpoint_unsupported").to_string();
+            return;
+        }
+        self.prompt = Some(Prompt::new(
+            PromptKind::DebugInstructionBreakpoint,
+            t!("prompt.debug_instruction_breakpoint").to_string(),
+        ));
+    }
+
+    /// The memory-reference prompt was answered: add the breakpoint, or
+    /// remove the one already there (an empty answer does nothing).
+    pub(super) fn accept_instruction_breakpoint(&mut self, reference: &str) {
+        let reference = reference.trim();
+        if reference.is_empty() {
+            return;
+        }
+        let mut list = self.dap.instruction_breakpoints().to_vec();
+        let status = if let Some(i) = list.iter().position(|b| b.reference == reference) {
+            list.remove(i);
+            t!(
+                "status.debug_instruction_breakpoint_removed",
+                reference = reference
+            )
+        } else {
+            list.push(crate::dap::InstructionBreakpoint::new(reference));
+            t!(
+                "status.debug_instruction_breakpoint_added",
+                reference = reference
+            )
+        };
+        self.status = if self.dap.set_instruction_breakpoints(list) {
+            status.to_string()
+        } else {
+            t!("status.debug_instruction_breakpoint_unsupported").to_string()
+        };
+    }
+
     // ----- Edit Breakpoint ----------------------------------------------------
 
     /// Run → Edit Breakpoint…: start the three prompts for the cursor line's

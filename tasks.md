@@ -7274,9 +7274,18 @@ new action.
   `tui/tests/integration/debugger.rs`. Leftovers
   landed later (`feat/t617-dap-leftovers`): function breakpoints (Run →
   Function Breakpoint…, `setFunctionBreakpoints`) and keeping tree expansion
-  across steps. Still not done: data breakpoints (`dataBreakpointInfo`,
-  needs a Debug panel key), instruction breakpoints, and breakpoint
-  persistence across runs of Vix.
+  across steps. Then (`feat/t617-dap-breakpoints`, 2026-11-05):
+  line and function breakpoints persist per workspace in `session.toml` and
+  are restored at startup; data breakpoints (`dataBreakpointInfo` +
+  `setDataBreakpoints`, `b` in the Debug panel and Run → Data Breakpoint on
+  Variable, gated on `supportsDataBreakpoints`); instruction breakpoints
+  (`setInstructionBreakpoints`, Run → Instruction Breakpoint…, gated on
+  `supportsInstructionBreakpoints`). All against the scripted mock adapter
+  only. Still not done: data and instruction breakpoints are not drawn in the
+  Debug panel (status line only), an instruction breakpoint has no offset,
+  condition or hit-condition prompt, and data and instruction breakpoints (and
+  the exception-filter choice) are not saved across runs of Vix; none has
+  been tried against a real native debugger.
 - [x] **T618 — Inline ghost-text completion.** A grep for
   `inlineCompletion` or `ghost` finds nothing. Neovim 0.12 supports
   `textDocument/inlineCompletion`, and Zed has Edit Predictions. Fix:

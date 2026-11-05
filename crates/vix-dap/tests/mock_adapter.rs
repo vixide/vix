@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use vix_dap::{Dap, DapEvent, DataBreakpoint, DebugAdapter, FunctionBreakpoint, SourceBreakpoint, StartMode};
+use vix_dap::{Dap, DapEvent, DataBreakpoint, DebugAdapter, FunctionBreakpoint, InstructionBreakpoint, SourceBreakpoint, StartMode};
 
 const MOCK_ADAPTER: &str = r"
 import sys, json
@@ -51,6 +51,7 @@ while True:
     if cmd == 'initialize':
         ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
                  'supportsDataBreakpoints': True,
+                 'supportsInstructionBreakpoints': True,
                  'exceptionBreakpointFilters': [
                      {'filter':'raised','label':'Raised Exceptions','default':False},
                      {'filter':'uncaught','label':'Uncaught Exceptions','default':True}]})
@@ -467,6 +468,7 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
     check_threads_frames_and_nested_variables(&mut dap);
     check_set_variable_and_evaluate_frame(&mut dap, &log);
     check_data_breakpoints(&mut dap, &log);
+    check_instruction_breakpoints(&mut dap, &log);
     dap.stop();
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -523,6 +525,25 @@ fn check_data_breakpoints(dap: &mut Dap, log: &std::path::Path) {
             serde_json::json!({ "breakpoints": [] }),
         ]
     );
+}
+
+/// `setInstructionBreakpoints` on a live session, sent at once.
+fn check_instruction_breakpoints(dap: &mut Dap, log: &std::path::Path) {
+    let mut bp = InstructionBreakpoint::new("0x4005d0");
+    bp.hit_condition = Some("2".into());
+    assert!(dap.set_instruction_breakpoints(vec![bp]));
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while logged_args(log, "setInstructionBreakpoints").len() < 2 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // One empty list during configuration, then the new one.
+    assert_eq!(
+        logged_args(log, "setInstructionBreakpoints")[1],
+        serde_json::json!({ "breakpoints": [
+            { "instructionReference": "0x4005d0", "hitCondition": "2" }
+        ] })
+    );
+    assert_eq!(dap.instruction_breakpoints().len(), 1);
 }
 
 #[test]

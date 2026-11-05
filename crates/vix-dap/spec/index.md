@@ -65,6 +65,17 @@ numeric ids and ports. `launch` values stay strings.
   the memory behind the variable highlighted in the Debug panel is written (or
   read, if the adapter offers only that). The same as `b` in the panel. See
   "Data breakpoints" below.
+- **Instruction Breakpoint…** (`run.instruction_breakpoint`, T617) — a prompt
+  for a memory reference (an address such as `0x4005d0`, as the adapter spells
+  it); Enter adds an instruction breakpoint there, or removes the one already
+  there (an empty answer does nothing). They are sent as
+  `setInstructionBreakpoints` (during configuration and again on every change),
+  only to an adapter that advertised `supportsInstructionBreakpoints`; with a
+  session whose adapter did not, the status line says so and no prompt opens.
+  With no session the breakpoint is only recorded and the next session sends
+  it. They are kept for later sessions of this run of Vix, like the function
+  breakpoints, but not saved to disk: addresses change from one run of a
+  program to the next.
 - **Continue**, **Step Over**, **Step Into**, **Step Out**, **Pause**.
 - **Add Watch…** — evaluate an expression each time execution stops.
 - **Evaluate…** — a one-off expression (REPL); the result prints to the bottom
@@ -129,7 +140,7 @@ execution continues or the session ends.
   + `setExceptionBreakpoints` (when the adapter advertised filters) + `launch`
   (or `attach`) + `configurationDone`. The `initialize` response's
   capabilities that Vix uses (exception filters, `supportsSetVariable`, `supportsFunctionBreakpoints`,
-  `supportsDataBreakpoints`) are
+  `supportsDataBreakpoints`, `supportsInstructionBreakpoints`) are
   kept for the session.
 - On a `stopped` event Vix fetches `threads` and the stopped thread's stack
   trace, then the top frame's scopes and the first scope's variables, jumps the
@@ -187,9 +198,12 @@ Exception-filter choices are about one adapter and are not saved.
 ## Limitations
 
 - A single debug session at a time.
-- Breakpoints are line, function and data breakpoints (no instruction
-  breakpoints yet); only the line and function ones are persisted across runs
-  of Vix, and data breakpoints have no row in the Debug panel.
+- Breakpoints are line, function, data and instruction breakpoints; only the
+  line and function ones are persisted across runs of Vix. Data and
+  instruction breakpoints have no row in the Debug panel (the status line
+  reports each change), and an instruction breakpoint is entered as a memory
+  reference only (no offset, condition or hit condition prompts; the library
+  type carries them).
 - A remembered expansion is matched by names, so two sibling variables with
   the same name share it.
 
@@ -200,7 +214,7 @@ Exception-filter choices are about one adapter and are not saved.
 
 ## Testing
 
-`crates/vix-dap/tests/mock_adapter.rs` drives the client against a scripted Python mock adapter (skipped without `python3`): the initialize → launch → stopped → threads → stackTrace → scopes → variables handshake and its request order, evaluate success/failure, a rejected request surfacing as `RequestFailed`, and `terminated` ending the session. T617 extends it: breakpoint condition / hitCondition / logMessage on the wire, `setExceptionBreakpoints` with the adapter's default filters and then a changed choice, `attach` with the `attach` table instead of `launch`, thread and frame selection, lazy `variables` for a nested reference, and `setVariable`. T617's data breakpoints add `dataBreakpointInfo` (a watchable and an unwatchable variable) and `setDataBreakpoints` to the same mock. `view.rs` unit-tests the tree model, and `tui/tests/integration/debugger.rs` drives Edit Breakpoint, the exception checklist and the panel keys through the real `App` against the same kind of mock. `tui/tests/authority_remote_tools.rs` (T716)
+`crates/vix-dap/tests/mock_adapter.rs` drives the client against a scripted Python mock adapter (skipped without `python3`): the initialize → launch → stopped → threads → stackTrace → scopes → variables handshake and its request order, evaluate success/failure, a rejected request surfacing as `RequestFailed`, and `terminated` ending the session. T617 extends it: breakpoint condition / hitCondition / logMessage on the wire, `setExceptionBreakpoints` with the adapter's default filters and then a changed choice, `attach` with the `attach` table instead of `launch`, thread and frame selection, lazy `variables` for a nested reference, and `setVariable`. T617's instruction breakpoints add `setInstructionBreakpoints` (live) to the mock too, and `debugger.rs` checks them set before the session and live. T617's data breakpoints add `dataBreakpointInfo` (a watchable and an unwatchable variable) and `setDataBreakpoints` to the same mock. `view.rs` unit-tests the tree model, and `tui/tests/integration/debugger.rs` drives Edit Breakpoint, the exception checklist and the panel keys through the real `App` against the same kind of mock. `tui/tests/authority_remote_tools.rs` (T716)
 runs a mock adapter over a fake `ssh` from **Run → Start**: it starts in the
 remote workspace, is launched with the remote program path, and its stop moves
 the editor there.

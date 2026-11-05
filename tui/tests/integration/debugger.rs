@@ -174,6 +174,7 @@ while True:
     if cmd == 'initialize':
         ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
                  'supportsDataBreakpoints': True,
+                 'supportsInstructionBreakpoints': True,
                  'exceptionBreakpointFilters': [
             {'filter':'raised','label':'Raised','default':False},
             {'filter':'uncaught','label':'Uncaught','default':True}]})
@@ -512,6 +513,66 @@ while True:
         app.run_action("run.data_breakpoint");
         assert!(requests(&log, "dataBreakpointInfo").is_empty());
         assert!(app.dap.data_breakpoints().is_empty());
+        app.run_action("run.stop");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn instruction_breakpoints_are_sent_by_memory_reference() {
+        let Some((mut app, dir, log)) = started("t617-instr") else {
+            return;
+        };
+        // Set before the session: kept, and sent while it configures.
+        app.run_action("run.instruction_breakpoint");
+        assert!(
+            app.prompt
+                .as_ref()
+                .is_some_and(|p| p.kind == PromptKind::DebugInstructionBreakpoint)
+        );
+        answer(&mut app, "0x4005d0");
+        assert_eq!(app.dap.instruction_breakpoints().len(), 1);
+        app.run_action("run.start");
+        wait(&mut app, |a| has_label(a, "p"));
+        assert_eq!(
+            requests(&log, "setInstructionBreakpoints")[0],
+            serde_json::json!({ "breakpoints": [{ "instructionReference": "0x4005d0" }] })
+        );
+
+        // Live: another one is added, then the first toggled off.
+        app.run_action("run.instruction_breakpoint");
+        answer(&mut app, "0x400600");
+        app.run_action("run.instruction_breakpoint");
+        answer(&mut app, "0x4005d0");
+        wait(&mut app, |_| {
+            requests(&log, "setInstructionBreakpoints").len() == 3
+        });
+        assert_eq!(
+            requests(&log, "setInstructionBreakpoints")[2],
+            serde_json::json!({ "breakpoints": [{ "instructionReference": "0x400600" }] })
+        );
+        // An empty answer changes nothing.
+        app.run_action("run.instruction_breakpoint");
+        answer(&mut app, "");
+        assert_eq!(app.dap.instruction_breakpoints().len(), 1);
+        app.run_action("run.stop");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn instruction_breakpoints_need_adapter_support() {
+        let Some((mut app, dir, log)) = started("t617-instr-unsupported") else {
+            return;
+        };
+        let mock = dir.join("mock_dap.py");
+        let script = fs::read_to_string(&mock)
+            .unwrap()
+            .replace("'supportsInstructionBreakpoints': True,", "");
+        fs::write(&mock, script).unwrap();
+        app.run_action("run.start");
+        wait(&mut app, |a| has_label(a, "p"));
+        app.run_action("run.instruction_breakpoint");
+        assert!(app.prompt.is_none(), "refused before asking");
+        assert!(requests(&log, "setInstructionBreakpoints").is_empty());
         app.run_action("run.stop");
         fs::remove_dir_all(&dir).ok();
     }

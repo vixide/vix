@@ -2755,6 +2755,11 @@ const RUN: &[Item] = &[
         "",
     ),
     Item::leaf("menu.item.run.data_breakpoint", "run.data_breakpoint", ""),
+    Item::leaf(
+        "menu.item.run.instruction_breakpoint",
+        "run.instruction_breakpoint",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.run.continue", "run.continue", ""),
     Item::leaf("menu.item.run.step_over", "run.step_over", ""),

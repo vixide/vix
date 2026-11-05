@@ -293,6 +293,50 @@ impl DataBreakpoint {
     }
 }
 
+/// An instruction breakpoint (T617): stop when execution reaches the
+/// instruction at a memory address.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct InstructionBreakpoint {
+    /// The memory reference of the instruction (typically an address such as
+    /// `0x4005d0`, as the adapter spells them).
+    pub reference: String,
+    /// Expression; the adapter stops only when it is true.
+    pub condition: Option<String>,
+    /// Hit-count condition (the syntax is the adapter's).
+    pub hit_condition: Option<String>,
+}
+
+impl InstructionBreakpoint {
+    /// A breakpoint on the instruction at memory `reference`.
+    #[must_use]
+    pub fn new(reference: impl Into<String>) -> Self {
+        InstructionBreakpoint {
+            reference: reference.into(),
+            condition: None,
+            hit_condition: None,
+        }
+    }
+
+    /// The `InstructionBreakpoint` JSON object for `setInstructionBreakpoints`.
+    fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "instructionReference".to_string(),
+            Value::String(self.reference.clone()),
+        );
+        for (key, value) in [
+            ("condition", &self.condition),
+            ("hitCondition", &self.hit_condition),
+        ] {
+            if let Some(v) = value {
+                map.insert(key.to_string(), Value::String(v.clone()));
+            }
+        }
+        Value::Object(map)
+    }
+}
+
 /// One exception filter an adapter advertises in `initialize`
 /// (`exceptionBreakpointFilters`, T617).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -330,6 +374,8 @@ pub struct Capabilities {
     pub supports_function_breakpoints: bool,
     /// `supportsDataBreakpoints` (T617).
     pub supports_data_breakpoints: bool,
+    /// `supportsInstructionBreakpoints` (T617).
+    pub supports_instruction_breakpoints: bool,
 }
 
 impl Capabilities {
@@ -362,6 +408,10 @@ impl Capabilities {
                 .unwrap_or(false),
             supports_data_breakpoints: body
                 .get("supportsDataBreakpoints")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            supports_instruction_breakpoints: body
+                .get("supportsInstructionBreakpoints")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         }
@@ -522,6 +572,8 @@ struct Session {
     breakpoints: HashMap<String, Vec<SourceBreakpoint>>,
     /// Function breakpoints to set on `initialized`.
     function_breakpoints: Vec<FunctionBreakpoint>,
+    /// Instruction breakpoints to set on `initialized`.
+    instruction_breakpoints: Vec<InstructionBreakpoint>,
     /// Data breakpoints (T617): this session only, as their ids are.
     data_breakpoints: Vec<DataBreakpoint>,
     /// Whether we have sent the launch (after the `initialized` event).
@@ -549,6 +601,8 @@ pub struct Dap {
     exception_choice: Option<Vec<String>>,
     /// The function breakpoints (T617); kept across sessions.
     function_breakpoints: Vec<FunctionBreakpoint>,
+    /// The instruction breakpoints (T617); kept across sessions of this run.
+    instruction_breakpoints: Vec<InstructionBreakpoint>,
 }
 
 impl Default for Dap {
@@ -566,6 +620,7 @@ impl Dap {
             workdir: None,
             exception_choice: None,
             function_breakpoints: Vec::new(),
+            instruction_breakpoints: Vec::new(),
         }
     }
 
@@ -631,6 +686,7 @@ impl Dap {
             start_request,
             breakpoints,
             function_breakpoints: self.function_breakpoints.clone(),
+            instruction_breakpoints: self.instruction_breakpoints.clone(),
             data_breakpoints: Vec::new(),
             configured: false,
             thread_id: None,
@@ -737,6 +793,33 @@ impl Dap {
                 s.send_function_breakpoints();
             }
         }
+    }
+
+    /// The instruction breakpoints (T617).
+    #[must_use]
+    pub fn instruction_breakpoints(&self) -> &[InstructionBreakpoint] {
+        &self.instruction_breakpoints
+    }
+
+    /// Replace the instruction breakpoints (`setInstructionBreakpoints`,
+    /// T617): sent at once to a configured session, and kept for later
+    /// sessions of this run. Returns `false`, changing nothing, when a session
+    /// is active whose adapter does not report
+    /// `supportsInstructionBreakpoints`; with no session they are only kept,
+    /// and each session sends them (to an adapter that supports them) once
+    /// it is configured.
+    pub fn set_instruction_breakpoints(&mut self, breakpoints: Vec<InstructionBreakpoint>) -> bool {
+        if let Some(s) = self.session.as_mut() {
+            if !s.capabilities.supports_instruction_breakpoints {
+                return false;
+            }
+            s.instruction_breakpoints.clone_from(&breakpoints);
+            if s.configured {
+                s.send_instruction_breakpoints();
+            }
+        }
+        self.instruction_breakpoints = breakpoints;
+        true
     }
 
     /// The data breakpoints of the active session (T617); empty when idle.
@@ -1136,6 +1219,7 @@ impl Session {
         }
         self.send_exception_filters(filters);
         self.send_function_breakpoints();
+        self.send_instruction_breakpoints();
         self.configured = true;
         let (command, args) = self.start_request.clone();
         self.request(command, &args, Pending::Other(command.to_string()));
@@ -1185,6 +1269,24 @@ impl Session {
             "setFunctionBreakpoints",
             &json!({ "breakpoints": bps }),
             Pending::Other("setFunctionBreakpoints".to_string()),
+        );
+    }
+
+    /// Send `setInstructionBreakpoints` — only to an adapter that advertised
+    /// `supportsInstructionBreakpoints` (others may reject the request).
+    fn send_instruction_breakpoints(&mut self) {
+        if !self.capabilities.supports_instruction_breakpoints {
+            return;
+        }
+        let bps: Vec<Value> = self
+            .instruction_breakpoints
+            .iter()
+            .map(InstructionBreakpoint::to_json)
+            .collect();
+        self.request(
+            "setInstructionBreakpoints",
+            &json!({ "breakpoints": bps }),
+            Pending::Other("setInstructionBreakpoints".to_string()),
         );
     }
 
