@@ -7,7 +7,7 @@ forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
 Status: **proposed**, except tiers (T760), the attestation (T761), option 3
-(trim hosted CI, T762) and option 8 (one entrypoint, T767), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
+(trim hosted CI, T762) option 8 (one entrypoint, T767) and option 5 (build caching: the clean-room environment, T764), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
 the gate runs and who has to trust whom.
 
 ## Why
@@ -87,7 +87,7 @@ only `full`.
 | 2 | **Signed gate attestation + `pre-push` hook**; forge CI verifies it instead of re-running | almost all remote minutes on trusted pushes | medium: self-reported, so needs principle 4 | **Do second.** |
 | 3 | **Trim hosted CI**: macOS/Windows and `cargo hack`, mutants and chaos only on schedule or tags; path filters; cancel superseded runs | most of the paid minutes | low | **Done (T762).** |
 | 4 | **Self-hosted runner** on the maintainer's Mac: a [Forgejo runner](https://forgejo.org/docs/latest/admin/actions/) (host-mode label) for Codeberg, a GitHub or GitLab runner for the others | all hosted minutes, native macOS | medium: runs code on a personal machine | **Spike** (needs the maintainer's call on hardware and always-on). |
-| 5 | **Build caching** (shared `CARGO_TARGET_DIR`, `sccache`) | local time | low, but the `kache` wrappers are known to cause bogus linker and rustdoc failures in the gate | **Decide**: fix or retire `kache` for the gate; document the clean-room environment. |
+| 5 | **Build caching** (shared `CARGO_TARGET_DIR`, `sccache`) | local time | low, but the `kache` wrappers are known to cause bogus linker and rustdoc failures in the gate | **Decided (T764)**: retire wrapper caching for the gate; the gate runs in a clean room by default. See "Build caching". |
 | 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Do** a Linux container script; Windows stays hosted but on tags and nightly only. |
 | 7 | **Local release path**: build the three targets, checksum, SSH-sign and upload from the maintainer's machine; `release.yml` remains the manual fallback | release minutes, and release depends on no hosted queue | medium: cutting a tag stays the user's decision | **Do** after 1 and 2. |
 | 8 | **One entrypoint** (`scripts/ci <job>`) that every forge file calls | drift | low | **Done (T767).** `spec/ci` revised. |
@@ -225,6 +225,105 @@ targets, which the Makefile does not build, so the handoff is partial. How-to:
 throwaway repository with a generated key and stub `make`, `gh` and `tea` (no
 network); it runs in the `push` tier and above. Honest limits: never run for real,
 and the `tea` flags are from its documentation, not exercised against Codeberg.
+
+## Build caching (option 5, T764, implemented)
+
+**Decision: the gate runs with no compiler-cache wrapper.** `scripts/check`
+sources `scripts/clean-room.sh` and, unless `VIX_CLEAN_ROOM=0`, strips `kache`
+and `sccache` from the build environment, then prints one line saying which
+environment it ran in (`==> environment: clean room (...)` or `inherited`). It
+is one definition in code, so every agent and every human gets the same one.
+Nothing outside the repository is edited: `~/.cargo/config.toml`, the shims and
+shell profiles stay as the user left them.
+
+What the clean room does (all of it is needed, found by trying):
+
+- drops PATH directories that name `kache` or `sccache` (the `cargo`, `rustdoc`
+  and `cc` shim directory);
+- sets `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER` and
+  `CARGO_BUILD_RUSTC_WRAPPER` to empty, which overrides config
+  `build.rustc-wrapper`;
+- sets `RUSTDOC=rustdoc`, because stripping PATH alone does **not** help: config
+  `build.rustdoc` pins an absolute path to the rustdoc shim, and only the
+  `RUSTDOC` environment variable overrides it (verified with `cargo doc -v`:
+  without it cargo still runs `.../kache/shims/rustdoc`);
+- **removes** (never empties) any `CARGO_TARGET_*_RUNNER` that names a wrapper:
+  an empty runner makes cargo fail with `invalid length 0, expected at least
+  one element`;
+- sets `HOST_CC=cc` and `HOST_CXX=c++` (config `[env]` `HOST_CC="kache cc"`
+  never overrides a variable already set) and removes `CC_KNOWN_WRAPPER_CUSTOM`.
+
+It never changes `CARGO_TARGET_DIR`.
+
+### Why the wrappers fail
+
+Evidence, and what is not known:
+
+- The wrapper is on every path of a build, not only `rustc`: the user's
+  environment sets `RUSTC_WRAPPER=kache`, config sets `build.rustdoc` to a shim
+  and `HOST_CC`/`HOST_CXX` to `kache cc` / `kache c++`, the shim directory is
+  first on PATH, and a `kache test-runner` is the `aarch64-apple-darwin` test
+  runner. A fault in any of them can fail the gate.
+- The installed `kache` is `2.0.0-rc.3`, a release candidate, talking to a
+  background daemon (`kache daemon`). The reported rustdoc errors, "daemon
+  compilation did not complete" and "cannot read compiler process identity",
+  are daemon-protocol failures: they name the wrapper's daemon, not rustc or
+  the tree. The bogus linker errors are consistent with a cached object, a C
+  compiler wrapped as `kache cc`, or a linker input restored for a different
+  build.
+- A small crate builds and documents fine through the wrapper
+  (`kache doctor` reports all checks passed), so this is **not** a plain
+  misconfiguration that can be fixed once on the Vix side. The failures appear
+  with this workspace's size and under concurrent builds (several agents and
+  worktrees sharing one store and one daemon, and in the user's shell one
+  shared `CARGO_TARGET_DIR`).
+- **Not reproduced here.** A cheap reproduction of the daemon failures was not
+  possible without a long concurrent build, so the root cause inside `kache` is
+  unverified. What is verified is that the clean room removes every wrapper
+  from the commands cargo runs, and that `scripts/test-clean-room` proves it.
+
+### Options weighed
+
+Correctness first, then speed, then concurrency.
+
+| Option | Correctness | Speed | Concurrency | Verdict |
+| ------ | ----------- | ----- | ----------- | ------- |
+| Fix or keep `kache` for the gate | A cache hit restores a build product the gate then trusts; a daemon fault fails a step for a reason unrelated to the tree. Cannot be fixed from this repository (a release-candidate tool and the user's machine config). | fastest warm | the daemon and store are shared by every agent: where the faults appear | **Rejected for the gate.** Fine for the user's own interactive builds; not Vix's to change |
+| Retire wrappers for the gate (the clean room) | A pure `cargo` and `rustc`; a failure means the tree | cold start per target dir, then incremental | independent | **Chosen** |
+| A shared `CARGO_TARGET_DIR` for all agents | Same compiler, but artifacts from different worktrees and flags thrash one directory, and cargo's build lock serializes every build | warm | worst: one agent waits for another's whole gate | **Rejected** |
+| `sccache` | Same class of risk as `kache` (a wrapper in front of every compile; it also disables incremental compilation for the Rust it caches); not tried | unmeasured here | shared store | **Rejected for the gate**; revisit only with measurements |
+
+A slow gate is a cost; a gate that can pass or fail spuriously is a defect. The
+clean room costs a cold build in each new target directory and nothing after.
+
+### Target directories for concurrent agents
+
+Cargo takes a lock on the target directory for the whole build, so two gates
+sharing one directory run one after the other. Recommendation:
+
+- **One private target directory per worktree** that is gating (the default
+  `./target` in a worktree already is). Never export one shared
+  `CARGO_TARGET_DIR` for several worktrees; if your shell does (the maintainer's
+  currently does), override it per run with a unique path.
+- Put it on the fast local disk, outside the worktree so removing the worktree
+  does not delete a warm cache you may want, for example
+  `CARGO_TARGET_DIR=$HOME/.cache/vix-target/<worktree-name>`, or the session
+  scratch directory for a throwaway agent run.
+- **How many:** one per gate that runs at the same time. A full workspace build
+  takes several GiB, so budget roughly four to six concurrent target
+  directories on a laptop (disk, and also CPU: more concurrent gates slow each
+  other and make timing-sensitive tests flaky) and remove ones for merged
+  worktrees. Gating one tree at a time is faster than eight at once.
+
+`scripts/check` prints the `CARGO_TARGET_DIR` it uses, or says it is unset, so
+the log shows which directory a result came from. It does not change it.
+
+`scripts/test-clean-room` (no network, no build; part of the `push` tier and
+above) runs `scripts/check` with a stub `cargo` in a fake `kache` directory and
+a wrapper-laden environment and proves the stub in the wrapper directory is not
+used, `RUSTC_WRAPPER` is empty, `RUSTDOC` is plain, the wrapper runner is unset
+(and an unrelated runner is kept), and that `VIX_CLEAN_ROOM=0` opts out.
+Forge runners have no wrappers, so `scripts/ci` does not use the clean room.
 
 ## Non-goals
 

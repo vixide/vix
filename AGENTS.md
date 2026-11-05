@@ -81,6 +81,11 @@ grammars are feature-gated: `--features syntax-all` for every grammar,
 clippy, tests, `cargo doc`, and the documentation checks. CI enforces the same gate on all
 three forges Vix is pushed to (GitHub, GitLab, Codeberg); when the gate changes,
 change every forge's config with it. See [`spec/ci/index.md`](spec/ci/index.md).
+`scripts/check` runs in a clean room (T764): it strips `kache`/`sccache` from
+PATH and `RUSTC_WRAPPER` and sets `HOST_CC=cc HOST_CXX=c++` itself (opt out with
+`VIX_CLEAN_ROOM=0`; never hand-strip them), prints which environment it ran in,
+and wants one private `CARGO_TARGET_DIR` per concurrent gate/worktree, never a
+shared one (see [`spec/local-ci`](spec/local-ci/index.md) "Build caching").
 `scripts/check --tier fast|push|full` (T760) picks how much to run while you
 iterate (`fast`: fmt, clippy and tests of changed crates; `push`: the whole
 workspace plus docs; `full`, the default, is the landing bar). Only the `full`

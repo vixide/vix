@@ -127,6 +127,16 @@ and the jobs they call were run, but the first real run on each forge is the
 first test of the glue (checkout credentials for the notes fetch, secret
 exposure, the GitLab job's `ssh-keygen`).
 
+## Build caching and the local environment (T764)
+
+The forge runners have no compiler-cache wrapper, so `scripts/ci` runs plain
+`cargo`. The local gate does the same on purpose: `scripts/check` runs in a
+clean room (no `kache`/`sccache` wrapper, `HOST_CC=cc`, `HOST_CXX=c++`; opt out
+with `VIX_CLEAN_ROOM=0`), because a wrapper once made it pass or fail
+spuriously. The reasoning, the options weighed and the target-directory advice
+for concurrent agents are in [`spec/local-ci`](../local-ci/index.md) "Build
+caching". Hosted caching stays `Swatinem/rust-cache`.
+
 ## Slim hosted CI (T762)
 
 Hosted CI is deliberately thin, because the local `scripts/check` is the

@@ -8,6 +8,11 @@
 # still matches the tree it describes.
 # Stops at the first failure. See spec/rust-cargo-fmt, spec/ci and spec/local-ci.
 #
+# Environment (T764): by default the gate runs in a "clean room" with no
+# compiler-cache wrapper (kache, sccache) on PATH or in RUSTC_WRAPPER, because
+# a wrapper made it pass or fail spuriously; VIX_CLEAN_ROOM=0 opts out. See
+# scripts/clean-room.sh and spec/local-ci "Build caching".
+#
 # Usage: scripts/check [--tier fast|push|full]      (T760; default: full)
 #   fast  fmt + clippy + tests of the crates changed since the merge base with main
 #   push  clippy and tests on the whole workspace, plus build, doc, the generated
@@ -61,6 +66,10 @@ full) want=3 ;;
 	exit 2
 	;;
 esac
+
+# shellcheck source=scripts/clean-room.sh
+. "$(dirname "$0")/clean-room.sh"
+vix_clean_room
 
 # A step runs when its tier is at or below the chosen one.
 in_tier() {
@@ -297,6 +306,10 @@ if in_tier push; then
 
 	step_begin "scripts/test-release-local (T766)"
 	sh "$(dirname "$0")/test-release-local"
+	step_end
+
+	step_begin "scripts/test-clean-room (T764)"
+	sh "$(dirname "$0")/test-clean-room"
 	step_end
 fi
 

@@ -29,7 +29,13 @@ implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
    pedantic with `-D warnings`, tests, feature combinations, headless
    examples, `cargo doc` with warnings denied, generated reference docs and
    man page current, semver, `scripts/check-docs` with CSpell, per-binary
-   licenses). It ends with `OK: … all passed`. While iterating,
+   licenses). It ends with `OK: … all passed`. It runs in a **clean room**
+   (T764): no `kache`/`sccache` wrapper on PATH or in `RUSTC_WRAPPER`,
+   `HOST_CC=cc`, `HOST_CXX=c++`, set by `scripts/check` itself (opt out with
+   `VIX_CLEAN_ROOM=0`), so do not strip them by hand. Give every gate that runs
+   at the same time its own `CARGO_TARGET_DIR` (one per worktree, never one
+   shared; cargo's lock serializes a shared directory), and read the
+   `==> environment:` line in the log to see what it ran in. While iterating,
 `scripts/check --tier fast` (fmt, clippy and tests of the crates changed
 since `main`) or `--tier push` is quicker, but only the default `full` tier
 counts as the landing gate; the shorter tiers end in `OK (tier …)`, never

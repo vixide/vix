@@ -9692,12 +9692,24 @@ the maintainer's decisions.
   decide whether a GitHub or GitLab runner is worth it given that GitHub's
   self-hosted charge was postponed, not cancelled. **Waits on the
   maintainer's decision about hardware and an always-on machine.** **Medium.**
-- [ ] **T764 — Build caching decision.** Decide whether to fix or retire the
+- [x] **T764 — Build caching decision.** Decide whether to fix or retire the
   `kache` wrappers for the gate (they cause bogus linker and rustdoc failures
   today, so the gate is run with them stripped), and whether a shared
   `CARGO_TARGET_DIR` or `sccache` replaces them; document the clean-room
   environment in `scripts/check` so every agent uses the same one.
   **Small.**
+  Done 2026-11-05: decision is to retire wrapper caching for the gate (a gate
+  that can pass or fail spuriously is worse than a slow one); a shared
+  `CARGO_TARGET_DIR` is rejected (cargo's build lock serializes every agent's
+  gate) and `sccache` is rejected for the same wrapper risk and being unmeasured.
+  `scripts/clean-room.sh`, sourced by `scripts/check`, is the one definition
+  (`VIX_CLEAN_ROOM=0` opts out); `scripts/test-clean-room` is in the `push`
+  tier. Found by trying: PATH stripping alone leaves config `build.rustdoc`
+  pointing at the shim (needs `RUSTDOC`), and an empty wrapper test runner is
+  a cargo error (must be unset). Honest limits: the `kache` 2.0.0-rc.3 daemon
+  failures were not reproduced here (a small crate builds fine through it) so
+  the root cause is unverified; no timing of kache versus clean-room gate
+  was measured; the target-dir count advice is a judgment, not a benchmark.
 - [ ] **T765 — Local Linux and Windows coverage.** A `scripts/check-linux`
   that runs the `push` tier in a container (Docker, Colima or OrbStack) for
   the Linux-only behavior a Mac misses; a documented Windows VM recipe;

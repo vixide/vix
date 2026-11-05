@@ -1,0 +1,97 @@
+#!/bin/sh
+# Tests for the clean-room gate environment (T764).
+#
+#     scripts/test-clean-room
+#
+# No network, no build. A stub `cargo` records the environment it is started in
+# and fails, so scripts/check stops at its first step; the stub in a "kache"
+# directory (the wrapper shim) must NOT be the one that runs. HOME and the
+# git config are pointed away; nothing outside a temp directory is touched.
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$src")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+export HOME="$work/home"
+mkdir -p "$HOME"
+
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+eq() { # NAME GOT WANT
+	if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi
+}
+
+mkdir -p "$work/shims/kache/shims" "$work/bin"
+cat >"$work/shims/kache/shims/cargo" <<'E'
+#!/bin/sh
+echo SHIM >"$VIX_TEST_OUT"
+exit 1
+E
+cat >"$work/bin/cargo" <<'E'
+#!/bin/sh
+{
+	echo "wrapper=[$RUSTC_WRAPPER]"
+	echo "rustdoc=[$RUSTDOC]"
+	echo "hostcc=[$HOST_CC] hostcxx=[$HOST_CXX]"
+	echo "runner=[${CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER-unset}] other=[${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER-unset}]"
+	echo "knownwrapper=[${CC_KNOWN_WRAPPER_CUSTOM-unset}]"
+	echo "path=[$PATH]"
+} >"$VIX_TEST_OUT"
+exit 1
+E
+chmod +x "$work/shims/kache/shims/cargo" "$work/bin/cargo"
+export VIX_TEST_OUT="$work/seen"
+
+# Run scripts/check with the wrapper-laden environment; KEY=VAL args extend it.
+gate() {
+	rm -f "$VIX_TEST_OUT"
+	env -u CARGO_TARGET_DIR PATH="$work/shims/kache/shims:$work/bin:/usr/bin:/bin:/opt/sccache/bin" \
+		RUSTC_WRAPPER=kache RUSTDOC="$work/shims/kache/shims/rustdoc" \
+		HOST_CC="kache cc" HOST_CXX="kache c++" CC_KNOWN_WRAPPER_CUSTOM=kache \
+		CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER="kache test-runner" \
+		CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="qemu-x86_64" \
+		"$@" sh "$root/scripts/check" >"$work/log" 2>&1
+}
+
+echo "== default: clean room"
+gate
+seen=$(cat "$VIX_TEST_OUT" 2>/dev/null)
+case "$seen" in SHIM*) bad "kache shim cargo ran" ;; *) ok "the kache shim cargo did not run" ;; esac
+eq "RUSTC_WRAPPER emptied" "$(echo "$seen" | sed -n 's/^wrapper=//p')" "[]"
+eq "RUSTDOC is plain rustdoc" "$(echo "$seen" | sed -n 's/^rustdoc=//p')" "[rustdoc]"
+eq "HOST_CC/HOST_CXX are cc and c++" "$(echo "$seen" | sed -n 's/^hostcc=//p')" "[cc] hostcxx=[c++]"
+eq "wrapper runner unset, unrelated runner kept" "$(echo "$seen" | sed -n 's/^runner=//p')" "[unset] other=[qemu-x86_64]"
+eq "CC_KNOWN_WRAPPER_CUSTOM unset" "$(echo "$seen" | sed -n 's/^knownwrapper=//p')" "[unset]"
+case "$seen" in *kache*) bad "PATH still names kache" ;; *) ok "PATH has no kache directory" ;; esac
+case "$seen" in *sccache*) bad "PATH still names sccache" ;; *) ok "PATH has no sccache directory" ;; esac
+grep -q '^==> environment: clean room' "$work/log" && ok "prints the clean-room line" || bad "prints the clean-room line"
+grep -q 'CARGO_TARGET_DIR unset' "$work/log" && ok "advises on CARGO_TARGET_DIR when unset" || bad "advises on CARGO_TARGET_DIR when unset"
+
+echo "== a CARGO_TARGET_DIR is reported and never changed"
+gate CARGO_TARGET_DIR="$work/mine"
+grep -q "CARGO_TARGET_DIR=$work/mine" "$work/log" && ok "reports the directory" || bad "reports the directory"
+
+echo "== VIX_CLEAN_ROOM=0 opts out"
+gate VIX_CLEAN_ROOM=0
+seen=$(cat "$VIX_TEST_OUT" 2>/dev/null)
+case "$seen" in SHIM*) ok "the shim runs when opted out" ;; *) bad "the shim runs when opted out" ;; esac
+grep -q '^==> environment: inherited' "$work/log" && ok "prints the inherited line" || bad "prints the inherited line"
+
+echo "== the helper functions"
+. "$src/clean-room.sh"
+eq "strip_path keeps clean entries in order" "$(vix_strip_path /a:/b/kache/shims:/c)" "/a:/c"
+eq "strip_path handles one entry" "$(vix_strip_path /x/sccache)" ""
+eq "strip_path leaves a clean PATH alone" "$(vix_strip_path /usr/bin:/bin)" "/usr/bin:/bin"
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "OK: scripts/test-clean-room all passed"
+else
+	echo "FAIL: scripts/test-clean-room: $fails failure(s)"
+	exit 1
+fi
