@@ -1,0 +1,117 @@
+#!/bin/sh
+# Tests for scripts/check-linux (T765). Throwaway: needs no Docker. Everything
+# runs with VIX_CI_DRY_RUN=1 (the command is printed, never run), except the
+# "no CLI" and "daemon down" cases, which use a stub CLI on a private PATH.
+#
+#     scripts/test-check-linux
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$src")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+	[ -f "$work/out" ] && sed 's/^/       /' "$work/out"
+}
+pass() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then ok "$name"; else bad "$name"; fi
+}
+fail() {
+	name=$1
+	shift
+	if "$@" >"$work/out" 2>&1; then bad "$name (unexpectedly passed)"; else ok "$name"; fi
+}
+has() {
+	if grep -q -- "$1" "$work/out"; then ok "output has '$1'"; else bad "output has '$1'"; fi
+}
+lacks() {
+	if grep -q -- "$1" "$work/out"; then bad "output lacks '$1'"; else ok "output lacks '$1'"; fi
+}
+
+cd "$root" || exit 1
+s=scripts/check-linux
+
+echo "== arguments"
+fail "unknown argument" "$s" --nonsense
+has "unknown argument"
+fail "unknown tier" "$s" --tier bogus
+has "unknown tier"
+fail "--tier needs a value" "$s" --tier
+has "needs a value"
+pass "help exits 0" "$s" --help
+has "usage:"
+
+echo "== dry run"
+export VIX_CI_DRY_RUN=1
+pass "default tier is push" "$s"
+has "scripts/check --tier push"
+pass "--tier fast" "$s" --tier fast
+has "scripts/check --tier fast"
+pass "--tier=full" "$s" --tier=full
+has "scripts/check --tier full"
+pass "--shell" "$s" --shell
+has "run --rm -it"
+has "exec bash"
+lacks "scripts/check --tier"
+
+echo "== generated command"
+pass "command" "$s"
+msrv=$(sed -n 's/^rust-version *= *"\([0-9.]*\)".*/\1/p' Cargo.toml | head -n 1)
+has "FROM rust:$msrv-bookworm"
+has "rustup component add clippy rustfmt"
+has "-v $root:/src:ro"
+has "vix-check-linux-work:/cache/work"
+has "vix-check-linux-target:/cache/target"
+has "vix-check-linux-cargo:/cache/cargo"
+has "--user [0-9]*:[0-9]*"
+lacks "--user 0:0"
+lacks "--user root"
+has "--cap-drop ALL"
+has "no-new-privileges"
+has "RUSTC_WRAPPER="
+lacks "\.ssh"
+lacks "docker\.sock"
+lacks "\.gitconfig"
+lacks "--privileged"
+lacks "--network host"
+lacks "AWS_\|GITHUB_TOKEN\|SSH_AUTH_SOCK"
+lacks "-v $HOME:"
+# Exactly one bind mount, and it is the repository, read-only.
+n=$(grep -o -- ' -v /[^ ]*' "$work/out" | wc -l | tr -d ' ')
+[ "$n" = 1 ] && ok "one bind mount" || bad "one bind mount (got $n)"
+n=$(grep -o -- ' -v /[^ ]*' "$work/out" | grep -c -- ':/src:ro')
+[ "$n" = 1 ] && ok "the bind mount is read-only" || bad "the bind mount is read-only"
+VIX_LINUX_RUST=1.99.1 pass "VIX_LINUX_RUST overrides" "$s"
+has "FROM rust:1.99.1-bookworm"
+VIX_LINUX_IMAGE=my/image:1 pass "VIX_LINUX_IMAGE overrides the tag" "$s"
+has "my/image:1 sh -c"
+VIX_CONTAINER_CLI=podman pass "VIX_CONTAINER_CLI" "$s"
+has "^podman run"
+
+echo "== real mode (stub CLI, no Docker needed)"
+unset VIX_CI_DRY_RUN
+mkdir "$work/bin"
+fail "no container CLI is a clear failure" env PATH="$work/bin:/usr/bin:/bin" VIX_CONTAINER_CLI=vix-no-such-cli "$s"
+has "no container CLI"
+has "colima"
+has "orbstack"
+printf '#!/bin/sh\n[ "$1" = info ] && exit 1\nexit 0\n' >"$work/bin/stub"
+chmod +x "$work/bin/stub"
+fail "daemon down is a clear failure" env PATH="$work/bin:/usr/bin:/bin" VIX_CONTAINER_CLI=stub "$s"
+has "daemon is not reachable"
+has "colima start"
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "scripts/test-check-linux: all checks passed"
+else
+	echo "scripts/test-check-linux: $fails check(s) FAILED"
+	exit 1
+fi

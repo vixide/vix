@@ -156,6 +156,12 @@ runs the feature-combination step only on schedule, tags and dispatch;
 at the top of `.gitlab-ci.yml`: its pipeline is paused by CI-minute quota
 (`ci_quota_exceeded` since 2026-08-29), so a red run there means no quota.
 
+Hosted Windows and macOS are not replaced by anything local: they stay on
+version tags, the weekly schedule and manual dispatch. What *is* local is a way
+to find those failures first: `scripts/check-linux` (a Linux container) and a
+documented Windows VM recipe, in [`spec/local-ci`](../local-ci/index.md)
+("Local Linux and Windows coverage", T765).
+
 ## GitHub
 
 Jobs in `ci.yml`. `plan` decides what this run needs (`full`: schedule, tag or
