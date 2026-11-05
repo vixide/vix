@@ -322,3 +322,54 @@ fn two_pane_wraps_long_lines_and_keeps_rows_aligned() {
     assert_eq!(cursor_text(&app), "+short");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// In a split, a review pane that is not focused is drawn two-pane too, from
+/// its own tab's cursor, and a click on it focuses it and maps onto its rows.
+#[test]
+fn an_unfocused_split_pane_draws_the_two_pane_view() {
+    use vix::editor::SplitDir;
+    let dir = unique_dir("review-split");
+    let mut app = app_at(&dir);
+    app.settings.review_view = "side_by_side".to_string();
+    app.open_review_from_diff("a..b", DIFF);
+    // Split: the review stays in the first pane, the untitled tab goes in the
+    // second, and focus moves to that second pane.
+    app.editor.set_split(SplitDir::Vertical);
+    app.editor.focus_leaf(1);
+    assert!(app.editor.active_tab().unwrap().path.is_none());
+
+    let rows = frame_rows(&mut app, 300, 30);
+    let row = rows
+        .iter()
+        .find(|r| r.contains("old") && r.contains("new"))
+        .unwrap_or_else(|| panic!("the unfocused pane is drawn two-pane: {rows:#?}"));
+    assert!(row.find("new").unwrap() > row.find("old").unwrap());
+
+    // A click on the review pane's left cell focuses it and picks `-old`.
+    let y = u16::try_from(rows.iter().position(|r| r == row).unwrap()).unwrap();
+    let x = u16::try_from(row[..row.find("old").unwrap()].chars().count()).unwrap();
+    app.on_mouse(click(x, y));
+    assert!(app.editor.active_tab().unwrap().read_only, "focus moved");
+    assert_eq!(cursor_text(&app), "-old");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A split pane too narrow for two columns shows the inline buffer on its own;
+/// the same review in a wider pane keeps the two-pane view.
+#[test]
+fn a_narrow_split_pane_falls_back_to_inline_by_itself() {
+    use vix::editor::SplitDir;
+    let dir = unique_dir("review-split-narrow");
+    let mut app = app_at(&dir);
+    app.settings.review_view = "side_by_side".to_string();
+    app.open_review_from_diff("a..b", DIFF);
+    // The review in one pane, the untitled tab in the other.
+    app.editor.set_split(SplitDir::Vertical);
+    let wide = frame_rows(&mut app, 320, 30);
+    // The review pane is wide enough: it shows the pair, no inline.
+    assert!(!wide.iter().any(|r| r.contains("-old")));
+    // Narrower: this pane (half the width) falls back on its own.
+    let narrow = frame_rows(&mut app, 150, 30);
+    assert!(narrow.iter().any(|r| r.contains("-old")));
+    std::fs::remove_dir_all(&dir).ok();
+}

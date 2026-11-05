@@ -131,6 +131,18 @@ mouse), `halves(width)` the pane widths, `inline_at(row, Half)` the inline row
 a click on a half stands for (each `Cell` records its own `inline` row) and
 `top_for_row(row)` the inline top line that makes a row the first shown.
 
+**Split panes.** Every editor pane that shows the review's tab draws it, not
+only the focused one: `App::review_panes_for(tab, width)` gives each pane the
+layout together with that tab's own wrap flag, cursor row and top row
+(`PaneView`), and the width test is per pane, so a pane under
+`MIN_SIDE_BY_SIDE_WIDTH` columns shows the inline buffer while a wider one
+shows the pairs. The view choice itself (`ReviewState::side_by_side`, toggled
+by `v`) belongs to the review, not to a pane: toggling changes every pane that
+shows it. Clicking another pane focuses it and, before the click is mapped,
+`layout.editor` is pointed at that pane's text area (it was only refreshed by
+the next draw, which mapped the first click in a newly focused pane against the
+previous pane's rectangle).
+
 **Wrapping.** With the editor's soft wrap on (View → Soft Wrap, the review
 tab's `soft_wrap_enabled`; there is no separate setting) a pair cell wraps
 within its pane: `wrap_text(text, width - GUTTER)` splits it into char ranges

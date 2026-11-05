@@ -9658,6 +9658,7 @@ impl App {
                 .focus_pane_at(self.layout.editor_region, col, row)
         {
             self.focus = Focus::Editor;
+            self.refresh_focused_pane_rect();
             self.editor_mouse(mouse);
             return;
         }
@@ -9950,6 +9951,28 @@ impl App {
             .max(MIN_DOCK);
         let h = bottom.saturating_sub(row).clamp(MIN_DOCK, max);
         self.settings.bottom_dock_height = h;
+    }
+
+    /// After a click moved the focus to another split pane, point
+    /// `layout.editor` (what mouse mapping uses, otherwise only updated by the
+    /// next draw) at that pane's text area, the same rectangle `draw_pane`
+    /// gives it.
+    fn refresh_focused_pane_rect(&mut self) {
+        let focused = self.editor.focused_leaf();
+        let region = self.layout.editor_region;
+        let Some(pane) = self
+            .editor
+            .split_layout(region)
+            .into_iter()
+            .find(|p| p.leaf == focused)
+        else {
+            return;
+        };
+        let mut rect = pane.rect;
+        if self.visible.contains(Visible::SCROLLBAR) && rect.width > 1 {
+            rect.width -= 1;
+        }
+        self.layout.editor = rect;
     }
 
     /// Resize the split whose divider is under the pointer, as a percentage of

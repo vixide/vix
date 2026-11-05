@@ -19,17 +19,21 @@ use crate::theme;
 /// Draw the review's two-pane view into `area` when it is on and `area` is
 /// wide enough; `false` (nothing drawn) means the caller draws the inline
 /// buffer instead.
-pub(super) fn draw_review_panes(app: &App, frame: &mut Frame, area: Rect) -> bool {
-    let Some(panes) = app.review_panes_for(area.width) else {
+pub(super) fn draw_review_panes(
+    app: &App,
+    frame: &mut Frame,
+    area: Rect,
+    tab_index: usize,
+) -> bool {
+    let Some(view) = app.review_panes_for(tab_index, area.width) else {
         return false;
     };
+    let (panes, wrap, cursor) = (view.panes, view.wrap, view.cursor);
     if area.height == 0 {
         return true;
     }
-    let wrap = app.review_wrap();
     let (width, height) = (usize::from(area.width), usize::from(area.height));
-    let cursor = app.editor.cursor_line();
-    let first = panes.view_start(app.editor.top_visible_line(), cursor, height, |i| {
+    let first = panes.view_start(view.top, cursor, height, |i| {
         panes.row_height(i, width, wrap)
     });
     let mut lines: Vec<Line> = Vec::new();

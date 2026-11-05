@@ -12,7 +12,7 @@ use super::review_panes::draw_review_panes;
 
 /// Without the `git` feature there is no branch review to draw.
 #[cfg(not(feature = "git"))]
-fn draw_review_panes(_app: &App, _frame: &mut Frame, _area: Rect) -> bool {
+fn draw_review_panes(_app: &App, _frame: &mut Frame, _area: Rect, _tab: usize) -> bool {
     false
 }
 use super::scroll_markers;
@@ -164,7 +164,7 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         }
         return text;
     }
-    if tab_index == app.editor.active && draw_review_panes(app, frame, text) {
+    if draw_review_panes(app, frame, text, tab_index) {
         return text;
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
@@ -245,7 +245,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         return;
     }
     // The review's two-pane view replaces the text editor (T665).
-    if draw_review_panes(app, frame, text) {
+    if draw_review_panes(app, frame, text, app.editor.active) {
         app.editor_hmax = 0;
         app.layout.editor_hscrollbar = Rect::default();
         return;

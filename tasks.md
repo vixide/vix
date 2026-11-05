@@ -8132,12 +8132,44 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `review_view` sets the opening view. The pairing is `vix_review::
     SideBySide` (not T660's `vix-diff-view` model, which diffs two texts and
     has no hunks, so the review's own parsed hunks are paired instead).
-    **Still not done:** mouse clicks and the wheel are not mapped onto the
-    two-pane rows (the keyboard drives it; the cursor still moves through the
-    hidden inline buffer, so commenting on a line goes by the cursor's inline
-    row); no line-level (partial hunk) staging or discard; no word-level
-    highlight inside paired lines; long lines are cut, not wrapped; the
-    two-pane view is drawn for the active pane only.
+    **Not done then:** mouse mapping, line-level (partial hunk) staging and
+    discard, word-level highlights, wrapping, and the two-pane view for
+    unfocused panes (all five below).
+  - **Finish pass** (`feat/t665-review-finish`, five commits):
+    1. Mouse: in the two-pane view a left click puts the cursor on the inline
+       row of the clicked cell (left half old line, right half new), the wheel
+       scrolls one row at a time and carries the cursor along when it would
+       leave the view (`App::review_mouse`; `SideBySide::{halves, view_start,
+       top_for_row, inline_at}`).
+    2. Line-level stage and discard: Git → Stage Review Lines
+       (`git.review_stage_lines`) and Discard Review Lines… (`git.review_discard_lines`)
+       act on the added/removed lines in the visual selection or under the
+       cursor, through a reduced patch built the way `git add -p` edits a hunk
+       (`Review::{select_rows, lines_patch}`, header counts recomputed, the
+       `\ No newline at end of file` marker kept with its line); discard
+       confirms; git's reason is shown when it rejects the patch. A selection
+       across two hunks is refused, and so is splitting a missing-final-newline
+       line from its partner.
+    3. Word marks inside paired lines of the two-pane view, from
+       `vix_diff_view::build` (`Cell::marks`), drawn reversed.
+    4. Wrapping in the two-pane view, tied to the editor's soft wrap (no new
+       setting): each side wraps in its own pane, the shorter side is padded,
+       and scrolling, clicks and the wheel count screen lines.
+    5. Every split pane that shows the review draws the two-pane view from its
+       own tab's cursor and scroll, with the width fallback judged per pane;
+       also fixed the first click in a newly focused split pane being mapped
+       against the previous pane's rectangle.
+    **Still not done (honest list):** the word marks are in the two-pane view
+    only (the inline view is the ordinary editor and has none); headings and
+    comment rows are cut, not wrapped; the view mode (inline/two-pane) is one
+    flag per review, not per pane, so `v` changes every pane that shows the
+    review (only the width fallback is per pane); a line-level selection must
+    sit inside one hunk; line-level stage/discard of a line pair where only one
+    copy of a final line without a newline is selected is refused rather than
+    guessed; the `git apply` of a reduced patch was tested against real git
+    for the cases in `tui/tests/integration/review_panes.rs` (replacement,
+    addition, missing final newline), not for every hunk shape (new-file and
+    whole-file-delete hunks are covered only by header unit tests).
 - [x] **T666 — Terminal-to-editor bridge (after T631).**
   - **Vix today.** `vix-terminal` is a key-capturing overlay that closes
     when the shell exits (`crates/vix-terminal/spec/index.md`), and T632

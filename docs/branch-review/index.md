@@ -88,6 +88,11 @@ that line. When the editor is narrower than 60 columns the inline
 view shows instead. The `review_view` setting (`"inline"`, the default, or
 `"side_by_side"`) chooses the view a review opens in.
 
+In a split editor every pane that shows the review draws the two-pane view
+(each pane is judged on its own width, so a narrow pane falls back to the inline
+diff while a wide one keeps both sides). The view setting is shared by all panes
+of the review.
+
 The mouse works on the rows you see. A click on the left half puts the cursor
 on that old line, a click on the right half on the new line (a click on a blank
 half uses the other side's line). The wheel scrolls one row at a time and

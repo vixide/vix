@@ -16,6 +16,20 @@ use vix_review::{
 use super::git::git_error_text;
 use super::{App, Confirm, ConfirmKind, Prompt, PromptKind};
 
+/// What one pane needs to draw the two-pane review: the layout and the
+/// state of the tab the pane shows.
+#[derive(Debug, Clone, Copy)]
+pub struct PaneView<'a> {
+    /// The review laid out for the two-pane view.
+    pub panes: &'a SideBySide,
+    /// Whether long lines wrap (the tab's soft wrap).
+    pub wrap: bool,
+    /// The tab's cursor row in the inline buffer.
+    pub cursor: usize,
+    /// The tab's first visible row in the inline buffer.
+    pub top: usize,
+}
+
 /// The review shown in the editor, if any.
 pub struct ReviewState {
     /// The range, its diff and its comments.
@@ -726,14 +740,35 @@ impl App {
             .is_some_and(|t| t.editor.soft_wrap_enabled())
     }
 
-    /// The two-pane layout to draw into a text area `width` columns wide, or
-    /// `None` when the inline buffer shows instead: the view is off, `width`
-    /// is under [`vix_review::MIN_SIDE_BY_SIDE_WIDTH`], or the active tab is
-    /// not the review.
+    /// The review state when tab `tab_index` (not necessarily the active one:
+    /// split panes show other tabs too) is the review's tab.
+    fn review_for_tab(&self, tab_index: usize) -> Option<&ReviewState> {
+        let state = self.review.as_ref()?;
+        let tab = self.editor.tabs.get(tab_index)?;
+        (tab.path.as_ref() == Some(&state.tab_path)).then_some(state)
+    }
+
+    /// The two-pane layout to draw for tab `tab_index` into a text area
+    /// `width` columns wide, with that tab's wrap flag, cursor row and top
+    /// row, or `None` when the inline buffer shows instead: the view is off,
+    /// `width` is under [`vix_review::MIN_SIDE_BY_SIDE_WIDTH`], or the tab is
+    /// not the review. Each split pane asks for itself, so a pane too narrow
+    /// for two columns shows the inline buffer while a wide one beside it
+    /// shows the pairs, and a pane that is not focused is drawn from its own
+    /// tab's cursor and scroll position.
     #[must_use]
-    pub fn review_panes_for(&self, width: u16) -> Option<&SideBySide> {
-        let state = self.active_review()?;
-        (state.side_by_side && width >= vix_review::MIN_SIDE_BY_SIDE_WIDTH).then_some(&state.panes)
+    pub fn review_panes_for(&self, tab_index: usize, width: u16) -> Option<PaneView<'_>> {
+        let state = self.review_for_tab(tab_index)?;
+        if !state.side_by_side || width < vix_review::MIN_SIDE_BY_SIDE_WIDTH {
+            return None;
+        }
+        let editor = &self.editor.tabs.get(tab_index)?.editor;
+        Some(PaneView {
+            panes: &state.panes,
+            wrap: editor.soft_wrap_enabled(),
+            cursor: editor.cursor_line(),
+            top: editor.top_line(),
+        })
     }
 }
 
