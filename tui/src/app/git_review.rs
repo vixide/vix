@@ -515,8 +515,7 @@ impl App {
         let Some((patch, path)) = self.review_lines_patch(&sel, LineMode::Discard) else {
             return;
         };
-        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::RevertWorktree)
-        {
+        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::RevertWorktree) {
             Ok(()) => {
                 self.status = t!(
                     "status.git_review_discarded_lines",

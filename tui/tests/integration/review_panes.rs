@@ -217,6 +217,53 @@ fn stage_lines_refuses_to_split_a_missing_final_newline() {
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
     }
     app.run_action("git.review_stage_lines");
-    assert!(t665_cached(&dir).contains("+three"), "{}", t665_cached(&dir));
+    assert!(
+        t665_cached(&dir).contains("+three"),
+        "{}",
+        t665_cached(&dir)
+    );
     fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// A drawn frame as a buffer, to look at cell styles.
+fn frame_buffer(app: &mut App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(width, height)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    term.backend().buffer().clone()
+}
+
+const WORDS: &str = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,3 +1,3 @@\n keep\n-the quick fox\n+the slow fox\n x\n";
+
+/// In a paired line the words that changed are drawn reversed on both sides
+/// and the words that did not are not.
+#[test]
+fn two_pane_highlights_the_changed_words_of_paired_lines() {
+    use ratatui::style::Modifier;
+    let dir = unique_dir("review-words");
+    let mut app = app_at(&dir);
+    app.settings.review_view = "side_by_side".to_string();
+    app.open_review_from_diff("a..b", WORDS);
+    let buf = frame_buffer(&mut app, 200, 30);
+    let row = (0..buf.area.height)
+        .find(|&y| {
+            let text: String = (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect();
+            text.contains("quick") && text.contains("slow")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "the paired row is drawn: {:#?}",
+                frame_rows(&mut app, 200, 30)
+            )
+        });
+    let text: String = (0..buf.area.width)
+        .map(|x| buf[(x, row)].symbol())
+        .collect();
+    let at = |word: &str| u16::try_from(text[..text.find(word).unwrap()].chars().count()).unwrap();
+    let reversed = |x: u16| buf[(x, row)].modifier.contains(Modifier::REVERSED);
+    assert!(reversed(at("quick")), "the old word is marked");
+    assert!(reversed(at("slow")), "the new word is marked");
+    assert!(!reversed(at("the ")), "unchanged words are not");
+    assert!(!reversed(at("fox")), "unchanged words are not");
+    std::fs::remove_dir_all(&dir).ok();
 }

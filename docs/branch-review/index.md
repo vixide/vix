@@ -77,7 +77,9 @@ the added copy of that line together; selecting only one is refused.
 Press `v` in the review (or use **Git → Review Two-Pane View**) to see the old
 text on the left and the new text on the right. A run of removed lines is
 lined up with the added lines that replace it; a line with no counterpart
-leaves the other side blank. Comments appear under their group. The cursor,
+leaves the other side blank. Where a removed line and an added line are paired, the words that changed are
+drawn reversed on both sides, so a one-word edit is easy to spot. Comments
+appear under their group. The cursor,
 hunk navigation, commenting and staging work as in the inline view, and both
 views scroll together. When the editor is narrower than 60 columns the inline
 view shows instead. The `review_view` setting (`"inline"`, the default, or

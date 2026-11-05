@@ -101,6 +101,10 @@ pub struct Cell {
     /// The row of the inline buffer ([`Review::render`]) this line is on,
     /// which is where a click on the cell puts the cursor.
     pub inline: usize,
+    /// Char ranges (`start..end`, in chars of `text`) that differ from the line
+    /// paired with this one, as `vix_diff_view` finds them word by word. Empty
+    /// for an unpaired line, a context line, and a line that differs entirely.
+    pub marks: Vec<(usize, usize)>,
 }
 
 /// One half of a two-pane row: where a click landed.
@@ -220,7 +224,11 @@ impl SideBySide {
             Half::Left => (left, right),
             Half::Right => (right, left),
         };
-        Some(want.as_ref().or(other.as_ref()).map_or(row.first, |c| c.inline))
+        Some(
+            want.as_ref()
+                .or(other.as_ref())
+                .map_or(row.first, |c| c.inline),
+        )
     }
 }
 
@@ -510,6 +518,7 @@ impl Review {
                 text: l.text.clone(),
                 kind: l.kind,
                 inline: at,
+                marks: Vec::new(),
             };
             // Inline, a line's comments sit right under it (and its marker).
             let mut here = Vec::new();
@@ -702,7 +711,12 @@ fn flush_group(
     added: &mut Vec<(Cell, usize)>,
     comments: &mut Vec<(String, usize)>,
 ) {
-    let (rem, add) = (std::mem::take(removed), std::mem::take(added));
+    let (mut rem, mut add) = (std::mem::take(removed), std::mem::take(added));
+    for (l, r) in rem.iter_mut().zip(add.iter_mut()) {
+        let (a, b) = word_marks(&l.0.text, &r.0.text);
+        l.0.marks = a;
+        r.0.marks = b;
+    }
     for i in 0..rem.len().max(add.len()) {
         let (l, r) = (rem.get(i), add.get(i));
         let at: Vec<usize> = [l, r].into_iter().flatten().map(|(_, at)| *at).collect();
@@ -724,6 +738,28 @@ fn flush_group(
             last: r,
         });
     }
+}
+
+/// The char ranges of `old` and `new` that differ word by word, from
+/// `vix_diff_view::build` on the two lines. A side that differs from end to
+/// end gets none: marking every character says nothing.
+fn word_marks(old: &str, new: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    use vix_diff_view::Kind;
+    let lines = vix_diff_view::build(&format!("{old}\n"), &format!("{new}\n"));
+    let pick = |kind: Kind, text: &str| -> Vec<(usize, usize)> {
+        let len = text.chars().count();
+        let marks = lines
+            .iter()
+            .find(|l| l.kind == kind)
+            .map(|l| l.emphasis.clone())
+            .unwrap_or_default();
+        if marks.iter().any(|&(a, b)| a == 0 && b >= len) {
+            Vec::new()
+        } else {
+            marks
+        }
+    };
+    (pick(Kind::Del, old), pick(Kind::Add, new))
 }
 
 /// The file name (without extension) a range's comments are stored under in
@@ -1292,7 +1328,8 @@ mod tests {
         assert_eq!(sbs.row_for_inline(sbs.top_for_row(i)), i);
     }
 
-    const LINES: &str = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,4 +1,5 @@ fn f\n a\n-b\n-c\n+B\n+C\n+D\n e\n";
+    const LINES: &str =
+        "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,4 +1,5 @@ fn f\n a\n-b\n-c\n+B\n+C\n+D\n e\n";
 
     fn pick(lines: &[usize]) -> LineSelection {
         LineSelection {
@@ -1392,6 +1429,40 @@ mod tests {
             two.select_rows(&out, 0, out.targets.len() - 1),
             Err(SelectError::SpansHunks)
         );
+    }
+
+    #[test]
+    fn paired_lines_carry_word_level_marks() {
+        let d = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,3 +1,3 @@\n keep\n-the quick fox\n+the slow fox\n x\n";
+        let sbs = Review::new("r", d).side_by_side();
+        let (l, r) = sbs
+            .rows
+            .iter()
+            .find_map(|row| match &row.kind {
+                PaneKind::Pair {
+                    left: Some(l),
+                    right: Some(r),
+                } if l.kind == LineKind::Removed => Some((l.clone(), r.clone())),
+                _ => None,
+            })
+            .unwrap();
+        // "quick" is chars 4..9 of the old line, "slow" 4..8 of the new one.
+        assert_eq!(l.marks, vec![(4, 9)]);
+        assert_eq!(r.marks, vec![(4, 8)]);
+        // Context cells and lines that differ completely carry none.
+        let whole = Review::new("r", DIFF).side_by_side();
+        for row in &whole.rows {
+            if let PaneKind::Pair { left, right } = &row.kind {
+                for c in [left, right].into_iter().flatten() {
+                    assert!(c.marks.is_empty(), "{c:?}");
+                }
+            }
+        }
+        // An unpaired addition has no counterpart to differ from.
+        let extra = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,1 +1,2 @@\n a\n+b\n";
+        let rows = Review::new("r", extra).side_by_side().rows;
+        assert!(rows.iter().all(|r| !matches!(&r.kind,
+            PaneKind::Pair { right: Some(c), .. } if !c.marks.is_empty())));
     }
 
     #[test]

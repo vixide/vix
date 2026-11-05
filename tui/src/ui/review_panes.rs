@@ -51,11 +51,14 @@ fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
     match &row.kind {
         PaneKind::Pair { left, right } => {
             let (half, rest) = SideBySide::halves(width);
-            Line::from(vec![
-                cell_span(left.as_ref(), half, mark),
-                Span::styled("│", theme::dim()),
-                cell_span(right.as_ref(), rest, mark),
-            ])
+            Line::from(
+                [
+                    cell_spans(left.as_ref(), half, mark),
+                    vec![Span::styled("│", theme::dim())],
+                    cell_spans(right.as_ref(), rest, mark),
+                ]
+                .concat(),
+            )
         }
         PaneKind::Comment => Line::from(Span::styled(
             fit(&row.text, width),
@@ -68,25 +71,61 @@ fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
     }
 }
 
-/// One half of a pair row: line number, text, padded or cut to `width`.
-fn cell_span(cell: Option<&Cell>, width: usize, mark: Modifier) -> Span<'static> {
+/// One half of a pair row: line number and text, padded or cut to `width`.
+/// Words that differ from the paired line (`Cell::marks`) are drawn reversed.
+fn cell_spans(cell: Option<&Cell>, width: usize, mark: Modifier) -> Vec<Span<'static>> {
     let Some(c) = cell else {
-        return Span::styled(" ".repeat(width), theme::dim());
+        return vec![Span::styled(" ".repeat(width), theme::dim())];
     };
-    let style = match c.kind {
+    let base = match c.kind {
         LineKind::Removed => Style::default().fg(Color::Red),
         LineKind::Added => Style::default().fg(Color::Green),
         _ => Style::default(),
-    };
-    Span::styled(
-        fit(&format!("{:>4} {}", c.number, c.text), width),
-        style.add_modifier(mark),
-    )
+    }
+    .add_modifier(mark);
+    let strong = base.add_modifier(Modifier::REVERSED | Modifier::BOLD);
+    let prefix = cut(&format!("{:>4} ", c.number), width);
+    let mut used = prefix
+        .chars()
+        .map(|ch| ch.width().unwrap_or(0))
+        .sum::<usize>();
+    let mut spans = vec![Span::styled(prefix, base)];
+    let mut run = String::new();
+    let mut run_marked = false;
+    for (i, ch) in c.text.chars().enumerate() {
+        let w = ch.width().unwrap_or(0);
+        if used + w > width {
+            break;
+        }
+        let marked = c.marks.iter().any(|&(a, b)| a <= i && i < b);
+        if marked != run_marked && !run.is_empty() {
+            spans.push(Span::styled(
+                std::mem::take(&mut run),
+                if run_marked { strong } else { base },
+            ));
+        }
+        run_marked = marked;
+        run.push(ch);
+        used += w;
+    }
+    if !run.is_empty() {
+        spans.push(Span::styled(run, if run_marked { strong } else { base }));
+    }
+    spans.push(Span::styled(" ".repeat(width - used), base));
+    spans
 }
 
 /// `text` cut to `width` display columns and padded with spaces to exactly
 /// that width.
 fn fit(text: &str, width: usize) -> String {
+    let mut out = cut(text, width);
+    let used: usize = out.chars().map(|ch| ch.width().unwrap_or(0)).sum();
+    out.push_str(&" ".repeat(width - used));
+    out
+}
+
+/// `text` cut to at most `width` display columns.
+fn cut(text: &str, width: usize) -> String {
     let mut out = String::new();
     let mut used = 0;
     for ch in text.chars() {
@@ -97,7 +136,6 @@ fn fit(text: &str, width: usize) -> String {
         out.push(ch);
         used += w;
     }
-    out.push_str(&" ".repeat(width - used));
     out
 }
 

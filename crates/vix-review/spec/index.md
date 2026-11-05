@@ -131,6 +131,14 @@ mouse), `halves(width)` the pane widths, `inline_at(row, Half)` the inline row
 a click on a half stands for (each `Cell` records its own `inline` row) and
 `top_for_row(row)` the inline top line that makes a row the first shown.
 
+**Word marks.** Where a removed line is zipped with an added line, `Cell::marks`
+holds the char ranges that differ word by word, taken from
+`vix_diff_view::build` run on the two lines (the same word-level emphasis
+Compare uses). A side that differs from end to end gets none, and so do
+context cells and unpaired lines. The host (`tui/src/ui/review_panes.rs`)
+draws marked characters reversed and bold on top of the line's red or green;
+the inline view is the ordinary editor and has no word marks.
+
 **Mouse.** While the two-pane view is drawn, `App::review_mouse` takes the
 editor's mouse events (the inline buffer and other tabs keep the ordinary
 handling): a left click moves the cursor to `inline_at(row, half)` without
@@ -175,6 +183,7 @@ the same shape as the storage file.
   `DiffLine`), `Review` (`render`, `set_comment`, `comment_text`,
   `line_text`, `to_markdown`, `to_json`, `load_json`), `Rendered`
   (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`/`full_patch`/`patch_counts`, `Review::select_rows`/`lines_patch` (`LineSelection`, `LineMode`, `SelectError`), `Review::side_by_side` (`SideBySide`, `PaneRow`, `PaneKind`, `Cell`), `store_name`. Pure; no I/O.
+- `Cargo.toml` depends on `vix-diff-view` for the word marks.
 - `crates/vix-git/src/lib.rs`: `review_diff`, `apply_patch`/`ApplyTarget`.
 - Stash chooser: `r` closes it and reviews `stash@{N}` (`tui/src/app/git_stash_worktree.rs`). Both git calls go through the workspace authority like every other `vix-git` runner.
 - `tui/src/ui/review_panes.rs`: paints `SideBySide` (old left, new right).
