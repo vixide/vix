@@ -9,7 +9,7 @@
 #   GitLab    .gitlab-ci.yml            (this file)
 #   Codeberg  .forgejo/workflows/ci.yml
 #
-# Keep the four in step — see spec/ci/index.md.
+# The commands live in scripts/ci (T767); keep the forge glue in step — see spec/ci/index.md.
 #
 # NOTE (T762): this pipeline is effectively paused. Every pipeline has failed
 # with `ci_quota_exceeded` (out of CI minutes) since 2026-08-29, so a red
@@ -68,13 +68,13 @@ fmt:
   stage: check
   script:
     - rustup component add rustfmt
-    - cargo fmt --all --check
+    - scripts/ci fmt
 
 clippy:
   stage: check
   script:
     - rustup component add clippy
-    - cargo clippy --workspace --all-targets -- -D warnings
+    - scripts/ci clippy
 
 # Supply-chain gate: RUSTSEC advisories, disallowed licenses, banned or
 # wildcard crates, untrusted sources — the policy is in deny.toml.
@@ -114,7 +114,7 @@ docs-links:
     - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
     - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
     - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
-    - lychee --offline --no-progress --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+    - scripts/ci docs-links
 
 # External URLs go stale independently of any change in this tree, so this
 # reports without failing the pipeline (`allow_failure`). CHANGELOG.md is
@@ -131,21 +131,15 @@ docs-links-external:
     - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
     - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
     - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
-    - lychee --no-progress --scheme https --scheme http --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
+    - scripts/ci docs-links-external
 
 test:
   stage: test
   script:
-    - cargo build --workspace --all-targets
-    - cargo test --workspace
-    # T505 (tasks.md): every example must keep running, not just compiling
-    # (--all-targets above already builds them all). Only the headless ones
-    # run here, each given real arguments against files in this checkout.
-    - cargo run --example list_commands >/dev/null
-    - cargo run --example headless_edit >/dev/null
-    - cargo run --example render_frame -- index.md >/dev/null
-    - cargo run --example textops_pipeline -- index.md >/dev/null
-    - cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
+    # T767: build, test and the headless examples (T505) are scripts/ci jobs.
+    - scripts/ci build
+    - scripts/ci test
+    - scripts/ci examples
 
 # T587: every Cargo feature combination must keep compiling and passing its own
 # tests (spec/cargo-features/index.md).
@@ -154,18 +148,7 @@ feature-combos:
   script:
     - rustup component add clippy
     - cargo install cargo-hack --locked
-    - cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
-    - cargo test -p vix-tui --no-default-features
-    # Every grammar's textobjects query (T616).
-    - cargo test -p vix-editor-core --features syntax-all --lib textobject
-    # The opt-in `cowork` feature is in no default build: lint and test it here.
-    - cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
-    - cargo test -p vix-tui --features cowork --lib cowork
-    # The opt-in `jupyter` feature likewise (T734c).
-    - cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
-    - cargo test -p vix-tui --features jupyter --lib jupyter
-    - cargo test -p vix-tui --features jupyter --test jupyter
-    - cargo hack check -p vix-tui --each-feature --no-dev-deps
+    - scripts/ci feature-combos
 
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's
 # complexity (see spec/ci/index.md) — posting a merge-request note needs an
@@ -217,7 +200,7 @@ doc:
   variables:
     RUSTDOCFLAGS: "-D warnings"
   script:
-    - cargo doc --workspace --no-deps
+    - scripts/ci doc
 
 # T305 (tasks.md): docs/reference/ (actions, settings, keybindings) is
 # generated from the real data, not hand-maintained — regenerate and diff, so
@@ -226,8 +209,7 @@ doc:
 docs-reference:
   stage: test
   script:
-    - cargo run --example list_commands -- --write >/dev/null
-    - git diff --exit-code -- docs/reference/
+    - scripts/ci reference-docs
 
 # T307 (tasks.md): tui/man/vix.1 is generated from the real Cli definition
 # (vix::cli::Cli, shared with tui/src/main.rs) -- regenerate and diff, same
@@ -235,8 +217,7 @@ docs-reference:
 man-page:
   stage: test
   script:
-    - cargo run --example generate_man >/dev/null
-    - git diff --exit-code -- tui/man/
+    - scripts/ci man-page
 
 # The specs are living documentation, gated like code: broken links, a crate
 # with no spec, a crate missing from the crate map, or a README.md that has
@@ -246,14 +227,25 @@ docs:
   script:
     # The rust image has no Node, so check-docs skips its CSpell step here
     # (with a notice); GitHub and Codeberg run it as required.
-    - python3 scripts/check-docs
+    - scripts/ci docs-check
+
+# T767 (spec/local-ci): the signed gate attestation (T761) for the pushed tip.
+# The trust root is the CI/CD variable VIX_ALLOWED_SIGNERS_DATA (the
+# allowed-signers file's text), never a file from the pushed tree. Advisory
+# until the CI/CD variable VIX_VERIFY_REQUIRED is 1. Default-branch pushes only.
+verify:
+  stage: check
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - VIX_CI_SHA="$CI_COMMIT_SHA" scripts/ci verify
 
 # Each distributed binary declares exactly the licenses its linked
 # dependencies allow (T648, spec/license). Mirrors `scripts/check`.
 binary-licenses:
   stage: check
   script:
-    - python3 scripts/check-binary-licenses
+    - scripts/ci licenses
 
 # ---------------------------------------------------------------------------
 # Release (tag pipelines only)

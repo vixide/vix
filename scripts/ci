@@ -1,0 +1,177 @@
+#!/bin/sh
+# The one CI entrypoint (T767; spec/ci, spec/local-ci "One entrypoint").
+#
+#   scripts/ci <job>      run one named job
+#   scripts/ci list       print every job name, one per line
+#
+# Every forge workflow (GitHub, Forgejo/Codeberg, GitLab) calls this instead of
+# carrying its own command list, so the three definitions are thin wrappers
+# (checkout, install a toolchain or a pinned tool, cache, then `scripts/ci
+# <job>`) and cannot drift. What stays in a workflow file is what only that
+# forge can say: triggers, path filters, concurrency, runner images, tool
+# installation and caching.
+#
+# Jobs:
+#   fmt             cargo fmt --check
+#   clippy          pedantic clippy over the workspace, -D warnings
+#   build           cargo build --workspace --all-targets
+#   test            the test suite (nextest + doctests when cargo-nextest is
+#                   installed, else cargo test)
+#   examples        run the headless examples (T505)
+#   doc             cargo doc with warnings denied
+#   reference-docs  docs/reference/ is current (T305)
+#   man-page        tui/man/vix.1 is current (T307)
+#   licenses        per-binary license check (T648)
+#   check           fmt, build, clippy, test, examples, doc, reference-docs,
+#                   man-page, licenses (the one Linux job on every push)
+#   feature-combos  every feature combination (T587; slow, scheduled/tags)
+#   docs-check      scripts/check-docs
+#   docs-links      lychee, offline (blocking)
+#   docs-links-external  lychee, http(s) (advisory; the workflow marks it so)
+#   docs            docs-check then docs-links
+#   verify          the signed gate attestation for the pushed tip (T761)
+#
+# `verify` trust model. The allowed-signers file is the trust root and must NOT
+# come from the content under verification (a push could swap it). It is
+# supplied from outside the pushed tree, one of:
+#   VIX_ALLOWED_SIGNERS_DATA   the file's text, from a repository secret or
+#                              variable (written to a private temp file)
+#   VIX_ALLOWED_SIGNERS        path to a file on the runner
+# A committed `.allowed_signers` is never read here. Advisory first: unless
+# VIX_VERIFY_REQUIRED=1, a missing, absent or failing attestation prints a
+# warning and exits 0; with it set, any of those fails the job. Flip the
+# variable once the first attested pushes verify cleanly. The notes ref is
+# fetched from $VIX_ATTEST_REMOTE (default origin); the revision checked is
+# $VIX_CI_SHA, else HEAD.
+#
+# VIX_CI_DRY_RUN=1 prints each command instead of running it (used by
+# scripts/test-ci).
+set -eu
+
+die() {
+	echo "scripts/ci: $*" >&2
+	exit 1
+}
+
+# run CMD...: echo, then run (or only echo under dry run).
+run() {
+	echo "+ $*" >&2
+	if [ "${VIX_CI_DRY_RUN:-0}" = 1 ]; then return 0; fi
+	"$@"
+}
+
+job_fmt() { run cargo fmt --all --check; }
+job_clippy() { run cargo clippy --workspace --all-targets -- -D warnings; }
+job_build() { run cargo build --workspace --all-targets; }
+job_test() {
+	if command -v cargo-nextest >/dev/null 2>&1; then
+		run cargo nextest run --workspace --profile ci
+		run cargo test --workspace --doc # nextest does not run doctests
+	else
+		run cargo test --workspace
+	fi
+}
+job_examples() {
+	run cargo run --example list_commands >/dev/null
+	run cargo run --example headless_edit >/dev/null
+	run cargo run --example render_frame -- index.md >/dev/null
+	run cargo run --example textops_pipeline -- index.md >/dev/null
+	run cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
+}
+job_doc() { RUSTDOCFLAGS="-D warnings" run cargo doc --workspace --no-deps; }
+job_reference_docs() {
+	run cargo run --example list_commands -- --write >/dev/null
+	run git diff --exit-code -- docs/reference/
+}
+job_man_page() {
+	run cargo run --example generate_man >/dev/null
+	run git diff --exit-code -- tui/man/
+}
+job_licenses() { run python3 scripts/check-binary-licenses; }
+job_check() {
+	job_fmt
+	job_build
+	job_clippy
+	job_test
+	job_examples
+	job_doc
+	job_reference_docs
+	job_man_page
+	job_licenses
+}
+job_feature_combos() {
+	run cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
+	run cargo test -p vix-tui --no-default-features
+	run cargo test -p vix-editor-core --features syntax-all --lib textobject
+	run cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
+	run cargo test -p vix-tui --features cowork --lib cowork
+	run cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
+	run cargo test -p vix-tui --features jupyter --lib jupyter
+	run cargo test -p vix-tui --features jupyter --test jupyter
+	run cargo hack check -p vix-tui --each-feature --no-dev-deps
+}
+job_docs_check() { run python3 scripts/check-docs; }
+job_docs_links() {
+	run lychee --offline --no-progress --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+}
+job_docs_links_external() {
+	run lychee --no-progress --scheme https --scheme http --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
+}
+job_docs() {
+	job_docs_check
+	job_docs_links
+}
+
+job_verify() {
+	required=${VIX_VERIFY_REQUIRED:-0}
+	remote=${VIX_ATTEST_REMOTE:-origin}
+	rev=${VIX_CI_SHA:-HEAD}
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' EXIT
+	# fail MSG...: required -> error; advisory -> warning, exit 0.
+	fail() {
+		if [ "$required" = 1 ]; then
+			echo "scripts/ci verify: FAILED (required): $*" >&2
+			exit 1
+		fi
+		echo "scripts/ci verify: WARNING (advisory, not failing): $*" >&2
+		exit 0
+	}
+	if [ -n "${VIX_ALLOWED_SIGNERS_DATA:-}" ]; then
+		printf '%s\n' "$VIX_ALLOWED_SIGNERS_DATA" >"$tmp/allowed"
+		signers=$tmp/allowed
+	elif [ -n "${VIX_ALLOWED_SIGNERS:-}" ]; then
+		signers=$VIX_ALLOWED_SIGNERS
+	else
+		fail "no trusted allowed-signers: set the VIX_ALLOWED_SIGNERS_DATA secret/variable (or VIX_ALLOWED_SIGNERS to a file). A committed .allowed_signers is never trusted here."
+	fi
+	[ -s "$signers" ] || fail "allowed-signers file is missing or empty: $signers"
+	run git fetch --no-tags "$remote" "+refs/notes/vix-gate:refs/notes/vix-gate" ||
+		fail "could not fetch refs/notes/vix-gate from $remote (push it with: git push $remote refs/notes/vix-gate)"
+	# Always pass the file explicitly so attest never falls back to git config
+	# or to the pushed .allowed_signers.
+	VIX_ALLOWED_SIGNERS=$signers run sh scripts/attest --verify "$rev" ||
+		fail "no valid signed full-tier attestation for $rev"
+}
+
+[ $# -ge 1 ] || die "usage: scripts/ci <job> | list"
+job=$1
+shift
+[ $# -eq 0 ] || die "unexpected argument '$1'"
+case "$job" in
+list)
+	sed -n 's/^job_\([a-z_]*\)().*/\1/p' "$0" | tr '_' '-'
+	exit 0
+	;;
+-h | --help)
+	sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+	exit 0
+	;;
+esac
+name=$(printf '%s' "$job" | tr '-' '_')
+case "$name" in
+fmt | clippy | build | test | examples | doc | reference_docs | man_page | licenses | check | feature_combos | docs_check | docs_links | docs_links_external | docs | verify)
+	"job_$name"
+	;;
+*) die "unknown job '$job' (try: scripts/ci list)" ;;
+esac

@@ -6,8 +6,8 @@ describes how to make the **local machine the primary authority** and the
 forges a thin, cheap second opinion, because hosted CI has proved unreliable
 and costs money. It is the design for tasks T760–T768 in `tasks.md`.
 
-Status: **proposed**, except tiers (T760), the attestation (T761) and option 3
-(trim hosted CI, T762), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
+Status: **proposed**, except tiers (T760), the attestation (T761), option 3
+(trim hosted CI, T762) and option 8 (one entrypoint, T767), which are implemented: see "Slim hosted CI" in [`spec/ci`](../ci/index.md). Nothing here changes the gate itself; it changes where
 the gate runs and who has to trust whom.
 
 ## Why
@@ -90,7 +90,7 @@ only `full`.
 | 5 | **Build caching** (shared `CARGO_TARGET_DIR`, `sccache`) | local time | low, but the `kache` wrappers are known to cause bogus linker and rustdoc failures in the gate | **Decide**: fix or retire `kache` for the gate; document the clean-room environment. |
 | 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Do** a Linux container script; Windows stays hosted but on tags and nightly only. |
 | 7 | **Local release path**: build the three targets, checksum, SSH-sign and upload from the maintainer's machine; `release.yml` remains the manual fallback | release minutes, and release depends on no hosted queue | medium: cutting a tag stays the user's decision | **Do** after 1 and 2. |
-| 8 | **One entrypoint** (`scripts/ci <job>`) that every forge file calls | drift | low | **Do**, and revise `spec/ci` ("deliberately duplicated"). |
+| 8 | **One entrypoint** (`scripts/ci <job>`) that every forge file calls | drift | low | **Done (T767).** `spec/ci` revised. |
 | 9 | **Evaluate** `act` (run GitHub workflows locally), Dagger, the existing `flake.nix` (`nix flake check`) and a Woodpecker instance | unknown | n/a | **Spike only.** Not researched deeply: `act` cannot run macOS or Windows jobs; Woodpecker is a separate server to operate. |
 
 Woodpecker versus Forgejo Actions: a Forgejo runner reuses the existing
@@ -167,10 +167,14 @@ the remote in `.git/config`. `scripts/attest` itself never pushes.
 **The forge `verify` job.** After fetching `refs/notes/vix-gate`, a forge job
 runs `VIX_ALLOWED_SIGNERS=<file> scripts/attest --verify "$SHA"`. It is
 read-only, takes seconds and needs no toolchain, only git and OpenSSH. The
-allowed-signers file must come from a trusted place (a committed
-`.allowed_signers` that only the maintainer can change, or a CI variable), not
-from the pushed content under test. Wiring the job into the workflows is left
-to T767, so no forge file changes with T761.
+allowed-signers file must come from a trusted place, not from the pushed
+content under test. T767 wired the job in as `scripts/ci verify`: it takes the
+allowed signers from a repository secret or variable (`VIX_ALLOWED_SIGNERS_DATA`)
+and never reads a committed `.allowed_signers`. A committed file was rejected as
+the source because on a push to `main` the file under test is the pushed tip
+itself; trusting it only from the protected default branch would need the
+pre-push state, which a forge job does not reliably have. The job is advisory
+until the variable `VIX_VERIFY_REQUIRED=1`. See "One entrypoint" below.
 
 What the attestation does **not** prove: that the machine was clean, or that a
 different operating system passes. That is what the independent Codeberg job
@@ -181,6 +185,17 @@ trust root, and it is the same key that signs commits.
 `scripts/test-attest` tests all of this against a throwaway repository with a
 generated ed25519 key and a stub gate (it never touches real keys or the real
 repository), and runs in the `push` tier and above.
+
+## One entrypoint (option 8, T767, implemented)
+
+`scripts/ci <job>` is the only place a CI job's commands are written; the GitHub,
+Codeberg and GitLab files call it and keep only forge-specific glue (triggers,
+path filters, concurrency, runners, tool installation, caching). T762's slim
+triggers and path filters are unchanged. The job table, the `verify` trust model
+(secret, advisory then required) and what is and is not tested are in
+[`spec/ci`](../ci/index.md), "One CI entrypoint". `scripts/test-ci` covers the
+job table, the forge-file no-drift check and `verify`; the workflow files
+themselves cannot be run locally.
 
 ## Non-goals
 

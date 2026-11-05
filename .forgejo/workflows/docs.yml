@@ -43,7 +43,7 @@ jobs:
       - name: scripts/check-docs
         env:
           VIX_REQUIRE_CSPELL: "1"
-        run: python3 scripts/check-docs
+        run: scripts/ci docs-check
       # Broken-link gate for the docs (T002, spec/ci/index.md), pinned and
       # checksummed like cargo-deny in security.yml.
       - name: Install lychee ${{ env.LYCHEE_VERSION }}
@@ -55,15 +55,30 @@ jobs:
           tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
             "lychee-x86_64-unknown-linux-musl/lychee"
       - name: lychee (offline links)
-        run: |
-          lychee --offline --no-progress \
-            --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+        run: scripts/ci docs-links
       # External URLs go stale independently of any change in this tree, so
       # this reports without failing the job. CHANGELOG.md is included here
       # (unlike the offline step): a URL it names should still resolve even
       # though a local path it names may not (exempt above).
       - name: lychee (external links, advisory)
         continue-on-error: true
-        run: |
-          lychee --no-progress --scheme https --scheme http \
-            --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
+        run: scripts/ci docs-links-external
+
+  # T767 (spec/local-ci): the signed gate attestation (T761) for the pushed
+  # tip, in this file because ci.yml's `paths-ignore` would skip it for a
+  # docs-only push. The trust root is the repository secret
+  # VIX_ALLOWED_SIGNERS (the allowed-signers file's text), never a file from
+  # the pushed tree. Advisory until the variable VIX_VERIFY_REQUIRED is 1.
+  verify:
+    name: gate attestation (verify)
+    if: github.event_name == 'push'
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+      - name: scripts/ci verify
+        env:
+          VIX_ALLOWED_SIGNERS_DATA: ${{ secrets.VIX_ALLOWED_SIGNERS }}
+          VIX_VERIFY_REQUIRED: ${{ vars.VIX_VERIFY_REQUIRED }}
+          VIX_CI_SHA: ${{ github.sha }}
+        run: scripts/ci verify

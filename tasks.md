@@ -9658,9 +9658,20 @@ the maintainer's decisions.
   SSH-signs the checksums and uploads with `gh` and `tea`; `release.yml`
   stays as the manual fallback. Cutting a tag remains the user's decision.
   **Large.**
-- [ ] **T767 — One CI entrypoint.** Every forge file calls `scripts/ci <job>`
+- [x] **T767 — One CI entrypoint.** Every forge file calls `scripts/ci <job>`
   instead of carrying its own command list; revise `spec/ci`, which now says
   the copies are deliberately duplicated. **Medium.**
+  Done 2026-11-05: `scripts/ci` has 16 jobs (fmt, clippy, build, test,
+  examples, doc, reference-docs, man-page, licenses, check, feature-combos,
+  docs-check, docs-links, docs-links-external, docs, verify); GitHub, Codeberg
+  and GitLab call it, T762's triggers and path filters untouched. `verify`
+  takes allowed signers from a secret/variable only (never the pushed tree, not
+  even a committed file), advisory until `VIX_VERIFY_REQUIRED=1`.
+  `scripts/test-ci` is in the `push` tier. Honest limits: the workflows cannot
+  be run locally (YAML parsed, called jobs dry-run and `verify` tested in a
+  throwaway repo); jobs that are one pinned tool (security, release, packaging,
+  GUI, semver, offline tests, coverage, MSRV, mdBook, binary size) stay in the
+  workflow files; `verify` is not yet required.
 - [ ] **T768 — Tool evaluation spike.** Try `act`, Dagger, `nix flake check`
   against the existing `flake.nix`, and a Woodpecker instance on one real
   workflow each; record what each cannot do (`act` cannot run macOS or

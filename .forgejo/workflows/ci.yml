@@ -19,7 +19,7 @@
 #   GitLab    .gitlab-ci.yml
 #   Codeberg  .forgejo/workflows/ci.yml   (this file)
 #
-# Keep the four in step — see spec/ci/index.md. Codeberg's shared runners are a
+# The commands live in scripts/ci (T767); keep the forge glue in step — see spec/ci/index.md. Codeberg's shared runners are a
 # donated, shared resource, so this is one job that does everything rather than
 # several jobs that each recompile the workspace.
 #
@@ -102,17 +102,9 @@ jobs:
           restore-keys: |
             cargo-${{ env.RUST_TOOLCHAIN }}-
 
-      - name: cargo fmt --check
-        run: cargo fmt --all --check
-
-      - name: cargo build --all-targets
-        run: cargo build --workspace --all-targets
-
-      - name: cargo clippy (pedantic, -D warnings)
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: cargo test
-        run: cargo test --workspace
+      # T767: the command list lives in scripts/ci (the one CI entrypoint).
+      - name: scripts/ci check
+        run: scripts/ci check
 
       # T587: every Cargo feature combination must keep compiling and passing
       # its own tests (spec/cargo-features/index.md).
@@ -121,51 +113,4 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: |
           cargo install cargo-hack --locked
-          cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
-          cargo test -p vix-tui --no-default-features
-          cargo test -p vix-editor-core --features syntax-all --lib textobject
-          cargo clippy -p vix-tui --features cowork --all-targets -- -D warnings
-          cargo test -p vix-tui --features cowork --lib cowork
-          cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
-          cargo test -p vix-tui --features jupyter --lib jupyter
-          cargo test -p vix-tui --features jupyter --test jupyter
-          cargo hack check -p vix-tui --each-feature --no-dev-deps
-
-      # T505 (tasks.md): every example must keep running, not just compiling
-      # (--all-targets above already builds them all). Only the headless
-      # ones run here, each given real arguments against files in this
-      # checkout.
-      - name: run headless examples (T505)
-        run: |
-          cargo run --example list_commands >/dev/null
-          cargo run --example headless_edit >/dev/null
-          cargo run --example render_frame -- index.md >/dev/null
-          cargo run --example textops_pipeline -- index.md >/dev/null
-          cargo run --example query_search -- tui/examples/demo-workspace TODO >/dev/null
-
-      - name: cargo doc (warnings denied)
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps
-
-      # T305 (tasks.md): docs/reference/ (actions, settings, keybindings) is
-      # generated from the real data, not hand-maintained — regenerate and
-      # diff, so a stale reference page fails the same way a broken link
-      # does. Mirrors `scripts/check`.
-      - name: generated reference docs current? (T305)
-        run: |
-          cargo run --example list_commands -- --write >/dev/null
-          git diff --exit-code -- docs/reference/
-
-      # T307 (tasks.md): tui/man/vix.1 is generated from the real Cli definition
-      # (vix::cli::Cli, shared with tui/src/main.rs) -- regenerate and diff, same
-      # pattern as docs/reference/ above.
-      - name: man page current? (T307)
-        run: |
-          cargo run --example generate_man >/dev/null
-          git diff --exit-code -- tui/man/
-
-      # Each distributed binary declares exactly the licenses its linked
-      # dependencies allow (T648, spec/license). Mirrors `scripts/check`.
-      - name: scripts/check-binary-licenses
-        run: python3 scripts/check-binary-licenses
+          scripts/ci feature-combos
