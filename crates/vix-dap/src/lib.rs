@@ -248,6 +248,51 @@ impl FunctionBreakpoint {
     }
 }
 
+/// A data breakpoint (T617): stop when the memory behind a variable is read
+/// or written. Its [`data_id`](Self::data_id) comes from the adapter's reply
+/// to `dataBreakpointInfo`, is meaningful only for the program run it was
+/// asked in, and so these are never saved across sessions.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DataBreakpoint {
+    /// The adapter's opaque id for the watched data.
+    pub data_id: String,
+    /// What the user sees: the variable's name, or the adapter's description.
+    pub description: String,
+    /// `read`, `write` or `readWrite`; `None` leaves the adapter's default.
+    pub access_type: Option<String>,
+    /// Expression; the adapter stops only when it is true.
+    pub condition: Option<String>,
+}
+
+impl DataBreakpoint {
+    /// A breakpoint on `data_id`, shown as `description`.
+    #[must_use]
+    pub fn new(data_id: impl Into<String>, description: impl Into<String>) -> Self {
+        DataBreakpoint {
+            data_id: data_id.into(),
+            description: description.into(),
+            access_type: None,
+            condition: None,
+        }
+    }
+
+    /// The `DataBreakpoint` JSON object for `setDataBreakpoints`.
+    fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("dataId".to_string(), Value::String(self.data_id.clone()));
+        for (key, value) in [
+            ("accessType", &self.access_type),
+            ("condition", &self.condition),
+        ] {
+            if let Some(v) = value {
+                map.insert(key.to_string(), Value::String(v.clone()));
+            }
+        }
+        Value::Object(map)
+    }
+}
+
 /// One exception filter an adapter advertises in `initialize`
 /// (`exceptionBreakpointFilters`, T617).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -283,6 +328,8 @@ pub struct Capabilities {
     pub supports_set_variable: bool,
     /// `supportsFunctionBreakpoints`.
     pub supports_function_breakpoints: bool,
+    /// `supportsDataBreakpoints` (T617).
+    pub supports_data_breakpoints: bool,
 }
 
 impl Capabilities {
@@ -311,6 +358,10 @@ impl Capabilities {
                 .unwrap_or(false),
             supports_function_breakpoints: body
                 .get("supportsFunctionBreakpoints")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            supports_data_breakpoints: body
+                .get("supportsDataBreakpoints")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         }
@@ -384,6 +435,18 @@ pub enum DapEvent {
         /// Its new rendered value.
         value: String,
     },
+    /// The answer to a `dataBreakpointInfo` request (T617): whether the
+    /// variable `name` can be watched, and how.
+    DataBreakpointInfo {
+        /// The variable asked about.
+        name: String,
+        /// The adapter's id for its data, or `None` when it cannot be watched.
+        data_id: Option<String>,
+        /// The adapter's description of the data (or why it cannot be watched).
+        description: String,
+        /// The access types offered (`read`, `write`, `readWrite`).
+        access_types: Vec<String>,
+    },
     /// A one-off `evaluate` result (for the REPL / watch), with its expression.
     Evaluated {
         /// The expression evaluated.
@@ -428,6 +491,8 @@ enum Pending {
         /// The variable's name.
         name: String,
     },
+    /// `dataBreakpointInfo` for the variable of that name.
+    DataBreakpointInfo(String),
     /// `evaluate` (REPL/watch), carrying the source expression.
     Evaluate(String),
     /// Any other request whose response needs no special handling on
@@ -457,6 +522,8 @@ struct Session {
     breakpoints: HashMap<String, Vec<SourceBreakpoint>>,
     /// Function breakpoints to set on `initialized`.
     function_breakpoints: Vec<FunctionBreakpoint>,
+    /// Data breakpoints (T617): this session only, as their ids are.
+    data_breakpoints: Vec<DataBreakpoint>,
     /// Whether we have sent the launch (after the `initialized` event).
     configured: bool,
     /// The selected thread: the most recent stopped one unless the user
@@ -564,6 +631,7 @@ impl Dap {
             start_request,
             breakpoints,
             function_breakpoints: self.function_breakpoints.clone(),
+            data_breakpoints: Vec::new(),
             configured: false,
             thread_id: None,
             frame_id: None,
@@ -669,6 +737,52 @@ impl Dap {
                 s.send_function_breakpoints();
             }
         }
+    }
+
+    /// The data breakpoints of the active session (T617); empty when idle.
+    #[must_use]
+    pub fn data_breakpoints(&self) -> &[DataBreakpoint] {
+        self.session
+            .as_ref()
+            .map_or(&[], |s| s.data_breakpoints.as_slice())
+    }
+
+    /// Ask whether the variable `name` in container `reference` can be
+    /// watched (`dataBreakpointInfo`, T617); the answer arrives as
+    /// [`DapEvent::DataBreakpointInfo`]. Returns `false`, sending nothing,
+    /// with no session or when the adapter does not report
+    /// `supportsDataBreakpoints`.
+    pub fn data_breakpoint_info(&mut self, reference: i64, name: &str) -> bool {
+        let Some(s) = self.session.as_mut() else {
+            return false;
+        };
+        if !s.capabilities.supports_data_breakpoints {
+            return false;
+        }
+        s.request(
+            "dataBreakpointInfo",
+            &json!({ "variablesReference": reference, "name": name }),
+            Pending::DataBreakpointInfo(name.to_string()),
+        );
+        true
+    }
+
+    /// Replace the session's data breakpoints (`setDataBreakpoints`, T617),
+    /// sent at once when configured. Returns `false`, changing nothing, with
+    /// no session or when the adapter does not report
+    /// `supportsDataBreakpoints`.
+    pub fn set_data_breakpoints(&mut self, breakpoints: Vec<DataBreakpoint>) -> bool {
+        let Some(s) = self.session.as_mut() else {
+            return false;
+        };
+        if !s.capabilities.supports_data_breakpoints {
+            return false;
+        }
+        s.data_breakpoints = breakpoints;
+        if s.configured {
+            s.send_data_breakpoints();
+        }
+        true
     }
 
     /// The active session's capabilities, if a session is active.
@@ -941,6 +1055,32 @@ impl Dap {
                     value,
                 });
             }
+            Pending::DataBreakpointInfo(name) => {
+                let data_id = body
+                    .get("dataId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let description = body
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let access_types = body
+                    .get("accessTypes")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|t| t.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                events.push(DapEvent::DataBreakpointInfo {
+                    name,
+                    data_id,
+                    description,
+                    access_types,
+                });
+            }
             Pending::Evaluate(expr) => {
                 let result = if success {
                     body.get("result")
@@ -1045,6 +1185,25 @@ impl Session {
             "setFunctionBreakpoints",
             &json!({ "breakpoints": bps }),
             Pending::Other("setFunctionBreakpoints".to_string()),
+        );
+    }
+
+    /// Send `setDataBreakpoints` — only to an adapter that advertised
+    /// `supportsDataBreakpoints`. Not part of configuration: a session starts
+    /// with none, as the ids are only good for one run.
+    fn send_data_breakpoints(&mut self) {
+        if !self.capabilities.supports_data_breakpoints {
+            return;
+        }
+        let bps: Vec<Value> = self
+            .data_breakpoints
+            .iter()
+            .map(DataBreakpoint::to_json)
+            .collect();
+        self.request(
+            "setDataBreakpoints",
+            &json!({ "breakpoints": bps }),
+            Pending::Other("setDataBreakpoints".to_string()),
         );
     }
 
@@ -1222,6 +1381,7 @@ fn failed_request_text(kind: &Pending, message: Option<&str>) -> String {
         Pending::Scopes(_) => "scopes",
         Pending::Variables(_) => "variables",
         Pending::SetVariable { .. } => "setVariable",
+        Pending::DataBreakpointInfo(_) => "dataBreakpointInfo",
         // `handle_response` never calls this for `Evaluate` (it reports its
         // own failure inline instead) -- kept here only so the match stays
         // exhaustive if that ever changes.

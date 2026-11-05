@@ -36,6 +36,7 @@ impl App {
             "run.edit_breakpoint" => self.begin_edit_breakpoint(),
             "run.exception_filters" => self.open_exception_filters(),
             "run.function_breakpoint" => self.begin_function_breakpoint(),
+            "run.data_breakpoint" => self.begin_data_breakpoint(),
             "run.continue" => self.resume_debugger(crate::dap::Dap::continue_),
             "run.step_over" => self.resume_debugger(crate::dap::Dap::step_over),
             "run.step_into" => self.resume_debugger(crate::dap::Dap::step_into),

@@ -67,6 +67,12 @@ impl App {
                 self.evaluate_watches();
                 self.refresh_debug_markers();
             }
+            DapEvent::DataBreakpointInfo {
+                name,
+                data_id,
+                description,
+                access_types,
+            } => self.data_breakpoint_info_arrived(&name, data_id, &description, &access_types),
             DapEvent::Evaluated { expr, result } => {
                 // Update a matching watch, else echo to the debug console.
                 if let Some(w) = self.dap_view.watches.iter_mut().find(|(e, _)| *e == expr) {
@@ -195,6 +201,7 @@ impl App {
             }
             KeyCode::Left => self.dap_view.collapse(),
             KeyCode::Char('e') => self.begin_set_variable(),
+            KeyCode::Char('b') => self.begin_data_breakpoint(),
             KeyCode::Esc => self.focus = Focus::Editor,
             _ => {}
         }
@@ -252,6 +259,64 @@ impl App {
         };
         if !value.is_empty() && !self.dap.set_variable(reference, &name, value) {
             self.status = t!("status.debug_set_variable_unsupported").to_string();
+        }
+    }
+
+    // ----- data breakpoints ---------------------------------------------------
+
+    /// `b` in the panel / Run → Data Breakpoint on Variable: ask the adapter
+    /// whether the highlighted variable can be watched (`dataBreakpointInfo`);
+    /// the answer toggles the breakpoint
+    /// ([`App::data_breakpoint_info_arrived`]).
+    pub(super) fn begin_data_breakpoint(&mut self) {
+        let Some((reference, name, _)) = self.dap_view.selected_variable() else {
+            self.status = t!("status.debug_data_no_variable").to_string();
+            return;
+        };
+        if !self.dap.data_breakpoint_info(reference, &name) {
+            self.status = if self.dap.is_active() {
+                t!("status.debug_data_breakpoint_unsupported").to_string()
+            } else {
+                t!("status.debug_data_no_variable").to_string()
+            };
+        }
+    }
+
+    /// The adapter answered `dataBreakpointInfo` for `name`: add a data
+    /// breakpoint on the data (writes, when the adapter offers that), or
+    /// remove the one already there, or say why it cannot be watched.
+    fn data_breakpoint_info_arrived(
+        &mut self,
+        name: &str,
+        data_id: Option<String>,
+        description: &str,
+        access_types: &[String],
+    ) {
+        let Some(data_id) = data_id else {
+            self.status = t!(
+                "status.debug_data_breakpoint_unavailable",
+                name = name,
+                reason = description
+            )
+            .to_string();
+            return;
+        };
+        let mut list = self.dap.data_breakpoints().to_vec();
+        if let Some(i) = list.iter().position(|b| b.data_id == data_id) {
+            list.remove(i);
+            self.status = t!("status.debug_data_breakpoint_removed", name = name).to_string();
+        } else {
+            let mut bp = crate::dap::DataBreakpoint::new(data_id, name);
+            bp.access_type = access_types
+                .iter()
+                .find(|a| a.as_str() == "write")
+                .or_else(|| access_types.first())
+                .cloned();
+            list.push(bp);
+            self.status = t!("status.debug_data_breakpoint_added", name = name).to_string();
+        }
+        if !self.dap.set_data_breakpoints(list) {
+            self.status = t!("status.debug_data_breakpoint_unsupported").to_string();
         }
     }
 

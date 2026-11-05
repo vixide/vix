@@ -520,6 +520,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.run_edit_breakpoint", "run.edit_breakpoint"),
     ("cmd.run_exception_filters", "run.exception_filters"),
     ("cmd.run_function_breakpoint", "run.function_breakpoint"),
+    ("cmd.run_data_breakpoint", "run.data_breakpoint"),
     ("cmd.run_focus_panel", "run.focus_panel"),
     ("cmd.run_config_edit", "project.run_config_edit"),
 ];

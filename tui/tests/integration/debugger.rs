@@ -173,6 +173,7 @@ while True:
     log.flush()
     if cmd == 'initialize':
         ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
+                 'supportsDataBreakpoints': True,
                  'exceptionBreakpointFilters': [
             {'filter':'raised','label':'Raised','default':False},
             {'filter':'uncaught','label':'Uncaught','default':True}]})
@@ -192,6 +193,11 @@ while True:
         ok(req, {'scopes':[{'name':'Locals','variablesReference':ref}]})
     elif cmd == 'variables':
         ok(req, {'variables': VARS.get(args['variablesReference'], [])})
+    elif cmd == 'dataBreakpointInfo':
+        if args['name'] == 'x':
+            ok(req, {'dataId':'d-x','description':'x','accessTypes':['read','write']})
+        else:
+            ok(req, {'dataId':None,'description':'a struct'})
     elif cmd == 'setVariable':
         ok(req, {'value': args['value']})
     elif cmd == 'evaluate':
@@ -445,6 +451,68 @@ while True:
         let mut third = app_at_with(&dir, Settings::default()).with_session_path(&session);
         third.restore_breakpoints();
         assert!(third.dap.function_breakpoints().is_empty());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn data_breakpoints_are_set_from_a_panel_variable() {
+        let Some((mut app, dir, log)) = started("t617-data") else {
+            return;
+        };
+        // Without a session or a highlighted variable nothing is asked.
+        app.run_action("run.data_breakpoint");
+        assert!(app.dap.data_breakpoints().is_empty());
+        app.run_action("run.start");
+        wait(&mut app, |a| has_label(a, "p"));
+        app.run_action("run.focus_panel");
+
+        // `b` on a variable that cannot be watched changes nothing.
+        app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 1])); // p
+        app.on_key(key('b'));
+        wait(&mut app, |_| requests(&log, "dataBreakpointInfo").len() == 1);
+        assert_eq!(
+            requests(&log, "dataBreakpointInfo")[0],
+            serde_json::json!({ "variablesReference": 5, "name": "p" })
+        );
+        std::thread::sleep(Duration::from_millis(200));
+        app.poll_dap();
+        assert!(app.dap.data_breakpoints().is_empty());
+
+        // `b` on x sets a write data breakpoint; the action toggles it off.
+        app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 0])); // x
+        app.on_key(key('b'));
+        wait(&mut app, |a| a.dap.data_breakpoints().len() == 1);
+        assert_eq!(app.dap.data_breakpoints()[0].data_id, "d-x");
+        wait(&mut app, |_| requests(&log, "setDataBreakpoints").len() == 1);
+        assert_eq!(
+            requests(&log, "setDataBreakpoints")[0],
+            serde_json::json!({ "breakpoints": [{ "dataId": "d-x", "accessType": "write" }] })
+        );
+        app.run_action("run.data_breakpoint");
+        wait(&mut app, |a| a.dap.data_breakpoints().is_empty());
+        wait(&mut app, |_| requests(&log, "setDataBreakpoints").len() == 2);
+        app.run_action("run.stop");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn data_breakpoints_need_adapter_support() {
+        let Some((mut app, dir, log)) = started("t617-data-unsupported") else {
+            return;
+        };
+        // An adapter that does not advertise `supportsDataBreakpoints`.
+        let mock = dir.join("mock_dap.py");
+        let script = fs::read_to_string(&mock)
+            .unwrap()
+            .replace("'supportsDataBreakpoints': True,", "");
+        fs::write(&mock, script).unwrap();
+        app.run_action("run.start");
+        wait(&mut app, |a| has_label(a, "p"));
+        app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 0]));
+        app.run_action("run.data_breakpoint");
+        assert!(requests(&log, "dataBreakpointInfo").is_empty());
+        assert!(app.dap.data_breakpoints().is_empty());
+        app.run_action("run.stop");
         fs::remove_dir_all(&dir).ok();
     }
 }

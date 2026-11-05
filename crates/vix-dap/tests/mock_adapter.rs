@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use vix_dap::{Dap, DapEvent, DebugAdapter, FunctionBreakpoint, SourceBreakpoint, StartMode};
+use vix_dap::{Dap, DapEvent, DataBreakpoint, DebugAdapter, FunctionBreakpoint, SourceBreakpoint, StartMode};
 
 const MOCK_ADAPTER: &str = r"
 import sys, json
@@ -50,6 +50,7 @@ while True:
     log.flush()
     if cmd == 'initialize':
         ok(req, {'supportsSetVariable': True, 'supportsFunctionBreakpoints': True,
+                 'supportsDataBreakpoints': True,
                  'exceptionBreakpointFilters': [
                      {'filter':'raised','label':'Raised Exceptions','default':False},
                      {'filter':'uncaught','label':'Uncaught Exceptions','default':True}]})
@@ -80,6 +81,11 @@ while True:
             9: [{'name':'px','value':'3'}],
             15: [{'name':'y','value':'2'}],
             25: [{'name':'w','value':'4'}]}.get(ref, [])})
+    elif cmd == 'dataBreakpointInfo':
+        if req['arguments']['name'] == 'x':
+            ok(req, {'dataId':'d-x','description':'x (int)','accessTypes':['read','write']})
+        else:
+            ok(req, {'dataId':None,'description':'not watchable'})
     elif cmd == 'setVariable':
         ok(req, {'value': req['arguments']['value']})
     elif cmd == 'evaluate':
@@ -460,8 +466,63 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
 
     check_threads_frames_and_nested_variables(&mut dap);
     check_set_variable_and_evaluate_frame(&mut dap, &log);
+    check_data_breakpoints(&mut dap, &log);
     dap.stop();
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `dataBreakpointInfo` for a watchable and an unwatchable variable, then
+/// `setDataBreakpoints` with the access type, and clearing them.
+fn check_data_breakpoints(dap: &mut Dap, log: &std::path::Path) {
+    let mut events = Vec::new();
+    assert!(dap.data_breakpoints().is_empty());
+    assert!(dap.data_breakpoint_info(5, "x"));
+    assert!(dap.data_breakpoint_info(5, "p"));
+    poll_until(dap, &mut events, |e| {
+        e.iter()
+            .filter(|e| matches!(e, DapEvent::DataBreakpointInfo { .. }))
+            .count()
+            == 2
+    });
+    let infos: Vec<(String, Option<String>, Vec<String>)> = events
+        .iter()
+        .filter_map(|e| match e {
+            DapEvent::DataBreakpointInfo {
+                name,
+                data_id,
+                access_types,
+                ..
+            } => Some((name.clone(), data_id.clone(), access_types.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        infos,
+        vec![
+            (
+                "x".to_string(),
+                Some("d-x".to_string()),
+                vec!["read".to_string(), "write".to_string()]
+            ),
+            ("p".to_string(), None, Vec::new()),
+        ]
+    );
+    let mut bp = DataBreakpoint::new("d-x", "x");
+    bp.access_type = Some("write".into());
+    assert!(dap.set_data_breakpoints(vec![bp]));
+    assert_eq!(dap.data_breakpoints().len(), 1);
+    assert!(dap.set_data_breakpoints(Vec::new()));
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while logged_args(log, "setDataBreakpoints").len() < 2 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        logged_args(log, "setDataBreakpoints"),
+        vec![
+            serde_json::json!({ "breakpoints": [{ "dataId": "d-x", "accessType": "write" }] }),
+            serde_json::json!({ "breakpoints": [] }),
+        ]
+    );
 }
 
 #[test]

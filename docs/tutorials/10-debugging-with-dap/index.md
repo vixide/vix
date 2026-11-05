@@ -190,6 +190,13 @@ name and toggles a breakpoint that stops when that function is entered, for
 adapters that support them. The Debug panel keeps the variables you expanded
 open as you step.
 
+**Run → Data Breakpoint on Variable** (`run.data_breakpoint`, or `b` in the
+Debug panel) stops when the memory behind the highlighted variable is written,
+for adapters that support data breakpoints (not every adapter, and not every
+variable: the status line says when one cannot be watched). Press it again on
+the same variable to remove the breakpoint. Data breakpoints last for one
+debug session only.
+
 Line and function breakpoints (with their condition, hit count and log
 message) are saved per workspace when you quit Vix and are back the next time
 you open it, and the next debug session sends them to the adapter like any
