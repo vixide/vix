@@ -749,6 +749,183 @@ pub fn store_name(range: &str) -> String {
     }
 }
 
+/// Which way a reduced patch is going to be applied: staging applies it to the
+/// index as written, discarding applies it reversed to the working tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LineMode {
+    /// `git apply --cached`: unselected removed lines stay (as context),
+    /// unselected added lines are left out.
+    Stage,
+    /// `git apply --reverse`: unselected added lines stay (as context),
+    /// unselected removed lines are left out.
+    Discard,
+}
+
+/// Why a set of rows cannot become a line-level patch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SelectError {
+    /// No added or removed line is in the selected rows.
+    NoLines,
+    /// The selected lines are in more than one hunk (or file).
+    SpansHunks,
+    /// The file is binary, or the hunk is gone.
+    NoHunk,
+    /// Leaving a line out would change whether the file's last line ends in a
+    /// newline, which a reduced patch cannot express; select the removed and
+    /// the added copy of that line together.
+    NoNewline,
+}
+
+/// The changed lines picked out of one hunk for a line-level stage or discard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineSelection {
+    /// Index into [`Review::files`].
+    pub file: usize,
+    /// Index into the file's hunks.
+    pub hunk: usize,
+    /// Indexes into the hunk's lines of the added and removed lines picked.
+    pub lines: Vec<usize>,
+}
+
+impl Review {
+    /// The added and removed lines on buffer rows `first..=last` of `rendered`
+    /// (context lines, headings and comments in the range are ignored).
+    ///
+    /// # Errors
+    /// [`SelectError::NoLines`] when the rows hold no changed line and
+    /// [`SelectError::SpansHunks`] when they hold lines of two hunks.
+    pub fn select_rows(
+        &self,
+        rendered: &Rendered,
+        first: usize,
+        last: usize,
+    ) -> Result<LineSelection, SelectError> {
+        let mut found: Option<LineSelection> = None;
+        for row in first..=last.min(rendered.targets.len().saturating_sub(1)) {
+            let Some(Target::Line { file, side, line }) = rendered.targets.get(row) else {
+                continue;
+            };
+            let Some((f, h)) = rendered.hunk_at(row) else {
+                continue;
+            };
+            if f != *file {
+                continue;
+            }
+            let Some(index) = self.files[f].hunks.get(h).and_then(|hunk| {
+                hunk.lines.iter().position(|l| match side {
+                    Side::Old => l.kind == LineKind::Removed && l.old == Some(*line),
+                    Side::New => l.kind != LineKind::Removed && l.new == Some(*line),
+                })
+            }) else {
+                continue;
+            };
+            if self.files[f].hunks[h].lines[index].kind == LineKind::Context {
+                continue;
+            }
+            match &mut found {
+                None => {
+                    found = Some(LineSelection {
+                        file: f,
+                        hunk: h,
+                        lines: vec![index],
+                    });
+                }
+                Some(sel) if sel.file == f && sel.hunk == h => sel.lines.push(index),
+                Some(_) => return Err(SelectError::SpansHunks),
+            }
+        }
+        found.ok_or(SelectError::NoLines)
+    }
+
+    /// A one-hunk patch holding only the lines of `sel`, built the way
+    /// `git add -p` edits a hunk, for `git apply --cached` ([`LineMode::Stage`])
+    /// or `git apply --reverse` ([`LineMode::Discard`]). The hunk header's
+    /// counts are recomputed; a `\ No newline at end of file` marker goes with
+    /// its line.
+    ///
+    /// # Errors
+    /// [`SelectError::NoHunk`] for a binary file or a missing hunk and
+    /// [`SelectError::NoNewline`] when an unselected line that carries the
+    /// marker would have to become context.
+    pub fn lines_patch(&self, sel: &LineSelection, mode: LineMode) -> Result<String, SelectError> {
+        let f = self.files.get(sel.file).ok_or(SelectError::NoHunk)?;
+        let h = f
+            .hunks
+            .get(sel.hunk)
+            .filter(|_| !f.binary)
+            .ok_or(SelectError::NoHunk)?;
+        let mut lines: Vec<DiffLine> = Vec::new();
+        let (mut old_count, mut new_count) = (0usize, 0usize);
+        for (i, l) in h.lines.iter().enumerate() {
+            let picked = sel.lines.contains(&i);
+            // The kind this line has in the reduced patch, or dropped.
+            let kind = match (l.kind, picked, mode) {
+                (LineKind::Context, _, _)
+                | (LineKind::Removed, false, LineMode::Stage)
+                | (LineKind::Added, false, LineMode::Discard) => LineKind::Context,
+                (LineKind::Added, false, LineMode::Stage)
+                | (LineKind::Removed, false, LineMode::Discard) => continue,
+                (kind, true, _) => kind,
+            };
+            if kind == LineKind::Context && l.kind != LineKind::Context && l.no_newline {
+                return Err(SelectError::NoNewline);
+            }
+            match kind {
+                LineKind::Context => {
+                    old_count += 1;
+                    new_count += 1;
+                }
+                LineKind::Removed => old_count += 1,
+                LineKind::Added => new_count += 1,
+            }
+            lines.push(DiffLine { kind, ..l.clone() });
+        }
+        let header = reduced_header(&h.header, mode, old_count, new_count);
+        let reduced = Hunk { header, lines };
+        let mut out = patch_header(&f.path, &reduced);
+        push_hunk(&mut out, &reduced);
+        Ok(out)
+    }
+}
+
+/// The `@@` line for a reduced hunk: the original's function-context suffix,
+/// the new counts, and the start of the side the patch is matched against
+/// (the old side to stage, the new side to discard) kept; the other start is
+/// derived from it, following git's convention for an empty side (the line
+/// before the change, or 0 for a whole file).
+fn reduced_header(original: &str, mode: LineMode, old_count: usize, new_count: usize) -> String {
+    let words: Vec<&str> = original.split_whitespace().collect();
+    let start = |w: Option<&&str>, sign: char| -> usize {
+        w.and_then(|w| w.strip_prefix(sign))
+            .and_then(|w| w.split(',').next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0)
+    };
+    let (old_start, new_start) = (start(words.get(1), '-'), start(words.get(2), '+'));
+    let (base, base_count, other_count) = match mode {
+        LineMode::Stage => (old_start, old_count, new_count),
+        LineMode::Discard => (new_start, new_count, old_count),
+    };
+    let other = if other_count == 0 {
+        base.saturating_sub(1)
+    } else if base_count == 0 {
+        base + 1
+    } else {
+        base
+    };
+    let (o, n) = match mode {
+        LineMode::Stage => (base, other),
+        LineMode::Discard => (other, base),
+    };
+    let suffix = original
+        .match_indices("@@")
+        .nth(1)
+        .map_or("", |(i, _)| &original[i + 2..]);
+    format!("@@ -{o},{old_count} +{n},{new_count} @@{suffix}")
+}
+
 /// The marker git prints after a line that has no trailing newline.
 const NO_NEWLINE: &str = "\\ No newline at end of file";
 
@@ -1113,6 +1290,108 @@ mod tests {
             assert!(sbs.row_for_inline(sbs.top_for_row(idx)) <= idx);
         }
         assert_eq!(sbs.row_for_inline(sbs.top_for_row(i)), i);
+    }
+
+    const LINES: &str = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,4 +1,5 @@ fn f\n a\n-b\n-c\n+B\n+C\n+D\n e\n";
+
+    fn pick(lines: &[usize]) -> LineSelection {
+        LineSelection {
+            file: 0,
+            hunk: 0,
+            lines: lines.to_vec(),
+        }
+    }
+
+    #[test]
+    fn staging_lines_keeps_unselected_removals_as_context() {
+        let r = Review::new("r", LINES);
+        // -b and +B only: -c stays (context), +C and +D are left out.
+        let p = r.lines_patch(&pick(&[1, 3]), LineMode::Stage).unwrap();
+        assert_eq!(
+            p,
+            "--- a/f\n+++ b/f\n@@ -1,4 +1,4 @@ fn f\n a\n-b\n c\n+B\n e\n"
+        );
+        // Everything selected is the hunk itself.
+        let all = r
+            .lines_patch(&pick(&[1, 2, 3, 4, 5]), LineMode::Stage)
+            .unwrap();
+        assert_eq!(all, r.hunk_patch(0, 0).unwrap());
+    }
+
+    #[test]
+    fn discarding_lines_keeps_unselected_additions_as_context() {
+        let r = Review::new("r", LINES);
+        // Undo only +B: the other additions stay, the removals are not undone.
+        let p = r.lines_patch(&pick(&[3]), LineMode::Discard).unwrap();
+        assert_eq!(
+            p,
+            "--- a/f\n+++ b/f\n@@ -1,4 +1,5 @@ fn f\n a\n+B\n C\n D\n e\n"
+        );
+        let all = r
+            .lines_patch(&pick(&[1, 2, 3, 4, 5]), LineMode::Discard)
+            .unwrap();
+        assert_eq!(all, r.hunk_patch(0, 0).unwrap());
+    }
+
+    #[test]
+    fn line_patches_handle_whole_file_hunks() {
+        let added = "diff --git a/n b/n\n--- /dev/null\n+++ b/n\n@@ -0,0 +1,3 @@\n+x\n+y\n+z\n";
+        let r = Review::new("r", added);
+        let p = r.lines_patch(&pick(&[1]), LineMode::Stage).unwrap();
+        assert_eq!(p, "--- /dev/null\n+++ b/n\n@@ -0,0 +1,1 @@\n+y\n");
+        // Discarding one added line of a new file keeps the file.
+        let d = r.lines_patch(&pick(&[1]), LineMode::Discard).unwrap();
+        assert_eq!(d, "--- a/n\n+++ b/n\n@@ -1,2 +1,3 @@\n x\n+y\n z\n");
+        let gone = "diff --git a/g b/g\n--- a/g\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-p\n-q\n";
+        let r = Review::new("r", gone);
+        // Staging one removal of a deleted file keeps the other as context.
+        let p = r.lines_patch(&pick(&[0]), LineMode::Stage).unwrap();
+        assert_eq!(p, "--- a/g\n+++ b/g\n@@ -1,2 +1,1 @@\n-p\n q\n");
+        // All of them is still the deletion.
+        let p = r.lines_patch(&pick(&[0, 1]), LineMode::Stage).unwrap();
+        assert_eq!(p, "--- a/g\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-p\n-q\n");
+    }
+
+    #[test]
+    fn a_missing_final_newline_cannot_be_split_from_its_partner() {
+        let d = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b\n";
+        let r = Review::new("r", d);
+        // Only +b: -b would stay as context while still carrying the marker.
+        assert_eq!(
+            r.lines_patch(&pick(&[2]), LineMode::Stage),
+            Err(SelectError::NoNewline)
+        );
+        // Only -b when discarding: +b would stay, which is fine to build (git
+        // judges the result), because the marker line itself is selected.
+        assert!(r.lines_patch(&pick(&[1]), LineMode::Discard).is_ok());
+        // Both together keep the marker with its line.
+        let both = r.lines_patch(&pick(&[1, 2]), LineMode::Stage).unwrap();
+        assert_eq!(both, r.hunk_patch(0, 0).unwrap());
+        assert!(both.contains("\\ No newline at end of file\n"));
+    }
+
+    #[test]
+    fn select_rows_finds_changed_lines_in_one_hunk() {
+        let r = Review::new("r", LINES);
+        let out = r.render();
+        let row = |s: &str| out.text.lines().position(|l| l == s).unwrap();
+        let sel = r.select_rows(&out, row("-b"), row("+C")).unwrap();
+        assert_eq!(sel, pick(&[1, 2, 3, 4]));
+        // Context and heading rows are ignored; none left is an error.
+        assert_eq!(
+            r.select_rows(&out, 0, row("-b") - 1),
+            Err(SelectError::NoLines)
+        );
+        assert_eq!(
+            r.select_rows(&out, row(" a"), row(" a")),
+            Err(SelectError::NoLines)
+        );
+        let two = Review::new("r", DIFF);
+        let out = two.render();
+        assert_eq!(
+            two.select_rows(&out, 0, out.targets.len() - 1),
+            Err(SelectError::SpansHunks)
+        );
     }
 
     #[test]

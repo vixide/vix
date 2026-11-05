@@ -7,13 +7,12 @@ with line comments that are saved per repository and exported as Markdown.
 navigation, saved line comments, the Markdown/JSON export, stage/discard of
 the hunk under the cursor, staging and discarding every hunk at once, `r` in
 the stash chooser, re-diffing after a stage or discard, `\ No newline at end
-of file` markers, and the two-pane (side-by-side) view. Not shipped: a stash
-chooser as a range source other than `r`, and staging or discarding single
-lines.
+of file` markers, and the two-pane (side-by-side) view, and line-level stage and discard. Not
+shipped: a stash chooser as a range source other than `r`.
 
 ## Actions
 
-All ten are in **Git** and in the command palette.
+All twelve are in **Git** and in the command palette.
 
 | Action | Menu item | Does |
 | --- | --- | --- |
@@ -23,6 +22,8 @@ All ten are in **Git** and in the command palette.
 | `git.review_prev` | Previous Review Hunk | Moves to the previous `@@` header, wrapping to the last. |
 | `git.review_export` | Export Review Comments | Writes the open review's comments to `.vix/review/<range>.md` and `.json`. |
 | `git.review_stage_hunk` | Stage Review Hunk | Stages the hunk under the cursor: `Review::hunk_patch` rebuilds a one-hunk patch (file headers use `/dev/null` for a new or deleted file) and `vix_git::apply_patch(.., ApplyTarget::Index)` feeds it to `git apply --cached`. A binary file, or a cursor outside a hunk, only says so in the status line. |
+| `git.review_stage_lines` | Stage Review Lines | Stages only the added and removed lines in the visual selection (or the line under the cursor) of one hunk. See *Line-level stage and discard* below. |
+| `git.review_discard_lines` | Discard Review Lines… | The same lines, reversed in the working tree after a yes/no (`ConfirmKind::GitReviewDiscardLines`). |
 | `git.review_stage_all` | Stage All Review Hunks | `Review::full_patch` joins every hunk of every text file (one header per file, binary files skipped) and `apply_patch(.., ApplyTarget::Index)` stages it in one call; for a stash review that is the whole stash. Says so in the status line when there is nothing to stage. |
 | `git.review_discard_hunk` | Discard Review Hunk… | Same patch, after a yes/no (`ConfirmKind::GitReviewDiscard`), through `git apply --reverse` on the working tree. |
 | `git.review_discard_all` | Discard All Review Hunks… | Reverses `Review::full_patch` on the working tree after a yes/no (`ConfirmKind::GitReviewDiscardAll`) whose text names `Review::patch_counts` (hunks, files). `git apply` is all or nothing, so a hunk that no longer fits leaves the tree untouched and git's reason is shown as an error; there is never a silent partial discard. Binary files are skipped (they are not in the patch). Succeeds, then re-diffs like the other discards. |
@@ -42,6 +43,42 @@ A line that git marks `\ No newline at end of file` carries
 `DiffLine::no_newline`; the buffer shows the marker on its own row right after
 the line, and `hunk_patch`/`full_patch` write it back so `git apply` accepts
 the hunk.
+
+## Line-level stage and discard
+
+`Review::select_rows(rendered, first, last)` turns buffer rows (the visual
+selection, else the cursor row) into a `LineSelection`: the indexes of the
+added and removed lines in one hunk. Context lines, headings and comment rows
+in the range are ignored. No changed line is `SelectError::NoLines`; lines of
+two hunks or files are `SpansHunks` (select within one hunk).
+
+`Review::lines_patch(sel, mode)` builds the reduced one-hunk patch the way
+`git add -p` edits a hunk:
+
+| | unselected `-` line | unselected `+` line |
+| --- | --- | --- |
+| `LineMode::Stage` (`git apply --cached`) | becomes context | dropped |
+| `LineMode::Discard` (`git apply --reverse`) | dropped | becomes context |
+
+The `@@` counts are recomputed from the kept lines. The side the patch is
+matched against keeps its start (old to stage, new to discard) and the other
+start follows git's convention for an empty side (the line before, or 0 for a
+whole file); the function-context suffix is kept, and a hunk that now starts
+or ends a whole file switches `/dev/null` headers on or off accordingly.
+Selecting every changed line gives exactly `hunk_patch`.
+
+A `\ No newline at end of file` marker travels with its line. If an
+*unselected* line carrying the marker would have to become context, the patch
+cannot say what the last line looks like, so `SelectError::NoNewline` refuses
+with a status line asking for both the removed and the added copy; selecting
+both stages them with the marker.
+
+The host stages through `apply_patch(.., ApplyTarget::Index)` and discards
+through `ApplyTarget::RevertWorktree` after the confirmation (the patch is
+built before asking, so an inexpressible selection is refused first). When git
+rejects the patch (the lines no longer match) its reason is shown as an error
+and nothing changes; there is never a silent partial result. A success
+re-diffs like the hunk actions.
 
 ## Ranges
 
@@ -137,7 +174,7 @@ the same shape as the storage file.
 - `crates/vix-review/src/lib.rs`: `parse` (unified diff to `FileDiff`/`Hunk`/
   `DiffLine`), `Review` (`render`, `set_comment`, `comment_text`,
   `line_text`, `to_markdown`, `to_json`, `load_json`), `Rendered`
-  (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`/`full_patch`/`patch_counts`, `Review::side_by_side` (`SideBySide`, `PaneRow`, `PaneKind`, `Cell`), `store_name`. Pure; no I/O.
+  (`next_hunk`, `prev_hunk`, `hunk_at`), `Review::hunk_patch`/`full_patch`/`patch_counts`, `Review::select_rows`/`lines_patch` (`LineSelection`, `LineMode`, `SelectError`), `Review::side_by_side` (`SideBySide`, `PaneRow`, `PaneKind`, `Cell`), `store_name`. Pure; no I/O.
 - `crates/vix-git/src/lib.rs`: `review_diff`, `apply_patch`/`ApplyTarget`.
 - Stash chooser: `r` closes it and reviews `stash@{N}` (`tui/src/app/git_stash_worktree.rs`). Both git calls go through the workspace authority like every other `vix-git` runner.
 - `tui/src/ui/review_panes.rs`: paints `SideBySide` (old left, new right).

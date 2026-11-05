@@ -19,6 +19,8 @@ All of these are in the **Git** menu and the command palette.
 | `git.review_stage_all` | Stage All Review Hunks | Stages every text hunk of the open review at once; for a stash review, the whole stash. |
 | `git.review_discard_hunk` | Discard Review Hunk… | After a yes/no, undoes the hunk under the cursor in the working tree (`git apply --reverse`). |
 | `git.review_discard_all` | Discard All Review Hunks… | Undoes every text hunk of the open review in the working tree, after a confirmation that says how many hunks in how many files. |
+| `git.review_stage_lines` | Stage Review Lines | Stages only the selected added and removed lines of one hunk. |
+| `git.review_discard_lines` | Discard Review Lines… | Undoes only those lines in the working tree, after a confirmation. |
 | `git.review_toggle_view` | Review Two-Pane View | Switches between the inline diff and a side-by-side view. `v` in the review does the same. |
 
 The last nine work only in the review tab. Stage and discard hand the hunk's
@@ -55,6 +57,20 @@ undo ("all 7 hunks in 3 files"). It is all or nothing: git applies the whole
 reverse patch or none of it, so if any hunk no longer fits (the file changed
 since the review opened) nothing is discarded and git's reason is shown.
 Binary files are not part of it. After a discard the review is diffed again.
+
+## Staging or discarding single lines
+
+Select some lines of one hunk (hold Shift and move the cursor; with no
+selection the line under the cursor counts) and use **Git → Stage Review
+Lines** or **Git → Discard Review Lines…**. Only the added and removed lines in
+the selection are staged or undone; the rest of the hunk is left alone.
+Context lines, headings and comments in the selection are ignored. A selection
+that reaches into a second hunk is refused (select inside one hunk). Discard
+asks first. If Git cannot apply the lines (the file changed since the review
+opened) nothing changes and Git's reason is shown.
+
+When a file's last line has no trailing newline, select both the removed and
+the added copy of that line together; selecting only one is refused.
 
 ## Two-pane view
 

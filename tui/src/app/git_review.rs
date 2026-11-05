@@ -9,7 +9,9 @@
 
 use std::path::PathBuf;
 
-use vix_review::{Rendered, Review, Side, SideBySide, Target};
+use vix_review::{
+    LineMode, LineSelection, Rendered, Review, SelectError, Side, SideBySide, Target,
+};
 
 use super::git::git_error_text;
 use super::{App, Confirm, ConfirmKind, Prompt, PromptKind};
@@ -26,6 +28,8 @@ pub struct ReviewState {
     pub pending: Option<(usize, Side, usize)>,
     /// The hunk a discard confirmation is open for: file index, hunk index.
     pub pending_hunk: Option<(usize, usize)>,
+    /// The changed lines a line-level discard confirmation is open for.
+    pub pending_lines: Option<LineSelection>,
     /// Whether the two-pane (side-by-side) view is wanted. It is drawn only
     /// when the editor is wide enough ([`vix_review::MIN_SIDE_BY_SIDE_WIDTH`]);
     /// otherwise the inline buffer shows.
@@ -45,6 +49,8 @@ impl App {
             "git.review_prev" => self.review_goto_hunk(false),
             "git.review_stage_hunk" => self.review_stage_hunk(),
             "git.review_stage_all" => self.review_stage_all(),
+            "git.review_stage_lines" => self.review_stage_lines(),
+            "git.review_discard_lines" => self.begin_review_discard_lines(),
             "git.review_discard_hunk" => self.begin_review_discard_hunk(),
             "git.review_discard_all" => self.begin_review_discard_all(),
             "git.review_toggle_view" => self.review_toggle_view(),
@@ -108,6 +114,7 @@ impl App {
             tab_path,
             pending: None,
             pending_hunk: None,
+            pending_lines: None,
             side_by_side,
             panes,
         });
@@ -399,6 +406,135 @@ impl App {
         }
     }
 
+    /// The changed lines the user means in the active review: those in the
+    /// visual selection, or else the one under the cursor. Says why in the
+    /// status line when there are none.
+    fn review_line_selection(&mut self) -> Option<LineSelection> {
+        let cursor = self.editor.cursor_line();
+        let span = self.editor.active_tab().and_then(|t| {
+            let (start, end) = t.editor.selection_span()?;
+            let code = t.editor.code_ref();
+            Some((
+                code.char_to_line(start),
+                code.char_to_line(end.saturating_sub(1)),
+            ))
+        });
+        let (first, last) = span.unwrap_or((cursor, cursor));
+        let Some(state) = self.active_review() else {
+            self.status = t!("status.git_review_none").to_string();
+            return None;
+        };
+        match state.review.select_rows(&state.rendered, first, last) {
+            Ok(sel) => Some(sel),
+            Err(e) => {
+                self.status = review_select_error(e);
+                None
+            }
+        }
+    }
+
+    /// **Git → Stage Review Lines**: stage only the changed lines in the
+    /// selection (or under the cursor) through a reduced one-hunk patch.
+    fn review_stage_lines(&mut self) {
+        let Some(sel) = self.review_line_selection() else {
+            return;
+        };
+        let Some((patch, path)) = self.review_lines_patch(&sel, LineMode::Stage) else {
+            return;
+        };
+        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::Index) {
+            Ok(()) => {
+                self.status = t!(
+                    "status.git_review_staged_lines",
+                    count = sel.lines.len(),
+                    path = path
+                )
+                .to_string();
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.rediff_review();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
+        }
+    }
+
+    /// The reduced patch for `sel` and its file's path; the reason in the
+    /// status line when the lines cannot be expressed as one.
+    fn review_lines_patch(
+        &mut self,
+        sel: &LineSelection,
+        mode: LineMode,
+    ) -> Option<(String, String)> {
+        let state = self.review.as_ref()?;
+        match state.review.lines_patch(sel, mode) {
+            Ok(patch) => Some((patch, state.review.files.get(sel.file)?.path.clone())),
+            Err(e) => {
+                self.status = review_select_error(e);
+                None
+            }
+        }
+    }
+
+    /// **Git → Discard Review Lines…**: ask before undoing only the changed
+    /// lines in the selection (or under the cursor) in the working tree.
+    fn begin_review_discard_lines(&mut self) {
+        let Some(sel) = self.review_line_selection() else {
+            return;
+        };
+        // Build the patch now so an inexpressible selection is refused before
+        // anything is asked.
+        let Some((_, path)) = self.review_lines_patch(&sel, LineMode::Discard) else {
+            return;
+        };
+        let count = sel.lines.len();
+        if let Some(s) = self.review.as_mut() {
+            s.pending_lines = Some(sel);
+        }
+        self.confirm = Some(Confirm {
+            message: t!(
+                "confirm.git_review_discard_lines",
+                count = count,
+                path = path.as_str()
+            )
+            .to_string(),
+            paths: vec![PathBuf::from(path)],
+            kind: ConfirmKind::GitReviewDiscardLines,
+        });
+    }
+
+    /// The answer to [`ConfirmKind::GitReviewDiscardLines`]: on yes, reverse
+    /// the reduced patch in the working tree (git refuses when it no longer
+    /// applies, and its reason is shown).
+    pub(super) fn review_discard_lines_answered(&mut self, yes: bool) {
+        let pending = self.review.as_mut().and_then(|s| s.pending_lines.take());
+        let (true, Some(sel)) = (yes, pending) else {
+            return;
+        };
+        let Some((patch, path)) = self.review_lines_patch(&sel, LineMode::Discard) else {
+            return;
+        };
+        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::RevertWorktree)
+        {
+            Ok(()) => {
+                self.status = t!(
+                    "status.git_review_discarded_lines",
+                    count = sel.lines.len(),
+                    path = path
+                )
+                .to_string();
+                self.reload_clean_buffers();
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.rediff_review();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_review_apply_failed", error = git_error_text(&e)).to_string()),
+        }
+    }
+
     /// **Git → Discard All Review Hunks…**: ask, naming how many hunks and
     /// files, before undoing every text hunk of the open review.
     fn begin_review_discard_all(&mut self) {
@@ -577,4 +713,15 @@ impl App {
         let state = self.active_review()?;
         (state.side_by_side && width >= vix_review::MIN_SIDE_BY_SIDE_WIDTH).then_some(&state.panes)
     }
+}
+
+/// The status-line text for a selection that cannot become a line patch.
+fn review_select_error(e: SelectError) -> String {
+    match e {
+        SelectError::NoLines => t!("status.git_review_no_lines"),
+        SelectError::SpansHunks => t!("status.git_review_lines_span"),
+        SelectError::NoNewline => t!("status.git_review_lines_newline"),
+        _ => t!("status.git_review_no_hunk"),
+    }
+    .to_string()
 }

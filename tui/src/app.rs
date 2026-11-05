@@ -902,6 +902,9 @@ pub enum ConfirmKind {
     /// Undo every text hunk of the open review in the working tree (T665);
     /// the confirmation names how many hunks and files.
     GitReviewDiscardAll,
+    /// Undo only the selected changed lines of a review hunk in the working
+    /// tree (T665); [`Confirm::paths`] holds the file.
+    GitReviewDiscardLines,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -8442,6 +8445,7 @@ impl App {
                     | ConfirmKind::GitWorktreeRemove
                     | ConfirmKind::GitReviewDiscard
                     | ConfirmKind::GitReviewDiscardAll
+                    | ConfirmKind::GitReviewDiscardLines
             )
         }) {
             self.git_confirm_key(kind, key);

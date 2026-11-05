@@ -1669,7 +1669,9 @@ impl App {
     pub(super) fn git_confirm_key(&mut self, kind: ConfirmKind, key: KeyEvent) {
         if matches!(
             kind,
-            ConfirmKind::GitReviewDiscard | ConfirmKind::GitReviewDiscardAll
+            ConfirmKind::GitReviewDiscard
+                | ConfirmKind::GitReviewDiscardAll
+                | ConfirmKind::GitReviewDiscardLines
         ) {
             let yes = match key.code {
                 KeyCode::Char('y' | 'Y') => true,
@@ -1679,6 +1681,8 @@ impl App {
             self.confirm = None;
             if kind == ConfirmKind::GitReviewDiscardAll {
                 self.review_discard_all_answered(yes);
+            } else if kind == ConfirmKind::GitReviewDiscardLines {
+                self.review_discard_lines_answered(yes);
             } else {
                 self.review_discard_answered(yes);
             }

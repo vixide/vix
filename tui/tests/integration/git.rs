@@ -973,7 +973,7 @@ fn git_graph_checkout_branch_and_cherry_pick_confirm_before_acting() {
 
 /// A fixture `git` for the T634 tests: isolated from the developer's global
 /// and system config on this command alone, never through the process env.
-fn t634_git(dir: &Path, args: &[&str]) {
+pub(crate) fn t634_git(dir: &Path, args: &[&str]) {
     let out = std::process::Command::new("git")
         .current_dir(dir)
         .env(
@@ -995,7 +995,7 @@ fn t634_git(dir: &Path, args: &[&str]) {
 /// A one-commit repository under `<unique>/repo`; its local config carries
 /// the identity and turns signing off, so the app's own git calls need no
 /// global setup.
-fn t634_repo(name: &str) -> PathBuf {
+pub(crate) fn t634_repo(name: &str) -> PathBuf {
     let base = unique_dir(name);
     let dir = base.join("repo");
     fs::create_dir_all(&dir).unwrap();
@@ -1494,17 +1494,17 @@ fn git_rebase_edit_continue_abort_and_cherry_pick() {
 }
 
 /// `git diff` of `dir` with the prefixes Review expects.
-fn t665_diff(dir: &Path) -> String {
+pub(crate) fn t665_diff(dir: &Path) -> String {
     t665_run(dir, &["diff", "--src-prefix=a/", "--dst-prefix=b/"])
 }
 
 /// `git diff --cached` of `dir`.
-fn t665_cached(dir: &Path) -> String {
+pub(crate) fn t665_cached(dir: &Path) -> String {
     t665_run(dir, &["diff", "--cached"])
 }
 
 /// Stdout of `git <args>` in `dir`, with the user's git config ignored.
-fn t665_run(dir: &Path, args: &[&str]) -> String {
+pub(crate) fn t665_run(dir: &Path, args: &[&str]) -> String {
     let out = std::process::Command::new("git")
         .current_dir(dir)
         .env(

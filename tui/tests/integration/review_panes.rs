@@ -95,3 +95,128 @@ fn clicks_and_wheel_map_onto_rows() {
     assert_ne!(app.editor.cursor_line(), 0);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+use super::git::{t634_git, t634_repo, t665_cached, t665_diff};
+use std::fs;
+
+/// Put the review cursor on the buffer row whose text is exactly `text`.
+fn cursor_to(app: &mut App, text: &str) {
+    let row = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .text()
+        .lines()
+        .position(|l| l == text)
+        .unwrap_or_else(|| panic!("no row {text:?}"));
+    app.editor.goto(row + 1, None, app.layout.editor);
+}
+
+/// A repo whose `a.txt` is committed as `a b c d` (one per line) and then
+/// edited in the working tree so one hunk holds `-b +b2 ... +e`.
+fn line_repo(name: &str) -> (std::path::PathBuf, App) {
+    let dir = t634_repo(name);
+    fs::write(dir.join("a.txt"), "a\nb\nc\nd\n").unwrap();
+    t634_git(&dir, &["add", "a.txt"]);
+    t634_git(&dir, &["commit", "-q", "-m", "four"]);
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "a\nb2\nc\nd\ne\n").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    (dir, app)
+}
+
+/// Stage Review Lines stages only the line under the cursor, or only the
+/// lines of a visual selection, through a reduced patch.
+#[test]
+fn stage_lines_stages_only_the_selected_lines() {
+    let (dir, mut app) = line_repo("t665lines-stage");
+    // The cursor on `+e`: just that line is staged.
+    cursor_to(&mut app, "+e");
+    app.run_action("git.review_stage_lines");
+    let cached = t665_cached(&dir);
+    assert!(cached.contains("+e") && !cached.contains("b2"), "{cached}");
+    // ("work" is not a range git can diff again, so the buffer is unchanged.)
+
+    // A visual selection of `-b` and `+b2` (two rows) stages the replacement.
+    cursor_to(&mut app, "-b");
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
+    app.run_action("git.review_stage_lines");
+    let cached = t665_cached(&dir);
+    assert!(cached.contains("-b") && cached.contains("+b2"), "{cached}");
+    assert!(t665_diff(&dir).is_empty(), "everything is staged now");
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// Nothing to stage: a context row, or no review, only says so.
+#[test]
+fn stage_lines_refuses_context_and_needs_a_review() {
+    let (dir, mut app) = line_repo("t665lines-refuse");
+    cursor_to(&mut app, " a");
+    app.run_action("git.review_stage_lines");
+    assert!(t665_cached(&dir).is_empty());
+    // Outside a review the actions only say so.
+    let mut plain = app_at(&dir);
+    plain.run_action("git.review_stage_lines");
+    plain.run_action("git.review_discard_lines");
+    assert!(plain.confirm.is_none() && plain.review.is_none());
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// Discard Review Lines asks first, undoes only the selected lines in the
+/// working tree, and shows git's reason (changing nothing) when the lines no
+/// longer match.
+#[test]
+fn discard_lines_confirms_then_reverts_only_those_lines() {
+    let (dir, mut app) = line_repo("t665lines-discard");
+    let file = dir.join("a.txt");
+    cursor_to(&mut app, "+e");
+    app.run_action("git.review_discard_lines");
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(vix::app::ConfirmKind::GitReviewDiscardLines)
+    );
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "a\nb2\nc\nd\ne\n");
+    app.run_action("git.review_discard_lines");
+    app.on_key(key('y'));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "a\nb2\nc\nd\n");
+
+    // The tree changed under the review: git refuses, the file is untouched
+    // and the reason is a message, not silence.
+    cursor_to(&mut app, "+b2");
+    fs::write(&file, "a\nzzz\nc\nd\n").unwrap();
+    let before = app.messages.items.len();
+    app.run_action("git.review_discard_lines");
+    app.on_key(key('y'));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "a\nzzz\nc\nd\n");
+    assert!(app.messages.items.len() > before, "git's reason is shown");
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
+
+/// A final line without a newline: selecting only one of its two copies is
+/// refused with a status, and nothing is staged.
+#[test]
+fn stage_lines_refuses_to_split_a_missing_final_newline() {
+    let dir = t634_repo("t665lines-nonl");
+    fs::write(dir.join("a.txt"), "one\ntwo").unwrap();
+    t634_git(&dir, &["add", "a.txt"]);
+    t634_git(&dir, &["commit", "-q", "-m", "nonl"]);
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+    app.open_review_from_diff("work", &t665_diff(&dir));
+    cursor_to(&mut app, "+two");
+    app.run_action("git.review_stage_lines");
+    assert!(t665_cached(&dir).is_empty(), "refused, nothing staged");
+    // Both copies together do stage, with the marker.
+    cursor_to(&mut app, "-two");
+    for _ in 0..4 {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
+    }
+    app.run_action("git.review_stage_lines");
+    assert!(t665_cached(&dir).contains("+three"), "{}", t665_cached(&dir));
+    fs::remove_dir_all(dir.parent().unwrap()).ok();
+}
