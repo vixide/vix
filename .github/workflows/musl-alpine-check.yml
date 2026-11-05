@@ -1,0 +1,33 @@
+# Manual-only confirmation of T670 on real x86_64 hardware: build the musl
+# release binary the way the release does, check it is static, and run it in an
+# Alpine container. Builds and runs only; uploads nothing, attaches nothing.
+# Run it from the Actions tab (workflow_dispatch). See spec/rust-cargo-config-toml-musl.
+name: musl Alpine check
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  alpine:
+    name: static musl binary runs on Alpine
+    runs-on: ubuntu-latest   # x86_64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: install musl tools (as dist's build setup does)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          echo "AR_x86_64-unknown-linux-musl=ar" >> "$GITHUB_ENV"
+      # The release builds with the `dist` profile; no RUSTFLAGS here, so the
+      # rustflags in .cargo/config.toml apply.
+      - name: build vix-tui (musl, dist profile)
+        run: cargo build --profile dist --locked -p vix-tui --target x86_64-unknown-linux-musl
+      - name: static check, then run on Alpine
+        run: sh scripts/check-alpine target/x86_64-unknown-linux-musl/dist/vix

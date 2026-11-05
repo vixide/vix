@@ -1,0 +1,42 @@
+#!/bin/sh
+# Run a musl-built vix binary in a real Alpine container (T670).
+#
+#   scripts/check-alpine PATH-TO-BINARY
+#
+# Prints `file`/`ldd` for the binary, then (after scripts/check-static-binary)
+# runs it in `alpine` with `--version` and `--doctor` (a headless self-check
+# that opens no terminal UI). Needs a `docker` CLI and daemon; on an x86_64
+# host with an x86_64 musl binary this is the real-hardware confirmation that
+# the static link works. Uploads nothing. VIX_CI_DRY_RUN=1 prints the docker
+# commands instead of running them.
+set -eu
+[ "$#" -eq 1 ] || { echo "usage: $0 PATH-TO-BINARY" >&2; exit 2; }
+bin=$1
+[ -f "$bin" ] || { echo "check-alpine: no such file: $bin" >&2; exit 2; }
+here=$(cd "$(dirname "$0")" && pwd)
+dir=$(cd "$(dirname "$bin")" && pwd)
+name=$(basename "$bin")
+
+echo "== file"
+file "$bin"
+echo "== ldd (expected: not a dynamic executable)"
+ldd "$bin" 2>&1 || true
+sh "$here/check-static-binary" "$bin"
+
+run() {
+	echo "+ $*" >&2
+	if [ "${VIX_CI_DRY_RUN:-0}" = 1 ]; then return 0; fi
+	"$@"
+}
+echo "== alpine: $name --version"
+run docker run --rm -v "$dir:/vix:ro" alpine:3 "/vix/$name" --version
+# Alpine has no git, so the doctor report may legitimately say so and exit 1;
+# only a crash (a signal exit, 128+, or a loader failure, 126/127) fails.
+echo "== alpine: $name --doctor"
+rc=0
+run docker run --rm -v "$dir:/vix:ro" alpine:3 "/vix/$name" --doctor || rc=$?
+if [ "$rc" -gt 1 ]; then
+	echo "FAIL: --doctor crashed in alpine (exit $rc)" >&2
+	exit 1
+fi
+echo "check-alpine: OK"

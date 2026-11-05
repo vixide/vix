@@ -8333,6 +8333,15 @@ widgets, and a markup-hiding Markdown "compose" mode.
     confirm the next release's musl archive passes the check and runs on
     Alpine, then the `.apk`/`.rpm` follow-ups below. Open question: dist's
     own build job has no check step (release.yml is generated).
+  - **Status 2026-11-05 (not marked done).** Added the manual-only
+    `.github/workflows/musl-alpine-check.yml` (`workflow_dispatch`): on an
+    x86_64 Ubuntu runner it builds `vix-tui` for `x86_64-unknown-linux-musl`
+    with the `dist` profile, then `scripts/check-alpine` prints `file`/`ldd`,
+    runs `scripts/check-static-binary`, and runs the binary in an `alpine:3`
+    container with `--version` and `--doctor` (exit 0 or 1 accepted: Alpine
+    has no git). **The run has not happened; T670 stays open until it
+    passes.** No Forgejo equivalent (not cheap: no Docker guarantee on the
+    Codeberg runner).
   - **After the fix:** add the `.apk` back to `scripts/build-linux-packages`,
     and use the static `vix-tui` for the x86_64 `.rpm`, so RHEL/Rocky 8 and
     9 work.

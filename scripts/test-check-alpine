@@ -1,0 +1,39 @@
+#!/bin/sh
+# Tests for scripts/check-alpine (T670). Needs no Docker: dry run only.
+#
+#     scripts/test-check-alpine
+set -u
+root=$(cd "$(dirname "$0")/.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+cd "$root" || exit 1
+s=scripts/check-alpine
+
+sh $s >"$work/o" 2>&1
+if [ $? -eq 2 ]; then ok "no args -> usage"; else bad "no args -> usage"; fi
+sh $s "$work/missing" >"$work/o" 2>&1
+if [ $? -eq 2 ]; then ok "missing file -> exit 2"; else bad "missing file -> exit 2"; fi
+
+# A non-ELF file is refused by the static check before docker is reached.
+printf '#!/bin/sh\n' >"$work/fake"
+VIX_CI_DRY_RUN=1 sh $s "$work/fake" >"$work/o" 2>&1
+rc=$?
+if [ $rc -ne 0 ] && ! grep -q 'docker run' "$work/o"; then ok "non-static refused before docker"; else bad "non-static refused before docker"; fi
+
+# With the static check stubbed (a copy of the script beside a stub), dry run.
+mkdir "$work/s"
+cp $s "$work/s/check-alpine"
+printf '#!/bin/sh\nexit 0\n' >"$work/s/check-static-binary"
+VIX_CI_DRY_RUN=1 sh "$work/s/check-alpine" "$work/fake" >"$work/o" 2>&1
+if [ $? -eq 0 ]; then ok "dry run succeeds"; else bad "dry run succeeds"; fi
+if grep -q 'docker run --rm -v .*:/vix:ro alpine:3 /vix/fake --version' "$work/o"; then ok "runs --version in alpine"; else bad "runs --version in alpine"; fi
+if grep -q -- '/vix/fake --doctor' "$work/o"; then ok "runs --doctor in alpine"; else bad "runs --doctor in alpine"; fi
+if grep -q 'check-alpine: OK' "$work/o"; then ok "prints OK"; else bad "prints OK"; fi
+
+if [ "$fails" -eq 0 ]; then echo "test-check-alpine: all passed"; else echo "test-check-alpine: $fails failed"; exit 1; fi

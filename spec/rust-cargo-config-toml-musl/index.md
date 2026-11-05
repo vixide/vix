@@ -52,3 +52,12 @@ fails if a binary is dynamically linked or has a `PT_INTERP`; it runs after
 the build in `release-minimal.yml` and over the musl release archive in
 `linux-packages.yml`. (A `RUSTFLAGS` environment variable replaces this
 config setting, so release jobs must not set one.)
+
+**Real-Alpine confirmation (T670).** `.github/workflows/musl-alpine-check.yml`
+is manual-only (`workflow_dispatch`). On an x86_64 Ubuntu runner it builds
+`vix-tui` for this target with the `dist` profile (no `RUSTFLAGS`), then runs
+`scripts/check-alpine`: `file` and `ldd` output, `scripts/check-static-binary`,
+and the binary in an `alpine:3` container with `--version` and `--doctor`
+(exit 0 or 1 accepted, since Alpine has no git). It uploads nothing.
+`scripts/test-check-alpine` tests the script without Docker. Not run yet; T670
+stays open until a run passes.
