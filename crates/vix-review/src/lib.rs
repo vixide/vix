@@ -844,10 +844,13 @@ fn flush_group(
     }
 }
 
+/// Char ranges `(start, end)` of a line's changed words.
+type Marks = Vec<(usize, usize)>;
+
 /// The char ranges of `old` and `new` that differ word by word, from
 /// `vix_diff_view::build` on the two lines. A side that differs from end to
 /// end gets none: marking every character says nothing.
-fn word_marks(old: &str, new: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+fn word_marks(old: &str, new: &str) -> (Marks, Marks) {
     use vix_diff_view::Kind;
     let lines = vix_diff_view::build(&format!("{old}\n"), &format!("{new}\n"));
     let pick = |kind: Kind, text: &str| -> Vec<(usize, usize)> {

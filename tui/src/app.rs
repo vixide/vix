@@ -9657,7 +9657,6 @@ impl App {
                 .editor
                 .focus_pane_at(self.layout.editor_region, col, row)
         {
-            self.focus = Focus::Editor;
             self.refresh_focused_pane_rect();
             self.editor_mouse(mouse);
             return;
@@ -9958,6 +9957,7 @@ impl App {
     /// next draw) at that pane's text area, the same rectangle `draw_pane`
     /// gives it.
     fn refresh_focused_pane_rect(&mut self) {
+        self.focus = Focus::Editor;
         let focused = self.editor.focused_leaf();
         let region = self.layout.editor_region;
         let Some(pane) = self

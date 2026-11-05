@@ -146,7 +146,7 @@ fn stage_lines_stages_only_the_selected_lines() {
     app.run_action("git.review_stage_lines");
     let cached = t665_cached(&dir);
     assert!(cached.contains("-b") && cached.contains("+b2"), "{cached}");
-    assert!(t665_diff(&dir).is_empty(), "everything is staged now");
+    assert_eq!(t665_diff(&dir), "", "everything is staged now");
     fs::remove_dir_all(dir.parent().unwrap()).ok();
 }
 
@@ -156,7 +156,7 @@ fn stage_lines_refuses_context_and_needs_a_review() {
     let (dir, mut app) = line_repo("t665lines-refuse");
     cursor_to(&mut app, " a");
     app.run_action("git.review_stage_lines");
-    assert!(t665_cached(&dir).is_empty());
+    assert_eq!(t665_cached(&dir), "");
     // Outside a review the actions only say so.
     let mut plain = app_at(&dir);
     plain.run_action("git.review_stage_lines");
@@ -211,7 +211,7 @@ fn stage_lines_refuses_to_split_a_missing_final_newline() {
     app.open_review_from_diff("work", &t665_diff(&dir));
     cursor_to(&mut app, "+two");
     app.run_action("git.review_stage_lines");
-    assert!(t665_cached(&dir).is_empty(), "refused, nothing staged");
+    assert_eq!(t665_cached(&dir), "", "refused, nothing staged");
     // Both copies together do stage, with the marker.
     cursor_to(&mut app, "-two");
     for _ in 0..4 {

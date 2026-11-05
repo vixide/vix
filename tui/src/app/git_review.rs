@@ -453,15 +453,15 @@ impl App {
         let Some(sel) = self.review_line_selection() else {
             return;
         };
-        let Some((patch, path)) = self.review_lines_patch(&sel, LineMode::Stage) else {
+        let Some((reduced, file)) = self.review_lines_patch(&sel, LineMode::Stage) else {
             return;
         };
-        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::Index) {
+        match crate::git::apply_patch(&self.root, &reduced, crate::git::ApplyTarget::Index) {
             Ok(()) => {
                 self.status = t!(
                     "status.git_review_staged_lines",
                     count = sel.lines.len(),
-                    path = path
+                    path = file
                 )
                 .to_string();
                 self.refresh_git();
@@ -526,15 +526,19 @@ impl App {
         let (true, Some(sel)) = (yes, pending) else {
             return;
         };
-        let Some((patch, path)) = self.review_lines_patch(&sel, LineMode::Discard) else {
+        let Some((reduced, file)) = self.review_lines_patch(&sel, LineMode::Discard) else {
             return;
         };
-        match crate::git::apply_patch(&self.root, &patch, crate::git::ApplyTarget::RevertWorktree) {
+        match crate::git::apply_patch(
+            &self.root,
+            &reduced,
+            crate::git::ApplyTarget::RevertWorktree,
+        ) {
             Ok(()) => {
                 self.status = t!(
                     "status.git_review_discarded_lines",
                     count = sel.lines.len(),
-                    path = path
+                    path = file
                 )
                 .to_string();
                 self.reload_clean_buffers();
