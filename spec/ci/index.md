@@ -83,7 +83,7 @@ deliberately copied into each file, which is a standing risk of drift.
 
 | Job | What it runs |
 | --- | --- |
-| `fmt`, `clippy`, `build`, `test` | `cargo fmt --check`; pedantic clippy `-D warnings`; build all targets; the tests (nextest plus doctests when `cargo-nextest` is installed, else `cargo test`) |
+| `fmt`, `clippy`, `build`, `test` | `cargo fmt --check`; pedantic clippy `-D warnings`; build all targets; the tests (nextest plus doc tests when `cargo-nextest` is installed, else `cargo test`) |
 | `examples`, `doc`, `reference-docs`, `man-page`, `licenses` | the headless examples (T505); rustdoc with warnings denied; the generated references and man page are current (T305, T307); the per-binary license check (T648) |
 | `check` | all of the above in order: the one Linux job on every push (T762) |
 | `feature-combos` | every feature combination (T587), run on the schedule and on tags |
