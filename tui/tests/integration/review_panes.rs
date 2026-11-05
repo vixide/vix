@@ -72,6 +72,7 @@ fn clicks_and_wheel_map_onto_rows() {
             app.editor.top_visible_line(),
             app.editor.cursor_line(),
             4,
+            |_| 1,
         )
     };
     let before = start(&app);
@@ -265,5 +266,59 @@ fn two_pane_highlights_the_changed_words_of_paired_lines() {
     assert!(reversed(at("slow")), "the new word is marked");
     assert!(!reversed(at("the ")), "unchanged words are not");
     assert!(!reversed(at("fox")), "unchanged words are not");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// With soft wrap on, a long line wraps within its own pane: the short side
+/// is padded so the next pair still starts on the same screen row for both
+/// panes, a click on a continuation line lands on the line's row, and with
+/// wrap off the line is cut.
+#[test]
+fn two_pane_wraps_long_lines_and_keeps_rows_aligned() {
+    let dir = unique_dir("review-wrap");
+    let mut app = app_at(&dir);
+    app.settings.review_view = "side_by_side".to_string();
+    let long = format!("{}END", "w".repeat(150));
+    let diff = format!(
+        "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,3 +1,3 @@\n keep\n-{long}\n+short\n tail\n"
+    );
+    app.open_review_from_diff("a..b", &diff);
+
+    // Off: the line is cut, the end is not drawn anywhere.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_soft_wrap(false);
+    assert!(
+        !frame_rows(&mut app, 200, 30)
+            .iter()
+            .any(|r| r.contains("END"))
+    );
+
+    // On: the end shows on a later screen row, and `tail` still follows.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_soft_wrap(true);
+    let rows = frame_rows(&mut app, 200, 30);
+    let first = rows.iter().position(|r| r.contains("short")).unwrap();
+    let last = rows.iter().position(|r| r.contains("END")).unwrap();
+    let tail = rows.iter().position(|r| r.contains("tail")).unwrap();
+    assert!(last > first, "the wrapped end is on a continuation row");
+    assert!(tail > last, "the next pair starts below the wrapped row");
+    // Both `tail` cells are on that one row (aligned).
+    assert_eq!(rows[tail].matches("tail").count(), 2);
+    // The short side's continuation rows are blank on the right.
+    assert!(!rows[last].contains("short"));
+
+    // Clicking the continuation line, left half, is the removed line's row.
+    let area = app.layout.editor;
+    app.on_mouse(click(area.x + 8, u16::try_from(last).unwrap()));
+    assert_eq!(cursor_text(&app), format!("-{long}"));
+    // ... and the right half there is the added line's.
+    app.on_mouse(click(area.x + area.width - 8, u16::try_from(last).unwrap()));
+    assert_eq!(cursor_text(&app), "+short");
     std::fs::remove_dir_all(&dir).ok();
 }

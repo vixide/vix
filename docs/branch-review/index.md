@@ -81,7 +81,10 @@ leaves the other side blank. Where a removed line and an added line are paired, 
 drawn reversed on both sides, so a one-word edit is easy to spot. Comments
 appear under their group. The cursor,
 hunk navigation, commenting and staging work as in the inline view, and both
-views scroll together. When the editor is narrower than 60 columns the inline
+views scroll together. With **View → Soft Wrap** on, long lines wrap within their own side and the
+shorter side is padded, so the two sides stay on the same rows; with it off
+they are cut at the edge. A click on a wrapped line's later row is a click on
+that line. When the editor is narrower than 60 columns the inline
 view shows instead. The `review_view` setting (`"inline"`, the default, or
 `"side_by_side"`) chooses the view a review opens in.
 

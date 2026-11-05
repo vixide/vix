@@ -11,6 +11,7 @@ description = "Review a branch, a commit range, a commit or a stash as one multi
 serde = { workspace = true }
 vix-diff-view = { workspace = true }
 serde_json = { workspace = true }
+unicode-width = { workspace = true }
 
 [lints]
 workspace = true

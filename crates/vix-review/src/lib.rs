@@ -88,6 +88,34 @@ pub struct FileDiff {
 /// drawn; below it the host falls back to the inline buffer.
 pub const MIN_SIDE_BY_SIDE_WIDTH: u16 = 60;
 
+/// Columns the line number takes at the start of a pair cell (`"{:>4} "`);
+/// the text of a cell gets the cell's width minus this.
+pub const GUTTER: usize = 5;
+
+/// Split `text` into pieces of at most `width` display columns, as char
+/// ranges `(start, end)` into `text`. Empty text is one empty piece, so a
+/// wrapped line is never zero rows tall. A character wider than `width` gets a
+/// piece of its own.
+#[must_use]
+pub fn wrap_text(text: &str, width: usize) -> Vec<(usize, usize)> {
+    use unicode_width::UnicodeWidthChar;
+    let width = width.max(1);
+    let mut out = Vec::new();
+    let (mut start, mut used, mut count) = (0usize, 0usize, 0usize);
+    for ch in text.chars() {
+        let w = ch.width().unwrap_or(0);
+        if used > 0 && used + w > width {
+            out.push((start, count));
+            start = count;
+            used = 0;
+        }
+        used += w;
+        count += 1;
+    }
+    out.push((start, count));
+    out
+}
+
 /// One side of a two-pane row: a numbered line of the old or new file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cell {
@@ -161,7 +189,69 @@ pub struct SideBySide {
     pub rows: Vec<PaneRow>,
 }
 
+impl PaneRow {
+    /// How many screen lines this row takes when each pair cell is wrapped
+    /// within its pane (`left` and `right` columns wide, as
+    /// [`SideBySide::halves`] gives); the longer side decides and the shorter
+    /// is padded. Headings and comments stay one line (they are cut).
+    #[must_use]
+    pub fn height(&self, left: usize, right: usize) -> usize {
+        let PaneKind::Pair { left: l, right: r } = &self.kind else {
+            return 1;
+        };
+        let lines = |c: &Option<Cell>, w: usize| {
+            c.as_ref()
+                .map_or(1, |c| wrap_text(&c.text, w.saturating_sub(GUTTER)).len())
+        };
+        lines(l, left).max(lines(r, right))
+    }
+}
+
 impl SideBySide {
+    /// Screen lines of row `index` in a view `width` columns wide: its
+    /// wrapped height when `wrap` is on, else 1. A missing row is 1.
+    #[must_use]
+    pub fn row_height(&self, index: usize, width: usize, wrap: bool) -> usize {
+        if !wrap {
+            return 1;
+        }
+        let (l, r) = Self::halves(width);
+        self.rows.get(index).map_or(1, |row| row.height(l, r))
+    }
+
+    /// The row under screen line `y` of a view that starts at row `first`,
+    /// and which line of that row it is (0 for its first line); `None` past
+    /// the last row. `row_height` gives each row's screen lines.
+    #[must_use]
+    pub fn row_at(
+        &self,
+        first: usize,
+        y: usize,
+        row_height: impl Fn(usize) -> usize,
+    ) -> Option<(usize, usize)> {
+        let mut top = 0;
+        for index in first..self.rows.len() {
+            let h = row_height(index).max(1);
+            if y < top + h {
+                return Some((index, y - top));
+            }
+            top += h;
+        }
+        None
+    }
+
+    /// The largest first row that still fills a view `height` lines tall with
+    /// rows to the end (0 when everything fits), for bounding the wheel.
+    #[must_use]
+    pub fn last_first(&self, height: usize, row_height: impl Fn(usize) -> usize) -> usize {
+        let (mut index, mut used) = (self.rows.len(), 0);
+        while index > 0 && used + row_height(index - 1).max(1) <= height {
+            index -= 1;
+            used += row_height(index).max(1);
+        }
+        index.min(self.rows.len().saturating_sub(1))
+    }
+
     /// Index of the first row that covers inline row `inline` or comes after
     /// it; the last row when `inline` is past the end. This is how the two
     /// views stay scroll-synced.
@@ -182,17 +272,31 @@ impl SideBySide {
         (left, usable - left)
     }
 
-    /// The first row to show in a view `height` rows tall: the row for the
-    /// buffer's top line `top_inline`, moved only as far as needed to keep the
-    /// row of `cursor` (an inline row) inside the view.
+    /// The first row to show in a view `height` screen lines tall: the row
+    /// for the buffer's top line `top_inline`, moved only as far as needed to
+    /// keep the row of `cursor` (an inline row) inside the view. `row_height`
+    /// gives the screen lines of a row (see [`Self::row_height`]).
     #[must_use]
-    pub fn view_start(&self, top_inline: usize, cursor: usize, height: usize) -> usize {
+    pub fn view_start(
+        &self,
+        top_inline: usize,
+        cursor: usize,
+        height: usize,
+        row_height: impl Fn(usize) -> usize,
+    ) -> usize {
         let mut first = self.row_for_inline(top_inline);
         let selected = self.row_for_inline(cursor);
         if selected < first {
-            first = selected;
-        } else if height > 0 && selected >= first + height {
-            first = selected + 1 - height;
+            return selected;
+        }
+        if height == 0 {
+            return first;
+        }
+        // Screen lines of the rows from `first` down to the cursor's row.
+        let mut used: usize = (first..=selected).map(|i| row_height(i).max(1)).sum();
+        while used > height && first < selected {
+            used -= row_height(first).max(1);
+            first += 1;
         }
         first
     }
@@ -1429,6 +1533,48 @@ mod tests {
             two.select_rows(&out, 0, out.targets.len() - 1),
             Err(SelectError::SpansHunks)
         );
+    }
+
+    #[test]
+    fn wrap_text_splits_by_display_width() {
+        assert_eq!(wrap_text("", 5), vec![(0, 0)]);
+        assert_eq!(wrap_text("abc", 5), vec![(0, 3)]);
+        assert_eq!(wrap_text("abcdefgh", 3), vec![(0, 3), (3, 6), (6, 8)]);
+        // Wide characters take two columns and are never split.
+        assert_eq!(wrap_text("日本語", 5), vec![(0, 2), (2, 3)]);
+        // Nothing fits in zero columns: one character per piece.
+        assert_eq!(wrap_text("ab", 0), vec![(0, 1), (1, 2)]);
+    }
+
+    #[test]
+    fn wrapped_rows_are_as_tall_as_their_longer_side() {
+        let long = "x".repeat(30);
+        let d = format!(
+            "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,3 +1,3 @@\n keep\n-{long}\n+short\n tail\n"
+        );
+        let sbs = Review::new("r", &d).side_by_side();
+        let (l, r) = SideBySide::halves(20); // 9 and 10 columns: 4 and 5 for text
+        let heights: Vec<usize> = sbs.rows.iter().map(|row| row.height(l, r)).collect();
+        // title, blank-less heading rows are 1; the long pair takes ceil(30/4).
+        assert!(heights.contains(&8), "{heights:?}");
+        assert_eq!(sbs.row_height(0, 20, false), 1);
+        let pair = heights.iter().position(|&h| h == 8).unwrap();
+        assert_eq!(sbs.row_height(pair, 20, true), 8);
+        // row_at walks lines, last_first fills the view to the end.
+        let h = |i: usize| sbs.row_height(i, 20, true);
+        assert_eq!(sbs.row_at(pair, 0, h), Some((pair, 0)));
+        assert_eq!(sbs.row_at(pair, 7, h), Some((pair, 7)));
+        assert_eq!(sbs.row_at(pair, 8, h), Some((pair + 1, 0)));
+        assert_eq!(sbs.row_at(0, 10_000, h), None);
+        assert_eq!(sbs.last_first(100, h), 0);
+        let lf = sbs.last_first(9, h);
+        assert!((lf..sbs.rows.len()).map(h).sum::<usize>() <= 9);
+        assert!(lf == 0 || (lf - 1..sbs.rows.len()).map(h).sum::<usize>() > 9);
+        // The view keeps a tall cursor row in sight.
+        let cursor = sbs.rows[pair].last;
+        let first = sbs.view_start(0, cursor, 9, h);
+        assert!((first..=pair).map(h).sum::<usize>() <= 9);
+        assert!(first <= pair);
     }
 
     #[test]

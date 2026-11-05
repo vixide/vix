@@ -1,15 +1,17 @@
 //! The two-pane (side-by-side) branch review (T665): old text on the left,
 //! new text on the right, aligned per hunk. The layout (pairing, blank
-//! cells, which inline row each row stands for) is `vix_review::SideBySide`;
-//! this file only paints it. The inline buffer stays the source of the cursor
-//! and of scrolling: the view starts at the row for the buffer's top line and
-//! moves just far enough to keep the cursor's row in sight, so the two panes
-//! scroll together.
+//! cells, wrapping, which inline row each row stands for) is
+//! `vix_review::SideBySide`; this file only paints it. The inline buffer stays
+//! the source of the cursor and of scrolling: the view starts at the row for
+//! the buffer's top line and moves just far enough to keep the cursor's row
+//! in sight, so the two panes scroll together. With the editor's soft wrap on
+//! a long line wraps within its pane and the shorter side is padded, so the
+//! panes stay row-aligned.
 
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthChar;
-use vix_review::{Cell, LineKind, PaneKind, PaneRow, SideBySide};
+use vix_review::{Cell, GUTTER, LineKind, PaneKind, PaneRow, SideBySide, wrap_text};
 
 use crate::app::App;
 use crate::theme;
@@ -24,25 +26,28 @@ pub(super) fn draw_review_panes(app: &App, frame: &mut Frame, area: Rect) -> boo
     if area.height == 0 {
         return true;
     }
+    let wrap = app.review_wrap();
+    let (width, height) = (usize::from(area.width), usize::from(area.height));
     let cursor = app.editor.cursor_line();
-    let top_inline = app.editor.top_visible_line();
-    let first = panes.view_start(top_inline, cursor, usize::from(area.height));
-    let lines: Vec<Line> = panes
-        .rows
-        .iter()
-        .skip(first)
-        .take(usize::from(area.height))
-        .map(|row| {
-            let here = row.first <= cursor && cursor <= row.last;
-            row_line(row, usize::from(area.width), here)
-        })
-        .collect();
+    let first = panes.view_start(app.editor.top_visible_line(), cursor, height, |i| {
+        panes.row_height(i, width, wrap)
+    });
+    let mut lines: Vec<Line> = Vec::new();
+    for row in panes.rows.iter().skip(first) {
+        if lines.len() >= height {
+            break;
+        }
+        let here = row.first <= cursor && cursor <= row.last;
+        lines.extend(row_lines(row, width, here, wrap));
+    }
+    lines.truncate(height);
     frame.render_widget(Paragraph::new(lines).style(theme::base()), area);
     true
 }
 
-/// One painted row, `width` columns wide.
-fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
+/// The painted screen lines of one row, `width` columns wide: one, or with
+/// `wrap` as many as the longer side of a pair needs.
+fn row_lines(row: &PaneRow, width: usize, here: bool, wrap: bool) -> Vec<Line<'static>> {
     let mark = if here {
         Modifier::BOLD | Modifier::UNDERLINED
     } else {
@@ -50,32 +55,55 @@ fn row_line(row: &PaneRow, width: usize, here: bool) -> Line<'static> {
     };
     match &row.kind {
         PaneKind::Pair { left, right } => {
-            let (half, rest) = SideBySide::halves(width);
-            Line::from(
-                [
-                    cell_spans(left.as_ref(), half, mark),
-                    vec![Span::styled("│", theme::dim())],
-                    cell_spans(right.as_ref(), rest, mark),
-                ]
-                .concat(),
-            )
+            let (l, r) = SideBySide::halves(width);
+            let count = if wrap { row.height(l, r) } else { 1 };
+            (0..count)
+                .map(|k| {
+                    Line::from(
+                        [
+                            cell_spans(left.as_ref(), l, k, wrap, mark),
+                            vec![Span::styled("│", theme::dim())],
+                            cell_spans(right.as_ref(), r, k, wrap, mark),
+                        ]
+                        .concat(),
+                    )
+                })
+                .collect()
         }
-        PaneKind::Comment => Line::from(Span::styled(
+        PaneKind::Comment => vec![Line::from(Span::styled(
             fit(&row.text, width),
             theme::dim().add_modifier(Modifier::ITALIC | mark),
-        )),
-        _ => Line::from(Span::styled(
+        ))],
+        _ => vec![Line::from(Span::styled(
             fit(&row.text, width),
             Style::default().add_modifier(Modifier::BOLD | mark),
-        )),
+        ))],
     }
 }
 
-/// One half of a pair row: line number and text, padded or cut to `width`.
-/// Words that differ from the paired line (`Cell::marks`) are drawn reversed.
-fn cell_spans(cell: Option<&Cell>, width: usize, mark: Modifier) -> Vec<Span<'static>> {
+/// Screen line `k` of one half of a pair row: the line number (blank on
+/// continuation lines) and its slice of the text, padded or cut to `width`.
+/// With `wrap` the text is split with `wrap_text`; without it line 0 holds
+/// the whole text, cut. Words that differ from the paired line
+/// (`Cell::marks`) are drawn reversed.
+fn cell_spans(
+    cell: Option<&Cell>,
+    width: usize,
+    k: usize,
+    wrap: bool,
+    mark: Modifier,
+) -> Vec<Span<'static>> {
+    let blank = || vec![Span::styled(" ".repeat(width), theme::dim())];
     let Some(c) = cell else {
-        return vec![Span::styled(" ".repeat(width), theme::dim())];
+        return blank();
+    };
+    let (from, to) = if wrap {
+        match wrap_text(&c.text, width.saturating_sub(GUTTER)).get(k) {
+            Some(&range) => range,
+            None => return blank(),
+        }
+    } else {
+        (0, usize::MAX)
     };
     let base = match c.kind {
         LineKind::Removed => Style::default().fg(Color::Red),
@@ -84,7 +112,12 @@ fn cell_spans(cell: Option<&Cell>, width: usize, mark: Modifier) -> Vec<Span<'st
     }
     .add_modifier(mark);
     let strong = base.add_modifier(Modifier::REVERSED | Modifier::BOLD);
-    let prefix = cut(&format!("{:>4} ", c.number), width);
+    let gutter = if k == 0 {
+        format!("{:>4} ", c.number)
+    } else {
+        " ".repeat(GUTTER)
+    };
+    let prefix = cut(&gutter, width);
     let mut used = prefix
         .chars()
         .map(|ch| ch.width().unwrap_or(0))
@@ -92,7 +125,13 @@ fn cell_spans(cell: Option<&Cell>, width: usize, mark: Modifier) -> Vec<Span<'st
     let mut spans = vec![Span::styled(prefix, base)];
     let mut run = String::new();
     let mut run_marked = false;
-    for (i, ch) in c.text.chars().enumerate() {
+    for (i, ch) in c
+        .text
+        .chars()
+        .enumerate()
+        .skip(from)
+        .take(to - from.min(to))
+    {
         let w = ch.width().unwrap_or(0);
         if used + w > width {
             break;
@@ -158,9 +197,54 @@ mod tests {
         let panes = Review::new("r", DIFF).side_by_side();
         let last = panes.rows.last().unwrap().last;
         // Top of the buffer, cursor at the end, three rows of room.
-        let first = panes.view_start(0, last, 3);
+        let first = panes.view_start(0, last, 3, |_| 1);
         assert_eq!(first, panes.rows.len() - 3);
         // Cursor already in view: the view stays where the buffer's top is.
-        assert_eq!(panes.view_start(0, 0, 3), 0);
+        assert_eq!(panes.view_start(0, 0, 3, |_| 1), 0);
+    }
+
+    #[test]
+    fn a_wrapped_cell_continues_on_blank_gutter_lines() {
+        let text = |spans: Vec<Span<'static>>| {
+            spans.iter().map(|s| s.content.as_ref()).collect::<String>()
+        };
+        let cell = Cell {
+            number: 7,
+            text: "abcdefghij".to_string(),
+            kind: LineKind::Added,
+            inline: 0,
+            marks: vec![(4, 6)],
+        };
+        // Width 9: five columns of gutter, four of text.
+        assert_eq!(
+            text(cell_spans(Some(&cell), 9, 0, true, Modifier::empty())),
+            "   7 abcd"
+        );
+        assert_eq!(
+            text(cell_spans(Some(&cell), 9, 1, true, Modifier::empty())),
+            "     efgh"
+        );
+        assert_eq!(
+            text(cell_spans(Some(&cell), 9, 2, true, Modifier::empty())),
+            "     ij  "
+        );
+        // Past the last piece the cell is blank, so the other side can go on.
+        assert_eq!(
+            text(cell_spans(Some(&cell), 9, 3, true, Modifier::empty())),
+            "         "
+        );
+        // Not wrapped: one cut line.
+        assert_eq!(
+            text(cell_spans(Some(&cell), 9, 0, false, Modifier::empty())),
+            "   7 abcd"
+        );
+        // The marked chars (4..6) are the reversed span on the second piece.
+        let second = cell_spans(Some(&cell), 9, 1, true, Modifier::empty());
+        let reversed: String = second
+            .iter()
+            .filter(|s| s.style.add_modifier.contains(Modifier::REVERSED))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(reversed, "ef");
     }
 }

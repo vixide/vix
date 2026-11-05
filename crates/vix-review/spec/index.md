@@ -131,6 +131,21 @@ mouse), `halves(width)` the pane widths, `inline_at(row, Half)` the inline row
 a click on a half stands for (each `Cell` records its own `inline` row) and
 `top_for_row(row)` the inline top line that makes a row the first shown.
 
+**Wrapping.** With the editor's soft wrap on (View → Soft Wrap, the review
+tab's `soft_wrap_enabled`; there is no separate setting) a pair cell wraps
+within its pane: `wrap_text(text, width - GUTTER)` splits it into char ranges
+by display width (`GUTTER` is the 5 columns of line number), the first piece
+carries the number and the rest a blank gutter. `PaneRow::height(left, right)`
+is the longer side's piece count, the shorter side is padded with blank
+cells, and so both panes stay row-aligned. Headings and comment rows are not
+wrapped (they are cut). With wrap off every row is one line and long text is
+cut. The pieces keep the word marks (a mark is a range of the whole text).
+Everything that maps rows to screen lines goes through a `row_height`
+function (`SideBySide::row_height(index, width, wrap)`): `view_start` keeps
+the cursor's whole row in the view, `row_at(first, y, ..)` finds the row (and
+which of its lines) under a screen line, which makes a click on a continuation
+line mean its row, and `last_first(height, ..)` bounds the wheel.
+
 **Word marks.** Where a removed line is zipped with an added line, `Cell::marks`
 holds the char ranges that differ word by word, taken from
 `vix_diff_view::build` run on the two lines (the same word-level emphasis

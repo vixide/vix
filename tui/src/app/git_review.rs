@@ -647,9 +647,11 @@ impl App {
             return false;
         }
         let panes = &state.panes;
-        let height = usize::from(area.height);
+        let (width, height) = (usize::from(area.width), usize::from(area.height));
+        let wrap = self.review_wrap();
+        let rh = |i: usize| panes.row_height(i, width, wrap);
         let (top, cursor) = (self.editor.top_visible_line(), self.editor.cursor_line());
-        let first = panes.view_start(top, cursor, height);
+        let first = panes.view_start(top, cursor, height, rh);
         // The target: a cursor inline row and the inline top to scroll to.
         let (new_cursor, new_top) = match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
@@ -660,8 +662,12 @@ impl App {
                 if !inside {
                     return true;
                 }
-                let index = first + usize::from(mouse.row - area.y);
-                let (left, _) = vix_review::SideBySide::halves(usize::from(area.width));
+                // A click on a wrapped continuation line is on its row.
+                let Some((index, _)) = panes.row_at(first, usize::from(mouse.row - area.y), rh)
+                else {
+                    return true;
+                };
+                let (left, _) = vix_review::SideBySide::halves(width);
                 let half = if usize::from(mouse.column - area.x) < left {
                     vix_review::Half::Left
                 } else {
@@ -673,7 +679,7 @@ impl App {
                 (line, top)
             }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-                let last_first = panes.rows.len().saturating_sub(height.max(1));
+                let last_first = panes.last_first(height, rh);
                 let moved = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
                     first.saturating_sub(1)
                 } else {
@@ -681,7 +687,15 @@ impl App {
                 };
                 // Keep the cursor's row inside the new view.
                 let selected = panes.row_for_inline(cursor);
-                let clamped = selected.clamp(moved, (moved + height.max(1) - 1).max(moved));
+                let (mut used, mut visible_last) = (0, moved);
+                for i in moved..panes.rows.len() {
+                    used += rh(i).max(1);
+                    if used > height && i > moved {
+                        break;
+                    }
+                    visible_last = i;
+                }
+                let clamped = selected.clamp(moved, visible_last);
                 let line = if clamped == selected {
                     cursor
                 } else {
@@ -701,6 +715,15 @@ impl App {
         }
         self.focus = super::Focus::Editor;
         true
+    }
+
+    /// Whether the two-pane review wraps long lines: the editor's soft wrap
+    /// (View → Soft Wrap) on the review tab.
+    #[must_use]
+    pub fn review_wrap(&self) -> bool {
+        self.editor
+            .active_tab()
+            .is_some_and(|t| t.editor.soft_wrap_enabled())
     }
 
     /// The two-pane layout to draw into a text area `width` columns wide, or
