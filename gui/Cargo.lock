@@ -11770,6 +11770,7 @@ dependencies = [
 name = "vix-dap"
 version = "2.0.0"
 dependencies = [
+ "bitflags 2.13.2",
  "serde_json",
  "vix-authority",
  "vix-lsp-core",
