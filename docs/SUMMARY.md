@@ -131,6 +131,7 @@
 - [Architecture](architecture/index.md)
 - [Comparison with Other Editors](comparison/index.md)
 - [Performance](performance/index.md)
+- [Local Linux and Windows Checks](local-ci/index.md)
 - [Specification Index](spec-overview.md)
 - [Crate Map](crate-map.md)
 - [Glossary](glossary.md)

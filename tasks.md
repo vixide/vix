@@ -9710,10 +9710,18 @@ the maintainer's decisions.
   failures were not reproduced here (a small crate builds fine through it) so
   the root cause is unverified; no timing of kache versus clean-room gate
   was measured; the target-dir count advice is a judgment, not a benchmark.
-- [ ] **T765 — Local Linux and Windows coverage.** A `scripts/check-linux`
+- [x] **T765 — Local Linux and Windows coverage.** A `scripts/check-linux`
   that runs the `push` tier in a container (Docker, Colima or OrbStack) for
   the Linux-only behavior a Mac misses; a documented Windows VM recipe;
   hosted Windows stays on tags and nightly. **Medium.**
+  Done 2026-11-05: `scripts/check-linux` (`--tier`, `--shell`, dry run via
+  `VIX_CI_DRY_RUN=1`), `scripts/test-check-linux` in the `push` tier, the
+  Windows VM recipe in `docs/local-ci`, specs in `spec/local-ci` and
+  `spec/ci`. Honest limits: the Docker daemon was not running when this was
+  written, so the container was never run (the Dockerfile, volume ownership
+  and in-container steps are untested; only the generated command and error
+  paths are tested); the Windows recipe has not been run on real Windows
+  hardware; the image defaults to the MSRV toolchain, not stable.
 - [x] **T766 — Local release path.** `scripts/release-local` builds the three
   targets (the `Makefile` already does so from a Mac), checksums them,
   SSH-signs the checksums and uploads with `gh` and `tea`; `release.yml`

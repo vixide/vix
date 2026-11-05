@@ -774,3 +774,8 @@ kache
 sccache
 DYLD
 signingkey
+Colima
+OrbStack
+Parallels
+bookworm
+Rustlang

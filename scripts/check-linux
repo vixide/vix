@@ -1,0 +1,198 @@
+#!/bin/sh
+# Run the Vix gate on Linux, from a Mac, inside a container (T765;
+# spec/local-ci "Local Linux and Windows coverage").
+#
+#   scripts/check-linux [--tier fast|push|full] [--shell]
+#
+# The default tier is `push`: it covers what a Mac misses on Linux (case
+# sensitive paths, glibc, no macOS frameworks) without the hour-long
+# each-feature step. `--shell` opens an interactive shell in the same
+# container, with the repository copied in, for debugging.
+#
+# Needs the `docker` CLI talking to a running daemon: Docker Desktop, Colima
+# (`colima start`) or OrbStack all provide it. Nothing is installed for you.
+#
+# What it does and does not do:
+#   - The image is built locally from a generated Dockerfile (no build context)
+#     on the official rust image whose version is `rust-version` in
+#     Cargo.toml (the MSRV), plus clippy, rustfmt and the few system tools the
+#     gate needs. Override with VIX_LINUX_RUST=<version> or VIX_LINUX_IMAGE.
+#   - The repository is mounted READ-ONLY at /src and copied (without target/
+#     and .git) into a named volume where a throwaway git repository is made,
+#     because the gate runs `git diff` on the generated docs. Your working tree
+#     is never written.
+#   - target/, the cargo registry and the copy live in named volumes
+#     (vix-check-linux-*), so reruns are incremental. `docker volume rm` them
+#     to start clean.
+#   - It runs as your uid:gid, never root, and mounts nothing else: not ~/.ssh,
+#     not the git config, not any credentials, not the Docker socket. The only
+#     network use at run time is cargo fetching crates; building the image once
+#     also reaches apt and rustup.
+#   - It runs `scripts/check --tier <tier>` from the copy. It is a Linux
+#     confidence check, not an attestation: scripts/attest still wants a full
+#     run on the maintainer's machine. Hosted macOS and Windows stay on tags
+#     and the weekly schedule (T762).
+#
+# VIX_CI_DRY_RUN=1 prints the commands instead of running them.
+# VIX_CONTAINER_CLI=<cli> picks the CLI (default: docker).
+set -eu
+
+usage() {
+	echo "usage: scripts/check-linux [--tier fast|push|full] [--shell]" >&2
+	echo "  --tier T   gate tier to run in the container (default: push)" >&2
+	echo "  --shell    open a shell in the container instead of running the gate" >&2
+}
+
+tier=push
+shell=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--tier)
+		if [ $# -lt 2 ]; then
+			echo "scripts/check-linux: --tier needs a value" >&2
+			usage
+			exit 2
+		fi
+		tier=$2
+		shift 2
+		;;
+	--tier=*)
+		tier=${1#--tier=}
+		shift
+		;;
+	--shell)
+		shell=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "scripts/check-linux: unknown argument '$1'" >&2
+		usage
+		exit 2
+		;;
+	esac
+done
+case "$tier" in
+fast | push | full) ;;
+*)
+	echo "scripts/check-linux: unknown tier '$tier'" >&2
+	usage
+	exit 2
+	;;
+esac
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+case "$root" in
+*[[:space:]]*)
+	echo "scripts/check-linux: the repository path contains whitespace; move it" >&2
+	exit 1
+	;;
+esac
+dry=${VIX_CI_DRY_RUN:-0}
+cli=${VIX_CONTAINER_CLI:-docker}
+
+# The pinned toolchain: the workspace MSRV unless overridden.
+rust=${VIX_LINUX_RUST:-}
+if [ -z "$rust" ]; then
+	rust=$(sed -n 's/^rust-version *= *"\([0-9.]*\)".*/\1/p' "$root/Cargo.toml" | head -n 1)
+fi
+if [ -z "$rust" ]; then
+	echo "scripts/check-linux: cannot read rust-version from Cargo.toml (set VIX_LINUX_RUST)" >&2
+	exit 1
+fi
+base="rust:$rust-bookworm"
+image=${VIX_LINUX_IMAGE:-vix-check-linux:$rust}
+
+if [ "$dry" != 1 ] && ! command -v "$cli" >/dev/null 2>&1; then
+	cat >&2 <<MSG
+scripts/check-linux: no container CLI ('$cli') found on PATH.
+Install one (this script installs nothing):
+  Colima:    brew install colima docker && colima start
+  OrbStack:  brew install --cask orbstack   (then open it once)
+  Docker:    https://docs.docker.com/desktop/setup/install/mac-install/
+MSG
+	exit 1
+fi
+if [ "$dry" != 1 ] && ! "$cli" info >/dev/null 2>&1; then
+	cat >&2 <<MSG
+scripts/check-linux: '$cli' is installed but its daemon is not reachable.
+Start one:
+  Colima:    colima start
+  OrbStack:  open -a OrbStack
+  Docker:    open -a Docker
+MSG
+	exit 1
+fi
+
+# The Dockerfile is generated and sent on stdin (no build context, so nothing
+# of the repository enters the image). The cache directories are mode 1777 so a
+# new named volume inherits them and a non-root user can write.
+dockerfile() {
+	cat <<DOCKERFILE
+FROM $base
+RUN rustup component add clippy rustfmt \\
+ && apt-get update \\
+ && apt-get install -y --no-install-recommends python3 git g++ make pkg-config \\
+ && rm -rf /var/lib/apt/lists/* \\
+ && mkdir -p /cache/target /cache/cargo /cache/work \\
+ && chmod -R 1777 /cache
+DOCKERFILE
+}
+
+# What runs inside: copy the read-only tree into the work volume, make a
+# throwaway repository (no branch named main, so `fast` checks everything),
+# then the gate or a shell.
+inner='set -eu
+mkdir -p /tmp/home
+find /cache/work -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+tar -C /src --exclude=./target --exclude=./.git --exclude=./.claude -cf - . | tar -C /cache/work -xf -
+cd /cache/work
+git init -q -b work
+git add -A
+git -c user.name=vix -c user.email=vix@localhost commit -q -m snapshot
+'
+tty=""
+if [ "$shell" = 1 ]; then
+	inner="${inner}exec bash"
+	tty="-it"
+else
+	inner="${inner}exec scripts/check --tier $tier"
+fi
+
+# The one container command, as arguments after the CLI name.
+run_args() {
+	# shellcheck disable=SC2086 # $tty is empty or one flag
+	printf '%s\n' run --rm $tty \
+		--user "$(id -u):$(id -g)" \
+		--cap-drop ALL --security-opt no-new-privileges \
+		-v "$root:/src:ro" \
+		-v vix-check-linux-work:/cache/work \
+		-v vix-check-linux-target:/cache/target \
+		-v vix-check-linux-cargo:/cache/cargo \
+		--tmpfs /tmp:exec \
+		-e HOME=/tmp/home -e CARGO_HOME=/cache/cargo -e CARGO_TARGET_DIR=/cache/target \
+		-e RUSTC_WRAPPER= -e CARGO_TERM_COLOR=never \
+		-w /cache/work \
+		"$image"
+}
+
+if [ "$dry" = 1 ]; then
+	echo "# image (built once from this Dockerfile, sent on stdin):"
+	dockerfile
+	echo "# $cli build -t $image -"
+	echo "# run:"
+	echo "$cli $(run_args | tr '\n' ' ')sh -c <script>"
+	echo "# script:"
+	echo "$inner"
+	exit 0
+fi
+
+echo "== building image $image (cached after the first run)"
+dockerfile | "$cli" build -q -t "$image" -
+echo "== running scripts/check --tier $tier in $image"
+# Arguments never contain spaces except the script, so word splitting is safe.
+# shellcheck disable=SC2046
+exec "$cli" $(run_args) sh -c "$inner"
