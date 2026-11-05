@@ -416,7 +416,7 @@ while True:
             .with_session_path(&session)
             .with_settings_path(&settings);
         again.open_initial(&file);
-        assert!(again.active_breakpoints().is_empty());
+        assert_eq!(again.active_breakpoints(), Vec::<usize>::new());
         again.restore_breakpoints();
         assert_eq!(again.active_breakpoints(), vec![1, 2]);
         let bp = again.active_breakpoint(2).unwrap();
@@ -451,7 +451,7 @@ while True:
         again.on_exit();
         let mut third = app_at_with(&dir, Settings::default()).with_session_path(&session);
         third.restore_breakpoints();
-        assert!(third.dap.function_breakpoints().is_empty());
+        assert_eq!(third.dap.function_breakpoints(), []);
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -462,7 +462,7 @@ while True:
         };
         // Without a session or a highlighted variable nothing is asked.
         app.run_action("run.data_breakpoint");
-        assert!(app.dap.data_breakpoints().is_empty());
+        assert_eq!(app.dap.data_breakpoints(), []);
         app.run_action("run.start");
         wait(&mut app, |a| has_label(a, "p"));
         app.run_action("run.focus_panel");
@@ -479,7 +479,7 @@ while True:
         );
         std::thread::sleep(Duration::from_millis(200));
         app.poll_dap();
-        assert!(app.dap.data_breakpoints().is_empty());
+        assert_eq!(app.dap.data_breakpoints(), []);
 
         // `b` on x sets a write data breakpoint; the action toggles it off.
         app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 0])); // x
@@ -517,8 +517,8 @@ while True:
         wait(&mut app, |a| has_label(a, "p"));
         app.dap_view.selected = row_index(&app, &RowKind::Node(vec![0, 0]));
         app.run_action("run.data_breakpoint");
-        assert!(requests(&log, "dataBreakpointInfo").is_empty());
-        assert!(app.dap.data_breakpoints().is_empty());
+        assert_eq!(requests(&log, "dataBreakpointInfo").len(), 0);
+        assert_eq!(app.dap.data_breakpoints(), []);
         app.run_action("run.stop");
         fs::remove_dir_all(&dir).ok();
     }
@@ -578,7 +578,7 @@ while True:
         wait(&mut app, |a| has_label(a, "p"));
         app.run_action("run.instruction_breakpoint");
         assert!(app.prompt.is_none(), "refused before asking");
-        assert!(requests(&log, "setInstructionBreakpoints").is_empty());
+        assert_eq!(requests(&log, "setInstructionBreakpoints").len(), 0);
         app.run_action("run.stop");
         fs::remove_dir_all(&dir).ok();
     }

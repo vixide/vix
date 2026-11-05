@@ -237,7 +237,7 @@ impl App {
         if !self
             .dap
             .capabilities()
-            .is_some_and(|c| c.supports_set_variable)
+            .is_some_and(crate::dap::Capabilities::supports_set_variable)
         {
             self.status = t!("status.debug_set_variable_unsupported").to_string();
             return;
@@ -329,7 +329,7 @@ impl App {
         if self
             .dap
             .capabilities()
-            .is_some_and(|c| !c.supports_instruction_breakpoints)
+            .is_some_and(|c| !c.supports_instruction_breakpoints())
         {
             self.status = t!("status.debug_instruction_breakpoint_unsupported").to_string();
             return;
@@ -471,7 +471,7 @@ impl App {
         if self
             .dap
             .capabilities()
-            .is_some_and(|c| !c.supports_function_breakpoints)
+            .is_some_and(|c| !c.supports_function_breakpoints())
         {
             self.status = t!("status.debug_function_breakpoint_unsupported").to_string();
         }

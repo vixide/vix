@@ -405,7 +405,7 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
         },
         "capabilities event",
     );
-    assert!(caps.supports_set_variable);
+    assert!(caps.supports_set_variable());
     assert_eq!(caps.exception_filters.len(), 2);
     assert_eq!(
         dap.exception_filters(),
@@ -451,7 +451,7 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
         logged_args(&log, "setFunctionBreakpoints"),
         vec![serde_json::json!({ "breakpoints": [] })]
     );
-    assert!(caps.supports_function_breakpoints);
+    assert!(caps.supports_function_breakpoints());
     let mut conditional = FunctionBreakpoint::new("parse");
     conditional.condition = Some("n > 2".into());
     dap.set_function_breakpoints(vec![FunctionBreakpoint::new("main"), conditional]);
@@ -480,7 +480,7 @@ fn mock_adapter_attach_breakpoint_fields_exception_filters_and_tree() {
 /// `setDataBreakpoints` with the access type, and clearing them.
 fn check_data_breakpoints(dap: &mut Dap, log: &std::path::Path) {
     let mut events = Vec::new();
-    assert!(dap.data_breakpoints().is_empty());
+    assert_eq!(dap.data_breakpoints(), []);
     assert!(dap.data_breakpoint_info(5, "x"));
     assert!(dap.data_breakpoint_info(5, "p"));
     poll_until(dap, &mut events, |e| {

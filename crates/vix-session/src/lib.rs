@@ -527,7 +527,7 @@ mod tests {
         assert_eq!(saved.breakpoints, w.breakpoints);
         assert_eq!(saved.function_breakpoints, w.function_breakpoints);
         let old: Session = toml::from_str("[[workspaces]]\nroot = \"/b\"\n").unwrap();
-        assert!(old.workspace("/b").unwrap().breakpoints.is_empty());
+        assert_eq!(old.workspace("/b").unwrap().breakpoints, []);
     }
 
     #[test]

@@ -362,20 +362,31 @@ impl ExceptionFilter {
     }
 }
 
+bitflags::bitflags! {
+    /// The yes/no capabilities of [`Capabilities`] that Vix uses: a bitset,
+    /// not one `bool` field each, which is what satisfies
+    /// `clippy::struct_excessive_bools` (T149).
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct Supports: u8 {
+        /// `supportsSetVariable`.
+        const SET_VARIABLE = 1 << 0;
+        /// `supportsFunctionBreakpoints`.
+        const FUNCTION_BREAKPOINTS = 1 << 1;
+        /// `supportsDataBreakpoints` (T617).
+        const DATA_BREAKPOINTS = 1 << 2;
+        /// `supportsInstructionBreakpoints` (T617).
+        const INSTRUCTION_BREAKPOINTS = 1 << 3;
+    }
+}
+
 /// What an adapter said it supports in its `initialize` response (T617).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Capabilities {
     /// Exception filters, in the adapter's order.
     pub exception_filters: Vec<ExceptionFilter>,
-    /// `supportsSetVariable`.
-    pub supports_set_variable: bool,
-    /// `supportsFunctionBreakpoints`.
-    pub supports_function_breakpoints: bool,
-    /// `supportsDataBreakpoints` (T617).
-    pub supports_data_breakpoints: bool,
-    /// `supportsInstructionBreakpoints` (T617).
-    pub supports_instruction_breakpoints: bool,
+    /// The advertised yes/no capabilities.
+    pub supports: Supports,
 }
 
 impl Capabilities {
@@ -396,25 +407,51 @@ impl Capabilities {
                     .collect()
             })
             .unwrap_or_default();
+        let mut supports = Supports::empty();
+        for (key, flag) in [
+            ("supportsSetVariable", Supports::SET_VARIABLE),
+            (
+                "supportsFunctionBreakpoints",
+                Supports::FUNCTION_BREAKPOINTS,
+            ),
+            ("supportsDataBreakpoints", Supports::DATA_BREAKPOINTS),
+            (
+                "supportsInstructionBreakpoints",
+                Supports::INSTRUCTION_BREAKPOINTS,
+            ),
+        ] {
+            if body.get(key).and_then(Value::as_bool).unwrap_or(false) {
+                supports |= flag;
+            }
+        }
         Capabilities {
             exception_filters,
-            supports_set_variable: body
-                .get("supportsSetVariable")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            supports_function_breakpoints: body
-                .get("supportsFunctionBreakpoints")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            supports_data_breakpoints: body
-                .get("supportsDataBreakpoints")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            supports_instruction_breakpoints: body
-                .get("supportsInstructionBreakpoints")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            supports,
         }
+    }
+
+    /// `supportsSetVariable`.
+    #[must_use]
+    pub fn supports_set_variable(&self) -> bool {
+        self.supports.contains(Supports::SET_VARIABLE)
+    }
+
+    /// `supportsFunctionBreakpoints`.
+    #[must_use]
+    pub fn supports_function_breakpoints(&self) -> bool {
+        self.supports.contains(Supports::FUNCTION_BREAKPOINTS)
+    }
+
+    /// `supportsDataBreakpoints`.
+    #[must_use]
+    pub fn supports_data_breakpoints(&self) -> bool {
+        self.supports.contains(Supports::DATA_BREAKPOINTS)
+    }
+
+    /// `supportsInstructionBreakpoints`.
+    #[must_use]
+    pub fn supports_instruction_breakpoints(&self) -> bool {
+        self.supports.contains(Supports::INSTRUCTION_BREAKPOINTS)
     }
 
     /// The ids of the filters the adapter marks `default`.
@@ -810,7 +847,7 @@ impl Dap {
     /// it is configured.
     pub fn set_instruction_breakpoints(&mut self, breakpoints: Vec<InstructionBreakpoint>) -> bool {
         if let Some(s) = self.session.as_mut() {
-            if !s.capabilities.supports_instruction_breakpoints {
+            if !s.capabilities.supports_instruction_breakpoints() {
                 return false;
             }
             s.instruction_breakpoints.clone_from(&breakpoints);
@@ -839,7 +876,7 @@ impl Dap {
         let Some(s) = self.session.as_mut() else {
             return false;
         };
-        if !s.capabilities.supports_data_breakpoints {
+        if !s.capabilities.supports_data_breakpoints() {
             return false;
         }
         s.request(
@@ -858,7 +895,7 @@ impl Dap {
         let Some(s) = self.session.as_mut() else {
             return false;
         };
-        if !s.capabilities.supports_data_breakpoints {
+        if !s.capabilities.supports_data_breakpoints() {
             return false;
         }
         s.data_breakpoints = breakpoints;
@@ -951,7 +988,7 @@ impl Dap {
         let Some(s) = self.session.as_mut() else {
             return false;
         };
-        if !s.capabilities.supports_set_variable {
+        if !s.capabilities.supports_set_variable() {
             return false;
         }
         s.request(
@@ -1257,7 +1294,7 @@ impl Session {
     /// Send `setFunctionBreakpoints` — only to an adapter that advertised
     /// `supportsFunctionBreakpoints` (others may reject the request).
     fn send_function_breakpoints(&mut self) {
-        if !self.capabilities.supports_function_breakpoints {
+        if !self.capabilities.supports_function_breakpoints() {
             return;
         }
         let bps: Vec<Value> = self
@@ -1275,7 +1312,7 @@ impl Session {
     /// Send `setInstructionBreakpoints` — only to an adapter that advertised
     /// `supportsInstructionBreakpoints` (others may reject the request).
     fn send_instruction_breakpoints(&mut self) {
-        if !self.capabilities.supports_instruction_breakpoints {
+        if !self.capabilities.supports_instruction_breakpoints() {
             return;
         }
         let bps: Vec<Value> = self
@@ -1294,7 +1331,7 @@ impl Session {
     /// `supportsDataBreakpoints`. Not part of configuration: a session starts
     /// with none, as the ids are only good for one run.
     fn send_data_breakpoints(&mut self) {
-        if !self.capabilities.supports_data_breakpoints {
+        if !self.capabilities.supports_data_breakpoints() {
             return;
         }
         let bps: Vec<Value> = self
@@ -1667,7 +1704,7 @@ mod tests {
                 { "filter": "bare" },
             ],
         }));
-        assert!(caps.supports_set_variable);
+        assert!(caps.supports_set_variable());
         let ids: Vec<&str> = caps
             .exception_filters
             .iter()
