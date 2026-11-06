@@ -40,6 +40,10 @@ fn repo() -> tempfile_dir::Dir {
     let d = tempfile_dir::Dir::new();
     let p = d.path();
     git(p, &["init", "-q", "-b", "main"]);
+    // The product code runs plain `git` (cherry-pick commits), which needs an
+    // identity in the repository: CI runners have no global one.
+    git(p, &["config", "user.name", "T"]);
+    git(p, &["config", "user.email", "t@example.com"]);
     commit(p, "a", "a");
     git(p, &["switch", "-q", "-c", "topic"]);
     commit(p, "c", "c");
@@ -119,6 +123,8 @@ fn pages_decorations_and_lanes_come_from_real_history() {
 fn empty_repository_is_an_empty_page() {
     let d = tempfile_dir::Dir::new();
     git(d.path(), &["init", "-q", "-b", "main"]);
+    git(d.path(), &["config", "user.name", "T"]);
+    git(d.path(), &["config", "user.email", "t@example.com"]);
     assert_eq!(fetch_page(d.path(), 0, 200, None).unwrap().len(), 0);
     let p = Panel::new(Vec::new(), Vec::new(), true);
     assert!(p.is_empty() && p.selected_commit().is_none());
