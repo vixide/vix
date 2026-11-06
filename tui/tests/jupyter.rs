@@ -901,8 +901,10 @@ fn confirm_evaluate_always_asks_every_run() {
     for _ in 0..2 {
         app.run_action("jupyter.run");
         assert!(app.jupyter_confirm_open());
-        app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        // Count before answering: the confirmation dispatches the run, and
+        // the kernel thread may log it before this thread runs again.
         let n = seen(&log).len();
+        app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
         pump(&mut app, "the confirmed run", |_| seen(&log).len() > n);
     }
     // A line sent on purpose never asks.
