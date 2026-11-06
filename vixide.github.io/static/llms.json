@@ -88,7 +88,7 @@
         {
           "title": "Debugger",
           "url": "https://github.com/vixide/vix/blob/main/docs/debugger/index.md",
-          "notes": "Debug Adapter Protocol — breakpoints, stepping, call stack, variables, watches"
+          "notes": "Debug Adapter Protocol — breakpoints with conditions, exception filters, attach, stepping, call stack, variables tree, watches, inline values"
         },
         {
           "title": "IDE parity features",
@@ -148,7 +148,42 @@
         {
           "title": "Git Panel",
           "url": "https://github.com/vixide/vix/blob/main/docs/git-panel/index.md",
-          "notes": "status, diff, blame, stage/unstage/ revert per hunk"
+          "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        },
+        {
+          "title": "Branch review",
+          "url": "https://github.com/vixide/vix/blob/main/docs/branch-review/index.md",
+          "notes": "a branch or commit range as one diff, with saved line comments exported as Markdown"
+        },
+        {
+          "title": "Change gutter base",
+          "url": "https://github.com/vixide/vix/blob/main/docs/gutter-base/index.md",
+          "notes": "compare the change gutter with HEAD, the index, the saved file or a branch"
+        },
+        {
+          "title": "Interactive rebase",
+          "url": "https://github.com/vixide/vix/blob/main/docs/interactive-rebase/index.md",
+          "notes": "reorder, reword, squash, drop and cherry-pick without an external editor"
+        },
+        {
+          "title": "Inline suggestions",
+          "url": "https://github.com/vixide/vix/blob/main/docs/ghost-text/index.md",
+          "notes": "dimmed ghost-text completion from an LSP server or an AI provider (off by default)"
+        },
+        {
+          "title": "Safe save",
+          "url": "https://github.com/vixide/vix/blob/main/docs/safe-save/index.md",
+          "notes": "atomic saves that keep hard links and ownership, and what an interrupted save leaves behind"
+        },
+        {
+          "title": "Project environment",
+          "url": "https://github.com/vixide/vix/blob/main/docs/project-environment/index.md",
+          "notes": "direnv, mise and .venv applied to servers, tasks and terminals, gated by workspace trust"
+        },
+        {
+          "title": "Terminal",
+          "url": "https://github.com/vixide/vix/blob/main/docs/terminal/index.md",
+          "notes": "several shells, scrollback, Ctrl+click to open output paths, send selection, restart"
         },
         {
           "title": "Scripting",
@@ -199,6 +234,11 @@
           "title": "Jupyter",
           "url": "https://github.com/vixide/vix/blob/main/spec/jupyter/index.md",
           "notes": ""
+        },
+        {
+          "title": "Overlay priority",
+          "url": "https://github.com/vixide/vix/blob/main/spec/overlay-priority/index.md",
+          "notes": "one table orders overlay drawing and key routing"
         },
         {
           "title": "Navigation",

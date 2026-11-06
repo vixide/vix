@@ -41,8 +41,9 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   its title and menu path, generated from the real catalog
 - [Language Server Protocol](https://github.com/vixide/vix/blob/main/docs/language-server-protocol/index.md):
   diagnostics, hover, go-to-definition, completion, progress
-- [Debugger](https://github.com/vixide/vix/blob/main/docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
-  stepping, call stack, variables, watches
+- [Debugger](https://github.com/vixide/vix/blob/main/docs/debugger/index.md): Debug Adapter Protocol — breakpoints
+  with conditions, exception filters, attach, stepping, call stack, variables
+  tree, watches, inline values
 - [IDE parity features](https://github.com/vixide/vix/blob/main/docs/ide-parity/index.md): Local History, Search
   Everywhere, Refactor… and Organize Imports, run configurations, peek
   definition, CodeLens, postfix completion
@@ -65,6 +66,20 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   Org-roam, export
 - [Git Panel](https://github.com/vixide/vix/blob/main/docs/git-panel/index.md): status, diff, blame, stage/unstage/
   revert per hunk
+- [Branch review](https://github.com/vixide/vix/blob/main/docs/branch-review/index.md): a branch or commit range as
+  one diff, with saved line comments exported as Markdown
+- [Change gutter base](https://github.com/vixide/vix/blob/main/docs/gutter-base/index.md): compare the change gutter
+  with HEAD, the index, the saved file or a branch
+- [Interactive rebase](https://github.com/vixide/vix/blob/main/docs/interactive-rebase/index.md): reorder, reword,
+  squash, drop and cherry-pick without an external editor
+- [Inline suggestions](https://github.com/vixide/vix/blob/main/docs/ghost-text/index.md): dimmed ghost-text completion
+  from an LSP server or an AI provider (off by default)
+- [Safe save](https://github.com/vixide/vix/blob/main/docs/safe-save/index.md): atomic saves that keep hard links and
+  ownership, and what an interrupted save leaves behind
+- [Project environment](https://github.com/vixide/vix/blob/main/docs/project-environment/index.md): direnv, mise and
+  `.venv` applied to servers, tasks and terminals, gated by workspace trust
+- [Terminal](https://github.com/vixide/vix/blob/main/docs/terminal/index.md): several shells, scrollback, Ctrl+click
+  to open output paths, send selection, restart
 - [Scripting](https://github.com/vixide/vix/blob/main/docs/scripting/index.md): Rhai `.rhai` scripts — new palette
   commands, key bindings, buffer transforms, no rebuild
 - [Performance](https://github.com/vixide/vix/blob/main/docs/performance/index.md): measured numbers, with the
@@ -80,6 +95,8 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   [Cowork](https://github.com/vixide/vix/blob/main/spec/cowork/index.md), [IM](https://github.com/vixide/vix/blob/main/spec/instant-message/index.md),
   [MCP server](https://github.com/vixide/vix/blob/main/spec/mcp-server/index.md), [Jupyter](https://github.com/vixide/vix/blob/main/spec/jupyter/index.md)
   (spike done, not implemented)
+- [Overlay priority](https://github.com/vixide/vix/blob/main/spec/overlay-priority/index.md): one table orders
+  overlay drawing and key routing
 - [Navigation](https://github.com/vixide/vix/blob/main/spec/navigation/index.md), [Tools menu](https://github.com/vixide/vix/blob/main/spec/tools/index.md),
   [Comparisons](https://github.com/vixide/vix/blob/main/spec/comparisons/index.md), [Test strategy](https://github.com/vixide/vix/blob/main/spec/test/index.md)
 - [agents/share/crate-map.md](https://github.com/vixide/vix/blob/main/agents/share/crate-map.md): every crate, module,

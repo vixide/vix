@@ -10,11 +10,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
+<<<<<<< HEAD
 ### Experimental in 2.0
 
 - **Remote editing over Kubernetes and WSL.** Remote editing in containers and dev containers (Docker, Podman) is tested against real engines. Kubernetes (`k8s://`) passed the conformance suite against one local `kind` cluster only: no managed or authenticated cluster, no multi-container pod, no non-root user. WSL (`wsl://`) has only been tested against a fake engine and has never run on a real Windows host, so its argument quoting, exit status for a missing distribution and environment handling are unconfirmed (T718b). Treat both as experimental; the `nerdctl://` form and the pod and distribution pickers (T718c) are not included.
 - **Alpine `.apk` and RHEL/Rocky `.rpm` packages.** They are built from the static musl binary, but the real `nfpm` output and the install tests have not run yet (T670a), and the `.apk` is unsigned.
 
+||||||| c74a2ce0
+=======
+### Changed
+
+- **Dependency refresh.** `cargo update` for the root and `gui/` lockfiles (toml 1.2, trash 5.3, ureq 3.5.1, and others), the site's npm dependencies within their ranges, and one `actions/checkout` / `download-artifact` pin across all workflows. The minimum Rust version stays 1.97 (stable 1.99 minus two).
+
+>>>>>>> feat/update-2-0-0
 ### Fixed
 
 - **Duplicate code-lens title.** When the server's `workspace/codeLens/refresh` arrived while a `codeLens/resolve` was in flight, the refreshed list asked for the same lens again and both replies were added, drawing a title such as `2 references | 2 references`. A resolve reply with no matching unresolved lens is now ignored. This was the cause of a one-in-many flake in `code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app`. Spec: [`vix-lsp`](crates/vix-lsp/spec/index.md).

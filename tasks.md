@@ -9916,7 +9916,7 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-11-02** (308 tasks ticked, 16 open, T608 half done).
+**Status as of 2026-11-06** (321 tasks ticked, 13 open, T608 half done; counted as top-level checklist items).
 Runs A–L, N, O (except the two late findings), P and Q (except T718) are
 complete. What is open, by run:
 

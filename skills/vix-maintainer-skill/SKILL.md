@@ -61,7 +61,11 @@ leave the drift for later.
    the reference-docs diff and `check-docs` only run as part of the full script, and a change that doesn't look docs-related can still
    trip `rustdoc::private_intra_doc_links` or a spec/description drift. Fix
    everything before moving on; CI on all three forges only ever confirms
-   what this said.
+   what this said. The gate runs in a clean room (no `kache`/`sccache`
+   wrapper; give each concurrent gate its own private `CARGO_TARGET_DIR`),
+   `scripts/check --tier fast|push` is a quicker iteration aid that never
+   counts as the landing bar, and `scripts/attest` records a signed note for
+   a tree that passed the full tier (see `spec/local-ci`).
 7. **Note user-visible changes** in `CHANGELOG.md` under `[Unreleased]`.
 8. **Spelling**: prose/docs are CSpell-checked (`cspell.json`); add project
    terms to `project-words.txt` rather than rewording around them.
