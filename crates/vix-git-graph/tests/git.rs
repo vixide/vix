@@ -41,8 +41,11 @@ fn repo() -> tempfile_dir::Dir {
     let p = d.path();
     git(p, &["init", "-q", "-b", "main"]);
     // The product code runs plain `git` (cherry-pick commits), which needs an
-    // identity in the repository: CI runners have no global one.
+    // identity in the repository: CI runners have no global one. It must also
+    // not sign with a developer's global key, which may need a passphrase.
+    // (`commit.gpgsign` is set here, not only in `git()`, for the same reason.)
     git(p, &["config", "user.name", "T"]);
+    git(p, &["config", "commit.gpgsign", "false"]);
     git(p, &["config", "user.email", "t@example.com"]);
     commit(p, "a", "a");
     git(p, &["switch", "-q", "-c", "topic"]);

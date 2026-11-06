@@ -7677,8 +7677,9 @@ new action.
   forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
   `tui/` and `gui/*` packages). **Done.**
 - [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
-  release).** *Status 2026-11-02: item (1) is done; items (2)-(6) wait for the
-  next release.* (1) ~~Publish the new crates in dependency order: `vix-input`
+  release).** *Status 2026-11-06: item (1) is done. (2) is done in the docs but the
+  assets are missing from 2.0.0; (4)-(6) moved to T771, and (5)'s rename is moot
+  because the tap has never had a formula.* (1) ~~Publish the new crates in dependency order: `vix-input`
   first (new in T640), then the members, then `vix-tui`; drop
   `--exclude vix-input --exclude vix-tui` from the semver step afterwards.~~
   Done: all 125 crates published at 1.8.0 (2026-10-25), excludes dropped. (2) The moment the
@@ -8366,6 +8367,12 @@ widgets, and a markup-hiding Markdown "compose" mode.
     nfpm output and the new Alpine and Rocky 8/9 install-tests in
     `linux-packages.yml` have not run. Unsigned `.apk` needs
     `--allow-untrusted`; signing is not done.
+  - **Progress 2026-11-06:** the real 2.0.0 musl archive (from
+    `scripts/release-local`) is statically linked (`scripts/check-static-binary`),
+    its signature verifies (`--verify-dir`), and `vix --version` runs on
+    `alpine:3.22` under amd64 emulation on arm64 Docker, not native x86_64. **Left:** real
+    nfpm output and the install tests; `linux-packages.yml` has never run on a
+    release. Happens with T771.
 - [ ] **T669 — apt and dnf/yum repositories.** Today a user downloads a
   package file, so there is no `apt install vix-tui` from a configured
   source and no updates through `apt upgrade`/`dnf upgrade`.
@@ -9822,6 +9829,30 @@ the maintainer's decisions.
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
 T759 wait for Cowork on `main`; T758 last.
 
+## Run V — 2.0.1 release repair (2026-11-06)
+
+2.0.0 shipped through `scripts/release-local` only: three archives, against 114
+assets for 1.8.0. dist's run failed at `plan` because a dependency pass edited
+the generated `release.yml`.
+
+- [x] **T770 — Say what 2.0.0 has, and catch `release.yml` drift.** An interim
+  install note in the README and Getting Started, a working 30-second command,
+  and the `dist-workflow` CI job (`dist generate --mode ci --check`).
+- [ ] **T771 — A full release through dist.** Approved by the maintainer
+  2026-11-06: tags `2.0.1-rc.1` then `2.0.1`, Homebrew and npm as real channels.
+  - **Maintainer:** add the `HOMEBREW_TAP_TOKEN` and `NPM_TOKEN` Actions
+    secrets; the repository and org have no secrets today. `vixide/homebrew-tap`
+    is an empty repository; give it a first commit in case the job's checkout
+    needs a branch.
+  - **npm:** add `npm` to `publish-jobs` in `dist-workspace.toml` and regenerate
+    `release.yml` with `dist` 0.33.1 (the local `dist` is 0.32.0).
+  - **Unexplained:** 1.8.0's `host` job failed at `gh release create` with
+    `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
+    The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,
+    so only `2.0.1` tests them.
+  - **After `2.0.1`:** remove the note and restore the Homebrew command in the
+    README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
+
 ## Run U — another GUI front end (2026-11-06)
 
 - [x] **T769 — `vix-bui`: the Vix desktop GUI on BUI.** A sixth, self-contained
@@ -10083,6 +10114,7 @@ CI-discovered rounds to get genuinely right on Windows).
 
 21. **Run U (another GUI, 2026-11-06):** T769 (`vix-bui`). First version done;
     the limits in its spec are the follow-ups.
+22. **Run V (2.0.1 release repair, 2026-11-06):** T770, then T771.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

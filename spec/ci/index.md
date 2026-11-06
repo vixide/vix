@@ -213,8 +213,12 @@ make the MSI (T658). `release.yml` is **generated**: edit
 generate --mode ci`), never the workflow by hand — `dist generate --mode
 ci --check` fails if the committed file has drifted from the config, the
 same check-then-write shape `docs/reference/*.md`/`tui/man/vix.1`'s own
-regenerate-and-diff gate uses, though nothing currently runs it in CI
-(only ever exercised by hand before a release-affecting config change).
+regenerate-and-diff gate uses. The GitHub-only **dist-workflow** job in
+`ci.yml` runs it on every push and pull request, with the `dist` version
+pinned in `dist-workspace.toml`, because `release.yml`'s own `plan` job fails
+on drift only once a tag is pushed, too late to fix that tag (2.0.0 lost its
+installers and packages this way, T770). A dependency bump to an action in
+`release.yml` fails this job: change the pin in `dist` instead, or leave it.
 `dist-workspace.toml`'s `cargo-cyclonedx = true` (T554, tasks.md) makes
 each release also generate and upload a CycloneDX SBOM (`*.cdx.xml`, one
 per target) via `cargo-cyclonedx` — native `dist` support, not a
