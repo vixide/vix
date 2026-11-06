@@ -59,5 +59,8 @@ is manual-only (`workflow_dispatch`). On an x86_64 Ubuntu runner it builds
 `scripts/check-alpine`: `file` and `ldd` output, `scripts/check-static-binary`,
 and the binary in an `alpine:3` container with `--version` and `--doctor`
 (exit 0 or 1 accepted, since Alpine has no git). It uploads nothing.
-`scripts/test-check-alpine` tests the script without Docker. Not run yet; T670
-stays open until a run passes.
+`scripts/test-check-alpine` tests the script without Docker. Passed on real
+x86_64 Alpine (run 42127678554, 2026-11-06): "statically linked" and
+`vix --doctor` ran. dist's own generated release job still has no such
+check; `linux-packages.yml` checks the release's musl archive afterwards, and
+the next release must confirm it (T670a).

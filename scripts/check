@@ -312,6 +312,10 @@ if in_tier push; then
 	sh "$(dirname "$0")/test-check-alpine"
 	step_end
 
+	step_begin "scripts/test-build-linux-packages (T670)"
+	sh "$(dirname "$0")/test-build-linux-packages"
+	step_end
+
 	step_begin "scripts/test-release-local (T766)"
 	sh "$(dirname "$0")/test-release-local"
 	step_end

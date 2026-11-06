@@ -1,0 +1,104 @@
+#!/bin/sh
+# Tests for scripts/build-linux-packages (T670 follow-ups: the static musl
+# `.apk` and `.rpm`). Needs no nfpm and no Docker: a stub `nfpm` on a private
+# PATH records the config it is given.
+#
+#     scripts/test-build-linux-packages
+set -u
+root=$(cd "$(dirname "$0")/.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+check() { # name, command...
+	name=$1
+	shift
+	if "$@"; then ok "$name"; else bad "$name"; fi
+}
+count() { # glob -> number of matching files
+	n=0
+	for f in "$@"; do [ -e "$f" ] && n=$((n + 1)); done
+	echo "$n"
+}
+cd "$root" || exit 1
+
+# Stub nfpm: copy the config it was given (named by a counter and the
+# packager) and create an empty package file in --target.
+mkdir "$work/bin" "$work/log"
+cat >"$work/bin/nfpm" <<STUB
+#!/bin/sh
+cfg=; fmt=; target=
+while [ \$# -gt 0 ]; do
+	case \$1 in
+	--config) cfg=\$2; shift ;;
+	--packager) fmt=\$2; shift ;;
+	--target) target=\$2; shift ;;
+	esac
+	shift
+done
+n=\$(ls "$work/log" | wc -l | tr -d ' ')
+cp "\$cfg" "$work/log/\$n-\$fmt.yaml"
+: >"\$target/pkg-\$n.\$fmt"
+STUB
+chmod +x "$work/bin/nfpm"
+
+# A fake release archive: dist's single top-level directory.
+mkarchive() { # package target
+	d="$work/src/$1-$2"
+	mkdir -p "$d" "$work/archives"
+	printf 'bin' >"$d/vix"
+	printf 'lic' >"$d/LICENSE"
+	tar -cJf "$work/archives/$1-$2.tar.xz" -C "$work/src" "$1-$2"
+}
+run() { # package
+	rm -rf "$work/log" "$work/out"
+	mkdir "$work/log"
+	PATH="$work/bin:$PATH" python3 scripts/build-linux-packages --version 9.9.9 \
+		--archives "$work/archives" --out "$work/out" --packages "$1" >"$work/o" 2>&1
+}
+# The config of the first log file of a format and arch, or empty.
+cfg() { # fmt arch
+	for f in "$work"/log/*-"$1".yaml; do
+		if [ -e "$f" ] && grep -q "^arch: $2" "$f"; then
+			echo "$f"
+			return
+		fi
+	done
+}
+
+echo "== glibc only (no musl archive)"
+mkarchive vix-tui x86_64-unknown-linux-gnu
+mkarchive vix-tui aarch64-unknown-linux-gnu
+check "builds" run vix-tui
+check "no apk" test "$(count "$work"/log/*-apk.yaml)" = 0
+check "x86_64 rpm built from glibc" grep -q 'glibc >= 2.35' "$(cfg rpm amd64)"
+
+echo "== with the static musl archive"
+mkarchive vix-tui x86_64-unknown-linux-musl
+check "builds" run vix-tui
+check "one apk" test "$(count "$work"/log/*-apk.yaml)" = 1
+apk=$(cfg apk amd64)
+check "apk is amd64" test -n "$apk"
+check "apk has no glibc or depends" test -z "$(grep -E 'glibc|libc6|depends' "$apk")"
+check "two rpms: x86_64 musl + aarch64 glibc" test "$(count "$work"/log/*-rpm.yaml)" = 2
+amd=$(cfg rpm amd64)
+check "x86_64 rpm has no glibc dependency" test -n "$amd" -a -z "$(grep -E 'glibc|depends' "$amd")"
+check "aarch64 rpm still needs glibc" grep -q 'glibc >= 2.35' "$(cfg rpm arm64)"
+check "two debs, both glibc" test "$(count "$work"/log/*-deb.yaml)" = 2
+check "debs need libc6" test -z "$(grep -L libc6 "$work"/log/*-deb.yaml)"
+check "two arch packages, both glibc" test "$(count "$work"/log/*-archlinux.yaml)" = 2
+check "arch packages need glibc" test -z "$(grep -L 'glibc>=2.35' "$work"/log/*-archlinux.yaml)"
+
+echo "== the musl archive is only for vix-tui"
+rm -rf "$work/archives" "$work/src"
+mkarchive vix-egui x86_64-unknown-linux-gnu
+mkarchive vix-egui x86_64-unknown-linux-musl
+check "builds" run vix-egui
+check "GUI gets no apk" test "$(count "$work"/log/*-apk.yaml)" = 0
+check "GUI rpm needs glibc" grep -q 'glibc >= 2.35' "$(cfg rpm amd64)"
+
+if [ "$fails" -eq 0 ]; then echo "test-build-linux-packages: all passed"; else echo "test-build-linux-packages: $fails failed"; exit 1; fi

@@ -7,6 +7,7 @@ installers (T668), so Linux users can install with their own package manager:
 |---|---|---|
 | Debian, Ubuntu and derivatives | `.deb` | `sudo apt install ./vix-tui_<version>-1_amd64.deb` |
 | Fedora, RHEL, Rocky, Alma, openSUSE | `.rpm` | `sudo dnf install ./vix-tui-<version>-1.x86_64.rpm` |
+| Alpine | `.apk` (`vix-tui`, x86_64) | `sudo apk add --allow-untrusted ./vix-tui-<version>-r1.apk` |
 | Arch Linux | `.pkg.tar.zst` | `sudo pacman -U ./vix-tui-<version>-1-x86_64.pkg.tar.zst` |
 
 `apt`, `dnf` and `pacman` also accept the release URL directly for `.rpm`
@@ -35,15 +36,18 @@ installers (T668), so Linux users can install with their own package manager:
 
 ## Which build, and what it needs
 
-- **Every package is a glibc build**, needing glibc 2.35 or newer: Ubuntu
-  22.04+, Debian 12+, Fedora 36+, RHEL/Rocky 10. RHEL/Rocky 8 and 9 have an
-  older glibc, so they can't use these packages; there, use `cargo install
-  vix-tui` or build from source.
-- **No Alpine package.** Alpine uses musl. The release's
-  `x86_64-unknown-linux-musl` build should be the one to package, but it
-  comes out dynamically linked against musl's loader rather than static, and
-  under emulation it crashes at startup. That build is fixed in T670, and
-  the `.apk` (and a glibc-free `vix-tui` for RHEL 8/9) follows from it.
+- **Most packages are glibc builds**, needing glibc 2.35 or newer: every
+  `.deb`, every Arch package, every GUI package, and the aarch64 packages
+  (Ubuntu 22.04+, Debian 12+, Fedora 36+, RHEL/Rocky 10).
+- **Static musl `vix-tui` (T670).** The release's
+  `x86_64-unknown-linux-musl` build is fully static (no libc dependency;
+  verified on real Alpine). `scripts/build-linux-packages` packages it as
+  the Alpine `.apk` and as the x86_64 `vix-tui` `.rpm`, so that `.rpm`
+  also installs on RHEL/Rocky 8 and 9 (older glibc). It declares no
+  dependencies. Only `vix-tui` has a musl build; if a release lacks the
+  archive, the x86_64 `.rpm` falls back to the glibc build and no `.apk`
+  is made. The `.apk` is unsigned (install with `--allow-untrusted`).
+  `scripts/test-build-linux-packages` tests this selection with a stub nfpm.
 - **Dependencies.** The packages declare glibc, plus each binary's directly
   linked libraries:
   - `vix-gpui`: xkbcommon, xkbcommon-x11, xcb
@@ -64,7 +68,8 @@ installers (T668), so Linux users can install with their own package manager:
   2. builds the packages;
   3. install-tests them on Debian 12, Ubuntu 22.04, Fedora 41 and Arch. Each test checks that the package manager resolves the
      dependencies, `vix --version` runs, and every GUI's `ldd` has no
-     "not found";
+     "not found". The static `.apk` is tested on `alpine:3` and the
+     `vix-tui` `.rpm` also on Rocky 8 and 9;
   4. uploads the packages and `linux-packages.sha256` to the release.
 - **Manual run.** The same workflow can be run by hand (`workflow_dispatch`
   with a tag) to add packages to an existing release.

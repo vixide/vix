@@ -7,13 +7,16 @@ Repackages the Linux binaries a release already built (dist's
 - `.deb` for Debian, Ubuntu and derivatives (`apt install ./file.deb`)
 - `.rpm` for Fedora, RHEL/Rocky/Alma, openSUSE (`dnf install ./file.rpm`)
 - `.pkg.tar.zst` for Arch Linux (`pacman -U ./file.pkg.tar.zst`)
+- `.apk` for Alpine (`apk add --allow-untrusted ./file.apk`), `vix-tui` only
 
 Nothing is recompiled: the packaged binary is byte-for-byte the one in the
-release archive. Every package is a glibc build and needs glibc 2.35 or newer
-(Ubuntu 22.04+, Debian 12+, Fedora 36+, RHEL/Rocky 10). The musl build is not
-packaged: release builds of it are dynamically linked against musl's loader
-rather than static, and crash at startup (T670), so there is no Alpine `.apk`
-yet.
+release archive. The GUI packages, and every `.deb`, Arch and aarch64
+package, are glibc builds and need glibc 2.35 or newer (Ubuntu 22.04+,
+Debian 12+, Fedora 36+, RHEL/Rocky 10). `vix-tui` also has a static musl
+build (`x86_64-unknown-linux-musl`, T670), which has no libc dependency; it
+becomes the x86_64 `.rpm` (so RHEL/Rocky 8 and 9 work) and the Alpine `.apk`.
+When a release has no musl archive the x86_64 `.rpm` falls back to the glibc
+build and there is no `.apk`.
 
 Usage:
     python3 scripts/build-linux-packages --version 1.8.0 \\
@@ -127,11 +130,19 @@ PACKAGES = {
     },
 }
 
-# Release target → nfpm arch. Only glibc builds are packaged (see T670).
+# Release target → nfpm arch.
 TARGETS = {
     "x86_64-unknown-linux-gnu": "amd64",
     "aarch64-unknown-linux-gnu": "arm64",
 }
+
+# The static musl build (T670): only `vix-tui` has one. It is packaged as the
+# x86_64 `.rpm` and the Alpine `.apk`, never as `.deb` or Arch (those keep the
+# glibc build, so the file names stay unique per format).
+MUSL_TARGET = "x86_64-unknown-linux-musl"
+MUSL_ARCH = "amd64"
+MUSL_PACKAGE = "vix-tui"
+MUSL_FORMATS = ("rpm", "apk")
 
 
 def license_of(manifest):
@@ -167,6 +178,29 @@ def builds(name, archives):
     return found
 
 
+def jobs(name, archives):
+    """The (target, arch, archive, formats) packages to build for `name`.
+
+    glibc archives give `deb`, `archlinux` and, unless a static musl build
+    replaces it, `rpm`. The static musl archive of `vix-tui` gives the
+    x86_64 `rpm` (runs on RHEL/Rocky 8 and 9) and the Alpine `apk`.
+    """
+    musl = None
+    if name == MUSL_PACKAGE:
+        path = os.path.join(archives, f"{name}-{MUSL_TARGET}.tar.xz")
+        if os.path.exists(path):
+            musl = path
+    out = []
+    for target, archive in builds(name, archives):
+        formats = ["deb", "rpm", "archlinux"]
+        if musl and TARGETS[target] == MUSL_ARCH:
+            formats.remove("rpm")
+        out.append((target, TARGETS[target], archive, formats))
+    if musl:
+        out.append((MUSL_TARGET, MUSL_ARCH, musl, list(MUSL_FORMATS)))
+    return out
+
+
 def desktop_entry(binary, title, summary):
     """A freedesktop .desktop file so the GUI shows up in app launchers."""
     return (
@@ -181,8 +215,12 @@ def desktop_entry(binary, title, summary):
     )
 
 
-def nfpm_config(name, spec, version, arch, stage, fmt):
-    """The nfpm YAML for one package, architecture and format."""
+def nfpm_config(name, spec, version, arch, stage, fmt, static=False):
+    """The nfpm YAML for one package, architecture and format.
+
+    `static` marks the musl build: it links no libc, so it declares no glibc
+    dependency.
+    """
     binary = spec["binary"]
     lines = [
         f"name: {name}",
@@ -214,12 +252,16 @@ def nfpm_config(name, spec, version, arch, stage, fmt):
         lines += [f"  - src: {stage}/vix.1.gz", "    dst: /usr/share/man/man1/vix.1.gz"]
     if spec["gui"]:
         lines += [f"  - src: {stage}/{name}.desktop", f"    dst: /usr/share/applications/{name}.desktop"]
-    depends = deps(fmt, GLIBC, spec["needs"])
+    depends = deps(fmt, {} if static else GLIBC, spec["needs"])
     recommends = deps(fmt, *spec["runtime"])
     if fmt == "rpm":
         # rpm has weak dependencies but no alternatives, so a `|` choice
         # becomes its first option.
         recommends = [r.split(" | ")[0] for r in recommends]
+    if fmt == "apk":
+        # apk dependencies are Alpine package names; the static binary needs
+        # none and the GUIs are not packaged for Alpine.
+        depends, recommends = [], []
     if fmt == "archlinux":
         # pacman has no "recommends": GUI runtime libraries are hard depends.
         depends, recommends = depends + recommends, []
@@ -277,19 +319,17 @@ def main():
     made = 0
     for name in args.packages:
         spec = dict(PACKAGES[name], license=license_of(PACKAGES[name]["manifest"]))
-        for target, archive in builds(name, os.path.abspath(args.archives)):
-            arch = TARGETS[target]
+        for target, arch, archive, formats in jobs(name, os.path.abspath(args.archives)):
             # A temp dir under `out` so a container can see it through the
             # one mount.
             work = tempfile.mkdtemp(prefix=f".{name}-{arch}-", dir=out)
             stage = os.path.join(work, "stage")
             os.makedirs(stage)
             stage_archive(archive, stage, name, spec)
-            formats = ["deb", "rpm", "archlinux"]
             for fmt in formats:
                 config = os.path.join(work, f"nfpm-{fmt}.yaml")
                 with open(config, "w") as f:
-                    f.write(nfpm_config(name, spec, args.version, arch, stage, fmt))
+                    f.write(nfpm_config(name, spec, args.version, arch, stage, fmt, target == MUSL_TARGET))
                 cmd = run(out, ["package", "--config", config, "--packager", fmt, "--target", out])
                 result = subprocess.run(cmd, capture_output=True, text=True, check=False)
                 if result.returncode != 0:

@@ -8244,8 +8244,8 @@ widgets, and a markup-hiding Markdown "compose" mode.
   2026-10-25 (`feat/linux-packages`).
   - **Builder.** `scripts/build-linux-packages` repackages the release's own
     Linux archives with nfpm (pinned `goreleaser/nfpm:v2.47.0`):
-    - formats: `.deb`, `.rpm` and Arch, from the glibc builds only (see
-      T670 for why there is no musl-based `.apk`)
+    - formats: `.deb`, `.rpm` and Arch, from the glibc builds (the
+      static-musl `.apk` and x86_64 `.rpm` were added under T670)
     - packages: `vix-tui` and the four released GUIs, on x86_64 and aarch64
     - library dependencies from each binary's ELF `NEEDED` entries, plus
       the windowing/GPU libraries it loads with dlopen (as recommends)
@@ -8310,7 +8310,9 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `pub(crate)`, 19 stay public. All 682 library tests (unit plus the
     whole integration suite) pass inside the crate unchanged apart from
     `crate::common` → `crate::integration::common`.
-- [ ] **T670: the musl release build is dynamically linked and crashes.**
+- [x] **T670: the musl release build is dynamically linked and crashes.**
+  (Build fix verified on real Alpine 2026-11-06; release-archive and
+  packaging follow-ups are the open task T670a below.)
   **High if it reproduces on real x86_64.**
   - **What's wrong.** dist's `x86_64-unknown-linux-musl` archive (1.8.0)
     holds a PIE with `INTERP /lib/ld-musl-x86_64.so.1`, not a static
@@ -8342,9 +8344,28 @@ widgets, and a markup-hiding Markdown "compose" mode.
     has no git). **The run has not happened; T670 stays open until it
     passes.** No Forgejo equivalent (not cheap: no Docker guarantee on the
     Codeberg runner).
-  - **After the fix:** add the `.apk` back to `scripts/build-linux-packages`,
-    and use the static `vix-tui` for the x86_64 `.rpm`, so RHEL/Rocky 8 and
-    9 work.
+  - **Verified 2026-11-06.** The manual workflow passed on real x86_64
+    Alpine ([run 42127678554](https://github.com/vixide/vix/actions/runs/42127678554)):
+    `file` reports "statically linked", `scripts/check-static-binary`
+    passed, and `vix --doctor` ran in `alpine:3`. That settles the build
+    fix on the `dist` profile; it is built from source by that workflow, not
+    taken from a release archive.
+  - **After the fix, done 2026-11-06 (`feat/t670-close`):**
+    `scripts/build-linux-packages` builds an Alpine `.apk` and the x86_64
+    `.rpm` from the static `vix-tui` (RHEL/Rocky 8 and 9), the glibc `.deb`
+    and Arch packages unchanged. `scripts/test-build-linux-packages`
+    (stub nfpm, in `scripts/check`) tests the selection and dependencies;
+    `linux-packages.yml` install-tests the `.apk` on `alpine:3` and the
+    `.rpm` on Rocky 8 and 9.
+- [ ] **T670a: confirm the musl release archive and packages on a real
+  release.** Open follow-up split out of T670.
+  - dist's generated release job has no static-binary check; only
+    `linux-packages.yml` checks the archive, after the release exists. The
+    next release's musl archive must be confirmed static and run on Alpine.
+  - The `.apk`/`.rpm` packaging has been tested with a stub nfpm only; real
+    nfpm output and the new Alpine and Rocky 8/9 install-tests in
+    `linux-packages.yml` have not run. Unsigned `.apk` needs
+    `--allow-untrusted`; signing is not done.
 - [ ] **T669 — apt and dnf/yum repositories.** Today a user downloads a
   package file, so there is no `apt install vix-tui` from a configured
   source and no updates through `apt upgrade`/`dnf upgrade`.
