@@ -6,7 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-06
+
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
+
+### Experimental in 2.0
+
+- **Remote editing over Kubernetes and WSL.** Remote editing in containers and dev containers (Docker, Podman) is tested against real engines. Kubernetes (`k8s://`) passed the conformance suite against one local `kind` cluster only: no managed or authenticated cluster, no multi-container pod, no non-root user. WSL (`wsl://`) has only been tested against a fake engine and has never run on a real Windows host, so its argument quoting, exit status for a missing distribution and environment handling are unconfirmed (T718b). Treat both as experimental; the `nerdctl://` form and the pod and distribution pickers (T718c) are not included.
+- **Alpine `.apk` and RHEL/Rocky `.rpm` packages.** They are built from the static musl binary, but the real `nfpm` output and the install tests have not run yet (T670a), and the `.apk` is unsigned.
 
 ### Fixed
 
