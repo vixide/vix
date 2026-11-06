@@ -294,9 +294,9 @@
   <div class="prose centered">
     <p>
       The whole of Vix also runs in a native window on macOS, Windows and Linux.
-      Five experimental front ends — <code>vix-gpui</code>, <code>vix-egui</code>,
+      Six experimental front ends — <code>vix-gpui</code>, <code>vix-egui</code>,
       <code>vix-iced</code>, <code>vix-slint</code>, and source-only
-      <code>vix-gtk4</code> — are each built on a different toolkit so they can be
+      <code>vix-gtk4</code> and <code>vix-bui</code> — are each built on a different toolkit so they can be
       compared. See <a href="/install/#desktop">Install</a>.
     </p>
   </div>

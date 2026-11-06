@@ -288,8 +288,9 @@
       macOS, Windows and Linux. Releases ship four front ends, each a
       complete implementation on a different toolkit so they can be compared:
       <code>vix-gpui</code> (GPUI), <code>vix-egui</code> (egui),
-      <code>vix-iced</code> (iced) and <code>vix-slint</code> (Slint). A fifth,
-      <code>vix-gtk4</code> (GTK 4), builds from source. They are
+      <code>vix-iced</code> (iced) and <code>vix-slint</code> (Slint). Two more,
+      <code>vix-gtk4</code> (GTK 4) and <code>vix-bui</code> (BUI, Blender's UI),
+      build from source. They are
       <strong>experimental</strong>.
     </p>
     <CopyCommand command="brew install vixide/homebrew-tap/vix-gpui" label="Copy the vix-gpui Homebrew install command" />

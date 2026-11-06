@@ -120,6 +120,7 @@
 - [Test Runner](test-runner/index.md)
 - [Themes](themes/index.md)
 - [Todo Tree](todo-tree/index.md)
+- [Desktop Window on BUI](vix-bui/index.md)
 - [IDE Parity Features](ide-parity/index.md)
 - [Tools](tools/index.md)
 - [Welcome Panel](welcome-panel/index.md)

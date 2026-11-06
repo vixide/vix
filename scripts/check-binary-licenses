@@ -51,6 +51,9 @@ PERMITS = {
     # Copyleft: the binary must be distributed under the same terms.
     "GPL-2.0-only": {"GPL-2.0-only"},
     "GPL-3.0-only": {"GPL-3.0-only"},
+    # BUI (`blenderui`, derived from Blender): v2 or any later version, so the
+    # binary may be GPLv2 or GPLv3 on this crate's account.
+    "GPL-2.0-or-later": {"GPL-2.0-only", "GPL-3.0-only"},
     "LGPL-2.1-or-later": {"GPL-2.0-only", "GPL-3.0-only"},
 }
 

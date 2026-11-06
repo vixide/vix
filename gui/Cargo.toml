@@ -8,10 +8,11 @@
 #   cargo run --release -p vix-iced [-- FILE…]   # iced
 #   cargo run --release -p vix-gtk4 [-- FILE…]   # GTK 4 (gtk4-rs)
 #   cargo run --release -p vix-slint [-- FILE…]  # Slint
+#   cargo run --release -p vix-bui [-- FILE…]    # BUI (Blender's UI)
 
 [workspace]
 resolver = "3"
-members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint"]
+members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint", "vix-bui"]
 
 [workspace.package]
 version = "2.0.0"

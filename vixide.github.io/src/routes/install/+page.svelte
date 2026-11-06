@@ -100,7 +100,8 @@
     <code>vix-gpui</code>, <code>vix-egui</code>, <code>vix-iced</code> and
     <code>vix-slint</code> ship from the same release and install the same
     way under their own names. They are experimental; <code>vix-slint</code>
-    is GPL-3.0-only, and <code>vix-gtk4</code> is source-only for now. See the
+    is GPL-3.0-only, and <code>vix-gtk4</code> and <code>vix-bui</code> (GPL-3.0-only,
+    needs CMake) are source-only for now. See the
     <a href="https://github.com/vixide/vix/blob/main/gui/spec/index.md">GUI spec</a>
     for platforms and run-time libraries.
   </p>

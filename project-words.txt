@@ -788,3 +788,10 @@ nons
 nocontainer
 nosuch
 nosuchctx
+
+# BUI desktop GUI (gui/vix-bui)
+blenderui
+freetype
+keysym
+libx
+smallvec

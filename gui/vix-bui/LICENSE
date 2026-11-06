@@ -1,0 +1,16 @@
+Vix™ (Vix IDE™) — the `vix-bui` desktop app
+
+This binary is licensed under the GNU General Public License, version 3
+only (https://github.com/vixide/vix/blob/main/docs/licenses/gpl-3.txt).
+
+It is built with BUI (the `blenderui` crates), Blender's user interface as a
+library, which is derived from Blender's sources and licensed GPL-2.0-or-later.
+BUI also links Apache-2.0-only code, which the FSF holds incompatible with
+GPLv2, so the binary as a whole is distributed under the GPLv3 only. The
+Vix source code is also offered under Apache-2.0, BSD-3-Clause, MIT and
+GPL-2.0-only; this binary is not. See spec/license/index.md ("Binary
+licenses") in the source repository.
+
+Vix™ and Vix IDE™ are trademarks.
+
+Copyright © 2026 Vix™ and Vix IDE™.

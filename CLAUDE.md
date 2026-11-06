@@ -11,7 +11,7 @@ Quick orientation:
 - **Vix** is a keyboard-friendly terminal text editor built on `ratatui`,
   organized as a **Cargo workspace**: a thin App shell (package `vix-tui` in `tui/`,
   building the `vix` command) over 146 focused `vix-*` member crates under
-  `crates/`; the five desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`) live beside it in `gui/`.
+  `crates/`; the six desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`, `vix-bui`) live beside it in `gui/`.
 - **Specs are the source of truth**, one per crate at
   `crates/<crate>/spec/index.md`; cross-cutting specs live at the repo-root
   `spec/`. Development is specification-driven — change the spec when intent

@@ -1,0 +1,35 @@
+[package]
+name = "vix-bui"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-only"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Vix desktop GUI on BUI (Blender's UI as a library): the full Vix App in a native window."
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# Blender's UI toolkit (https://github.com/ppmpreetham/BUI), GPL-2.0-or-later.
+# Pinned exactly: it is pre-1.0 and its macOS window host is experimental.
+# Built from C by CMake (`blenderui-sys`). Only FreeType text and SVG icons
+# are enabled: no image/video codecs, no GPU renderer (macOS has none) and no
+# file browser, so the build stays small and Vix links nothing it does not use.
+blenderui = { version = "=0.4.0", default-features = false, features = ["freetype", "svg"] }
+# PNG output for the scripted render smoke test.
+png = { version = "0.17", optional = true }
+
+[features]
+# `VIX_GUI_SCREENSHOT=out.png vix-bui` renders the window to a PNG after
+# scripted actions/keystrokes and quits (see gui/spec/index.md).
+screenshot = ["dep:png"]
+
+[lints]
+workspace = true

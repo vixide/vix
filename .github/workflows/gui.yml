@@ -1,6 +1,6 @@
 # The desktop GUIs (T641, T642, tasks.md; gui/spec/index.md): `gui/` is its own
 # Cargo workspace -- vix-gpui (GPUI), vix-egui (egui), vix-iced (iced), vix-gtk4
-# (GTK 4) and vix-slint (Slint), each self-contained -- so no
+# (GTK 4), vix-slint (Slint) and vix-bui (BUI), each self-contained -- so no
 # GUI toolkit enters the terminal build, which also means the main CI gate
 # (ci.yml, scripts/check) never builds it. This workflow does, on all three
 # desktop platforms. Advisory for now (`continue-on-error`): both toolkits are
@@ -55,7 +55,8 @@ jobs:
           workspaces: gui
       # Windowing (X11 + Wayland), xkbcommon keymaps, fontconfig/freetype fonts,
       # Vulkan (wgpu), ALSA -- for GPUI and the winit-based front ends; GTK 4
-      # for vix-gtk4; OpenGL/EGL for vix-slint's femtovg renderer.
+      # for vix-gtk4; OpenGL/EGL for vix-slint's femtovg renderer; the X11
+      # headers and CMake for vix-bui's C kit (BUI loads libX11 at run time).
       - name: Linux system libraries
         if: runner.os == 'Linux'
         run: |
@@ -64,7 +65,8 @@ jobs:
             libasound2-dev libfontconfig-dev libfreetype-dev libwayland-dev \
             libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev libxrandr-dev \
             libxi-dev libvulkan-dev libssl-dev libzstd-dev \
-            libgtk-4-dev libgl1-mesa-dev libegl-dev
+            libgtk-4-dev libgl1-mesa-dev libegl-dev \
+            libx11-dev cmake
       # vix-gtk4 links the system GTK 4: Homebrew's on macOS. Windows runners
       # have no GTK, so vix-gtk4 is left out there (EXCLUDE below).
       - name: macOS GTK 4
@@ -91,7 +93,7 @@ jobs:
           # `escape` first: a fresh profile opens on the Welcome overlay.
           VIX_GUI_SCREENSHOT_KEYS: "escape ctrl-p c a r g o"
         run: |
-          for gui in vix-gpui vix-egui vix-iced vix-gtk4 vix-slint; do
+          for gui in vix-gpui vix-egui vix-iced vix-gtk4 vix-slint vix-bui; do
             VIX_GUI_SCREENSHOT="$RUNNER_TEMP/$gui.png" \
               cargo run --manifest-path gui/Cargo.toml --locked -p "$gui" --features screenshot -- README.md
             test -s "$RUNNER_TEMP/$gui.png"

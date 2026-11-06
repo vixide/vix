@@ -43,7 +43,7 @@ brew install vixide/homebrew-tap/vix-gpui
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.sh | sh
 ```
 
-`vix-slint` is GPL-3.0-only, and `vix-gtk4` is source-only for now. See
+`vix-slint` is GPL-3.0-only, and `vix-gtk4` and `vix-bui` (GPL-3.0-only) are source-only for now. See
 [`gui/spec/index.md`](../../gui/spec/index.md) (Distribution) for platforms
 and run-time libraries.
 

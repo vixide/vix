@@ -1002,6 +1002,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "blenderui"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a618dd35f33070d6eaf145c35d1c965eb4c7f7d30944b14625963832c004b7f"
+dependencies = [
+ "blenderui-macros",
+ "blenderui-sys",
+ "blenderui-table",
+ "blenderui-tailwind",
+ "blenderui-vlist",
+ "paste",
+ "smallvec",
+ "taffy 0.15.1",
+]
+
+[[package]]
+name = "blenderui-macros"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e484ed51821f5077d9414eeaf2094b408e9f079b2df088610bc1c0e43081163"
+dependencies = [
+ "blenderui-tailwind",
+]
+
+[[package]]
+name = "blenderui-paint"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c10c39c874cf95632cb7971867e71f0518999d1cfed5f924a2eba42b5774bbcb"
+
+[[package]]
+name = "blenderui-sys"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cbff96e177b7404e40141017179b03b7f178756decbfc7d07b74f79993e7062"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
+name = "blenderui-table"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "937e238a4b34b9c58fb0881a8ed59328ef34bb3d2e43ef0480abdff4af92eaa9"
+dependencies = [
+ "blenderui-paint",
+]
+
+[[package]]
+name = "blenderui-tailwind"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c5dc318e75975cfe2710ae2c1696820b94f4f658125ec249e1190dcac648d97"
+
+[[package]]
+name = "blenderui-vlist"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa4328f29524865b5f0375f6c34926e117080119e0e0bfd4b0fca0e1cfb809a"
+dependencies = [
+ "blenderui-paint",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1466,6 +1530,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "197fd99cb113a8d5d9b6376f3aa817f32c1078f2343b714fff7d2ca44fdf67d5"
 dependencies = [
  "hashbrown 0.16.1",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -10457,6 +10530,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "taffy"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f7bd2d97198df05186f93a3a3c306845f40e8b3c22bf9279cdd7e5cf5fea7d"
+dependencies = [
+ "serde",
+ "slotmap",
+ "smallvec",
+]
+
+[[package]]
 name = "tao-core-video-sys"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11585,6 +11669,20 @@ dependencies = [
 [[package]]
 name = "vix-bottom-dock"
 version = "2.0.0"
+
+[[package]]
+name = "vix-bui"
+version = "2.0.0"
+dependencies = [
+ "blenderui",
+ "clap",
+ "png 0.17.16",
+ "ratatui",
+ "rust-i18n",
+ "vix-i18n",
+ "vix-input",
+ "vix-tui",
+]
 
 [[package]]
 name = "vix-byte-size"

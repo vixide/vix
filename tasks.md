@@ -9822,6 +9822,27 @@ the maintainer's decisions.
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
 T759 wait for Cowork on `main`; T758 last.
 
+## Run U — another GUI front end (2026-11-06)
+
+- [x] **T769 — `vix-bui`: the Vix desktop GUI on BUI.** A sixth, self-contained
+  front end in `gui/` on [BUI](https://github.com/ppmpreetham/BUI) (Blender's
+  UI as a library; `blenderui` 0.4.0, GPL-2.0-or-later, so the binary is
+  `GPL-3.0-only` like `vix-slint`; `scripts/check-binary-licenses` classifies
+  the new license id). Spec first: [`gui/vix-bui/spec`](gui/vix-bui/spec/index.md).
+  Uses only BUI's window, input and `canvas` painter; the unchanged `ui::draw`
+  renders into a cell grid, so open/edit/save, themes, keymaps, the explorer
+  and every overlay come from the `App`. Box-drawing and block characters are
+  drawn as rectangles (BUI's embedded Inter has none), each character is placed
+  at its own column, and there is a `screenshot` feature that renders the real
+  App through BUI's headless window. **Done:** build, pedantic clippy,
+  rustfmt, unit tests and four end-to-end tests through BUI off-screen
+  windows, a rendered PNG. **Not done / unverified:** the live native Cocoa
+  window (BUI marks macOS experimental), Linux and Windows builds, vetoing the
+  close box (BUI has no close-request event), keys before the pointer enters
+  the window, a monospace font and Nerd Font icons (needs HTML-element
+  rendering with `add_font`), native menus/file dialog/IME, release
+  distribution (source-only, like `vix-gtk4`). **Medium.**
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -10059,6 +10080,9 @@ CI-discovered rounds to get genuinely right on Windows).
 20. **Run T (local-first CI, 2026-11-04):** T760 → T761 → T762 (with T764),
     then T767, T765, T766; T763 and T768 are spikes. See
     [`spec/local-ci`](spec/local-ci/index.md).
+
+21. **Run U (another GUI, 2026-11-06):** T769 (`vix-bui`). First version done;
+    the limits in its spec are the follow-ups.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

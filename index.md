@@ -268,8 +268,9 @@ The same editor — every panel, overlay and dock — also runs in a native wind
 on macOS, Windows and Linux. Four front ends ship with each release,
 installed like `vix-tui` under their own names (for example
 `brew install vixide/homebrew-tap/vix-gpui`): `vix-gpui` (GPUI), `vix-egui`
-(egui), `vix-iced` (iced) and `vix-slint` (Slint, GPL-3.0-only). A fifth,
-`vix-gtk4` (GTK 4), builds from source. They are **experimental**, built side
+(egui), `vix-iced` (iced) and `vix-slint` (Slint, GPL-3.0-only). Two more,
+`vix-gtk4` (GTK 4) and `vix-bui` (BUI, Blender's UI library; GPL-3.0-only, needs
+CMake) build from source. They are **experimental**, built side
 by side so the toolkits can be compared; see
 [`gui/spec/index.md`](gui/spec/index.md).
 

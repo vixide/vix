@@ -1,15 +1,16 @@
-# Desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`)
+# Desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`, `vix-bui`)
 
-Native desktop windows for Vix on macOS, Windows and Linux, built five
+Native desktop windows for Vix on macOS, Windows and Linux, built six
 times — on [GPUI](https://github.com/longbridge/gpui-kit) (via Longbridge's
 GPUI Kit), [egui](https://github.com/emilk/egui) (via eframe),
 [iced](https://github.com/iced-rs/iced), [GTK 4](https://gtk.org) (via
-gtk4-rs) and [Slint](https://slint.dev) — each a complete, independent
+gtk4-rs), [Slint](https://slint.dev) and
+[BUI](https://github.com/ppmpreetham/BUI) (Blender's UI) — each a complete, independent
 implementation, so the toolkits can be tried and compared side by side
 before committing to one.
 
 **Status:** experimental. GUI Phase 0 (T640) and Phase 1 (T641, T642)
-shipped, with iced, GTK 4 and Slint front ends added in T647; Phase 2 (native components) not started, and waits on choosing a
+shipped, with iced, GTK 4 and Slint front ends added in T647 and BUI in T769; Phase 2 (native components) not started, and waits on choosing a
 toolkit.
 
 ```sh
@@ -18,6 +19,7 @@ cargo run --manifest-path gui/Cargo.toml --release -p vix-egui [-- FILE…]
 cargo run --manifest-path gui/Cargo.toml --release -p vix-iced [-- FILE…]
 cargo run --manifest-path gui/Cargo.toml --release -p vix-gtk4 [-- FILE…]   # needs GTK 4 installed
 cargo run --manifest-path gui/Cargo.toml --release -p vix-slint [-- FILE…]
+cargo run --manifest-path gui/Cargo.toml --release -p vix-bui [-- FILE…]    # needs CMake
 ```
 
 All take the same command line as `vix` (`vix::cli::Cli`).
@@ -34,6 +36,7 @@ with one crate per front end:
 | `vix-iced` | The iced front end: an Elm-style application whose `canvas` paints the grid, a zero-size widget that enables the input method at the cursor, events through a subscription, native menus (macOS) through `muda`, file dialog through `rfd`. iced pinned `=0.14.0`. |
 | `vix-gtk4` | The GTK 4 front end: a `DrawingArea` painted with Cairo and Pango, an `IMMulticontext` driven by the key controller, a GIO menu bar (native on every platform), `FileChooserNative`. gtk4-rs 0.11 against the GTK 4.0 API, so it builds with Ubuntu 22.04's GTK 4.6. |
 | `vix-slint` | The Slint front end: `.slint` markup compiled at startup by `slint-interpreter` (Slint's generated Rust contains `unsafe` code, which this workspace forbids), per-row repeaters of background, text and line elements whose models are diffed after each frame, a generated `MenuBar` (native on macOS and Windows), file dialog through `rfd`. Slint pinned `=1.18.1`; used under the GPL-3.0-only, so `vix-slint` itself is `GPL-3.0-only`. |
+| `vix-bui` | The BUI front end: one BUI `canvas` painted from the cell grid (box-drawing characters drawn as rectangles, every character at its own column, because BUI's one embedded font is proportional and has no icons), BUI's own window and input, no native menu bar. `blenderui` pinned `=0.4.0`, GPL-2.0-or-later, so `vix-bui` is `GPL-3.0-only`. Its own spec: [`gui/vix-bui/spec/index.md`](../vix-bui/spec/index.md). |
 
 Each crate also carries its own copy of the parts that do not depend on
 the toolkit: a ratatui cell-grid `Backend` (`grid`), color resolution and
@@ -82,7 +85,9 @@ recomputes it from `gui/Cargo.lock` and fails on any difference. Today
 `vix-gpui`, `vix-egui`, `vix-iced` and `vix-gtk4` are `Apache-2.0 OR
 BSD-3-Clause OR MIT OR GPL-3.0-only` (GPUI is Apache-2.0 only, and every
 toolkit stack links Apache-2.0-only crates, which rule out GPL-2.0-only)
-and `vix-slint` is `GPL-3.0-only` (Slint, used under its GPLv3 option).
+and `vix-slint` is `GPL-3.0-only` (Slint, used under its GPLv3 option), and so is
+`vix-bui` (BUI is GPL-2.0-or-later, and the Apache-2.0-only crates rule out
+GPLv2).
 A new front end, or a toolkit upgrade, follows the same rule. See
 [`spec/license/index.md`](../../spec/license/index.md) ("Binary licenses").
 
@@ -128,6 +133,7 @@ A new front end, or a toolkit upgrade, follows the same rule. See
 | `vix-iced` | cosmic-text with advanced shaping; system fonts and per-glyph fallback built in; icon spans drawn in the Nerd Font explicitly | macOS only (`muda`, clicks delivered as a subscription) | `rfd` (macOS menu only) | commits type like text, via a zero-size widget requesting the input method at the cursor | Elm-style: the grid is redrawn once per message (event, tick, menu click) |
 | `vix-gtk4` | Pango over Cairo (software); OS font stack with per-glyph fallback | every platform (GIO menu model; the global bar on macOS) | `FileChooserNative`, every platform | commits through an `IMMulticontext`; candidate window at the cursor | retained `DrawingArea`, `queue_draw` |
 | `vix-slint` | Slint's femtovg renderer (OpenGL) with parley / fontique; per-script fallback, icon spans given the Nerd Font family | macOS and Windows (Slint's `MenuBar`); none on Linux, where it would duplicate the in-grid bar | `rfd` (macOS menu only) | none (Slint enables IME only for a focused `TextInput`) | retained elements; per-row models diffed each frame |
+| `vix-bui` | BUI's FreeType text in its embedded proportional Inter, each character placed at its cell; box and block characters as rectangles; no fallback (no icons, CJK or emoji); software raster on macOS | none (in-grid menus only) | none | none | one `canvas`, repainted on a notify (input, or `App::poll_interval` by a timer thread) |
 
 Clipboard keys (`Cmd/Ctrl+X/C/V`) arrive as plain keys in every build
 (egui needs `NativeOptions::clipboard_shortcuts = false` for that); Vix
@@ -166,6 +172,10 @@ so the `vix-slint: …` line printed on startup failure is unchanged.
   `unstable-*` Slint features (raw winit events for Option-as-Meta, and
   Slint's font collection for the icon font), safe only because Slint is
   pinned exactly.
+- `vix-bui` has no monospace font, Nerd Font icons, native menus, file
+  dialog or IME, cannot veto the window's close box (so closing it skips the
+  unsaved-changes prompt) and drops keys until the pointer has entered the
+  window or been clicked in it: all BUI 0.4 limits; see its spec.
 - Native menu labels are translated at startup; changing the locale at
   runtime does not relabel them until restart.
 - Wide (CJK, emoji) glyphs are drawn at their cell position but sized by
@@ -198,6 +208,8 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/release
   on macOS, `libgtk-4-dev` on Debian/Ubuntu).
 - **`vix-slint` is GPL-3.0-only**: Slint is used under the GPLv3, so its
   binaries carry that license rather than Vix's five-way choice.
+- **`vix-bui` is not released** either (build it from source; it needs CMake
+  and, on Linux, the X11 headers). Its binary would be GPL-3.0-only.
 - **Windows** release builds use the `windows` subsystem, so no console
   window opens beside the GUI (which also means `--help` prints nothing
   there); debug builds keep the console.
@@ -248,7 +260,8 @@ visible (a CI runner, or one behind other windows) otherwise stops
 painting; iced takes `window::screenshot` (it redraws after every message,
 hidden or not); GTK 4 paints the grid into a Cairo image surface with the
 same paint function, no window capture at all; Slint uses
-`Window::take_snapshot`. `vix-gpui`'s feature enables
+`Window::take_snapshot`; BUI renders an off-screen (headless) BUI window
+with its software raster, so it needs no display at all. `vix-gpui`'s feature enables
 `gpui-pre-platform`'s `test-support` directly, because GPUI Kit's own
 `test-support` also pulls in its alternate GPUI Fast backend, whose exact
 version pins conflict with the default backend's.
