@@ -96,6 +96,8 @@ view (replay Ops onto Painter) ◀── scene (grid → Ops) ◀── ui::draw
 | `glyphs` | Box-drawing (U+2500–257F) and block (U+2580–259F) characters as rectangles. |
 | `keys` | A BUI keystroke (keysym, typed text, Shift/Control/Alt) as a `vix-input` key event, through `key_rules`. |
 | `key_rules` | The keystroke rules shared in shape with the other front ends (typed character vs. unmodified chord key, `Shift+Tab` as `BackTab`, …). |
+| `menu_tree` | The native menu bar's contents from the `vix-menu` model; File gains **Open with System Dialog…**. |
+| `menus` | (macOS) that tree as a `muda` bar, replacing BUI's default one; clicks are polled by the timer job, and the dialog is `rfd`. |
 | `model` | The `App`, its grid and palette, mouse state and the tick schedule; no BUI types, so tests and the screenshot run drive it directly. |
 | `view` | The BUI side: one `canvas` filling the window with an element above it per styled item, event handlers that forward to `model`, a timer thread posting `App::tick` jobs through `UiSender`. |
 | `startup` | The terminal binary's startup sequence minus the terminal. |
@@ -191,6 +193,11 @@ window:
 - **File explorer** (left dock), command palette, menus (the in-grid bar:
   every menu, `F10`, `Alt` mnemonics), pickers, overlays — all of them,
   because the unchanged `ui::draw` draws them.
+- **Native menu bar** on macOS, built from the same `vix-menu` model; every
+  leaf runs its action id through `App::run_action`. It replaces the small
+  default bar BUI's Cocoa host installs, whose `Cmd+Q` and `Cmd+W` key
+  equivalents would otherwise never reach Vix. File gains
+  **Open with System Dialog…** (`menu.item.file.open_native`, through `rfd`).
 - **Mouse:** click, drag, double-click, wheel (whole lines), reported per cell
   like a terminal.
 - **Clipboard:** `Ctrl/Cmd+X/C/V` reach Vix, which uses the real system
@@ -217,18 +224,24 @@ window:
   in a basic terminal. Without a Nerd Font installed, icons are boxes too.
 - **Fallback is a fixed list**, not the OS font fallback: a character in none
   of `font_choice::fallbacks`'s installed families shows the box.
-- **No native menu bar or IME.** BUI has neither; the in-grid menus work, and
-  there is no preedit text (composed input arrives as typed characters if
-  the OS delivers it as key text). The system file dialog (`rfd`, macOS) waits
-  for a native menu to call it: the in-grid menus are the shared model, which
-  has no GUI-only items.
+- **Native menu bar and file dialog on macOS only**, like `vix-egui` and
+  `vix-iced`: `muda`'s Windows setup is an `unsafe fn`, forbidden here, and on
+  Linux it needs a GTK loop. `File → Open with System Dialog…` lives on that bar
+  (the in-grid menus are the shared model, which has no GUI-only items), so
+  Windows and Linux have neither; `Ctrl+O` and the in-grid menus work there. A
+  menu click waits for the next tick, up to 50 ms. Labels are translated at
+  startup.
+- **No IME.** BUI has none: there is no preedit text (composed input arrives
+  as typed characters if the OS delivers it as key text).
 - **No GPU renderer on macOS** (BUI's own limit): drawing is BUI's software
   raster. Fine for a text grid; full-window redraws at high resolutions cost
   CPU.
 - **Fractional-scale text** is BUI's. Box lines are snapped to whole logical
   pixels; at a fractional display scale they may blur slightly.
 - **Window geometry** is fixed at startup (1200 × 800 logical pixels) and is
-  not remembered; resizing re-fits the grid.
+  not remembered; resizing re-fits the grid. No sibling remembers it either,
+  and BUI 0.4 has no window position to read or set (`Window::bounds` has a
+  fixed origin; `WindowOptions`' origin is ignored).
 - **macOS only has been built here.** Linux (X11, via `dlopen`) and Windows
   (Win32) are what BUI calls "works"; macOS is "experimental". The source
   carries no platform conditionals, and CI builds all three on the weekly
@@ -251,9 +264,15 @@ Nerd Font icons, Japanese, Chinese and Korean through the fallback list, and
 real bold and italic Menlo on the same baseline (bold and italic through a
 temporary patch of the scene, since no built-in theme uses them).
 
+The menu tree (every model leaf, in order, plus the dialog item) and what the
+dialog does with its answer are tested without a window; `menus` and `rfd`
+compile on macOS but need a live app.
+
 Unverified: BUI's native Cocoa window (live typing, resizing, retina scale,
 focus), so the device-pixel snapping of the cell at scale 2 has only run in
-unit tests; Linux and Windows builds, so their font lists are untested
+unit tests; the native menu bar and the file dialog, neither of which has been
+seen on screen (whether `muda` clicks arrive under BUI's own event loop, and
+whether `rfd`'s modal panel works from a timer job); Linux and Windows builds, so their font lists are untested
 (Consolas, DejaVu Sans Mono, the fallback families); frame times at retina
 resolution; and sustained use.
 
@@ -266,8 +285,9 @@ pixels. They never assert on translated text.
 
 ## Internationalization
 
-vix-bui has no user-facing text of its own: the window title comes from
+vix-bui has almost no user-facing text of its own: the window title comes from
 `startup::window_title` (`Vix — <workspace>`, the same as the other front
-ends), and every string in the window is the `App`'s, already translated in
-all 15 core locales through `vix-i18n`. The one diagnostic it prints
+ends), the native menu is the `vix-menu` model's labels plus the existing
+`menu.item.file.open_native` key, and every string in the window is the
+`App`'s, already translated in all 15 core locales through `vix-i18n`. The one diagnostic it prints
 (`vix-bui: …` on stderr when startup fails) matches the other front ends'.

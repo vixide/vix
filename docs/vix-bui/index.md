@@ -42,8 +42,9 @@ into a character grid, so nothing behaves differently from the terminal.
   color and scripts that need shaping (Arabic, Devanagari) do not draw
   properly. With no such font installed, BUI's built-in Inter is used, placed
   cell by cell.
-- **There is no native menu bar, file dialog or input-method (IME) support.**
-  Use the in-window menus.
+- **Menus.** On macOS the native menu bar works alongside the in-window one,
+  and **File → Open with System Dialog…** is on it. Elsewhere use the in-window
+  menus. There is no input-method (IME) support.
 - **Quit with File → Quit (`Ctrl+Q`).** Closing the window with its close
   button ends the program immediately, without the unsaved-changes prompt:
   BUI cannot let an app veto it.

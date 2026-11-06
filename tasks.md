@@ -9870,14 +9870,16 @@ the generated `release.yml`.
   windows, a rendered PNG. **Not done / unverified:** the live native Cocoa
   window (BUI marks macOS experimental), Linux and Windows builds, vetoing the
   close box (BUI has no close-request event), keys before the pointer enters
-  the window, native menus/file dialog/IME, release distribution (source-only,
-  like `vix-gtk4`). **Medium.**
+  the window, IME, release distribution (source-only, like `vix-gtk4`).
+  **Medium.**
   **Follow-ups (`feat/t769-bui-followups`):** monospace text. `add_font` under
   the empty family name replaces BUI's default, so the grid stays on the
   canvas (measured: 1.6 ms per full-window frame, against 17–19 ms for one
   element per character); only bold, italic and fallback glyphs are elements.
-  Fallback per character is ours, BUI has none. Left: shaping and color emoji
-  (BUI draws one outline face per run).
+  Fallback per character is ours, BUI has none. System file dialog (`rfd`) and
+  native macOS menu bar (`muda`), both unseen on a live window. Window geometry
+  skipped: no sibling keeps it and BUI cannot read or set a position. Left:
+  shaping and color emoji (BUI draws one outline face per run).
 
 ## Ideas backlog (unscoped)
 

@@ -11677,6 +11677,7 @@ dependencies = [
  "blenderui",
  "clap",
  "fontique 0.12.0",
+ "muda 0.21.2",
  "png 0.17.16",
  "ratatui",
  "rfd",

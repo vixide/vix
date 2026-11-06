@@ -4,13 +4,17 @@
 //! window, with all of its own GUI code (no library shared with the other
 //! front ends): the App's unchanged `ui::draw` renders into an in-memory cell
 //! grid, which this front end paints with BUI's `canvas` (`view`, `scene`);
-//! keystrokes and the mouse feed back into the same `App::on_key` /
-//! `App::on_mouse` the terminal uses (`keys`, `model`). See
+//! keystrokes, the mouse and (on macOS) the native menu bar feed back into the
+//! same `App::on_key` / `App::on_mouse` / `App::run_action` the terminal uses
+//! (`keys`, `model`, `menus`). See
 //! `gui/spec/index.md` and `gui/vix-bui/spec/index.md`.
 
 // A release build on Windows is a GUI app: no console window opens beside it.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+// `t!` is used only by `menu_tree`.
+#[cfg_attr(any(target_os = "macos", test), macro_use)]
+extern crate vix_i18n;
 vix_i18n::surface!();
 
 mod font_choice;
@@ -19,6 +23,11 @@ mod glyphs;
 mod grid;
 mod key_rules;
 mod keys;
+// Only the macOS native menu bar reads the menu tree (its tests run everywhere).
+#[cfg(any(target_os = "macos", test))]
+mod menu_tree;
+#[cfg(target_os = "macos")]
+mod menus;
 mod model;
 mod render;
 mod scene;

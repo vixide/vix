@@ -281,11 +281,25 @@ fn up_handler(shared: &Rc<Shared>) -> impl Fn(&MouseUpEvent, &mut Window, &mut A
 /// Ask for files with the platform's dialog, then open them. The model is not
 /// borrowed while the dialog runs, because it spins an event loop of its own.
 #[cfg(target_os = "macos")]
-#[allow(dead_code, reason = "the native menu bar is what calls it")]
 fn open_with_system_dialog(shared: &Shared) {
     if let Some(paths) = rfd::FileDialog::new().pick_files() {
         shared.model.borrow_mut().open_files(&paths);
     }
+}
+
+/// Run what was clicked on the native menu bar since the last tick. Returns
+/// whether anything was.
+#[cfg(target_os = "macos")]
+fn run_menu_clicks(shared: &Shared) -> bool {
+    let clicks = crate::menus::clicked();
+    for id in &clicks {
+        if id == crate::menus::OPEN_NATIVE {
+            open_with_system_dialog(shared);
+        } else {
+            shared.model.borrow_mut().run_action(id);
+        }
+    }
+    !clicks.is_empty()
 }
 
 thread_local! {
@@ -299,8 +313,12 @@ fn tick_job(cx: &mut App) {
     let Some(shared) = SHARED.with(|s| s.borrow().clone()) else {
         return;
     };
-    let redraw = shared.model.borrow_mut().tick();
-    settle(&shared, cx, redraw);
+    #[cfg(target_os = "macos")]
+    let clicked = run_menu_clicks(&shared);
+    #[cfg(not(target_os = "macos"))]
+    let clicked = false;
+    let due = shared.model.borrow_mut().tick();
+    settle(&shared, cx, clicked || due);
 }
 
 /// Open the window for `shared` with a logical size of `width` x `height`.
@@ -335,6 +353,12 @@ pub fn run(model: Model, title: String, dark: bool) {
     let shared = Shared::new(model);
     SHARED.with(|s| *s.borrow_mut() = Some(Rc::clone(&shared)));
     let window = Rc::clone(&shared);
+    // The menu bar lives as long as the event loop, which starts after this
+    // closure returns.
+    #[cfg(target_os = "macos")]
+    let menu = Rc::new(Cell::new(None));
+    #[cfg(target_os = "macos")]
+    let installed = Rc::clone(&menu);
     Application::new()
         .theme(if dark { "dark" } else { "light" })
         .run(move |cx| {
@@ -342,6 +366,8 @@ pub fn run(model: Model, title: String, dark: bool) {
                 eprintln!("vix-bui: could not open a window: {e}");
                 return;
             }
+            #[cfg(target_os = "macos")]
+            installed.set(Some(crate::menus::install()));
             // Closing the window with its own close box ends the program
             // (BUI offers no way to veto it; see the spec's limits).
             cx.on_window_closed(|_, cx| cx.quit());
@@ -356,6 +382,8 @@ pub fn run(model: Model, title: String, dark: bool) {
             });
         });
     shared.model.borrow_mut().on_exit();
+    #[cfg(target_os = "macos")]
+    drop(menu);
 }
 
 #[cfg(test)]

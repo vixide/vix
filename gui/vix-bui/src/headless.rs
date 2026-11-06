@@ -152,7 +152,10 @@ fn files_from_the_system_dialog_open_in_tabs() {
         let win = view::open(cx, &shared, "Vix".into(), 800.0, 400.0).expect("window");
         cx.draw(win.id);
         assert!(!grid_has(&shared, "picked-by-the-dialog"));
-        shared.model.borrow_mut().open_files(std::slice::from_ref(&file));
+        shared
+            .model
+            .borrow_mut()
+            .open_files(std::slice::from_ref(&file));
         cx.notify_all();
         cx.draw(win.id);
         assert!(grid_has(&shared, "picked-by-the-dialog"));

@@ -36,7 +36,7 @@ with one crate per front end:
 | `vix-iced` | The iced front end: an Elm-style application whose `canvas` paints the grid, a zero-size widget that enables the input method at the cursor, events through a subscription, native menus (macOS) through `muda`, file dialog through `rfd`. iced pinned `=0.14.0`. |
 | `vix-gtk4` | The GTK 4 front end: a `DrawingArea` painted with Cairo and Pango, an `IMMulticontext` driven by the key controller, a GIO menu bar (native on every platform), `FileChooserNative`. gtk4-rs 0.11 against the GTK 4.0 API, so it builds with Ubuntu 22.04's GTK 4.6. |
 | `vix-slint` | The Slint front end: `.slint` markup compiled at startup by `slint-interpreter` (Slint's generated Rust contains `unsafe` code, which this workspace forbids), per-row repeaters of background, text and line elements whose models are diffed after each frame, a generated `MenuBar` (native on macOS and Windows), file dialog through `rfd`. Slint pinned `=1.18.1`; used under the GPL-3.0-only, so `vix-slint` itself is `GPL-3.0-only`. |
-| `vix-bui` | The BUI front end: one BUI `canvas` painted from the cell grid in a monospace font found through `fontique` and registered as BUI's default family, elements above it for bold, italic and per-character fallback (which BUI lacks), BUI's own window and input, no native menu bar. `blenderui` pinned `=0.4.0`, GPL-2.0-or-later, so `vix-bui` is `GPL-3.0-only`. Its own spec: [`gui/vix-bui/spec/index.md`](../vix-bui/spec/index.md). |
+| `vix-bui` | The BUI front end: one BUI `canvas` painted from the cell grid in a monospace font found through `fontique` and registered as BUI's default family, elements above it for bold, italic and per-character fallback (which BUI lacks), BUI's own window and input, native menus (macOS) through `muda`, file dialog through `rfd`. `blenderui` pinned `=0.4.0`, GPL-2.0-or-later, so `vix-bui` is `GPL-3.0-only`. Its own spec: [`gui/vix-bui/spec/index.md`](../vix-bui/spec/index.md). |
 
 Each crate also carries its own copy of the parts that do not depend on
 the toolkit: a ratatui cell-grid `Backend` (`grid`), color resolution and
@@ -133,7 +133,7 @@ A new front end, or a toolkit upgrade, follows the same rule. See
 | `vix-iced` | cosmic-text with advanced shaping; system fonts and per-glyph fallback built in; icon spans drawn in the Nerd Font explicitly | macOS only (`muda`, clicks delivered as a subscription) | `rfd` (macOS menu only) | commits type like text, via a zero-size widget requesting the input method at the cursor | Elm-style: the grid is redrawn once per message (event, tick, menu click) |
 | `vix-gtk4` | Pango over Cairo (software); OS font stack with per-glyph fallback | every platform (GIO menu model; the global bar on macOS) | `FileChooserNative`, every platform | commits through an `IMMulticontext`; candidate window at the cursor | retained `DrawingArea`, `queue_draw` |
 | `vix-slint` | Slint's femtovg renderer (OpenGL) with parley / fontique; per-script fallback, icon spans given the Nerd Font family | macOS and Windows (Slint's `MenuBar`); none on Linux, where it would duplicate the in-grid bar | `rfd` (macOS menu only) | none (Slint enables IME only for a focused `TextInput`) | retained elements; per-row models diffed each frame |
-| `vix-bui` | BUI's FreeType text: the monospace font replaces BUI's default family on the canvas, each character placed at its cell; bold, italic and fallback as elements, fallback chosen here per character from a fixed list (BUI has none; no shaping, no color emoji); box and block characters as rectangles; embedded Inter if no font is found; software raster on macOS | none (in-grid menus only) | none | none | one `canvas`, repainted on a notify (input, or `App::poll_interval` by a timer thread) |
+| `vix-bui` | BUI's FreeType text: the monospace font replaces BUI's default family on the canvas, each character placed at its cell; bold, italic and fallback as elements, fallback chosen here per character from a fixed list (BUI has none; no shaping, no color emoji); box and block characters as rectangles; embedded Inter if no font is found; software raster on macOS | macOS only (`muda`, clicks polled by the tick job) | `rfd` (macOS menu only) | none | one `canvas` plus an element per styled item, rebuilt on a notify (input, or `App::poll_interval` by a timer thread) |
 
 Clipboard keys (`Cmd/Ctrl+X/C/V`) arrive as plain keys in every build
 (egui needs `NativeOptions::clipboard_shortcuts = false` for that); Vix
@@ -172,8 +172,7 @@ so the `vix-slint: …` line printed on startup failure is unchanged.
   `unstable-*` Slint features (raw winit events for Option-as-Meta, and
   Slint's font collection for the icon font), safe only because Slint is
   pinned exactly.
-- `vix-bui` has no text shaping, color emoji, native menus, file
-  dialog or IME, cannot veto the window's close box (so closing it skips the
+- `vix-bui` has no text shaping, color emoji or IME, cannot veto the window's close box (so closing it skips the
   unsaved-changes prompt) and drops keys until the pointer has entered the
   window or been clicked in it: all BUI 0.4 limits; see its spec.
 - Native menu labels are translated at startup; changing the locale at
