@@ -5,6 +5,7 @@
 //! scripted screenshot run; `crate::view` only forwards BUI's events to it and
 //! replays [`Model::scene`] onto BUI's painter.
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ratatui::Terminal;
@@ -232,6 +233,13 @@ impl Model {
     /// Run one action id, as a menu leaf would.
     pub fn run_action(&mut self, id: &str) {
         self.app.run_action(id);
+    }
+
+    /// Open `paths` in tabs, as if given on the command line.
+    pub fn open_files(&mut self, paths: &[PathBuf]) {
+        for path in paths {
+            self.app.open_initial(path);
+        }
     }
 
     /// Background work, as the terminal loop's `App::tick`. Returns whether

@@ -217,10 +217,11 @@ window:
   in a basic terminal. Without a Nerd Font installed, icons are boxes too.
 - **Fallback is a fixed list**, not the OS font fallback: a character in none
   of `font_choice::fallbacks`'s installed families shows the box.
-- **No native menu bar, file dialog or IME.** BUI has none; the in-grid
-  menus work, `File → Open with System Dialog…` does not exist here, and
+- **No native menu bar or IME.** BUI has neither; the in-grid menus work, and
   there is no preedit text (composed input arrives as typed characters if
-  the OS delivers it as key text).
+  the OS delivers it as key text). The system file dialog (`rfd`, macOS) waits
+  for a native menu to call it: the in-grid menus are the shared model, which
+  has no GUI-only items.
 - **No GPU renderer on macOS** (BUI's own limit): drawing is BUI's software
   raster. Fine for a text grid; full-window redraws at high resolutions cost
   CPU.

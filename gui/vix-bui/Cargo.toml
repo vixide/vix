@@ -36,5 +36,9 @@ png = { version = "0.17", optional = true }
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:png"]
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# The platform file dialog, for the menu's Open with System Dialog….
+rfd = "0.17"
+
 [lints]
 workspace = true

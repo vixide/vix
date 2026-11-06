@@ -141,6 +141,25 @@ fn a_monospace_window_keeps_input_working_over_styled_text() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// What the system dialog does with its answer, without the dialog.
+#[test]
+fn files_from_the_system_dialog_open_in_tabs() {
+    let dir = scratch("dialog");
+    let file = dir.join("picked.txt");
+    std::fs::write(&file, "picked-by-the-dialog\n").expect("file");
+    let shared = shared_at(&dir);
+    Application::headless().run(|cx| {
+        let win = view::open(cx, &shared, "Vix".into(), 800.0, 400.0).expect("window");
+        cx.draw(win.id);
+        assert!(!grid_has(&shared, "picked-by-the-dialog"));
+        shared.model.borrow_mut().open_files(std::slice::from_ref(&file));
+        cx.notify_all();
+        cx.draw(win.id);
+        assert!(grid_has(&shared, "picked-by-the-dialog"));
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn quit_action_ends_the_loop_request() {
     let dir = scratch("quit");

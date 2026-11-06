@@ -278,6 +278,16 @@ fn up_handler(shared: &Rc<Shared>) -> impl Fn(&MouseUpEvent, &mut Window, &mut A
     }
 }
 
+/// Ask for files with the platform's dialog, then open them. The model is not
+/// borrowed while the dialog runs, because it spins an event loop of its own.
+#[cfg(target_os = "macos")]
+#[allow(dead_code, reason = "the native menu bar is what calls it")]
+fn open_with_system_dialog(shared: &Shared) {
+    if let Some(paths) = rfd::FileDialog::new().pick_files() {
+        shared.model.borrow_mut().open_files(&paths);
+    }
+}
+
 thread_local! {
     /// The window's shared state, for the timer job (which carries no data
     /// because it must be `Send`; it always runs on this, the UI, thread).
