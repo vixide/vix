@@ -9,6 +9,7 @@ use blenderui::prelude::Application;
 use vix::app::App;
 use vix::settings::Settings;
 
+use crate::fonts::Fonts;
 use crate::model::Model;
 use crate::view::{self, Shared};
 
@@ -24,7 +25,7 @@ fn scratch(tag: &str) -> PathBuf {
 fn shared_at(root: &Path) -> Rc<Shared> {
     let app = App::new(root.to_path_buf(), Settings::default())
         .with_session_path(root.join("session.toml"));
-    Shared::new(Model::new(app, true))
+    Shared::new(Model::new(app, true, Fonts::embedded()))
 }
 
 /// Whether any row of the grid contains `needle`.
@@ -106,6 +107,36 @@ fn clicking_and_scrolling_do_not_disturb_the_window() {
         let (w, h, px) = cx.draw(win.id);
         assert!(w > 0 && h > 0 && !px.is_empty());
         assert!(!shared.model.borrow_mut().should_quit());
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The real path with whatever monospace font this machine has: a real font,
+/// a styled span and a fallback icon over the canvas must neither disturb the
+/// grid's text nor stop input from reaching the window. With no font installed
+/// (a bare CI image) this is the embedded path again, and still must hold.
+#[test]
+fn a_monospace_window_keeps_input_working_over_styled_text() {
+    let dir = scratch("mono");
+    let file = dir.join("note.txt");
+    std::fs::write(&file, "# heading\n\u{f07b} icon\n").expect("file");
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(dir.join("session.toml"));
+    app.open_initial(&file);
+    let shared = Shared::new(Model::new(app, true, Fonts::load()));
+    Application::headless().run(|cx| {
+        let win = view::open(cx, &shared, "Vix".into(), 800.0, 400.0).expect("window");
+        let (_, _, pixels) = cx.draw(win.id);
+        assert!(pixels.iter().any(|&p| p != pixels[0]), "not a blank window");
+        assert!(grid_has(&shared, "heading"));
+        let m = shared.model.borrow().metrics();
+        // Over the opened text, where a styled element may sit.
+        cx.simulate_mouse_move(win.id, m.cell_w * 30.0, m.cell_h * 3.0);
+        cx.simulate_key(win.id, "z", "z");
+        cx.simulate_scroll(win.id, m.cell_w * 30.0, m.cell_h * 3.0, 1);
+        cx.notify_all();
+        cx.draw(win.id);
+        assert!(grid_has(&shared, "z"), "the key reached the App");
     });
     let _ = std::fs::remove_dir_all(&dir);
 }

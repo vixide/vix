@@ -11676,9 +11676,11 @@ version = "2.0.0"
 dependencies = [
  "blenderui",
  "clap",
+ "fontique 0.12.0",
  "png 0.17.16",
  "ratatui",
  "rust-i18n",
+ "ttf-parser",
  "vix-i18n",
  "vix-input",
  "vix-tui",

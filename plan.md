@@ -613,12 +613,11 @@ postponed, not cancelled. Full assessment and the option table:
 
 Vix has five desktop GUIs, each a full, independent implementation so the
 toolkits can be compared. T769 adds a sixth on BUI (Blender's UI as a
-library), the first to use a C-kit toolkit and the first without a monospace
-font, native menus or IME. The first version is deliberately thin: BUI's
-window, input and `canvas` painter around the unchanged `App`. Its spec,
+library), the first to use a C-kit toolkit. It is deliberately thin: BUI's
+window, input and `canvas` painter around the unchanged `App`, with elements
+only for text the canvas cannot draw. Its spec,
 [`gui/vix-bui/spec`](gui/vix-bui/spec/index.md), lists what works and what does
-not; the main follow-up is drawing the grid as HTML elements with a registered
-monospace font (real bold/italic, icons). Task: T769 in `tasks.md`.
+not. Task: T769 in `tasks.md`.
 
 ## Sequencing & dependencies
 

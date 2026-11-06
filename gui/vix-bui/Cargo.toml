@@ -23,6 +23,11 @@ ratatui = { workspace = true }
 # are enabled: no image/video codecs, no GPU renderer (macOS has none) and no
 # file browser, so the build stays small and Vix links nothing it does not use.
 blenderui = { version = "=0.4.0", default-features = false, features = ["freetype", "svg"] }
+# Finds a monospace family, its styles and fallbacks by name, as vix-egui does;
+# BUI itself only takes font bytes (or guesses a file name).
+fontique = { version = "0.12", default-features = false, features = ["system", "fontconfig-dlopen"] }
+# Measures the cell and tells which font has a character (BUI exposes neither).
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
 # PNG output for the scripted render smoke test.
 png = { version = "0.17", optional = true }
 

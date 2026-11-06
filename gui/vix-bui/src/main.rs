@@ -14,6 +14,7 @@
 vix_i18n::surface!();
 
 mod font_choice;
+mod fonts;
 mod glyphs;
 mod grid;
 mod key_rules;
@@ -55,7 +56,7 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    let model = Model::new(app, dark);
+    let model = Model::new(app, dark, fonts::Fonts::load());
 
     #[cfg(feature = "screenshot")]
     if let Some(script) = startup::Script::from_env() {

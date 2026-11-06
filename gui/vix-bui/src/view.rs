@@ -15,9 +15,10 @@ use blenderui::{Modifiers, MouseButton as BuiButton};
 use vix_input::{KeyModifiers, MouseButton};
 
 use crate::font_choice::FONT_SIZE;
+use crate::fonts;
 use crate::model::Model;
 use crate::render::Rgba8;
-use crate::scene::Op;
+use crate::scene::{Metrics, Op};
 
 /// What the window shares with its event handlers.
 pub struct Shared {
@@ -25,6 +26,9 @@ pub struct Shared {
     pub model: RefCell<Model>,
     /// Where the canvas's top-left is in the window, set while painting.
     origin: Cell<(f32, f32)>,
+    /// This frame's drawing, built before BUI lays the window out, because
+    /// its [`Op::Styled`] items are elements of that layout.
+    ops: RefCell<Rc<Vec<Op>>>,
 }
 
 impl Shared {
@@ -34,6 +38,7 @@ impl Shared {
         Rc::new(Self {
             model: RefCell::new(model),
             origin: Cell::new((0.0, 0.0)),
+            ops: RefCell::new(Rc::new(Vec::new())),
         })
     }
 
@@ -43,15 +48,30 @@ impl Shared {
         (x - ox, y - oy)
     }
 
-    /// Fit the grid to `bounds`, render the `App` into it and paint it.
+    /// Fit the grid to a window of `size` at `scale` device pixels per
+    /// logical pixel, render the `App` into it and build this frame's
+    /// drawing. Returns the drawing and the geometry it was built for.
+    fn prepare(&self, size: Size<Pixels>, scale: f32) -> (Rc<Vec<Op>>, Metrics) {
+        let mut model = self.model.borrow_mut();
+        model.fit(size.width.0, size.height.0, scale);
+        model.render();
+        let ops = Rc::new(model.scene());
+        *self.ops.borrow_mut() = Rc::clone(&ops);
+        (ops, model.metrics())
+    }
+
+    /// Paint the frame [`Self::prepare`] built.
     fn paint(&self, bounds: Bounds<f32>, painter: &mut Painter) {
         self.origin.set((bounds.origin.x, bounds.origin.y));
-        let mut model = self.model.borrow_mut();
-        model.fit(bounds.size.width, bounds.size.height);
-        model.render();
-        let palette = model.palette();
-        painter.fill(bounds, color(palette.bg));
-        replay(&model.scene(), bounds.origin.x, bounds.origin.y, painter);
+        let model = self.model.borrow();
+        painter.fill(bounds, color(model.palette().bg));
+        replay(
+            &self.ops.borrow(),
+            bounds.origin.x,
+            bounds.origin.y,
+            model.metrics().text_drop,
+            painter,
+        );
     }
 }
 
@@ -68,13 +88,13 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<f32> {
     }
 }
 
-/// Draw `ops` onto `painter`, offset by (`ox`, `oy`).
+/// Draw `ops` onto `painter`, offset by (`ox`, `oy`), with text `drop` below
+/// its cell's top. [`Op::Styled`] items are elements instead, see [`styled`].
 ///
-/// BUI has no bold face to ask for, so bold text is the same glyph drawn a
-/// half pixel to the right as well, which thickens its stems.
-fn replay(ops: &[Op], ox: f32, oy: f32, painter: &mut Painter) {
-    // Text sits a little below the cell top so the glyph box centers in it.
-    const TEXT_DROP: f32 = 2.0;
+/// The canvas has no bold face to ask for, so canvas bold (the embedded font
+/// only) is the same glyph drawn a half pixel to the right as well, which
+/// thickens its stems.
+fn replay(ops: &[Op], ox: f32, oy: f32, drop: f32, painter: &mut Painter) {
     for op in ops {
         match op {
             Op::Rect {
@@ -93,14 +113,55 @@ fn replay(ops: &[Op], ox: f32, oy: f32, painter: &mut Painter) {
                 color: c,
                 bold,
             } => {
-                let (x, y) = (ox + x, oy + y + TEXT_DROP);
+                let (x, y) = (ox + x, oy + y + drop);
                 painter.text(x, y, text, FONT_SIZE, color(*c));
                 if *bold {
                     painter.text(x + 0.5, y, text, FONT_SIZE, color(*c));
                 }
             }
+            Op::Styled { .. } => {}
         }
     }
+}
+
+/// An [`Op::Styled`] item as an element above the canvas, the only way to
+/// name a font in BUI. Much dearer than a canvas item, so only text the
+/// canvas cannot draw comes here.
+///
+/// The tiny `letter-spacing` is what keeps a span on the grid: with any
+/// spacing BUI places each character by its width rounded to device pixels,
+/// which is how the cell is sized, instead of at the font's fractional pen.
+fn styled(op: &Op, m: Metrics) -> Option<Div> {
+    let Op::Styled {
+        x,
+        y,
+        text,
+        color: c,
+        bold,
+        italic,
+        fallback,
+    } = op
+    else {
+        return None;
+    };
+    let family = fallback.map_or_else(|| fonts::MONO.to_string(), fonts::fallback_family);
+    let mut element = div()
+        .absolute()
+        .css("left", format!("{x}px"))
+        .css("top", format!("{}px", y + m.element_drop))
+        .css("font-size", format!("{FONT_SIZE}px"))
+        .css("line-height", format!("{}px", m.cell_h))
+        .css("letter-spacing", "0.001px")
+        .css("white-space", "pre")
+        .text_color(color(*c))
+        .font_family(family);
+    if *bold {
+        element = element.css("font-weight", "bold");
+    }
+    if *italic {
+        element = element.css("font-style", "italic");
+    }
+    Some(element.child(text.clone()))
 }
 
 /// The BUI button as `vix-input`'s.
@@ -141,8 +202,9 @@ impl VixBui {
 }
 
 impl Render for VixBui {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let s = &self.shared;
+        let (ops, metrics) = s.prepare(window.viewport_size(), window.scale_factor());
         let paint = Rc::clone(s);
         let key = Rc::clone(s);
         let down = Rc::clone(s);
@@ -193,9 +255,13 @@ impl Render for VixBui {
             .child(
                 canvas(move |bounds, painter| paint.paint(bounds, painter))
                     .id("vix-grid")
+                    .absolute()
+                    .css("left", "0")
+                    .css("top", "0")
                     .w_full()
                     .h_full(),
             )
+            .children(ops.iter().filter_map(|op| styled(op, metrics)))
     }
 }
 
@@ -248,6 +314,7 @@ pub fn open(
         }),
         ..WindowOptions::default()
     };
+    shared.model.borrow().install_fonts();
     let view = Rc::clone(shared);
     cx.open_window(options, move |_, cx| cx.new(|_| VixBui::new(view)))
 }
