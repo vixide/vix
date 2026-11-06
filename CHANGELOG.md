@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
+### Changed
+
+- **Dependency refresh.** `cargo update` for the root and `gui/` lockfiles (toml 1.2, trash 5.3, ureq 3.5.1, and others), the site's npm dependencies within their ranges, and one `actions/checkout` / `download-artifact` pin across all workflows. The minimum Rust version stays 1.97 (stable 1.99 minus two).
+
 ### Fixed
 
 - **Duplicate code-lens title.** When the server's `workspace/codeLens/refresh` arrived while a `codeLens/resolve` was in flight, the refreshed list asked for the same lens again and both replies were added, drawing a title such as `2 references | 2 references`. A resolve reply with no matching unresolved lens is now ignored. This was the cause of a one-in-many flake in `code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app`. Spec: [`vix-lsp`](crates/vix-lsp/spec/index.md).
