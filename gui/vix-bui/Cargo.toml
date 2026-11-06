@@ -23,6 +23,11 @@ ratatui = { workspace = true }
 # are enabled: no image/video codecs, no GPU renderer (macOS has none) and no
 # file browser, so the build stays small and Vix links nothing it does not use.
 blenderui = { version = "=0.4.0", default-features = false, features = ["freetype", "svg"] }
+# Finds a monospace family, its styles and fallbacks by name, as vix-egui does;
+# BUI itself only takes font bytes (or guesses a file name).
+fontique = { version = "0.12", default-features = false, features = ["system", "fontconfig-dlopen"] }
+# Measures the cell and tells which font has a character (BUI exposes neither).
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
 # PNG output for the scripted render smoke test.
 png = { version = "0.17", optional = true }
 
@@ -30,6 +35,16 @@ png = { version = "0.17", optional = true }
 # `VIX_GUI_SCREENSHOT=out.png vix-bui` renders the window to a PNG after
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:png"]
+
+# BUI has no menus an app can fill; muda supplies a native bar. macOS only: on
+# Windows its setup takes a raw window handle through an `unsafe fn`, which
+# this workspace forbids, and on Linux it needs a GTK event loop. No default
+# features: its default `gtk3` is Linux-only and would pin GTK 3 / glib 0.18
+# in Cargo.lock for nothing.
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = { version = "0.21", default-features = false }
+# The platform file dialog, for the menu's Open with System Dialog….
+rfd = "0.17"
 
 [lints]
 workspace = true

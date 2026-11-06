@@ -5,13 +5,14 @@
 //! scripted screenshot run; `crate::view` only forwards BUI's events to it and
 //! replays [`Model::scene`] onto BUI's painter.
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ratatui::Terminal;
 use vix::app::{App, AppFlags};
 use vix_input::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use crate::font_choice::{CELL_WIDTH, cell_height};
+use crate::fonts::Fonts;
 use crate::grid::GridBackend;
 use crate::keys;
 use crate::render::Palette;
@@ -26,6 +27,7 @@ pub struct Model {
     app: App,
     term: Terminal<GridBackend>,
     palette: Palette,
+    fonts: Fonts,
     metrics: Metrics,
     /// Fractional wheel lines not yet delivered.
     scroll_accum: f32,
@@ -41,17 +43,16 @@ pub struct Model {
 
 impl Model {
     /// Wrap a started `App`. `dark` picks the default palette for
-    /// `Color::Reset` cells.
+    /// `Color::Reset` cells; `fonts` sets the cell size.
     #[must_use]
-    pub fn new(app: App, dark: bool) -> Self {
+    pub fn new(app: App, dark: bool, fonts: Fonts) -> Self {
+        let metrics = Self::metrics_for(&fonts, 1.0);
         Self {
             app,
             term: Terminal::new(GridBackend::new(80, 24)).unwrap_or_else(|never| match never {}),
             palette: Palette::for_appearance(dark),
-            metrics: Metrics {
-                cell_w: CELL_WIDTH,
-                cell_h: cell_height(),
-            },
+            fonts,
+            metrics,
             scroll_accum: 0.0,
             pressed: None,
             last_move_cell: None,
@@ -73,8 +74,28 @@ impl Model {
         (area.width, area.height)
     }
 
-    /// Resize the grid to fill a `width` x `height` logical-pixel area.
-    pub fn fit(&mut self, width: f32, height: f32) {
+    /// The grid geometry for `fonts` at `scale` device pixels per logical one.
+    fn metrics_for(fonts: &Fonts, scale: f32) -> Metrics {
+        fonts
+            .metrics()
+            .map_or_else(Metrics::embedded, |font| Metrics::monospace(font, scale))
+    }
+
+    /// The grid geometry in use.
+    #[must_use]
+    pub const fn metrics(&self) -> Metrics {
+        self.metrics
+    }
+
+    /// Give BUI this window's fonts; see [`Fonts::install`].
+    pub fn install_fonts(&self) {
+        self.fonts.install();
+    }
+
+    /// Resize the grid to fill a `width` x `height` logical-pixel area at
+    /// `scale` device pixels per logical pixel.
+    pub fn fit(&mut self, width: f32, height: f32, scale: f32) {
+        self.metrics = Self::metrics_for(&self.fonts, scale);
         let cols = cell_count(width / self.metrics.cell_w);
         let rows = cell_count(height / self.metrics.cell_h);
         self.term.backend_mut().resize(cols, rows);
@@ -87,14 +108,18 @@ impl Model {
         let _ = self.term.draw(|frame| vix::ui::draw(app, frame));
     }
 
-    /// The drawing operations for the grid as last rendered.
+    /// The drawing operations for the grid as last rendered. Runs inside
+    /// `Application::run`: a character's first use may register its fallback
+    /// font with BUI.
     #[must_use]
-    pub fn scene(&self) -> Vec<Op> {
+    pub fn scene(&mut self) -> Vec<Op> {
+        let fonts = &mut self.fonts;
         scene::build(
             self.term.backend().buffer(),
             self.term.backend().cursor(),
             self.palette,
             self.metrics,
+            &mut |ch| fonts.route(ch),
         )
     }
 
@@ -208,6 +233,13 @@ impl Model {
     /// Run one action id, as a menu leaf would.
     pub fn run_action(&mut self, id: &str) {
         self.app.run_action(id);
+    }
+
+    /// Open `paths` in tabs, as if given on the command line.
+    pub fn open_files(&mut self, paths: &[PathBuf]) {
+        for path in paths {
+            self.app.open_initial(path);
+        }
     }
 
     /// Background work, as the terminal loop's `App::tick`. Returns whether

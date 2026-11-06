@@ -36,13 +36,15 @@ into a character grid, so nothing behaves differently from the terminal.
 
 ## What is different
 
-- **The font is BUI's, not a terminal font.** Text is drawn in BUI's embedded
-  proportional font (Inter), each character in its own cell. Borders, scroll
-  bars and separators are drawn as lines, so they join up. Icons from Nerd
-  Fonts, CJK text and emoji show as boxes, and there are no separate bold or
-  italic faces.
-- **There is no native menu bar, file dialog or input-method (IME) support.**
-  Use the in-window menus.
+- **Fonts.** Text is in Menlo, Consolas or DejaVu Sans Mono by platform; set
+  `VIX_GUI_FONT` to a family name to change it. Icons need a Nerd Font
+  installed; CJK and symbols come from a fixed list of system fonts. Emoji in
+  color and scripts that need shaping (Arabic, Devanagari) do not draw
+  properly. With no such font installed, BUI's built-in Inter is used, placed
+  cell by cell.
+- **Menus.** On macOS the native menu bar works alongside the in-window one,
+  and **File → Open with System Dialog…** is on it. Elsewhere use the in-window
+  menus. There is no input-method (IME) support.
 - **Quit with File → Quit (`Ctrl+Q`).** Closing the window with its close
   button ends the program immediately, without the unsaved-changes prompt:
   BUI cannot let an app veto it.
