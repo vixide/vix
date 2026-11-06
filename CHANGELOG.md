@@ -10,19 +10,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
-<<<<<<< HEAD
 ### Experimental in 2.0
 
 - **Remote editing over Kubernetes and WSL.** Remote editing in containers and dev containers (Docker, Podman) is tested against real engines. Kubernetes (`k8s://`) passed the conformance suite against one local `kind` cluster only: no managed or authenticated cluster, no multi-container pod, no non-root user. WSL (`wsl://`) has only been tested against a fake engine and has never run on a real Windows host, so its argument quoting, exit status for a missing distribution and environment handling are unconfirmed (T718b). Treat both as experimental; the `nerdctl://` form and the pod and distribution pickers (T718c) are not included.
 - **Alpine `.apk` and RHEL/Rocky `.rpm` packages.** They are built from the static musl binary, but the real `nfpm` output and the install tests have not run yet (T670a), and the `.apk` is unsigned.
 
-||||||| c74a2ce0
-=======
 ### Changed
 
 - **Dependency refresh.** `cargo update` for the root and `gui/` lockfiles (toml 1.2, trash 5.3, ureq 3.5.1, and others), the site's npm dependencies within their ranges, and one `actions/checkout` / `download-artifact` pin across all workflows. The minimum Rust version stays 1.97 (stable 1.99 minus two).
 
->>>>>>> feat/update-2-0-0
 ### Fixed
 
 - **Flaky `confirm_evaluate_always_asks_every_run`.** The test counted the code the fake kernel had received only after sending the confirming `y`, which dispatches the run; if the kernel thread logged the run first, the count already included it and the wait for "the confirmed run" timed out. It now counts before answering. Test-only; no product change. Reproduced deterministically by delaying the count; not reproduced by 60 loops under CPU load.
