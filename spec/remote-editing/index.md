@@ -157,8 +157,11 @@ Done 2026-10-30. Details:
   above).
 - **Kubernetes and WSL** fall out of the same transport (`kubectl exec` has
   no `-e`, so their environment values are exported by the script, on argv
-  as over SSH). They are tested against the fake engine only: T718a (a real
-  cluster) and T718b (a real WSL host) remain.
+  as over SSH). Kubernetes passes `conformance::run` against a real `kind`
+  cluster (`VIX_TEST_K8S`, T718a; `lost` matches the messages `kubectl exec`
+  actually prints, recorded in the container spec) and has a GitHub-only CI
+  job that has not run yet; WSL is tested against the fake engine only, and
+  T718b (a real WSL host) remains.
 
 ## The hard part: the local-only model
 

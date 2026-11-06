@@ -328,6 +328,17 @@ script and the workflow, plus `workflow_dispatch`, so it never slows an unrelate
 The per-push gate keeps testing the authority against a fake `ssh`. Developers run the same
 script locally (Linux or macOS). Not yet exercised on a runner (added 2026-10-30).
 
+### Kubernetes authority against a real cluster (T718a)
+
+`.github/workflows/k8s.yml` (GitHub only) starts a `kind` cluster with
+`helm/kind-action`, runs one `alpine:3` pod, and runs only
+`a_real_kubernetes_container_conforms` (`crates/vix-authority/tests/container.rs`)
+with `VIX_TEST_K8S=default/vixpod/vixpod`, so the conformance suite goes
+through `kubectl exec`. Opt-in like the sshd job: path-filtered to
+`crates/vix-authority/**` and the workflow, plus `workflow_dispatch`. The
+per-push gate keeps testing the authority against a fake `kubectl`. Not yet
+run on a runner (the test itself passed against a local kind cluster).
+
 ### Feature combinations (T587)
 
 All three forges (a `feature-combos` job on GitHub and GitLab, a step on

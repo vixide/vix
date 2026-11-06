@@ -27,7 +27,7 @@ other side:
 | `name` | `ssh` | `docker`, `podman`, `kubernetes`, `wsl` |
 | `label` (error messages) | the host | `docker:user@name`, `k8s:ns/pod/ctr`, `wsl:distro` |
 | `shell(script, tty, env_names)` | `ssh -T`/`-t … HOST <envelope>` | the engine prefix, then `/bin/sh -c <decoder> vix <octal digits>` |
-| `lost(status, stderr)` | status 255 | 125 (Docker, Podman), -1 (WSL), or an engine "no such container / can't connect" message |
+| `lost(status, stderr)` | status 255 | 125 (Docker, Podman), -1 (WSL), or an engine "no such container / can't connect" message (for `kubectl`, its message only: see below) |
 | `passes_env_by_name` | no | Docker and Podman |
 | `login_shell` (terminal) | `exec "${SHELL:-/bin/sh}" -l` | `$SHELL`, else `bash` if present, else `/bin/sh`, with `-l` |
 | agent mode, agent binary | `SshOptions` | `ExecOptions` |
@@ -137,10 +137,49 @@ trips, hostile names). `tui/tests/remote_container.rs` drives the App:
 Open Remote with a `docker://` name, and Reopen in Dev Container with a
 fake `devcontainer` CLI.
 
+## Kubernetes against a real cluster (T718a)
+
+`conformance::run` passes through `kubectl exec` against a real `kind`
+cluster (v0.33, Kubernetes 1.37, a pod of `alpine:3`), with
+`VIX_TEST_K8S=namespace/pod/container cargo test -p vix-authority --features
+ssh --test container a_real_kubernetes_container_conforms` (it starts and
+removes nothing; the cluster and pod are the caller's), and in CI by the
+GitHub-only `.github/workflows/k8s.yml`.
+
+What `kubectl exec` printed and exited with (all on stderr, stdout empty),
+recorded against that cluster. These are what `ExecTransport::lost` matches
+(substring of stderr; `kubectl` exits 1 for all of them, so the status says
+nothing and the message decides):
+
+| Situation | Status | stderr |
+| --- | --- | --- |
+| missing pod | 1 | `Error from server (NotFound): pods "nopod" not found` |
+| missing namespace | 1 | `Error from server (NotFound): namespaces "nons" not found` |
+| missing container | 1 | `error: container nocontainer is not valid for pod vixpod out of: vixpod` |
+| API server stopped | 1 | `The connection to the server 127.0.0.1:62793 was refused - did you specify the right host or port?` |
+| no kubeconfig | 1 | `The connection to the server localhost:8080 was refused - ...` |
+| unresolvable API host | 1 | `Unable to connect to the server: dial tcp: lookup nosuch.invalid: no such host` |
+| unreachable API host, `--request-timeout` | 1 | `Unable to connect to the server: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)` |
+| unknown context | 1 | `error: context "nosuchctx" does not exist` |
+| script `exit 7` | 7 | `command terminated with exit code 7` (not lost) |
+| command not found in the container | 1 | `error: Internal error occurred: ... OCI runtime exec failed: ... exec: "/nonexistent": stat /nonexistent: no such file or directory` (not matched: a script failure) |
+
+A session cut off in flight (the pod deleted, with or without a grace
+period, or the node stopped, while an `exec` ran) is **not** reported by
+`kubectl` as a connection error: it ends with status 137 (pod deleted) or 143
+(node stopped) and only `command terminated with exit code N`, the same as
+a script killed from inside. `lost` deliberately does not match those; the
+next operation fails with the NotFound / connection refused texts above and
+is reported lost then. The first line `kubectl` prints is not stable across
+versions or locales, so the match list is best-effort, as for the other
+engines.
+
 ## Not done
 
-- No real Kubernetes or WSL run yet (the fake engine only); there is no
-  opt-in job for them (`VIX_TEST_DOCKER` covers Docker/Podman).
+- WSL has only been run against the fake engine (T718b). Kubernetes ran on
+  one local `kind` cluster (Podman provider, macOS arm64) and not yet on a
+  CI runner, nor on a managed cluster, a non-root container user, or a pod
+  with several containers.
 - nerdctl has no URL form (its `exec -e NAME` behavior is unverified); the
   OC panel's **Open Workspace** refuses it with a message.
 - Kubernetes and WSL environment values travel on argv (no by-name

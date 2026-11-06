@@ -1,0 +1,61 @@
+# The Kubernetes authority against a real cluster (T718a, tasks.md): starts a
+# throwaway `kind` cluster, runs one pod, and runs the `a_real_kubernetes_container_conforms`
+# conformance test through `kubectl exec` (`VIX_TEST_K8S=default/vixpod/vixpod`).
+# The per-push gate (ci.yml) covers the same authority against a fake
+# `kubectl`; this job proves it against Kubernetes itself.
+#
+# Opt-in: it runs only when the authority crate or this file changes, or on
+# demand, so it never slows an unrelated push or PR. GitHub only; see
+# spec/ci/index.md. This workflow has NOT run on a runner yet; the test itself
+# passed against a local kind cluster (Podman provider, macOS).
+
+name: Kubernetes authority (real cluster)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/vix-authority/**"
+      - ".github/workflows/k8s.yml"
+  pull_request:
+    paths:
+      - "crates/vix-authority/**"
+      - ".github/workflows/k8s.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: k8s-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  kind:
+    name: conformance over kubectl exec into kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: start a kind cluster
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: vix-t718a
+          wait: 180s
+      - name: start the pod
+        run: |
+          kubectl run vixpod --image=alpine:3 --restart=Never -- sleep 3600
+          kubectl wait --for=condition=Ready pod/vixpod --timeout=180s
+      - name: build the test
+        run: cargo test -p vix-authority --features ssh --test container --no-run
+      - name: run the conformance suite through kubectl exec
+        env:
+          VIX_TEST_K8S: default/vixpod/vixpod
+        run: cargo test -p vix-authority --features ssh --test container a_real_kubernetes_container_conforms -- --nocapture

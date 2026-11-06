@@ -4,7 +4,7 @@
 //! the `/bin/sh` that runs inside, and runs that locally, in a scratch
 //! directory standing in for the container. Nothing here starts a real
 //! engine; `a_real_docker_container_conforms` does only when
-//! `VIX_TEST_DOCKER` is set.
+//! `VIX_TEST_DOCKER` is set (`a_real_kubernetes_container_conforms`: `VIX_TEST_K8S`).
 #![cfg(all(unix, feature = "ssh"))]
 #![allow(
     clippy::unwrap_used,
@@ -374,5 +374,31 @@ fn a_real_docker_container_conforms() {
             .args(["rm", "-f", &name])
             .output();
     }
+    assert_eq!(failures, Vec::<String>::new());
+}
+
+/// Opt-in only (T718a): `VIX_TEST_K8S=namespace/pod/container` runs the suite
+/// through `kubectl exec` in that running container of an existing cluster
+/// (the current `kubectl` context; `KUBECONFIG` as usual), e.g. a `kind`
+/// cluster with `kubectl run vixpod --image=alpine:3 -- sleep 3600`
+/// (`VIX_TEST_K8S=default/vixpod/vixpod`). The test starts and removes
+/// nothing. Nothing runs without it.
+#[test]
+fn a_real_kubernetes_container_conforms() {
+    let Some(value) = std::env::var_os("VIX_TEST_K8S") else {
+        return;
+    };
+    let value = value.to_string_lossy().into_owned();
+    let parts: Vec<&str> = value.split('/').collect();
+    assert_eq!(parts.len(), 3, "VIX_TEST_K8S is namespace/pod/container");
+    let target = ContainerTarget::kubernetes(parts[0], parts[1], parts[2]).unwrap();
+    let auth = ContainerAuthority::new(target, ExecOptions::default());
+    auth.connect().unwrap();
+    assert_eq!(auth.name(), "kubernetes");
+    let failures = conformance::run(
+        &auth,
+        Path::new(&format!("/tmp/vix-t718a-{}", std::process::id())),
+    );
+    assert!(vix_authority::can_run(&auth, "sh"));
     assert_eq!(failures, Vec::<String>::new());
 }

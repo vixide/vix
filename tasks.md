@@ -8950,13 +8950,33 @@ so, and the first task of each plan re-checks the facts it depends on.
     `VIX_TEST_DOCKER=1` (run 2026-10-30: Podman 5.8 behind `docker`, alpine);
     `tui/tests/remote_container.rs` drives Open Remote and the dev container
     flow with fakes. Spec: `crates/vix-authority/spec/container`.
-  - [ ] **T718a — Kubernetes against a real cluster.** Run
+  - [x] **T718a — Kubernetes against a real cluster.** Run
     `conformance::run` through `kubectl exec` against a `kind`/`k3d`
     cluster behind an opt-in `VIX_TEST_K8S=ns/pod/ctr` test (mirroring
     `VIX_TEST_DOCKER`), and a GitHub-only workflow that starts `kind` when
     `crates/vix-authority/**` changes. Check what `kubectl exec` prints and
     exits with for a missing pod/container and a dropped API connection, and
     extend `ExecTransport::lost` to match. **Small–medium.**
+    - **Done 2026-11-06** (`feat/t718a-kubernetes`). Verified: a local `kind`
+      v0.33 cluster (Podman provider, macOS arm64; kind needed
+      `KIND_EXPERIMENTAL_PROVIDER=podman` and cpuset delegated in the Podman
+      VM), one `alpine:3` pod; `VIX_TEST_K8S=default/vixpod/vixpod` ran
+      `conformance::run` + `can_run` through `kubectl exec` and passed on
+      the first run (no authority bug found). Recorded `kubectl exec`'s
+      stderr and status for a missing pod, container and namespace, a
+      stopped API server, a missing kubeconfig, unresolvable and
+      unreachable hosts, an unknown context, a script exit and a missing
+      binary (table in `crates/vix-authority/spec/container`); `lost` gained
+      `The connection to the server`, `is not valid for pod` and `error:
+      context "`, with unit tests carrying the captured text. Finding: a pod
+      deleted or node stopped *during* an exec ends with status 137/143 and
+      only `command terminated with exit code N` (same as a killed script),
+      so it is not matched; the next operation reports it. Not verified:
+      the workflow `.github/workflows/k8s.yml` (never run; `helm/kind-action@v1.12.0`
+      and the runner's `kubectl` unchecked), other kubectl/Kubernetes
+      versions, a managed or authenticated cluster, a non-root user, a
+      multi-container pod, the remote agent over `kubectl exec`, and
+      `kubectl` message text in other locales.
   - [ ] **T718b — WSL on a real Windows host.** Run the suite through
     `wsl.exe -d <distro> --exec` from a Windows build (CI `windows-latest`
     has WSL off; needs a self-hosted runner or a manual run), confirm

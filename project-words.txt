@@ -779,3 +779,12 @@ OrbStack
 Parallels
 bookworm
 Rustlang
+
+# Kubernetes authority captures (T718a)
+cpuset
+vixpod
+nopod
+nons
+nocontainer
+nosuch
+nosuchctx

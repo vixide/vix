@@ -144,10 +144,18 @@ const LOST: &[&str] = &[
     "can only create exec sessions on running containers",
     "unable to connect to Podman",
     "Cannot connect to Podman",
-    // kubectl
+    // kubectl (messages captured from `kubectl exec` against a local kind
+    // cluster, T718a; all exit with status 1): a missing pod or namespace
+    // is `Error from server (NotFound): ...`, a missing container is
+    // `error: container X is not valid for pod P ...`, a refused API
+    // connection is `The connection to the server H:P was refused ...`, and
+    // an unresolvable or silent one is `Unable to connect to the server: ...`.
     "Error from server",
     "unable to upgrade connection",
     "Unable to connect to the server",
+    "The connection to the server",
+    "is not valid for pod",
+    "error: context \"",
     // WSL
     "There is no distribution with the supplied name",
     "WSL_E_DISTRO_NOT_FOUND",
@@ -243,5 +251,62 @@ impl ShellAuthority<ExecTransport> {
     /// Stop the agent, if one runs; nothing else is held open.
     pub fn disconnect(&self) {
         self.stop_agent();
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "tests fail loudly on a broken fixture")]
+mod tests {
+    //! `lost` against the engines' real output. The kubectl texts were
+    //! captured from `kubectl exec` against a local `kind` cluster (T718a).
+
+    use super::*;
+
+    fn k8s() -> ExecTransport {
+        ExecTransport {
+            target: ContainerTarget::kubernetes("default", "vixpod", "vixpod").unwrap(),
+            options: ExecOptions::default(),
+        }
+    }
+
+    #[test]
+    fn kubectl_failures_are_a_lost_connection() {
+        let t = k8s();
+        for text in [
+            // missing pod
+            "Error from server (NotFound): pods \"nopod\" not found",
+            // missing namespace
+            "Error from server (NotFound): namespaces \"nons\" not found",
+            // missing container
+            "error: container nocontainer is not valid for pod vixpod out of: vixpod",
+            // API server stopped (the node's container stopped)
+            "The connection to the server 127.0.0.1:62793 was refused - did you specify the right host or port?",
+            // no kubeconfig at all
+            "The connection to the server localhost:8080 was refused - did you specify the right host or port?",
+            // unresolvable and blackholed API servers
+            "Unable to connect to the server: dial tcp: lookup nosuch.invalid: no such host",
+            "Unable to connect to the server: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)",
+            // a context that is not in the kubeconfig
+            "error: context \"nosuchctx\" does not exist",
+        ] {
+            assert!(t.lost(1, text), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_script_that_exits_nonzero_under_kubectl_is_not_lost() {
+        let t = k8s();
+        // `exit 7` and the Vix script codes: kubectl reports the status
+        // itself, with this line on stderr.
+        assert!(!t.lost(7, "command terminated with exit code 7"));
+        assert!(!t.lost(1, "command terminated with exit code 1"));
+        assert!(!t.lost(105, "command terminated with exit code 105"));
+        assert!(!t.lost(1, "grep: nothing"));
+        // The pod deleted or the node stopped mid-exec ends the session with
+        // the container process's signal status (137, 143) and only that
+        // line: indistinguishable from a killed script, so the next
+        // operation (NotFound / connection refused) is what reports it lost.
+        assert!(!t.lost(137, "command terminated with exit code 137"));
+        assert!(!t.lost(143, "command terminated with exit code 143"));
     }
 }
