@@ -170,7 +170,7 @@ MACOS_TARGET=$macos WINDOWS_TARGET=$windows LINUX_TARGET=$linux \
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 pack() { # TARGET BINARY-NAME EXT
-	bin=target/$1/release/$2
+	bin=${CARGO_TARGET_DIR:-target}/$1/release/$2
 	[ -f "$bin" ] || die "build produced no $bin"
 	name=vix-tui-$1.$3
 	d=$stage/vix-tui-$1

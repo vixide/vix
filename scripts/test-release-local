@@ -1,5 +1,6 @@
 #!/bin/sh
 # Tests for scripts/release-local (T766).
+unset CARGO_TARGET_DIR
 #
 #     scripts/test-release-local
 #
