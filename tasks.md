@@ -9844,8 +9844,9 @@ the generated `release.yml`.
     secrets; the repository and org have no secrets today. `vixide/homebrew-tap`
     is an empty repository; give it a first commit in case the job's checkout
     needs a branch.
-  - **npm:** add `npm` to `publish-jobs` in `dist-workspace.toml` and regenerate
-    `release.yml` with `dist` 0.33.1 (the local `dist` is 0.32.0).
+  - **npm:** done: `npm` is in `publish-jobs` and `release.yml` is regenerated
+    with `dist` 0.33.1. `@vixide/vix` has never been published, so the first
+    publish also needs the `@vixide` scope to exist on npm.
   - **Unexplained:** 1.8.0's `host` job failed at `gh release create` with
     `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
     The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,
