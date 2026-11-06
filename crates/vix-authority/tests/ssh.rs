@@ -34,9 +34,15 @@ fn scratch(tag: &str) -> PathBuf {
 }
 
 /// A short control directory for `dir` (a socket path must fit in 104
-/// bytes, and macOS's per-user temp directory is long).
+/// bytes, and macOS's per-user temp directory is long). The `ctl-` prefix keeps
+/// it distinct from `dir` itself: where `TMPDIR` is `/tmp` (Linux CI) both
+/// would be the same path, and the 0755 scratch directory would fail the
+/// control directory's privacy check.
 fn control_dir(dir: &Path) -> PathBuf {
-    Path::new("/tmp").join(dir.file_name().unwrap())
+    Path::new("/tmp").join(format!(
+        "ctl-{}",
+        dir.file_name().unwrap().to_string_lossy()
+    ))
 }
 
 /// Remove a test's scratch and control directories.

@@ -240,7 +240,10 @@ fn search_over_ssh_is_one_remote_tool_run_not_a_read_per_file() {
     }
     std::fs::write(root.join("f17.txt"), "a remote needle\n").unwrap();
     let target = SshTarget::parse(&format!("ssh://me@example.invalid{}", root.display())).unwrap();
-    let control = Path::new("/tmp").join(dir.file_name().unwrap());
+    let control = Path::new("/tmp").join(format!(
+        "ctl-{}",
+        dir.file_name().unwrap().to_string_lossy()
+    ));
     let _ = std::fs::remove_dir_all(&control);
     let options = SshOptions::default()
         .with_program(fake_ssh(&dir))
