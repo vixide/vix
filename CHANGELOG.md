@@ -10,6 +10,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 This is the 2.0 release: it makes breaking changes to the library API (the `vix` command and settings files are unaffected) so later additions can be non-breaking.
 
+### Highlights
+
+Vix 2.0 is a feature release for people who edit code in a terminal. The `vix` command and your settings files keep working; the breaking changes are to the **library** API of the `vix-*` crates (see **Breaking** below). The full story is [What's new in Vix 2.0](docs/whats-new-2-0/index.md).
+
+- **Remote editing** over SSH, Docker, Podman and dev containers, with Kubernetes and WSL experimental (`vix ssh://user@host/path`, **File → Open Remote…**).
+- **Cowork:** real-time shared editing, encrypted peer to peer (opt-in build, `--features cowork`).
+- **IM menu:** a code-aware chat with a local Notes conversation, IRC, `path:line` references and threads anchored to lines.
+- **IDE features:** Local History, Search Everywhere, Refactor menu, Peek Definition, CodeLens, run configurations, and LSP and debugger depth.
+- **Large File Viewer** for multi-gigabyte files, and much lighter everyday editing (a 100 MB log takes 126 MiB instead of 1.1 GiB; an idle Vix uses no CPU).
+- **Local CI and release path:** gate tiers, signed gate attestation, a clean-room build and `scripts/release-local`.
+- **Packaging:** a static musl build confirmed on real x86_64 Alpine, plus Alpine `.apk` and RHEL/Rocky `.rpm` packages (not yet install-tested).
+- Minimum Rust for building from source is 1.97.
+
 ### Experimental in 2.0
 
 - **Remote editing over Kubernetes and WSL.** Remote editing in containers and dev containers (Docker, Podman) is tested against real engines. Kubernetes (`k8s://`) passed the conformance suite against one local `kind` cluster only: no managed or authenticated cluster, no multi-container pod, no non-root user. WSL (`wsl://`) has only been tested against a fake engine and has never run on a real Windows host, so its argument quoting, exit status for a missing distribution and environment handling are unconfirmed (T718b). Treat both as experimental; the `nerdctl://` form and the pod and distribution pickers (T718c) are not included.

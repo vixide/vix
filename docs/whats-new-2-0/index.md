@@ -1,10 +1,8 @@
 # What's new in Vix 2.0
 
-> **Status: not released yet.** The latest published release is 1.8.0. This page
-> describes what has landed on `main` for 2.0 and will be tidied when 2.0 ships.
-> Every item below is built and tested; where something is partial, experimental
+> **Status: 2.0.0, 2026-11-06.** Every item below is built and tested; where something is partial, experimental
 > or opt-in, it says so. The full, detailed record is the
-> [changelog](../changelog.md) (its `[Unreleased]` section).
+> [changelog](../changelog.md) (its `[2.0.0]` section).
 
 2.0 is a feature release for people who edit code in a terminal: it adds working
 on other machines, working together, a code-aware chat, many IDE conveniences
@@ -22,8 +20,9 @@ working; see [Upgrading](#upgrading).
   debugger and tasks run there too. A `vix` of the same version on the remote
   side is used as a faster remote agent when it is present. Docker and Podman
   containers (`docker://`, `podman://`) and dev containers work the same way;
-  Kubernetes (`k8s://`) and WSL (`wsl://`) are implemented but so far tested
-  only against a stand-in. See [Remote editing](../remote-editing/index.md).
+  Kubernetes (`k8s://`) passed the conformance suite against one local `kind`
+  cluster, and WSL (`wsl://`) has only been tested against a stand-in, so treat
+  both as experimental. See [Remote editing](../remote-editing/index.md).
 - **Cowork: edit together in real time (opt-in build).** Single-use invites,
   the host approves each guest, everyone's cursors in their own color,
   conflict-free merging, a session chat and shared notes, and a terminal that
@@ -147,7 +146,7 @@ So that nothing here is a surprise:
   verified**; use Homebrew, the installer scripts, npm, a Linux package or
   Cargo.
 - There is no apt or dnf repository; update by installing the next package.
-- Matrix chat, Kubernetes and WSL against real systems, and the full ACP agent
+- Matrix chat, WSL against a real Windows host (Kubernetes is verified on one local cluster only), and the full ACP agent
   experience are not done.
 - Cowork and Jupyter need a custom build.
 
