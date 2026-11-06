@@ -204,7 +204,8 @@ Releases are produced by [`dist`](https://opensource.axo.dev/cargo-dist/)
 target triples (`aarch64`/`x86_64-apple-darwin`, `aarch64`/`x86_64-unknown-linux-gnu`,
 `x86_64-unknown-linux-musl`, `aarch64`/`x86_64-pc-windows-msvc`), the shell/PowerShell/npm/Homebrew/MSI installers, and the
 GitHub Release, then pushes the formula to `vixide/homebrew-tap` — that last
-step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
+step is why the `HOMEBREW_TAP_TOKEN` secret exists, and publishes `@vixide/vix`
+to npm with the `NPM_TOKEN` secret (see
 `spec/homebrew-tap-token`). Windows on ARM is the terminal app only (each GUI lists its own
 targets) and builds on the native `windows-11-arm` runner
 (`github-custom-runners`), since dist's default Ubuntu cross-build can't
