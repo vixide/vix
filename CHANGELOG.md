@@ -10,6 +10,7 @@ This is the 2.0 release: it makes breaking changes to the library API (the `vix`
 
 ### Fixed
 
+- **Flaky `confirm_evaluate_always_asks_every_run`.** The test counted the code the fake kernel had received only after sending the confirming `y`, which dispatches the run; if the kernel thread logged the run first, the count already included it and the wait for "the confirmed run" timed out. It now counts before answering. Test-only; no product change. Reproduced deterministically by delaying the count; not reproduced by 60 loops under CPU load.
 - **Duplicate code-lens title.** When the server's `workspace/codeLens/refresh` arrived while a `codeLens/resolve` was in flight, the refreshed list asked for the same lens again and both replies were added, drawing a title such as `2 references | 2 references`. A resolve reply with no matching unresolved lens is now ignored. This was the cause of a one-in-many flake in `code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app`. Spec: [`vix-lsp`](crates/vix-lsp/spec/index.md).
 - **musl release build (T670).** The `x86_64-unknown-linux-musl` build is now configured to link statically and without PIE (`.cargo/config.toml`), and CI checks the result with the new `scripts/check-static-binary`. The previous build was dynamically linked against `/lib/ld-musl-x86_64.so.1`, so it did not start on glibc systems and crashed on Alpine. Verified on real Alpine by the manual workflow below; the release archive itself is still to be confirmed (T670a).
 
