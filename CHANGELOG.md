@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **DB workbench: cancel keeps the session.** `Ctrl+C` on PostgreSQL and MySQL now asks the server to stop the statement, so temporary tables, session settings and an open transaction survive; SQLite, and a cancel the server refuses, still reconnect, and the status line says when a transaction was lost (T774).
+- **DB workbench: errors point at the problem.** A PostgreSQL error moves the editor cursor to the character it names (T775). Server notices are still dropped: sqlx does not expose them, and the spec says what it would take.
+- **DB workbench: plans as a tree.** On PostgreSQL, `F6`/`F7` show the plan as a tree with each step's share of the time, the slowest steps in red and row estimates off by 10× or more in yellow (T776).
+- **DB workbench: stage new rows and deletions.** On an editable table preview, `a` adds a row, `d` deletes or restores one and `u` discards a row's changes; `W` commits everything in one transaction and rolls it all back unless each statement affects exactly one row. Enum, boolean and `CHECK (… IN …)` columns offer their values with `↑`/`↓`, generated columns are read only, and `=expr` values are computed by the server (T777).
+- **DB workbench: search rows on the server.** `F` on a table preview builds a `WHERE` from a column, an operator and a value and runs it on the server, so it finds rows the 200-row preview never loaded; the results stay editable (T778).
+- **DB workbench: relations and aliases.** `R` on a table lists its outgoing and incoming foreign keys and the views that depend on it, and completion after `o.` now resolves table aliases such as `FROM orders o` (T779, T780).
+
 ### Fixed
 
 - **Install docs.** The interim note about 2.0.0's missing files is gone and the Homebrew and npm commands are back, because 2.0.2 ships every channel: installers, Homebrew, npm, Linux packages and the desktop GUIs.

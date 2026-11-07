@@ -9931,37 +9931,44 @@ From a reading of [dbjoy](https://github.com/agustind/dbjoy); assessment in
 task updates that spec section as it lands, and has tests on SQLite plus an
 engine-gated test where PostgreSQL or MySQL behaves differently.
 
-- [ ] **T774 — Cancel without losing the session.** `Ctrl+C` sends
+- [x] **T774 — Cancel without losing the session.** `Ctrl+C` sends
   `pg_cancel_backend(pid)` (PostgreSQL) or `KILL QUERY id` (MySQL) over a
   short-lived second connection, recording the backend id at connect time.
   The session and an open transaction survive (aborted after a cancel, `TX!`).
   SQLite and a failed server cancel fall back to the reconnect, and the
   status line says the transaction was lost. Today `execute.rs` reconnects
   and loses it silently.
-- [ ] **T775 — Error positions and server notices.** Spike first: does sqlx's
+  Done 2026-11-07: server cancel over a second connection with a 10-second limit; a second `Ctrl+C` escalates to the reconnect. MySQL is still marked aborted after a cancel, as the client mirror always has.
+- [x] **T775 — Error positions and server notices.** Spike first: does sqlx's
   `Any` driver keep PostgreSQL's error `position` and the notice stream? If
   it does, move the cursor to the error and show notices under the result;
   if it does not, record why and what it would take.
-- [ ] **T776 — PostgreSQL plan tree.** `EXPLAIN (FORMAT JSON)` parsed into a
+  Done 2026-11-07 (positions only): sqlx 0.9.0 keeps the PostgreSQL error position, but `PgStream::recv` swallows notices into a log event, so notices need an upstream sqlx hook plus a typed `PgConnection` session; recorded in the spec.
+- [x] **T776 — PostgreSQL plan tree.** `EXPLAIN (FORMAT JSON)` parsed into a
   tree: time share per node with `ANALYZE`, slowest nodes highlighted, row
   estimates off by 10× or more flagged. Pure parser in `vix-db`, unit-tested
   on recorded plans. Keeps the full-scan hint; other engines keep text.
-- [ ] **T777 — Staged inserts, deletes and smarter cells.** Add and delete
+  Done 2026-11-07: uses `EXPLAIN (FORMAT YAML)`, not JSON, because sqlx's `Any` driver cannot decode the `json` column; one parser reads both.
+- [x] **T777 — Staged inserts, deletes and smarter cells.** Add and delete
   rows on a table preview beside today's cell updates, color-coded; `W`
   commits all in one transaction and rolls back if any statement does not
   affect exactly one row. Pickers for booleans, enums and `CHECK (col IN
   (…))`; generated columns read-only; `=expr` values computed by the server,
   `\=` for literal text. New i18n keys in every locale.
-- [ ] **T778 — Server-side row search.** A filter row (column, operator,
+  Done 2026-11-07: keys `a`/`d`/`u`; new `Session::execute` counts affected rows. Found: sqlx `Any` cannot decode SQLite `BOOLEAN`/`DATE` columns, so such previews fail (pre-existing).
+- [x] **T778 — Server-side row search.** A filter row (column, operator,
   value) builds a quoted `WHERE` and re-runs the preview on the server;
   results stay editable. Operators: contains, equals, not equal, range,
   `IN`, `IS NULL`, `IS NOT NULL`, raw SQL. Pure SQL builder, unit-tested per
   engine's quoting.
-- [ ] **T779 — Relations view.** Outgoing and incoming foreign keys and
+  Done 2026-11-07: key `F`; refused while changes are staged.
+- [x] **T779 — Relations view.** Outgoing and incoming foreign keys and
   dependent views per table, with catalog queries for each engine.
-- [ ] **T780 — Alias-aware completion.** Resolve `FROM t a`, `FROM t AS a`
+  Done 2026-11-07: key `R`; SQLite dependent views are found by scanning view SQL (approximate, documented).
+- [x] **T780 — Alias-aware completion.** Resolve `FROM t a`, `FROM t AS a`
   and `JOIN t a` aliases in the statement at the cursor, so `a.` offers
   `t`'s columns.
+  Done 2026-11-07: quoted alias qualifiers (`"o".`) are not completed yet.
 - [ ] **T781 — Environments and connection strings.** `environment` on a
   saved connection (default `local`), shown as a colored badge; on
   `production` every write shows its SQL and asks, even in a transaction;
