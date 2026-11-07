@@ -172,16 +172,16 @@ vix-convert-from-tsv-into-csv-tool = { workspace = true }
 # Convert: TSV text into a JSON array of objects.
 vix-convert-from-tsv-into-json-tool = { workspace = true }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
-vix-dap = { path = "../crates/vix-dap", version = "2.0.1", default-features = false }
+vix-dap = { path = "../crates/vix-dap", version = "2.0.2", default-features = false }
 # DB workbench: connection management, schema browsing, and SQL queries.
 vix-db = { workspace = true, optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
-vix-editor = { path = "../crates/vix-editor", version = "2.0.1", default-features = false }
+vix-editor = { path = "../crates/vix-editor", version = "2.0.2", default-features = false }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
 # default-features = false leaves grammar selection to the root `lang-*` features.
-vix-editor-core = { path = "../crates/vix-editor-core", version = "2.0.1", default-features = false }
+vix-editor-core = { path = "../crates/vix-editor-core", version = "2.0.2", default-features = false }
 # LSP client: process management and document sync over `vix_lsp_core`.
-vix-lsp = { path = "../crates/vix-lsp", version = "2.0.1", default-features = false }
+vix-lsp = { path = "../crates/vix-lsp", version = "2.0.2", default-features = false }
 # Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested submenu levels).
 vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
@@ -267,7 +267,7 @@ vix-coverage = { workspace = true }
 # Read-only side-by-side comparison: a unified diff between two texts.
 vix-diff-view = { workspace = true }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
-vix-doctor = { path = "../crates/vix-doctor", version = "2.0.1", default-features = false }
+vix-doctor = { path = "../crates/vix-doctor", version = "2.0.2", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { workspace = true }
 # The Large File Viewer (T733): a read-only, chunked view of huge files.
@@ -297,14 +297,14 @@ vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
 vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
-vix-format-tool = { path = "../crates/vix-format-tool", version = "2.0.1", default-features = false }
+vix-format-tool = { path = "../crates/vix-format-tool", version = "2.0.2", default-features = false }
 # HL7 FHIR client logic (profiles, request building, Bundle/OperationOutcome);
 # its blocking network layer is enabled by the `http` feature.
 vix-fhir = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "../crates/vix-git", version = "2.0.1", default-features = false }
+vix-git = { path = "../crates/vix-git", version = "2.0.2", default-features = false }
 # Interactive Git graph: lanes, decorations, paged log, per-commit actions.
-vix-git-graph = { path = "../crates/vix-git-graph", version = "2.0.1", default-features = false }
+vix-git-graph = { path = "../crates/vix-git-graph", version = "2.0.2", default-features = false }
 # OC menu: drive a container engine through its CLI (runner behind `oc`).
 vix-oci = { workspace = true }
 # OC menu list panel: containers, images, volumes, networks, pods.
@@ -319,7 +319,7 @@ vix-http-client = { workspace = true, optional = true }
 vix-cowork = { workspace = true, optional = true }
 vix-cowork-net = { workspace = true, optional = true }
 # Jupyter kernel transport (the `jupyter` feature; `process` adds ZeroMQ).
-vix-jupyter = { path = "../crates/vix-jupyter", version = "2.0.1", default-features = false, optional = true }
+vix-jupyter = { path = "../crates/vix-jupyter", version = "2.0.2", default-features = false, optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { workspace = true }
 # Data and table state for the keybinding editor overlay (rebind/reset).
@@ -391,7 +391,7 @@ vix-settings-bundle = { workspace = true }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { workspace = true }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
-vix-spellcheck = { path = "../crates/vix-spellcheck", version = "2.0.1", default-features = false }
+vix-spellcheck = { path = "../crates/vix-spellcheck", version = "2.0.2", default-features = false }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { workspace = true }
 # Branch review: a multi-file diff of a revision range with saved line comments.

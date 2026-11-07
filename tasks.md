@@ -9883,7 +9883,13 @@ the generated `release.yml`.
     dynamic PIE, because dist ignores `.cargo/config.toml`'s rustflags.
     Reproduced and fixed on a throwaway branch (run 42370437132); the fix is in
     `.github/dist/build-setup.yml`. 2.0.1's musl archive still needs replacing,
-    then `linux-packages` dispatched for `2.0.1`. crates.io publish running.
+    then `linux-packages` dispatched for `2.0.1`. All 147 crates are on crates.io
+    at 2.0.1.
+  - **`2.0.2` (2026-11-07):** chosen by the maintainer over patching 2.0.1's
+    files by hand, so dist generates every checksum and installer. Ships the
+    static musl fix. `HOMEBREW_TAP_TOKEN` and `NPM_TOKEN` are set, the tap has a
+    first commit and the `@vixide` npm organization exists, so this is the first
+    run with every channel able to publish. Tag it on `main`.
   - **After `2.0.1`:** remove the note and restore the Homebrew command in the
     README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
 
