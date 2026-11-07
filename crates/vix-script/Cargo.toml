@@ -20,7 +20,7 @@ rhai = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 toml = { workspace = true }
-vix-git = { path = "../vix-git", version = "2.0.0", default-features = false, optional = true }
+vix-git = { path = "../vix-git", version = "2.0.1-rc.3", default-features = false, optional = true }
 vix-macros = { workspace = true }
 
 [lints]
