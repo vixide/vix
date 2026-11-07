@@ -86,3 +86,52 @@ fn interactive_query_replace_bang_replaces_rest() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T781: a connection string pasted into the DB connection form fills it, the
+/// environment row cycles to production, and the saved settings file holds the
+/// connection and its environment but never the pasted password.
+#[test]
+fn pasted_connection_string_fills_the_db_form_and_saves_without_its_password() {
+    let dir = unique_dir("db-paste");
+    let config = dir.join("config.toml");
+    let _ = fs::remove_file(&config);
+    let mut app = app_at(&dir).with_settings_path(&config);
+    app.run_action("db.connections");
+    app.on_key(key('a'));
+    app.on_paste("postgres://ops:hunter2@db.example.com:5433/shop?sslmode=require");
+    let db = app.db.as_ref().expect("the DB overlay is open");
+    assert_eq!(
+        db.form.fields[0], "shop",
+        "the name defaults to the database"
+    );
+    assert_eq!(db.form.fields[3], "db.example.com");
+    assert!(db.form_password_held(), "the password is held, not typed");
+    for _ in 0..vix::db::FORM_ENVIRONMENT {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    for _ in 0..4 {
+        app.on_key(key(' '));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    let conn = &app.settings.db_connections[0];
+    assert_eq!(conn.name, "shop");
+    assert_eq!(conn.kind, vix::db::connect::Kind::Postgres);
+    assert_eq!(conn.port, "5433");
+    assert_eq!(conn.user, "ops");
+    assert_eq!(conn.sslmode, "require");
+    assert_eq!(
+        app.settings.db_environments.get("shop"),
+        Some(&vix::db::connect::Environment::Production)
+    );
+    let saved = fs::read_to_string(&config).expect("settings were written");
+    assert!(!saved.contains("hunter2"), "a password is never saved");
+    assert!(saved.contains("[db_environments]"), "{saved}");
+    assert!(saved.contains("shop = \"production\""), "{saved}");
+
+    // Ordinary text pasted into a field is typed as before.
+    app.on_key(key('a'));
+    app.on_paste("plain");
+    assert_eq!(app.db.as_ref().unwrap().form.fields[0], "plain");
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -22,6 +22,16 @@ saved connections.
   **Esc**/**q** closes.
 - The add/edit form: **↑/↓** pick a field, type to edit it, **Space** cycles
   the engine kind (sqlite → postgres → mysql), **Enter** saves.
+- **Paste a connection string** into the form to fill it: a `postgres://`,
+  `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq `key=value`
+  string (`host=db port=5432 dbname=shop user=me sslmode=require`, values
+  may be single-quoted). A password in the string is held in memory for the
+  next connect and never saved.
+- The **Environment** row cycles `local` (default) → `development` →
+  `testing` → `staging` → `production`, shown as a badge in the list and the
+  editor title. On **production** every write shows its SQL and asks, even
+  inside a transaction. It is saved in your settings file as a
+  `[db_environments]` table (`name = "production"`).
 - Server engines prompt for a **password** on connect. It is masked, kept
   only in memory for the session, and **never written to disk** — saved
   connections persist in your settings file without any password field.
@@ -42,6 +52,8 @@ Schemas expand into **Tables / Views / Functions** folders.
 - **i** indexes · **f** foreign keys · **g** triggers · **x** constraints —
   each report opens in the results grid.
 - **p** previews the table's data (`SELECT * … LIMIT 200`).
+- **A** copies the table for AI: its columns, primary key, foreign keys,
+  constraints and indexes, plus up to 50 rows, as Markdown.
 - **/** searches the tree live (matches show regardless of collapse state);
   **Enter** keeps the filter, **Esc** clears it.
 - **r** refreshes the schema after DDL changes.
@@ -56,9 +68,11 @@ Type SQL; multiple statements separated by `;` are fine.
   **F7** runs `EXPLAIN ANALYZE`. If the plan contains a full table scan, the
   message line suggests considering an index.
 - Statements that **write** (`INSERT`, `UPDATE`, `DELETE`, `DROP`, … — even
-  hidden inside a `WITH` CTE) ask for confirmation first: **Enter/y** runs,
-  **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks too, since it really
-  executes.
+  hidden inside a `WITH` CTE) ask for confirmation first, showing the SQL:
+  **Enter/y** runs, **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks
+  too, since it really executes. Inside an open transaction a write runs
+  without asking, except `DROP`/`TRUNCATE` and any write on a
+  **production** connection.
 - **Transactions just work**: run `BEGIN`, some statements, then `COMMIT` or
   `ROLLBACK` — the persistent connection keeps the transaction open between
   executions. Savepoints too.
@@ -78,6 +92,10 @@ Type SQL; multiple statements separated by `;` are fine.
   off. Numbers compare numerically.
 - **/** filters rows live (any cell, case-insensitive).
 - **y** copies the selected cell, **Y** the whole row (tab-separated).
+- **A** copies for AI: the statement, the rows from the top of the visible
+  page (at most 50, filter and sort applied) and, on a table preview, the
+  column types, as Markdown to paste into a chat. It is your copy to share;
+  Vix's AI assistant is still shown the schema only, never a row.
 - **v** opens the cell viewer for long content — **p** toggles JSON
   pretty-printing, **y** copies, **Esc** closes.
 - **e** exports the current view (filter and sort applied): **←/→** choose

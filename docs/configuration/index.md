@@ -111,6 +111,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `org_priority_default` | char | `0`  | Priority given to a headline that had no cookie yet. |
 | `command_recents` | list of strings | `[]` | Action ids recently run from the palette, surfaced at the top of the `>` list. Managed by Vix. |
 | `db_connections` | list of tables | `[]` | Saved database connections for the **DB** menu. Passwords are never stored; they are prompted per session. See `crates/vix-db/spec/index.md`. |
+| `[db_environments]` | table | `{}` | Each saved database connection's environment, as `name = "production"` (`local`, `development`, `testing`, `staging` or `production`); a connection with no entry is `local`. Production connections confirm every write, even inside a transaction. Set on the connection form. See [DB](../db/index.md). |
 | `[im]` | table | see below | The **IM** menu: `nick` (`""` = OS user name), `notify` (`"mentions"`; or `"all"`, `"off"`), `history` (`"session"`; or `"disk"`), `history_days` (`30`), `blocked` (`[]`), and `[[im.accounts]]` IRC accounts (`name`, `server`, `port` = 6697, `tls` = true, `channels`, `sasl_user`). Passwords come only from `VIX_IM_PASSWORD_<NAME>`. See [IM](../im/index.md). |
 | `jupyter_confirm_evaluate` | string | `"untrusted"` | When running an Org `src` block in a Jupyter kernel asks first: `"untrusted"` asks before a block's first run in a session unless the workspace is trusted (and always for a file outside the workspace), `"always"` asks before every run, `"never"` never asks. A block's `:eval query` still asks and `:eval never` still refuses. Only in a build with the `jupyter` feature. See [Jupyter Kernels](../jupyter/index.md). |
 | `[jupyter_kernels]` | table | `{}` | Which Jupyter kernelspec runs each language, as `language = "kernelspec name"` (for example `python = "python3"`). Used by **Run → Jupyter → Run** when no kernel for the language is running yet; empty picks the first installed kernelspec for the language. Only in a build with the `jupyter` feature. See [Jupyter Kernels](../jupyter/index.md). |
@@ -183,7 +184,7 @@ two-space hard line breaks — set `trim_trailing_whitespace = false` if you rel
 them.
 
 Some keys are **managed by Vix rather than hand-edited** — `recent_files`,
-`command_recents`, `db_connections`, and the window/dock geometry are written
+`command_recents`, `db_connections`, `db_environments`, and the window/dock geometry are written
 back as you use the editor.
 
 Most settings are also changed from inside the app and saved on quit: toggling

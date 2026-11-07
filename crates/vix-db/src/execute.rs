@@ -23,7 +23,10 @@
 //! 2. A write/DDL statement (see [`editor::is_write_statement`]) is refused
 //!    outright on a read-only session.
 //! 3. Otherwise it needs a `View::Confirm` approval -- except inside an
-//!    explicit transaction, where `ROLLBACK` can undo it.
+//!    explicit transaction, where `ROLLBACK` can undo it. Two exceptions to
+//!    the exception (T781, [`editor::needs_confirmation`]): `DROP` and
+//!    `TRUNCATE` always ask, and on a `production` connection every write
+//!    asks, staged cell edits and CSV imports included.
 //!
 //! Owning specs: `crates/vix-db/spec/index.md` and `spec/session.md`.
 
@@ -42,6 +45,27 @@ pub(crate) enum PendingRun {
     One(String),
     /// Every statement in the buffer, in order.
     All(Vec<String>),
+    /// Staged cell edits on a production connection (T781): the `UPDATE`s,
+    /// and the previewed table to refresh afterwards.
+    Commit {
+        /// The `UPDATE` statements, in grid order.
+        updates: Vec<String>,
+        /// Schema of the edited table.
+        schema: String,
+        /// The edited table.
+        table: String,
+        /// The connection's engine.
+        kind: connect::Kind,
+    },
+    /// A CSV/TSV import on a production connection (T781).
+    Import {
+        /// The `CREATE TABLE` and `INSERT` statements.
+        statements: Vec<String>,
+        /// The new table's name.
+        table: String,
+        /// Data rows imported (for the status line).
+        rows: usize,
+    },
 }
 
 /// What to do with the reply from an in-flight asynchronous query. Chosen at
@@ -135,6 +159,17 @@ impl Browser {
                 match self.pending_run.take() {
                     Some(PendingRun::One(sql)) => self.run_statement(&sql),
                     Some(PendingRun::All(stmts)) => self.run_all(&stmts),
+                    Some(PendingRun::Commit {
+                        updates,
+                        schema,
+                        table,
+                        kind,
+                    }) => self.finish_commit(&updates, &schema, &table, kind),
+                    Some(PendingRun::Import {
+                        statements,
+                        table,
+                        rows,
+                    }) => self.run_import(&statements, &table, rows),
                     None => {}
                 }
             }
@@ -232,7 +267,8 @@ impl Browser {
     /// Execute one fully-formed statement, gating writes as [`Self::execute`]
     /// does. Shared by the plain path and the bind-parameter path. Inside an
     /// explicit transaction the confirmation is skipped — the change is
-    /// provisional and `ROLLBACK` can undo it.
+    /// provisional and `ROLLBACK` can undo it — unless the statement drops or
+    /// truncates, or the connection is `production` (T781).
     fn execute_sql(&mut self, stmt: String) {
         if editor::is_write_statement(&stmt) {
             if !self.write_enabled {
@@ -242,7 +278,11 @@ impl Browser {
                 self.history_override = None;
                 return;
             }
-            if self.tx == TxState::None {
+            if editor::needs_confirmation(
+                &stmt,
+                self.active_environment(),
+                self.tx != TxState::None,
+            ) {
                 self.pending_run = Some(PendingRun::One(stmt));
                 self.view = View::Confirm;
                 return;
@@ -356,6 +396,9 @@ impl Browser {
             match chunk {
                 session::Chunk::Head(headers) => {
                     self.grid.set(headers, Vec::new());
+                    if let Some(p) = self.pending_query.as_ref() {
+                        self.grid_source = Some((p.sql.clone(), None));
+                    }
                     self.focus = Pane::Results;
                 }
                 session::Chunk::Rows(batch) => self.grid.append_rows(batch),
@@ -602,6 +645,7 @@ impl Browser {
         }
         let (headers, rows) = last;
         self.grid.set(headers, rows);
+        self.grid_source = stmts.last().map(|s| (s.clone(), None));
         self.focus = Pane::Results;
         self.set_uneditable();
         self.message = Some(t!("msg.db_ran_all", count = stmts.len()).to_string());
@@ -632,17 +676,39 @@ impl Browser {
     }
 
     /// A short description of the execution awaiting confirmation, for the
-    /// confirmation view: the statement itself, or the statement count for a
-    /// run-all.
+    /// confirmation view: the statement itself, or the statement count and
+    /// the first statement for several.
     #[must_use]
     pub fn pending_summary(&self) -> Option<String> {
         match self.pending_run.as_ref()? {
             PendingRun::One(sql) => Some(sql.clone()),
-            PendingRun::All(stmts) => Some(format!(
+            PendingRun::All(stmts)
+            | PendingRun::Commit { updates: stmts, .. }
+            | PendingRun::Import {
+                statements: stmts, ..
+            } => Some(format!(
                 "{} × … {}",
                 stmts.len(),
                 stmts.first().map_or("", String::as_str)
             )),
+        }
+    }
+
+    /// Every statement awaiting confirmation, in run order, so the
+    /// confirmation view can show the SQL in full (T781). Empty when nothing
+    /// is pending.
+    #[must_use]
+    pub fn pending_statements(&self) -> Vec<String> {
+        match self.pending_run.as_ref() {
+            None => Vec::new(),
+            Some(PendingRun::One(sql)) => vec![sql.clone()],
+            Some(
+                PendingRun::All(stmts)
+                | PendingRun::Commit { updates: stmts, .. }
+                | PendingRun::Import {
+                    statements: stmts, ..
+                },
+            ) => stmts.clone(),
         }
     }
 }

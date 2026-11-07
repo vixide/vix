@@ -21,7 +21,7 @@
 
 use vix_input::{KeyCode, KeyEvent};
 
-use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect};
+use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect, execute};
 
 /// One staged cell edit: `(underlying row index, column index)` →
 /// `(original value, new value)`.
@@ -85,6 +85,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, Some((schema.clone(), table.clone()))));
                 self.last_table = Some(table.clone());
                 self.focus = Pane::Results;
                 self.set_editable(&schema, &table, kind);
@@ -191,6 +192,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, None));
                 self.last_table = Some(parent);
                 self.set_uneditable();
             }
@@ -302,13 +304,36 @@ impl Browser {
         let Some(updates) = self.build_pending_updates(kind, &target, &pk_idx, &edits) else {
             return;
         };
-        let count = updates.len();
-        if !self.apply_updates_in_transaction(&updates) {
+        // On production every write shows its SQL and asks first (T781).
+        if self.active_environment().is_production() {
+            self.pending_run = Some(execute::PendingRun::Commit {
+                updates,
+                schema,
+                table,
+                kind,
+            });
+            self.view = View::Confirm;
+            return;
+        }
+        self.finish_commit(&updates, &schema, &table, kind);
+    }
+
+    /// Apply the built `UPDATE`s in one transaction, then clear the staged
+    /// edits and refresh the preview (the tail of [`Self::commit_edits`],
+    /// also reached from the production confirmation).
+    pub(super) fn finish_commit(
+        &mut self,
+        updates: &[String],
+        schema: &str,
+        table: &str,
+        kind: connect::Kind,
+    ) {
+        if !self.apply_updates_in_transaction(updates) {
             return;
         }
         self.edits.clear();
-        self.message = Some(t!("msg.db_edit_committed", count = count).to_string());
-        self.preview_selected_refresh(&schema, &table, kind);
+        self.message = Some(t!("msg.db_edit_committed", count = updates.len()).to_string());
+        self.preview_selected_refresh(schema, table, kind);
     }
 
     /// Build one `UPDATE` statement per staged edit, re-reading each cell first
@@ -412,6 +437,7 @@ impl Browser {
         let sql = catalog::preview_sql(kind, schema, table);
         if let Ok((headers, rows)) = self.run_catalog(&sql) {
             self.grid.set(headers, rows);
+            self.grid_source = Some((sql, Some((schema.to_string(), table.to_string()))));
             self.set_editable(schema, table, kind);
         }
     }
@@ -432,6 +458,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, None));
                 self.focus = Pane::Results;
                 self.set_uneditable();
             }

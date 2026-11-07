@@ -62,6 +62,24 @@ connect skips the prompt. Saved connections never persist a password field
 to disk. Server engines default to `writable = false`, same as SQLite, so
 the read-only/write-mode split above applies there too.
 
+Instead of filling the fields one by one you can **paste a connection
+string** into the form: `postgres://me@db.example.com:5432/shop?sslmode=require`,
+`mysql://…`, `sqlite:db/demo.sqlite`, or a libpq string such as `host=db
+dbname=shop user=me`. Vix fills the engine, host, port, user, database and
+TLS mode (and the name, if it is still empty). A password inside the string
+is never written to a field or to disk: it is held in memory for the next
+connect, exactly like one typed on the prompt.
+
+### Environments
+
+The form's last row, **Environment**, marks what the database is: `local`
+(the default), `development`, `testing`, `staging` or `production`. The
+connections list and the editor title show it as a badge. On a
+**production** connection every write shows its SQL and asks first, even
+inside a `BEGIN … COMMIT` transaction (elsewhere a transaction skips the
+question, since `ROLLBACK` can undo it). `DROP` and `TRUNCATE` ask on every
+connection.
+
 ## The schema tree
 
 The left pane groups each schema into **Tables / Views / Functions**
@@ -138,6 +156,11 @@ In the results pane:
   row (a `tasks.person_id` cell jumps to that row in `people`).
 - **y**/**Y** yank the cell/row (tab-separated) to the clipboard; **v** opens
   a full-content cell viewer with a JSON pretty-print toggle (**p**).
+- **A** (*copy for AI*) copies the statement and up to 50 rows from the top
+  of the visible page as Markdown, ready to paste into a chat; on a table
+  preview it adds each column's type. **A** on a table in the tree copies
+  its columns, keys, constraints and indexes with its rows. Only you decide
+  where that goes: Vix's own AI assistant is still never shown a row.
 - On a table preview that has a primary key (press **p** on `people` in the
   tree, not this join), **i** stages an edit to the selected cell and **W**
   commits every staged edit as `UPDATE`s in one transaction, with conflict
@@ -165,8 +188,8 @@ tasks(person_id)` would turn it into a `SEARCH`). **F7** (**Explain
 Analyze**) runs `EXPLAIN ANALYZE` where the engine supports it — on SQLite
 that's still `EXPLAIN QUERY PLAN`, since SQLite has no separate ANALYZE
 form. Statements that actually write ask for confirmation first
-(**Enter**/**y** runs, **Esc**/**n** cancels) — `EXPLAIN ANALYZE` of a write
-does too, since it really executes.
+(**Enter**/**y** runs, **Esc**/**n** cancels), showing the SQL in full —
+`EXPLAIN ANALYZE` of a write does too, since it really executes.
 
 ## Exporting results
 

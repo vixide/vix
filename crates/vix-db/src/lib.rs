@@ -58,8 +58,11 @@ pub mod catalog;
 mod cell_edit;
 pub mod chart;
 pub mod complete;
+pub mod conn_string;
 pub mod connect;
+mod copy_ai;
 pub mod editor;
+pub mod environment;
 pub mod erd;
 mod execute;
 pub mod export;
@@ -232,8 +235,12 @@ pub const FORM_WRITABLE: usize = FORM_FIELDS;
 /// Index of the keyring-store row, toggled, not typed.
 pub const FORM_STORE: usize = FORM_FIELDS + 1;
 
-/// Total navigable form rows (text fields plus the two toggles).
-pub const FORM_ROWS: usize = FORM_FIELDS + 2;
+/// Index of the environment row (local … production), cycled, not typed
+/// (T781). Its value is [`Browser::form_environment`].
+pub const FORM_ENVIRONMENT: usize = FORM_FIELDS + 2;
+
+/// Total navigable form rows (text fields plus the three cycled rows).
+pub const FORM_ROWS: usize = FORM_FIELDS + 3;
 
 /// The add/edit connection form.
 #[derive(Debug, Clone, Default)]
@@ -358,6 +365,27 @@ pub struct Pages {
 pub struct Browser {
     /// Saved connections (mirrors the persisted setting).
     pub connections: Vec<connect::Connection>,
+    /// Each saved connection's environment, by connection name (mirrors the
+    /// persisted `db_environments` setting; a missing name is `local`). The
+    /// host fills it with [`Browser::set_environments`] and collects changes
+    /// with [`Browser::take_dirty_environments`] (T781).
+    environments: std::collections::BTreeMap<String, connect::Environment>,
+    /// The environments as last handed to or collected by the host; a
+    /// difference from `environments` is what makes them dirty.
+    saved_environments: std::collections::BTreeMap<String, connect::Environment>,
+    /// The environment picked on the add/edit form's environment row.
+    pub form_environment: connect::Environment,
+    /// A password taken from a connection string pasted into the open form,
+    /// until the form is saved or cancelled. Never persisted.
+    form_password: Option<String>,
+    /// Passwords from pasted connection strings, by connection name, waiting
+    /// for that connection's next connect, where they are used like a typed
+    /// password (and saved to the keyring only if the connection opts in).
+    /// Memory only.
+    held_passwords: std::collections::HashMap<String, String>,
+    /// The statement behind the current grid and, for a table preview, its
+    /// `(schema, table)`; read by Copy for AI (T782).
+    grid_source: Option<(String, Option<(String, String)>)>,
     /// Which screen is showing.
     pub view: View,
     /// Connections-list selection.
@@ -510,6 +538,12 @@ impl Browser {
     pub fn new(connections: Vec<connect::Connection>) -> Browser {
         Browser {
             connections,
+            environments: std::collections::BTreeMap::new(),
+            saved_environments: std::collections::BTreeMap::new(),
+            form_environment: connect::Environment::Local,
+            form_password: None,
+            held_passwords: std::collections::HashMap::new(),
+            grid_source: None,
             view: View::Connections,
             sel: 0,
             scroll: 0,
@@ -606,6 +640,104 @@ impl Browser {
         } else {
             None
         }
+    }
+
+    /// The environment of the saved connection named `name` (`local` when it
+    /// has none recorded).
+    #[must_use]
+    pub fn environment_of(&self, name: &str) -> connect::Environment {
+        self.environments.get(name).copied().unwrap_or_default()
+    }
+
+    /// The environment of the active connection (`local` when disconnected).
+    #[must_use]
+    pub fn active_environment(&self) -> connect::Environment {
+        self.conn
+            .as_ref()
+            .map(|c| self.environment_of(&c.name))
+            .unwrap_or_default()
+    }
+
+    /// The connection environments if they changed since the last call (for
+    /// the host to persist as `db_environments`), clearing the flag.
+    pub fn take_dirty_environments(
+        &mut self,
+    ) -> Option<std::collections::BTreeMap<String, connect::Environment>> {
+        if self.environments == self.saved_environments {
+            None
+        } else {
+            self.saved_environments.clone_from(&self.environments);
+            Some(self.environments.clone())
+        }
+    }
+
+    /// Load the saved connections' environments (the host's
+    /// `db_environments` setting), by connection name.
+    pub fn set_environments(
+        &mut self,
+        environments: std::collections::BTreeMap<String, connect::Environment>,
+    ) {
+        self.saved_environments.clone_from(&environments);
+        self.environments = environments;
+    }
+
+    /// Whether the open form holds a password from a pasted connection
+    /// string (shown as a hint; the password itself is never displayed).
+    #[must_use]
+    pub fn form_password_held(&self) -> bool {
+        self.form_password.is_some()
+    }
+
+    /// Offer a bracketed paste to the overlay. On the add/edit form, a
+    /// connection string (see [`conn_string::parse`]) fills the engine,
+    /// file, host, port, user, database and TLS-mode fields — and the name,
+    /// when it is still empty — and its password is held in memory for the
+    /// next connect, never saved. Returns `true` when the paste was used
+    /// that way (or was a malformed connection string, reported on the
+    /// status line); `false` means the host should deliver it as keystrokes.
+    pub fn paste(&mut self, text: &str) -> bool {
+        if self.view != View::Form {
+            return false;
+        }
+        match conn_string::parse(text) {
+            Ok(parsed) => {
+                self.fill_form(parsed);
+                true
+            }
+            Err(conn_string::ParseError::NotAConnectionString) => false,
+            Err(e) => {
+                self.message = Some(t!("msg.db_dsn_invalid", error = e.to_string()).to_string());
+                true
+            }
+        }
+    }
+
+    /// Fill the form from a parsed connection string (see [`Self::paste`]).
+    fn fill_form(&mut self, parsed: conn_string::Parsed) {
+        let c = parsed.connection;
+        let f = &mut self.form;
+        f.kind = c.kind;
+        f.fields[2] = c.file;
+        f.fields[3] = c.host;
+        f.fields[4] = c.port;
+        f.fields[5] = c.user;
+        f.fields[6] = c.database;
+        f.fields[FORM_SSLMODE] = c.sslmode;
+        if f.fields[0].trim().is_empty() {
+            f.fields[0] = default_name(&f.fields[6], &f.fields[2], &f.fields[3]);
+        }
+        let held = parsed.password.is_some();
+        self.form_password = parsed.password;
+        let mut message = if held {
+            t!("msg.db_dsn_filled_password").to_string()
+        } else {
+            t!("msg.db_dsn_filled").to_string()
+        };
+        if !parsed.ignored.is_empty() {
+            message.push(' ');
+            message.push_str(&t!("msg.db_dsn_ignored", keys = parsed.ignored.join(", ")));
+        }
+        self.message = Some(message);
     }
 
     /// The connections list if it changed since the last call (for the host
@@ -753,6 +885,20 @@ impl Browser {
         }
         Outcome::Consumed
     }
+}
+
+/// A name for a connection filled from a connection string whose form had
+/// none: the database, else the file's stem, else the host.
+fn default_name(database: &str, file: &str, host: &str) -> String {
+    if !database.is_empty() {
+        return database.to_string();
+    }
+    if !file.is_empty() {
+        return std::path::Path::new(file)
+            .file_stem()
+            .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
+    }
+    host.to_string()
 }
 
 /// Rows of the catalog objects query as `(schema, name, kind)` triples.
@@ -1222,6 +1368,153 @@ mod tests {
         );
         b.handle_key(key(KeyCode::Right), Pages::default());
         assert_eq!(b.grid.cur_col, 1);
+    }
+
+    fn type_into(b: &mut Browser, text: &str) {
+        for c in text.chars() {
+            b.handle_key(key(KeyCode::Char(c)), Pages::default());
+        }
+    }
+
+    #[test]
+    fn pasted_connection_string_fills_the_form_and_holds_the_password() {
+        let mut b = browser();
+        assert!(
+            !b.paste("postgres://u:pw@h/d"),
+            "only the form takes a paste"
+        );
+        b.handle_key(key(KeyCode::Char('a')), Pages::default());
+        assert!(!b.paste("just some text"), "ordinary text is typed instead");
+        assert!(b.paste("postgresql://joel:s%40cret@db.example.com:5433/orders?sslmode=require"));
+        assert_eq!(b.form.kind, connect::Kind::Postgres);
+        assert_eq!(
+            b.form.fields[0], "orders",
+            "the name defaults to the database"
+        );
+        assert_eq!(b.form.fields[3], "db.example.com");
+        assert_eq!(b.form.fields[4], "5433");
+        assert_eq!(b.form.fields[5], "joel");
+        assert_eq!(b.form.fields[6], "orders");
+        assert_eq!(b.form.fields[FORM_SSLMODE], "require");
+        assert!(b.form_password_held());
+        assert!(
+            !b.form.fields.iter().any(|f| f.contains("cret")),
+            "the password never lands in a field"
+        );
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        let saved = b.connections.last().unwrap().clone();
+        assert_eq!(saved.name, "orders");
+        assert_eq!(
+            b.held_passwords.get("orders").map(String::as_str),
+            Some("s@cret")
+        );
+        assert!(!b.form_password_held());
+        // The persisted connection has nowhere to put a password.
+        let toml = format!("{saved:?}");
+        assert!(!toml.contains("s@cret"), "{toml}");
+    }
+
+    #[test]
+    fn malformed_connection_string_is_reported_and_cancel_drops_the_password() {
+        let mut b = browser();
+        b.handle_key(key(KeyCode::Char('a')), Pages::default());
+        type_into(&mut b, "keep");
+        assert!(b.paste("postgres://h:99999/d"));
+        assert!(b.message.is_some(), "a malformed string is reported");
+        assert_eq!(b.form.fields[0], "keep", "nothing was filled");
+        assert!(b.paste("host=h password=pw"));
+        assert_eq!(b.form.fields[0], "keep", "a typed name is kept");
+        assert!(b.form_password_held());
+        b.handle_key(key(KeyCode::Esc), Pages::default());
+        assert!(
+            !b.form_password_held(),
+            "cancel forgets the pasted password"
+        );
+        assert!(b.held_passwords.is_empty());
+    }
+
+    #[test]
+    fn environment_row_cycles_and_saves_by_name() {
+        let mut b = browser();
+        b.set_environments(std::collections::BTreeMap::new());
+        assert!(b.take_dirty_environments().is_none());
+        assert_eq!(b.environment_of("app"), connect::Environment::Local);
+        b.handle_key(key(KeyCode::Char('e')), Pages::default());
+        while b.form.sel != FORM_ENVIRONMENT {
+            b.handle_key(key(KeyCode::Down), Pages::default());
+        }
+        for _ in 0..4 {
+            b.handle_key(key(KeyCode::Char(' ')), Pages::default());
+        }
+        assert_eq!(b.form_environment, connect::Environment::Production);
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        assert_eq!(b.environment_of("app"), connect::Environment::Production);
+        let envs = b.take_dirty_environments().expect("environments changed");
+        assert_eq!(envs.get("app"), Some(&connect::Environment::Production));
+        assert!(
+            b.take_dirty_environments().is_none(),
+            "flag clears after take"
+        );
+        // Renaming carries the environment to the new name.
+        b.handle_key(key(KeyCode::Char('e')), Pages::default());
+        assert_eq!(b.form_environment, connect::Environment::Production);
+        type_into(&mut b, "2");
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        assert_eq!(b.environment_of("app2"), connect::Environment::Production);
+        assert_eq!(b.environment_of("app"), connect::Environment::Local);
+        // Deleting drops it.
+        b.handle_key(key(KeyCode::Char('d')), Pages::default());
+        assert_eq!(
+            b.take_dirty_environments(),
+            Some(std::collections::BTreeMap::new())
+        );
+    }
+
+    fn workbench_on(env: connect::Environment, tx: TxState) -> Browser {
+        let mut b = browser();
+        let mut envs = std::collections::BTreeMap::new();
+        envs.insert("app".to_string(), env);
+        b.set_environments(envs);
+        b.conn = Some(b.connections[0].clone());
+        b.view = View::Workbench;
+        b.focus = Pane::Editor;
+        b.write_enabled = true;
+        b.tx = tx;
+        b
+    }
+
+    #[test]
+    fn production_confirms_writes_inside_a_transaction() {
+        let mut b = workbench_on(connect::Environment::Production, TxState::Open);
+        assert_eq!(b.active_environment(), connect::Environment::Production);
+        type_into(&mut b, "update t set x = 1");
+        b.handle_key(key(KeyCode::F(5)), Pages::default());
+        assert_eq!(
+            b.view,
+            View::Confirm,
+            "production asks even in a transaction"
+        );
+        assert_eq!(
+            b.pending_statements(),
+            vec!["update t set x = 1".to_string()]
+        );
+    }
+
+    #[test]
+    fn local_skips_the_confirmation_in_a_transaction_but_not_for_drop() {
+        let mut b = workbench_on(connect::Environment::Local, TxState::Open);
+        type_into(&mut b, "drop table t");
+        b.handle_key(key(KeyCode::F(5)), Pages::default());
+        assert_eq!(b.view, View::Confirm, "DROP always asks");
+        b.handle_key(key(KeyCode::Esc), Pages::default());
+        assert_eq!(b.pending_statements(), Vec::<String>::new());
+        // A plain write inside the transaction runs without asking (it fails
+        // here, with no session, which is all this test needs).
+        b.query = editor::Query::default();
+        type_into(&mut b, "update t set x = 1");
+        b.handle_key(key(KeyCode::F(5)), Pages::default());
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(b.pending_statements(), Vec::<String>::new());
     }
 
     #[test]

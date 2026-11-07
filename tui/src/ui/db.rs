@@ -103,14 +103,22 @@ fn draw_db_connections(app: &mut App, frame: &mut Frame, area: Rect) {
         )));
     }
     for (i, conn) in b.connections.iter().enumerate() {
-        let text = format!(" {} {:10} {}", conn.name, conn.kind.label(), conn.target());
+        let env = b.environment_of(&conn.name);
+        let badge = crate::db::environment::badge(env);
+        let text = format!(
+            " {} {badge} {:10} {}",
+            conn.name,
+            conn.kind.label(),
+            conn.target()
+        );
         let line = if i == b.sel {
             Line::from(Span::styled(text, theme::selected()))
         } else {
             Line::from(vec![
                 Span::raw(format!(" {} ", conn.name)),
+                Span::styled(badge, crate::db::environment::style(env)),
                 Span::styled(
-                    format!("{:10} {}", conn.kind.label(), conn.target()),
+                    format!(" {:10} {}", conn.kind.label(), conn.target()),
                     theme::dim(),
                 ),
             ])
@@ -141,6 +149,7 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.db_field_sslmode"),
         t!("ui.db_field_access"),
         t!("ui.db_field_store_keyring"),
+        t!("ui.db_field_environment"),
     ];
     let on_off = |on: bool| {
         if on {
@@ -164,8 +173,15 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
             }
         } else if i == crate::db::FORM_STORE {
             on_off(b.form.store_keyring).to_string()
+        } else if i == crate::db::FORM_ENVIRONMENT {
+            crate::db::environment::badge(b.form_environment)
         } else {
             b.form.fields[i].clone()
+        };
+        let value_style = if i == crate::db::FORM_ENVIRONMENT {
+            crate::db::environment::style(b.form_environment)
+        } else {
+            Style::default()
         };
         let text = format!(" {label:<14} {value}");
         let line = if i == b.form.sel {
@@ -173,10 +189,16 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         } else {
             Line::from(vec![
                 Span::styled(format!(" {label:<14} "), theme::dim()),
-                Span::raw(value),
+                Span::styled(value, value_style),
             ])
         };
         lines.push(line);
+    }
+    if b.form_password_held() {
+        lines.push(Line::from(Span::styled(
+            format!(" {}", t!("ui.db_form_password_held")),
+            theme::dim(),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -355,18 +377,22 @@ fn draw_db_confirm(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
-    let summary = b.pending_summary().unwrap_or_default();
-    let lines = vec![
-        Line::from(Span::styled(
-            format!(" {}", t!("ui.db_confirm")),
-            theme::title(true),
-        )),
-        Line::from(Span::raw(format!(
-            " {}",
-            trunc(&summary, usize::from(area.width).saturating_sub(2))
-        ))),
-    ];
-    frame.render_widget(Paragraph::new(lines), area);
+    // Every pending statement in full (T781): on production in particular the
+    // user approves exactly the SQL that will run.
+    let env = b.active_environment();
+    let mut lines = vec![Line::from(vec![
+        Span::styled(format!(" {} ", t!("ui.db_confirm")), theme::title(true)),
+        Span::styled(
+            crate::db::environment::badge(env),
+            crate::db::environment::style(env),
+        ),
+    ])];
+    for stmt in b.pending_statements() {
+        for text in stmt.lines() {
+            lines.push(Line::from(Span::raw(format!(" {text}"))));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 
 /// The full-content cell viewer of the DB overlay.
@@ -600,14 +626,23 @@ fn draw_db_editor(app: &App, frame: &mut Frame, area: Rect) {
         crate::db::TxState::Aborted => " · TX!",
         crate::db::TxState::None => "",
     };
+    let env = b.active_environment();
+    let env_badge = Span::styled(
+        crate::db::environment::badge(env),
+        crate::db::environment::style(env),
+    );
     let title = if let Some(secs) = b.query_elapsed_secs() {
-        format!(
-            " {} — {} ",
-            t!("ui.db_editor"),
-            t!("ui.db_query_running", secs = secs)
-        )
+        Line::from(vec![
+            Span::raw(format!(" {} — ", t!("ui.db_editor"))),
+            env_badge,
+            Span::raw(format!(" {} ", t!("ui.db_query_running", secs = secs))),
+        ])
     } else {
-        format!(" {} — {badge}{tx} ", t!("ui.db_editor"))
+        Line::from(vec![
+            Span::raw(format!(" {} — ", t!("ui.db_editor"))),
+            env_badge,
+            Span::raw(format!(" {badge}{tx} ")),
+        ])
     };
     let block = Block::default()
         .borders(Borders::ALL)

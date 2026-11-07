@@ -6,7 +6,7 @@
 //! (plus that in-memory password) as the `sqlite:` / `postgres:` / `mysql:`
 //! URL that [`crate::session`] hands to sqlx's `Any` driver.
 //!
-//! The [`Connection`] and [`Kind`] types themselves are defined in the
+//! The [`Connection`], [`Kind`] and [`Environment`] types themselves are defined in the
 //! `vix-settings` crate (they are persisted in the settings file) and
 //! re-exported here so the rest of this crate keeps a `connect::` path. This
 //! module only adds the DB-specific URL and read-only-pragma logic on top.
@@ -17,7 +17,7 @@
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use std::fmt::Write as _;
 
-pub use vix_settings::{Connection, Kind};
+pub use vix_settings::{Connection, Environment, Kind};
 
 /// The sqlx connection URL for `conn`. The password appears only in this
 /// in-memory string, percent-encoded alongside the user; it is never written

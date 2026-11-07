@@ -255,6 +255,8 @@ pgsavvy
 surus
 dbjoy
 libpq
+dbname
+hostaddr
 Geometrein
 
 # LSP servers / editors referenced in docs
