@@ -9850,9 +9850,21 @@ the generated `release.yml`.
   - **`2.0.1-rc.1` (2026-11-06):** the run stopped at `aarch64-pc-windows-msvc`
     (no WiX on `windows-11-arm`), so `host` never ran. Tag CI also found a Unix-only
     `vix-acp` test and a false positive from `inherent_method_must_use_added`. All
-    three are fixed; a further rc is needed. Left alone: `vix-oci`'s
+    three are fixed; a further rc is needed. `vix-oci`'s
     `listing_through_the_fake_parses` failed with `Text file busy` in the advisory
     coverage job, a race in the test's fake engine script.
+  - **`2.0.1-rc.2` (2026-11-07):** `aarch64-apple-darwin` was cancelled before
+    any step with `The configuration 'macos-14-arm64-us-default' is not
+    supported`, which also explains the cancellation in rc.1, so `host` was
+    skipped again. Now on `macos-latest`. The race above also failed the
+    no-network job, so the fake engine tests now run one at a time. All GUI jobs
+    failed Clippy 1.99's `assert_is_empty` in `vix-slint`, fixed; those jobs are
+    `continue-on-error`, so the GUI run still reports success, and rc.1's success
+    says nothing about them. The WiX fix worked: `aarch64-pc-windows-msvc`
+    built. Windows CI found a real bug: `sqlite_read_only_url` wrote
+    `sqlite://C:\...`, which `url` parses as host `C`, so no read-only SQLite
+    file opened on Windows. Fixed, and the Windows test step now uses
+    `--no-fail-fast`, so one run reports every failure.
   - **Unexplained:** 1.8.0's `host` job failed at `gh release create` with
     `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
     The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,

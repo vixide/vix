@@ -9,8 +9,19 @@
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 
 use vix_oci::{OciError, argv};
+
+/// One test at a time writes and runs its script. A child forked by a parallel
+/// test inherits the descriptor `fake` has open for writing, and executing a
+/// file open for writing fails with `Text file busy`.
+fn serial() -> MutexGuard<'static, ()> {
+    static SPAWN: Mutex<()> = Mutex::new(());
+    SPAWN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn fake(dir: &std::path::Path, body: &str) -> PathBuf {
     let path = dir.join("docker");
@@ -27,6 +38,7 @@ fn scratch(name: &str) -> PathBuf {
 
 #[test]
 fn run_returns_stdout_and_passes_argv_untouched() {
+    let _serial = serial();
     let dir = scratch("argv");
     let program = fake(&dir, "for a in \"$@\"; do echo \"[$a]\"; done");
     let out = vix_oci::run(&program, &["rm".into(), "a b; echo pwned".into()], None).unwrap();
@@ -36,6 +48,7 @@ fn run_returns_stdout_and_passes_argv_untouched() {
 
 #[test]
 fn login_password_travels_on_stdin_only() {
+    let _serial = serial();
     let dir = scratch("login");
     let program = fake(&dir, "echo \"args:$*\"; echo \"stdin:$(cat)\"");
     let args = argv::login("ghcr.io", "octocat").unwrap();
@@ -47,6 +60,7 @@ fn login_password_travels_on_stdin_only() {
 
 #[test]
 fn a_failing_engine_reports_code_and_stderr() {
+    let _serial = serial();
     let dir = scratch("fail");
     let program = fake(&dir, "echo 'no such container' >&2; exit 7");
     match vix_oci::run(&program, &["stop".into(), "x".into()], None) {
@@ -67,6 +81,7 @@ fn a_missing_program_is_not_installed() {
 
 #[test]
 fn listing_through_the_fake_parses() {
+    let _serial = serial();
     let dir = scratch("list");
     let program = fake(
         &dir,
