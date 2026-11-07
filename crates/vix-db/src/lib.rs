@@ -57,6 +57,7 @@ pub mod ai_features;
 pub mod catalog;
 mod cell_edit;
 pub mod chart;
+pub mod compare;
 pub mod complete;
 pub mod connect;
 pub mod editor;
