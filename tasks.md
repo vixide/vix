@@ -9923,6 +9923,89 @@ the generated `release.yml`.
   scan counter is thread-local, so another test can't bump it: something in
   the app does one more whole-buffer scan after an edit, depending on timing.
 
+## Run W — database workbench, from dbjoy (2026-11-07)
+
+From a reading of [dbjoy](https://github.com/agustind/dbjoy); assessment in
+[`spec/comparisons/dbjoy.md`](spec/comparisons/dbjoy.md), planned behavior in
+[`crates/vix-db/spec`](crates/vix-db/spec/index.md) ("dbjoy-inspired"). Each
+task updates that spec section as it lands, and has tests on SQLite plus an
+engine-gated test where PostgreSQL or MySQL behaves differently.
+
+- [x] **T774 — Cancel without losing the session.** `Ctrl+C` sends
+  `pg_cancel_backend(pid)` (PostgreSQL) or `KILL QUERY id` (MySQL) over a
+  short-lived second connection, recording the backend id at connect time.
+  The session and an open transaction survive (aborted after a cancel, `TX!`).
+  SQLite and a failed server cancel fall back to the reconnect, and the
+  status line says the transaction was lost. Today `execute.rs` reconnects
+  and loses it silently.
+  Done 2026-11-07: server cancel over a second connection with a 10-second limit; a second `Ctrl+C` escalates to the reconnect. MySQL is still marked aborted after a cancel, as the client mirror always has.
+- [x] **T775 — Error positions and server notices.** Spike first: does sqlx's
+  `Any` driver keep PostgreSQL's error `position` and the notice stream? If
+  it does, move the cursor to the error and show notices under the result;
+  if it does not, record why and what it would take.
+  Done 2026-11-07 (positions only): sqlx 0.9.0 keeps the PostgreSQL error position, but `PgStream::recv` swallows notices into a log event, so notices need an upstream sqlx hook plus a typed `PgConnection` session; recorded in the spec.
+- [x] **T776 — PostgreSQL plan tree.** `EXPLAIN (FORMAT JSON)` parsed into a
+  tree: time share per node with `ANALYZE`, slowest nodes highlighted, row
+  estimates off by 10× or more flagged. Pure parser in `vix-db`, unit-tested
+  on recorded plans. Keeps the full-scan hint; other engines keep text.
+  Done 2026-11-07: uses `EXPLAIN (FORMAT YAML)`, not JSON, because sqlx's `Any` driver cannot decode the `json` column; one parser reads both.
+- [x] **T777 — Staged inserts, deletes and smarter cells.** Add and delete
+  rows on a table preview beside today's cell updates, color-coded; `W`
+  commits all in one transaction and rolls back if any statement does not
+  affect exactly one row. Pickers for booleans, enums and `CHECK (col IN
+  (…))`; generated columns read-only; `=expr` values computed by the server,
+  `\=` for literal text. New i18n keys in every locale.
+  Done 2026-11-07: keys `a`/`d`/`u`; new `Session::execute` counts affected rows. Found: sqlx `Any` cannot decode SQLite `BOOLEAN`/`DATE` columns, so such previews fail (pre-existing).
+- [x] **T778 — Server-side row search.** A filter row (column, operator,
+  value) builds a quoted `WHERE` and re-runs the preview on the server;
+  results stay editable. Operators: contains, equals, not equal, range,
+  `IN`, `IS NULL`, `IS NOT NULL`, raw SQL. Pure SQL builder, unit-tested per
+  engine's quoting.
+  Done 2026-11-07: key `F`; refused while changes are staged.
+- [x] **T779 — Relations view.** Outgoing and incoming foreign keys and
+  dependent views per table, with catalog queries for each engine.
+  Done 2026-11-07: key `R`; SQLite dependent views are found by scanning view SQL (approximate, documented).
+- [x] **T780 — Alias-aware completion.** Resolve `FROM t a`, `FROM t AS a`
+  and `JOIN t a` aliases in the statement at the cursor, so `a.` offers
+  `t`'s columns.
+  Done 2026-11-07: quoted alias qualifiers (`"o".`) are not completed yet.
+- [ ] **T781 — Environments and connection strings.** `environment` on a
+  saved connection (default `local`), shown as a colored badge; on
+  `production` every write shows its SQL and asks, even in a transaction;
+  `DROP` and `TRUNCATE` always ask. Parse a pasted `postgres://`,
+  `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq `key=value`
+  string, into the add form; a password in it is never saved.
+- [ ] **T782 — Copy for AI.** Copy the statement, its column types and the
+  selected rows (capped), or a table's structure with rows, as Markdown.
+  User-initiated only; the assistant's schema-only rule is unchanged, and
+  the spec says why.
+- [ ] **T783 — Decision: share saved connections over MCP.** Needs the
+  maintainer's yes or no, because it relaxes two MCP safety rules (no
+  keyring reads, no sockets). Design and safeguards in
+  [`spec/mcp-server`](spec/mcp-server/index.md): opt-in per connection,
+  credentials without prompts, read-only statements in a read-only
+  transaction with a 30-second timeout and a 100-row cap, every call
+  logged, stdio only.
+- [ ] **T784 — Whole-table export from one snapshot.** CSV, JSON or NDJSON per
+  table, or one SQL file of `INSERT`s in foreign-key order with sequences
+  reset, streamed to disk inside one read-only snapshot transaction.
+- [ ] **T785 — Schema compare and migrations.** Snapshot one schema on each of
+  two saved connections (PostgreSQL first), diff them, and write migration
+  SQL ordered by phase (types, drops, tables, constraints, indexes, foreign
+  keys, views, triggers). Destructive changes start unchecked; risky ones
+  are flagged; run on the target in one transaction after a confirmation
+  naming its environment. Large: split into snapshot, diff, ordering, and
+  UI, each landed separately.
+- [ ] **T786 — Run a `.sql` file.** Load a `.sql` file or the current buffer
+  into the workbench editor and run it statement by statement, stopping at
+  the first error. Refuse a file with psql meta-commands (`\copy`,
+  `\connect`, `\i` …) before anything runs, listing their lines.
+
+**Ideas backlog (from the same reading):** an opt-in, per-connection mode in
+which the assistant may run read-only queries and see their results, with an
+approval step for anything else. It conflicts with today's schema-only
+principle, so it waits for a deliberate decision.
+
 ## Run U — another GUI front end (2026-11-06)
 
 - [x] **T769 — `vix-bui`: the Vix desktop GUI on BUI.** A sixth, self-contained
@@ -10192,6 +10275,10 @@ CI-discovered rounds to get genuinely right on Windows).
 21. **Run U (another GUI, 2026-11-06):** T769 (`vix-bui`). First version done;
     the limits in its spec are the follow-ups.
 22. **Run V (2.0.1 release repair, 2026-11-06):** T770, then T771.
+23. **Run W (database workbench, from dbjoy, 2026-11-07):** T774 first (it
+    stops a silent loss of an open transaction), then T775 and T776, T777
+    and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
+    slices. T783 waits for the maintainer's decision.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

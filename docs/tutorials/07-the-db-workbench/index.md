@@ -111,7 +111,11 @@ With the cursor on the statement, press **Ctrl+Enter** or **F5** (**DB →
 Execute at Cursor**) — **F9** (**Execute All**) instead runs every statement
 in the buffer in order, stopping at the first error. The query runs
 asynchronously; the editor title shows an elapsed-time indicator while it's
-in flight (**Ctrl+C** cancels and reconnects). Results stream in as they
+in flight. **Ctrl+C** cancels: on PostgreSQL and MySQL it asks the server
+to stop the statement and keeps your session and any open transaction (which
+is then aborted, so roll it back); on SQLite, or if the server cancel fails,
+it reconnects and the open transaction is lost. When PostgreSQL reports where
+in the statement an error is, the cursor moves there. Results stream in as they
 arrive rather than waiting for the full set — batches append to the grid
 progressively, capped at 20,000 rows with a truncation note if a result set
 is that large.
@@ -139,9 +143,12 @@ In the results pane:
 - **y**/**Y** yank the cell/row (tab-separated) to the clipboard; **v** opens
   a full-content cell viewer with a JSON pretty-print toggle (**p**).
 - On a table preview that has a primary key (press **p** on `people` in the
-  tree, not this join), **i** stages an edit to the selected cell and **W**
-  commits every staged edit as `UPDATE`s in one transaction, with conflict
-  detection against anyone else's changes in between.
+  tree, not this join), **i** stages an edit to the selected cell, **a** a
+  new row and **d** a row's deletion, and **W** commits them all in one
+  transaction, with conflict detection against anyone else's changes in
+  between. A value like `=now()` is computed by the database. **F** searches
+  the whole table on the server by column and operator, where **/** only
+  filters the rows already loaded.
 
 ## EXPLAIN and EXPLAIN ANALYZE
 

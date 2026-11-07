@@ -253,7 +253,17 @@ keyring
 NDJSON
 pgsavvy
 surus
+dbjoy
+libpq
 Geometrein
+conkey
+confkey
+ORDINALITY
+xinfo
+attgenerated
+constraintdef
+tinyint
+ILIKE
 
 # LSP servers / editors referenced in docs
 gopls

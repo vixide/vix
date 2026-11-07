@@ -41,6 +41,9 @@ Schemas expand into **Tables / Views / Functions** folders.
   **Enter** on a table shows its **columns**.
 - **i** indexes · **f** foreign keys · **g** triggers · **x** constraints —
   each report opens in the results grid.
+- **R** shows the table's **relations**: its foreign keys to other tables,
+  the foreign keys on other tables that point at it, and the views that read
+  from it (on SQLite the view list is a best guess from each view's SQL).
 - **p** previews the table's data (`SELECT * … LIMIT 200`).
 - **/** searches the tree live (matches show regardless of collapse state);
   **Enter** keeps the filter, **Esc** clears it.
@@ -54,7 +57,10 @@ Type SQL; multiple statements separated by `;` are fine.
   **F9** executes all statements in order (stopping at the first error).
 - **F6** shows the query plan (`EXPLAIN`; `EXPLAIN QUERY PLAN` on SQLite);
   **F7** runs `EXPLAIN ANALYZE`. If the plan contains a full table scan, the
-  message line suggests considering an index.
+  message line suggests considering an index. On PostgreSQL the plan is shown
+  as a tree, one row per step: with **F7** each step shows its share of the
+  total time, the slowest steps are highlighted in red, and a step whose row
+  estimate is off from the real count by 10× or more is flagged in yellow.
 - Statements that **write** (`INSERT`, `UPDATE`, `DELETE`, `DROP`, … — even
   hidden inside a `WITH` CTE) ask for confirmation first: **Enter/y** runs,
   **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks too, since it really
@@ -65,7 +71,9 @@ Type SQL; multiple statements separated by `;` are fine.
 - **Alt+Shift+F** re-formats the statement at the cursor: keywords
   uppercased, major clauses on their own lines, `AND`/`OR` indented.
 - Autocomplete pops up as you type: SQL keywords, table names from the
-  connected database, and `table.` column completion. **↑/↓** choose,
+  connected database, and `table.` column completion. Aliases work too:
+  after `FROM orders o` (or `AS o`, or `JOIN … c`), `o.` offers the columns
+  of `orders`. **↑/↓** choose,
   **Tab** accepts, **Esc** dismisses.
 - Highlighting follows your Vix™ theme's `syntax` colors (keywords, strings,
   numbers, comments), the same ones the code editor uses.
@@ -83,6 +91,37 @@ Type SQL; multiple statements separated by `;` are fine.
 - **e** exports the current view (filter and sort applied): **←/→** choose
   CSV, TSV, JSON, NDJSON, Markdown, or SQL `INSERT`s; **Tab** switches
   between writing a file and copying to the clipboard; **Enter** exports.
+
+### Editing a table
+
+Press **p** on a table in the tree to preview it. If the table has a primary
+key, the preview is editable; nothing is written until you commit.
+
+- **i** edits the selected cell. For a boolean, an enum or a column with a
+  `CHECK (col IN (…))` constraint, **↑/↓** pick from its allowed values.
+  Generated columns are read only.
+- A value starting with `=` is an SQL expression the server computes when
+  you commit: `=now()`, `=upper('x')`, `=NULL`. Type `\=` to store text that
+  starts with `=`.
+- **a** adds a new row (blank cells take the column default), **d** marks the
+  selected row for deletion (press it again to restore the row), and **u**
+  discards a row's changes. Changed cells are yellow, new rows green, and
+  deleted rows red and struck through.
+- **W** commits everything in one transaction (write mode, **F8**, must be
+  on). If a row changed since you loaded it, or any statement would affect
+  anything other than exactly one row, the whole commit is rolled back and
+  your changes stay staged.
+
+### Searching a table on the server
+
+**/** filters only the rows already loaded (a preview loads at most 200).
+To search the whole table, press **F** on a table preview: choose a column
+and an operator with **↑/↓** and **←/→**, type a value, and press **Enter**.
+The operators are contains (case-insensitive), `=`, `<>`, `<`, `<=`, `>`,
+`>=`, between (`low..high`), `IN` (`a, b, c`), `IS NULL`, `IS NOT NULL`, and
+a raw SQL condition written as is. Vix quotes the column and the value for
+your database, runs the query on the server, and the results stay
+editable. **Delete** in the search form clears the search.
 
 ## Query history and saved queries
 
