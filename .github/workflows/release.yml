@@ -130,6 +130,10 @@ jobs:
       - name: "Point AR at the system ar for the musl target (CI-only override)"
         run: "echo \"AR_x86_64-unknown-linux-musl=ar\" >> \"$GITHUB_ENV\""
         shell: "bash"
+      - name: "Link the musl build statically"
+        if: "contains(matrix.targets, 'x86_64-unknown-linux-musl')"
+        run: "printf 'CARGO_ENCODED_RUSTFLAGS=-Ctarget-feature=+crt-static\\x1f-Crelocation-model=static\\n' >> \"$GITHUB_ENV\""
+        shell: "bash"
       - name: "Install WiX 3.14 on Windows on ARM"
         if: "runner.os == 'Windows' && runner.arch == 'ARM64'"
         run: |

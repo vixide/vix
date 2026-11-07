@@ -9872,6 +9872,18 @@ the generated `release.yml`.
     `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
     The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,
     so only `2.0.1` tests them.
+  - **The 403, solved (2026-11-07):** `GITHUB_TOKEN` may not create a release
+    whose target is a commit on no branch, and dist passes the tagged
+    commit. Found with throwaway draft-release probes (runs 42358144264,
+    42358222039). The rc commits were off `main` on purpose; 1.8.0's tag commit
+    reached `main` seconds after the tag. Tag only a commit already on `main`.
+  - **`2.0.1` (2026-11-07):** the Release is live, created by CI, with 97 files
+    and every build. Homebrew and npm failed because their secrets are still not
+    set. `linux-packages` stopped at its static check: dist's musl build was a
+    dynamic PIE, because dist ignores `.cargo/config.toml`'s rustflags.
+    Reproduced and fixed on a throwaway branch (run 42370437132); the fix is in
+    `.github/dist/build-setup.yml`. 2.0.1's musl archive still needs replacing,
+    then `linux-packages` dispatched for `2.0.1`. crates.io publish running.
   - **After `2.0.1`:** remove the note and restore the Homebrew command in the
     README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
 
@@ -9892,6 +9904,12 @@ the generated `release.yml`.
   - **Test assumptions:** `ssh://` URLs built from Windows paths (`BadPort`), and
     a `sqlite:` URL holding `\\?\` in `integration::mcp`.
   - **Unknown:** `run_configuration_runs_its_before_step_first`.
+
+- [ ] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
+  in a gate on a loaded machine (2026-11-07, `left: 3, right: 2` at
+  `tui/tests/integration/big_buffer.rs:70`) and passed five times alone. The
+  scan counter is thread-local, so another test can't bump it: something in
+  the app does one more whole-buffer scan after an edit, depending on timing.
 
 ## Run U — another GUI front end (2026-11-06)
 

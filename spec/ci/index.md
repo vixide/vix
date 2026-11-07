@@ -212,7 +212,13 @@ targets) and builds on the native `windows-11-arm` runner
 make the MSI (T658). That runner has no WiX, so
 `.github/dist/build-setup.yml` installs a hash-pinned WiX 3.14 there (T771). macOS on ARM builds on
 `macos-latest` through the same setting, because the `macos-14` runner dist asks
-for is gone (T771). `release.yml` is **generated**: edit
+for is gone (T771). **Tag only a commit that is already on `main` on GitHub.**
+`host` creates the GitHub Release with the tagged commit as its target, and
+`GITHUB_TOKEN` gets `403 Resource not accessible by integration` for a target
+that is on no branch; this is why 1.8.0 and every `2.0.1` rc failed there
+(T771). The musl build job also gets the static-link flags as
+`CARGO_ENCODED_RUSTFLAGS` from `.github/dist/build-setup.yml`, because dist
+ignores `.cargo/config.toml`'s `rustflags` (T771). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
 generate --mode ci`), never the workflow by hand — `dist generate --mode
 ci --check` fails if the committed file has drifted from the config, the

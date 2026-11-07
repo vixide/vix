@@ -51,7 +51,11 @@ systems and crashed at startup on Alpine. `scripts/check-static-binary`
 fails if a binary is dynamically linked or has a `PT_INTERP`; it runs after
 the build in `release-minimal.yml` and over the musl release archive in
 `linux-packages.yml`. (A `RUSTFLAGS` environment variable replaces this
-config setting, so release jobs must not set one.)
+config setting, so release jobs must not set one.) dist's build does not pick
+up this setting either: 2.0.1's musl archive was a dynamic PIE. So
+`.github/dist/build-setup.yml` sets the same two flags as
+`CARGO_ENCODED_RUSTFLAGS`, which outranks every other source, in the musl
+build job only (T771).
 
 **Real-Alpine confirmation (T670).** `.github/workflows/musl-alpine-check.yml`
 is manual-only (`workflow_dispatch`). On an x86_64 Ubuntu runner it builds
@@ -62,5 +66,6 @@ and the binary in an `alpine:3` container with `--version` and `--doctor`
 `scripts/test-check-alpine` tests the script without Docker. Passed on real
 x86_64 Alpine (run 42127678554, 2026-11-06): "statically linked" and
 `vix --doctor` ran. dist's own generated release job still has no such
-check; `linux-packages.yml` checks the release's musl archive afterwards, and
-the next release must confirm it (T670a).
+check; `linux-packages.yml` checks the release's musl archive afterwards. It
+caught 2.0.1's dynamic archive, and the next release must confirm the fix
+(T670a).
