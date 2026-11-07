@@ -253,6 +253,8 @@ keyring
 NDJSON
 pgsavvy
 surus
+dbjoy
+libpq
 Geometrein
 
 # LSP servers / editors referenced in docs

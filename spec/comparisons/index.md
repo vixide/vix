@@ -24,3 +24,8 @@ Easier for novices than emacs because:
   Copy; the menu bar is on by default; command names are typical (Copy/Paste,
   not Kill/Yank).
 - Power users who prefer chords can opt into the **Emacs keymap**.
+
+## Feature comparisons
+
+- [dbjoy](dbjoy.md): a macOS PostgreSQL client, compared with the DB
+  workbench (2026-11-07; Run W, T774–T786).
