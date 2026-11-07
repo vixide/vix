@@ -429,6 +429,59 @@ pub fn quote_literal(value: &str) -> String {
     }
 }
 
+/// A `value` as a literal for `kind`, for the SQL the workbench builds itself
+/// (staged row changes, T777; server-side row search, T778).
+///
+/// Unlike [`quote_literal`], it knows the engine:
+///
+/// - **`PostgreSQL`** always single-quotes. A quoted literal has no type of
+///   its own there and takes the column's, so `id = '42'` and `name = '42'`
+///   both work, where a bare `42` against a text column is an error.
+/// - **`MySQL`** always single-quotes too, and doubles backslashes as well as
+///   quotes, because a backslash escapes in its default `sql_mode`. Under
+///   `NO_BACKSLASH_ESCAPES` a backslash is stored twice, but the literal still
+///   closes where it should, so the value can never break out of it.
+/// - **`SQLite`** keeps a plain number bare (as [`quote_literal`] does), since
+///   a column declared without a type compares the integer `42` and the text
+///   `'42'` as different values.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::quote_value, connect::Kind};
+/// assert_eq!(quote_value(Kind::Postgres, "42"), "'42'");
+/// assert_eq!(quote_value(Kind::Sqlite, "42"), "42");
+/// assert_eq!(quote_value(Kind::Mysql, r"a\'b"), r"'a\\''b'");
+/// ```
+#[must_use]
+pub fn quote_value(kind: Kind, value: &str) -> String {
+    match kind {
+        Kind::Sqlite => quote_literal(value),
+        Kind::Postgres => format!("'{}'", quote_str(value)),
+        Kind::Mysql => format!("'{}'", quote_str(&value.replace('\\', "\\\\"))),
+    }
+}
+
+/// The quoted name of `schema`.`table` for `kind`, as a statement's target.
+/// `SQLite` has a single schema, so it omits the qualifier.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::table_target, connect::Kind};
+/// assert_eq!(table_target(Kind::Postgres, "public", "users"), "\"public\".\"users\"");
+/// assert_eq!(table_target(Kind::Sqlite, "main", "users"), "\"users\"");
+/// ```
+#[must_use]
+pub fn table_target(kind: Kind, schema: &str, table: &str) -> String {
+    match kind {
+        Kind::Sqlite => quote_ident(kind, table),
+        Kind::Postgres | Kind::Mysql => {
+            format!("{}.{}", quote_ident(kind, schema), quote_ident(kind, table))
+        }
+    }
+}
+
 /// Quote `name` as an identifier for `kind`: backticks for `MySQL`, standard
 /// double quotes for `PostgreSQL` and `SQLite` (internal quotes doubled).
 ///
@@ -466,13 +519,26 @@ pub const PREVIEW_LIMIT: usize = 200;
 /// ```
 #[must_use]
 pub fn preview_sql(kind: Kind, schema: &str, table: &str) -> String {
-    let target = match kind {
-        Kind::Sqlite => quote_ident(kind, table),
-        Kind::Postgres | Kind::Mysql => {
-            format!("{}.{}", quote_ident(kind, schema), quote_ident(kind, table))
-        }
-    };
+    let target = table_target(kind, schema, table);
     format!("SELECT * FROM {target} LIMIT {PREVIEW_LIMIT};")
+}
+
+/// A preview of `schema`.`table` narrowed by a `WHERE` clause built by
+/// [`crate::row_filter`] (T778): `SELECT * … WHERE <clause> LIMIT`.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::filtered_preview_sql, connect::Kind};
+/// assert_eq!(
+///     filtered_preview_sql(Kind::Sqlite, "main", "users", "\"id\" = 1"),
+///     "SELECT * FROM \"users\" WHERE \"id\" = 1 LIMIT 200;"
+/// );
+/// ```
+#[must_use]
+pub fn filtered_preview_sql(kind: Kind, schema: &str, table: &str, clause: &str) -> String {
+    let target = table_target(kind, schema, table);
+    format!("SELECT * FROM {target} WHERE {clause} LIMIT {PREVIEW_LIMIT};")
 }
 
 /// Wrap `stmt` in the engine's EXPLAIN. `SQLite` has no ANALYZE variant of

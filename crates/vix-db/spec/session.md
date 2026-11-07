@@ -11,9 +11,11 @@ driver errors, and no dependency on client tools being installed.
 - `db::session::Session` — one sqlx `Any` connection per workbench
   connection, owned by a dedicated worker thread running a current-thread
   tokio runtime. `Session::run(sql)` exchanges one request for one reply over
-  channels, so the TUI stays synchronous. Dropping the `Session` closes the
-  channel and the worker
-  closes the connection cleanly.
+  channels, so the TUI stays synchronous. `Session::execute(sql)` runs a
+  statement for its effect and returns the rows it affected (the
+  staged-change commit needs exactly one per statement, T777; `MySQL` reports
+  matched rows, since sqlx connects with `CLIENT_FOUND_ROWS`). Dropping the
+  `Session` closes the channel and the worker closes the connection cleanly.
 - Statements execute via `raw_sql` + `AssertSqlSafe` (the workbench runs
   exactly what the user typed — sqlx's dynamic-SQL opt-in, not an injection
   hazard). Cells decode through a widest-first cascade
@@ -67,12 +69,14 @@ scroll-to-bottom) rather than a fixed cap.
 
 **Staged cell edits (M5) — done.** On an editable grid (a table preview whose
 primary key `primary_key_sql` resolves; no PK ⇒ read-only), `i` edits the
-selected cell into a staged map `edits: (row, col) → (original, new)`, shown
-bold-yellow in the grid. `W` commits: each edit becomes an `UPDATE … WHERE pk =
-…`, re-checked against the loaded value for optimistic conflict detection
+selected cell into a staged map `(row, col) → (original, new)`, shown
+bold-yellow in the grid. `W` commits: each edited row becomes an `UPDATE … WHERE
+pk = …`, re-checked against the loaded values for optimistic conflict detection
 (`msg.db_edit_conflict`), all wrapped in one `BEGIN`/`COMMIT` (rollback on any
 error), then the preview refreshes. See
-`tui/tests/db_smoke.rs::staged_cell_edits_commit_in_a_transaction`.
+`tui/tests/db_smoke.rs::staged_cell_edits_commit_in_a_transaction`. T777 grew
+this into staged inserts and deletes (`db::staging`); see the dbjoy section of
+[index.md](index.md).
 
 **SSH tunnels (M6) — done.** `Connection` gained
 `ssh_host/ssh_user/ssh_port/ssh_identity`. When `ssh_host` is set (server

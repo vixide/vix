@@ -92,6 +92,37 @@ Type SQL; multiple statements separated by `;` are fine.
   CSV, TSV, JSON, NDJSON, Markdown, or SQL `INSERT`s; **Tab** switches
   between writing a file and copying to the clipboard; **Enter** exports.
 
+### Editing a table
+
+Press **p** on a table in the tree to preview it. If the table has a primary
+key, the preview is editable; nothing is written until you commit.
+
+- **i** edits the selected cell. For a boolean, an enum or a column with a
+  `CHECK (col IN (…))` constraint, **↑/↓** pick from its allowed values.
+  Generated columns are read only.
+- A value starting with `=` is an SQL expression the server computes when
+  you commit: `=now()`, `=upper('x')`, `=NULL`. Type `\=` to store text that
+  starts with `=`.
+- **a** adds a new row (blank cells take the column default), **d** marks the
+  selected row for deletion (press it again to restore the row), and **u**
+  discards a row's changes. Changed cells are yellow, new rows green, and
+  deleted rows red and struck through.
+- **W** commits everything in one transaction (write mode, **F8**, must be
+  on). If a row changed since you loaded it, or any statement would affect
+  anything other than exactly one row, the whole commit is rolled back and
+  your changes stay staged.
+
+### Searching a table on the server
+
+**/** filters only the rows already loaded (a preview loads at most 200).
+To search the whole table, press **F** on a table preview: choose a column
+and an operator with **↑/↓** and **←/→**, type a value, and press **Enter**.
+The operators are contains (case-insensitive), `=`, `<>`, `<`, `<=`, `>`,
+`>=`, between (`low..high`), `IN` (`a, b, c`), `IS NULL`, `IS NOT NULL`, and
+a raw SQL condition written as is. Vix quotes the column and the value for
+your database, runs the query on the server, and the results stay
+editable. **Delete** in the search form clears the search.
+
 ## Query history and saved queries
 
 - **Ctrl+R** opens the **history**: every executed statement, newest first,

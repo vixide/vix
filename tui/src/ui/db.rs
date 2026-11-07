@@ -42,6 +42,9 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::Connections => draw_db_connections(app, frame, chunks[0]),
         crate::db::View::Form => draw_db_form(app, frame, chunks[0]),
         crate::db::View::Password => draw_db_password(app, frame, chunks[0]),
+        crate::db::View::Workbench if b.row_filter_open() => {
+            draw_db_row_filter(app, frame, chunks[0]);
+        }
         crate::db::View::Workbench => draw_db_workbench(app, frame, chunks[0]),
         crate::db::View::History | crate::db::View::Saved => {
             draw_db_query_list(app, frame, chunks[0]);
@@ -68,6 +71,7 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::Connections => t!("ui.db_connections_hint"),
         crate::db::View::Form => t!("ui.db_form_hint"),
         crate::db::View::Password => t!("ui.db_password_hint"),
+        crate::db::View::Workbench if b.row_filter_open() => t!("ui.db_filter_hint"),
         crate::db::View::Workbench => t!("ui.db_hint"),
         crate::db::View::History | crate::db::View::Saved => t!("ui.db_list_hint"),
         crate::db::View::SaveName => t!("ui.db_save_hint"),
@@ -275,21 +279,90 @@ fn draw_db_save_name(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
 }
 
-/// The inline cell editor prompt (stages a new value for the selected cell).
+/// The inline cell editor prompt (stages a new value for the selected cell),
+/// with the column's allowed values listed under it when it has some.
 fn draw_db_cell_edit(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
-    let lines = vec![
+    let mut lines = vec![
         Line::from(Span::styled(
             format!(" {}", t!("ui.db_cell_edit_title")),
             theme::title(true),
         )),
         Line::from(format!(" {}", b.edit_input)),
     ];
+    let choices = b.edit_choices();
+    if !choices.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!(" {}", t!("ui.db_cell_edit_choices")),
+            theme::dim(),
+        )));
+        for (i, choice) in choices.iter().enumerate() {
+            let style = if b.edit_choice == Some(i) {
+                theme::selected()
+            } else {
+                theme::base()
+            };
+            lines.push(Line::from(Span::styled(format!("   {choice} "), style)));
+        }
+    }
     frame.render_widget(Paragraph::new(lines), area);
     let col = u16::try_from(b.edit_input.chars().count() + 1).unwrap_or(u16::MAX);
     frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+}
+
+/// The server-side row search form: column, operator and value rows, and the
+/// `WHERE` condition they build (or why they do not yet).
+fn draw_db_row_filter(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(b) = app.db.as_ref() else {
+        return;
+    };
+    let form = &b.row_filter;
+    let column = b.grid.headers.get(form.column).cloned().unwrap_or_default();
+    let fields = [
+        (
+            t!("ui.db_filter_column"),
+            format!("\u{2039} {column} \u{203a}"),
+        ),
+        (
+            t!("ui.db_filter_operator"),
+            format!("\u{2039} {} \u{203a}", form.op().label()),
+        ),
+        (t!("ui.db_filter_value"), form.value.clone()),
+    ];
+    let width = fields
+        .iter()
+        .map(|(label, _)| label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut lines = vec![Line::from(Span::styled(
+        format!(" {}", t!("ui.db_filter_title")),
+        theme::title(true),
+    ))];
+    for (i, (label, value)) in fields.iter().enumerate() {
+        let style = if i == form.field {
+            theme::selected()
+        } else {
+            theme::base()
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {label:<width$}  "), theme::dim()),
+            Span::styled(format!("{value} "), style),
+        ]));
+    }
+    lines.push(Line::from(""));
+    let preview = match b.row_filter_clause() {
+        Ok(clause) => Span::styled(format!(" WHERE {clause}"), theme::base()),
+        Err(e) => Span::styled(format!(" {e}"), theme::dim()),
+    };
+    lines.push(Line::from(preview));
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    if form.field == 2 {
+        let col = u16::try_from(width + 3 + form.value.chars().count()).unwrap_or(u16::MAX);
+        frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 3));
+    }
 }
 
 /// The CSV/TSV import file-path prompt.
@@ -707,8 +780,12 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
     } else {
         format!("/{} ", b.grid.filter)
     };
+    let server_note = b
+        .server_filter()
+        .map(|clause| format!("WHERE {} ", trunc(clause, 40)))
+        .unwrap_or_default();
     let title = format!(
-        " {} \u{2014} {} {filter_note}",
+        " {} \u{2014} {} {server_note}{filter_note}",
         t!("ui.db_results"),
         t!("msg.db_rows", count = filtered.len())
     );
@@ -778,10 +855,12 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), body);
 }
 
-/// The data rows of the results grid. A row with staged cell edits is drawn
-/// cell-by-cell so the changed cells stand out (bold yellow); other rows take
-/// the fast single-span path, colored by the row's plan-tree mark (T776):
-/// the slowest nodes bold red, a far-off row estimate yellow.
+/// The data rows of the results grid. A row with staged changes is drawn
+/// cell-by-cell and colored by kind: changed cells of a modified row bold
+/// yellow, a new row bold green, a row staged for deletion red and struck
+/// through. Other rows take the fast single-span path, colored by the row's
+/// plan-tree mark (T776): the slowest nodes bold red, a far-off row estimate
+/// yellow.
 fn db_result_rows(
     b: &crate::db::Browser,
     cols: &[usize],
@@ -790,15 +869,27 @@ fn db_result_rows(
     focused: bool,
     height: usize,
 ) -> Vec<Line<'static>> {
+    use crate::db::staging::ChangeKind;
     use std::fmt::Write as _;
     let edited = Style::default()
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
     let marks = b.plan_marks();
+    let inserted = Style::default()
+        .fg(Color::Green)
+        .add_modifier(Modifier::BOLD);
+    let deleted = Style::default()
+        .fg(Color::Red)
+        .add_modifier(Modifier::CROSSED_OUT);
     let mut lines = Vec::new();
     for (i, &ri) in filtered.iter().enumerate().skip(b.grid.scroll).take(height) {
         let selected = i == b.grid.sel && focused;
-        if cols.iter().any(|&c| b.staged_value(ri, c).is_some()) {
+        if let Some(change) = b.row_change(ri) {
+            let base = if selected {
+                theme::selected()
+            } else {
+                Style::default()
+            };
             let spans: Vec<Span> = cols
                 .iter()
                 .map(|&c| {
@@ -806,12 +897,11 @@ fn db_result_rows(
                     let text =
                         staged.unwrap_or_else(|| b.grid.rows[ri].get(c).map_or("", String::as_str));
                     let cell = format!("{:w$} ", trunc(text, widths[c]), w = widths[c]);
-                    let style = if staged.is_some() {
-                        edited
-                    } else if selected {
-                        theme::selected()
-                    } else {
-                        Style::default()
+                    let style = match change {
+                        ChangeKind::Deleted => base.patch(deleted),
+                        ChangeKind::Inserted => base.patch(inserted),
+                        ChangeKind::Modified if staged.is_some() => edited,
+                        ChangeKind::Modified => base,
                     };
                     Span::styled(cell, style)
                 })

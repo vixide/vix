@@ -143,9 +143,12 @@ In the results pane:
 - **y**/**Y** yank the cell/row (tab-separated) to the clipboard; **v** opens
   a full-content cell viewer with a JSON pretty-print toggle (**p**).
 - On a table preview that has a primary key (press **p** on `people` in the
-  tree, not this join), **i** stages an edit to the selected cell and **W**
-  commits every staged edit as `UPDATE`s in one transaction, with conflict
-  detection against anyone else's changes in between.
+  tree, not this join), **i** stages an edit to the selected cell, **a** a
+  new row and **d** a row's deletion, and **W** commits them all in one
+  transaction, with conflict detection against anyone else's changes in
+  between. A value like `=now()` is computed by the database. **F** searches
+  the whole table on the server by column and operator, where **/** only
+  filters the rows already loaded.
 
 ## EXPLAIN and EXPLAIN ANALYZE
 

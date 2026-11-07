@@ -61,6 +61,10 @@ pub const MAX_ROWS: usize = 20_000;
 enum Request {
     /// Execute the SQL and stream its rows back as [`Chunk`]s.
     Run(String),
+    /// Execute the SQL for its effect only and report how many rows it
+    /// affected on the given one-shot channel (T777's exactly-one-row
+    /// commit check), instead of streaming rows.
+    Exec(String, mpsc::Sender<Result<u64, QueryError>>),
 }
 
 /// A piece of a streamed result: the header row, then batches of data rows,
@@ -601,6 +605,27 @@ impl Session {
             }
         }
     }
+
+    /// Execute `sql` for its effect only and return the number of rows it
+    /// affected, as the driver reports it (`MySQL` counts *matched* rows,
+    /// since sqlx connects with `CLIENT_FOUND_ROWS`). Blocks like
+    /// [`run`](Session::run). Used by the staged-change commit, which needs
+    /// every statement to touch exactly one row (T777).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError::Query`] for the database error, or
+    /// [`SessionError::NotConnected`] if the worker died.
+    pub fn execute(&mut self, sql: &str) -> Result<u64, SessionError> {
+        let (done_tx, done_rx) = mpsc::channel();
+        self.req_tx
+            .send(Request::Exec(sql.to_string(), done_tx))
+            .map_err(|_| SessionError::NotConnected)?;
+        done_rx
+            .recv()
+            .map_err(|_| SessionError::NotConnected)?
+            .map_err(SessionError::Query)
+    }
 }
 
 /// The worker loop: connect, signal readiness, then serve one statement at a
@@ -654,14 +679,20 @@ fn worker(
     // Readiness is reported only after setup succeeds, so `Session::connect`
     // never hands back a session whose read-only pragma failed to apply.
     let _ = ready_tx.send(Ok(backend_id));
-    while let Ok(Request::Run(sql)) = req_rx.recv() {
-        if !rt.block_on(stream_sql(
-            &mut conn,
-            &sql,
-            reply_tx,
-            &mut cancel_rx,
-            error_position,
-        )) {
+    while let Ok(request) = req_rx.recv() {
+        let keep_going = match request {
+            Request::Run(sql) => rt.block_on(stream_sql(
+                &mut conn,
+                &sql,
+                reply_tx,
+                &mut cancel_rx,
+                error_position,
+            )),
+            Request::Exec(sql, done) => {
+                rt.block_on(exec_counted(&mut conn, &sql, &done, &mut cancel_rx))
+            }
+        };
+        if !keep_going {
             break; // the consumer went away, or cancelled (T532), and abandoned this worker
         }
     }
@@ -726,6 +757,29 @@ async fn query_text(
         .iter()
         .map(|row| (0..row.columns().len()).map(|i| cell(row, i)).collect())
         .collect())
+}
+
+/// Execute one statement for its effect and send the number of rows it
+/// affected (or its error) on `done`. Returns `false` when cancelled (T532),
+/// like [`stream_sql`], so the worker stops; a closed `done` channel is not a
+/// reason to stop, since the next request may still be read.
+async fn exec_counted(
+    conn: &mut sqlx::AnyConnection,
+    sql: &str,
+    done: &mpsc::Sender<Result<u64, QueryError>>,
+    cancel_rx: &mut tokio::sync::watch::Receiver<bool>,
+) -> bool {
+    let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
+    let result = tokio::select! {
+        biased;
+        _ = cancel_rx.changed() => return false,
+        result = query.execute(conn) => result,
+    };
+    let reply = result
+        .map(|r| r.rows_affected())
+        .map_err(|e| QueryError::from_sqlx(&e));
+    let _ = done.send(reply);
+    true
 }
 
 /// Stream one statement's rows back as [`Chunk`]s: a [`Chunk::Head`], then
@@ -885,6 +939,22 @@ mod tests {
         assert_eq!(password_of("mysql://u:p%40ss@h:3306/d"), Some("p%40ss"));
         assert_eq!(password_of("postgres://user@host/db"), None); // no password
         assert_eq!(password_of("sqlite::memory:"), None); // no authority
+    }
+
+    #[test]
+    fn execute_reports_rows_affected() {
+        let mut s = memory();
+        s.run("CREATE TABLE t (a INTEGER)").unwrap();
+        assert_eq!(s.execute("INSERT INTO t VALUES (1), (2), (3)").unwrap(), 3);
+        assert_eq!(s.execute("UPDATE t SET a = a + 10 WHERE a = 1").unwrap(), 1);
+        assert_eq!(s.execute("DELETE FROM t WHERE a = 99").unwrap(), 0);
+        assert!(matches!(
+            s.execute("DELETE FROM missing"),
+            Err(SessionError::Query(_))
+        ));
+        // The session still serves streamed queries afterwards.
+        let (_, rows) = s.run("SELECT count(*) FROM t").unwrap();
+        assert_eq!(rows, vec![vec!["3"]]);
     }
 
     #[test]
