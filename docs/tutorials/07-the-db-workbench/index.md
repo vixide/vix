@@ -111,7 +111,11 @@ With the cursor on the statement, press **Ctrl+Enter** or **F5** (**DB →
 Execute at Cursor**) — **F9** (**Execute All**) instead runs every statement
 in the buffer in order, stopping at the first error. The query runs
 asynchronously; the editor title shows an elapsed-time indicator while it's
-in flight (**Ctrl+C** cancels and reconnects). Results stream in as they
+in flight. **Ctrl+C** cancels: on PostgreSQL and MySQL it asks the server
+to stop the statement and keeps your session and any open transaction (which
+is then aborted, so roll it back); on SQLite, or if the server cancel fails,
+it reconnects and the open transaction is lost. When PostgreSQL reports where
+in the statement an error is, the cursor moves there. Results stream in as they
 arrive rather than waiting for the full set — batches append to the grid
 progressively, capped at 20,000 rows with a truncation note if a result set
 is that large.

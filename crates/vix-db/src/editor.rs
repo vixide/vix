@@ -178,6 +178,40 @@ impl Query {
             + self.col
     }
 
+    /// Move the cursor to char offset `offset` of [`Query::text`], clamped
+    /// to the end of the buffer (the inverse of [`Query::cursor_offset`]).
+    /// Used to put the cursor on a server-reported error position (T775).
+    pub fn set_cursor_offset(&mut self, offset: usize) {
+        let mut left = offset;
+        for (row, line) in self.lines.iter().enumerate() {
+            let len = line.chars().count();
+            if left <= len {
+                self.row = row;
+                self.col = left;
+                return;
+            }
+            left -= len + 1;
+        }
+        self.row = self.lines.len() - 1;
+        self.col = self.lines[self.row].chars().count();
+    }
+
+    /// The char offset in [`Query::text`] where the statement under the
+    /// cursor starts, after its leading whitespace: where
+    /// [`Query::statement_at_cursor`]'s text begins.
+    #[must_use]
+    pub fn statement_offset_at_cursor(&self) -> Option<usize> {
+        let text = self.text();
+        let (start, end) = self.span_at_cursor()?;
+        let lead = text
+            .chars()
+            .skip(start)
+            .take(end - start)
+            .take_while(|c| c.is_whitespace())
+            .count();
+        (lead < end - start).then_some(start + lead)
+    }
+
     /// The statement under the cursor (or the one just before it), trimmed.
     ///
     /// `None` when the buffer holds no non-whitespace statement. Backs
@@ -400,6 +434,29 @@ mod tests {
             lines: text.split('\n').map(str::to_string).collect(),
             ..Query::default()
         }
+    }
+
+    #[test]
+    fn set_cursor_offset_is_the_inverse_of_cursor_offset() {
+        let mut q = query("select 1;\nselect  é;\n");
+        for offset in 0..=q.text().chars().count() {
+            q.set_cursor_offset(offset);
+            assert_eq!(q.cursor_offset(), offset, "round-trips at {offset}");
+        }
+        q.set_cursor_offset(10_000);
+        assert_eq!((q.row, q.col), (2, 0), "clamped to the end of the buffer");
+    }
+
+    #[test]
+    fn statement_offset_skips_leading_whitespace() {
+        let mut q = query("select 1;\n   select 2");
+        q.row = 1;
+        q.col = 5;
+        assert_eq!(q.statement_offset_at_cursor(), Some(13));
+        let text = q.text();
+        let stmt: String = text.chars().skip(13).collect();
+        assert_eq!(stmt, q.statement_at_cursor().unwrap());
+        assert_eq!(query("   ").statement_offset_at_cursor(), None);
     }
 
     #[test]

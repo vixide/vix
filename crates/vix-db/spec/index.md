@@ -76,7 +76,9 @@ The overlay's screens and keys:
   (connections open read-only — see below), `Ctrl+L` opens the query log,
   `Ctrl+E` builds an ER diagram, and `Ctrl+A` / `Ctrl+O` drive the AI
   assistant. `F5` / `F6` / `F7` run asynchronously — the editor title shows the
-  elapsed time and `Ctrl+C` cancels (reconnecting to free the UI).
+  elapsed time and `Ctrl+C` cancels (on PostgreSQL and MySQL by asking the
+  server to stop the statement, keeping the session; see "Cancel and error
+  positions" below).
   - *Schema tree*: `←`/`→`/`Space` collapse/expand; on a table `Enter` shows
     columns and `i`/`f`/`g`/`x` show indexes / foreign keys / triggers /
     constraints; `s` shows row-count/size statistics, `D` the `CREATE`
@@ -222,6 +224,84 @@ The same surus round added three companion features the AI surface builds on:
   scrollable viewer; `y` yanks the Mermaid text to paste anywhere Mermaid
   renders (including Vix's own Org/Mermaid support).
 
+## Cancel and error positions (from dbjoy)
+
+Built from the dbjoy assessment
+([`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md)), rows 1
+and 2.
+
+- **Cancel keeps the session (T774).** When a session connects, the worker
+  reads the server's id for the connection (`SELECT pg_backend_pid()` on
+  PostgreSQL, `SELECT CAST(CONNECTION_ID() AS SIGNED)` on MySQL; the cast is
+  needed because sqlx's `Any` row mapping rejects `BIGINT UNSIGNED`) and the
+  session keeps a `CancelHandle`: its connection URL plus the cancel
+  statement, `SELECT pg_cancel_backend(<pid>)` or `KILL QUERY <id>`
+  (`session::backend_id_sql`, `session::cancel_sql`, pure and unit-tested).
+  `Ctrl+C` on a running statement sends that statement from a background
+  thread over a short-lived second connection with the same URL (through the
+  SSH tunnel when there is one), bounded by a 10-second timeout, and the
+  status line says the server was asked (`msg.db_cancelling_server`). The
+  session is not touched: the statement comes back as an error with SQL state
+  `57014` (PostgreSQL) or `70100` (MySQL), which the workbench reports as
+  cancelled rather than as an error to fix. Temporary tables, session
+  settings and an open transaction survive; a cancelled statement inside a
+  transaction marks it aborted (`TX!`), and the status line asks for a
+  rollback (`msg.db_cancelled_tx_aborted`). PostgreSQL really requires the
+  rollback; MySQL keeps the transaction usable after `KILL QUERY`, but the
+  client mirror marks any failure inside a transaction aborted, as it always
+  has.
+- **Fallback: reconnect.** There is no server cancel on SQLite (in-process,
+  no backend id), nor when the id could not be read at connect. A server
+  cancel that fails (the second connection cannot be opened, the statement
+  is rejected, `pg_cancel_backend` answers `false`, or the timeout passes)
+  falls back too, and so does a second `Ctrl+C` while a server cancel is
+  already under way (a hung network read the server cancel cannot reach).
+  The fallback is the earlier behavior: abandon the worker and reconnect in
+  the background. The transaction and session state are lost, and when a
+  transaction was open the status line says so
+  (`msg.db_cancelled_tx_lost`); otherwise it reads `msg.db_cancelled`.
+- **Error positions (T775).** A PostgreSQL error that carries a position
+  (the `P` field of the error response) moves the editor cursor to that
+  character of the statement and focuses the editor. The position is
+  1-based in characters of the SQL that was sent; the workbench maps it back
+  through the statement's offset in the buffer and, for `F6`/`F7`, past the
+  `EXPLAIN …` prefix it added. A position inside that prefix, a position into
+  an internally generated query (a PL/pgSQL body), and a statement whose bind
+  parameters were substituted (the sent text no longer matches the buffer)
+  leave the cursor where it is. `F9` (run all) does not move the cursor.
+  MySQL and SQLite errors carry no position.
+- **Server notices: not built (T775 spike).** Notices (`RAISE NOTICE`,
+  warnings) cannot be reached through sqlx 0.9.0, so they are still dropped.
+  The spike found:
+  - *Positions survive the `Any` driver.* `sqlx-postgres`'s
+    `AnyConnectionBackend::fetch_many` passes errors through unchanged, so a
+    `sqlx::Error::Database` still boxes the engine's `PgDatabaseError`, and
+    `try_downcast_ref::<sqlx::postgres::PgDatabaseError>()` followed by
+    `position()` gives `PgErrorPosition::Original(n)`. The worker stores
+    it before it sends the error, and `Session::error_position` reads it; it
+    is not a `QueryError` field because adding one to that public struct
+    would break semver after 2.0.
+  - *Notices never leave the connection.* `PgStream::recv` (the connection
+    stream module of `sqlx-postgres` 0.9.0) consumes every
+    `NoticeResponse` itself: it emits a `log`/`tracing` event with target
+    `sqlx::postgres::notice` and reads the next message. `PgConnection` has
+    no notice handler or channel, and `AnyConnection` would not expose one
+    anyway (its backend is a private `Box<dyn AnyConnectionBackend>`).
+  - *Why not capture the log event.* A process-global `log` or `tracing`
+    subscriber filtering that target would see every session's notices
+    with nothing to tell which session or statement raised them, only at
+    whatever level the subscriber enables, and Vix installs no subscriber.
+    That is a hack, not a feature, so it was not done.
+  - *What it would take.* A notice hook upstream in sqlx (a callback or
+    channel on `PgConnection`), and a PostgreSQL session that holds a typed
+    `sqlx::PgConnection` instead of `AnyConnection` so the hook is
+    reachable; the worker would then forward notices as a new `Chunk` and
+    the results pane would list them under the grid. MySQL warnings are a
+    separate path: the warning count in the OK packet is not exposed through
+    `Any` either, but a `SHOW WARNINGS` after each MySQL statement would work
+    today, at one extra round trip per statement; it is left for a later
+    task.
+
 ## dbjoy-inspired (planned, Run W)
 
 **Planned, not built.** These come from a reading of
@@ -230,19 +310,6 @@ assessment is [`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md).
 When a task lands, its text moves out of this section into the sections
 above, and its box is checked in `tasks.md`.
 
-- **Cancel keeps the session (T774).** `Ctrl+C` asks the server to stop the
-  statement instead of reconnecting: `pg_cancel_backend(pid)` on PostgreSQL
-  and `KILL QUERY id` on MySQL, sent over a short-lived second connection
-  with the same credentials. The session, its temporary tables and an open
-  transaction survive; a cancelled statement inside a transaction leaves it
-  aborted, and the `TX!` badge says so. SQLite, and any server cancel that
-  fails, falls back to today's reconnect, and the status line then says the
-  transaction was lost.
-- **Error positions and notices (T775).** A PostgreSQL error that carries a
-  position moves the editor cursor to that character of the statement.
-  Server notices (`RAISE NOTICE`, warnings) are shown under the result
-  instead of being dropped. A spike confirms first that sqlx's `Any` driver
-  keeps both.
 - **Plan tree (T776).** On PostgreSQL, `F6`/`F7` request `FORMAT JSON` and
   show the plan as a tree. Each node shows its share of the total time (with
   `ANALYZE`), the slowest nodes are highlighted, and a node whose row
