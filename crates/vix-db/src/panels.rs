@@ -369,7 +369,7 @@ impl Browser {
     /// While the filter box is active it captures every key; otherwise `/`
     /// starts a search and the single-letter keys select a detail report
     /// (`i` indexes, `f` foreign keys, `g` triggers, `x` constraints, `s`
-    /// stats, `D` DDL, `p` preview, `r` refresh). `page` is the pane height
+    /// stats, `D` DDL, `R` relations, `p` preview, `r` refresh). `page` is the pane height
     /// for PageUp/PageDown.
     pub(super) fn key_tree(&mut self, key: KeyEvent, page: usize) {
         if self.tree.filtering {
@@ -419,6 +419,7 @@ impl Browser {
             KeyCode::Char('x') => self.show_detail(catalog::Detail::Constraints),
             KeyCode::Char('s') => self.show_detail(catalog::Detail::Stats),
             KeyCode::Char('D') => self.show_ddl(),
+            KeyCode::Char('R') => self.show_relations(),
             KeyCode::Char('r') => self.refresh_catalog(),
             _ => {}
         }
