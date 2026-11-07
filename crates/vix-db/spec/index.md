@@ -84,7 +84,9 @@ The overlay's screens and keys:
   - *Schema tree*: `←`/`→`/`Space` collapse/expand; on a table `Enter` shows
     columns and `i`/`f`/`g`/`x` show indexes / foreign keys / triggers /
     constraints; `s` shows row-count/size statistics, `D` the `CREATE`
-    statement, `R` the relations view (below); `r` refreshes the catalog.
+    statement, `R` the relations view (below); `r` refreshes the catalog;
+    `m` marks a table and `e` exports the marked tables (or the one under the
+    cursor) whole — see *Table export* below.
   - *Relations* (`R`, module `db::relations`, T779): on a table or view, the
     grid lists one row per relation with four columns — relation (outgoing,
     incoming or view), constraint name, from and to, each side written
@@ -135,7 +137,9 @@ The overlay's screens and keys:
     *dbjoy-inspired* below).
   - *AI & data* (see the sections below): `Ctrl+A` ask (prefix `?` for a
     schema question), `Ctrl+O` optimize, `Ctrl+F` fix the last error, `Ctrl+K`
-    explain the query; `Ctrl+U` imports a CSV/TSV file into a new table.
+    explain the query; `Ctrl+U` imports a CSV/TSV file into a new table;
+    `Ctrl+P` loads a `.sql` file into the editor and runs it (see *Running a
+    `.sql` file* below).
 
 Pure logic (statement splitting, highlighting, completion, formatting, the
 tree, the grid) is unit-tested in the submodules; `db::session` is tested
@@ -474,6 +478,102 @@ Tests: the builders are unit-tested per engine in `staging`, `columns` and
 exactly-one-row rollback (a `DELETE` whose row someone else removed), and the
 row search end to end on SQLite.
 
+## dbjoy-inspired: table export and running files
+
+From the same reading of [dbjoy](https://github.com/agustind/dbjoy) as the
+planned items below ([`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md)).
+
+### Table export (T784)
+
+The results-grid export (`e` in results) writes the rows already loaded.
+`e` in the **schema tree** exports *whole tables*: the tables marked with `m`
+(a toggle; marks are kept until disconnect), or the table under the cursor
+when none is marked. Views and functions are not exported. The dialog
+(`View::Export` with `Browser::table_export` set) cycles the format with
+`←`/`→` and takes a destination path; `Enter` starts, `Esc` closes.
+
+| Format | Output |
+| ------ | ------ |
+| CSV | One `table.csv` per table in the chosen directory (created if missing), header row, `NULL` as an empty field |
+| JSON | One `table.json` per table: an array of objects; `NULL`, numbers and booleans stay typed |
+| NDJSON | One `table.ndjson` per table: one object per line, typed like JSON |
+| SQL | One file: `BEGIN;`, one `INSERT` per row for every table, the sequence resets, `COMMIT;` |
+
+When the chosen tables span schemas, per-table files are named
+`schema.table.ext`; characters other than letters, digits, `-`, `_` and `.`
+become `_`, so a name never leaves the directory. The default destination is
+`vix-export` (a directory) or `vix-export.sql`, and follows the format while
+it is unedited.
+
+**SQL ordering.** Tables are ordered by the foreign keys among them (from
+`catalog::relationships_sql`): a table comes after every table it
+references, ties in the chosen order. Self-references and keys to tables
+outside the export do not constrain the order (rows *within* a
+self-referencing table stay in table order). If the keys form a cycle there
+is no valid order: the tables keep the chosen order and the file's header
+comment says so and asks to load with foreign-key checks off; the status
+line says so too. Generated columns are left out of `INSERT`s. Values keep
+their decoded type: `NULL`, bare numbers, `TRUE`/`FALSE`, quoted text (with
+`\` doubled on MySQL), binary as `X'…'` (`'\x…'::bytea` on PostgreSQL).
+`INSERT`s name the table schema-qualified on PostgreSQL and unqualified on
+SQLite and MySQL (a MySQL schema is the database, so the dump loads into a
+database of another name). The comments in the file are fixed English, like
+the SQL, so a dump does not depend on the UI language.
+
+**Sequence reset**, at the end of the SQL file, read inside the snapshot:
+
+| Engine | Read | Written |
+| ------ | ---- | ------- |
+| PostgreSQL | each column with an owned sequence (`pg_get_serial_sequence`: serial and identity) | `SELECT setval('seq', COALESCE(MAX(col), 1), MAX(col) IS NOT NULL) FROM t;` |
+| MySQL | `information_schema.tables.AUTO_INCREMENT` | `ALTER TABLE t AUTO_INCREMENT = n;` |
+| SQLite | `sqlite_sequence.seq` (none without an `AUTOINCREMENT` table) | `DELETE FROM sqlite_sequence WHERE name = 't';` + `INSERT INTO sqlite_sequence …` |
+
+**One snapshot, streamed, on a second connection.** The export opens its own
+read-only connection from the session's URL (same credentials, same SSH
+tunnel) on a background thread, so **an open user transaction is never
+touched** — and its uncommitted changes are not exported — and the workbench
+stays usable while it runs. It reads every table inside one read-only
+transaction: `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` on
+PostgreSQL; `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` then `START
+TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY` on MySQL; `BEGIN` on SQLite.
+It ends with `COMMIT` (`ROLLBACK` after a failure). Each table is one
+`SELECT` whose rows are written to the file as the driver yields them — no
+`MAX_ROWS` cap, nothing accumulated — and progress reaches the status line
+every 512 rows. Each file is written as `name.part` and renamed when
+complete; a failure removes the partial file and reports the error (passwords
+redacted). An in-memory SQLite database is refused, since a second
+connection would see a different, empty database. Disconnecting, or closing
+the DB overlay, drops the export: it stops at its next progress report,
+rolls back and removes its partial file.
+
+Code: `db::table_export` — the pure, unit-tested pieces (`fk_order`,
+`snapshot_begin_sql`, `column_names_sql`, `select_sql`, `sequences_sql`,
+`sequence_reset_sql`, `sql_literal`, `insert_sql`, `csv_line`,
+`json_object`, `file_name`), the worker, and the `Browser` methods
+(`toggle_export_mark`, `open_table_export`, `poll_table_export`,
+`table_export_running`); the host polls it with the query in
+`App::poll_db_query`.
+
+### Running a `.sql` file (T786)
+
+`Ctrl+P` in the workbench opens a path prompt (`View::Import` with
+`Browser::import_is_sql_file`); `Enter` reads the file, loads it into the
+query editor (replacing its text) and runs it with **Execute All** — every
+statement in order, stopping at the first error, through the usual
+read-only refusal and write confirmation. **DB → Run Buffer in Workbench**
+(`db.run_buffer`, also in the palette) does the same with the active editor
+buffer, unsaved changes included; with no connection it opens the
+connections list. Both end in `Browser::run_script`.
+
+Execute All first scans the editor for **psql meta-commands**
+(`editor::meta_commands`): lines whose first non-blank character is a
+backslash outside strings, quoted identifiers, `--` and (nested) `/* */`
+comments and dollar-quoted bodies — `\copy`, `\connect`, `\c`, `\i`,
+`\set`, and the rest. They are psql client commands, not SQL, so if any is
+found nothing runs and the status line lists their line numbers; the
+script stays in the editor to be fixed. The check applies to `F9` on any
+buffer, not only to loaded files.
+
 ## dbjoy-inspired (planned, Run W)
 
 **Planned, not built.** These come from a reading of
@@ -497,11 +597,6 @@ above, and its box is checked in `tasks.md`.
   with the rows. It is an explicit, user-initiated copy, so it does not
   change the assistant's schema-only rule: the assistant itself still never
   sees a row.
-- **Table export (T784).** Export whole tables, not only the loaded rows:
-  CSV, JSON or NDJSON per table, or one SQL file of `INSERT`s in
-  foreign-key order with sequences reset. Rows stream to the file from one
-  consistent snapshot (`REPEATABLE READ READ ONLY` on PostgreSQL, a read
-  transaction on SQLite and MySQL), so a large table never sits in memory.
 - **Schema compare (T785).** Compare one schema across two saved
   connections, PostgreSQL first: tables, columns, keys, indexes, checks,
   views, functions, triggers, enums and sequences. Each difference shows
@@ -512,11 +607,6 @@ above, and its box is checked in `tasks.md`.
   flagged. The script can be copied, saved, opened in the editor or run on
   the target in one transaction, after a confirmation that names the
   target's environment.
-- **Run a `.sql` file (T786).** Open a `.sql` file (or the current buffer)
-  in the workbench editor and run it, statement by statement, stopping at
-  the first error. psql-only meta-commands (`\copy`, `\connect`, `\i` and
-  the rest) are found before anything runs, and the run is refused with
-  their line numbers.
 
 ## Headless schema read (T731)
 

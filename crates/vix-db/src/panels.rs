@@ -20,19 +20,86 @@ use super::{
     object_triples,
 };
 
+/// What the file-path prompt ([`View::Import`]) does with the file it is
+/// given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PathTarget {
+    /// Import a CSV/TSV file into a new table (Ctrl+U).
+    Import,
+    /// Load a `.sql` file into the editor and run it (Ctrl+P, T786).
+    RunSql,
+}
+
 impl Browser {
-    /// Keys on the CSV/TSV import prompt: a one-line path field; Enter imports.
+    /// Keys on the file-path prompt: a one-line path field; Enter imports the
+    /// CSV/TSV file, or loads and runs the `.sql` file (T786).
     pub(super) fn key_import(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.import_path.push(c),
             KeyCode::Backspace => {
                 self.import_path.pop();
             }
+            KeyCode::Enter if self.import_target == PathTarget::RunSql => self.do_run_file(),
             KeyCode::Enter => self.do_import(),
             KeyCode::Esc => self.view = View::Workbench,
             _ => {}
         }
         Outcome::Consumed
+    }
+
+    /// Whether the path prompt ([`View::Import`]) is choosing a `.sql` file
+    /// to run (Ctrl+P) rather than a CSV/TSV file to import (Ctrl+U).
+    #[must_use]
+    pub fn import_is_sql_file(&self) -> bool {
+        self.import_target == PathTarget::RunSql
+    }
+
+    /// Open the path prompt for a `.sql` file to load into the editor and run
+    /// (Ctrl+P, T786). Unlike import it needs no write mode: the statements
+    /// themselves pass the read-only and confirmation gates when they run.
+    pub fn open_run_file(&mut self) {
+        if self.conn.is_none() {
+            self.message = Some(t!("msg.db_not_connected").to_string());
+            return;
+        }
+        self.import_path.clear();
+        self.import_target = PathTarget::RunSql;
+        self.view = View::Import;
+    }
+
+    /// Read the `.sql` file at `import_path` and hand it to
+    /// [`Self::run_script`].
+    fn do_run_file(&mut self) {
+        let path = self.import_path.trim().to_string();
+        match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                self.import_target = PathTarget::Import;
+                self.view = View::Workbench;
+                self.run_script(&text);
+            }
+            Err(e) => self.message = Some(e.to_string()),
+        }
+    }
+
+    /// Load `text` (a `.sql` file or an editor buffer) into the query editor
+    /// and run it statement by statement, stopping at the first error — the
+    /// Execute All path (`F9`), so writes still need write mode and a
+    /// confirmation (T786).
+    ///
+    /// Execute All first scans the script for psql meta-commands (`\copy`,
+    /// `\connect`, `\i`, …), which only the psql client understands; if any
+    /// are found the script stays in the editor, nothing runs, and the status
+    /// line lists their line numbers.
+    pub fn run_script(&mut self, text: &str) {
+        if self.conn.is_none() {
+            self.message = Some(t!("msg.db_not_connected").to_string());
+            return;
+        }
+        self.query = editor::Query::from_text(text);
+        self.popup = None;
+        self.view = View::Workbench;
+        self.focus = Pane::Editor;
+        self.execute_all();
     }
 
     /// Open the CSV/TSV import prompt. Import creates and writes a table, so it
@@ -47,6 +114,7 @@ impl Browser {
             return;
         }
         self.import_path.clear();
+        self.import_target = PathTarget::Import;
         self.view = View::Import;
     }
 
@@ -293,6 +361,9 @@ impl Browser {
     /// Keys on the export dialog: Left/Right choose the format (wrapping),
     /// Tab toggles file vs clipboard, other characters edit the path.
     pub(super) fn key_export(&mut self, key: KeyEvent) -> Outcome {
+        if self.table_export.is_some() {
+            return self.key_table_export(key);
+        }
         match key.code {
             KeyCode::Left => {
                 self.export_format =
@@ -317,6 +388,7 @@ impl Browser {
         if self.grid.headers.is_empty() {
             return;
         }
+        self.table_export = None;
         self.export_path = format!("vix-export.{}", export::FORMATS[self.export_format].label());
         self.view = View::Export;
     }
@@ -369,7 +441,8 @@ impl Browser {
     /// While the filter box is active it captures every key; otherwise `/`
     /// starts a search and the single-letter keys select a detail report
     /// (`i` indexes, `f` foreign keys, `g` triggers, `x` constraints, `s`
-    /// stats, `D` DDL, `R` relations, `p` preview, `r` refresh). `page` is the pane height
+    /// stats, `D` DDL, `R` relations, `p` preview, `r` refresh); `m` marks a table and `e`
+    /// exports the marked tables (or the one under the cursor, T784). `page` is the pane height
     /// for PageUp/PageDown.
     pub(super) fn key_tree(&mut self, key: KeyEvent, page: usize) {
         if self.tree.filtering {
@@ -421,6 +494,8 @@ impl Browser {
             KeyCode::Char('D') => self.show_ddl(),
             KeyCode::Char('R') => self.show_relations(),
             KeyCode::Char('r') => self.refresh_catalog(),
+            KeyCode::Char('m') => self.toggle_export_mark(),
+            KeyCode::Char('e') => self.open_table_export(),
             _ => {}
         }
     }

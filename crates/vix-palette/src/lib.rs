@@ -486,6 +486,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.db_query", "db.query"),
     ("cmd.db_history", "db.history"),
     ("cmd.db_saved", "db.saved"),
+    ("cmd.db_run_buffer", "db.run_buffer"),
     ("cmd.qrcode", "tools.qrcode"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),

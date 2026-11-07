@@ -82,6 +82,7 @@ pub mod secret;
 pub mod session;
 pub mod staging;
 pub mod store;
+pub mod table_export;
 pub mod tunnel;
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
@@ -124,7 +125,8 @@ pub enum View {
     Confirm,
     /// Full-content viewer for the selected results cell.
     Cell,
-    /// The results-export dialog.
+    /// The export dialog: the results grid, or whole tables from the tree
+    /// while [`Browser::table_export`] is set.
     Export,
     /// The session query log (Ctrl+L).
     Log,
@@ -134,7 +136,8 @@ pub enum View {
     Ask,
     /// Collecting values for `:name` bind parameters before a run.
     Params,
-    /// The CSV/TSV import file-path prompt (Ctrl+U).
+    /// The file-path prompt: CSV/TSV import (Ctrl+U), or a `.sql` file to
+    /// load and run (Ctrl+P, see [`Browser::import_is_sql_file`]).
     Import,
     /// Inline editor for a single result cell (staged, `i`).
     CellEdit,
@@ -495,6 +498,17 @@ pub struct Browser {
     /// by [`Browser::poll_reconnect`] (Run H, T531/T532). `None` once
     /// resolved either way.
     pending_reconnect: Option<execute::PendingReconnect>,
+    /// Tables marked in the tree (`m`) for a table export, as
+    /// `(schema, table)` (T784).
+    pub export_marks: std::collections::BTreeSet<(String, String)>,
+    /// The table-export dialog, while [`View::Export`] exports whole tables
+    /// rather than the results grid (T784).
+    pub table_export: Option<table_export::Dialog>,
+    /// A table export running on its own connection (T784).
+    pending_export: Option<table_export::Pending>,
+    /// What the [`View::Import`] path prompt does with its file: import
+    /// CSV/TSV, or load and run a `.sql` file (T786).
+    import_target: panels::PathTarget,
 }
 
 /// State for the bind-parameter prompt: the SQL and its `:name` placeholders,
@@ -593,6 +607,10 @@ impl Browser {
             tunnel: None,
             pending_connect: None,
             pending_reconnect: None,
+            export_marks: std::collections::BTreeSet::new(),
+            table_export: None,
+            pending_export: None,
+            import_target: panels::PathTarget::Import,
         }
     }
 
@@ -686,7 +704,7 @@ impl Browser {
     ///
     /// Order matters: a busy workbench (a query running, or a cancelled
     /// query's reconnect in flight) swallows keys first; then the global chords (F5/F6/F7/F8/F9 run, explain and
-    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U open the sub-views and AI
+    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U/P open the sub-views and AI
     /// helpers; Alt+F formats); then Tab focus cycling (suppressed while the
     /// autocomplete popup owns Tab); and only then the focused pane's own
     /// handler.
@@ -759,6 +777,10 @@ impl Browser {
             }
             KeyCode::Char('u' | 'U') if ctrl => {
                 self.open_import();
+                return Outcome::Consumed;
+            }
+            KeyCode::Char('p' | 'P') if ctrl => {
+                self.open_run_file();
                 return Outcome::Consumed;
             }
             KeyCode::Char('f' | 'F') if alt => {

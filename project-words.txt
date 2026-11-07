@@ -264,6 +264,9 @@ attgenerated
 constraintdef
 tinyint
 ILIKE
+bytea
+setval
+AUTOINCREMENT
 
 # LSP servers / editors referenced in docs
 gopls

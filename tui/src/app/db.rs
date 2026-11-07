@@ -26,6 +26,7 @@ impl App {
             }
             "db.execute" => self.with_db(crate::db::Browser::execute),
             "db.execute_all" => self.with_db(crate::db::Browser::execute_all),
+            "db.run_buffer" => self.db_run_buffer(),
             "db.explain" => self.with_db(|b| b.explain(false)),
             "db.explain_analyze" => self.with_db(|b| b.explain(true)),
             "db.format" => self.with_db(crate::db::Browser::format_at_cursor),
@@ -41,6 +42,29 @@ impl App {
             _ => return false,
         }
         true
+    }
+
+    /// Load the active editor buffer into the workbench query editor and run
+    /// it statement by statement (T786, `db.run_buffer`): the same path as a
+    /// `.sql` file opened with Ctrl+P in the workbench. Without a connection
+    /// the overlay opens on the connections list.
+    fn db_run_buffer(&mut self) {
+        let text = match self.editor.active_tab() {
+            Some(tab) if !tab.is_image() => tab.text(),
+            _ => {
+                self.messages.warn(t!("msg.edit_sql_no_buffer").to_string());
+                return;
+            }
+        };
+        self.open_db();
+        if let Some(b) = self.db.as_mut() {
+            if b.conn.is_some() {
+                b.run_script(&text);
+            } else {
+                b.view = crate::db::View::Connections;
+                b.message = Some(t!("msg.db_not_connected").to_string());
+            }
+        }
     }
 
     /// Open the DB overlay (if it is not already), keeping any live session.
@@ -156,15 +180,19 @@ impl App {
     pub fn poll_db_query(&mut self) {
         if let Some(b) = self.db.as_mut() {
             b.poll_query();
+            // A whole-table export (T784) runs on its own connection; its
+            // progress drains on the same tick.
+            b.poll_table_export();
         }
     }
 
-    /// Whether a DB query is running asynchronously (keeps the loop polling).
+    /// Whether a DB query or table export is running asynchronously (keeps
+    /// the loop polling).
     #[must_use]
     pub fn db_query_running(&self) -> bool {
         self.db
             .as_ref()
-            .is_some_and(crate::db::Browser::query_running)
+            .is_some_and(|b| b.query_running() || b.table_export_running())
     }
 
     /// Drain a finished asynchronous DB connect (or password-prompted retry)

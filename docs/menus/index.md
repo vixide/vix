@@ -211,6 +211,7 @@ only fills the message box, it never commits on its own (T125).
 
 The database workbench (see [`../../crates/vix-db/spec/index.md`](../../crates/vix-db/spec/index.md)):
 **Connections** / **New Query**, **Execute** / **Execute All** (`F5`/`F9`),
+**Run Buffer in Workbench**,
 **Explain** / **Explain Analyze** (`F6`/`F7`), **Format**, **History** /
 **Saved** / **Save Query…**, **Export…**, **Begin** / **Commit** / **Rollback**,
 **Refresh Schema**, and **Disconnect**. The overlay itself adds read-only-by-

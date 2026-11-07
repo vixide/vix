@@ -86,3 +86,55 @@ fn interactive_query_replace_bang_replaces_rest() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T786: DB → Run Buffer in Workbench loads the active buffer into the
+/// workbench editor and runs it statement by statement; without a
+/// connection it opens the connections list instead.
+#[test]
+fn run_buffer_in_workbench_loads_and_runs_the_buffer() {
+    let dir = std::env::temp_dir().join(format!("vix-run-buffer-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("run.db");
+    let _ = std::fs::remove_file(&file);
+    let mut app = app_at(&dir);
+    type_str(&mut app, "select 41 + 1;\nselect 'two'");
+
+    app.run_action("db.run_buffer");
+    let b = app.db.as_ref().expect("the overlay opens");
+    assert_eq!(b.view, vix::db::View::Connections, "no connection yet");
+
+    let mut browser = vix::db::Browser::new(vec![vix::db::connect::Connection {
+        name: "run".into(),
+        kind: vix::db::connect::Kind::Sqlite,
+        file: file.display().to_string(),
+        ..vix::db::connect::Connection::default()
+    }]);
+    browser.handle_key(
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        vix::db::Pages::default(),
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while browser.connect_running() {
+        browser.poll_connect();
+        assert!(std::time::Instant::now() < deadline, "connect stalled");
+        std::thread::yield_now();
+    }
+    assert_eq!(
+        browser.view,
+        vix::db::View::Workbench,
+        "{:?}",
+        browser.message
+    );
+    app.db = Some(browser);
+
+    app.run_action("db.run_buffer");
+    let b = app.db.as_ref().unwrap();
+    assert_eq!(b.view, vix::db::View::Workbench, "{:?}", b.message);
+    assert_eq!(b.query.text(), "select 41 + 1;\nselect 'two'");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["two".to_string()]],
+        "the last statement's rows"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

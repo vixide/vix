@@ -395,6 +395,12 @@ impl Browser {
         self.last_error = None;
         self.params = None;
         self.import_path.clear();
+        self.import_target = super::panels::PathTarget::Import;
+        // Dropping a running table export's receiver stops its worker at
+        // the next progress report (it rolls back and removes its `.part`).
+        self.pending_export = None;
+        self.table_export = None;
+        self.export_marks.clear();
         self.tx = TxState::None;
         self.pending_query = None;
         self.pending_connect = None;

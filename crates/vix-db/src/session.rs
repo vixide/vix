@@ -404,6 +404,12 @@ impl CancelHandle {
     }
 }
 
+/// Register sqlx's `Any` drivers (once per process) before opening an `Any`
+/// connection — shared with the table-export connection (T784).
+pub(crate) fn install_drivers() {
+    DRIVERS.call_once(sqlx::any::install_default_drivers);
+}
+
 /// A live database connection on its own worker thread.
 #[derive(Debug)]
 pub struct Session {
@@ -443,7 +449,7 @@ impl Session {
     /// credentials, unreachable host, unreadable file, …) or
     /// [`SessionError::Setup`] for a failing setup statement.
     pub fn connect(url: &str, setup: &[String]) -> Result<Session, SessionError> {
-        DRIVERS.call_once(sqlx::any::install_default_drivers);
+        install_drivers();
         let (req_tx, req_rx) = mpsc::channel::<Request>();
         let (reply_tx, reply_rx) = mpsc::channel::<Chunk>();
         let (ready_tx, ready_rx) = mpsc::channel::<Result<Option<u64>, SessionError>>();
@@ -511,6 +517,13 @@ impl Session {
     #[must_use]
     pub fn cancel_handle(&self) -> Option<CancelHandle> {
         self.cancel_handle.clone()
+    }
+
+    /// The connection URL this session was opened with (it holds the
+    /// in-memory password, so it never leaves the crate). The table export
+    /// (T784) opens its own second connection from it.
+    pub(crate) fn url(&self) -> &str {
+        &self.url
     }
 
     /// Tell the worker to abandon whatever statement it's mid-flight on and
@@ -715,7 +728,7 @@ fn worker(
 /// error variant, can echo the DSN — which embeds `user:password@host`. This
 /// replaces the full URL and, defensively, the bare password substring with
 /// placeholders so a password can never surface in a status message or log.
-fn redact_url_secret(msg: &str, url: &str) -> String {
+pub(crate) fn redact_url_secret(msg: &str, url: &str) -> String {
     let mut out = msg.replace(url, "<database-url>");
     if let Some(pw) = password_of(url).filter(|p| !p.is_empty()) {
         out = out.replace(pw, "<redacted>");

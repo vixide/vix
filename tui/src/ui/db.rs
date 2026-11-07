@@ -38,6 +38,8 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
     let view = b.view;
+    let tables = b.table_export.is_some();
+    let sql_file = b.import_is_sql_file();
     match view {
         crate::db::View::Connections => draw_db_connections(app, frame, chunks[0]),
         crate::db::View::Form => draw_db_form(app, frame, chunks[0]),
@@ -52,6 +54,9 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::SaveName => draw_db_save_name(app, frame, chunks[0]),
         crate::db::View::Confirm => draw_db_confirm(app, frame, chunks[0]),
         crate::db::View::Cell => draw_db_cell(app, frame, chunks[0]),
+        crate::db::View::Export if tables => {
+            draw_db_table_export(app, frame, chunks[0]);
+        }
         crate::db::View::Export => draw_db_export(app, frame, chunks[0]),
         crate::db::View::Log => draw_db_log(app, frame, chunks[0]),
         crate::db::View::Erd => draw_db_erd(app, frame, chunks[0]),
@@ -77,11 +82,13 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::SaveName => t!("ui.db_save_hint"),
         crate::db::View::Confirm => t!("ui.db_confirm_hint"),
         crate::db::View::Cell => t!("ui.db_cell_hint"),
+        crate::db::View::Export if tables => t!("ui.db_table_export_hint"),
         crate::db::View::Export => t!("ui.db_export_hint"),
         crate::db::View::Log => t!("ui.db_log_hint"),
         crate::db::View::Erd => t!("ui.db_erd_hint"),
         crate::db::View::Ask => t!("ui.db_ask_hint"),
         crate::db::View::Params => t!("ui.db_params_hint"),
+        crate::db::View::Import if sql_file => t!("ui.db_run_file_hint"),
         crate::db::View::Import => t!("ui.db_import_hint"),
         crate::db::View::CellEdit => t!("ui.db_cell_edit_hint"),
     };
@@ -365,16 +372,18 @@ fn draw_db_row_filter(app: &mut App, frame: &mut Frame, area: Rect) {
     }
 }
 
-/// The CSV/TSV import file-path prompt.
+/// The file-path prompt: CSV/TSV import, or a `.sql` file to run (T786).
 fn draw_db_import(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
+    let title = if b.import_is_sql_file() {
+        t!("ui.db_run_file_title")
+    } else {
+        t!("ui.db_import_title")
+    };
     let lines = vec![
-        Line::from(Span::styled(
-            format!(" {}", t!("ui.db_import_title")),
-            theme::title(true),
-        )),
+        Line::from(Span::styled(format!(" {title}"), theme::title(true))),
         Line::from(format!(" {}", b.import_path)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -567,6 +576,54 @@ fn draw_db_export(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
+/// The table-export dialog (T784): the chosen tables, the format, and the
+/// destination directory (or file, for SQL).
+fn draw_db_table_export(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(b) = app.db.as_ref() else {
+        return;
+    };
+    let Some(dialog) = b.table_export.as_ref() else {
+        return;
+    };
+    let formats: Vec<Span> = crate::db::table_export::TABLE_FORMATS
+        .iter()
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let style = if i == dialog.format {
+                theme::selected()
+            } else {
+                theme::dim()
+            };
+            [
+                Span::styled(format!(" {} ", f.label()), style),
+                Span::raw(" "),
+            ]
+        })
+        .collect();
+    let names: Vec<&str> = dialog.tables.iter().map(|(_, t)| t.as_str()).collect();
+    let dest = if dialog.single_file() {
+        t!("ui.db_export_file")
+    } else {
+        t!("ui.db_table_export_dir")
+    };
+    let lines = vec![
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_table_export")),
+            theme::title(true),
+        )),
+        Line::from(Span::styled(
+            format!(
+                " {}",
+                t!("ui.db_table_export_tables", names = names.join(", "))
+            ),
+            theme::dim(),
+        )),
+        Line::from(formats),
+        Line::from(format!(" {dest}: {}", dialog.path)),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+}
+
 /// The three-pane DB workbench: schema tree, SQL editor, results grid.
 fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     let cols = Layout::default()
@@ -634,6 +691,17 @@ fn draw_db_tree(app: &App, frame: &mut Frame, area: Rect) {
             t!(folder.label_key()).to_string()
         } else {
             row.text.clone()
+        };
+        // A table marked for export (`m`, T784) shows a `*` in the arrow slot.
+        let arrow = match row.reference {
+            crate::db::catalog::RowRef::Object(si, crate::db::catalog::Folder::Tables, _)
+                if b.tree.schemas.get(si).is_some_and(|s| {
+                    b.export_marks.contains(&(s.name.clone(), row.text.clone()))
+                }) =>
+            {
+                "* "
+            }
+            _ => arrow,
         };
         let text = format!("{}{arrow}{text}", " ".repeat(row.depth * 2));
         let line = if i == b.tree.sel && focused {

@@ -48,6 +48,9 @@ Schemas expand into **Tables / Views / Functions** folders.
 - **/** searches the tree live (matches show regardless of collapse state);
   **Enter** keeps the filter, **Esc** clears it.
 - **r** refreshes the schema after DDL changes.
+- **m** marks the table under the cursor for export (press again to unmark);
+  **e** exports the marked tables — or, with none marked, the table under the
+  cursor. See [Exporting whole tables](#exporting-whole-tables).
 
 ### Query editor (right, top)
 
@@ -122,6 +125,48 @@ The operators are contains (case-insensitive), `=`, `<>`, `<`, `<=`, `>`,
 a raw SQL condition written as is. Vix quotes the column and the value for
 your database, runs the query on the server, and the results stay
 editable. **Delete** in the search form clears the search.
+
+## Exporting whole tables
+
+**e** in the schema tree exports whole tables, not just the rows loaded in
+the grid. **←/→** choose the format:
+
+- **CSV**, **JSON** or **NDJSON** — one file per table (`users.csv`, …) in
+  the directory you type (created if missing; `schema.table.csv` when the
+  tables come from more than one schema). JSON keeps `NULL`, numbers and
+  booleans typed; CSV writes `NULL` as an empty field.
+- **SQL** — one file of `INSERT` statements for every chosen table, inside
+  `BEGIN;` … `COMMIT;`, ordered so a table comes after the tables its foreign
+  keys reference. If the foreign keys form a cycle, the tables keep the order
+  you chose and a comment at the top says to load with foreign-key checks
+  off. At the end, sequences are reset: `setval` on PostgreSQL's serial and
+  identity sequences, `ALTER TABLE … AUTO_INCREMENT` on MySQL, and
+  `sqlite_sequence` on SQLite.
+
+**Enter** starts the export. It runs in the background on a **second,
+read-only connection**, inside one consistent snapshot (`REPEATABLE READ READ
+ONLY` on PostgreSQL, `WITH CONSISTENT SNAPSHOT` on MySQL, one read
+transaction on SQLite), and rows stream straight to disk, so even a very
+large table never sits in memory. The status line shows progress, and you
+can keep working meanwhile (disconnecting or closing the DB overlay stops
+the export and removes its partial file). Because it is a separate connection, a
+transaction you have open in the workbench is never touched — and its
+uncommitted changes are not in the export. An in-memory SQLite database
+cannot be seen from a second connection, so it cannot be exported this way.
+
+## Running a `.sql` file
+
+- **Ctrl+P** in the workbench asks for the path of a `.sql` file, loads it
+  into the query editor, and runs it statement by statement, stopping at the
+  first error — exactly like **F9**.
+- **DB → Run Buffer in Workbench** does the same with the buffer you are
+  editing (unsaved changes included).
+- Writes still follow the usual rules: refused on a read-only connection,
+  confirmed first otherwise.
+- psql meta-commands (`\copy`, `\connect`, `\i`, `\set`, … — lines that start
+  with a backslash) are not SQL. If the script has any, nothing runs: the
+  message line lists their line numbers, and the script stays in the editor
+  for you to fix. **F9** applies the same check to anything in the editor.
 
 ## Query history and saved queries
 

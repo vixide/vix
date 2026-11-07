@@ -184,6 +184,27 @@ the clipboard, and **Enter** exports. The export applies your current filter
 and sort, not the raw query result — filter to `engineer` first and the CSV
 only has Alice's and Carol's rows.
 
+To export **whole tables** instead, go to the schema tree: **m** marks
+`people` and `tasks`, and **e** opens the table export (with nothing marked
+it takes the table under the cursor). Pick **SQL** with **←/→** and press
+**Enter**: Vix reads both tables from one consistent snapshot on a second,
+read-only connection and writes one file of `INSERT`s with `people` before
+`tasks` (parents before children). A table with an `AUTOINCREMENT` counter
+(or a PostgreSQL sequence, a MySQL `AUTO_INCREMENT`) gets it reset at the end
+of the file; these two have none.
+CSV, JSON and NDJSON write one file per table into a directory instead. Rows
+stream straight to disk, so the 20,000-row grid cap does not apply, and an
+open transaction in the workbench is left alone.
+
+## Running a `.sql` file
+
+**Ctrl+P** asks for the path of a `.sql` file, loads it into the editor and
+runs it like **F9** — statement by statement, stopping at the first error,
+with writes confirmed as usual. **DB → Run Buffer in Workbench** does the
+same with the file you are editing. A script with psql meta-commands
+(`\copy`, `\i`, …) is refused before anything runs, and the message line
+lists their line numbers.
+
 ## Query history and saved queries
 
 - **Ctrl+R** (**DB → History…**) lists every statement you've executed,

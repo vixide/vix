@@ -1667,6 +1667,7 @@ const DB: &[Item] = &[
     SEP,
     Item::leaf("menu.item.db.execute", "db.execute", "F5"),
     Item::leaf("menu.item.db.execute_all", "db.execute_all", "F9"),
+    Item::leaf("menu.item.db.run_buffer", "db.run_buffer", ""),
     Item::leaf("menu.item.db.explain", "db.explain", "F6"),
     Item::leaf("menu.item.db.explain_analyze", "db.explain_analyze", "F7"),
     Item::leaf("menu.item.db.format", "db.format", "Alt Shift F"),
