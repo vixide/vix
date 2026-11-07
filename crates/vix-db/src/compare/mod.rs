@@ -9,10 +9,13 @@
 //!   `SQLite`; `MySQL` is not supported).
 //! - [`diff`] — the changes between two snapshots, each with its
 //!   migration statements and destructive/risky flags.
+//! - [`plan`] — orders the chosen changes' statements so the migration
+//!   runs, rebuilding views that block a change.
 //!
 //! The owning spec is `crates/vix-db/spec/index.md` ("Schema compare").
 
 pub mod diff;
+pub mod plan;
 pub mod read;
 pub mod snapshot;
 

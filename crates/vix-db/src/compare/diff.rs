@@ -186,7 +186,7 @@ impl Statement {
     }
 
     /// A statement that creates or drops view `name`.
-    fn on_view(phase: Phase, sql: String, name: &str) -> Statement {
+    pub(crate) fn on_view(phase: Phase, sql: String, name: &str) -> Statement {
         Statement {
             phase,
             sql,
@@ -285,8 +285,16 @@ fn norm(s: &str) -> String {
     joined.trim_end_matches(';').trim_end().to_string()
 }
 
+/// The SQL generator for `snapshot`'s dialect and schema.
+pub(crate) fn view_sql(snapshot: &Snapshot) -> Sql<'_> {
+    Sql {
+        kind: snapshot.kind,
+        schema: &snapshot.schema,
+    }
+}
+
 /// SQL generation for one dialect and schema.
-struct Sql<'a> {
+pub(crate) struct Sql<'a> {
     /// The engine.
     kind: Kind,
     /// The schema name.
@@ -349,7 +357,7 @@ impl Sql<'_> {
     }
 
     /// A view's `CREATE` statement.
-    fn create_view(&self, v: &View) -> String {
+    pub(crate) fn create_view(&self, v: &View) -> String {
         if self.sqlite() {
             return v.definition.trim().trim_end_matches(';').to_string();
         }
@@ -366,7 +374,7 @@ impl Sql<'_> {
     }
 
     /// A view's `DROP` statement.
-    fn drop_view(&self, v: &View) -> String {
+    pub(crate) fn drop_view(&self, v: &View) -> String {
         let kind = if v.materialized {
             "MATERIALIZED VIEW"
         } else {
