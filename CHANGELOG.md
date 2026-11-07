@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-07
+
 ### Fixed
 
 - **Static musl release build.** dist's `x86_64-unknown-linux-musl` build ignored the static-link flags in `.cargo/config.toml`, so 2.0.1's musl archive is a dynamically linked binary that needs `/lib/ld-musl-x86_64.so.1`, and the Linux packages job stopped at its static check. The release build now passes the flags in a way dist can't override.
