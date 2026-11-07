@@ -114,11 +114,49 @@ through `t!`.
   `config.toml`, and opens databases read-only.
 - **No network.** Nothing in this mode opens a socket.
 
+## Proposed: shared database connections (T783)
+
+**Proposed, not accepted.** This needs the maintainer's decision, because it
+relaxes two rules in [Safety](#safety): the server would read credentials
+from the OS keyring or a `password_command`, and it would open sockets to
+database servers. It comes from
+[dbjoy](https://github.com/agustind/dbjoy)'s MCP server; see
+[`spec/comparisons/dbjoy.md`](../comparisons/dbjoy.md).
+
+If accepted, a saved DB workbench connection gains a `share_with_mcp` flag,
+off by default, and `vix --mcp` adds four tools for the shared connections
+only:
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `db_connections` | — | `{connections: [{name, kind, environment, database}]}` (no host, user or password). |
+| `db_tables` | `connection`, `schema` (optional) | Tables, views and routines in the schema, and the other schema names. |
+| `db_describe` | `connection`, `table` | Columns, keys, indexes, constraints and foreign keys. |
+| `db_query` | `connection`, `sql` | The first 100 rows as text, with the column names. |
+
+Safeguards:
+
+- **Opt-in per connection.** A connection that is not shared does not exist
+  for MCP clients.
+- **No prompts.** Credentials come from the keyring or the connection's
+  `password_command` only. A connection that would need a typed password
+  fails with a message, because nobody is there to type it.
+- **Reads only.** `db_query` accepts one statement starting with `SELECT`,
+  `WITH`, `EXPLAIN` (never `ANALYZE`), `SHOW` or `VALUES`, and rejects
+  anything `is_write_statement` flags. It runs inside a read-only
+  transaction with a 30-second statement timeout (PostgreSQL
+  `SET LOCAL statement_timeout`, MySQL `MAX_EXECUTION_TIME`), then rolls
+  back, which also stops writes hidden in functions.
+- **Seen.** Every call is appended to a log file next to the session file:
+  time, tool, connection and SQL. The workbench's query log shows it.
+- **stdio stays the only transport.** Unlike dbjoy, there is no local HTTP
+  listener or token, because `vix --mcp` is started by the client.
+
 ## Not in v1
 
 - Live language-server diagnostics and symbols (would need to spawn and
   manage servers without the editor running).
 - Seeing unsaved buffers of a running Vix (would need an attach channel).
-- `PostgreSQL`/`MySQL` schemas (need secrets).
+- `PostgreSQL`/`MySQL` schemas (need secrets; proposed as T783 above).
 - Any write tool, prompts, subscriptions, or `listChanged` notifications.
 - The HTTP transport (stdio only).

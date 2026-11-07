@@ -619,6 +619,41 @@ only for text the canvas cannot draw. Its spec,
 [`gui/vix-bui/spec`](gui/vix-bui/spec/index.md), lists what works and what does
 not. Task: T769 in `tasks.md`.
 
+## Run W — database workbench, from dbjoy (researched 2026-11-07)
+
+[dbjoy](https://github.com/agustind/dbjoy) (Swift, MIT, a month old) is a
+native macOS PostgreSQL client. Its README, its engine-neutral core and its
+MCP server were read, and every candidate was checked against
+`crates/vix-db/src`. Vix already has most of the basics, and covers SQLite and
+MySQL too, with no external tools. Full assessment:
+[`spec/comparisons/dbjoy.md`](spec/comparisons/dbjoy.md). What is left, as
+**Run W** in `tasks.md` (T774–T786), in this order:
+
+1. **Don't lose work (T774).** `Ctrl+C` reconnects today, which silently
+   ends an open transaction. Cancel on the server instead and keep the
+   session.
+2. **Find the problem fast (T775, T776).** Jump to the error's position,
+   show server notices, and show PostgreSQL plans as a tree that marks the
+   slow steps and the bad row estimates.
+3. **Edit data safely (T777, T778).** Stage inserts and deletes as well as
+   updates, require each statement to touch exactly one row, offer enum and
+   `CHECK` values, allow `=expr` cells, and search rows on the server.
+4. **Know the schema (T779, T780).** Incoming foreign keys and dependent
+   views; completion that resolves aliases.
+5. **Protect production (T781).** Environment tags with stronger rules on
+   `production`, and connection strings pasted into the form.
+6. **Move data (T782, T784, T786).** Copy for AI, whole-table export from one
+   snapshot, and running `.sql` files with psql meta-commands caught first.
+7. **Schema compare (T785)**, the largest task: diff two connections and
+   write an ordered migration, PostgreSQL first.
+
+T783, sharing saved connections with MCP clients, is a decision for the
+maintainer: it relaxes two written MCP safety rules (no keyring, no sockets).
+Its design is in [`spec/mcp-server`](spec/mcp-server/index.md). Not taken:
+dbjoy's database copy (bundled `pg_dump`/`psql`, drops every schema in the
+target), an assistant that reads query results (Vix's assistant sees the
+schema only), and GUI-only conveniences.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on

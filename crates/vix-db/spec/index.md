@@ -222,6 +222,86 @@ The same surus round added three companion features the AI surface builds on:
   scrollable viewer; `y` yanks the Mermaid text to paste anywhere Mermaid
   renders (including Vix's own Org/Mermaid support).
 
+## dbjoy-inspired (planned, Run W)
+
+**Planned, not built.** These come from a reading of
+[dbjoy](https://github.com/agustind/dbjoy), a macOS PostgreSQL client; the
+assessment is [`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md).
+When a task lands, its text moves out of this section into the sections
+above, and its box is checked in `tasks.md`.
+
+- **Cancel keeps the session (T774).** `Ctrl+C` asks the server to stop the
+  statement instead of reconnecting: `pg_cancel_backend(pid)` on PostgreSQL
+  and `KILL QUERY id` on MySQL, sent over a short-lived second connection
+  with the same credentials. The session, its temporary tables and an open
+  transaction survive; a cancelled statement inside a transaction leaves it
+  aborted, and the `TX!` badge says so. SQLite, and any server cancel that
+  fails, falls back to today's reconnect, and the status line then says the
+  transaction was lost.
+- **Error positions and notices (T775).** A PostgreSQL error that carries a
+  position moves the editor cursor to that character of the statement.
+  Server notices (`RAISE NOTICE`, warnings) are shown under the result
+  instead of being dropped. A spike confirms first that sqlx's `Any` driver
+  keeps both.
+- **Plan tree (T776).** On PostgreSQL, `F6`/`F7` request `FORMAT JSON` and
+  show the plan as a tree. Each node shows its share of the total time (with
+  `ANALYZE`), the slowest nodes are highlighted, and a node whose row
+  estimate is off from the actual count by 10× or more is flagged. The
+  full-scan hint stays. MySQL and SQLite keep the text plan.
+- **Staged inserts, deletes and expressions (T777).** Besides cell updates, a
+  table preview stages new rows and row deletions, color-coded by kind. `W`
+  commits them in one transaction, and every statement must affect exactly
+  one row or the whole batch rolls back. Boolean, enum and `CHECK (col IN
+  (…))` columns offer their values to pick from; generated columns are read
+  only. A cell value starting with `=` is an SQL expression the server
+  computes on commit (`=now()`); `\=` stores text that starts with `=`.
+  Tables without a primary key stay read only.
+- **Server-side row search (T778).** On a table preview, a filter row takes a
+  column, an operator (contains, equals, not equal, range, `IN`, `IS NULL`,
+  `IS NOT NULL`, raw SQL) and a value. Vix builds the `WHERE` clause with
+  quoted identifiers and literals and runs it on the server, and the results
+  stay editable. `/` keeps filtering the loaded rows.
+- **Relations (T779).** On a table, a relations view lists outgoing foreign
+  keys, incoming foreign keys (the tables that reference this one) and the
+  views that depend on it, per engine.
+- **Alias-aware completion (T780).** After `FROM orders o` or `JOIN customers
+  AS c`, typing `o.` offers the columns of `orders`.
+- **Environments and connection strings (T781).** A saved connection carries
+  an `environment`: `local`, `development`, `testing`, `staging` or
+  `production` (default `local`), shown as a colored badge in the list and
+  the editor title. On `production`, every write shows its SQL and asks,
+  even inside an explicit transaction; `DROP` and `TRUNCATE` always ask on
+  any connection. Pasting a connection string into the add form fills it: a
+  `postgres://`, `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq
+  `key=value` string. A password in the string is never saved; it goes to
+  the keyring prompt like a typed one.
+- **Copy for AI (T782).** In results, a key copies the statement, its column
+  names and types, and the selected rows (or the visible page, capped) as
+  Markdown. On a table it copies the columns, keys, constraints and indexes
+  with the rows. It is an explicit, user-initiated copy, so it does not
+  change the assistant's schema-only rule: the assistant itself still never
+  sees a row.
+- **Table export (T784).** Export whole tables, not only the loaded rows:
+  CSV, JSON or NDJSON per table, or one SQL file of `INSERT`s in
+  foreign-key order with sequences reset. Rows stream to the file from one
+  consistent snapshot (`REPEATABLE READ READ ONLY` on PostgreSQL, a read
+  transaction on SQLite and MySQL), so a large table never sits in memory.
+- **Schema compare (T785).** Compare one schema across two saved
+  connections, PostgreSQL first: tables, columns, keys, indexes, checks,
+  views, functions, triggers, enums and sequences. Each difference shows
+  both definitions and its migration SQL. The whole migration is ordered so
+  it runs (types before the tables that use them, drops before creates,
+  foreign keys last). Changes that delete data start unchecked; changes that
+  can fail on existing rows (`NOT NULL`, a unique index, a type change) are
+  flagged. The script can be copied, saved, opened in the editor or run on
+  the target in one transaction, after a confirmation that names the
+  target's environment.
+- **Run a `.sql` file (T786).** Open a `.sql` file (or the current buffer)
+  in the workbench editor and run it, statement by statement, stopping at
+  the first error. psql-only meta-commands (`\copy`, `\connect`, `\i` and
+  the rest) are found before anything runs, and the run is refused with
+  their line numbers.
+
 ## Headless schema read (T731)
 
 `catalog::read_sqlite_schema(path)` reads one `SQLite` file's tables, views
