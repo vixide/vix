@@ -8,7 +8,7 @@ through libpq and bundles `pg_dump` and `psql` for backups and database
 copies.
 
 This page records what was read, what Vix already has, what Vix should take,
-and what it should not. Status as of 2026-11-07: T774–T780 are built (see each task in `tasks.md`); the
+and what it should not. Status as of 2026-11-07: T774–T782 and T784–T786 are built; T783 waits for the maintainer (see each task in `tasks.md`); the
 "Vix today" column below records what Vix had when this was written. The
 resulting work is Run W in
 [`tasks.md`](../../tasks.md) (T774–T786) and [`plan.md`](../../plan.md). The

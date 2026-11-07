@@ -290,6 +290,7 @@ impl Browser {
                     let wrapped = catalog::explain_sql(kind, &sql, false);
                     if let Ok((headers, rows)) = self.run_catalog(&wrapped) {
                         self.grid.set(headers, rows);
+                        self.grid_source = Some((wrapped, None));
                         self.focus = Pane::Results;
                         self.set_uneditable();
                     }

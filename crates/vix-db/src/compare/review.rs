@@ -96,6 +96,9 @@ pub struct Compare {
     pub password: String,
     /// The chosen target connection.
     pub target: Option<connect::Connection>,
+    /// The target connection's environment (T781), recorded when the target
+    /// is chosen.
+    pub target_env: Option<connect::Environment>,
     /// The source connection's name.
     pub source_name: String,
     /// The changes, in diff order.
@@ -151,13 +154,11 @@ impl Compare {
             .unwrap_or_default()
     }
 
-    /// The target's environment for the run confirmation, when connections
-    /// carry one.
+    /// The target's environment for the run confirmation, as its translated
+    /// badge (`[production]`, …), once a target is chosen (T781).
     #[must_use]
     pub fn target_environment(&self) -> Option<String> {
-        // T781 hook: return the target connection's `environment` (local,
-        // development, testing, staging, production) once it exists.
-        None
+        self.target_env.map(crate::environment::badge)
     }
 
     /// The migration for the chosen changes, in run order.
@@ -284,6 +285,7 @@ impl Browser {
             pick: 0,
             password: String::new(),
             target: None,
+            target_env: None,
             source_name: conn.name,
             changes: Vec::new(),
             checked: Vec::new(),
@@ -464,10 +466,12 @@ impl Browser {
             };
             let _ = tx.send(work);
         });
+        let target_env = self.environment_of(&target.name);
         if let Some(c) = self.compare.as_mut() {
             c.source = source;
             c.schema = schema;
             c.target_write = target.writable;
+            c.target_env = Some(target_env);
             c.target = Some(target);
             c.session = None;
             c.tunnel = None;

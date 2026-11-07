@@ -520,6 +520,68 @@ const WRITE_KEYWORDS: &[&str] = &[
 /// ```
 #[must_use]
 pub fn is_write_statement(sql: &str) -> bool {
+    has_keyword(sql, WRITE_KEYWORDS)
+}
+
+/// Keywords that destroy data or schema wholesale; these always ask before
+/// running, on any connection and inside a transaction too (T781).
+const DESTRUCTIVE_KEYWORDS: &[&str] = &["drop", "truncate"];
+
+/// Whether `sql` contains `DROP` or `TRUNCATE` outside strings and comments
+/// (the same whole-word scan as [`is_write_statement`]). Such a statement
+/// always asks for confirmation, whatever the connection's environment and
+/// even inside an explicit transaction, since `TRUNCATE` and most `DROP`s are
+/// not undone by `ROLLBACK` on every engine (T781).
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::editor::is_destructive_statement;
+/// assert!(is_destructive_statement("DROP TABLE users"));
+/// assert!(is_destructive_statement("truncate orders"));
+/// assert!(!is_destructive_statement("DELETE FROM t WHERE id = 1"));
+/// assert!(!is_destructive_statement("select 'drop' -- truncate"));
+/// ```
+#[must_use]
+pub fn is_destructive_statement(sql: &str) -> bool {
+    has_keyword(sql, DESTRUCTIVE_KEYWORDS)
+}
+
+/// Whether running `sql` must first show it and ask (T781), given the
+/// connection's `environment` and whether an explicit transaction is open.
+///
+/// A read never asks. `DROP` and `TRUNCATE` always ask. On
+/// [`crate::connect::Environment::Production`] every write asks, even inside
+/// a transaction. Elsewhere a write asks only outside a transaction, where
+/// `ROLLBACK` cannot undo it.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::connect::Environment;
+/// use vix_db::editor::needs_confirmation;
+/// let update = "UPDATE t SET x = 1";
+/// assert!(needs_confirmation(update, Environment::Local, false));
+/// assert!(!needs_confirmation(update, Environment::Local, true));
+/// assert!(needs_confirmation(update, Environment::Production, true));
+/// assert!(needs_confirmation("DROP TABLE t", Environment::Local, true));
+/// assert!(!needs_confirmation("SELECT 1", Environment::Production, false));
+/// ```
+#[must_use]
+pub fn needs_confirmation(
+    sql: &str,
+    environment: crate::connect::Environment,
+    in_transaction: bool,
+) -> bool {
+    if !is_write_statement(sql) {
+        return false;
+    }
+    is_destructive_statement(sql) || environment.is_production() || !in_transaction
+}
+
+/// Whether any of `keywords` (lowercase) appears in `sql` as a whole word
+/// outside strings and comments.
+fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
     let chars: Vec<char> = sql.chars().collect();
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
     let mut i = 0;
@@ -550,7 +612,7 @@ pub fn is_write_statement(sql: &str) -> bool {
                         i += 1;
                     }
                     let word: String = chars[start..i].iter().collect();
-                    if WRITE_KEYWORDS.contains(&word.to_ascii_lowercase().as_str()) {
+                    if keywords.contains(&word.to_ascii_lowercase().as_str()) {
                         return true;
                     }
                     continue;
@@ -566,6 +628,50 @@ pub fn is_write_statement(sql: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connect::Environment;
+
+    #[test]
+    fn destructive_statements_are_drop_and_truncate_only() {
+        assert!(is_destructive_statement("drop table t"));
+        assert!(is_destructive_statement("WITH x AS (SELECT 1) TRUNCATE t"));
+        assert!(is_destructive_statement("/* c */ DROP INDEX i"));
+        assert!(!is_destructive_statement("delete from t"));
+        assert!(!is_destructive_statement("update t set dropped = 1"));
+        assert!(!is_destructive_statement(
+            "select 'drop' from t -- truncate"
+        ));
+        assert!(!is_destructive_statement("select 1 /* drop */"));
+    }
+
+    #[test]
+    fn confirmation_policy_per_environment_and_transaction() {
+        for env in Environment::ALL {
+            // Reads never ask.
+            assert!(!needs_confirmation("select * from t", env, false));
+            assert!(!needs_confirmation("select * from t", env, true));
+            // DROP and TRUNCATE always ask.
+            assert!(needs_confirmation("drop table t", env, true));
+            assert!(needs_confirmation("truncate t", env, false));
+            // Any write outside a transaction asks.
+            assert!(needs_confirmation("insert into t values (1)", env, false));
+        }
+        // Inside a transaction only production asks for a plain write.
+        assert!(!needs_confirmation(
+            "delete from t",
+            Environment::Local,
+            true
+        ));
+        assert!(!needs_confirmation(
+            "delete from t",
+            Environment::Staging,
+            true
+        ));
+        assert!(needs_confirmation(
+            "delete from t",
+            Environment::Production,
+            true
+        ));
+    }
 
     fn query(text: &str) -> Query {
         Query {

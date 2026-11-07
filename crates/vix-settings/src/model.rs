@@ -139,6 +139,75 @@ impl Connection {
     }
 }
 
+/// Which deployment stage a saved database connection points at (T781).
+///
+/// Shown as a colored badge in the DB workbench; on [`Environment::Production`]
+/// every write asks for confirmation, even inside an explicit transaction.
+/// Stored per connection name in `Settings::db_environments` rather than on
+/// [`Connection`] itself, so that published struct keeps its fields; a
+/// connection with no entry is [`Environment::Local`].
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum Environment {
+    /// A database on this machine (the default).
+    #[default]
+    Local,
+    /// A shared development database.
+    Development,
+    /// A test or CI database.
+    Testing,
+    /// A pre-production copy.
+    Staging,
+    /// The live database: every write asks first.
+    Production,
+}
+
+impl Environment {
+    /// Every environment, in the order the connection form cycles them.
+    pub const ALL: [Environment; 5] = [
+        Environment::Local,
+        Environment::Development,
+        Environment::Testing,
+        Environment::Staging,
+        Environment::Production,
+    ];
+
+    /// The value written to the settings file (`local`, `development`,
+    /// `testing`, `staging`, `production`).
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Environment::Local => "local",
+            Environment::Development => "development",
+            Environment::Testing => "testing",
+            Environment::Staging => "staging",
+            Environment::Production => "production",
+        }
+    }
+
+    /// The next environment, cycling; used by the connection form's
+    /// environment row.
+    #[must_use]
+    pub fn next(self) -> Environment {
+        match self {
+            Environment::Local => Environment::Development,
+            Environment::Development => Environment::Testing,
+            Environment::Testing => Environment::Staging,
+            Environment::Staging => Environment::Production,
+            Environment::Production => Environment::Local,
+        }
+    }
+
+    /// Whether this is [`Environment::Production`].
+    #[must_use]
+    pub fn is_production(self) -> bool {
+        self == Environment::Production
+    }
+}
+
 /// A configured debug adapter (parallels `LspServer` in `vix-settings`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]

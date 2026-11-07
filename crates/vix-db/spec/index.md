@@ -65,9 +65,13 @@ connections persist in the settings file without any password field.
 The overlay's screens and keys:
 
 - **Connections** — `Enter` connect · `a` add · `e` edit · `d` delete ·
-  `Esc`/`q` close. The add/edit form cycles the engine kind with `Space` and
-  toggles the access (read-only default) and keyring rows the same way; it also
-  takes a **Password cmd** (a command that prints the password).
+  `Esc`/`q` close. Each row shows the connection's environment badge. The
+  add/edit form cycles the engine kind with `Space` and toggles the access
+  (read-only default) and keyring rows the same way, and cycles the
+  **Environment** row (`local` → `development` → `testing` → `staging` →
+  `production`); it also takes a **Password cmd** (a command that prints the
+  password). Pasting a connection string anywhere in the form fills it (see
+  *Environments and connection strings* below).
 - **Password** — masked entry, held in memory for the session only. Server
   connections first try the credential waterfall — the `password_command`, then
   the OS keyring — and only prompt on a miss; a prompted password is saved to
@@ -84,7 +88,8 @@ The overlay's screens and keys:
   - *Schema tree*: `←`/`→`/`Space` collapse/expand; on a table `Enter` shows
     columns and `i`/`f`/`g`/`x` show indexes / foreign keys / triggers /
     constraints; `s` shows row-count/size statistics, `D` the `CREATE`
-    statement, `R` the relations view (below); `r` refreshes the catalog;
+    statement, `R` the relations view (below), `A` copies the table for AI (see
+    below); `r` refreshes the catalog;
     `m` marks a table and `e` exports the marked tables (or the one under the
     cursor) whole — see *Table export* below.
   - *Relations* (`R`, module `db::relations`, T779): on a table or view, the
@@ -129,7 +134,8 @@ The overlay's screens and keys:
     prompts for each value before running.
   - *Results*: `←`/`→` scroll wide sets by column, `/` filters live; `x`
     expands the selected row vertically, `f` follows a foreign-key cell to its
-    parent row, `c` charts a `(label, number)` result; the pane title shows the
+    parent row, `c` charts a `(label, number)` result, `A` copies the result
+    for AI as Markdown (see below); the pane title shows the
     row count. On an editable table preview (one with a primary key), `i` stages
     an edit to the selected cell, `a` stages a new row, `d` stages the selected
     row's deletion, `u` discards the row's staged changes, and `W` commits them
@@ -162,7 +168,11 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
   cursor under a name) — persisted in `db_queries.toml`.
 - **Write/DDL confirmation** — `is_write_statement` scans keywords outside
   strings/comments (so a CTE like `WITH … DELETE` is caught) and gates
-  execution behind an `Enter/y` / `Esc/n` confirmation view.
+  execution behind an `Enter/y` / `Esc/n` confirmation view, which shows every
+  pending statement in full. Inside an explicit transaction a write runs
+  without asking, since `ROLLBACK` can undo it — except `DROP`/`TRUNCATE`
+  and anything on a `production` connection (`editor::needs_confirmation`,
+  T781).
 - **Execute All** (`F9`) — runs every statement in order, stopping at the
   first error; the grid shows the last result.
 - **EXPLAIN / EXPLAIN ANALYZE** (`F6` / `F7`; `EXPLAIN QUERY PLAN` on SQLite)
@@ -219,6 +229,9 @@ keeps surus's three safety principles, fitted to Vix's assistant model:
   row of data. The schema brief and the user's question travel on the assistant
   CLI's **stdin**; only a fixed instruction goes on its command line, so no
   user-supplied text is ever interpolated into a shell command.
+  *Copy for AI* (`A`, T782, below) does not relax this: it is a clipboard
+  copy the user starts, and nothing from it reaches the assistant unless the
+  user pastes it somewhere.
 - **Read-only by default.** A connection opens read-only (see *Read-only,
   query log & ERD* below), and the brief tells the model "READ-ONLY: answer with
   a single `SELECT`." Defense in depth: if the model ignores that, the generated
@@ -576,29 +589,85 @@ found nothing runs and the status line lists their line numbers; the
 script stays in the editor to be fixed. The check applies to `F9` on any
 buffer, not only to loaded files.
 
-## dbjoy-inspired (planned, Run W)
+## dbjoy-inspired: environments and connection strings (T781)
 
-**Planned, not built.** These come from a reading of
-[dbjoy](https://github.com/agustind/dbjoy), a macOS PostgreSQL client; the
-assessment is [`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md).
-When a task lands, its text moves out of this section into the sections
-above, and its box is checked in `tasks.md`.
+From the [dbjoy](https://github.com/agustind/dbjoy) reading
+([`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md)):
 
-- **Environments and connection strings (T781).** A saved connection carries
-  an `environment`: `local`, `development`, `testing`, `staging` or
-  `production` (default `local`), shown as a colored badge in the list and
-  the editor title. On `production`, every write shows its SQL and asks,
-  even inside an explicit transaction; `DROP` and `TRUNCATE` always ask on
-  any connection. Pasting a connection string into the add form fills it: a
-  `postgres://`, `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq
-  `key=value` string. A password in the string is never saved; it goes to
-  the keyring prompt like a typed one.
-- **Copy for AI (T782).** In results, a key copies the statement, its column
-  names and types, and the selected rows (or the visible page, capped) as
-  Markdown. On a table it copies the columns, keys, constraints and indexes
-  with the rows. It is an explicit, user-initiated copy, so it does not
-  change the assistant's schema-only rule: the assistant itself still never
-  sees a row.
+- **Environments.** A saved connection carries an environment: `local`,
+  `development`, `testing`, `staging` or `production` (default `local`).
+  Because the published `Connection` struct cannot gain a field without a
+  semver break, the environment is stored by connection name in its own
+  settings table, `[db_environments]` (`prod = "production"`); a connection
+  with no entry — every connection saved before T781 — is `local`. The form's **Environment** row cycles it with
+  `Space`/`←`/`→`; renaming a connection carries its environment, deleting
+  one drops it. The host loads it with `Browser::set_environments` and
+  persists it from `Browser::take_dirty_environments`.
+- **Badge.** The environment is shown as a `[label]` badge (translated) in
+  the connections list, the workbench editor title and the confirmation
+  view (`db::environment`). Under the monochrome built-in themes the badge
+  is plain text, dim for `local`; with a custom JSON theme it takes the
+  theme's `syntax` colors (`string` development, `keyword` testing, `number`
+  staging, `comment` local), and production is always red.
+- **Confirmation policy** (`editor::needs_confirmation`, pure and
+  unit-tested). A read never asks. `DROP` and `TRUNCATE`
+  (`editor::is_destructive_statement`) always ask, on any connection and
+  inside a transaction. On `production` every write asks, even inside an
+  explicit transaction — including committing staged cell edits (`W`, the
+  confirmation lists the `UPDATE`s) and a CSV/TSV import (`Ctrl+U`, the
+  confirmation lists its `CREATE TABLE` and `INSERT`s). Elsewhere a write
+  asks outside a transaction only. Run All (`F9`) and `EXPLAIN ANALYZE` of a
+  write keep asking everywhere. Read-only mode still refuses writes before
+  any of this.
+- **Connection strings** (`db::conn_string::parse`, pure, unit-tested on
+  malformed input too). A bracketed paste into the add/edit form that parses
+  as a connection string fills the engine, file, host, port, user, database
+  and TLS-mode fields, and the name when it is empty (the database, else the
+  file stem, else the host); other text is typed into the field as before.
+  Accepted: `postgres://` and `postgresql://`, `mysql://` and `sqlite:` URLs
+  (`sqlite:app.db`, `sqlite://app.db`, `sqlite:///abs/app.db`,
+  `sqlite::memory:`) with strict percent-decoding, an optional port (1–65535),
+  IPv6 hosts in brackets, the database as the path, and the query options the
+  form has a row for (`sslmode`, `ssl-mode`, `ssl_mode`, and on server URLs
+  `host`, `port`, `user`, `password`, `dbname`/`database`); and libpq
+  `key=value` strings (`host`, `hostaddr`, `port`, `dbname`, `user`,
+  `password`, `sslmode`), with single-quoted values and backslash escapes.
+  Other options are listed as ignored on the status line. Several hosts, a
+  bad port, a broken `%` escape or an unclosed quote are reported and fill
+  nothing.
+- **A pasted password is never saved.** It never reaches a form field or the
+  settings file. The form holds it (the form shows a note) until it is saved
+  or cancelled; a saved form hands it to an in-memory store keyed by the
+  connection name, and the connection's next connect uses it exactly like a
+  password typed on the prompt — so it is written to the OS keyring only
+  when **Save to keyring** is on, and the credential waterfall applies on
+  every later connect.
+
+## dbjoy-inspired: Copy for AI (T782)
+
+`A` copies, as Markdown, something to paste into a chat with an assistant
+(`db::copy_ai`, its renderers pure and unit-tested; tables rendered by
+`db::export`'s Markdown format, clipboard through the same path as `y`/`Y`):
+
+- **In the results pane:** the statement behind the grid in an `sql` fence;
+  a column/type table when the types are known; and the rows, from the top
+  of the visible page down, in the grid's filtered and sorted order, at most
+  **50** rows, under a "Rows (shown of total)" heading. Types are known for a
+  table preview (`p`), from the catalog's column report; for an arbitrary
+  statement the copy carries the column names only, because the `Any`
+  driver's per-column type names would need a new variant on the streamed
+  `session::Chunk` enum, a semver break deferred to the next major version.
+- **On a schema-tree table or view:** a `## table (engine)` heading, then the
+  columns, primary key, foreign keys, constraints and indexes from the
+  catalog's own reports, and up to 50 preview rows.
+
+This is a copy the user starts, of rows the user can already see; it puts
+nothing anywhere but the clipboard. It does **not** change the assistant's
+schema-only rule: the AI assistant (`Ctrl+A`/`O`/`F`/`K`) is still shown the
+schema and never a row, because what a user chooses to paste into some chat
+is the user's decision, while what Vix sends on its own must stay safe by
+default.
+
 
 ## Headless schema read (T731)
 
@@ -705,9 +774,8 @@ Destructive changes start unchecked; everything else starts checked. Keys:
 
 **Running.** The target session opens with the saved connection's access, so
 a read-only target refuses `r` with a message until `F8` allows writes. The
-confirmation names the target and the statement count (and its environment,
-once connections carry one: `Compare::target_environment` is the marked
-hook for T781). The run happens on a background thread: `BEGIN`, each
+confirmation names the target, the statement count and the target's
+environment badge (T781), recorded when the target is chosen. The run happens on a background thread: `BEGIN`, each
 statement, `COMMIT`; on the first failure `ROLLBACK`, and the message names
 the failing statement, so nothing changes. After a successful run the target
 is read again and the list shows what is left (the unchecked changes).

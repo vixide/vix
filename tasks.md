@@ -9969,16 +9969,18 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   and `JOIN t a` aliases in the statement at the cursor, so `a.` offers
   `t`'s columns.
   Done 2026-11-07: quoted alias qualifiers (`"o".`) are not completed yet.
-- [ ] **T781 — Environments and connection strings.** `environment` on a
+- [x] **T781 — Environments and connection strings.** `environment` on a
   saved connection (default `local`), shown as a colored badge; on
   `production` every write shows its SQL and asks, even in a transaction;
   `DROP` and `TRUNCATE` always ask. Parse a pasted `postgres://`,
   `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq `key=value`
   string, into the add form; a password in it is never saved.
-- [ ] **T782 — Copy for AI.** Copy the statement, its column types and the
+  Done 2026-11-07: environments live in a `[db_environments]` settings table keyed by connection name, because a new field on the public `Connection` would break semver. Schema compare names the target environment too.
+- [x] **T782 — Copy for AI.** Copy the statement, its column types and the
   selected rows (capped), or a table's structure with rows, as Markdown.
   User-initiated only; the assistant's schema-only rule is unchanged, and
   the spec says why.
+  Done 2026-11-07: key `A`. Column types appear for table previews only; arbitrary statements would need a new `session::Chunk` variant (a semver break), deferred to the next major version.
 - [ ] **T783 — Decision: share saved connections over MCP.** Needs the
   maintainer's yes or no, because it relaxes two MCP safety rules (no
   keyring reads, no sockets). Design and safeguards in

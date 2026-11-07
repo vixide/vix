@@ -345,6 +345,13 @@ impl App {
             self.editor.paste_str(text, area);
             return;
         }
+        // The DB connection form takes a pasted connection string whole
+        // (T781): it fills the form, and its password never reaches a field.
+        if self.open_overlays().next_back().map(|o| o.id) == Some(super::overlays::OverlayId::Db)
+            && self.db_paste(text)
+        {
+            return;
+        }
         // The IM panel's input takes a paste as one line, never as Enter.
         if self.focus == Focus::Im && !self.overlay_capturing_keys() {
             self.im_paste(text);

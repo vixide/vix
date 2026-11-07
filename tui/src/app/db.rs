@@ -74,6 +74,7 @@ impl App {
     pub(super) fn open_db(&mut self) {
         if self.db.is_none() {
             let mut browser = crate::db::Browser::new(self.settings.db_connections.clone());
+            browser.set_environments(self.settings.db_environments.clone());
             browser.history = crate::db::store::load_history();
             browser.saved = crate::db::store::load_saved();
             self.db = Some(browser);
@@ -88,6 +89,12 @@ impl App {
         }
     }
 
+    /// Offer a bracketed paste to the open DB workbench (a connection string
+    /// pasted into its form, T781); `true` when it was used.
+    pub(super) fn db_paste(&mut self, text: &str) -> bool {
+        self.db.as_mut().is_some_and(|db| db.paste(text))
+    }
+
     /// Route a key to the open DB workbench, persist any connection-list
     /// change, and act on the outcome.
     pub(super) fn db_key(&mut self, key: KeyEvent) {
@@ -100,12 +107,21 @@ impl App {
             Some(b) => b.handle_key(key, pages),
             None => return,
         };
-        if let Some(conns) = self
+        let conns = self
             .db
             .as_mut()
-            .and_then(crate::db::Browser::take_dirty_connections)
-        {
-            self.settings.db_connections = conns;
+            .and_then(crate::db::Browser::take_dirty_connections);
+        let envs = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_environments);
+        if conns.is_some() || envs.is_some() {
+            if let Some(conns) = conns {
+                self.settings.db_connections = conns;
+            }
+            if let Some(envs) = envs {
+                self.settings.db_environments = envs;
+            }
             self.store_settings_or_warn();
         }
         if let Some(history) = self

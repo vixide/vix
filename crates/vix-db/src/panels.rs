@@ -16,7 +16,7 @@
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{
-    Browser, Outcome, Pane, View, catalog, chart, editor, erd, export, format, import,
+    Browser, Outcome, Pane, View, catalog, chart, editor, erd, execute, export, format, import,
     object_triples,
 };
 
@@ -144,13 +144,30 @@ impl Browser {
             self.message = Some(t!("msg.db_import_empty").to_string());
             return;
         }
-        for sql in &statements {
+        let rows = records.len().saturating_sub(1);
+        // On production every write shows its SQL and asks first (T781).
+        if self.active_environment().is_production() {
+            self.pending_run = Some(execute::PendingRun::Import {
+                statements,
+                table,
+                rows,
+            });
+            self.view = View::Confirm;
+            return;
+        }
+        self.run_import(&statements, &table, rows);
+    }
+
+    /// Run an import's statements in order, stopping at the first error, then
+    /// refresh the catalog (the tail of `do_import`, also reached from the
+    /// production confirmation).
+    pub(super) fn run_import(&mut self, statements: &[String], table: &str, rows: usize) {
+        for sql in statements {
             if let Err(e) = self.run_sql(sql) {
                 self.message = Some(e.to_string());
                 return;
             }
         }
-        let rows = records.len().saturating_sub(1);
         self.refresh_catalog();
         self.view = View::Workbench;
         self.message = Some(t!("msg.db_imported", count = rows, table = table).to_string());
@@ -441,8 +458,8 @@ impl Browser {
     /// While the filter box is active it captures every key; otherwise `/`
     /// starts a search and the single-letter keys select a detail report
     /// (`i` indexes, `f` foreign keys, `g` triggers, `x` constraints, `s`
-    /// stats, `D` DDL, `R` relations, `p` preview, `r` refresh); `m` marks a table and `e`
-    /// exports the marked tables (or the one under the cursor, T784). `page` is the pane height
+    /// stats, `D` DDL, `R` relations, `A` copy for AI, `p` preview, `r` refresh); `m` marks a
+    /// table and `e` exports the marked tables (or the one under the cursor, T784). `page` is the pane height
     /// for PageUp/PageDown.
     pub(super) fn key_tree(&mut self, key: KeyEvent, page: usize) {
         if self.tree.filtering {
@@ -493,6 +510,7 @@ impl Browser {
             KeyCode::Char('s') => self.show_detail(catalog::Detail::Stats),
             KeyCode::Char('D') => self.show_ddl(),
             KeyCode::Char('R') => self.show_relations(),
+            KeyCode::Char('A') => self.copy_table_for_ai(),
             KeyCode::Char('r') => self.refresh_catalog(),
             KeyCode::Char('m') => self.toggle_export_mark(),
             KeyCode::Char('e') => self.open_table_export(),
@@ -566,9 +584,10 @@ impl Browser {
 
     /// Keys in the results grid (including the live filter).
     ///
-    /// `y`/`Y` copy the cell/row (tab-joined), `v` views the cell, `e`
-    /// exports, `x` expands the row, `f` follows a foreign key, `c` charts,
-    /// `i` stages a cell edit and `W` commits staged edits.
+    /// `y`/`Y` copy the cell/row (tab-joined), `A` copies the result for AI
+    /// as Markdown, `v` views the cell, `e` exports, `x` expands the row, `f`
+    /// follows a foreign key, `c` charts, `i` stages a cell edit and `W`
+    /// commits staged edits.
     pub(super) fn key_results(&mut self, key: KeyEvent, page: usize) {
         if self.grid.filtering {
             match key.code {
@@ -622,6 +641,7 @@ impl Browser {
             KeyCode::Char('u') => self.discard_row_changes(),
             KeyCode::Char('W') => self.commit_edits(),
             KeyCode::Char('F') => self.open_row_filter(),
+            KeyCode::Char('A') => self.copy_results_for_ai(),
             _ => {}
         }
     }
@@ -646,10 +666,16 @@ impl Browser {
     /// Copy `text` to the system clipboard and report the outcome on the
     /// status line.
     pub(super) fn yank(&mut self, text: &str) {
+        self.yank_with(text, t!("msg.db_copied").to_string());
+    }
+
+    /// Copy `text` to the system clipboard, reporting `done` on success or the
+    /// clipboard's error.
+    pub(super) fn yank_with(&mut self, text: &str, done: String) {
         // Go through the shared, lock-guarded helper so this never races the
         // editor's clipboard access on the (non-thread-safe) platform backend.
         self.message = Some(match vix_clipboard::set(text) {
-            Ok(()) => t!("msg.db_copied").to_string(),
+            Ok(()) => done,
             Err(e) => e.to_string(),
         });
     }

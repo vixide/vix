@@ -26,7 +26,8 @@
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
-    Browser, Outcome, Pane, Popup, TxState, View, catalog, columns, connect, relations, staging,
+    Browser, Outcome, Pane, Popup, TxState, View, catalog, columns, connect, execute, relations,
+    staging,
 };
 
 impl Browser {
@@ -128,6 +129,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, Some((schema.clone(), table.clone()))));
                 self.last_table = Some(table.clone());
                 self.focus = Pane::Results;
                 self.server_filter = None;
@@ -258,6 +260,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, None));
                 self.last_table = Some(parent);
                 self.set_uneditable();
             }
@@ -473,7 +476,31 @@ impl Browser {
         if !self.check_conflicts(&statements) {
             return;
         }
-        if !self.apply_in_transaction(&statements) {
+        // On production every write shows its SQL and asks first (T781).
+        if self.active_environment().is_production() {
+            self.pending_run = Some(execute::PendingRun::Commit {
+                statements,
+                schema,
+                table,
+                kind,
+            });
+            self.view = View::Confirm;
+            return;
+        }
+        self.finish_commit(&statements, &schema, &table, kind);
+    }
+
+    /// Run the built statements in one transaction, then clear what was
+    /// staged and refresh the preview (the tail of [`Self::commit_edits`],
+    /// also reached from the production confirmation).
+    pub(super) fn finish_commit(
+        &mut self,
+        statements: &[staging::Statement],
+        schema: &str,
+        table: &str,
+        kind: connect::Kind,
+    ) {
+        if !self.apply_in_transaction(statements) {
             return;
         }
         let (updated, inserted, deleted) = self.staged_counts();
@@ -488,7 +515,7 @@ impl Browser {
             )
             .to_string(),
         );
-        self.refresh_preview(&schema, &table, kind);
+        self.refresh_preview(schema, table, kind);
     }
 
     /// Re-read every row an `UPDATE` will touch and compare it with the
@@ -570,6 +597,7 @@ impl Browser {
         };
         if let Ok((headers, rows)) = self.run_catalog(&sql) {
             self.grid.set(headers, rows);
+            self.grid_source = Some((sql, Some((schema.to_string(), table.to_string()))));
             self.set_editable(schema, table, kind);
         }
     }
@@ -590,6 +618,7 @@ impl Browser {
             Ok((headers, rows)) => {
                 self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
                 self.grid.set(headers, rows);
+                self.grid_source = Some((sql, None));
                 self.focus = Pane::Results;
                 self.set_uneditable();
             }
