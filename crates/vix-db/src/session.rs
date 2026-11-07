@@ -884,7 +884,7 @@ async fn stream_sql(
 ///
 /// Binary values are shown via lossy UTF-8, so non-text blobs display
 /// replacement characters; a value no decoding accepts also renders empty.
-fn cell(row: &sqlx::any::AnyRow, i: usize) -> String {
+pub(crate) fn cell(row: &sqlx::any::AnyRow, i: usize) -> String {
     if let Ok(v) = row.try_get::<Option<i64>, _>(i) {
         return v.map(|x| x.to_string()).unwrap_or_default();
     }

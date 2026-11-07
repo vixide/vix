@@ -32,6 +32,10 @@ saved connections.
   editor title. On **production** every write shows its SQL and asks, even
   inside a transaction. It is saved in your settings file as a
   `[db_environments]` table (`name = "production"`).
+- **Share with MCP** (off by default) lets AI agents that run `vix --mcp`
+  read this connection: list its tables, describe them, and run read-only
+  queries (at most 100 rows), each logged. Saved as a `[db_mcp_shared]`
+  table (`name = true`). See [MCP server](../mcp-server/index.md).
 - Server engines prompt for a **password** on connect. It is masked, kept
   only in memory for the session, and **never written to disk** — saved
   connections persist in your settings file without any password field.

@@ -322,8 +322,9 @@ implement live reload, and
 `vix-settings` owns the plain serde types for the sections whose behavior lives
 elsewhere: `Connection`, `Kind` and `Environment` (DB, with their small pure
 helpers; a connection's environment lives in the separate `db_environments`
-table, keyed by connection name, so the published `Connection` keeps its
-fields — T781),
+table, and whether `vix --mcp` shares it in `db_mcp_shared`, both keyed by
+connection name, so the published `Connection` keeps its fields — T781,
+T783),
 `DebugAdapter` (DAP), and `CaptureTemplate`, `EntryType` and
 `default_capture_templates` (org-capture). `vix-db`, `vix-dap` and
 `vix-org-capture` depend on `vix-settings` and re-export them, so existing paths

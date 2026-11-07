@@ -494,7 +494,7 @@ fn dollar_tag(chars: &[char]) -> Option<String> {
 
 /// Keywords that make a statement a write / DDL (confirmation required).
 /// Lowercase; compared case-insensitively against whole words.
-const WRITE_KEYWORDS: &[&str] = &[
+pub(crate) const WRITE_KEYWORDS: &[&str] = &[
     "insert", "update", "delete", "drop", "alter", "truncate", "create", "grant", "revoke",
     "merge", "replace", "vacuum", "reindex", "attach", "detach",
 ];
@@ -581,7 +581,7 @@ pub fn needs_confirmation(
 
 /// Whether any of `keywords` (lowercase) appears in `sql` as a whole word
 /// outside strings and comments.
-fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
+pub(crate) fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
     let chars: Vec<char> = sql.chars().collect();
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
     let mut i = 0;

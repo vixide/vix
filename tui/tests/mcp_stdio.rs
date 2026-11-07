@@ -84,6 +84,7 @@ fn initialize_list_and_call_over_stdio() {
         .collect();
     assert!(names.contains(&"document_symbols"), "{names:?}");
     assert!(names.contains(&"db_schema"), "{names:?}");
+    assert!(names.contains(&"db_query"), "{names:?}");
 
     let call = exchange(&json!({
         "jsonrpc": "2.0", "id": 3, "method": "tools/call",

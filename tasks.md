@@ -9981,13 +9981,14 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   User-initiated only; the assistant's schema-only rule is unchanged, and
   the spec says why.
   Done 2026-11-07: key `A`. Column types appear for table previews only; arbitrary statements would need a new `session::Chunk` variant (a semver break), deferred to the next major version.
-- [ ] **T783 — Decision: share saved connections over MCP.** Needs the
+- [x] **T783 — Decision: share saved connections over MCP.** Needs the
   maintainer's yes or no, because it relaxes two MCP safety rules (no
   keyring reads, no sockets). Design and safeguards in
   [`spec/mcp-server`](spec/mcp-server/index.md): opt-in per connection,
   credentials without prompts, read-only statements in a read-only
   transaction with a 30-second timeout and a 100-row cap, every call
   logged, stdio only.
+  Done 2026-11-07 (accepted): `[db_mcp_shared]` settings table and a **Share with MCP** form row; `db_connections`/`db_tables`/`db_describe`/`db_query` via `vix_db::mcp_share`; log `mcp-db.log` beside the session file, rotated at 1 MiB. SQLite's timeout is client-side only (sqlx `Any` cannot interrupt), and MCP calls do not appear in the workbench query log.
 - [x] **T784 — Whole-table export from one snapshot.** CSV, JSON or NDJSON per
   table, or one SQL file of `INSERT`s in foreign-key order with sequences
   reset, streamed to disk inside one read-only snapshot transaction.
@@ -10293,7 +10294,7 @@ CI-discovered rounds to get genuinely right on Windows).
 23. **Run W (database workbench, from dbjoy, 2026-11-07):** T774 first (it
     stops a silent loss of an open transaction), then T775 and T776, T777
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
-    slices. T783 waits for the maintainer's decision.
+    slices. T783 (accepted by the maintainer) last.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

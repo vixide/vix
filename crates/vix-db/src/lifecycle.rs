@@ -27,9 +27,9 @@
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
-    Browser, FORM_ENVIRONMENT, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form,
-    Outcome, Pane, TxState, View, ai_features::AiState, catalog, complete, connect, object_triples,
-    secret, session, store, tunnel,
+    Browser, FORM_ENVIRONMENT, FORM_FIELDS, FORM_KIND, FORM_MCP_SHARED, FORM_ROWS, FORM_STORE,
+    FORM_WRITABLE, Form, Outcome, Pane, TxState, View, ai_features::AiState, catalog, complete,
+    connect, mcp_share, object_triples, secret, session, store, tunnel,
 };
 
 /// Outcome of a background connect attempt (Run H, T531): fully connected,
@@ -97,6 +97,7 @@ impl Browser {
             KeyCode::Char('a') => {
                 self.form = Form::default();
                 self.form_environment = connect::Environment::Local;
+                self.form_mcp_sharing = mcp_share::Sharing::Private;
                 self.form_password = None;
                 self.view = View::Form;
             }
@@ -104,6 +105,11 @@ impl Browser {
                 if let Some(conn) = self.connections.get(self.sel) {
                     self.form = Form::from_connection(conn, Some(self.sel));
                     self.form_environment = self.environment_of(&conn.name);
+                    self.form_mcp_sharing = if self.is_mcp_shared(&conn.name) {
+                        mcp_share::Sharing::Shared
+                    } else {
+                        mcp_share::Sharing::Private
+                    };
                     self.form_password = None;
                     self.view = View::Form;
                 }
@@ -115,6 +121,7 @@ impl Browser {
                     // environment entry.
                     if !self.connections.iter().any(|c| c.name == removed.name) {
                         self.environments.remove(&removed.name);
+                        self.mcp_shared.remove(&removed.name);
                         self.held_passwords.remove(&removed.name);
                     }
                     self.sel = self.sel.min(self.connections.len().saturating_sub(1));
@@ -136,8 +143,8 @@ impl Browser {
 
     /// Keys on the add/edit connection form.
     ///
-    /// Row `FORM_KIND`, the two toggle rows (`FORM_WRITABLE`, `FORM_STORE`)
-    /// and the environment row (`FORM_ENVIRONMENT`) respond to
+    /// Row `FORM_KIND`, the toggle rows (`FORM_WRITABLE`, `FORM_STORE`,
+    /// `FORM_MCP_SHARED`) and the environment row (`FORM_ENVIRONMENT`) respond to
     /// Left/Right/Space instead of text entry; the others are plain text
     /// fields. Enter saves (rejecting an empty name) and flags the connection
     /// list and environments dirty for the host to persist.
@@ -160,6 +167,11 @@ impl Browser {
                 if self.form.sel == FORM_ENVIRONMENT =>
             {
                 self.form_environment = self.form_environment.next();
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ')
+                if self.form.sel == FORM_MCP_SHARED =>
+            {
+                self.form_mcp_sharing = self.form_mcp_sharing.toggled();
             }
             KeyCode::Char(c) if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
                 self.form.fields[self.form.sel].push(c);
@@ -206,6 +218,7 @@ impl Browser {
             && !self.connections.iter().any(|c| c.name == old)
         {
             self.environments.remove(&old);
+            self.mcp_shared.remove(&old);
             if let Some(pw) = self.held_passwords.remove(&old) {
                 self.held_passwords.insert(name.clone(), pw);
             }
@@ -215,6 +228,11 @@ impl Browser {
         } else {
             self.environments
                 .insert(name.clone(), self.form_environment);
+        }
+        if self.form_mcp_sharing.is_shared() {
+            self.mcp_shared.insert(name.clone());
+        } else {
+            self.mcp_shared.remove(&name);
         }
         if let Some(pw) = self.form_password.take() {
             self.held_passwords.insert(name, pw);

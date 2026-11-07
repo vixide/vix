@@ -2,8 +2,9 @@
 
 Read-only Model Context Protocol server core: JSON-RPC over stdio exposing a
 workspace's open buffers, symbols, outline, offline diagnostics and SQLite
-schema. It is the protocol core of `vix --mcp` (T731): newline-delimited
-JSON-RPC 2.0 on stdio. The behavior — methods, tools, error codes, safety
+schema, and the saved DB connections the user shared (T783). It is the
+protocol core of `vix --mcp` (T731): newline-delimited JSON-RPC 2.0 on
+stdio. The behavior — methods, tools, error codes, safety
 rules and what v1 leaves out — is specified in the cross-cutting
 [`spec/mcp-server`](../../../spec/mcp-server/index.md) (see also the
 [Model Context Protocol](https://modelcontextprotocol.io)); this page covers
@@ -30,13 +31,25 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
     (the server canonicalizes them and drops anything outside the root,
     missing, or secret);
   - `sqlite_schema(path)` — one SQLite file's tables and columns, read-only;
-    `None` when the build has no database support.
-- `tools` holds the six tool definitions (`tools::list`) and their
+    `None` when the build has no database support;
+  - `shared_connections()`, `db_tables(connection, schema)`,
+    `db_describe(connection, schema, table)` and `db_query(connection, sql)`
+    (T783) — the shared DB connections (`SharedConnection`) and their
+    catalog and query results (`DbTables`, `DbDescription`, `Rows`). Each
+    has a default that returns `None` (no database support), so a host that
+    shares nothing implements only the first two. The host owns the safety
+    rules: which connections are shared, the statement check, the log, and
+    opening read-only without prompting (the App shell does it through
+    `vix_db::mcp_share`).
+- `tools` holds the ten tool definitions (`tools::list`) and their
   implementations (`tools::call`): `list_open_buffers`, `read_buffer`,
   `document_symbols` (`vix_palette::symbols`), `outline` (Markdown via
   `vix-markdown-preview`, Org via `vix_org::headlines`, otherwise symbols),
-  `diagnostics` (`vix_conflict_tool::find_all`; no language server) and
-  `db_schema`.
+  `diagnostics` (`vix_conflict_tool::find_all`; no language server),
+  `db_schema`, and the DB connection tools `db_connections`, `db_tables`,
+  `db_describe` and `db_query`, which only check their arguments and shape
+  the host's answer as JSON (`connections_json`, `tables_json`,
+  `describe_json`, `query_json`, `rows_json`, pure and unit-tested).
 - `workspace` is the boundary: `resolve` (lexical normalization, then
   canonicalization, then a prefix check against the canonical root, so
   neither `..` nor a symbolic link escapes), `is_secret`, `read_text`
@@ -65,8 +78,12 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
 | | `MissingPath` | a required `path` argument is absent |
 | | `PathNotString` | an optional `path` argument is not a string |
 | | `Workspace(WorkspaceError)` | the workspace boundary refused the path |
+| | `MissingArgument(name)` | a required string argument (`connection`, `table`, `sql`) is absent |
+| | `NotAString(name)` | an optional argument (`schema`) is not a string |
+| | `NoSqlCapability` | a DB connection tool in a build without database support |
+| | `Host(HostError)` | the host refused or failed (an unshared connection, a refused statement, a database error) |
 
-`Host::sqlite_schema` reports failures as `HostError`
+`Host::sqlite_schema` and the DB connection methods report failures as `HostError`
 (`Box<dyn Error + Send + Sync>`); only its `Display` text reaches the client.
 Every type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
 `thiserror`). `Display` is the same text the earlier `String` errors carried,
@@ -77,7 +94,12 @@ so the `isError` tool results are unchanged.
 Unit tests run every method against a fake `Host` over a scratch
 workspace: version negotiation, the not-initialized guard, notifications,
 parse/batch/method/param errors, one-line replies, every tool, secret and
-escape refusals, symbolic links pointing outside, resource round trips and
-the `serve` loop. `tui/tests/mcp_stdio.rs` spawns the real binary for an
+escape refusals, symbolic links pointing outside, resource round trips,
+the `serve` loop, and the DB connection tools' JSON and in-band errors.
+`tui/tests/integration/mcp.rs` drives the App shell's `McpHost` through
+`Server::handle_line` with real `SQLite` files (T783): an unshared
+connection is invisible, writes and `WITH … DELETE` are refused, a
+`SELECT` is capped at 100 rows, and every call reaches the log, which
+rotates. `tui/tests/mcp_stdio.rs` spawns the real binary for an
 `initialize` → `tools/list` → `tools/call` round trip and checks it wrote
 nothing.

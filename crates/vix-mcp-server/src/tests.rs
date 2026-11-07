@@ -19,6 +19,69 @@ impl Host for FakeHost {
     fn sqlite_schema(&self, _path: &Path) -> Option<Result<Vec<Table>, crate::HostError>> {
         self.schema.clone().map(Ok)
     }
+
+    // The DB connection tools: with "database support" (a schema), one
+    // shared connection, `app`; every other name is unknown.
+    fn shared_connections(&self) -> Option<Result<Vec<SharedConnection>, crate::HostError>> {
+        self.schema.as_ref()?;
+        Some(Ok(vec![SharedConnection {
+            name: "app".into(),
+            kind: "sqlite".into(),
+            environment: "local".into(),
+            database: "app.db".into(),
+        }]))
+    }
+
+    fn db_tables(
+        &self,
+        connection: &str,
+        schema: Option<&str>,
+    ) -> Option<Result<DbTables, crate::HostError>> {
+        self.schema.as_ref()?;
+        Some(known(connection).map(|()| DbTables {
+            schema: schema.unwrap_or("main").into(),
+            schemas: vec!["main".into()],
+            objects: vec![("users".into(), "table".into())],
+            truncated: false,
+        }))
+    }
+
+    fn db_describe(
+        &self,
+        connection: &str,
+        schema: Option<&str>,
+        table: &str,
+    ) -> Option<Result<DbDescription, crate::HostError>> {
+        self.schema.as_ref()?;
+        Some(known(connection).map(|()| DbDescription {
+            schema: schema.unwrap_or("main").into(),
+            table: table.into(),
+            columns: Rows {
+                columns: vec!["name".into(), "type".into()],
+                rows: vec![vec!["id".into(), "INTEGER".into()]],
+                truncated: false,
+            },
+            ..DbDescription::default()
+        }))
+    }
+
+    fn db_query(&self, connection: &str, sql: &str) -> Option<Result<Rows, crate::HostError>> {
+        self.schema.as_ref()?;
+        Some(known(connection).map(|()| Rows {
+            columns: vec!["sql".into()],
+            rows: vec![vec![sql.into()]],
+            truncated: true,
+        }))
+    }
+}
+
+/// The fake host's one shared connection name.
+fn known(connection: &str) -> Result<(), crate::HostError> {
+    if connection == "app" {
+        Ok(())
+    } else {
+        Err(format!("no shared connection named {connection}").into())
+    }
 }
 
 /// A scratch workspace with a Rust file, a Markdown file, an Org file, a
@@ -193,7 +256,7 @@ fn every_reply_is_one_line() {
 }
 
 #[test]
-fn tools_list_names_six_read_only_tools() {
+fn tools_list_names_ten_read_only_tools() {
     let mut s = server("list", None);
     let reply = request(&mut s, "tools/list", &json!({}));
     let tools = reply["result"]["tools"].as_array().unwrap();
@@ -206,9 +269,21 @@ fn tools_list_names_six_read_only_tools() {
             "document_symbols",
             "outline",
             "diagnostics",
-            "db_schema"
+            "db_schema",
+            "db_connections",
+            "db_tables",
+            "db_describe",
+            "db_query"
         ]
     );
+    let query = tools.iter().find(|t| t["name"] == "db_query").unwrap();
+    assert_eq!(
+        query["inputSchema"]["required"],
+        json!(["connection", "sql"])
+    );
+    let tables = tools.iter().find(|t| t["name"] == "db_tables").unwrap();
+    assert_eq!(tables["inputSchema"]["required"], json!(["connection"]));
+    assert!(tables["inputSchema"]["properties"]["schema"].is_object());
     for tool in tools {
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
         assert_eq!(tool["inputSchema"]["type"], "object");
@@ -320,6 +395,95 @@ fn db_schema_reports_tables_or_a_missing_capability() {
     let mut s = server("db-off", None);
     let result = call(&mut s, "db_schema", &json!({}));
     assert!(result["structuredContent"]["error"].is_string());
+}
+
+#[test]
+fn db_connection_tools_shape_their_json() {
+    let mut s = server("db-tools", Some(Vec::new()));
+    let result = call(&mut s, "db_connections", &json!({}));
+    assert_eq!(
+        result["structuredContent"],
+        json!({"connections": [
+            {"name": "app", "kind": "sqlite", "environment": "local", "database": "app.db"}
+        ]})
+    );
+    let result = call(&mut s, "db_tables", &json!({"connection": "app"}));
+    assert_eq!(
+        result["structuredContent"],
+        json!({
+            "connection": "app", "schema": "main", "schemas": ["main"],
+            "objects": [{"name": "users", "kind": "table"}], "truncated": false
+        })
+    );
+    let result = call(
+        &mut s,
+        "db_describe",
+        &json!({"connection": "app", "table": "users"}),
+    );
+    let d = &result["structuredContent"];
+    assert_eq!(d["table"], "users");
+    assert_eq!(
+        d["columns"],
+        json!({"columns": ["name", "type"], "rows": [["id", "INTEGER"]], "truncated": false})
+    );
+    assert_eq!(
+        d["indexes"],
+        json!({"columns": [], "rows": [], "truncated": false})
+    );
+    for key in ["primary_key", "foreign_keys", "constraints"] {
+        assert!(d[key].is_object(), "{key}");
+    }
+    let result = call(
+        &mut s,
+        "db_query",
+        &json!({"connection": "app", "sql": "select 1"}),
+    );
+    assert_eq!(
+        result["structuredContent"],
+        json!({
+            "connection": "app", "columns": ["sql"], "rows": [["select 1"]],
+            "row_count": 1, "row_limit": 100, "truncated": true
+        })
+    );
+}
+
+#[test]
+fn db_connection_tools_report_failures_in_band() {
+    let mut s = server("db-tool-errors", Some(Vec::new()));
+    // An unknown (or unshared) connection is the host's tool error.
+    let result = call(
+        &mut s,
+        "db_query",
+        &json!({"connection": "other", "sql": "select 1"}),
+    );
+    assert_eq!(result["isError"], true);
+    assert_eq!(
+        result["content"][0]["text"],
+        "no shared connection named other"
+    );
+    let result = call(&mut s, "db_query", &json!({"connection": "app"}));
+    assert_eq!(result["isError"], true);
+    assert_eq!(result["content"][0]["text"], "missing string argument: sql");
+    let result = call(
+        &mut s,
+        "db_tables",
+        &json!({"connection": "app", "schema": 1}),
+    );
+    assert_eq!(
+        result["content"][0]["text"],
+        "argument schema must be a string"
+    );
+    // Without database support.
+    let mut s = server("db-tool-off", None);
+    let result = call(&mut s, "db_connections", &json!({}));
+    assert_eq!(result["structuredContent"]["connections"], json!([]));
+    assert!(result["structuredContent"]["error"].is_string());
+    let result = call(&mut s, "db_tables", &json!({"connection": "app"}));
+    assert_eq!(result["isError"], true);
+    assert_eq!(
+        result["content"][0]["text"],
+        "this vix build has no `sql` capability"
+    );
 }
 
 #[test]

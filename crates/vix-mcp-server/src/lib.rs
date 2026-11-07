@@ -91,6 +91,65 @@ pub struct Table {
 /// An error the [`Host`] reports; only its `Display` text reaches the client.
 pub type HostError = Box<dyn std::error::Error + Send + Sync>;
 
+/// A saved DB workbench connection the user shared with MCP clients (T783),
+/// as `db_connections` shows it: never its host, user or password.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedConnection {
+    /// The connection's saved name; the other DB tools take it.
+    pub name: String,
+    /// `sqlite`, `postgres` or `mysql`.
+    pub kind: String,
+    /// `local`, `development`, `testing`, `staging` or `production`.
+    pub environment: String,
+    /// The database name (for `SQLite`, the file's name without its folder).
+    pub database: String,
+}
+
+/// A capped result set: column names, rows as text, and whether rows were
+/// cut off.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Rows {
+    /// Column names, in result order (empty when there are no rows).
+    pub columns: Vec<String>,
+    /// The rows, each cell as text (`NULL` is empty).
+    pub rows: Vec<Vec<String>>,
+    /// Whether the result had more rows than were returned.
+    pub truncated: bool,
+}
+
+/// What `db_tables` returns for one shared connection.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DbTables {
+    /// The schema listed.
+    pub schema: String,
+    /// Every schema that holds an object.
+    pub schemas: Vec<String>,
+    /// `(name, kind)` of each table, view and routine in `schema`.
+    pub objects: Vec<(String, String)>,
+    /// Whether the catalog was cut off.
+    pub truncated: bool,
+}
+
+/// What `db_describe` returns for one table: the engine's own catalog
+/// reports, each as rows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DbDescription {
+    /// The schema (empty for `MySQL`).
+    pub schema: String,
+    /// The table or view.
+    pub table: String,
+    /// Columns: names, types, nullability, defaults.
+    pub columns: Rows,
+    /// The primary-key columns, in key order.
+    pub primary_key: Rows,
+    /// Indexes.
+    pub indexes: Rows,
+    /// Foreign keys leaving the table.
+    pub foreign_keys: Rows,
+    /// Constraints.
+    pub constraints: Rows,
+}
+
 /// What the App shell supplies to the protocol core.
 pub trait Host {
     /// The files Vix last had open in the workspace at canonical `root`
@@ -105,6 +164,65 @@ pub trait Host {
     /// Any error whose `Display` text is shown to the client as the
     /// database's error.
     fn sqlite_schema(&self, path: &Path) -> Option<Result<Vec<Table>, HostError>>;
+
+    /// The saved connections the user shared with MCP clients (T783), in
+    /// saved order. `None` when this build cannot read databases at all.
+    /// The default shares nothing.
+    ///
+    /// # Errors
+    ///
+    /// Any error reading the user's settings.
+    fn shared_connections(&self) -> Option<Result<Vec<SharedConnection>, HostError>> {
+        None
+    }
+
+    /// `db_tables` on the shared connection named `connection`: the objects
+    /// of `schema` (or its default schema). `None` without database support.
+    ///
+    /// The host must refuse a connection that is not shared exactly as one
+    /// that does not exist, log the call before opening anything, and open
+    /// the connection read-only without prompting.
+    ///
+    /// # Errors
+    ///
+    /// Any error whose `Display` text is shown to the client.
+    fn db_tables(
+        &self,
+        connection: &str,
+        schema: Option<&str>,
+    ) -> Option<Result<DbTables, HostError>> {
+        let _ = (connection, schema);
+        None
+    }
+
+    /// `db_describe` on a shared connection (see [`Host::db_tables`] for the
+    /// host's duties).
+    ///
+    /// # Errors
+    ///
+    /// Any error whose `Display` text is shown to the client.
+    fn db_describe(
+        &self,
+        connection: &str,
+        schema: Option<&str>,
+        table: &str,
+    ) -> Option<Result<DbDescription, HostError>> {
+        let _ = (connection, schema, table);
+        None
+    }
+
+    /// `db_query` on a shared connection: one read-only statement, at most
+    /// 100 rows (see [`Host::db_tables`] for the host's duties; the host
+    /// also checks the statement).
+    ///
+    /// # Errors
+    ///
+    /// Any error whose `Display` text is shown to the client, including a
+    /// refused statement.
+    fn db_query(&self, connection: &str, sql: &str) -> Option<Result<Rows, HostError>> {
+        let _ = (connection, sql);
+        None
+    }
 }
 
 /// The protocol state for one stdio session.
@@ -240,7 +358,9 @@ impl<H: Host> Server<H> {
             "serverInfo": {"name": "vix", "title": "Vix", "version": self.version},
             "instructions": "Read-only view of one Vix workspace: the files Vix last had open, \
                 their symbols and outline, offline diagnostics, and SQLite schemas. \
-                Paths are relative to the workspace root.",
+                Paths are relative to the workspace root. The db_connections, db_tables, \
+                db_describe and db_query tools reach only the saved database connections \
+                the user shared with MCP clients, read-only, and every call is logged.",
         })
     }
 

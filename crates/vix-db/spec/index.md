@@ -69,8 +69,9 @@ The overlay's screens and keys:
   add/edit form cycles the engine kind with `Space` and toggles the access
   (read-only default) and keyring rows the same way, and cycles the
   **Environment** row (`local` → `development` → `testing` → `staging` →
-  `production`); it also takes a **Password cmd** (a command that prints the
-  password). Pasting a connection string anywhere in the form fills it (see
+  `production`) and toggles **Share with MCP** (off by default; see
+  *Shared with MCP clients* below); it also takes a **Password cmd** (a
+  command that prints the password). Pasting a connection string anywhere in the form fills it (see
   *Environments and connection strings* below).
 - **Password** — masked entry, held in memory for the session only. Server
   connections first try the credential waterfall — the `password_command`, then
@@ -677,8 +678,51 @@ and columns without the workbench: it opens the file through
 written), applies `PRAGMA query_only = ON`, and runs
 `catalog::SQLITE_SCHEMA_SQL`, returning `(object, kind, column, type)` rows.
 No credentials are involved. The `vix --mcp` server's `db_schema` tool uses
-it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)); server engines
-are deliberately not offered there, since they need a password.
+it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)). Server engines
+reach MCP clients only as saved connections the user shares (next section).
+
+## Shared with MCP clients (T783)
+
+The form's **Share with MCP** row (`FORM_MCP_SHARED`, value
+`Browser::form_mcp_sharing`, a `mcp_share::Sharing`, off by default) marks a
+saved connection for `vix --mcp`. Like T781's environments it is kept by
+connection name in its own settings table, `[db_mcp_shared]`
+(`app = true`), because the published `Connection` struct cannot gain a
+field; the host loads it with `Browser::set_mcp_shared` and persists it from
+`Browser::take_dirty_mcp_shared`. Renaming carries it, deleting drops it.
+
+`mcp_share` is the engine side of the four MCP DB tools; the protocol rules
+(log, visibility, JSON) are in
+[`spec/mcp-server`](../../../spec/mcp-server/index.md#shared-database-connections-t783).
+
+- `check_query(sql)` (pure): exactly one statement starting with `SELECT`,
+  `WITH`, `EXPLAIN`, `SHOW` or `VALUES`; no `ANALYZE`, no write keyword
+  (`editor::is_write_statement`'s list, named in the refusal), none of
+  `REFUSED_KEYWORDS` (`INTO`, `LOCK`, `SHARE`, `COMMIT`, `ROLLBACK`,
+  `SAVEPOINT`). Returns the trimmed statement or a `Refusal`.
+- `password(conn)`: no password for `SQLite`, else `secret::resolve` (the
+  `password_command`, then the keyring) or `ShareError::NeedsPassword` —
+  never a prompt.
+- `tunnel::open_batch(conn)`: `tunnel::open` with `-o BatchMode=yes` in
+  front, so `ssh` fails instead of asking for a passphrase, a password or a
+  host key.
+- `opening_sql(kind)` (pure) and `CLOSING_SQL`: the read-only session and
+  transaction with the 30-second statement timeout, then `ROLLBACK`
+  (PostgreSQL `SET LOCAL statement_timeout = '30s'`, MySQL
+  `SET SESSION MAX_EXECUTION_TIME = 30000`; SQLite opened `mode=ro` with
+  `query_only` and a client-side deadline, because the `Any` driver cannot
+  interrupt it).
+- `tables`, `describe` and `query` each open one connection on their own
+  current-thread runtime (not a workbench `Session`), run `opening_sql`, the
+  catalog queries or the checked statement, `ROLLBACK` and close. Rows are
+  read from the stream and it stops after `ROW_LIMIT` (100) rows for a
+  query or `CATALOG_ROW_LIMIT` (10,000) for a catalog read, setting
+  `Rows::truncated`. A connection error is passed through
+  `redact_url_secret`.
+- Errors are `ShareError` (`Refused`, `NeedsPassword`, `Tunnel`, `Connect`,
+  `Query`, `Timeout`, `NoSuchTable`, `Runtime`), `#[non_exhaustive]`, with
+  English `Display` text: it is protocol text for an agent, like every MCP
+  message. The tunnel's own errors keep their translated text.
 
 ## Schema compare (T785)
 

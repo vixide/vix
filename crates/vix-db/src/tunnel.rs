@@ -203,6 +203,25 @@ pub fn wanted(conn: &Connection) -> bool {
 /// cannot be spawned, or the forward does not come up within `READY_TIMEOUT`
 /// (10s).
 pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
+    open_with(conn, false)
+}
+
+/// Like [`open`], but `ssh` never asks anything: `-o BatchMode=yes` makes it
+/// fail instead of prompting for a passphrase, a password or an unknown host
+/// key. For `vix --mcp` (T783), where nobody is at a terminal to answer, so
+/// a shared connection must tunnel with an agent key or an identity file
+/// that needs no passphrase, to a host already in `known_hosts`.
+///
+/// # Errors
+///
+/// The same as [`open`]; a refused login shows up as [`TunnelError::Timeout`]
+/// (the forward never comes up).
+pub fn open_batch(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
+    open_with(conn, true)
+}
+
+/// [`open`] and [`open_batch`]: spawn the forward and wait for it.
+fn open_with(conn: &Connection, batch: bool) -> Result<Option<Tunnel>, TunnelError> {
     if !wanted(conn) {
         return Ok(None);
     }
@@ -210,7 +229,7 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
     // another process could grab it in between; `ExitOnForwardFailure=yes`
     // turns that rare race into a prompt `Timeout` instead of a silent hang.
     let local_port = free_port().ok_or(TunnelError::NoPort)?;
-    let args = ssh_args(conn, local_port)?;
+    let args = args_for(conn, local_port, batch)?;
     let child = std::process::Command::new("ssh")
         .args(args)
         .stdin(std::process::Stdio::null())
@@ -227,6 +246,16 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, TunnelError> {
         let _ = tunnel.child.kill();
         Err(TunnelError::Timeout)
     }
+}
+
+/// [`ssh_args`], with `-o BatchMode=yes` in front when `batch` is set
+/// (options must come before the `--` that ends them).
+fn args_for(conn: &Connection, local_port: u16, batch: bool) -> Result<Vec<String>, TunnelError> {
+    let mut args = ssh_args(conn, local_port)?;
+    if batch {
+        args.splice(0..0, ["-o".to_string(), "BatchMode=yes".to_string()]);
+    }
+    Ok(args)
 }
 
 /// Reserve a free local TCP port by binding to `:0` and dropping the listener.
@@ -273,6 +302,16 @@ fn wait_ready(local_port: u16, child: &mut Child) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_mode_comes_before_the_end_of_options() {
+        let conn = pg("", "", "");
+        let plain = args_for(&conn, 5555, false).unwrap();
+        assert!(!plain.iter().any(|a| a == "BatchMode=yes"));
+        let batch = args_for(&conn, 5555, true).unwrap();
+        assert_eq!(batch[..2], ["-o".to_string(), "BatchMode=yes".to_string()]);
+        assert_eq!(batch[2..], plain[..]);
+    }
 
     fn pg(ssh_user: &str, ssh_port: &str, identity: &str) -> Connection {
         Connection {
