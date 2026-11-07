@@ -210,7 +210,9 @@ to npm with the `NPM_TOKEN` secret (see
 targets) and builds on the native `windows-11-arm` runner
 (`github-custom-runners`), since dist's default Ubuntu cross-build can't
 make the MSI (T658). That runner has no WiX, so
-`.github/dist/build-setup.yml` installs a hash-pinned WiX 3.14 there (T771). `release.yml` is **generated**: edit
+`.github/dist/build-setup.yml` installs a hash-pinned WiX 3.14 there (T771). macOS on ARM builds on
+`macos-latest` through the same setting, because the `macos-14` runner dist asks
+for is gone (T771). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
 generate --mode ci`), never the workflow by hand — `dist generate --mode
 ci --check` fails if the committed file has drifted from the config, the

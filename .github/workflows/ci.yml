@@ -359,7 +359,7 @@ jobs:
             cargo nextest run --workspace --profile ci
             cargo test --workspace --doc
           else
-            cargo test --workspace
+            cargo test --workspace --no-fail-fast
           fi
       # T505 (tasks.md): every example must keep running, not just compiling
       # (--all-targets above already builds them all, examples included).

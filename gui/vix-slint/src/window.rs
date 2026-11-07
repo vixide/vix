@@ -147,7 +147,7 @@ mod tests {
             panic!("expected a compile error");
         };
         assert!(matches!(err, WindowError::Compile { .. }), "{err:?}");
-        assert!(!err.to_string().is_empty());
+        assert_ne!(err.to_string(), "");
         let Err(err) = compile("export component Other inherits Window {}".to_string()) else {
             panic!("expected a compile error");
         };

@@ -808,14 +808,15 @@ pub const SQLITE_SCHEMA_SQL: &str = "SELECT m.name, m.type, p.name, p.type \
 
 /// The sqlx URL that opens the `SQLite` file at `path` **read-only**
 /// (`mode=ro`: the file is never created or written). `%`, `?` and `#` in
-/// the path are percent-encoded so they cannot end the path early.
+/// the path are percent-encoded so they cannot end the path early. There is
+/// no `//`: after it, `C:` in a Windows path would parse as a host and port.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::path::Path;
 /// let url = vix_db::catalog::sqlite_read_only_url(Path::new("/tmp/a#b.db"));
-/// assert_eq!(url, "sqlite:///tmp/a%23b.db?mode=ro");
+/// assert_eq!(url, "sqlite:/tmp/a%23b.db?mode=ro");
 /// ```
 #[must_use]
 pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
@@ -824,7 +825,7 @@ pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
         .replace('%', "%25")
         .replace('?', "%3F")
         .replace('#', "%23");
-    format!("sqlite://{path}?mode=ro")
+    format!("sqlite:{path}?mode=ro")
 }
 
 /// Read the schema of the `SQLite` database at `path` without writing to it:
@@ -862,7 +863,7 @@ mod tests {
     fn sqlite_read_only_url_escapes_query_characters() {
         assert_eq!(
             sqlite_read_only_url(std::path::Path::new("/w/a?b#c%d.db")),
-            "sqlite:///w/a%3Fb%23c%25d.db?mode=ro"
+            "sqlite:/w/a%3Fb%23c%25d.db?mode=ro"
         );
     }
 
@@ -895,6 +896,9 @@ mod tests {
             ]
         );
         assert_eq!(std::fs::read(&file).unwrap(), before);
+        let odd = dir.join("a#b%c.db");
+        std::fs::copy(&file, &odd).unwrap();
+        assert_eq!(read_sqlite_schema(&odd).unwrap(), rows);
         assert!(read_sqlite_schema(&dir.join("missing.db")).is_err());
     }
 

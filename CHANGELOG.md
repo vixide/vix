@@ -14,6 +14,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Install docs for 2.0.0.** The README and Getting Started now say what 2.0.0 actually has: three archives and `cargo install vix-tui`. The Homebrew tap has never been populated and `@vixide/vix` has never been on npm, despite earlier docs. 2.0.1 is meant to bring those, the installer scripts, Linux packages and GUI downloads.
 - **Windows on ARM release build.** The `windows-11-arm` runner has no WiX, so the MSI failed at `candle` and stopped every dist run from reaching the release. The build now installs WiX 3.14, pinned by hash.
+- **SQLite schema on Windows.** Reading a SQLite file's schema failed with "unable to open database file", because the URL turned `C:` into a host name.
+- **macOS on ARM release build.** GitHub no longer serves the `macos-14` runner dist asks for, so the job was cancelled before its first step and `host` never ran. It now builds on `macos-latest`.
+- **`vix-oci` fake engine tests.** Parallel tests could fail with `Text file busy` when one test forked while another still had its script open for writing. Test-only.
+- **`vix-slint` lint.** A test tripped Clippy 1.99's new `assert_is_empty`, which failed the advisory GUI job on every platform. Test-only.
 - **`vix-acp` path test on Windows.** The test used a Unix-style root, which is not absolute on Windows. Test-only.
 - **npm publishing.** dist's `npm` publish job is on, so a release publishes `@vixide/vix` (needs the `NPM_TOKEN` secret); before this, dist built the npm tarball and nothing published it.
 - **`release.yml` drift is caught before a tag.** A new `dist-workflow` CI job runs `dist generate --mode ci --check` with the pinned `dist`, so a hand-edited workflow fails on the push instead of on the release.
