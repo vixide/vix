@@ -21,7 +21,7 @@
 
 use vix_input::{KeyCode, KeyEvent};
 
-use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect};
+use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect, relations};
 
 /// One staged cell edit: `(underlying row index, column index)` →
 /// `(original value, new value)`.
@@ -439,6 +439,71 @@ impl Browser {
         }
     }
 
+    /// Show the relations view of the selected table or view in the grid
+    /// (`R` in the tree, T779): outgoing foreign keys, then incoming ones, then
+    /// dependent views. A failed foreign-key query reports its error; a failed
+    /// view query retries the engine's fallback (`MySQL` before 8.0.13) and
+    /// otherwise leaves the views out.
+    pub(super) fn show_relations(&mut self) {
+        let Some((schema, table, folder)) = self.tree.selected_object() else {
+            return;
+        };
+        if folder == catalog::Folder::Functions {
+            return;
+        }
+        let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
+            return;
+        };
+        let q = relations::relations_sql(kind, &schema, &table);
+        let mut found = Vec::new();
+        for (sql, dir) in [
+            (&q.outgoing, relations::RelationKind::Outgoing),
+            (&q.incoming, relations::RelationKind::Incoming),
+        ] {
+            match self.run_catalog(sql) {
+                Ok((_, rows)) => found.extend(relations::fk_relations(dir, &rows, &schema)),
+                Err(e) => {
+                    self.message = Some(e.to_string());
+                    return;
+                }
+            }
+        }
+        let views = match self.run_catalog(&q.views) {
+            Ok((_, rows)) => rows,
+            Err(_) => q
+                .views_fallback
+                .as_deref()
+                .and_then(|sql| self.run_catalog(sql).ok())
+                .map(|(_, rows)| rows)
+                .unwrap_or_default(),
+        };
+        found.extend(relations::view_relations(
+            &views,
+            &schema,
+            &table,
+            q.views_scan,
+        ));
+        let headers = relations::HEADER_KEYS
+            .iter()
+            .map(|k| t!(*k).to_string())
+            .collect();
+        let rows: Vec<Vec<String>> = found
+            .into_iter()
+            .map(|r| {
+                vec![
+                    t!(r.kind.label_key()).to_string(),
+                    r.constraint,
+                    r.from,
+                    r.to,
+                ]
+            })
+            .collect();
+        self.message = Some(t!("msg.db_rows", count = rows.len()).to_string());
+        self.grid.set(headers, rows);
+        self.focus = Pane::Results;
+        self.set_uneditable();
+    }
+
     /// Fetch the `CREATE` statement for the selected table and show it in the
     /// text viewer (`y` copies it).
     pub(super) fn show_ddl(&mut self) {
@@ -476,10 +541,12 @@ impl Browser {
 
     /// Recompute the autocomplete popup for the cursor position. The popup is
     /// `None` when the completer has no candidates, which is how typing
-    /// dismisses it.
+    /// dismisses it. Aliases resolve over the whole statement under the
+    /// cursor, not just its line (T780).
     pub(super) fn refresh_popup(&mut self) {
         let line = self.query.lines()[self.query.row].clone();
-        let s = self.completer.suggest(&line, self.query.col);
+        let statement = self.query.statement_at_cursor().unwrap_or_default();
+        let s = self.completer.suggest_in(&line, self.query.col, &statement);
         self.popup = (!s.items.is_empty()).then_some(Popup {
             items: s.items,
             sel: 0,

@@ -14,6 +14,7 @@ Connection Management
 Database Browser
 - Interactive Tree View - Navigate schemas, tables, views, and functions
 - Table Details - View columns, constraints, indexes, foreign keys, and triggers
+- Relations - Outgoing and incoming foreign keys and dependent views per table
 - Expandable - Collapse/expand schemas for easy navigation
 
 SQL Query Editor
@@ -31,6 +32,7 @@ Syntax Highlighting
 - Table Names - Autocomplete table names from your database
 - Column Names - Context-aware column suggestions
 - Table.Column - Type users. to see columns from users table
+- Aliases - After FROM orders o, type o. to see columns from orders
 - Keyboard Navigation - Arrow keys to navigate, Tab to accept
 
 Query Formatting
@@ -80,13 +82,46 @@ The overlay's screens and keys:
   - *Schema tree*: `←`/`→`/`Space` collapse/expand; on a table `Enter` shows
     columns and `i`/`f`/`g`/`x` show indexes / foreign keys / triggers /
     constraints; `s` shows row-count/size statistics, `D` the `CREATE`
-    statement; `r` refreshes the catalog.
+    statement, `R` the relations view (below); `r` refreshes the catalog.
+  - *Relations* (`R`, module `db::relations`, T779): on a table or view, the
+    grid lists one row per relation with four columns — relation (outgoing,
+    incoming or view), constraint name, from and to, each side written
+    `table (col, …)` with multi-column keys in key order and a table in
+    another schema written `schema.table`. Outgoing rows are the table's own
+    foreign keys, incoming rows the keys on other tables that reference it,
+    and view rows the views reading from it. Catalog queries per engine:
+    PostgreSQL reads `pg_constraint` (pairing `conkey`/`confkey` with
+    `unnest … WITH ORDINALITY`) and finds dependent views and materialized
+    views through `pg_depend` and each view's `pg_rewrite` rule; MySQL reads
+    `information_schema.KEY_COLUMN_USAGE` rows with `REFERENCED_TABLE_NAME`
+    set, and `VIEW_TABLE_USAGE` for views (8.0.13+; when that query fails it
+    falls back to searching `VIEWS.VIEW_DEFINITION` for the backtick-quoted
+    table name); SQLite runs `pragma_foreign_key_list` on the table and over
+    every table for incoming keys (a `REFERENCES t` without columns resolves
+    to `t`'s primary key). SQLite records no view dependencies, so its view
+    rows are **approximate**: every view's SQL is tokenized and kept when it
+    names the table outside strings and comments, so a column or alias
+    spelled like the table also counts. Names enter the queries only as
+    escaped string literals. The builders and row grouping are pure and
+    unit-tested per engine; `tui/tests/db_smoke.rs` covers SQLite end to end.
   - *Query editor*: syntax highlighting colored by the active Vix theme's
     `syntax` block (`keyword` / `string` / `number` / `comment`, the same
     colors the code editor uses; the spec's cyan/green/yellow/gray only as
     fallbacks); autocomplete over 80+ keywords, table names, `table.column`,
     and — right after `JOIN` — `table ON …` clauses from the foreign-key graph
-    (arrows navigate, `Tab` accepts). A statement with `:name` placeholders
+    (arrows navigate, `Tab` accepts). Qualifiers resolve table aliases bound
+    anywhere in the statement under the cursor, even on another line (T780,
+    module `db::alias`): after `FROM orders o`, `FROM orders AS o`,
+    `JOIN customers c`, `JOIN customers AS c`, `UPDATE orders o`, or a comma
+    join (`FROM a x, b y`), typing `o.` offers the columns of `orders`.
+    Schema-qualified (`public.orders o`, and `public.orders.` without an
+    alias) and quoted names (`"Order Items" oi`, `` `orders` o ``) resolve
+    too. Clause keywords (`WHERE`, `ON`, `USING`, `LEFT`, `JOIN`, `GROUP`,
+    `NATURAL`, …) are never taken for an alias unless written after `AS` or
+    quoted; strings and comments are skipped; derived tables and table
+    functions (`FROM (SELECT …) s`) bind nothing, though aliases inside the
+    subquery still resolve. When two bindings share an alias, the last one
+    written wins. A statement with `:name` placeholders
     prompts for each value before running.
   - *Results*: `←`/`→` scroll wide sets by column, `/` filters live; `x`
     expands the selected row vertically, `f` follows a foreign-key cell to its
@@ -261,11 +296,6 @@ above, and its box is checked in `tasks.md`.
   `IS NOT NULL`, raw SQL) and a value. Vix builds the `WHERE` clause with
   quoted identifiers and literals and runs it on the server, and the results
   stay editable. `/` keeps filtering the loaded rows.
-- **Relations (T779).** On a table, a relations view lists outgoing foreign
-  keys, incoming foreign keys (the tables that reference this one) and the
-  views that depend on it, per engine.
-- **Alias-aware completion (T780).** After `FROM orders o` or `JOIN customers
-  AS c`, typing `o.` offers the columns of `orders`.
 - **Environments and connection strings (T781).** A saved connection carries
   an `environment`: `local`, `development`, `testing`, `staging` or
   `production` (default `local`), shown as a colored badge in the list and

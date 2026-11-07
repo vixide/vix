@@ -54,6 +54,7 @@ vix_i18n::surface!();
 
 pub mod ai;
 pub mod ai_features;
+pub mod alias;
 pub mod catalog;
 mod cell_edit;
 pub mod chart;
@@ -69,6 +70,7 @@ pub mod import;
 mod lifecycle;
 mod panels;
 pub mod params;
+pub mod relations;
 pub mod results;
 pub mod secret;
 pub mod session;

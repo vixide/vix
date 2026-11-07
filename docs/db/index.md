@@ -41,6 +41,9 @@ Schemas expand into **Tables / Views / Functions** folders.
   **Enter** on a table shows its **columns**.
 - **i** indexes · **f** foreign keys · **g** triggers · **x** constraints —
   each report opens in the results grid.
+- **R** shows the table's **relations**: its foreign keys to other tables,
+  the foreign keys on other tables that point at it, and the views that read
+  from it (on SQLite the view list is a best guess from each view's SQL).
 - **p** previews the table's data (`SELECT * … LIMIT 200`).
 - **/** searches the tree live (matches show regardless of collapse state);
   **Enter** keeps the filter, **Esc** clears it.
@@ -65,7 +68,9 @@ Type SQL; multiple statements separated by `;` are fine.
 - **Alt+Shift+F** re-formats the statement at the cursor: keywords
   uppercased, major clauses on their own lines, `AND`/`OR` indented.
 - Autocomplete pops up as you type: SQL keywords, table names from the
-  connected database, and `table.` column completion. **↑/↓** choose,
+  connected database, and `table.` column completion. Aliases work too:
+  after `FROM orders o` (or `AS o`, or `JOIN … c`), `o.` offers the columns
+  of `orders`. **↑/↓** choose,
   **Tab** accepts, **Esc** dismisses.
 - Highlighting follows your Vix™ theme's `syntax` colors (keywords, strings,
   numbers, comments), the same ones the code editor uses.

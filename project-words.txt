@@ -256,6 +256,9 @@ surus
 dbjoy
 libpq
 Geometrein
+conkey
+confkey
+ORDINALITY
 
 # LSP servers / editors referenced in docs
 gopls

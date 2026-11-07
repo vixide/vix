@@ -9,7 +9,9 @@
 //! A fourth, context-sensitive source — `JOIN` clauses derived from foreign
 //! keys — kicks in right after a `JOIN` keyword. The keyword list is shared
 //! with the syntax highlighter ([`crate::highlight::KEYWORDS`]) so what is
-//! coloured as a keyword is also completable. The browser wires this in
+//! coloured as a keyword is also completable. Qualifiers may be table
+//! aliases bound in the statement under the cursor (`FROM orders o`, then
+//! `o.`), resolved by [`crate::alias`] (T780). The browser wires this in
 //! `lib.rs` (popup state is [`crate::Popup`]); owning spec:
 //! `crates/vix-db/spec/index.md` ("Intelligent Autocomplete").
 
@@ -83,6 +85,26 @@ impl Completer {
     /// ```
     #[must_use]
     pub fn suggest(&self, line: &str, col: usize) -> Suggestions {
+        self.suggest_in(line, col, line)
+    }
+
+    /// [`Completer::suggest`], resolving table aliases bound anywhere in
+    /// `statement` (the statement under the cursor, which may span lines):
+    /// after `FROM orders o` or `JOIN customers AS c`, `o.` offers the
+    /// columns of `orders` (see [`crate::alias`]). A qualifier that is no alias
+    /// is a table name, schema-qualified or not (`public.orders.`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_db::complete::Completer;
+    /// let mut c = Completer::default();
+    /// c.set_schema(vec!["orders".into()], vec![("orders".into(), "total".into())]);
+    /// let s = c.suggest_in("SELECT o.", 9, "SELECT o.\nFROM orders AS o");
+    /// assert_eq!(s.items, ["total"]);
+    /// ```
+    #[must_use]
+    pub fn suggest_in(&self, line: &str, col: usize, statement: &str) -> Suggestions {
         let chars: Vec<char> = line.chars().collect();
         let col = col.min(chars.len());
         let mut start = col;
@@ -98,9 +120,17 @@ impl Completer {
         // prefix is only the part after the last dot, so `users.` + accept
         // keeps the table qualifier.
         if let Some(dot) = token.rfind('.') {
-            let table = &token[..dot];
+            let qualifier = &token[..dot];
             let partial = &token[dot + 1..];
-            let items = self.column_matches(table, partial);
+            let table = crate::alias::resolve(statement, qualifier).unwrap_or_else(|| {
+                // `schema.table.` → the columns are keyed by the bare name.
+                qualifier
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or(qualifier)
+                    .to_string()
+            });
+            let items = self.column_matches(&table, partial);
             let partial_chars = partial.chars().count();
             return Suggestions {
                 start: col - partial_chars,
@@ -262,6 +292,40 @@ mod tests {
         assert_eq!(
             engine().suggest("", 0).items,
             [] as [std::string::String; 0]
+        );
+    }
+
+    #[test]
+    fn aliases_resolve_to_their_table_columns() {
+        let c = engine();
+        let stmt = "SELECT o., u.na FROM orders o JOIN users AS u ON u.id = o.id";
+        let s = c.suggest_in("SELECT o., u.na", 9, stmt);
+        assert_eq!(s.items, vec!["id"], "o is orders");
+        assert_eq!(s.start, 9);
+        let s = c.suggest_in("SELECT o., u.na", 15, stmt);
+        assert_eq!(s.items, vec!["name"], "u is users");
+        assert_eq!(s.start, 13);
+        // The FROM clause may sit on a later line of the same statement.
+        let s = c.suggest_in("  u.", 4, "SELECT\n  u.\nFROM users, orders x");
+        assert!(s.items.is_empty(), "users has no alias here: {:?}", s.items);
+        let s = c.suggest_in("  x.", 4, "SELECT\n  x.\nFROM users, orders x");
+        assert_eq!(s.items, vec!["id"]);
+        // `suggest` resolves aliases on its own line too.
+        assert_eq!(c.suggest("UPDATE users u SET u.e", 22).items, vec!["email"]);
+    }
+
+    #[test]
+    fn keywords_and_schemas_do_not_confuse_alias_lookup() {
+        let c = engine();
+        // `WHERE` is no alias, so `where.` is just an unknown table.
+        let s = c.suggest_in("where.", 6, "SELECT * FROM users WHERE");
+        assert!(s.items.is_empty(), "{:?}", s.items);
+        // Schema-qualified table names still complete without an alias.
+        assert_eq!(c.suggest("SELECT public.users.em", 22).items, vec!["email"]);
+        assert_eq!(
+            c.suggest_in("q.", 2, "SELECT q. FROM public.\"users\" q")
+                .items,
+            vec!["id", "name", "email"]
         );
     }
 

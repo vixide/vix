@@ -858,3 +858,66 @@ fn transaction_state_badge_and_relaxed_confirm() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn relations_view_and_alias_completion() {
+    let dir = std::env::temp_dir().join(format!("vix-db-relations-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("relations.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, \
+             customer_id INTEGER REFERENCES customers(id), total REAL)",
+            // No column list: the key points at orders' primary key.
+            "CREATE TABLE line_items (order_id INTEGER REFERENCES orders, product TEXT)",
+            "CREATE VIEW big_orders AS SELECT * FROM \"orders\" WHERE total > 100",
+            "CREATE VIEW v_customers AS SELECT 'orders' AS label FROM customers",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("relations", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    // Tables sort customers, line_items, orders: schema → Tables → orders.
+    b.focus = Pane::Tree;
+    for _ in 0..4 {
+        key(&mut b, KeyCode::Down);
+    }
+    key(&mut b, KeyCode::Char('R'));
+    assert_eq!(b.focus, Pane::Results, "{:?}", b.message);
+    assert_eq!(b.grid.headers.len(), 4);
+    // Outgoing, then incoming, then dependent views; column 0 is a
+    // translated label, so only the untranslated columns are compared.
+    let rows: Vec<(&str, &str)> = b
+        .grid
+        .rows
+        .iter()
+        .map(|r| (r[2].as_str(), r[3].as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("orders (customer_id)", "customers (id)"),
+            ("line_items (order_id)", "orders (id)"),
+            ("big_orders", "orders"),
+        ],
+        "v_customers only mentions 'orders' in a string"
+    );
+    let labels: Vec<&str> = b.grid.rows.iter().map(|r| r[0].as_str()).collect();
+    assert!(
+        labels[0] != labels[1] && labels[1] != labels[2],
+        "{labels:?}"
+    );
+
+    // Alias-aware completion: `o.` on a later line offers orders' columns.
+    b.focus = Pane::Editor;
+    type_str(&mut b, "SELECT * FROM orders AS o");
+    key(&mut b, KeyCode::Enter);
+    type_str(&mut b, "WHERE o.");
+    let popup = b.popup.as_ref().expect("alias columns offered");
+    assert_eq!(popup.items, vec!["id", "customer_id", "total"]);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
