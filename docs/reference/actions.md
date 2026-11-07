@@ -75,6 +75,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `db.run_buffer` | Run Buffer in Workbench | Menu |
 | `db.save_query` | Save Query… | Menu |
 | `db.saved` | Saved Queries… | Menu |
+| `db.schema_compare` | Schema Compare… | Menu |
 | `delete` | Delete | Catalog |
 | `delete_line` | Delete Line | Catalog |
 | `delete_sub_word_left` | Delete Sub-Word Left | Catalog |

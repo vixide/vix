@@ -140,6 +140,8 @@ The overlay's screens and keys:
     explain the query; `Ctrl+U` imports a CSV/TSV file into a new table;
     `Ctrl+P` loads a `.sql` file into the editor and runs it (see *Running a
     `.sql` file* below).
+  - *Schema compare*: `Ctrl+D` compares the schema with another saved
+    connection and writes the migration (see *Schema compare (T785)*).
 
 Pure logic (statement splitting, highlighting, completion, formatting, the
 tree, the grid) is unit-tested in the submodules; `db::session` is tested
@@ -597,16 +599,6 @@ above, and its box is checked in `tasks.md`.
   with the rows. It is an explicit, user-initiated copy, so it does not
   change the assistant's schema-only rule: the assistant itself still never
   sees a row.
-- **Schema compare (T785).** Compare one schema across two saved
-  connections, PostgreSQL first: tables, columns, keys, indexes, checks,
-  views, functions, triggers, enums and sequences. Each difference shows
-  both definitions and its migration SQL. The whole migration is ordered so
-  it runs (types before the tables that use them, drops before creates,
-  foreign keys last). Changes that delete data start unchecked; changes that
-  can fail on existing rows (`NOT NULL`, a unique index, a type change) are
-  flagged. The script can be copied, saved, opened in the editor or run on
-  the target in one transaction, after a confirmation that names the
-  target's environment.
 
 ## Headless schema read (T731)
 
@@ -618,6 +610,114 @@ written), applies `PRAGMA query_only = ON`, and runs
 No credentials are involved. The `vix --mcp` server's `db_schema` tool uses
 it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)); server engines
 are deliberately not offered there, since they need a password.
+
+## Schema compare (T785)
+
+Compare one schema across two saved connections of the same engine and
+write the migration that makes the **target** look like the **source**. The
+source is the workbench's own connection; the target is any other saved
+connection of the same kind. **PostgreSQL** (10 or later) and **SQLite** are
+supported; **MySQL** is not (the workbench says so). The module tree is
+`compare::{snapshot, read, diff, plan, review}`; all but `review` are pure.
+
+**Opening it.** `Ctrl+D` in the workbench, or **DB → Schema Compare…**
+(`db.schema_compare`). The first screen lists the candidate targets
+(`↑`/`↓`) and the schema name, typed in place: on PostgreSQL it starts as the
+schema of the tree selection, else `public`; on SQLite it is `main`. `Enter`
+reads the source schema on the workbench session, then connects to the
+target on a background thread through the normal credential waterfall
+(`password_command`, the OS keyring, then a masked password prompt) and
+reads it there. `Esc` stops waiting. A schema missing on the source is
+refused; one missing on the target is created (`CREATE SCHEMA IF NOT
+EXISTS`).
+
+**Snapshots** (`compare::snapshot`, `compare::read`). A `Snapshot` is plain
+data: tables (columns with type, nullability, default, generated flag,
+identity and comment; primary key; unique, exclusion and check constraints;
+foreign keys; indexes that do not back a constraint; comment), views and
+materialized views (definition, comment, and the relations and columns they
+read), functions and procedures (identity arguments and full definition),
+triggers, enums (values in order) and sequences (type, start, increment,
+bounds, cache, cycle). PostgreSQL is read with eleven `pg_catalog` queries
+that cast every value to `text` (`format_type(…)`, `pg_get_viewdef(oid)`,
+`pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_functiondef`,
+`pg_get_triggerdef`), because sqlx's `Any` driver decodes only text,
+numbers, booleans and bytes. Objects owned by an extension, partitions,
+internal triggers and identity-owned sequences are left out. SQLite is read
+from `sqlite_master` and the `table_xinfo` / `foreign_key_list` pragmas; its
+unique and check constraints live inside the stored `CREATE TABLE` text, and
+its view dependencies are estimated from the names in the view's SQL.
+
+**Diff** (`compare::diff`). Objects are matched by name (routines by name and
+arguments, triggers by table and name; SQLite foreign keys, which have no
+names, by their definition), so a rename shows as a removal plus an
+addition. Definitions are compared with whitespace collapsed. Each `Change`
+is added, removed or changed, carries both definitions and its own
+statements, each tagged with the phase it runs in, and two flags:
+
+- **destructive** — drops a table or column, removes or reorders enum values,
+  or rebuilds a generated column;
+- **risky** — can fail on rows already in the target: `NOT NULL` added (or a
+  new `NOT NULL` column without a default), a unique index, any added key or
+  constraint (primary, unique, check, foreign), or a column type change
+  (`ALTER COLUMN … TYPE … USING col::type`, with the default dropped first and
+  restored after).
+
+New enum values become `ALTER TYPE … ADD VALUE … AFTER/BEFORE`; removed or
+reordered values become a manual note. A changed function is replaced with
+its own `CREATE OR REPLACE` (which fails, and rolls back, if its return type
+changed). SQLite can only add and drop columns in place: any other change to
+an existing SQLite table (a column's type, nullability or default, a key)
+becomes a **manual** change whose only statement is an SQL comment saying
+which table to rebuild; it is never run.
+
+**Ordering** (`compare::plan`). The chosen changes' statements run phase by
+phase: create schema, create type, alter type, create/alter sequence; drop
+trigger, drop view, drop foreign key, drop constraint, drop index, drop
+table, drop column, drop routine; create table, add/alter column, add
+constraint, create index, add foreign key; create routine, create view,
+create trigger; comments; drop sequence, drop type. Inside a phase the diff's
+order is kept, except that views follow their dependencies (dependents are
+dropped first and created last). A target view that reads a column, table
+or view the migration drops or retypes is dropped before the change and
+recreated after it, from the source's definition (the target's when the
+source has none), even when the view itself did not change. Duplicate
+statements are dropped. The script is the header comment, `BEGIN;`, the
+statements, and `COMMIT;`, with manual notes kept as comments.
+
+**Review.** A summary line (source → target, schema, chosen/total, the
+target's access), the change list (`[x]`/`[ ]`, `+`/`-`/`~`, the object kind,
+`table.name`, and the flags *destructive*, *risky*, *manual*), and the
+highlighted change's source and target definitions and statements.
+Destructive changes start unchecked; everything else starts checked. Keys:
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` | move |
+| `Space` | choose or drop the change |
+| `Enter` / `v` | show the whole script (scrollable; `Esc` back) |
+| `y` | copy the script to the clipboard |
+| `s` | save it as a `.sql` file (path prompt, prefilled `migration-<target>.sql`) |
+| `o` | open it in the workbench editor and close the compare (the editor runs on the source connection; the message says so) |
+| `r` | run it on the target, after a confirmation |
+| `F8` | toggle write mode on the target session |
+| `Esc` / `q` | close the compare and its target session |
+
+**Running.** The target session opens with the saved connection's access, so
+a read-only target refuses `r` with a message until `F8` allows writes. The
+confirmation names the target and the statement count (and its environment,
+once connections carry one: `Compare::target_environment` is the marked
+hook for T781). The run happens on a background thread: `BEGIN`, each
+statement, `COMMIT`; on the first failure `ROLLBACK`, and the message names
+the failing statement, so nothing changes. After a successful run the target
+is read again and the list shows what is left (the unchecked changes).
+
+**Limits.** One schema per compare, same engine on both sides. Not compared:
+extensions, grants and owners, partitions, collations, domains and composite
+types, column order, statistics and storage options. `ALTER TYPE … ADD
+VALUE` runs inside the transaction (PostgreSQL 12 or later), but the new
+value cannot be used by a later statement of the same migration. A dropped
+serial column's sequence is dropped with `IF EXISTS`.
 
 ## Errors (T610)
 

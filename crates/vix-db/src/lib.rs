@@ -61,6 +61,7 @@ pub mod catalog;
 mod cell_edit;
 pub mod chart;
 pub mod columns;
+pub mod compare;
 pub mod complete;
 pub mod connect;
 pub mod editor;
@@ -509,6 +510,9 @@ pub struct Browser {
     /// What the [`View::Import`] path prompt does with its file: import
     /// CSV/TSV, or load and run a `.sql` file (T786).
     import_target: panels::PathTarget,
+    /// The schema compare (T785), a modal layer over the workbench while
+    /// open; see [`Browser::compare`].
+    compare: Option<compare::review::Compare>,
 }
 
 /// State for the bind-parameter prompt: the SQL and its `:name` placeholders,
@@ -611,6 +615,7 @@ impl Browser {
             table_export: None,
             pending_export: None,
             import_target: panels::PathTarget::Import,
+            compare: None,
         }
     }
 
@@ -680,6 +685,9 @@ impl Browser {
     /// the latest layout (see [`Pages`]).
     pub fn handle_key(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
         self.message = None;
+        if self.compare.is_some() {
+            return self.key_compare(key, pages.results);
+        }
         match self.view {
             View::Connections => self.key_connections(key),
             View::Form => self.key_form(key),
@@ -704,7 +712,7 @@ impl Browser {
     ///
     /// Order matters: a busy workbench (a query running, or a cancelled
     /// query's reconnect in flight) swallows keys first; then the global chords (F5/F6/F7/F8/F9 run, explain and
-    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U/P open the sub-views and AI
+    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U/P/D open the sub-views and AI
     /// helpers; Alt+F formats); then Tab focus cycling (suppressed while the
     /// autocomplete popup owns Tab); and only then the focused pane's own
     /// handler.
@@ -781,6 +789,10 @@ impl Browser {
             }
             KeyCode::Char('p' | 'P') if ctrl => {
                 self.open_run_file();
+                return Outcome::Consumed;
+            }
+            KeyCode::Char('d' | 'D') if ctrl => {
+                self.open_compare();
                 return Outcome::Consumed;
             }
             KeyCode::Char('f' | 'F') if alt => {

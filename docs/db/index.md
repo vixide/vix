@@ -168,6 +168,32 @@ cannot be seen from a second connection, so it cannot be exported this way.
   message line lists their line numbers, and the script stays in the editor
   for you to fix. **F9** applies the same check to anything in the editor.
 
+## Schema compare
+
+**Ctrl+D** in the workbench (or **DB → Schema Compare…**) compares one schema
+of the connected database with another saved connection of the same engine
+(PostgreSQL or SQLite; not MySQL), and writes the migration that makes that
+other database — the **target** — match the one you are connected to.
+
+- Pick the target with **↑/↓**; type to change the schema name (`public` by
+  default on PostgreSQL); **Enter** compares. The target connects like any
+  other connection: password command, keyring, or a password prompt.
+- The review lists every difference — tables, columns, keys, checks,
+  indexes, foreign keys, views, functions, triggers, enums, sequences — with
+  a checkbox. **Space** toggles one; the bottom pane shows both definitions
+  and the SQL. Changes that drop a table or column (*destructive*) start
+  unchecked; changes that can fail on existing rows (*risky*: `NOT NULL`, a
+  unique index, a type change, a new constraint) are flagged.
+- The migration is ordered so it runs: types first, then drops, then
+  creates, foreign keys after their tables, views and triggers last. Views
+  that use a dropped or retyped column are dropped and recreated around it.
+- **Enter** shows the whole script, **y** copies it, **s** saves it as a
+  `.sql` file, **o** opens it in the editor, and **r** runs it on the target
+  in one transaction after a confirmation — if any statement fails, nothing
+  changes. A read-only target refuses to run until **F8** allows writes.
+- SQLite can only add and drop columns in place; other SQLite table changes
+  show as *manual* notes in the script.
+
 ## Query history and saved queries
 
 - **Ctrl+R** opens the **history**: every executed statement, newest first,
