@@ -54,7 +54,7 @@ into a character grid, so nothing behaves differently from the terminal.
 
 The full list of limits, and what is and is not verified, is in the
 [specification](../../gui/vix-bui/spec/index.md). Licensing: BUI is
-GPL-2.0-or-later, so the `vix-bui` binary is distributed under the GPL-3.0
+GPL-3.0-or-later (from 0.4.1), so the `vix-bui` binary is distributed under the GPL-3.0
 only (like `vix-slint`); see [`spec/license`](../../spec/license/index.md).
 
 See also the [desktop GUI overview](../../gui/spec/index.md).

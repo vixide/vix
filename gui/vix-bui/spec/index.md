@@ -49,15 +49,16 @@ has none), no file browser, so less C is compiled and linked.
 
 ### Licensing and supply chain
 
-- BUI is `GPL-2.0-or-later` (derived from Blender's sources; its vendored
-  FreeType is dual FTL/GPL, Inter is OFL-1.1, the rest MIT/Zlib/public
-  domain). Its own `Cargo.toml` says GPL-2.0-or-later (its `LICENSE` file is
-  the GPLv3 text; the README says v2-or-later).
+- BUI is `GPL-3.0-or-later` from 0.4.1 (derived from Blender's sources; its
+  vendored FreeType is dual FTL/GPL, Inter is OFL-1.1, the rest
+  MIT/Zlib/public domain). 0.4.0's `Cargo.toml` said GPL-2.0-or-later while
+  its `LICENSE` file was the GPLv3 text; 0.4.1's `Cargo.toml` says
+  GPL-3.0-or-later, which matches.
 - Linked with the Apache-2.0-only crates every Vix front end links (which the
   FSF holds incompatible with GPLv2), the binary is distributed under
   **GPL-3.0-only**, exactly like `vix-slint`. `Cargo.toml` and `LICENSE` say
-  so, and `scripts/check-binary-licenses` (which now classifies
-  `GPL-2.0-or-later`) recomputes and enforces it. See
+  so, and `scripts/check-binary-licenses` (which classifies
+  `GPL-2.0-or-later` and `GPL-3.0-or-later`) recomputes and enforces it. See
   [`spec/license/index.md`](../../../spec/license/index.md).
 - `cargo deny` runs on the root workspace only; `gui/` is a separate
   workspace and has never been in its scope (Slint's GPL would not pass its

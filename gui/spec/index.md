@@ -86,8 +86,8 @@ recomputes it from `gui/Cargo.lock` and fails on any difference. Today
 BSD-3-Clause OR MIT OR GPL-3.0-only` (GPUI is Apache-2.0 only, and every
 toolkit stack links Apache-2.0-only crates, which rule out GPL-2.0-only)
 and `vix-slint` is `GPL-3.0-only` (Slint, used under its GPLv3 option), and so is
-`vix-bui` (BUI is GPL-2.0-or-later, and the Apache-2.0-only crates rule out
-GPLv2).
+`vix-bui` (BUI is GPL-3.0-or-later from 0.4.1; 0.4.0 was GPL-2.0-or-later,
+and the Apache-2.0-only crates rule out GPLv2 either way).
 A new front end, or a toolkit upgrade, follows the same rule. See
 [`spec/license/index.md`](../../spec/license/index.md) ("Binary licenses").
 
