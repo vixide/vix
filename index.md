@@ -26,8 +26,8 @@ database workbench come built in, so Vix is useful the moment it opens.
 ## Try it in 30 seconds
 
 ```sh
-cargo install vix-tui   # needs Rust 1.97+; see Install for prebuilt archives
-vix                     # open the current directory
+brew install vixide/homebrew-tap/vix-tui   # or: npm install -g @vixide/vix
+vix                                        # open the current directory
 ```
 
 Press `Ctrl+P` to find a file, `F1` to see every shortcut, and `Ctrl+Q` to
@@ -120,15 +120,6 @@ editor? See the pages for
 ## Install
 
 The command is `vix` however you install it.
-
-> **2.0.0 is missing most of its release files.** Its release has only three
-> archives: macOS arm64, Windows x86_64 and static Linux x86_64. The Homebrew,
-> npm and installer-script commands below do not work yet, and 2.0.0 has no
-> Linux packages or desktop GUI downloads. Until 2.0.1 is out, use
-> `cargo install vix-tui` or an archive from the
-> [latest release](https://github.com/vixide/vix/releases/latest). The
-> [1.8.0 release](https://github.com/vixide/vix/releases/tag/1.8.0) still has
-> installers and packages for that version.
 
 ```sh
 # macOS or Linux, Homebrew

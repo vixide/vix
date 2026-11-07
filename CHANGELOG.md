@@ -6,6 +6,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Install docs.** The interim note about 2.0.0's missing files is gone and the Homebrew and npm commands are back, because 2.0.2 ships every channel: installers, Homebrew, npm, Linux packages and the desktop GUIs.
+
 ## [2.0.2] - 2026-11-07
 
 ### Fixed

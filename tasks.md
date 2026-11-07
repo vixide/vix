@@ -9890,6 +9890,12 @@ the generated `release.yml`.
     static musl fix. `HOMEBREW_TAP_TOKEN` and `NPM_TOKEN` are set, the tap has a
     first commit and the `@vixide` npm organization exists, so this is the first
     run with every channel able to publish. Tag it on `main`.
+  - **`2.0.2` result (2026-11-07):** Release (129 files), installers, a static
+    musl archive, `.deb`/`.rpm`/Arch packages for the TUI and every GUI, and the
+    first npm publish of `@vixide/vix`. Homebrew failed at checkout with `Bad
+    credentials`: the stored `HOMEBREW_TAP_TOKEN` was not a valid token. Re-run
+    `publish-homebrew-formula` once it is replaced. crates.io 2.0.2 publishing.
+    The README and Getting Started install note is reverted.
   - **After `2.0.1`:** remove the note and restore the Homebrew command in the
     README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
 
