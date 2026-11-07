@@ -14,3 +14,19 @@
 - name: Point AR at the system ar for the musl target (CI-only override)
   shell: bash
   run: echo "AR_x86_64-unknown-linux-musl=ar" >> "$GITHUB_ENV"
+
+# dist builds an MSI for every Windows target, and WiX 3 is not on the
+# `windows-11-arm` image (windows-latest has it), so that build failed at
+# `candle` the first time it ran (2.0.1-rc.1, T771). 3.14 is the first WiX 3
+# that can target arm64. Pinned by hash: GitHub publishes no digest for it.
+- name: Install WiX 3.14 on Windows on ARM
+  if: runner.os == 'Windows' && runner.arch == 'ARM64'
+  shell: pwsh
+  run: |
+    $zip = Join-Path $env:RUNNER_TEMP 'wix314-binaries.zip'
+    $dir = Join-Path $env:RUNNER_TEMP 'wix314'
+    Invoke-WebRequest -Uri 'https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip' -OutFile $zip
+    $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash
+    if ($hash -ne '6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31') { throw "WiX download hash mismatch: $hash" }
+    Expand-Archive -Path $zip -DestinationPath $dir
+    Add-Content -Path $env:GITHUB_PATH -Value $dir

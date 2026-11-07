@@ -128,13 +128,17 @@ mod tests {
 
     #[test]
     fn contains_only_absolute_paths_under_root() {
-        let root = Path::new("/w/proj");
-        assert!(contain(root, "/w/proj/a/b.rs").is_ok());
+        // `/w` is not absolute on Windows.
+        let base = if cfg!(windows) { "C:/w" } else { "/w" };
+        let at = |rest: &str| format!("{base}{rest}");
+        let root_text = at("/proj");
+        let root = Path::new(&root_text);
+        assert!(contain(root, &at("/proj/a/b.rs")).is_ok());
         assert_eq!(contain(root, "a/b.rs"), Err(PathError::NotAbsolute));
-        assert_eq!(contain(root, "/w/proj/../x"), Err(PathError::Traversal));
-        assert_eq!(contain(root, "/w/other/x"), Err(PathError::Outside));
-        assert_eq!(contain(root, "/w/proj2/x"), Err(PathError::Outside));
-        assert_eq!(contain(root, "/w/proj/a\0b"), Err(PathError::Traversal));
+        assert_eq!(contain(root, &at("/proj/../x")), Err(PathError::Traversal));
+        assert_eq!(contain(root, &at("/other/x")), Err(PathError::Outside));
+        assert_eq!(contain(root, &at("/proj2/x")), Err(PathError::Outside));
+        assert_eq!(contain(root, &at("/proj/a\0b")), Err(PathError::Traversal));
     }
 
     #[cfg(unix)]
