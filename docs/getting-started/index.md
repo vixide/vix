@@ -5,15 +5,6 @@
 Pick whichever fits how you work. All of these ship the same binary; none
 requires a Rust toolchain except building from source.
 
-> **2.0.0 is missing most of its release files.** Its release has only three
-> archives: macOS arm64, Windows x86_64 and static Linux x86_64. The Homebrew,
-> npm and installer-script commands below do not work yet, and 2.0.0 has no
-> Linux packages or desktop GUI downloads. Until 2.0.1 is out, use
-> `cargo install vix-tui` or an archive from the
-> [latest release](https://github.com/vixide/vix/releases/latest). The
-> [1.8.0 release](https://github.com/vixide/vix/releases/tag/1.8.0) still has
-> installers and packages for that version.
-
 **macOS or Linux, via Homebrew:**
 
 ```sh
