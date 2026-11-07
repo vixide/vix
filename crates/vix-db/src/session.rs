@@ -10,8 +10,11 @@
 //! [`Session::run`] blocks for one full result (used for fast internal catalog
 //! and commit queries); [`Session::send`] + [`Session::poll`] are the
 //! non-blocking counterpart that streams a statement's rows back as [`Chunk`]s
-//! so the host can keep the UI responsive (M3/M4). [`Session::restart`]
-//! reconnects on a fresh connection to recover from a cancelled query. Dropping
+//! so the host can keep the UI responsive (M3/M4). On PostgreSQL and MySQL,
+//! [`Session::cancel_handle`] asks the server to stop a running statement over
+//! a second connection, leaving this one (and its transaction) alive (T774);
+//! [`Session::restart`] reconnects on a fresh connection, the fallback for a
+//! cancelled query that cannot be stopped that way. Dropping
 //! the `Session` closes the channel; the worker notices, closes the connection
 //! cleanly, and exits.
 //!
@@ -28,9 +31,11 @@
 //!   [`MAX_ROWS`], reported through `Chunk::Done(true)`.
 //! - **No secrets in errors.** Connect failures are passed through
 //!   `redact_url_secret` before reaching the UI.
-//! - **Cancellation is cooperative.** [`Session::cancel`] only signals; a
-//!   hung worker is abandoned (and a fresh one started by
-//!   [`Session::restart`]) rather than killed.
+//! - **Cancellation is cooperative.** A server-side cancel
+//!   ([`CancelHandle::send`]) makes the statement fail on the server, and the
+//!   worker carries on; [`Session::cancel`] only signals, and a hung worker
+//!   is abandoned (and a fresh one started by [`Session::restart`]) rather
+//!   than killed.
 //!
 //! The design is described in `crates/vix-db/spec/session.md`; the callers are
 //! the `lifecycle` (connect) and `execute` (run/cancel) modules of this crate.
@@ -198,12 +203,41 @@ impl QueryError {
 
     /// A disconnected-channel or other non-`sqlx::Error` failure, with no
     /// finer classification available.
-    fn other(message: impl Into<String>) -> QueryError {
+    pub(crate) fn other(message: impl Into<String>) -> QueryError {
         QueryError {
             message: message.into(),
             kind: QueryErrorKind::Other,
             code: None,
         }
+    }
+
+    /// Whether this is the server reporting that the statement was
+    /// cancelled on request (T774): SQLSTATE `57014` (PostgreSQL
+    /// `query_canceled`) or `70100` (MySQL's "query execution was
+    /// interrupted" after `KILL QUERY`).
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self.code.as_deref(), Some("57014" | "70100"))
+    }
+}
+
+/// Where in the statement the server says `e` is (T775): a 1-based character
+/// position into the SQL text that was sent. Only PostgreSQL reports one (the
+/// `P` field of its error response). The `Any` driver passes the engine's own
+/// error through boxed, so it survives a downcast to
+/// [`sqlx::postgres::PgDatabaseError`]. A position into an internally
+/// generated query (a PL/pgSQL body) is dropped: it does not point into the
+/// editor's text.
+fn error_position_of(e: &sqlx::Error) -> Option<usize> {
+    let sqlx::Error::Database(db_err) = e else {
+        return None;
+    };
+    match db_err
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()?
+        .position()?
+    {
+        sqlx::postgres::PgErrorPosition::Original(at) => Some(at),
+        sqlx::postgres::PgErrorPosition::Internal { .. } => None,
     }
 }
 
@@ -211,6 +245,160 @@ impl QueryError {
 /// connection panics on an unregistered scheme, so [`Session::connect`] calls
 /// this before every connect; `Once` makes that cheap and thread-safe.
 static DRIVERS: Once = Once::new();
+
+/// How long a server-side cancel (T774) may take, connect included, before
+/// it counts as failed and the caller falls back to reconnecting.
+const CANCEL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The engine a connection URL is for, from its scheme: `postgres://` or
+/// `postgresql://`, `mysql://`, or `sqlite:`. `None` for anything else.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{connect::Kind, session::kind_of_url};
+/// assert_eq!(kind_of_url("postgresql://u@h/d"), Some(Kind::Postgres));
+/// assert_eq!(kind_of_url("mysql://u@h/d"), Some(Kind::Mysql));
+/// assert_eq!(kind_of_url("sqlite::memory:"), Some(Kind::Sqlite));
+/// assert_eq!(kind_of_url("mssql://h"), None);
+/// ```
+#[must_use]
+pub fn kind_of_url(url: &str) -> Option<crate::connect::Kind> {
+    use crate::connect::Kind;
+    let scheme = url.split(':').next()?.to_ascii_lowercase();
+    match scheme.as_str() {
+        "postgres" | "postgresql" => Some(Kind::Postgres),
+        "mysql" | "mariadb" => Some(Kind::Mysql),
+        "sqlite" => Some(Kind::Sqlite),
+        _ => None,
+    }
+}
+
+/// The query that reports the server's id for the current connection (T774),
+/// run once when a session connects: `pg_backend_pid()` on PostgreSQL,
+/// `CONNECTION_ID()` (cast to a signed integer) on MySQL. `SQLite` runs in-process and has none.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{connect::Kind, session::backend_id_sql};
+/// assert_eq!(backend_id_sql(Kind::Postgres), Some("SELECT pg_backend_pid()"));
+/// assert_eq!(backend_id_sql(Kind::Sqlite), None);
+/// ```
+#[must_use]
+pub fn backend_id_sql(kind: crate::connect::Kind) -> Option<&'static str> {
+    use crate::connect::Kind;
+    match kind {
+        Kind::Postgres => Some("SELECT pg_backend_pid()"),
+        // `CONNECTION_ID()` is `BIGINT UNSIGNED`, which sqlx's `Any` row
+        // mapping rejects (its MySQL integer decoding is signed only).
+        Kind::Mysql => Some("SELECT CAST(CONNECTION_ID() AS SIGNED)"),
+        Kind::Sqlite => None,
+    }
+}
+
+/// The statement that asks the server to stop whatever connection `id` is
+/// running, without closing that connection (T774). Sent over a second,
+/// short-lived connection, since the first one is busy.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{connect::Kind, session::cancel_sql};
+/// assert_eq!(
+///     cancel_sql(Kind::Postgres, 4242).as_deref(),
+///     Some("SELECT pg_cancel_backend(4242)")
+/// );
+/// assert_eq!(cancel_sql(Kind::Mysql, 17).as_deref(), Some("KILL QUERY 17"));
+/// assert_eq!(cancel_sql(Kind::Sqlite, 1), None);
+/// ```
+#[must_use]
+pub fn cancel_sql(kind: crate::connect::Kind, id: u64) -> Option<String> {
+    use crate::connect::Kind;
+    match kind {
+        Kind::Postgres => Some(format!("SELECT pg_cancel_backend({id})")),
+        Kind::Mysql => Some(format!("KILL QUERY {id}")),
+        Kind::Sqlite => None,
+    }
+}
+
+/// Whether the reply to a [`cancel_sql`] statement means the server took
+/// the cancel: `pg_cancel_backend` returns one boolean cell (`false` when
+/// the backend could not be signalled); `KILL QUERY` returns no rows and
+/// reports failure as an error instead.
+fn cancel_reply_ok(rows: &[Vec<String>]) -> bool {
+    match rows.first().and_then(|r| r.first()) {
+        Some(v) => !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "f" | "0"),
+        None => true,
+    }
+}
+
+/// What it takes to ask the server to stop a [`Session`]'s running
+/// statement (T774): the session's own connection URL and the cancel
+/// statement for its backend id. `Clone + Send`, so the host can send the
+/// cancel from a background thread while the session itself keeps waiting
+/// for the statement's (now failing) reply.
+#[derive(Clone)]
+pub struct CancelHandle {
+    /// The URL the session connected with (credentials included; never
+    /// shown — errors pass through `redact_url_secret`).
+    pub(crate) url: String,
+    /// The engine's cancel statement, from [`cancel_sql`].
+    pub(crate) sql: String,
+}
+
+impl std::fmt::Debug for CancelHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The URL can carry a password; keep it out of debug output.
+        f.debug_struct("CancelHandle")
+            .field("sql", &self.sql)
+            .finish_non_exhaustive()
+    }
+}
+
+impl CancelHandle {
+    /// Open a second connection with the same URL, send the cancel
+    /// statement, and close it again. Blocks (bounded by a 10-second
+    /// timeout, connect included), so call it off the UI thread.
+    ///
+    /// Returns `Ok(true)` when the server accepted the cancel and
+    /// `Ok(false)` when it answered that it could not signal the backend.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::Connect`] when the second connection cannot be
+    /// opened (or the whole attempt timed out), [`SessionError::Query`]
+    /// when the server rejected the cancel statement itself (for example
+    /// missing privileges for `KILL QUERY`), or [`SessionError::Spawn`]
+    /// when no runtime could be built.
+    pub fn send(&self) -> Result<bool, SessionError> {
+        DRIVERS.call_once(sqlx::any::install_default_drivers);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(SessionError::Spawn)?;
+        let url = self.url.clone();
+        let sql = self.sql.clone();
+        let attempt = async move {
+            let mut conn = <sqlx::AnyConnection as sqlx::Connection>::connect(&url)
+                .await
+                .map_err(|e| SessionError::Connect {
+                    message: redact_url_secret(&e.to_string(), &url),
+                })?;
+            let reply = query_text(&mut conn, &sql).await;
+            let _ = sqlx::Connection::close(conn).await;
+            reply
+                .map(|rows| cancel_reply_ok(&rows))
+                .map_err(|e| SessionError::Query(QueryError::from_sqlx(&e)))
+        };
+        rt.block_on(async { tokio::time::timeout(CANCEL_TIMEOUT, attempt).await })
+            .unwrap_or_else(|_| {
+                Err(SessionError::Connect {
+                    message: std::io::Error::from(std::io::ErrorKind::TimedOut).to_string(),
+                })
+            })
+    }
+}
 
 /// A live database connection on its own worker thread.
 #[derive(Debug)]
@@ -229,6 +417,15 @@ pub struct Session {
     /// Signals the worker to abandon an in-flight statement and exit as
     /// soon as it can (Run H, T532) — see [`Self::cancel`].
     cancel_tx: tokio::sync::watch::Sender<bool>,
+    /// How to ask the server to stop the running statement (T774): `Some`
+    /// when the engine supports it and the backend id was read at connect.
+    pub(crate) cancel_handle: Option<CancelHandle>,
+    /// The server-reported error position of the latest failed statement
+    /// (T775), written by the worker before it sends the `Chunk::Err`; `0`
+    /// means none (positions are 1-based). A side slot rather than a
+    /// `QueryError` field, because adding a field to that public,
+    /// literal-constructible struct would be a semver break.
+    error_position: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Session {
@@ -245,11 +442,13 @@ impl Session {
         DRIVERS.call_once(sqlx::any::install_default_drivers);
         let (req_tx, req_rx) = mpsc::channel::<Request>();
         let (reply_tx, reply_rx) = mpsc::channel::<Chunk>();
-        let (ready_tx, ready_rx) = mpsc::channel::<Result<(), SessionError>>();
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<Option<u64>, SessionError>>();
         let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
         let url = url.to_string();
         let setup = setup.to_vec();
         let (worker_url, worker_setup) = (url.clone(), setup.clone());
+        let error_position = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let worker_position = std::sync::Arc::clone(&error_position);
         std::thread::Builder::new()
             .name("vix-db-session".into())
             .spawn(move || {
@@ -260,19 +459,54 @@ impl Session {
                     &req_rx,
                     &reply_tx,
                     cancel_rx,
+                    &worker_position,
                 );
             })
             .map_err(SessionError::Spawn)?;
-        ready_rx.recv().map_err(|e| SessionError::Connect {
+        let backend_id = ready_rx.recv().map_err(|e| SessionError::Connect {
             message: e.to_string(),
         })??;
+        let cancel_handle = backend_id
+            .zip(kind_of_url(&url))
+            .and_then(|(id, kind)| cancel_sql(kind, id))
+            .map(|sql| CancelHandle {
+                url: url.clone(),
+                sql,
+            });
         Ok(Session {
             req_tx,
             reply_rx,
             url,
             setup,
             cancel_tx,
+            cancel_handle,
+            error_position,
         })
+    }
+
+    /// Where the server says the error of the statement that last came back
+    /// as `Chunk::Err` is (T775): a 1-based character position into the SQL
+    /// that was sent. `None` when the engine reports none (only PostgreSQL
+    /// does) or the latest statement succeeded. Read it right after
+    /// receiving the `Chunk::Err`, before sending another statement.
+    #[must_use]
+    pub fn error_position(&self) -> Option<usize> {
+        match self
+            .error_position
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            0 => None,
+            at => Some(at),
+        }
+    }
+
+    /// How to cancel this session's running statement on the server
+    /// (T774), or `None` when that is not possible (`SQLite`, or the
+    /// backend id could not be read at connect) and the only way out of a
+    /// running statement is [`restart`](Session::restart).
+    #[must_use]
+    pub fn cancel_handle(&self) -> Option<CancelHandle> {
+        self.cancel_handle.clone()
     }
 
     /// Tell the worker to abandon whatever statement it's mid-flight on and
@@ -374,10 +608,11 @@ impl Session {
 fn worker(
     url: &str,
     setup: &[String],
-    ready_tx: &mpsc::Sender<Result<(), SessionError>>,
+    ready_tx: &mpsc::Sender<Result<Option<u64>, SessionError>>,
     req_rx: &mpsc::Receiver<Request>,
     reply_tx: &mpsc::Sender<Chunk>,
     mut cancel_rx: tokio::sync::watch::Receiver<bool>,
+    error_position: &std::sync::atomic::AtomicUsize,
 ) {
     // A current-thread runtime is enough: the worker serves one statement at
     // a time, and it keeps the thread count at one per connection.
@@ -407,11 +642,26 @@ fn worker(
             return;
         }
     }
+    // The server's id for this connection, so a cancel can name it (T774).
+    // Best effort: without it, cancelling falls back to reconnecting.
+    let backend_id = match kind_of_url(url).and_then(backend_id_sql) {
+        Some(sql) => rt
+            .block_on(query_text(&mut conn, sql))
+            .ok()
+            .and_then(|rows| rows.first()?.first()?.trim().parse::<u64>().ok()),
+        None => None,
+    };
     // Readiness is reported only after setup succeeds, so `Session::connect`
     // never hands back a session whose read-only pragma failed to apply.
-    let _ = ready_tx.send(Ok(()));
+    let _ = ready_tx.send(Ok(backend_id));
     while let Ok(Request::Run(sql)) = req_rx.recv() {
-        if !rt.block_on(stream_sql(&mut conn, &sql, reply_tx, &mut cancel_rx)) {
+        if !rt.block_on(stream_sql(
+            &mut conn,
+            &sql,
+            reply_tx,
+            &mut cancel_rx,
+            error_position,
+        )) {
             break; // the consumer went away, or cancelled (T532), and abandoned this worker
         }
     }
@@ -463,6 +713,21 @@ async fn exec_one(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), Strin
         .map_err(|e| e.to_string())
 }
 
+/// Run one short statement and collect every row as text (the backend-id
+/// lookup and the cancel statement, T774).
+async fn query_text(
+    conn: &mut sqlx::AnyConnection,
+    sql: &str,
+) -> Result<Vec<Vec<String>>, sqlx::Error> {
+    let rows = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()))
+        .fetch_all(conn)
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| (0..row.columns().len()).map(|i| cell(row, i)).collect())
+        .collect())
+}
+
 /// Stream one statement's rows back as [`Chunk`]s: a [`Chunk::Head`], then
 /// [`Chunk::Rows`] batches of up to [`BATCH`], then [`Chunk::Done`] (flagged
 /// truncated past [`MAX_ROWS`]) — or a [`Chunk::Err`]. Returns `false` when the
@@ -474,7 +739,9 @@ async fn stream_sql(
     sql: &str,
     reply_tx: &mpsc::Sender<Chunk>,
     cancel_rx: &mut tokio::sync::watch::Receiver<bool>,
+    error_position: &std::sync::atomic::AtomicUsize,
 ) -> bool {
+    error_position.store(0, std::sync::atomic::Ordering::Release);
     let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
     let mut stream = query.fetch(conn);
     let mut head_sent = false;
@@ -523,7 +790,15 @@ async fn stream_sql(
                     break;
                 }
             }
-            Err(e) => return reply_tx.send(Chunk::Err(QueryError::from_sqlx(&e))).is_ok(),
+            Err(e) => {
+                // Stored before the chunk is sent, so the consumer that
+                // receives the error can read the position (T775).
+                error_position.store(
+                    error_position_of(&e).unwrap_or(0),
+                    std::sync::atomic::Ordering::Release,
+                );
+                return reply_tx.send(Chunk::Err(QueryError::from_sqlx(&e))).is_ok();
+            }
         }
     }
     drop(stream);
@@ -818,6 +1093,121 @@ mod tests {
             QueryErrorKind::Database,
             "message: {}",
             err.message
+        );
+    }
+
+    #[test]
+    fn engine_specific_cancel_sql_is_built_per_engine() {
+        use crate::connect::Kind;
+        assert_eq!(kind_of_url("postgres://u:p@h:5432/d"), Some(Kind::Postgres));
+        assert_eq!(kind_of_url("POSTGRESQL://h/d"), Some(Kind::Postgres));
+        assert_eq!(kind_of_url("mysql://u@h/d"), Some(Kind::Mysql));
+        assert_eq!(kind_of_url("sqlite:/x.db?mode=rwc"), Some(Kind::Sqlite));
+        assert_eq!(kind_of_url("nonsense"), None);
+        assert_eq!(
+            backend_id_sql(Kind::Mysql),
+            Some("SELECT CAST(CONNECTION_ID() AS SIGNED)")
+        );
+        assert_eq!(
+            cancel_sql(Kind::Postgres, 99).as_deref(),
+            Some("SELECT pg_cancel_backend(99)")
+        );
+        assert_eq!(
+            cancel_sql(Kind::Mysql, 99).as_deref(),
+            Some("KILL QUERY 99")
+        );
+        assert_eq!(backend_id_sql(Kind::Sqlite), None);
+        assert_eq!(cancel_sql(Kind::Sqlite, 99), None);
+    }
+
+    #[test]
+    fn cancel_reply_reads_pg_booleans_and_mysql_ok() {
+        let one = |v: &str| vec![vec![v.to_string()]];
+        assert!(cancel_reply_ok(&one("true")));
+        assert!(cancel_reply_ok(&one("t")));
+        assert!(cancel_reply_ok(&one("1")));
+        assert!(!cancel_reply_ok(&one("false")));
+        assert!(!cancel_reply_ok(&one("f")));
+        assert!(!cancel_reply_ok(&one("0")));
+        assert!(cancel_reply_ok(&[]), "KILL QUERY answers with no rows");
+    }
+
+    #[test]
+    fn sqlite_sessions_have_no_server_cancel() {
+        let s = memory();
+        assert!(
+            s.cancel_handle().is_none(),
+            "SQLite runs in-process: no backend id, so cancel reconnects"
+        );
+    }
+
+    #[test]
+    fn a_cancel_handle_uses_a_second_short_lived_connection() {
+        // SQLite stands in for the server: the handle's statement runs on a
+        // fresh connection with the session's URL, and its reply decides.
+        let dir = std::env::temp_dir().join(format!("vix-sess-cancel-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let url = format!("sqlite:{}?mode=rwc", dir.join("c.db").display());
+        let handle = |sql: &str| CancelHandle {
+            url: url.clone(),
+            sql: sql.to_string(),
+        };
+        assert!(matches!(handle("SELECT 1").send(), Ok(true)));
+        assert!(
+            matches!(handle("SELECT 0").send(), Ok(false)),
+            "pg_cancel_backend answering false is a refused cancel"
+        );
+        assert!(matches!(
+            handle("NOT VALID SQL").send(),
+            Err(SessionError::Query(_))
+        ));
+        let missing = CancelHandle {
+            url: "sqlite:/definitely/missing/dir/x.db".into(),
+            sql: "SELECT 1".into(),
+        };
+        assert!(matches!(missing.send(), Err(SessionError::Connect { .. })));
+        let shown = format!(
+            "{:?}",
+            CancelHandle {
+                url: "postgres://u:sup3rsecret@h/d".into(),
+                sql: "SELECT 1".into(),
+            }
+        );
+        assert!(
+            !shown.contains("sup3rsecret"),
+            "debug leaks the URL: {shown}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cancelled_statements_are_recognised_by_sqlstate() {
+        let with_code = |code: Option<&str>| QueryError {
+            code: code.map(str::to_string),
+            ..QueryError::other("x")
+        };
+        assert!(
+            with_code(Some("57014")).is_cancelled(),
+            "PostgreSQL query_canceled"
+        );
+        assert!(with_code(Some("70100")).is_cancelled(), "MySQL KILL QUERY");
+        assert!(!with_code(Some("42601")).is_cancelled());
+        assert!(!with_code(None).is_cancelled());
+    }
+
+    #[test]
+    fn sqlite_errors_carry_no_position() {
+        let mut s = memory();
+        let _ = send_and_expect_err(&mut s, "SELECT * FROM nope");
+        assert_eq!(
+            s.error_position(),
+            None,
+            "only PostgreSQL reports a position"
+        );
+        assert_eq!(
+            error_position_of(&sqlx::Error::RowNotFound),
+            None,
+            "not a database error"
         );
     }
 

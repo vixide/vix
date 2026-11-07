@@ -47,6 +47,11 @@ discarded when it finally arrives — and reconnecting so the UI is usable
 again; this is universal across engines (no `pg_backend_pid` juggling) at the
 cost of losing transaction state and not truly interrupting a server-side
 query. See `tui/tests/db_smoke.rs::async_query_runs_off_the_event_loop_and_cancels`.
+Since T774 this reconnect is the fallback: on PostgreSQL and MySQL the session
+records its backend id at connect (`Session::cancel_handle`), and `Ctrl+C`
+first asks the server to stop the statement over a short-lived second
+connection, keeping the session and its transaction (see "Cancel and error
+positions" in [index.md](index.md)).
 
 **Streaming results (M4) — done.** The worker fetches with `fetch` (a row
 stream) instead of `fetch_all` and forwards the result as `Chunk`s over the

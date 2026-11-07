@@ -56,7 +56,7 @@ enum QueryKind {
 }
 
 /// A user query running on the worker thread, awaited by [`Browser::poll_query`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Pending {
     /// When the query was sent (for the elapsed indicator and the log's
     /// duration).
@@ -69,6 +69,42 @@ pub(crate) struct Pending {
     history_sql: String,
     /// How to apply the reply.
     kind: QueryKind,
+    /// Where the statement sits in the editor buffer, so a server error
+    /// position can move the cursor there (T775); `None` when the sent SQL
+    /// does not contain the editor's text verbatim (bind parameters were
+    /// substituted, or it did not come from the cursor statement).
+    anchor: Option<Anchor>,
+    /// A server-side cancel sent for this statement (T774), if any.
+    cancel: Option<ServerCancel>,
+}
+
+/// How a statement's text maps back onto the editor buffer (T775).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Anchor {
+    /// Char offset in [`editor::Query::text`] where the statement starts.
+    start: usize,
+    /// Chars of the sent SQL before the statement (an `EXPLAIN` prefix).
+    prefix: usize,
+    /// The statement's length in chars.
+    len: usize,
+}
+
+/// The editor offset a server error position points at (T775): `position`
+/// is 1-based in chars of the sent SQL; a position inside a wrapping prefix
+/// (an `EXPLAIN …` the user did not type) maps nowhere, and one past the
+/// statement's end is clamped to it.
+fn error_offset(anchor: Anchor, position: usize) -> Option<usize> {
+    let rel = position.checked_sub(1)?.checked_sub(anchor.prefix)?;
+    Some(anchor.start + rel.min(anchor.len))
+}
+
+/// A server-side cancel (T774) in flight or done, awaited by
+/// [`Browser::poll_query`].
+#[derive(Debug)]
+struct ServerCancel {
+    /// The cancel's outcome from its background thread (see
+    /// [`session::CancelHandle::send`]); `None` once received.
+    rx: Option<std::sync::mpsc::Receiver<Result<bool, session::SessionError>>>,
 }
 
 /// A cancelled query's reconnect running on a background thread, awaited by
@@ -78,6 +114,9 @@ pub(crate) struct PendingReconnect {
     /// own error (in which case the workbench gives up and disconnects,
     /// exactly like the old synchronous path did).
     rx: std::sync::mpsc::Receiver<Result<session::Session, session::SessionError>>,
+    /// Whether a transaction was open (or aborted) when the reconnect began,
+    /// so the status line can say it was lost (T774).
+    lost_tx: bool,
 }
 
 impl Browser {
@@ -334,19 +373,43 @@ impl Browser {
             self.message = Some(e.to_string());
             return;
         }
+        let anchor = self.anchor_for(&sql);
         self.message = Some(t!("msg.db_running").to_string());
         self.pending_query = Some(Pending {
             started: std::time::Instant::now(),
             sql,
             history_sql,
             kind,
+            anchor,
+            cancel: None,
         });
+    }
+
+    /// Where `sql` (about to be sent) sits in the editor: found when the
+    /// statement under the cursor appears in it verbatim, as it does for a
+    /// plain run (trailing `;` stripped) and an `EXPLAIN` wrap (T775).
+    fn anchor_for(&self, sql: &str) -> Option<Anchor> {
+        let start = self.query.statement_offset_at_cursor()?;
+        let stmt = self.query.statement_at_cursor()?;
+        let core = stmt.trim_end_matches(';').trim_end();
+        if core.is_empty() {
+            return None;
+        }
+        let at = sql.find(core)?;
+        Some(Anchor {
+            start,
+            prefix: sql[..at].chars().count(),
+            len: core.chars().count(),
+        })
     }
 
     /// Drain streamed result chunks into the grid, applying batches as they
     /// arrive. Called by the host each event-loop tick; cheap when idle.
     pub fn poll_query(&mut self) {
         if self.pending_query.is_none() {
+            return;
+        }
+        if self.poll_server_cancel() {
             return;
         }
         loop {
@@ -364,26 +427,85 @@ impl Browser {
                     return;
                 }
                 session::Chunk::Err(e) => {
-                    self.finish_stream_err(&e);
+                    let position = self
+                        .session
+                        .as_ref()
+                        .and_then(session::Session::error_position);
+                    self.finish_stream_err(&e, position);
                     return;
                 }
             }
         }
     }
 
-    /// Cancel the in-flight query: abandon the worker (its result is
-    /// discarded when/if it ever arrives) and reconnect, in the background
-    /// (Run H, T531), so the UI is usable again. Transaction state is lost.
-    /// [`Self::poll_reconnect`] finishes it.
+    /// Cancel the in-flight query (`Ctrl+C`).
     ///
-    /// The old synchronous `Session::restart` here was the designed escape
-    /// hatch from a hung query — but reconnecting calls `Session::connect`
-    /// again, so if the network condition that caused the hang was still
-    /// present, cancelling a hung query could itself hang. Backgrounding it
-    /// fixes that. The old worker's stuck read is abandoned by
-    /// [`session::Session::restart`], which signals it to stop (T532) before
-    /// connecting afresh.
+    /// First choice (T774): ask the server to stop the statement over a
+    /// short-lived second connection ([`session::CancelHandle`]), sent from
+    /// a background thread. The session stays: the statement comes back as
+    /// an error through [`Self::poll_query`], temporary tables and session
+    /// settings survive, and an open transaction is left aborted (the `TX!`
+    /// badge) for the user to roll back.
+    ///
+    /// Fallback: when there is no server cancel (`SQLite`, or the backend id
+    /// was not read at connect), when the server cancel fails, or when
+    /// `Ctrl+C` is pressed again while one is already under way (a hung
+    /// network read that the server cancel cannot reach), abandon the
+    /// worker and reconnect in the background (Run H, T531) -- the
+    /// transaction and session state are lost, and the status line says so
+    /// when a transaction was open. [`Self::poll_reconnect`] finishes it.
     pub fn cancel_query(&mut self) {
+        let Some(pending) = self.pending_query.as_mut() else {
+            return;
+        };
+        if pending.cancel.is_none()
+            && let Some(handle) = self
+                .session
+                .as_ref()
+                .and_then(session::Session::cancel_handle)
+        {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(handle.send());
+            });
+            pending.cancel = Some(ServerCancel { rx: Some(rx) });
+            self.message = Some(t!("msg.db_cancelling_server").to_string());
+            return;
+        }
+        self.cancel_by_reconnect();
+    }
+
+    /// Receive a finished server-side cancel's outcome (T774). A refused or
+    /// failed one falls back to [`Self::cancel_by_reconnect`]; returns `true`
+    /// when it did, so the caller stops draining the abandoned session.
+    fn poll_server_cancel(&mut self) -> bool {
+        let Some(cancel) = self.pending_query.as_mut().and_then(|p| p.cancel.as_mut()) else {
+            return false;
+        };
+        let Some(rx) = cancel.rx.as_ref() else {
+            return false;
+        };
+        let accepted = match rx.try_recv() {
+            Ok(result) => matches!(result, Ok(true)),
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+        };
+        cancel.rx = None;
+        if accepted {
+            // The statement will now fail with "cancelled"; keep draining.
+            return false;
+        }
+        self.cancel_by_reconnect();
+        true
+    }
+
+    /// Cancel by abandoning the worker and reconnecting, in the background
+    /// (Run H, T531): the pre-T774 path, and still the fallback. The old
+    /// synchronous `Session::restart` here could itself hang on the network
+    /// condition that caused the hang; backgrounding it fixes that. The old
+    /// worker's stuck read is abandoned by [`session::Session::restart`],
+    /// which signals it to stop (T532) before connecting afresh.
+    fn cancel_by_reconnect(&mut self) {
         if self.pending_query.take().is_none() {
             return;
         }
@@ -397,9 +519,10 @@ impl Browser {
             let result = session.restart().map(|()| session);
             let _ = tx.send(result);
         });
+        let lost_tx = self.tx != TxState::None;
         self.tx = TxState::None;
         self.message = Some(t!("msg.db_cancelling").to_string());
-        self.pending_reconnect = Some(PendingReconnect { rx });
+        self.pending_reconnect = Some(PendingReconnect { rx, lost_tx });
     }
 
     /// Whether a cancelled query's reconnect is running in the background
@@ -423,11 +546,16 @@ impl Browser {
                 Err(session::SessionError::NotConnected)
             }
         };
+        let lost_tx = pending.lost_tx;
         self.pending_reconnect = None;
         match result {
             Ok(session) => {
                 self.session = Some(session);
-                self.message = Some(t!("msg.db_cancelled").to_string());
+                self.message = Some(if lost_tx {
+                    t!("msg.db_cancelled_tx_lost").to_string()
+                } else {
+                    t!("msg.db_cancelled").to_string()
+                });
             }
             Err(e) => {
                 self.message = Some(e.to_string());
@@ -489,7 +617,9 @@ impl Browser {
     /// a clarifying hint on top of it when the error's [`session::
     /// QueryErrorKind`] (Run H, T538) says the connection itself is gone —
     /// a plain I/O error's text alone doesn't make that obvious.
-    fn finish_stream_err(&mut self, error: &session::QueryError) {
+    /// `position` is the server's error position (T775), from
+    /// [`session::Session::error_position`].
+    fn finish_stream_err(&mut self, error: &session::QueryError, position: Option<usize>) {
         let Some(pending) = self.pending_query.take() else {
             return;
         };
@@ -501,7 +631,27 @@ impl Browser {
             origin: store::Origin::User,
         });
         self.note_tx(&pending.sql, false);
+        // A statement stopped by our own server-side cancel (T774) is not an
+        // error to fix: say it was cancelled, and whether the transaction it
+        // ran in now needs a rollback.
+        if pending.cancel.is_some() && error.is_cancelled() {
+            self.message = Some(if self.tx == TxState::Aborted {
+                t!("msg.db_cancelled_tx_aborted").to_string()
+            } else {
+                t!("msg.db_cancelled").to_string()
+            });
+            return;
+        }
         self.last_error = Some((pending.sql.clone(), error.message.clone()));
+        // Put the cursor where the server says the error is (T775).
+        if let Some(offset) = pending
+            .anchor
+            .zip(position)
+            .and_then(|(anchor, position)| error_offset(anchor, position))
+        {
+            self.query.set_cursor_offset(offset);
+            self.focus = Pane::Editor;
+        }
         self.message = Some(if error.kind == session::QueryErrorKind::ConnectionLost {
             t!("msg.db_connection_lost", error = &error.message).to_string()
         } else {
@@ -644,5 +794,237 @@ impl Browser {
                 stmts.first().map_or("", String::as_str)
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn connected() -> Browser {
+        let mut b = Browser::new(Vec::new());
+        b.session = Some(session::Session::connect("sqlite::memory:", &[]).expect("memory db"));
+        b
+    }
+
+    fn set_text(b: &mut Browser, text: &str) {
+        for c in text.chars() {
+            if c == '\n' {
+                b.query.newline();
+            } else {
+                b.query.insert_char(c);
+            }
+        }
+    }
+
+    /// Drive the async query and any cancel reconnect to completion.
+    fn drain(b: &mut Browser) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while b.query_running() || b.reconnect_running() {
+            b.poll_query();
+            b.poll_reconnect();
+            assert!(std::time::Instant::now() < deadline, "async work stalled");
+            std::thread::yield_now();
+        }
+    }
+
+    /// Whether the session is still the one that created the temp table.
+    fn same_session(b: &mut Browser) -> bool {
+        b.session
+            .as_mut()
+            .is_some_and(|s| s.run("SELECT count(*) FROM keep").is_ok())
+    }
+
+    #[test]
+    fn error_offset_maps_a_server_position_into_the_buffer() {
+        let plain = Anchor {
+            start: 10,
+            prefix: 0,
+            len: 8,
+        };
+        assert_eq!(error_offset(plain, 1), Some(10), "position is 1-based");
+        assert_eq!(error_offset(plain, 5), Some(14));
+        assert_eq!(error_offset(plain, 99), Some(18), "clamped to the end");
+        assert_eq!(error_offset(plain, 0), None);
+        let explain = Anchor {
+            start: 0,
+            prefix: 8, // "EXPLAIN "
+            len: 8,
+        };
+        assert_eq!(error_offset(explain, 3), None, "inside the EXPLAIN prefix");
+        assert_eq!(error_offset(explain, 9), Some(0));
+    }
+
+    #[test]
+    fn the_anchor_tracks_plain_and_explain_statements() {
+        let mut b = connected();
+        set_text(&mut b, "select 1;\n  SELEKT 2;");
+        assert_eq!(
+            b.anchor_for("SELEKT 2"),
+            Some(Anchor {
+                start: 12,
+                prefix: 0,
+                len: 8
+            })
+        );
+        assert_eq!(
+            b.anchor_for("EXPLAIN QUERY PLAN SELEKT 2;"),
+            Some(Anchor {
+                start: 12,
+                prefix: 19,
+                len: 8
+            })
+        );
+        assert_eq!(
+            b.anchor_for("SELECT 'substituted'"),
+            None,
+            "substituted bind parameters do not map back"
+        );
+    }
+
+    #[test]
+    fn a_positioned_error_moves_the_cursor_to_it() {
+        // SQLite reports no position, so feed the error PostgreSQL would
+        // send for `SELECT 1 FRM t` (position 10, the `FRM`).
+        let mut b = connected();
+        set_text(&mut b, "select 0;\nSELECT 1 FRM t");
+        b.focus = Pane::Results;
+        b.pending_query = Some(Pending {
+            started: std::time::Instant::now(),
+            sql: "SELECT 1 FRM t".into(),
+            history_sql: "SELECT 1 FRM t".into(),
+            kind: QueryKind::Run,
+            anchor: b.anchor_for("SELECT 1 FRM t"),
+            cancel: None,
+        });
+        let error = session::QueryError::other("syntax error at or near \"FRM\"");
+        b.finish_stream_err(&error, Some(10));
+        assert_eq!((b.query.row, b.query.col), (1, 9), "cursor on `FRM`");
+        assert_eq!(b.focus, Pane::Editor);
+        assert!(b.last_error.is_some(), "still a real error to fix");
+    }
+
+    #[test]
+    fn an_error_without_a_position_leaves_the_cursor() {
+        let mut b = connected();
+        set_text(&mut b, "SELECT * FROM nope");
+        b.query.row = 0;
+        b.query.col = 3;
+        b.execute();
+        drain(&mut b);
+        assert!(b.last_error.is_some());
+        assert_eq!((b.query.row, b.query.col), (0, 3));
+    }
+
+    #[test]
+    fn a_server_cancel_keeps_the_session_and_its_transaction() {
+        let mut b = connected();
+        let session = b.session.as_mut().unwrap();
+        session.run("CREATE TEMP TABLE keep (a INTEGER)").unwrap();
+        session.run("BEGIN").unwrap();
+        // SQLite stands in for a server whose cancel is accepted: the handle
+        // runs on a second connection, and the session must not restart.
+        session.cancel_handle = Some(session::CancelHandle {
+            url: "sqlite::memory:".into(),
+            sql: "SELECT 1".into(),
+        });
+        b.tx = TxState::Open;
+        set_text(&mut b, "SELECT count(*) FROM keep");
+        b.execute();
+        assert!(b.query_running());
+        b.cancel_query();
+        assert!(b.query_running(), "the statement is still awaited");
+        assert!(!b.reconnect_running(), "no reconnect for a server cancel");
+        drain(&mut b);
+        assert!(!b.reconnect_running());
+        assert_eq!(b.tx, TxState::Open, "the transaction survives");
+        assert!(same_session(&mut b), "temporary tables survive");
+    }
+
+    #[test]
+    fn a_cancelled_statement_in_a_transaction_marks_it_aborted() {
+        let mut b = connected();
+        b.tx = TxState::Open;
+        b.pending_query = Some(Pending {
+            started: std::time::Instant::now(),
+            sql: "SELECT pg_sleep(60)".into(),
+            history_sql: "SELECT pg_sleep(60)".into(),
+            kind: QueryKind::Run,
+            anchor: None,
+            cancel: Some(ServerCancel { rx: None }),
+        });
+        let cancelled = session::QueryError {
+            code: Some("57014".into()),
+            ..session::QueryError::other("canceling statement due to user request")
+        };
+        b.finish_stream_err(&cancelled, None);
+        assert_eq!(b.tx, TxState::Aborted, "TX! until the user rolls back");
+        assert!(b.last_error.is_none(), "a cancel is not an error to fix");
+        assert!(b.session.is_some(), "the session is kept");
+    }
+
+    #[test]
+    fn a_failed_server_cancel_falls_back_to_reconnecting() {
+        let mut b = connected();
+        let session = b.session.as_mut().unwrap();
+        session.run("CREATE TEMP TABLE keep (a INTEGER)").unwrap();
+        session.cancel_handle = Some(session::CancelHandle {
+            url: "sqlite::memory:".into(),
+            sql: "NOT VALID SQL".into(),
+        });
+        b.tx = TxState::Open;
+        // Keep the statement in flight until the cancel's reply is read:
+        // nothing is polled between sending it and the cancel.
+        set_text(&mut b, "SELECT count(*) FROM keep");
+        b.execute();
+        b.cancel_query();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !b.reconnect_running() && b.query_running() {
+            // Only the cancel's reply is read here, not the rows, so the
+            // fallback is taken regardless of how fast the query is.
+            let _ = b.poll_server_cancel();
+            assert!(std::time::Instant::now() < deadline, "cancel stalled");
+            std::thread::yield_now();
+        }
+        assert!(b.reconnect_running(), "fell back to reconnecting");
+        drain(&mut b);
+        assert_eq!(b.tx, TxState::None, "the transaction is gone");
+        assert!(b.pending_reconnect.is_none());
+        assert!(
+            !same_session(&mut b),
+            "a fresh session: the temp table is gone"
+        );
+    }
+
+    #[test]
+    fn a_second_ctrl_c_escalates_to_reconnecting() {
+        let mut b = connected();
+        b.session.as_mut().unwrap().cancel_handle = Some(session::CancelHandle {
+            url: "sqlite::memory:".into(),
+            sql: "SELECT 1".into(),
+        });
+        set_text(&mut b, "SELECT 1");
+        b.execute();
+        b.cancel_query();
+        assert!(!b.reconnect_running());
+        b.cancel_query();
+        assert!(!b.query_running(), "the statement is abandoned");
+        assert!(b.reconnect_running(), "the second Ctrl+C reconnects");
+        drain(&mut b);
+        assert!(b.session.is_some());
+    }
+
+    #[test]
+    fn sqlite_cancel_reconnects_and_reports_a_lost_transaction() {
+        let mut b = connected();
+        b.tx = TxState::Open;
+        set_text(&mut b, "SELECT 1");
+        b.execute();
+        b.cancel_query();
+        assert!(b.reconnect_running(), "no server cancel on SQLite");
+        let lost = b.pending_reconnect.as_ref().is_some_and(|p| p.lost_tx);
+        assert!(lost, "the reconnect knows a transaction was open");
+        drain(&mut b);
+        assert_eq!(b.tx, TxState::None);
     }
 }
