@@ -15,6 +15,16 @@
   shell: bash
   run: echo "AR_x86_64-unknown-linux-musl=ar" >> "$GITHUB_ENV"
 
+# dist's musl build ignores `rustflags` from `.cargo/config.toml`, so it
+# linked a dynamic PIE that needs /lib/ld-musl-x86_64.so.1 (2.0.1, T771).
+# `CARGO_ENCODED_RUSTFLAGS` outranks every other rustflags source, so the
+# flags reach rustc whatever dist sets. Reproduced and fixed on a throwaway
+# branch building with dist exactly as release.yml does (run 42370437132).
+- name: Link the musl build statically
+  if: contains(matrix.targets, 'x86_64-unknown-linux-musl')
+  shell: bash
+  run: printf 'CARGO_ENCODED_RUSTFLAGS=-Ctarget-feature=+crt-static\x1f-Crelocation-model=static\n' >> "$GITHUB_ENV"
+
 # dist builds an MSI for every Windows target, and WiX 3 is not on the
 # `windows-11-arm` image (windows-latest has it), so that build failed at
 # `candle` the first time it ran (2.0.1-rc.1, T771). 3.14 is the first WiX 3
