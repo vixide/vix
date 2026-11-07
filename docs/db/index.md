@@ -22,6 +22,16 @@ saved connections.
   **Esc**/**q** closes.
 - The add/edit form: **↑/↓** pick a field, type to edit it, **Space** cycles
   the engine kind (sqlite → postgres → mysql), **Enter** saves.
+- **Paste a connection string** into the form to fill it: a `postgres://`,
+  `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq `key=value`
+  string (`host=db port=5432 dbname=shop user=me sslmode=require`, values
+  may be single-quoted). A password in the string is held in memory for the
+  next connect and never saved.
+- The **Environment** row cycles `local` (default) → `development` →
+  `testing` → `staging` → `production`, shown as a badge in the list and the
+  editor title. On **production** every write shows its SQL and asks, even
+  inside a transaction. It is saved in your settings file as a
+  `[db_environments]` table (`name = "production"`).
 - Server engines prompt for a **password** on connect. It is masked, kept
   only in memory for the session, and **never written to disk** — saved
   connections persist in your settings file without any password field.
@@ -45,9 +55,14 @@ Schemas expand into **Tables / Views / Functions** folders.
   the foreign keys on other tables that point at it, and the views that read
   from it (on SQLite the view list is a best guess from each view's SQL).
 - **p** previews the table's data (`SELECT * … LIMIT 200`).
+- **A** copies the table for AI: its columns, primary key, foreign keys,
+  constraints and indexes, plus up to 50 rows, as Markdown.
 - **/** searches the tree live (matches show regardless of collapse state);
   **Enter** keeps the filter, **Esc** clears it.
 - **r** refreshes the schema after DDL changes.
+- **m** marks the table under the cursor for export (press again to unmark);
+  **e** exports the marked tables — or, with none marked, the table under the
+  cursor. See [Exporting whole tables](#exporting-whole-tables).
 
 ### Query editor (right, top)
 
@@ -62,9 +77,11 @@ Type SQL; multiple statements separated by `;` are fine.
   total time, the slowest steps are highlighted in red, and a step whose row
   estimate is off from the real count by 10× or more is flagged in yellow.
 - Statements that **write** (`INSERT`, `UPDATE`, `DELETE`, `DROP`, … — even
-  hidden inside a `WITH` CTE) ask for confirmation first: **Enter/y** runs,
-  **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks too, since it really
-  executes.
+  hidden inside a `WITH` CTE) ask for confirmation first, showing the SQL:
+  **Enter/y** runs, **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks
+  too, since it really executes. Inside an open transaction a write runs
+  without asking, except `DROP`/`TRUNCATE` and any write on a
+  **production** connection.
 - **Transactions just work**: run `BEGIN`, some statements, then `COMMIT` or
   `ROLLBACK` — the persistent connection keeps the transaction open between
   executions. Savepoints too.
@@ -86,6 +103,10 @@ Type SQL; multiple statements separated by `;` are fine.
   off. Numbers compare numerically.
 - **/** filters rows live (any cell, case-insensitive).
 - **y** copies the selected cell, **Y** the whole row (tab-separated).
+- **A** copies for AI: the statement, the rows from the top of the visible
+  page (at most 50, filter and sort applied) and, on a table preview, the
+  column types, as Markdown to paste into a chat. It is your copy to share;
+  Vix's AI assistant is still shown the schema only, never a row.
 - **v** opens the cell viewer for long content — **p** toggles JSON
   pretty-printing, **y** copies, **Esc** closes.
 - **e** exports the current view (filter and sort applied): **←/→** choose
@@ -122,6 +143,74 @@ The operators are contains (case-insensitive), `=`, `<>`, `<`, `<=`, `>`,
 a raw SQL condition written as is. Vix quotes the column and the value for
 your database, runs the query on the server, and the results stay
 editable. **Delete** in the search form clears the search.
+
+## Exporting whole tables
+
+**e** in the schema tree exports whole tables, not just the rows loaded in
+the grid. **←/→** choose the format:
+
+- **CSV**, **JSON** or **NDJSON** — one file per table (`users.csv`, …) in
+  the directory you type (created if missing; `schema.table.csv` when the
+  tables come from more than one schema). JSON keeps `NULL`, numbers and
+  booleans typed; CSV writes `NULL` as an empty field.
+- **SQL** — one file of `INSERT` statements for every chosen table, inside
+  `BEGIN;` … `COMMIT;`, ordered so a table comes after the tables its foreign
+  keys reference. If the foreign keys form a cycle, the tables keep the order
+  you chose and a comment at the top says to load with foreign-key checks
+  off. At the end, sequences are reset: `setval` on PostgreSQL's serial and
+  identity sequences, `ALTER TABLE … AUTO_INCREMENT` on MySQL, and
+  `sqlite_sequence` on SQLite.
+
+**Enter** starts the export. It runs in the background on a **second,
+read-only connection**, inside one consistent snapshot (`REPEATABLE READ READ
+ONLY` on PostgreSQL, `WITH CONSISTENT SNAPSHOT` on MySQL, one read
+transaction on SQLite), and rows stream straight to disk, so even a very
+large table never sits in memory. The status line shows progress, and you
+can keep working meanwhile (disconnecting or closing the DB overlay stops
+the export and removes its partial file). Because it is a separate connection, a
+transaction you have open in the workbench is never touched — and its
+uncommitted changes are not in the export. An in-memory SQLite database
+cannot be seen from a second connection, so it cannot be exported this way.
+
+## Running a `.sql` file
+
+- **Ctrl+P** in the workbench asks for the path of a `.sql` file, loads it
+  into the query editor, and runs it statement by statement, stopping at the
+  first error — exactly like **F9**.
+- **DB → Run Buffer in Workbench** does the same with the buffer you are
+  editing (unsaved changes included).
+- Writes still follow the usual rules: refused on a read-only connection,
+  confirmed first otherwise.
+- psql meta-commands (`\copy`, `\connect`, `\i`, `\set`, … — lines that start
+  with a backslash) are not SQL. If the script has any, nothing runs: the
+  message line lists their line numbers, and the script stays in the editor
+  for you to fix. **F9** applies the same check to anything in the editor.
+
+## Schema compare
+
+**Ctrl+D** in the workbench (or **DB → Schema Compare…**) compares one schema
+of the connected database with another saved connection of the same engine
+(PostgreSQL or SQLite; not MySQL), and writes the migration that makes that
+other database — the **target** — match the one you are connected to.
+
+- Pick the target with **↑/↓**; type to change the schema name (`public` by
+  default on PostgreSQL); **Enter** compares. The target connects like any
+  other connection: password command, keyring, or a password prompt.
+- The review lists every difference — tables, columns, keys, checks,
+  indexes, foreign keys, views, functions, triggers, enums, sequences — with
+  a checkbox. **Space** toggles one; the bottom pane shows both definitions
+  and the SQL. Changes that drop a table or column (*destructive*) start
+  unchecked; changes that can fail on existing rows (*risky*: `NOT NULL`, a
+  unique index, a type change, a new constraint) are flagged.
+- The migration is ordered so it runs: types first, then drops, then
+  creates, foreign keys after their tables, views and triggers last. Views
+  that use a dropped or retyped column are dropped and recreated around it.
+- **Enter** shows the whole script, **y** copies it, **s** saves it as a
+  `.sql` file, **o** opens it in the editor, and **r** runs it on the target
+  in one transaction after a confirmation — if any statement fails, nothing
+  changes. A read-only target refuses to run until **F8** allows writes.
+- SQLite can only add and drop columns in place; other SQLite table changes
+  show as *manual* notes in the script.
 
 ## Query history and saved queries
 

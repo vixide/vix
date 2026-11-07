@@ -72,8 +72,10 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `db.query` | Query Editor | Menu |
 | `db.refresh` | Refresh Schema | Menu |
 | `db.rollback` | Rollback | Menu |
+| `db.run_buffer` | Run Buffer in Workbench | Menu |
 | `db.save_query` | Save Query… | Menu |
 | `db.saved` | Saved Queries… | Menu |
+| `db.schema_compare` | Schema Compare… | Menu |
 | `delete` | Delete | Catalog |
 | `delete_line` | Delete Line | Catalog |
 | `delete_sub_word_left` | Delete Sub-Word Left | Catalog |
@@ -821,4 +823,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**814 actions.**
+**816 actions.**

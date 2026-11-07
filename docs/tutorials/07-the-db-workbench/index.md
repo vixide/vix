@@ -62,6 +62,24 @@ connect skips the prompt. Saved connections never persist a password field
 to disk. Server engines default to `writable = false`, same as SQLite, so
 the read-only/write-mode split above applies there too.
 
+Instead of filling the fields one by one you can **paste a connection
+string** into the form: `postgres://me@db.example.com:5432/shop?sslmode=require`,
+`mysql://…`, `sqlite:db/demo.sqlite`, or a libpq string such as `host=db
+dbname=shop user=me`. Vix fills the engine, host, port, user, database and
+TLS mode (and the name, if it is still empty). A password inside the string
+is never written to a field or to disk: it is held in memory for the next
+connect, exactly like one typed on the prompt.
+
+### Environments
+
+The form's last row, **Environment**, marks what the database is: `local`
+(the default), `development`, `testing`, `staging` or `production`. The
+connections list and the editor title show it as a badge. On a
+**production** connection every write shows its SQL and asks first, even
+inside a `BEGIN … COMMIT` transaction (elsewhere a transaction skips the
+question, since `ROLLBACK` can undo it). `DROP` and `TRUNCATE` ask on every
+connection.
+
 ## The schema tree
 
 The left pane groups each schema into **Tables / Views / Functions**
@@ -142,6 +160,11 @@ In the results pane:
   row (a `tasks.person_id` cell jumps to that row in `people`).
 - **y**/**Y** yank the cell/row (tab-separated) to the clipboard; **v** opens
   a full-content cell viewer with a JSON pretty-print toggle (**p**).
+- **A** (*copy for AI*) copies the statement and up to 50 rows from the top
+  of the visible page as Markdown, ready to paste into a chat; on a table
+  preview it adds each column's type. **A** on a table in the tree copies
+  its columns, keys, constraints and indexes with its rows. Only you decide
+  where that goes: Vix's own AI assistant is still never shown a row.
 - On a table preview that has a primary key (press **p** on `people` in the
   tree, not this join), **i** stages an edit to the selected cell, **a** a
   new row and **d** a row's deletion, and **W** commits them all in one
@@ -172,8 +195,8 @@ tasks(person_id)` would turn it into a `SEARCH`). **F7** (**Explain
 Analyze**) runs `EXPLAIN ANALYZE` where the engine supports it — on SQLite
 that's still `EXPLAIN QUERY PLAN`, since SQLite has no separate ANALYZE
 form. Statements that actually write ask for confirmation first
-(**Enter**/**y** runs, **Esc**/**n** cancels) — `EXPLAIN ANALYZE` of a write
-does too, since it really executes.
+(**Enter**/**y** runs, **Esc**/**n** cancels), showing the SQL in full —
+`EXPLAIN ANALYZE` of a write does too, since it really executes.
 
 ## Exporting results
 
@@ -183,6 +206,27 @@ or SQL `INSERT`s — **Tab** switches between writing a file and copying to
 the clipboard, and **Enter** exports. The export applies your current filter
 and sort, not the raw query result — filter to `engineer` first and the CSV
 only has Alice's and Carol's rows.
+
+To export **whole tables** instead, go to the schema tree: **m** marks
+`people` and `tasks`, and **e** opens the table export (with nothing marked
+it takes the table under the cursor). Pick **SQL** with **←/→** and press
+**Enter**: Vix reads both tables from one consistent snapshot on a second,
+read-only connection and writes one file of `INSERT`s with `people` before
+`tasks` (parents before children). A table with an `AUTOINCREMENT` counter
+(or a PostgreSQL sequence, a MySQL `AUTO_INCREMENT`) gets it reset at the end
+of the file; these two have none.
+CSV, JSON and NDJSON write one file per table into a directory instead. Rows
+stream straight to disk, so the 20,000-row grid cap does not apply, and an
+open transaction in the workbench is left alone.
+
+## Running a `.sql` file
+
+**Ctrl+P** asks for the path of a `.sql` file, loads it into the editor and
+runs it like **F9** — statement by statement, stopping at the first error,
+with writes confirmed as usual. **DB → Run Buffer in Workbench** does the
+same with the file you are editing. A script with psql meta-commands
+(`\copy`, `\i`, …) is refused before anything runs, and the message line
+lists their line numbers.
 
 ## Query history and saved queries
 

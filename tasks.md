@@ -9969,16 +9969,18 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   and `JOIN t a` aliases in the statement at the cursor, so `a.` offers
   `t`'s columns.
   Done 2026-11-07: quoted alias qualifiers (`"o".`) are not completed yet.
-- [ ] **T781 — Environments and connection strings.** `environment` on a
+- [x] **T781 — Environments and connection strings.** `environment` on a
   saved connection (default `local`), shown as a colored badge; on
   `production` every write shows its SQL and asks, even in a transaction;
   `DROP` and `TRUNCATE` always ask. Parse a pasted `postgres://`,
   `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq `key=value`
   string, into the add form; a password in it is never saved.
-- [ ] **T782 — Copy for AI.** Copy the statement, its column types and the
+  Done 2026-11-07: environments live in a `[db_environments]` settings table keyed by connection name, because a new field on the public `Connection` would break semver. Schema compare names the target environment too.
+- [x] **T782 — Copy for AI.** Copy the statement, its column types and the
   selected rows (capped), or a table's structure with rows, as Markdown.
   User-initiated only; the assistant's schema-only rule is unchanged, and
   the spec says why.
+  Done 2026-11-07: key `A`. Column types appear for table previews only; arbitrary statements would need a new `session::Chunk` variant (a semver break), deferred to the next major version.
 - [ ] **T783 — Decision: share saved connections over MCP.** Needs the
   maintainer's yes or no, because it relaxes two MCP safety rules (no
   keyring reads, no sockets). Design and safeguards in
@@ -9986,20 +9988,33 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   credentials without prompts, read-only statements in a read-only
   transaction with a 30-second timeout and a 100-row cap, every call
   logged, stdio only.
-- [ ] **T784 — Whole-table export from one snapshot.** CSV, JSON or NDJSON per
+- [x] **T784 — Whole-table export from one snapshot.** CSV, JSON or NDJSON per
   table, or one SQL file of `INSERT`s in foreign-key order with sequences
   reset, streamed to disk inside one read-only snapshot transaction.
-- [ ] **T785 — Schema compare and migrations.** Snapshot one schema on each of
+  Done 2026-11-07: keys `m`/`e` in the tree; a second read-only connection, not a refusal, so an open transaction is untouched. Same-named tables in different schemas can confuse the FK order; identity columns need `OVERRIDING SYSTEM VALUE` (not done).
+- [x] **T785 — Schema compare and migrations.** Snapshot one schema on each of
   two saved connections (PostgreSQL first), diff them, and write migration
   SQL ordered by phase (types, drops, tables, constraints, indexes, foreign
   keys, views, triggers). Destructive changes start unchecked; risky ones
   are flagged; run on the target in one transaction after a confirmation
   naming its environment. Large: split into snapshot, diff, ordering, and
   UI, each landed separately.
-- [ ] **T786 — Run a `.sql` file.** Load a `.sql` file or the current buffer
+  Done 2026-11-07: PostgreSQL 10+ and SQLite, MySQL refused; `Ctrl+D` or DB → Schema Compare…. Matching is by name (a rename is a drop plus an add). Not compared: extensions, grants, partitions, collations, domains, composite types, column order.
+- [x] **T786 — Run a `.sql` file.** Load a `.sql` file or the current buffer
   into the workbench editor and run it statement by statement, stopping at
   the first error. Refuse a file with psql meta-commands (`\copy`,
   `\connect`, `\i` …) before anything runs, listing their lines.
+  Done 2026-11-07: `Ctrl+P`, and action `db.run_buffer`. The meta-command check runs in Execute All (`F9`) too. `$$` bodies are still split on `;` (pre-existing).
+
+- [ ] **T787 — Decode every common column type.** Found while building Run W:
+  sqlx's `Any` driver decodes only text, numeric, boolean and byte types, so a
+  PostgreSQL `timestamp`, `numeric`, `json`, array or `uuid` column, and a
+  SQLite column declared `BOOLEAN`, `DATE` or `DATETIME`, fails a table preview
+  and a table export, and plan output had to switch to YAML. Options: cast to
+  `text` in generated `SELECT`s (cheap, covers previews and exports, not
+  free-form queries), or a typed connection per engine (`PgConnection`,
+  `MySqlConnection`, `SqliteConnection`) behind the session, which would also
+  unlock PostgreSQL notices (T775). Spike first, then choose.
 
 **Ideas backlog (from the same reading):** an opt-in, per-connection mode in
 which the assistant may run read-only queries and see their results, with an

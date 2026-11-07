@@ -255,6 +255,8 @@ pgsavvy
 surus
 dbjoy
 libpq
+dbname
+hostaddr
 Geometrein
 conkey
 confkey
@@ -264,6 +266,15 @@ attgenerated
 constraintdef
 tinyint
 ILIKE
+bytea
+setval
+AUTOINCREMENT
+constraintdef
+functiondef
+indexdef
+triggerdef
+viewdef
+xinfo
 
 # LSP servers / editors referenced in docs
 gopls

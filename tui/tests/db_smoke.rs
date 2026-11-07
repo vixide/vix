@@ -43,10 +43,17 @@ use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 /// for a real per-frame UI tick and need no change.
 fn drain_async(browser: &mut Browser) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while browser.query_running() || browser.connect_running() || browser.reconnect_running() {
+    while browser.query_running()
+        || browser.connect_running()
+        || browser.reconnect_running()
+        || browser.table_export_running()
+        || browser.compare_running()
+    {
         browser.poll_query();
         browser.poll_connect();
         browser.poll_reconnect();
+        browser.poll_table_export();
+        browser.poll_compare();
         assert!(
             std::time::Instant::now() < deadline,
             "async DB work did not finish within 30s — worker thread stalled or deadlocked"
@@ -1249,5 +1256,569 @@ fn server_side_row_search_narrows_the_preview_and_stays_editable() {
         rows(&[&["300"]])
     );
     assert!(OPS.contains(&Op::IsNull));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn ctrl(browser: &mut Browser, c: char) {
+    browser.handle_key(
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    drain_async(browser);
+}
+
+/// Replace the query editor's text and run it with F5.
+fn run_in_editor(b: &mut Browser, sql: &str) {
+    b.focus = Pane::Editor;
+    b.query = vix::db::editor::Query::from_text(sql);
+    key(b, KeyCode::F(5));
+}
+
+/// T784: mark tables in the tree, export them as one SQL file from a
+/// snapshot on a second connection — ordered parents first, every row of a
+/// table larger than the grid's row cap, sequences reset — while the user's
+/// own transaction stays open and untouched.
+#[test]
+fn tree_exports_whole_tables_from_a_snapshot_beside_an_open_transaction() {
+    let dir = std::env::temp_dir().join(format!("vix-db-table-export-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("shop.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id))",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, order_id INTEGER REFERENCES orders(id))",
+            "INSERT INTO users (name) VALUES ('ada'), ('grace')",
+            "INSERT INTO orders VALUES (1, 1), (2, 2)",
+            "INSERT INTO items WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c \
+             WHERE n < 21000) SELECT n, 1 + n % 2 FROM c",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("shop", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    // An open transaction with an uncommitted delete in the user's session.
+    run_in_editor(&mut b, "BEGIN");
+    run_in_editor(&mut b, "DELETE FROM items");
+    assert_eq!(b.tx_state(), vix::db::TxState::Open);
+
+    // Tree rows: schema, Tables, items, orders, users. Mark all three.
+    b.focus = Pane::Tree;
+    for _ in 0..2 {
+        key(&mut b, KeyCode::Down);
+    }
+    for i in 0..3 {
+        if i > 0 {
+            key(&mut b, KeyCode::Down);
+        }
+        key(&mut b, KeyCode::Char('m'));
+    }
+    assert_eq!(b.export_marks.len(), 3);
+    key(&mut b, KeyCode::Char('e'));
+    assert_eq!(b.view, View::Export);
+    let dialog = b
+        .table_export
+        .as_ref()
+        .expect("the table-export dialog is open");
+    assert_eq!(dialog.tables.len(), 3);
+    key(&mut b, KeyCode::Left); // CSV wraps to SQL
+    assert!(b.table_export.as_ref().unwrap().single_file());
+    let dump = dir.join("shop.sql");
+    b.table_export.as_mut().unwrap().path.clear();
+    type_str(&mut b, &dump.display().to_string());
+    key(&mut b, KeyCode::Enter); // starts; key() drains the export
+    assert_eq!(b.view, View::Workbench);
+    assert!(!b.table_export_running());
+
+    let text = std::fs::read_to_string(&dump).unwrap_or_else(|e| panic!("{e}: {:?}", b.message));
+    let at = |needle: &str| {
+        text.find(needle)
+            .unwrap_or_else(|| panic!("{needle} missing"))
+    };
+    assert!(at("-- \"users\"") < at("-- \"orders\""), "parents first");
+    assert!(at("-- \"orders\"") < at("-- \"items\""), "parents first");
+    assert_eq!(
+        text.matches("INSERT INTO \"items\"").count(),
+        21_000,
+        "every committed row, past the grid's cap; not the uncommitted delete"
+    );
+    assert!(text.contains("INSERT INTO sqlite_sequence (name, seq) VALUES ('users', 2);"));
+
+    // The user's transaction is still open on their own session.
+    assert_eq!(b.tx_state(), vix::db::TxState::Open);
+    run_in_editor(&mut b, "SELECT count(*) FROM items");
+    assert_eq!(b.grid.rows, vec![vec!["0".to_string()]], "{:?}", b.message);
+    run_in_editor(&mut b, "ROLLBACK");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T784: with nothing marked, `e` exports the table under the cursor, one
+/// CSV file per table into the chosen directory.
+#[test]
+fn tree_exports_the_table_under_the_cursor_as_csv() {
+    let dir = std::env::temp_dir().join(format!("vix-db-table-csv-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("songs.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE songs (id INTEGER PRIMARY KEY, title TEXT)",
+            "INSERT INTO songs VALUES (1, 'blue'), (2, NULL)",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("songs", &file)]);
+    key(&mut b, KeyCode::Enter);
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('e'));
+    let out = dir.join("csv");
+    b.table_export.as_mut().unwrap().path = out.display().to_string();
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(
+        std::fs::read_to_string(out.join("songs.csv"))
+            .unwrap_or_else(|e| panic!("{e}: {:?}", b.message)),
+        "id,title\n1,blue\n2,\n"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T786: Ctrl+P loads a `.sql` file into the editor and runs it statement by
+/// statement (writes still confirmed); a file with psql meta-commands is
+/// refused before anything runs.
+#[test]
+fn run_a_sql_file_and_refuse_psql_meta_commands() {
+    let dir = std::env::temp_dir().join(format!("vix-db-run-file-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("run.db");
+    seed(&file, &["CREATE TABLE seen (a INTEGER)"]);
+    let script = dir.join("setup.sql");
+    std::fs::write(
+        &script,
+        "CREATE TABLE z (a INTEGER);\nINSERT INTO z VALUES (1), (2);\nSELECT count(*) FROM z;\n",
+    )
+    .unwrap();
+    let bad = dir.join("psql.sql");
+    std::fs::write(
+        &bad,
+        "CREATE TABLE never (a INTEGER);\n\\copy never FROM 'x.csv'\nSELECT 1;\n  \\i more.sql\n",
+    )
+    .unwrap();
+    let mut b = Browser::new(vec![sqlite_connection("run", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    ctrl(&mut b, 'p');
+    assert_eq!(b.view, View::Import);
+    assert!(b.import_is_sql_file());
+    type_str(&mut b, &script.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Confirm, "the script writes: {:?}", b.message);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.grid.rows, vec![vec!["2".to_string()]], "{:?}", b.message);
+
+    ctrl(&mut b, 'p');
+    type_str(&mut b, &bad.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "refused, not confirmed");
+    assert!(b.message.is_some());
+    assert!(
+        b.query.text().contains("\\copy"),
+        "the script is loaded for fixing"
+    );
+    run_in_editor(
+        &mut b,
+        "SELECT count(*) FROM sqlite_master WHERE name = 'never'",
+    );
+    assert_eq!(b.grid.rows, vec![vec!["0".to_string()]], "nothing ran");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two `SQLite` files for the schema compare: a source with `users`,
+/// `orders` (with a foreign key and an index) and a view, and a target with
+/// an older `users` (one row, an extra column) and a view on that column.
+/// The target connection is read-only. Returns the browser (source first)
+/// and the target file.
+fn compare_fixture(dir: &std::path::Path) -> (Browser, std::path::PathBuf) {
+    let source = dir.join("source.db");
+    let target = dir.join("target.db");
+    seed(
+        &source,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, \
+             user_id INTEGER REFERENCES users(id), total REAL DEFAULT 0)",
+            "CREATE INDEX orders_user_idx ON orders(user_id)",
+            "CREATE VIEW big_orders AS SELECT id, total FROM orders WHERE total > 100",
+        ],
+    );
+    seed(
+        &target,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, legacy TEXT)",
+            "INSERT INTO users VALUES (1, 'ada@example.org', 'x')",
+            "CREATE VIEW v_legacy AS SELECT legacy FROM users",
+        ],
+    );
+    let mut read_only_target = sqlite_connection("target", &target);
+    read_only_target.writable = false;
+    let b = Browser::new(vec![sqlite_connection("source", &source), read_only_target]);
+    (b, target)
+}
+
+#[test]
+fn schema_compare_migrates_one_sqlite_file_to_match_another() {
+    use vix::db::compare::diff::{Action, Object};
+    use vix::db::compare::review::Screen;
+    let dir = std::env::temp_dir().join(format!("vix-db-compare-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut b, target) = compare_fixture(&dir);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    // Ctrl+D opens the compare on the other SQLite connection.
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    let c = b.compare().expect("compare opens");
+    assert_eq!(c.screen, Screen::Pick);
+    assert_eq!(c.candidates, vec![1]);
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().expect("still open");
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    let find = |object: Object, name: &str| {
+        let c = b.compare().unwrap();
+        c.changes
+            .iter()
+            .position(|ch| ch.object == object && ch.name == name)
+            .unwrap_or_else(|| panic!("no {object:?} {name}: {:#?}", c.changes))
+    };
+    let orders = find(Object::Table, "orders");
+    let legacy = find(Object::Column, "legacy");
+    let old_view = find(Object::View, "v_legacy");
+    let new_view = find(Object::View, "big_orders");
+    {
+        let c = b.compare().unwrap();
+        assert_eq!(c.changes[orders].action, Action::Added);
+        assert!(c.changes[legacy].destructive);
+        assert!(!c.checked[legacy], "destructive changes start unchecked");
+        assert!(c.checked[orders] && c.checked[old_view] && c.checked[new_view]);
+        // The script drops the old view before it creates anything.
+        let script = c.script();
+        let at = |needle: &str| script.find(needle).unwrap_or_else(|| panic!("{needle}"));
+        assert!(at("DROP VIEW") < at("CREATE TABLE orders"));
+        assert!(at("CREATE TABLE orders") < at("CREATE INDEX orders_user_idx"));
+        assert!(at("CREATE INDEX orders_user_idx") < at("CREATE VIEW big_orders"));
+        assert!(
+            !script.contains("DROP COLUMN"),
+            "unchecked changes stay out"
+        );
+    }
+
+    // Save the script to a file.
+    key(&mut b, KeyCode::Char('s'));
+    assert_eq!(b.compare().unwrap().screen, Screen::SavePath);
+    for _ in 0..b.compare().unwrap().path.chars().count() {
+        key(&mut b, KeyCode::Backspace);
+    }
+    let saved = dir.join("migration.sql");
+    type_str(&mut b, &saved.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.compare().unwrap().screen, Screen::Review);
+    let text = std::fs::read_to_string(&saved).unwrap();
+    assert!(text.contains("BEGIN;") && text.contains("COMMIT;"));
+
+    // The target opened read-only: running is refused until F8.
+    key(&mut b, KeyCode::Char('r'));
+    assert_eq!(b.compare().unwrap().screen, Screen::Review);
+    assert!(b.message.is_some());
+    key(&mut b, KeyCode::F(8));
+    assert!(b.compare().unwrap().target_write_enabled());
+    key(&mut b, KeyCode::Char('r'));
+    assert_eq!(b.compare().unwrap().screen, Screen::Confirm);
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    // Re-read after the run: only the unchecked column drop is left.
+    assert_eq!(c.changes.len(), 1, "{:#?}", c.changes);
+    assert_eq!(c.changes[0].name, "legacy");
+
+    // Choose it too and run again: the schemas now match.
+    key(&mut b, KeyCode::Char(' '));
+    key(&mut b, KeyCode::Char('r'));
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert!(c.changes.is_empty(), "{:#?} {:?}", c.changes, b.message);
+
+    // The target really changed, and its row survived.
+    let mut check = Session::connect(&format!("sqlite:{}", target.display()), &[]).unwrap();
+    let (_, rows) = check
+        .run("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
+        .unwrap();
+    let names: Vec<&str> = rows.iter().map(|r| r[0].as_str()).collect();
+    assert_eq!(names, vec!["big_orders", "orders", "users"]);
+    let (_, rows) = check.run("SELECT email FROM users").unwrap();
+    assert_eq!(rows, vec![vec!["ada@example.org".to_string()]]);
+
+    // Opening the script in the editor closes the compare.
+    key(&mut b, KeyCode::Char('o'));
+    assert!(b.compare().is_none());
+    assert_eq!(b.view, View::Workbench);
+    assert!(b.query.text().contains("BEGIN;"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failing_migration_changes_nothing_on_the_target() {
+    use vix::db::compare::review::Screen;
+    let dir = std::env::temp_dir().join(format!("vix-db-compare-fail-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = dir.join("source.db");
+    let target = dir.join("target.db");
+    seed(
+        &source,
+        &[
+            "CREATE TABLE a (id INTEGER PRIMARY KEY)",
+            "CREATE TABLE b (id INTEGER PRIMARY KEY, n INTEGER NOT NULL)",
+        ],
+    );
+    // The target's `b` has rows, so adding a NOT NULL column without a
+    // default fails after `a` was already created.
+    seed(
+        &target,
+        &[
+            "CREATE TABLE b (id INTEGER PRIMARY KEY)",
+            "INSERT INTO b VALUES (1)",
+        ],
+    );
+    let mut b = Browser::new(vec![
+        sqlite_connection("source", &source),
+        sqlite_connection("target", &target),
+    ]);
+    key(&mut b, KeyCode::Enter);
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    assert!(
+        c.changes.iter().any(|ch| ch.risky),
+        "NOT NULL without default is risky"
+    );
+    key(&mut b, KeyCode::Char('r'));
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review);
+    assert!(b.message.is_some());
+    // Nothing changed: `a` was rolled back with the rest.
+    let mut check = Session::connect(&format!("sqlite:{}", target.display()), &[]).unwrap();
+    let (_, rows) = check
+        .run("SELECT count(*) FROM sqlite_master WHERE name = 'a'")
+        .unwrap();
+    assert_eq!(rows, vec![vec!["0".to_string()]]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn clear_editor(b: &mut Browser) {
+    b.focus = Pane::Editor;
+    for _ in 0..=b.query.text().chars().count() {
+        key(b, KeyCode::Backspace);
+    }
+}
+
+fn production(name: &str) -> std::collections::BTreeMap<String, connect::Environment> {
+    std::iter::once((name.to_string(), connect::Environment::Production)).collect()
+}
+
+/// T781: on a production connection every write shows its SQL and asks, even
+/// inside a transaction; on any connection `DROP`/`TRUNCATE` always ask.
+#[test]
+fn production_confirms_every_write_and_drop_always_asks() {
+    use vix::db::TxState;
+    let dir = std::env::temp_dir().join(format!("vix-db-env-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("env.db");
+    seed(
+        &file,
+        &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("prod", &file)]);
+    b.set_environments(production("prod"));
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    assert_eq!(b.active_environment(), connect::Environment::Production);
+
+    b.begin_tx();
+    assert_eq!(b.tx_state(), TxState::Open);
+    type_str(&mut b, "DELETE FROM t WHERE a = 1");
+    key(&mut b, KeyCode::F(5));
+    assert_eq!(
+        b.view,
+        View::Confirm,
+        "production asks inside a transaction"
+    );
+    assert_eq!(
+        b.pending_statements(),
+        vec!["DELETE FROM t WHERE a = 1".to_string()]
+    );
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench);
+    b.rollback_tx();
+
+    clear_editor(&mut b);
+    type_str(&mut b, "SELECT count(*) FROM t");
+    key(&mut b, KeyCode::F(5));
+    assert_eq!(b.view, View::Workbench, "a read never asks");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["2".to_string()]],
+        "rollback restored the row"
+    );
+
+    // A local connection skips the confirmation inside a transaction, but not
+    // for DROP.
+    let mut b = Browser::new(vec![sqlite_connection("local", &file)]);
+    key(&mut b, KeyCode::Enter);
+    b.begin_tx();
+    type_str(&mut b, "DROP TABLE t");
+    key(&mut b, KeyCode::F(5));
+    assert_eq!(b.view, View::Confirm, "DROP asks even in a transaction");
+    key(&mut b, KeyCode::Esc);
+    clear_editor(&mut b);
+    type_str(&mut b, "DELETE FROM t WHERE a = 2");
+    key(&mut b, KeyCode::F(5));
+    assert_eq!(
+        b.view,
+        View::Workbench,
+        "a plain write in a tx runs: {:?}",
+        b.message
+    );
+    b.rollback_tx();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T781: committing staged cell edits on production shows the `UPDATE`s and
+/// asks first.
+#[test]
+fn production_cell_edit_commit_shows_its_updates_first() {
+    let dir = std::env::temp_dir().join(format!("vix-db-env-edit-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("edit.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO users VALUES (1,'ada')",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("prod", &file)]);
+    b.set_environments(production("prod"));
+    key(&mut b, KeyCode::Enter);
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('p'));
+    assert!(b.editable());
+    b.focus = Pane::Results;
+    key(&mut b, KeyCode::Right);
+    key(&mut b, KeyCode::Char('i'));
+    for _ in 0.."ada".len() {
+        key(&mut b, KeyCode::Backspace);
+    }
+    type_str(&mut b, "Ada");
+    key(&mut b, KeyCode::Enter);
+    key(&mut b, KeyCode::Char('W'));
+    assert_eq!(b.view, View::Confirm, "production asks before committing");
+    let stmts = b.pending_statements();
+    assert_eq!(stmts.len(), 1);
+    assert!(stmts[0].starts_with("UPDATE "), "{stmts:?}");
+    key(&mut b, KeyCode::Enter);
+    assert!(b.edits.is_empty(), "committed: {:?}", b.message);
+    assert_eq!(b.grid.rows, vec![vec!["1".to_string(), "Ada".to_string()]]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T781: a pasted `sqlite:` URL fills the add form, and the saved connection
+/// connects.
+#[test]
+fn pasted_sqlite_url_adds_a_working_connection() {
+    let dir = std::env::temp_dir().join(format!("vix-db-paste-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("pasted app.db");
+    seed(&file, &["CREATE TABLE t (a INTEGER)"]);
+    let mut b = Browser::new(Vec::new());
+    key(&mut b, KeyCode::Char('a'));
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        file.display().to_string().replace(' ', "%20")
+    );
+    assert!(b.paste(&url));
+    assert_eq!(b.form.kind, connect::Kind::Sqlite);
+    assert_eq!(b.form.fields[0], "pasted app", "named after the file");
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.connections[0].file, file.display().to_string());
+    assert!(b.take_dirty_connections().is_some());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    assert!(b.tree.table_names().contains(&"t".to_string()));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T782: `A` copies the result (statement, types for a preview, rows) and a
+/// table's structure with its rows as Markdown.
+#[test]
+fn copy_for_ai_puts_markdown_on_the_clipboard() {
+    let dir = std::env::temp_dir().join(format!("vix-db-copy-ai-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("ai.db");
+    let mut seeds = vec![
+        "CREATE TABLE ai_people (id INTEGER PRIMARY KEY, name TEXT NOT NULL)".to_string(),
+        "CREATE INDEX ai_people_name ON ai_people (name)".to_string(),
+    ];
+    seeds.extend((1..=60).map(|i| format!("INSERT INTO ai_people VALUES ({i}, 'p{i}')")));
+    let refs: Vec<&str> = seeds.iter().map(String::as_str).collect();
+    seed(&file, &refs);
+    let mut b = Browser::new(vec![sqlite_connection("ai", &file)]);
+    key(&mut b, KeyCode::Enter);
+
+    // A query result: statement, rows, capped at 50.
+    type_str(&mut b, "SELECT id, name FROM ai_people ORDER BY id");
+    key(&mut b, KeyCode::F(5));
+    b.focus = Pane::Results;
+    key(&mut b, KeyCode::Char('A'));
+    let md = vix::clipboard::get().unwrap();
+    assert!(
+        md.contains("```sql\nSELECT id, name FROM ai_people ORDER BY id\n```"),
+        "{md}"
+    );
+    assert!(md.contains("| id | name |"), "{md}");
+    assert!(md.contains("| 50 | p50 |"), "{md}");
+    assert!(!md.contains("| 51 | p51 |"), "rows are capped at 50");
+
+    // A table preview also carries the column types.
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('p'));
+    b.focus = Pane::Results;
+    key(&mut b, KeyCode::Char('A'));
+    let md = vix::clipboard::get().unwrap();
+    assert!(md.contains("| id | INTEGER |"), "{md}");
+    assert!(md.contains("| name | TEXT |"), "{md}");
+
+    // On the tree table: structure plus rows.
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Char('A'));
+    let md = vix::clipboard::get().unwrap();
+    assert!(md.starts_with("## `ai_people` (sqlite)"), "{md}");
+    assert!(md.contains("ai_people_name"), "the index is listed: {md}");
+    assert!(md.contains("| 1 | p1 |"), "preview rows follow: {md}");
+    assert!(!md.contains("| 51 | p51 |"), "rows are capped at 50");
     let _ = std::fs::remove_dir_all(&dir);
 }

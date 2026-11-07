@@ -21,6 +21,12 @@ impl App {
         debug_assert!(self.db.is_none());
     }
 
+    /// The DB workbench can't be open, so it never takes a paste.
+    pub(super) fn db_paste(&mut self, _text: &str) -> bool {
+        debug_assert!(self.db.is_none());
+        false
+    }
+
     /// The SQL editor can't be open, so it never takes a key.
     pub(super) fn edit_sql_key(&mut self, _key: KeyEvent) {
         debug_assert!(self.db.is_none());

@@ -26,6 +26,7 @@ impl App {
             }
             "db.execute" => self.with_db(crate::db::Browser::execute),
             "db.execute_all" => self.with_db(crate::db::Browser::execute_all),
+            "db.run_buffer" => self.db_run_buffer(),
             "db.explain" => self.with_db(|b| b.explain(false)),
             "db.explain_analyze" => self.with_db(|b| b.explain(true)),
             "db.format" => self.with_db(crate::db::Browser::format_at_cursor),
@@ -37,10 +38,34 @@ impl App {
             "db.commit" => self.with_db(crate::db::Browser::commit_tx),
             "db.rollback" => self.with_db(crate::db::Browser::rollback_tx),
             "db.refresh" => self.with_db(crate::db::Browser::refresh_catalog),
+            "db.schema_compare" => self.with_db(crate::db::Browser::open_compare),
             "db.disconnect" => self.with_db(crate::db::Browser::disconnect),
             _ => return false,
         }
         true
+    }
+
+    /// Load the active editor buffer into the workbench query editor and run
+    /// it statement by statement (T786, `db.run_buffer`): the same path as a
+    /// `.sql` file opened with Ctrl+P in the workbench. Without a connection
+    /// the overlay opens on the connections list.
+    fn db_run_buffer(&mut self) {
+        let text = match self.editor.active_tab() {
+            Some(tab) if !tab.is_image() => tab.text(),
+            _ => {
+                self.messages.warn(t!("msg.edit_sql_no_buffer").to_string());
+                return;
+            }
+        };
+        self.open_db();
+        if let Some(b) = self.db.as_mut() {
+            if b.conn.is_some() {
+                b.run_script(&text);
+            } else {
+                b.view = crate::db::View::Connections;
+                b.message = Some(t!("msg.db_not_connected").to_string());
+            }
+        }
     }
 
     /// Open the DB overlay (if it is not already), keeping any live session.
@@ -49,6 +74,7 @@ impl App {
     pub(super) fn open_db(&mut self) {
         if self.db.is_none() {
             let mut browser = crate::db::Browser::new(self.settings.db_connections.clone());
+            browser.set_environments(self.settings.db_environments.clone());
             browser.history = crate::db::store::load_history();
             browser.saved = crate::db::store::load_saved();
             self.db = Some(browser);
@@ -63,6 +89,12 @@ impl App {
         }
     }
 
+    /// Offer a bracketed paste to the open DB workbench (a connection string
+    /// pasted into its form, T781); `true` when it was used.
+    pub(super) fn db_paste(&mut self, text: &str) -> bool {
+        self.db.as_mut().is_some_and(|db| db.paste(text))
+    }
+
     /// Route a key to the open DB workbench, persist any connection-list
     /// change, and act on the outcome.
     pub(super) fn db_key(&mut self, key: KeyEvent) {
@@ -75,12 +107,21 @@ impl App {
             Some(b) => b.handle_key(key, pages),
             None => return,
         };
-        if let Some(conns) = self
+        let conns = self
             .db
             .as_mut()
-            .and_then(crate::db::Browser::take_dirty_connections)
-        {
-            self.settings.db_connections = conns;
+            .and_then(crate::db::Browser::take_dirty_connections);
+        let envs = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_environments);
+        if conns.is_some() || envs.is_some() {
+            if let Some(conns) = conns {
+                self.settings.db_connections = conns;
+            }
+            if let Some(envs) = envs {
+                self.settings.db_environments = envs;
+            }
             self.store_settings_or_warn();
         }
         if let Some(history) = self
@@ -156,33 +197,39 @@ impl App {
     pub fn poll_db_query(&mut self) {
         if let Some(b) = self.db.as_mut() {
             b.poll_query();
+            // A whole-table export (T784) runs on its own connection; its
+            // progress drains on the same tick.
+            b.poll_table_export();
         }
     }
 
-    /// Whether a DB query is running asynchronously (keeps the loop polling).
+    /// Whether a DB query or table export is running asynchronously (keeps
+    /// the loop polling).
     #[must_use]
     pub fn db_query_running(&self) -> bool {
         self.db
             .as_ref()
-            .is_some_and(crate::db::Browser::query_running)
+            .is_some_and(|b| b.query_running() || b.table_export_running())
     }
 
     /// Drain a finished asynchronous DB connect (or password-prompted retry)
-    /// into the workbench (Run H, T531). Called each event-loop tick; cheap
-    /// when nothing is running.
+    /// into the workbench (Run H, T531), and the schema compare's background
+    /// work: its target connect and its migration run (T785). Called each
+    /// event-loop tick; cheap when nothing is running.
     pub fn poll_db_connect(&mut self) {
         if let Some(b) = self.db.as_mut() {
             b.poll_connect();
+            b.poll_compare();
         }
     }
 
-    /// Whether a DB connect is running asynchronously (keeps the loop
-    /// polling).
+    /// Whether a DB connect, or schema-compare work, is running
+    /// asynchronously (keeps the loop polling).
     #[must_use]
     pub fn db_connect_running(&self) -> bool {
         self.db
             .as_ref()
-            .is_some_and(crate::db::Browser::connect_running)
+            .is_some_and(|b| b.connect_running() || b.compare_running())
     }
 
     /// Drain a finished asynchronous DB reconnect (a cancelled query's

@@ -27,9 +27,9 @@
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
-    Browser, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form, Outcome, Pane,
-    TxState, View, ai_features::AiState, catalog, complete, connect, object_triples, secret,
-    session, store, tunnel,
+    Browser, FORM_ENVIRONMENT, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form,
+    Outcome, Pane, TxState, View, ai_features::AiState, catalog, complete, connect, object_triples,
+    secret, session, store, tunnel,
 };
 
 /// Outcome of a background connect attempt (Run H, T531): fully connected,
@@ -37,7 +37,7 @@ use super::{
 /// prompt, exactly like the old synchronous credential waterfall did), or
 /// failed outright (bad credentials, unreachable host, a failing setup
 /// statement, …).
-enum ConnectOutcome {
+pub(crate) enum ConnectOutcome {
     /// The session is open and ready; `tunnel` is `Some` only when this
     /// connection is configured to go over one.
     Connected {
@@ -96,17 +96,27 @@ impl Browser {
             KeyCode::Enter => self.start_connect(self.sel),
             KeyCode::Char('a') => {
                 self.form = Form::default();
+                self.form_environment = connect::Environment::Local;
+                self.form_password = None;
                 self.view = View::Form;
             }
             KeyCode::Char('e') => {
                 if let Some(conn) = self.connections.get(self.sel) {
                     self.form = Form::from_connection(conn, Some(self.sel));
+                    self.form_environment = self.environment_of(&conn.name);
+                    self.form_password = None;
                     self.view = View::Form;
                 }
             }
             KeyCode::Char('d') => {
                 if self.sel < self.connections.len() {
-                    self.connections.remove(self.sel);
+                    let removed = self.connections.remove(self.sel);
+                    // A name another saved connection still uses keeps its
+                    // environment entry.
+                    if !self.connections.iter().any(|c| c.name == removed.name) {
+                        self.environments.remove(&removed.name);
+                        self.held_passwords.remove(&removed.name);
+                    }
                     self.sel = self.sel.min(self.connections.len().saturating_sub(1));
                     self.dirty.connections = true;
                 }
@@ -126,10 +136,11 @@ impl Browser {
 
     /// Keys on the add/edit connection form.
     ///
-    /// Row `FORM_KIND` and the two toggle rows (`FORM_WRITABLE`, `FORM_STORE`)
-    /// respond to Left/Right/Space instead of text entry; the others are plain
-    /// text fields. Enter saves (rejecting an empty name) and flags the
-    /// connection list dirty for the host to persist.
+    /// Row `FORM_KIND`, the two toggle rows (`FORM_WRITABLE`, `FORM_STORE`)
+    /// and the environment row (`FORM_ENVIRONMENT`) respond to
+    /// Left/Right/Space instead of text entry; the others are plain text
+    /// fields. Enter saves (rejecting an empty name) and flags the connection
+    /// list and environments dirty for the host to persist.
     pub(super) fn key_form(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Up => self.form.sel = self.form.sel.saturating_sub(1),
@@ -145,6 +156,11 @@ impl Browser {
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_STORE => {
                 self.form.store_keyring = !self.form.store_keyring;
             }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ')
+                if self.form.sel == FORM_ENVIRONMENT =>
+            {
+                self.form_environment = self.form_environment.next();
+            }
             KeyCode::Char(c) if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
                 self.form.fields[self.form.sel].push(c);
             }
@@ -157,19 +173,54 @@ impl Browser {
                 if self.form.fields[0].trim().is_empty() {
                     self.message = Some(t!("msg.db_name_required").to_string());
                 } else {
-                    let conn = self.form.to_connection();
-                    match self.form.editing {
-                        Some(i) if i < self.connections.len() => self.connections[i] = conn,
-                        _ => self.connections.push(conn),
-                    }
-                    self.dirty.connections = true;
-                    self.view = View::Connections;
+                    self.save_form();
                 }
             }
-            KeyCode::Esc => self.view = View::Connections,
+            KeyCode::Esc => {
+                self.form_password = None;
+                self.view = View::Connections;
+            }
             _ => {}
         }
         Outcome::Consumed
+    }
+
+    /// Save the form as a connection (replacing the edited one, or appending),
+    /// record its environment under its (possibly new) name, and hold a
+    /// pasted password for its next connect.
+    fn save_form(&mut self) {
+        let conn = self.form.to_connection();
+        let name = conn.name.clone();
+        let old_name = match self.form.editing {
+            Some(i) if i < self.connections.len() => {
+                Some(std::mem::replace(&mut self.connections[i], conn).name)
+            }
+            _ => {
+                self.connections.push(conn);
+                None
+            }
+        };
+        // A rename carries the held password; the environment is rewritten
+        // under the new name below.
+        if let Some(old) = old_name.filter(|old| *old != name)
+            && !self.connections.iter().any(|c| c.name == old)
+        {
+            self.environments.remove(&old);
+            if let Some(pw) = self.held_passwords.remove(&old) {
+                self.held_passwords.insert(name.clone(), pw);
+            }
+        }
+        if self.form_environment == connect::Environment::Local {
+            self.environments.remove(&name);
+        } else {
+            self.environments
+                .insert(name.clone(), self.form_environment);
+        }
+        if let Some(pw) = self.form_password.take() {
+            self.held_passwords.insert(name, pw);
+        }
+        self.dirty.connections = true;
+        self.view = View::Connections;
     }
 
     /// Keys on the password prompt. Typed characters go to
@@ -214,7 +265,15 @@ impl Browser {
         let Some(conn) = self.connections.get(idx).cloned() else {
             return;
         };
-        self.begin_connect(conn, None, Some(idx));
+        // A password from a pasted connection string is used once, exactly
+        // like one typed on the prompt (and saved to the keyring on success
+        // only if the connection opts in).
+        let held = if conn.needs_password() {
+            self.held_passwords.remove(&conn.name)
+        } else {
+            None
+        };
+        self.begin_connect(conn, held, Some(idx));
     }
 
     /// Kick off a background connect to `conn`. `password`: `Some` uses
@@ -389,12 +448,19 @@ impl Browser {
             session.cancel();
         }
         self.tunnel = None; // drop → kills the ssh forward
+        self.compare = None; // and the schema compare's target session
         self.write_enabled = false;
         self.log = store::Log::default();
         self.ai = AiState::Idle;
         self.last_error = None;
         self.params = None;
         self.import_path.clear();
+        self.import_target = super::panels::PathTarget::Import;
+        // Dropping a running table export's receiver stops its worker at
+        // the next progress report (it rolls back and removes its `.part`).
+        self.pending_export = None;
+        self.table_export = None;
+        self.export_marks.clear();
         self.tx = TxState::None;
         self.pending_query = None;
         self.pending_connect = None;
@@ -436,7 +502,7 @@ impl Browser {
 /// `wait_ready` (up to 10s), or an unreachable host's OS TCP timeout
 /// (commonly 60-130s) — which is exactly why it no longer runs on the UI
 /// thread.
-fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> ConnectOutcome {
+pub(crate) fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> ConnectOutcome {
     let password = match password {
         Some(p) => p.to_string(),
         None if !conn.needs_password() => String::new(),

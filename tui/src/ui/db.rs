@@ -38,27 +38,11 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
     let view = b.view;
-    match view {
-        crate::db::View::Connections => draw_db_connections(app, frame, chunks[0]),
-        crate::db::View::Form => draw_db_form(app, frame, chunks[0]),
-        crate::db::View::Password => draw_db_password(app, frame, chunks[0]),
-        crate::db::View::Workbench if b.row_filter_open() => {
-            draw_db_row_filter(app, frame, chunks[0]);
-        }
-        crate::db::View::Workbench => draw_db_workbench(app, frame, chunks[0]),
-        crate::db::View::History | crate::db::View::Saved => {
-            draw_db_query_list(app, frame, chunks[0]);
-        }
-        crate::db::View::SaveName => draw_db_save_name(app, frame, chunks[0]),
-        crate::db::View::Confirm => draw_db_confirm(app, frame, chunks[0]),
-        crate::db::View::Cell => draw_db_cell(app, frame, chunks[0]),
-        crate::db::View::Export => draw_db_export(app, frame, chunks[0]),
-        crate::db::View::Log => draw_db_log(app, frame, chunks[0]),
-        crate::db::View::Erd => draw_db_erd(app, frame, chunks[0]),
-        crate::db::View::Ask => draw_db_ask(app, frame, chunks[0]),
-        crate::db::View::Params => draw_db_params(app, frame, chunks[0]),
-        crate::db::View::Import => draw_db_import(app, frame, chunks[0]),
-        crate::db::View::CellEdit => draw_db_cell_edit(app, frame, chunks[0]),
+    let compare = b.compare().map(|c| c.screen);
+    if compare.is_some() {
+        draw_db_compare(app, frame, chunks[0]);
+    } else {
+        draw_db_view(app, frame, view, chunks[0]);
     }
     let Some(b) = app.db.as_ref() else { return };
     if let Some(msg) = &b.message {
@@ -67,6 +51,48 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
             chunks[1],
         );
     }
+    let hint = match compare {
+        Some(screen) => compare_hint(screen),
+        None => view_hint(b, view),
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
+        chunks[2],
+    );
+}
+
+/// Draw the body of the current workbench `view`.
+fn draw_db_view(app: &mut App, frame: &mut Frame, view: crate::db::View, area: Rect) {
+    let (filter, tables) = app.db.as_ref().map_or((false, false), |b| {
+        (b.row_filter_open(), b.table_export.is_some())
+    });
+    match view {
+        crate::db::View::Connections => draw_db_connections(app, frame, area),
+        crate::db::View::Form => draw_db_form(app, frame, area),
+        crate::db::View::Password => draw_db_password(app, frame, area),
+        crate::db::View::Workbench if filter => draw_db_row_filter(app, frame, area),
+        crate::db::View::Workbench => draw_db_workbench(app, frame, area),
+        crate::db::View::History | crate::db::View::Saved => {
+            draw_db_query_list(app, frame, area);
+        }
+        crate::db::View::SaveName => draw_db_save_name(app, frame, area),
+        crate::db::View::Confirm => draw_db_confirm(app, frame, area),
+        crate::db::View::Cell => draw_db_cell(app, frame, area),
+        crate::db::View::Export if tables => draw_db_table_export(app, frame, area),
+        crate::db::View::Export => draw_db_export(app, frame, area),
+        crate::db::View::Log => draw_db_log(app, frame, area),
+        crate::db::View::Erd => draw_db_erd(app, frame, area),
+        crate::db::View::Ask => draw_db_ask(app, frame, area),
+        crate::db::View::Params => draw_db_params(app, frame, area),
+        crate::db::View::Import => draw_db_import(app, frame, area),
+        crate::db::View::CellEdit => draw_db_cell_edit(app, frame, area),
+    }
+}
+
+/// The hint line for the current workbench `view`.
+fn view_hint(b: &crate::db::Browser, view: crate::db::View) -> String {
+    let tables = b.table_export.is_some();
+    let sql_file = b.import_is_sql_file();
     let hint = match view {
         crate::db::View::Connections => t!("ui.db_connections_hint"),
         crate::db::View::Form => t!("ui.db_form_hint"),
@@ -77,18 +103,17 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         crate::db::View::SaveName => t!("ui.db_save_hint"),
         crate::db::View::Confirm => t!("ui.db_confirm_hint"),
         crate::db::View::Cell => t!("ui.db_cell_hint"),
+        crate::db::View::Export if tables => t!("ui.db_table_export_hint"),
         crate::db::View::Export => t!("ui.db_export_hint"),
         crate::db::View::Log => t!("ui.db_log_hint"),
         crate::db::View::Erd => t!("ui.db_erd_hint"),
         crate::db::View::Ask => t!("ui.db_ask_hint"),
         crate::db::View::Params => t!("ui.db_params_hint"),
+        crate::db::View::Import if sql_file => t!("ui.db_run_file_hint"),
         crate::db::View::Import => t!("ui.db_import_hint"),
         crate::db::View::CellEdit => t!("ui.db_cell_edit_hint"),
     };
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
-        chunks[2],
-    );
+    hint.to_string()
 }
 
 /// The saved-connections list of the DB overlay.
@@ -107,14 +132,22 @@ fn draw_db_connections(app: &mut App, frame: &mut Frame, area: Rect) {
         )));
     }
     for (i, conn) in b.connections.iter().enumerate() {
-        let text = format!(" {} {:10} {}", conn.name, conn.kind.label(), conn.target());
+        let env = b.environment_of(&conn.name);
+        let badge = crate::db::environment::badge(env);
+        let text = format!(
+            " {} {badge} {:10} {}",
+            conn.name,
+            conn.kind.label(),
+            conn.target()
+        );
         let line = if i == b.sel {
             Line::from(Span::styled(text, theme::selected()))
         } else {
             Line::from(vec![
                 Span::raw(format!(" {} ", conn.name)),
+                Span::styled(badge, crate::db::environment::style(env)),
                 Span::styled(
-                    format!("{:10} {}", conn.kind.label(), conn.target()),
+                    format!(" {:10} {}", conn.kind.label(), conn.target()),
                     theme::dim(),
                 ),
             ])
@@ -145,6 +178,7 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.db_field_sslmode"),
         t!("ui.db_field_access"),
         t!("ui.db_field_store_keyring"),
+        t!("ui.db_field_environment"),
     ];
     let on_off = |on: bool| {
         if on {
@@ -168,8 +202,15 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
             }
         } else if i == crate::db::FORM_STORE {
             on_off(b.form.store_keyring).to_string()
+        } else if i == crate::db::FORM_ENVIRONMENT {
+            crate::db::environment::badge(b.form_environment)
         } else {
             b.form.fields[i].clone()
+        };
+        let value_style = if i == crate::db::FORM_ENVIRONMENT {
+            crate::db::environment::style(b.form_environment)
+        } else {
+            Style::default()
         };
         let text = format!(" {label:<14} {value}");
         let line = if i == b.form.sel {
@@ -177,10 +218,16 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         } else {
             Line::from(vec![
                 Span::styled(format!(" {label:<14} "), theme::dim()),
-                Span::raw(value),
+                Span::styled(value, value_style),
             ])
         };
         lines.push(line);
+    }
+    if b.form_password_held() {
+        lines.push(Line::from(Span::styled(
+            format!(" {}", t!("ui.db_form_password_held")),
+            theme::dim(),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -365,16 +412,18 @@ fn draw_db_row_filter(app: &mut App, frame: &mut Frame, area: Rect) {
     }
 }
 
-/// The CSV/TSV import file-path prompt.
+/// The file-path prompt: CSV/TSV import, or a `.sql` file to run (T786).
 fn draw_db_import(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
+    let title = if b.import_is_sql_file() {
+        t!("ui.db_run_file_title")
+    } else {
+        t!("ui.db_import_title")
+    };
     let lines = vec![
-        Line::from(Span::styled(
-            format!(" {}", t!("ui.db_import_title")),
-            theme::title(true),
-        )),
+        Line::from(Span::styled(format!(" {title}"), theme::title(true))),
         Line::from(format!(" {}", b.import_path)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -428,18 +477,22 @@ fn draw_db_confirm(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
-    let summary = b.pending_summary().unwrap_or_default();
-    let lines = vec![
-        Line::from(Span::styled(
-            format!(" {}", t!("ui.db_confirm")),
-            theme::title(true),
-        )),
-        Line::from(Span::raw(format!(
-            " {}",
-            trunc(&summary, usize::from(area.width).saturating_sub(2))
-        ))),
-    ];
-    frame.render_widget(Paragraph::new(lines), area);
+    // Every pending statement in full (T781): on production in particular the
+    // user approves exactly the SQL that will run.
+    let env = b.active_environment();
+    let mut lines = vec![Line::from(vec![
+        Span::styled(format!(" {} ", t!("ui.db_confirm")), theme::title(true)),
+        Span::styled(
+            crate::db::environment::badge(env),
+            crate::db::environment::style(env),
+        ),
+    ])];
+    for stmt in b.pending_statements() {
+        for text in stmt.lines() {
+            lines.push(Line::from(Span::raw(format!(" {text}"))));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 
 /// The full-content cell viewer of the DB overlay.
@@ -567,6 +620,54 @@ fn draw_db_export(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
+/// The table-export dialog (T784): the chosen tables, the format, and the
+/// destination directory (or file, for SQL).
+fn draw_db_table_export(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(b) = app.db.as_ref() else {
+        return;
+    };
+    let Some(dialog) = b.table_export.as_ref() else {
+        return;
+    };
+    let formats: Vec<Span> = crate::db::table_export::TABLE_FORMATS
+        .iter()
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let style = if i == dialog.format {
+                theme::selected()
+            } else {
+                theme::dim()
+            };
+            [
+                Span::styled(format!(" {} ", f.label()), style),
+                Span::raw(" "),
+            ]
+        })
+        .collect();
+    let names: Vec<&str> = dialog.tables.iter().map(|(_, t)| t.as_str()).collect();
+    let dest = if dialog.single_file() {
+        t!("ui.db_export_file")
+    } else {
+        t!("ui.db_table_export_dir")
+    };
+    let lines = vec![
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_table_export")),
+            theme::title(true),
+        )),
+        Line::from(Span::styled(
+            format!(
+                " {}",
+                t!("ui.db_table_export_tables", names = names.join(", "))
+            ),
+            theme::dim(),
+        )),
+        Line::from(formats),
+        Line::from(format!(" {dest}: {}", dialog.path)),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+}
+
 /// The three-pane DB workbench: schema tree, SQL editor, results grid.
 fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     let cols = Layout::default()
@@ -635,6 +736,17 @@ fn draw_db_tree(app: &App, frame: &mut Frame, area: Rect) {
         } else {
             row.text.clone()
         };
+        // A table marked for export (`m`, T784) shows a `*` in the arrow slot.
+        let arrow = match row.reference {
+            crate::db::catalog::RowRef::Object(si, crate::db::catalog::Folder::Tables, _)
+                if b.tree.schemas.get(si).is_some_and(|s| {
+                    b.export_marks.contains(&(s.name.clone(), row.text.clone()))
+                }) =>
+            {
+                "* "
+            }
+            _ => arrow,
+        };
         let text = format!("{}{arrow}{text}", " ".repeat(row.depth * 2));
         let line = if i == b.tree.sel && focused {
             Line::from(Span::styled(text, theme::selected()))
@@ -673,14 +785,23 @@ fn draw_db_editor(app: &App, frame: &mut Frame, area: Rect) {
         crate::db::TxState::Aborted => " · TX!",
         crate::db::TxState::None => "",
     };
+    let env = b.active_environment();
+    let env_badge = Span::styled(
+        crate::db::environment::badge(env),
+        crate::db::environment::style(env),
+    );
     let title = if let Some(secs) = b.query_elapsed_secs() {
-        format!(
-            " {} — {} ",
-            t!("ui.db_editor"),
-            t!("ui.db_query_running", secs = secs)
-        )
+        Line::from(vec![
+            Span::raw(format!(" {} — ", t!("ui.db_editor"))),
+            env_badge,
+            Span::raw(format!(" {} ", t!("ui.db_query_running", secs = secs))),
+        ])
     } else {
-        format!(" {} — {badge}{tx} ", t!("ui.db_editor"))
+        Line::from(vec![
+            Span::raw(format!(" {} — ", t!("ui.db_editor"))),
+            env_badge,
+            Span::raw(format!(" {badge}{tx} ")),
+        ])
     };
     let block = Block::default()
         .borders(Borders::ALL)
@@ -930,4 +1051,256 @@ fn db_result_rows(
         }
     }
     lines
+}
+
+/// The hint line for a schema-compare screen (T785).
+fn compare_hint(screen: crate::db::compare::review::Screen) -> String {
+    use crate::db::compare::review::Screen;
+    match screen {
+        Screen::Pick => t!("ui.db_compare_pick_hint"),
+        Screen::Password => t!("ui.db_password_hint"),
+        Screen::Review => t!("ui.db_compare_review_hint"),
+        Screen::Confirm => t!("ui.db_confirm_hint"),
+        Screen::SavePath => t!("ui.db_compare_save_hint"),
+        Screen::Script => t!("ui.db_compare_script_hint"),
+        _ => t!("ui.db_compare_wait_hint"),
+    }
+    .to_string()
+}
+
+/// The schema compare (T785): target picker, password prompt, progress,
+/// the review list with the highlighted change's details, the run
+/// confirmation, the save prompt and the script viewer.
+fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::db::compare::review::Screen;
+    let Some(b) = app.db.as_ref() else {
+        return;
+    };
+    let Some(c) = b.compare() else {
+        return;
+    };
+    let width = usize::from(area.width).saturating_sub(2);
+    let title = |text: String| Line::from(Span::styled(format!(" {text}"), theme::title(true)));
+    let mut lines: Vec<Line> = Vec::new();
+    let mut cursor: Option<(usize, usize)> = None;
+    match c.screen {
+        Screen::Pick => {
+            lines.push(title(format!(
+                "{} — {}",
+                t!("ui.db_compare_title"),
+                t!("ui.db_compare_pick")
+            )));
+            let schema = t!("ui.db_compare_schema", schema = c.schema).to_string();
+            cursor = Some((1, schema.chars().count() + 1));
+            lines.push(Line::from(format!(" {schema}")));
+            for (i, idx) in c.candidates.iter().enumerate() {
+                let Some(conn) = b.connections.get(*idx) else {
+                    continue;
+                };
+                let text = format!(" {} {:10} {}", conn.name, conn.kind.label(), conn.target());
+                let style = if i == c.pick {
+                    theme::selected()
+                } else {
+                    theme::base()
+                };
+                lines.push(Line::from(Span::styled(trunc(&text, width), style)));
+            }
+        }
+        Screen::Password => {
+            lines.push(title(
+                t!("ui.db_compare_password", name = c.target_name()).to_string(),
+            ));
+            let masked = "\u{2022}".repeat(c.password.chars().count());
+            cursor = Some((1, masked.chars().count() + 1));
+            lines.push(Line::from(format!(" {masked}")));
+        }
+        Screen::Working => {
+            let secs = c.elapsed_secs().unwrap_or(0);
+            lines.push(title(if c.running_migration() {
+                t!("ui.db_compare_running", name = c.target_name(), secs = secs).to_string()
+            } else {
+                t!("ui.db_compare_reading", secs = secs).to_string()
+            }));
+        }
+        Screen::Review => {
+            draw_db_compare_review(c, frame, area);
+            return;
+        }
+        Screen::Confirm => {
+            let count = c.plan().runnable().len();
+            lines.push(title(
+                t!(
+                    "ui.db_compare_confirm",
+                    count = count,
+                    name = c.target_name()
+                )
+                .to_string(),
+            ));
+            if let Some(env) = c.target_environment() {
+                lines.push(Line::from(format!(
+                    " {}",
+                    t!("ui.db_compare_confirm_env", env = env)
+                )));
+            }
+            lines.push(Line::from(Span::styled(
+                format!(" {}", t!("ui.db_compare_confirm_note")),
+                theme::dim(),
+            )));
+        }
+        Screen::SavePath => {
+            lines.push(title(t!("ui.db_compare_save").to_string()));
+            cursor = Some((1, c.path.chars().count() + 1));
+            lines.push(Line::from(format!(" {}", c.path)));
+        }
+        Screen::Script => {
+            lines.push(title(t!("ui.db_compare_script").to_string()));
+            let height = usize::from(area.height).saturating_sub(1);
+            for l in c.script().lines().skip(c.script_scroll).take(height) {
+                lines.push(Line::from(format!(" {l}")));
+            }
+        }
+        _ => {}
+    }
+    frame.render_widget(Paragraph::new(lines), area);
+    if let Some((row, col)) = cursor {
+        let col = u16::try_from(col).unwrap_or(u16::MAX);
+        let row = u16::try_from(row).unwrap_or(u16::MAX);
+        frame.set_cursor_position((
+            area.x + col.min(area.width.saturating_sub(1)),
+            area.y + row.min(area.height.saturating_sub(1)),
+        ));
+    }
+}
+
+/// The schema compare's review screen: a summary line, the change list
+/// with checkboxes and flags, and the highlighted change's definitions and
+/// statements.
+fn draw_db_compare_review(c: &crate::db::compare::review::Compare, frame: &mut Frame, area: Rect) {
+    let width = usize::from(area.width).saturating_sub(2);
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Percentage(45),
+            Constraint::Min(3),
+        ])
+        .split(area);
+    let chosen = c.checked.iter().filter(|on| **on).count();
+    let access = if c.target_write_enabled() {
+        t!("ui.db_access_write")
+    } else {
+        t!("ui.db_access_read")
+    };
+    let summary = t!(
+        "ui.db_compare_summary",
+        source = c.source_name,
+        target = c.target_name(),
+        schema = c.schema,
+        chosen = chosen,
+        total = c.changes.len()
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            trunc(&format!(" {summary} · {access}"), width),
+            theme::title(true),
+        ))),
+        rows[0],
+    );
+    if c.changes.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!(" {}", t!("ui.db_compare_same")),
+                theme::dim(),
+            ))),
+            rows[1],
+        );
+        return;
+    }
+    let height = usize::from(rows[1].height);
+    let skip = c.cursor.saturating_sub(height.saturating_sub(1));
+    let mut list: Vec<Line> = Vec::with_capacity(height);
+    for (i, change) in c.changes.iter().enumerate().skip(skip).take(height) {
+        list.push(compare_change_line(c, i, change, width));
+    }
+    frame.render_widget(Paragraph::new(list), rows[1]);
+    if let Some(change) = c.changes.get(c.cursor) {
+        draw_db_compare_detail(change, frame, rows[2]);
+    }
+}
+
+/// One row of the schema compare's change list: checkbox, action marker,
+/// object kind, name and flags.
+fn compare_change_line(
+    c: &crate::db::compare::review::Compare,
+    i: usize,
+    change: &crate::db::compare::diff::Change,
+    width: usize,
+) -> Line<'static> {
+    let mark = if c.checked.get(i).copied().unwrap_or(false) {
+        "[x]"
+    } else {
+        "[ ]"
+    };
+    let mut flags = Vec::new();
+    if change.destructive {
+        flags.push(t!("ui.db_compare_destructive").to_string());
+    }
+    if change.risky {
+        flags.push(t!("ui.db_compare_risky").to_string());
+    }
+    if change.is_manual() {
+        flags.push(t!("ui.db_compare_manual").to_string());
+    }
+    let flags = if flags.is_empty() {
+        String::new()
+    } else {
+        format!("  ! {}", flags.join(", "))
+    };
+    let text = format!(
+        " {mark} {} {} {}{flags}",
+        change.action.marker(),
+        t!(change.object.label_key()),
+        change.label()
+    );
+    // Monochrome like the built-in themes: the flags carry the severity.
+    let style = if i == c.cursor {
+        theme::selected()
+    } else {
+        theme::base()
+    };
+    Line::from(Span::styled(trunc(&text, width), style))
+}
+
+/// The highlighted change's source and target definitions and statements.
+fn draw_db_compare_detail(
+    change: &crate::db::compare::diff::Change,
+    frame: &mut Frame,
+    area: Rect,
+) {
+    let block = Block::default()
+        .borders(Borders::TOP)
+        .border_style(theme::dim())
+        .title(format!(" {} ", change.label()));
+    let body = block.inner(area);
+    frame.render_widget(block, area);
+    let mut detail: Vec<Line> = Vec::new();
+    for (label, text) in [
+        (t!("ui.db_compare_source"), &change.source),
+        (t!("ui.db_compare_target"), &change.target),
+    ] {
+        detail.push(Line::from(Span::styled(format!(" {label}:"), theme::dim())));
+        for l in text.lines() {
+            detail.push(Line::from(format!("   {l}")));
+        }
+    }
+    detail.push(Line::from(Span::styled(
+        format!(" {}:", t!("ui.db_compare_sql")),
+        theme::dim(),
+    )));
+    for s in &change.statements {
+        for l in s.sql.lines() {
+            detail.push(Line::from(format!("   {l}")));
+        }
+    }
+    frame.render_widget(Paragraph::new(detail).wrap(Wrap { trim: false }), body);
 }

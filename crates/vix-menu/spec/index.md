@@ -355,6 +355,7 @@ The database workbench; see [`crates/vix-db/spec/index.md`](../../vix-db/spec/in
 | ----------------------------- | ----------------------------------------------- |
 | Connections / New Query       | Open the saved-connections list / the workbench |
 | Execute / Execute All         | Run the statement at the cursor / all (`F5`/`F9`) |
+| Run Buffer in Workbench       | Load the active buffer into the workbench editor and run it statement by statement (`db.run_buffer`) |
 | Explain / Explain Analyze     | `EXPLAIN` the statement (`F6`/`F7`)             |
 | Format                        | Beautify the statement (`Alt+Shift+F`)          |
 | History / Saved / Save Query… | Recall (`Ctrl+R`/`Ctrl+B`) or save (`Ctrl+S`)   |

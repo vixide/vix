@@ -30,7 +30,8 @@ pub use layers::{
     project_settings_path, read_layer, unknown_keys, unmerge,
 };
 pub use model::{
-    CaptureTemplate, Connection, DebugAdapter, EntryType, Kind, default_capture_templates,
+    CaptureTemplate, Connection, DebugAdapter, EntryType, Environment, Kind,
+    default_capture_templates,
 };
 
 /// Application name used by [`confy`] to locate the config directory.
@@ -318,6 +319,13 @@ pub struct Settings {
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
     pub db_connections: Vec<Connection>,
+    /// The environment of each saved database connection, by connection name
+    /// (T781): a `[db_environments]` table such as `prod = "production"`.
+    /// Values are `local`, `development`, `testing`, `staging` or
+    /// `production`; a connection with no entry is `local`. Production
+    /// connections confirm every write, even inside a transaction. Managed by
+    /// the DB workbench's connection form.
+    pub db_environments: std::collections::BTreeMap<String, Environment>,
     /// The **IM** menu (T752, `spec/instant-message`): your nick, when to
     /// notify, where history lives, blocked nicks and IRC accounts. Written as
     /// an `[im]` table. Passwords are never stored here: an account's SASL
@@ -963,6 +971,7 @@ impl Default for Settings {
             project_snippets: "config/snippets/snippets.json".to_string(),
             coverage_path: String::new(),
             db_connections: Vec::new(),
+            db_environments: std::collections::BTreeMap::new(),
             im: ImSettings::default(),
             jupyter_confirm_evaluate: "untrusted".to_string(),
             jupyter_kernels: std::collections::BTreeMap::new(),
@@ -1271,6 +1280,24 @@ mod tests {
     };
     use crate::EntryType;
 
+    /// T781: a legacy config (no `[db_environments]` table) loads with every
+    /// connection `local`, and survives a save and reload unchanged.
+    #[test]
+    fn legacy_db_connections_load_as_local_and_round_trip() {
+        let src = "[[db_connections]]\nname = \"app\"\nkind = \"sqlite\"\nfile = \"a.db\"\n";
+        let s: Settings = toml::from_str(src).unwrap();
+        assert_eq!(s.db_connections[0].name, "app");
+        assert!(s.db_environments.is_empty());
+        assert_eq!(
+            s.db_environments.get("app").copied().unwrap_or_default(),
+            crate::Environment::Local
+        );
+        let saved = toml::to_string(&s).unwrap();
+        let again: Settings = toml::from_str(&saved).unwrap();
+        assert_eq!(again.db_connections, s.db_connections);
+        assert!(again.db_environments.is_empty());
+    }
+
     /// T584: the DB, debug-adapter and org-capture sections are plain data owned by
     /// this crate, so a config carrying every one of them survives a load → save
     /// round trip unchanged even in a build that omits those capabilities.
@@ -1288,6 +1315,9 @@ writable = true
 password_command = "pass show db/prod"
 ssh_host = "jump.example.com"
 sslmode = "verify-full"
+
+[db_environments]
+prod = "production"
 
 [[debug_adapters]]
 adapter_id = "codelldb"
@@ -1323,6 +1353,10 @@ clock_in = true
         let second: Settings = toml::from_str(&saved).unwrap();
         assert_eq!(toml::to_string(&second).unwrap(), saved);
         assert_eq!(second.db_connections, first.db_connections);
+        assert_eq!(
+            second.db_environments.get("prod"),
+            Some(&crate::Environment::Production)
+        );
         assert_eq!(second.org_capture_templates, first.org_capture_templates);
         assert_eq!(
             second.debug_adapters[0].command,

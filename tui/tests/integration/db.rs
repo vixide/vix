@@ -86,3 +86,104 @@ fn interactive_query_replace_bang_replaces_rest() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T786: DB → Run Buffer in Workbench loads the active buffer into the
+/// workbench editor and runs it statement by statement; without a
+/// connection it opens the connections list instead.
+#[test]
+fn run_buffer_in_workbench_loads_and_runs_the_buffer() {
+    let dir = std::env::temp_dir().join(format!("vix-run-buffer-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("run.db");
+    let _ = std::fs::remove_file(&file);
+    let mut app = app_at(&dir);
+    type_str(&mut app, "select 41 + 1;\nselect 'two'");
+
+    app.run_action("db.run_buffer");
+    let b = app.db.as_ref().expect("the overlay opens");
+    assert_eq!(b.view, vix::db::View::Connections, "no connection yet");
+
+    let mut browser = vix::db::Browser::new(vec![vix::db::connect::Connection {
+        name: "run".into(),
+        kind: vix::db::connect::Kind::Sqlite,
+        file: file.display().to_string(),
+        ..vix::db::connect::Connection::default()
+    }]);
+    browser.handle_key(
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        vix::db::Pages::default(),
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while browser.connect_running() {
+        browser.poll_connect();
+        assert!(std::time::Instant::now() < deadline, "connect stalled");
+        std::thread::yield_now();
+    }
+    assert_eq!(
+        browser.view,
+        vix::db::View::Workbench,
+        "{:?}",
+        browser.message
+    );
+    app.db = Some(browser);
+
+    app.run_action("db.run_buffer");
+    let b = app.db.as_ref().unwrap();
+    assert_eq!(b.view, vix::db::View::Workbench, "{:?}", b.message);
+    assert_eq!(b.query.text(), "select 41 + 1;\nselect 'two'");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["two".to_string()]],
+        "the last statement's rows"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T781: a connection string pasted into the DB connection form fills it, the
+/// environment row cycles to production, and the saved settings file holds the
+/// connection and its environment but never the pasted password.
+#[test]
+fn pasted_connection_string_fills_the_db_form_and_saves_without_its_password() {
+    let dir = unique_dir("db-paste");
+    let config = dir.join("config.toml");
+    let _ = fs::remove_file(&config);
+    let mut app = app_at(&dir).with_settings_path(&config);
+    app.run_action("db.connections");
+    app.on_key(key('a'));
+    app.on_paste("postgres://ops:hunter2@db.example.com:5433/shop?sslmode=require");
+    let db = app.db.as_ref().expect("the DB overlay is open");
+    assert_eq!(
+        db.form.fields[0], "shop",
+        "the name defaults to the database"
+    );
+    assert_eq!(db.form.fields[3], "db.example.com");
+    assert!(db.form_password_held(), "the password is held, not typed");
+    for _ in 0..vix::db::FORM_ENVIRONMENT {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    for _ in 0..4 {
+        app.on_key(key(' '));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    let conn = &app.settings.db_connections[0];
+    assert_eq!(conn.name, "shop");
+    assert_eq!(conn.kind, vix::db::connect::Kind::Postgres);
+    assert_eq!(conn.port, "5433");
+    assert_eq!(conn.user, "ops");
+    assert_eq!(conn.sslmode, "require");
+    assert_eq!(
+        app.settings.db_environments.get("shop"),
+        Some(&vix::db::connect::Environment::Production)
+    );
+    let saved = fs::read_to_string(&config).expect("settings were written");
+    assert!(!saved.contains("hunter2"), "a password is never saved");
+    assert!(saved.contains("[db_environments]"), "{saved}");
+    assert!(saved.contains("shop = \"production\""), "{saved}");
+
+    // Ordinary text pasted into a field is typed as before.
+    app.on_key(key('a'));
+    app.on_paste("plain");
+    assert_eq!(app.db.as_ref().unwrap().form.fields[0], "plain");
+    let _ = fs::remove_dir_all(&dir);
+}

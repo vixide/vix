@@ -65,9 +65,13 @@ connections persist in the settings file without any password field.
 The overlay's screens and keys:
 
 - **Connections** — `Enter` connect · `a` add · `e` edit · `d` delete ·
-  `Esc`/`q` close. The add/edit form cycles the engine kind with `Space` and
-  toggles the access (read-only default) and keyring rows the same way; it also
-  takes a **Password cmd** (a command that prints the password).
+  `Esc`/`q` close. Each row shows the connection's environment badge. The
+  add/edit form cycles the engine kind with `Space` and toggles the access
+  (read-only default) and keyring rows the same way, and cycles the
+  **Environment** row (`local` → `development` → `testing` → `staging` →
+  `production`); it also takes a **Password cmd** (a command that prints the
+  password). Pasting a connection string anywhere in the form fills it (see
+  *Environments and connection strings* below).
 - **Password** — masked entry, held in memory for the session only. Server
   connections first try the credential waterfall — the `password_command`, then
   the OS keyring — and only prompt on a miss; a prompted password is saved to
@@ -84,7 +88,10 @@ The overlay's screens and keys:
   - *Schema tree*: `←`/`→`/`Space` collapse/expand; on a table `Enter` shows
     columns and `i`/`f`/`g`/`x` show indexes / foreign keys / triggers /
     constraints; `s` shows row-count/size statistics, `D` the `CREATE`
-    statement, `R` the relations view (below); `r` refreshes the catalog.
+    statement, `R` the relations view (below), `A` copies the table for AI (see
+    below); `r` refreshes the catalog;
+    `m` marks a table and `e` exports the marked tables (or the one under the
+    cursor) whole — see *Table export* below.
   - *Relations* (`R`, module `db::relations`, T779): on a table or view, the
     grid lists one row per relation with four columns — relation (outgoing,
     incoming or view), constraint name, from and to, each side written
@@ -127,7 +134,8 @@ The overlay's screens and keys:
     prompts for each value before running.
   - *Results*: `←`/`→` scroll wide sets by column, `/` filters live; `x`
     expands the selected row vertically, `f` follows a foreign-key cell to its
-    parent row, `c` charts a `(label, number)` result; the pane title shows the
+    parent row, `c` charts a `(label, number)` result, `A` copies the result
+    for AI as Markdown (see below); the pane title shows the
     row count. On an editable table preview (one with a primary key), `i` stages
     an edit to the selected cell, `a` stages a new row, `d` stages the selected
     row's deletion, `u` discards the row's staged changes, and `W` commits them
@@ -135,7 +143,11 @@ The overlay's screens and keys:
     *dbjoy-inspired* below).
   - *AI & data* (see the sections below): `Ctrl+A` ask (prefix `?` for a
     schema question), `Ctrl+O` optimize, `Ctrl+F` fix the last error, `Ctrl+K`
-    explain the query; `Ctrl+U` imports a CSV/TSV file into a new table.
+    explain the query; `Ctrl+U` imports a CSV/TSV file into a new table;
+    `Ctrl+P` loads a `.sql` file into the editor and runs it (see *Running a
+    `.sql` file* below).
+  - *Schema compare*: `Ctrl+D` compares the schema with another saved
+    connection and writes the migration (see *Schema compare (T785)*).
 
 Pure logic (statement splitting, highlighting, completion, formatting, the
 tree, the grid) is unit-tested in the submodules; `db::session` is tested
@@ -156,7 +168,11 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
   cursor under a name) — persisted in `db_queries.toml`.
 - **Write/DDL confirmation** — `is_write_statement` scans keywords outside
   strings/comments (so a CTE like `WITH … DELETE` is caught) and gates
-  execution behind an `Enter/y` / `Esc/n` confirmation view.
+  execution behind an `Enter/y` / `Esc/n` confirmation view, which shows every
+  pending statement in full. Inside an explicit transaction a write runs
+  without asking, since `ROLLBACK` can undo it — except `DROP`/`TRUNCATE`
+  and anything on a `production` connection (`editor::needs_confirmation`,
+  T781).
 - **Execute All** (`F9`) — runs every statement in order, stopping at the
   first error; the grid shows the last result.
 - **EXPLAIN / EXPLAIN ANALYZE** (`F6` / `F7`; `EXPLAIN QUERY PLAN` on SQLite)
@@ -213,6 +229,9 @@ keeps surus's three safety principles, fitted to Vix's assistant model:
   row of data. The schema brief and the user's question travel on the assistant
   CLI's **stdin**; only a fixed instruction goes on its command line, so no
   user-supplied text is ever interpolated into a shell command.
+  *Copy for AI* (`A`, T782, below) does not relax this: it is a clipboard
+  copy the user starts, and nothing from it reaches the assistant unless the
+  user pastes it somewhere.
 - **Read-only by default.** A connection opens read-only (see *Read-only,
   query log & ERD* below), and the brief tells the model "READ-ONLY: answer with
   a single `SELECT`." Defense in depth: if the model ignores that, the generated
@@ -474,49 +493,181 @@ Tests: the builders are unit-tested per engine in `staging`, `columns` and
 exactly-one-row rollback (a `DELETE` whose row someone else removed), and the
 row search end to end on SQLite.
 
-## dbjoy-inspired (planned, Run W)
+## dbjoy-inspired: table export and running files
 
-**Planned, not built.** These come from a reading of
-[dbjoy](https://github.com/agustind/dbjoy), a macOS PostgreSQL client; the
-assessment is [`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md).
-When a task lands, its text moves out of this section into the sections
-above, and its box is checked in `tasks.md`.
+From the same reading of [dbjoy](https://github.com/agustind/dbjoy) as the
+planned items below ([`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md)).
 
-- **Environments and connection strings (T781).** A saved connection carries
-  an `environment`: `local`, `development`, `testing`, `staging` or
-  `production` (default `local`), shown as a colored badge in the list and
-  the editor title. On `production`, every write shows its SQL and asks,
-  even inside an explicit transaction; `DROP` and `TRUNCATE` always ask on
-  any connection. Pasting a connection string into the add form fills it: a
-  `postgres://`, `postgresql://`, `mysql://` or `sqlite:` URL, or a libpq
-  `key=value` string. A password in the string is never saved; it goes to
-  the keyring prompt like a typed one.
-- **Copy for AI (T782).** In results, a key copies the statement, its column
-  names and types, and the selected rows (or the visible page, capped) as
-  Markdown. On a table it copies the columns, keys, constraints and indexes
-  with the rows. It is an explicit, user-initiated copy, so it does not
-  change the assistant's schema-only rule: the assistant itself still never
-  sees a row.
-- **Table export (T784).** Export whole tables, not only the loaded rows:
-  CSV, JSON or NDJSON per table, or one SQL file of `INSERT`s in
-  foreign-key order with sequences reset. Rows stream to the file from one
-  consistent snapshot (`REPEATABLE READ READ ONLY` on PostgreSQL, a read
-  transaction on SQLite and MySQL), so a large table never sits in memory.
-- **Schema compare (T785).** Compare one schema across two saved
-  connections, PostgreSQL first: tables, columns, keys, indexes, checks,
-  views, functions, triggers, enums and sequences. Each difference shows
-  both definitions and its migration SQL. The whole migration is ordered so
-  it runs (types before the tables that use them, drops before creates,
-  foreign keys last). Changes that delete data start unchecked; changes that
-  can fail on existing rows (`NOT NULL`, a unique index, a type change) are
-  flagged. The script can be copied, saved, opened in the editor or run on
-  the target in one transaction, after a confirmation that names the
-  target's environment.
-- **Run a `.sql` file (T786).** Open a `.sql` file (or the current buffer)
-  in the workbench editor and run it, statement by statement, stopping at
-  the first error. psql-only meta-commands (`\copy`, `\connect`, `\i` and
-  the rest) are found before anything runs, and the run is refused with
-  their line numbers.
+### Table export (T784)
+
+The results-grid export (`e` in results) writes the rows already loaded.
+`e` in the **schema tree** exports *whole tables*: the tables marked with `m`
+(a toggle; marks are kept until disconnect), or the table under the cursor
+when none is marked. Views and functions are not exported. The dialog
+(`View::Export` with `Browser::table_export` set) cycles the format with
+`←`/`→` and takes a destination path; `Enter` starts, `Esc` closes.
+
+| Format | Output |
+| ------ | ------ |
+| CSV | One `table.csv` per table in the chosen directory (created if missing), header row, `NULL` as an empty field |
+| JSON | One `table.json` per table: an array of objects; `NULL`, numbers and booleans stay typed |
+| NDJSON | One `table.ndjson` per table: one object per line, typed like JSON |
+| SQL | One file: `BEGIN;`, one `INSERT` per row for every table, the sequence resets, `COMMIT;` |
+
+When the chosen tables span schemas, per-table files are named
+`schema.table.ext`; characters other than letters, digits, `-`, `_` and `.`
+become `_`, so a name never leaves the directory. The default destination is
+`vix-export` (a directory) or `vix-export.sql`, and follows the format while
+it is unedited.
+
+**SQL ordering.** Tables are ordered by the foreign keys among them (from
+`catalog::relationships_sql`): a table comes after every table it
+references, ties in the chosen order. Self-references and keys to tables
+outside the export do not constrain the order (rows *within* a
+self-referencing table stay in table order). If the keys form a cycle there
+is no valid order: the tables keep the chosen order and the file's header
+comment says so and asks to load with foreign-key checks off; the status
+line says so too. Generated columns are left out of `INSERT`s. Values keep
+their decoded type: `NULL`, bare numbers, `TRUE`/`FALSE`, quoted text (with
+`\` doubled on MySQL), binary as `X'…'` (`'\x…'::bytea` on PostgreSQL).
+`INSERT`s name the table schema-qualified on PostgreSQL and unqualified on
+SQLite and MySQL (a MySQL schema is the database, so the dump loads into a
+database of another name). The comments in the file are fixed English, like
+the SQL, so a dump does not depend on the UI language.
+
+**Sequence reset**, at the end of the SQL file, read inside the snapshot:
+
+| Engine | Read | Written |
+| ------ | ---- | ------- |
+| PostgreSQL | each column with an owned sequence (`pg_get_serial_sequence`: serial and identity) | `SELECT setval('seq', COALESCE(MAX(col), 1), MAX(col) IS NOT NULL) FROM t;` |
+| MySQL | `information_schema.tables.AUTO_INCREMENT` | `ALTER TABLE t AUTO_INCREMENT = n;` |
+| SQLite | `sqlite_sequence.seq` (none without an `AUTOINCREMENT` table) | `DELETE FROM sqlite_sequence WHERE name = 't';` + `INSERT INTO sqlite_sequence …` |
+
+**One snapshot, streamed, on a second connection.** The export opens its own
+read-only connection from the session's URL (same credentials, same SSH
+tunnel) on a background thread, so **an open user transaction is never
+touched** — and its uncommitted changes are not exported — and the workbench
+stays usable while it runs. It reads every table inside one read-only
+transaction: `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` on
+PostgreSQL; `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` then `START
+TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY` on MySQL; `BEGIN` on SQLite.
+It ends with `COMMIT` (`ROLLBACK` after a failure). Each table is one
+`SELECT` whose rows are written to the file as the driver yields them — no
+`MAX_ROWS` cap, nothing accumulated — and progress reaches the status line
+every 512 rows. Each file is written as `name.part` and renamed when
+complete; a failure removes the partial file and reports the error (passwords
+redacted). An in-memory SQLite database is refused, since a second
+connection would see a different, empty database. Disconnecting, or closing
+the DB overlay, drops the export: it stops at its next progress report,
+rolls back and removes its partial file.
+
+Code: `db::table_export` — the pure, unit-tested pieces (`fk_order`,
+`snapshot_begin_sql`, `column_names_sql`, `select_sql`, `sequences_sql`,
+`sequence_reset_sql`, `sql_literal`, `insert_sql`, `csv_line`,
+`json_object`, `file_name`), the worker, and the `Browser` methods
+(`toggle_export_mark`, `open_table_export`, `poll_table_export`,
+`table_export_running`); the host polls it with the query in
+`App::poll_db_query`.
+
+### Running a `.sql` file (T786)
+
+`Ctrl+P` in the workbench opens a path prompt (`View::Import` with
+`Browser::import_is_sql_file`); `Enter` reads the file, loads it into the
+query editor (replacing its text) and runs it with **Execute All** — every
+statement in order, stopping at the first error, through the usual
+read-only refusal and write confirmation. **DB → Run Buffer in Workbench**
+(`db.run_buffer`, also in the palette) does the same with the active editor
+buffer, unsaved changes included; with no connection it opens the
+connections list. Both end in `Browser::run_script`.
+
+Execute All first scans the editor for **psql meta-commands**
+(`editor::meta_commands`): lines whose first non-blank character is a
+backslash outside strings, quoted identifiers, `--` and (nested) `/* */`
+comments and dollar-quoted bodies — `\copy`, `\connect`, `\c`, `\i`,
+`\set`, and the rest. They are psql client commands, not SQL, so if any is
+found nothing runs and the status line lists their line numbers; the
+script stays in the editor to be fixed. The check applies to `F9` on any
+buffer, not only to loaded files.
+
+## dbjoy-inspired: environments and connection strings (T781)
+
+From the [dbjoy](https://github.com/agustind/dbjoy) reading
+([`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md)):
+
+- **Environments.** A saved connection carries an environment: `local`,
+  `development`, `testing`, `staging` or `production` (default `local`).
+  Because the published `Connection` struct cannot gain a field without a
+  semver break, the environment is stored by connection name in its own
+  settings table, `[db_environments]` (`prod = "production"`); a connection
+  with no entry — every connection saved before T781 — is `local`. The form's **Environment** row cycles it with
+  `Space`/`←`/`→`; renaming a connection carries its environment, deleting
+  one drops it. The host loads it with `Browser::set_environments` and
+  persists it from `Browser::take_dirty_environments`.
+- **Badge.** The environment is shown as a `[label]` badge (translated) in
+  the connections list, the workbench editor title and the confirmation
+  view (`db::environment`). Under the monochrome built-in themes the badge
+  is plain text, dim for `local`; with a custom JSON theme it takes the
+  theme's `syntax` colors (`string` development, `keyword` testing, `number`
+  staging, `comment` local), and production is always red.
+- **Confirmation policy** (`editor::needs_confirmation`, pure and
+  unit-tested). A read never asks. `DROP` and `TRUNCATE`
+  (`editor::is_destructive_statement`) always ask, on any connection and
+  inside a transaction. On `production` every write asks, even inside an
+  explicit transaction — including committing staged cell edits (`W`, the
+  confirmation lists the `UPDATE`s) and a CSV/TSV import (`Ctrl+U`, the
+  confirmation lists its `CREATE TABLE` and `INSERT`s). Elsewhere a write
+  asks outside a transaction only. Run All (`F9`) and `EXPLAIN ANALYZE` of a
+  write keep asking everywhere. Read-only mode still refuses writes before
+  any of this.
+- **Connection strings** (`db::conn_string::parse`, pure, unit-tested on
+  malformed input too). A bracketed paste into the add/edit form that parses
+  as a connection string fills the engine, file, host, port, user, database
+  and TLS-mode fields, and the name when it is empty (the database, else the
+  file stem, else the host); other text is typed into the field as before.
+  Accepted: `postgres://` and `postgresql://`, `mysql://` and `sqlite:` URLs
+  (`sqlite:app.db`, `sqlite://app.db`, `sqlite:///abs/app.db`,
+  `sqlite::memory:`) with strict percent-decoding, an optional port (1–65535),
+  IPv6 hosts in brackets, the database as the path, and the query options the
+  form has a row for (`sslmode`, `ssl-mode`, `ssl_mode`, and on server URLs
+  `host`, `port`, `user`, `password`, `dbname`/`database`); and libpq
+  `key=value` strings (`host`, `hostaddr`, `port`, `dbname`, `user`,
+  `password`, `sslmode`), with single-quoted values and backslash escapes.
+  Other options are listed as ignored on the status line. Several hosts, a
+  bad port, a broken `%` escape or an unclosed quote are reported and fill
+  nothing.
+- **A pasted password is never saved.** It never reaches a form field or the
+  settings file. The form holds it (the form shows a note) until it is saved
+  or cancelled; a saved form hands it to an in-memory store keyed by the
+  connection name, and the connection's next connect uses it exactly like a
+  password typed on the prompt — so it is written to the OS keyring only
+  when **Save to keyring** is on, and the credential waterfall applies on
+  every later connect.
+
+## dbjoy-inspired: Copy for AI (T782)
+
+`A` copies, as Markdown, something to paste into a chat with an assistant
+(`db::copy_ai`, its renderers pure and unit-tested; tables rendered by
+`db::export`'s Markdown format, clipboard through the same path as `y`/`Y`):
+
+- **In the results pane:** the statement behind the grid in an `sql` fence;
+  a column/type table when the types are known; and the rows, from the top
+  of the visible page down, in the grid's filtered and sorted order, at most
+  **50** rows, under a "Rows (shown of total)" heading. Types are known for a
+  table preview (`p`), from the catalog's column report; for an arbitrary
+  statement the copy carries the column names only, because the `Any`
+  driver's per-column type names would need a new variant on the streamed
+  `session::Chunk` enum, a semver break deferred to the next major version.
+- **On a schema-tree table or view:** a `## table (engine)` heading, then the
+  columns, primary key, foreign keys, constraints and indexes from the
+  catalog's own reports, and up to 50 preview rows.
+
+This is a copy the user starts, of rows the user can already see; it puts
+nothing anywhere but the clipboard. It does **not** change the assistant's
+schema-only rule: the AI assistant (`Ctrl+A`/`O`/`F`/`K`) is still shown the
+schema and never a row, because what a user chooses to paste into some chat
+is the user's decision, while what Vix sends on its own must stay safe by
+default.
+
 
 ## Headless schema read (T731)
 
@@ -528,6 +679,113 @@ written), applies `PRAGMA query_only = ON`, and runs
 No credentials are involved. The `vix --mcp` server's `db_schema` tool uses
 it ([`spec/mcp-server`](../../../spec/mcp-server/index.md)); server engines
 are deliberately not offered there, since they need a password.
+
+## Schema compare (T785)
+
+Compare one schema across two saved connections of the same engine and
+write the migration that makes the **target** look like the **source**. The
+source is the workbench's own connection; the target is any other saved
+connection of the same kind. **PostgreSQL** (10 or later) and **SQLite** are
+supported; **MySQL** is not (the workbench says so). The module tree is
+`compare::{snapshot, read, diff, plan, review}`; all but `review` are pure.
+
+**Opening it.** `Ctrl+D` in the workbench, or **DB → Schema Compare…**
+(`db.schema_compare`). The first screen lists the candidate targets
+(`↑`/`↓`) and the schema name, typed in place: on PostgreSQL it starts as the
+schema of the tree selection, else `public`; on SQLite it is `main`. `Enter`
+reads the source schema on the workbench session, then connects to the
+target on a background thread through the normal credential waterfall
+(`password_command`, the OS keyring, then a masked password prompt) and
+reads it there. `Esc` stops waiting. A schema missing on the source is
+refused; one missing on the target is created (`CREATE SCHEMA IF NOT
+EXISTS`).
+
+**Snapshots** (`compare::snapshot`, `compare::read`). A `Snapshot` is plain
+data: tables (columns with type, nullability, default, generated flag,
+identity and comment; primary key; unique, exclusion and check constraints;
+foreign keys; indexes that do not back a constraint; comment), views and
+materialized views (definition, comment, and the relations and columns they
+read), functions and procedures (identity arguments and full definition),
+triggers, enums (values in order) and sequences (type, start, increment,
+bounds, cache, cycle). PostgreSQL is read with eleven `pg_catalog` queries
+that cast every value to `text` (`format_type(…)`, `pg_get_viewdef(oid)`,
+`pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_functiondef`,
+`pg_get_triggerdef`), because sqlx's `Any` driver decodes only text,
+numbers, booleans and bytes. Objects owned by an extension, partitions,
+internal triggers and identity-owned sequences are left out. SQLite is read
+from `sqlite_master` and the `table_xinfo` / `foreign_key_list` pragmas; its
+unique and check constraints live inside the stored `CREATE TABLE` text, and
+its view dependencies are estimated from the names in the view's SQL.
+
+**Diff** (`compare::diff`). Objects are matched by name (routines by name and
+arguments, triggers by table and name; SQLite foreign keys, which have no
+names, by their definition), so a rename shows as a removal plus an
+addition. Definitions are compared with whitespace collapsed. Each `Change`
+is added, removed or changed, carries both definitions and its own
+statements, each tagged with the phase it runs in, and two flags:
+
+- **destructive** — drops a table or column, removes or reorders enum values,
+  or rebuilds a generated column;
+- **risky** — can fail on rows already in the target: `NOT NULL` added (or a
+  new `NOT NULL` column without a default), a unique index, any added key or
+  constraint (primary, unique, check, foreign), or a column type change
+  (`ALTER COLUMN … TYPE … USING col::type`, with the default dropped first and
+  restored after).
+
+New enum values become `ALTER TYPE … ADD VALUE … AFTER/BEFORE`; removed or
+reordered values become a manual note. A changed function is replaced with
+its own `CREATE OR REPLACE` (which fails, and rolls back, if its return type
+changed). SQLite can only add and drop columns in place: any other change to
+an existing SQLite table (a column's type, nullability or default, a key)
+becomes a **manual** change whose only statement is an SQL comment saying
+which table to rebuild; it is never run.
+
+**Ordering** (`compare::plan`). The chosen changes' statements run phase by
+phase: create schema, create type, alter type, create/alter sequence; drop
+trigger, drop view, drop foreign key, drop constraint, drop index, drop
+table, drop column, drop routine; create table, add/alter column, add
+constraint, create index, add foreign key; create routine, create view,
+create trigger; comments; drop sequence, drop type. Inside a phase the diff's
+order is kept, except that views follow their dependencies (dependents are
+dropped first and created last). A target view that reads a column, table
+or view the migration drops or retypes is dropped before the change and
+recreated after it, from the source's definition (the target's when the
+source has none), even when the view itself did not change. Duplicate
+statements are dropped. The script is the header comment, `BEGIN;`, the
+statements, and `COMMIT;`, with manual notes kept as comments.
+
+**Review.** A summary line (source → target, schema, chosen/total, the
+target's access), the change list (`[x]`/`[ ]`, `+`/`-`/`~`, the object kind,
+`table.name`, and the flags *destructive*, *risky*, *manual*), and the
+highlighted change's source and target definitions and statements.
+Destructive changes start unchecked; everything else starts checked. Keys:
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` | move |
+| `Space` | choose or drop the change |
+| `Enter` / `v` | show the whole script (scrollable; `Esc` back) |
+| `y` | copy the script to the clipboard |
+| `s` | save it as a `.sql` file (path prompt, prefilled `migration-<target>.sql`) |
+| `o` | open it in the workbench editor and close the compare (the editor runs on the source connection; the message says so) |
+| `r` | run it on the target, after a confirmation |
+| `F8` | toggle write mode on the target session |
+| `Esc` / `q` | close the compare and its target session |
+
+**Running.** The target session opens with the saved connection's access, so
+a read-only target refuses `r` with a message until `F8` allows writes. The
+confirmation names the target, the statement count and the target's
+environment badge (T781), recorded when the target is chosen. The run happens on a background thread: `BEGIN`, each
+statement, `COMMIT`; on the first failure `ROLLBACK`, and the message names
+the failing statement, so nothing changes. After a successful run the target
+is read again and the list shows what is left (the unchecked changes).
+
+**Limits.** One schema per compare, same engine on both sides. Not compared:
+extensions, grants and owners, partitions, collations, domains and composite
+types, column order, statistics and storage options. `ALTER TYPE … ADD
+VALUE` runs inside the transaction (PostgreSQL 12 or later), but the new
+value cannot be used by a later statement of the same migration. A dropped
+serial column's sequence is dropped with `IF EXISTS`.
 
 ## Errors (T610)
 
