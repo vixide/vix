@@ -10,7 +10,7 @@
 //! [`session`] so transactions span statements — no external client tools.
 //!
 //! Pure state lives in the submodules ([`catalog`], [`complete`], [`editor`],
-//! [`format`](mod@format), [`highlight`], [`results`]); [`connect`] models the saved
+//! [`format`](mod@format), [`highlight`], [`plan`], [`results`]); [`connect`] models the saved
 //! connection and its URL, and [`session`] owns the live connection. This
 //! module is the state machine the host drives with keys — split, where a
 //! cohesive slice of it justified its own file (T516), into `lifecycle`
@@ -69,6 +69,7 @@ pub mod import;
 mod lifecycle;
 mod panels;
 pub mod params;
+pub mod plan;
 pub mod results;
 pub mod secret;
 pub mod session;
@@ -404,6 +405,11 @@ pub struct Browser {
     /// Execution awaiting write/DDL confirmation (the [`View::Confirm`]
     /// screen); cleared on confirm or cancel.
     pending_run: Option<execute::PendingRun>,
+    /// The plan tree's rows and their marks, from the last `PostgreSQL`
+    /// explain (T776). Kept beside the grid rather than in it, and only
+    /// reported by [`Browser::plan_marks`] while the grid still holds
+    /// exactly those rows, so any later result drops them on its own.
+    plan_marks: Option<(Vec<Vec<String>>, Vec<results::Mark>)>,
     /// When set, the text to record in the *persisted* history for the next
     /// started query, in place of the executed SQL. Used to keep bind-parameter
     /// **templates** (`… = :name`) in history rather than the substituted
@@ -532,6 +538,7 @@ impl Browser {
             save_name: String::new(),
             save_sql: String::new(),
             pending_run: None,
+            plan_marks: None,
             history_override: None,
             cell_text: String::new(),
             cell_pretty: false,
@@ -813,6 +820,34 @@ mod tests {
             );
             std::thread::yield_now();
         }
+    }
+
+    #[test]
+    fn a_postgres_plan_replaces_the_grid_with_its_tree_and_others_stay_text() {
+        let yaml = "- Plan: \n    Node Type: \"Seq Scan\"\n    Relation Name: \"users\"\n    \
+                    Total Cost: 1.1\n    Plan Rows: 1\n    Actual Total Time: 0.2\n    \
+                    Actual Rows: 40\n    Actual Loops: 1\n  Planning Time: 0.1\n  \
+                    Execution Time: 0.3";
+        let mut b = browser();
+        b.grid
+            .set(vec!["QUERY PLAN".into()], vec![vec![yaml.into()]]);
+        let plan = b.show_plan_tree(connect::Kind::Postgres).expect("parses");
+        assert_eq!(plan.nodes.len(), 1);
+        assert_eq!(b.grid.rows.len(), 1);
+        assert_eq!(b.grid.rows[0][0], "Seq Scan on users");
+        assert_eq!(b.grid.headers.len(), b.grid.rows[0].len());
+        let marks = b.plan_marks().expect("the grid holds the plan tree");
+        assert!(marks[0].hot && marks[0].warn, "100% and 40× off");
+        // The plan-doctor full-scan hint still sees the tree's titles.
+        assert!(catalog::scan_insight(connect::Kind::Postgres, &b.grid.rows));
+
+        // A text plan (any other engine, or unparsable text) is left alone.
+        let text = vec![vec!["SCAN users".to_string()]];
+        b.grid.set(vec!["detail".into()], text.clone());
+        assert!(b.show_plan_tree(connect::Kind::Sqlite).is_none());
+        assert!(b.show_plan_tree(connect::Kind::Postgres).is_none());
+        assert_eq!(b.grid.rows, text);
+        assert_eq!(b.plan_marks(), None, "the marks left with the plan rows");
     }
 
     #[test]

@@ -90,6 +90,39 @@ fn sqlite_connection(name: &str, file: &std::path::Path) -> connect::Connection 
     }
 }
 
+/// `SQLite` keeps today's text plan on `F6` and `F7`: only `PostgreSQL` plans
+/// become a tree (T776), so the grid holds `EXPLAIN QUERY PLAN`'s own columns
+/// and no plan-tree row marks.
+#[test]
+fn sqlite_explain_keeps_the_text_plan() {
+    let dir = std::env::temp_dir().join(format!("vix-db-plan-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("plan.db");
+    seed(
+        &file,
+        &["CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)"],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("plan", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    type_str(&mut b, "SELECT * FROM users WHERE name = 'ada'");
+    for analyze in [false, true] {
+        b.focus = Pane::Editor;
+        key(&mut b, KeyCode::F(if analyze { 7 } else { 6 }));
+        assert_eq!(b.grid.headers.last().map(String::as_str), Some("detail"));
+        assert!(
+            b.grid
+                .rows
+                .iter()
+                .any(|r| r.iter().any(|c| c.contains("SCAN users"))),
+            "text plan: {:?}",
+            b.grid.rows
+        );
+        assert_eq!(b.plan_marks(), None, "no plan tree on SQLite");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn sqlite_connect_browse_query_and_filter() {
     let dir = std::env::temp_dir().join(format!("vix-db-smoke-{}", std::process::id()));

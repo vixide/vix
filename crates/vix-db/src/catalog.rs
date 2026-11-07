@@ -499,6 +499,33 @@ pub fn explain_sql(kind: Kind, stmt: &str, analyze: bool) -> String {
     format!("{prefix} {stmt};")
 }
 
+/// Wrap `stmt` in the EXPLAIN the workbench's `F6`/`F7` send: on
+/// `PostgreSQL` a structured `FORMAT YAML` plan the [`crate::plan`] module
+/// turns into a tree (T776; YAML rather than JSON because sqlx's `Any`
+/// driver cannot decode the `json` column `FORMAT JSON` returns), and on the
+/// other engines exactly [`explain_sql`]'s text plan.
+///
+/// The same `EXPLAIN ANALYZE` caution as [`explain_sql`] applies.
+///
+/// # Examples
+///
+/// ```
+/// use vix_db::{catalog::explain_tree_sql, connect::Kind};
+/// assert_eq!(
+///     explain_tree_sql(Kind::Postgres, "SELECT 1", true),
+///     "EXPLAIN (ANALYZE, FORMAT YAML) SELECT 1;"
+/// );
+/// assert_eq!(explain_tree_sql(Kind::Mysql, "SELECT 1", false), "EXPLAIN SELECT 1;");
+/// ```
+#[must_use]
+pub fn explain_tree_sql(kind: Kind, stmt: &str, analyze: bool) -> String {
+    match (kind, analyze) {
+        (Kind::Postgres, true) => format!("EXPLAIN (ANALYZE, FORMAT YAML) {stmt};"),
+        (Kind::Postgres, false) => format!("EXPLAIN (FORMAT YAML) {stmt};"),
+        _ => explain_sql(kind, stmt, analyze),
+    }
+}
+
 /// Whether an EXPLAIN result reports a full table scan — the plan-doctor
 /// heuristic behind the workbench's "consider an index" insight.
 ///
@@ -1040,6 +1067,27 @@ mod tests {
             "EXPLAIN QUERY PLAN select 1;",
             "sqlite has no readable ANALYZE variant"
         );
+    }
+
+    #[test]
+    fn explain_tree_sql_asks_postgres_for_a_structured_plan() {
+        assert_eq!(
+            explain_tree_sql(Kind::Postgres, "select 1", false),
+            "EXPLAIN (FORMAT YAML) select 1;"
+        );
+        assert_eq!(
+            explain_tree_sql(Kind::Postgres, "select 1", true),
+            "EXPLAIN (ANALYZE, FORMAT YAML) select 1;"
+        );
+        for kind in [Kind::Sqlite, Kind::Mysql] {
+            for analyze in [false, true] {
+                assert_eq!(
+                    explain_tree_sql(kind, "select 1", analyze),
+                    explain_sql(kind, "select 1", analyze),
+                    "other engines keep the text plan"
+                );
+            }
+        }
     }
 
     #[test]
