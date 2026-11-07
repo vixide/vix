@@ -9847,6 +9847,12 @@ the generated `release.yml`.
   - **npm:** done: `npm` is in `publish-jobs` and `release.yml` is regenerated
     with `dist` 0.33.1. `@vixide/vix` has never been published, so the first
     publish also needs the `@vixide` scope to exist on npm.
+  - **`2.0.1-rc.1` (2026-11-06):** the run stopped at `aarch64-pc-windows-msvc`
+    (no WiX on `windows-11-arm`), so `host` never ran. Tag CI also found a Unix-only
+    `vix-acp` test and a false positive from `inherent_method_must_use_added`. All
+    three are fixed; a further rc is needed. Left alone: `vix-oci`'s
+    `listing_through_the_fake_parses` failed with `Text file busy` in the advisory
+    coverage job, a race in the test's fake engine script.
   - **Unexplained:** 1.8.0's `host` job failed at `gh release create` with
     `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
     The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,

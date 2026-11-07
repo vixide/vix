@@ -29,3 +29,8 @@ sha2 = { workspace = true }
 
 [lints]
 workspace = true
+
+# False positive: ShellAuthority has one inherent `new` per transport, and the
+# lint pairs them up wrongly across versions. Both are unchanged since 2.0.0.
+[package.metadata.cargo-semver-checks.lints]
+inherent_method_must_use_added = "allow"

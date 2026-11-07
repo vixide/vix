@@ -209,7 +209,8 @@ to npm with the `NPM_TOKEN` secret (see
 `spec/homebrew-tap-token`). Windows on ARM is the terminal app only (each GUI lists its own
 targets) and builds on the native `windows-11-arm` runner
 (`github-custom-runners`), since dist's default Ubuntu cross-build can't
-make the MSI (T658). `release.yml` is **generated**: edit
+make the MSI (T658). That runner has no WiX, so
+`.github/dist/build-setup.yml` installs a hash-pinned WiX 3.14 there (T771). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
 generate --mode ci`), never the workflow by hand — `dist generate --mode
 ci --check` fails if the committed file has drifted from the config, the

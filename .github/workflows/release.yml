@@ -130,6 +130,17 @@ jobs:
       - name: "Point AR at the system ar for the musl target (CI-only override)"
         run: "echo \"AR_x86_64-unknown-linux-musl=ar\" >> \"$GITHUB_ENV\""
         shell: "bash"
+      - name: "Install WiX 3.14 on Windows on ARM"
+        if: "runner.os == 'Windows' && runner.arch == 'ARM64'"
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'wix314-binaries.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'wix314'
+          Invoke-WebRequest -Uri 'https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash
+          if ($hash -ne '6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31') { throw "WiX download hash mismatch: $hash" }
+          Expand-Archive -Path $zip -DestinationPath $dir
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+        shell: "pwsh"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
