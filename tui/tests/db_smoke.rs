@@ -43,10 +43,15 @@ use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 /// for a real per-frame UI tick and need no change.
 fn drain_async(browser: &mut Browser) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while browser.query_running() || browser.connect_running() || browser.reconnect_running() {
+    while browser.query_running()
+        || browser.connect_running()
+        || browser.reconnect_running()
+        || browser.table_export_running()
+    {
         browser.poll_query();
         browser.poll_connect();
         browser.poll_reconnect();
+        browser.poll_table_export();
         assert!(
             std::time::Instant::now() < deadline,
             "async DB work did not finish within 30s — worker thread stalled or deadlocked"
@@ -856,5 +861,182 @@ fn transaction_state_badge_and_relaxed_confirm() {
         vec![vec!["2".to_string()]],
         "rollback restored the row"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn ctrl(browser: &mut Browser, c: char) {
+    browser.handle_key(
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    drain_async(browser);
+}
+
+/// Replace the query editor's text and run it with F5.
+fn run_in_editor(b: &mut Browser, sql: &str) {
+    b.focus = Pane::Editor;
+    b.query = vix::db::editor::Query::from_text(sql);
+    key(b, KeyCode::F(5));
+}
+
+/// T784: mark tables in the tree, export them as one SQL file from a
+/// snapshot on a second connection — ordered parents first, every row of a
+/// table larger than the grid's row cap, sequences reset — while the user's
+/// own transaction stays open and untouched.
+#[test]
+fn tree_exports_whole_tables_from_a_snapshot_beside_an_open_transaction() {
+    let dir = std::env::temp_dir().join(format!("vix-db-table-export-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("shop.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id))",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, order_id INTEGER REFERENCES orders(id))",
+            "INSERT INTO users (name) VALUES ('ada'), ('grace')",
+            "INSERT INTO orders VALUES (1, 1), (2, 2)",
+            "INSERT INTO items WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c \
+             WHERE n < 21000) SELECT n, 1 + n % 2 FROM c",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("shop", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    // An open transaction with an uncommitted delete in the user's session.
+    run_in_editor(&mut b, "BEGIN");
+    run_in_editor(&mut b, "DELETE FROM items");
+    assert_eq!(b.tx_state(), vix::db::TxState::Open);
+
+    // Tree rows: schema, Tables, items, orders, users. Mark all three.
+    b.focus = Pane::Tree;
+    for _ in 0..2 {
+        key(&mut b, KeyCode::Down);
+    }
+    for i in 0..3 {
+        if i > 0 {
+            key(&mut b, KeyCode::Down);
+        }
+        key(&mut b, KeyCode::Char('m'));
+    }
+    assert_eq!(b.export_marks.len(), 3);
+    key(&mut b, KeyCode::Char('e'));
+    assert_eq!(b.view, View::Export);
+    let dialog = b
+        .table_export
+        .as_ref()
+        .expect("the table-export dialog is open");
+    assert_eq!(dialog.tables.len(), 3);
+    key(&mut b, KeyCode::Left); // CSV wraps to SQL
+    assert!(b.table_export.as_ref().unwrap().single_file());
+    let dump = dir.join("shop.sql");
+    b.table_export.as_mut().unwrap().path.clear();
+    type_str(&mut b, &dump.display().to_string());
+    key(&mut b, KeyCode::Enter); // starts; key() drains the export
+    assert_eq!(b.view, View::Workbench);
+    assert!(!b.table_export_running());
+
+    let text = std::fs::read_to_string(&dump).unwrap_or_else(|e| panic!("{e}: {:?}", b.message));
+    let at = |needle: &str| {
+        text.find(needle)
+            .unwrap_or_else(|| panic!("{needle} missing"))
+    };
+    assert!(at("-- \"users\"") < at("-- \"orders\""), "parents first");
+    assert!(at("-- \"orders\"") < at("-- \"items\""), "parents first");
+    assert_eq!(
+        text.matches("INSERT INTO \"items\"").count(),
+        21_000,
+        "every committed row, past the grid's cap; not the uncommitted delete"
+    );
+    assert!(text.contains("INSERT INTO sqlite_sequence (name, seq) VALUES ('users', 2);"));
+
+    // The user's transaction is still open on their own session.
+    assert_eq!(b.tx_state(), vix::db::TxState::Open);
+    run_in_editor(&mut b, "SELECT count(*) FROM items");
+    assert_eq!(b.grid.rows, vec![vec!["0".to_string()]], "{:?}", b.message);
+    run_in_editor(&mut b, "ROLLBACK");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T784: with nothing marked, `e` exports the table under the cursor, one
+/// CSV file per table into the chosen directory.
+#[test]
+fn tree_exports_the_table_under_the_cursor_as_csv() {
+    let dir = std::env::temp_dir().join(format!("vix-db-table-csv-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("songs.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE songs (id INTEGER PRIMARY KEY, title TEXT)",
+            "INSERT INTO songs VALUES (1, 'blue'), (2, NULL)",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("songs", &file)]);
+    key(&mut b, KeyCode::Enter);
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('e'));
+    let out = dir.join("csv");
+    b.table_export.as_mut().unwrap().path = out.display().to_string();
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(
+        std::fs::read_to_string(out.join("songs.csv"))
+            .unwrap_or_else(|e| panic!("{e}: {:?}", b.message)),
+        "id,title\n1,blue\n2,\n"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// T786: Ctrl+P loads a `.sql` file into the editor and runs it statement by
+/// statement (writes still confirmed); a file with psql meta-commands is
+/// refused before anything runs.
+#[test]
+fn run_a_sql_file_and_refuse_psql_meta_commands() {
+    let dir = std::env::temp_dir().join(format!("vix-db-run-file-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("run.db");
+    seed(&file, &["CREATE TABLE seen (a INTEGER)"]);
+    let script = dir.join("setup.sql");
+    std::fs::write(
+        &script,
+        "CREATE TABLE z (a INTEGER);\nINSERT INTO z VALUES (1), (2);\nSELECT count(*) FROM z;\n",
+    )
+    .unwrap();
+    let bad = dir.join("psql.sql");
+    std::fs::write(
+        &bad,
+        "CREATE TABLE never (a INTEGER);\n\\copy never FROM 'x.csv'\nSELECT 1;\n  \\i more.sql\n",
+    )
+    .unwrap();
+    let mut b = Browser::new(vec![sqlite_connection("run", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    ctrl(&mut b, 'p');
+    assert_eq!(b.view, View::Import);
+    assert!(b.import_is_sql_file());
+    type_str(&mut b, &script.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Confirm, "the script writes: {:?}", b.message);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.grid.rows, vec![vec!["2".to_string()]], "{:?}", b.message);
+
+    ctrl(&mut b, 'p');
+    type_str(&mut b, &bad.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "refused, not confirmed");
+    assert!(b.message.is_some());
+    assert!(
+        b.query.text().contains("\\copy"),
+        "the script is loaded for fixing"
+    );
+    run_in_editor(
+        &mut b,
+        "SELECT count(*) FROM sqlite_master WHERE name = 'never'",
+    );
+    assert_eq!(b.grid.rows, vec![vec!["0".to_string()]], "nothing ran");
     let _ = std::fs::remove_dir_all(&dir);
 }

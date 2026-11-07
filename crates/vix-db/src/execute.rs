@@ -256,9 +256,19 @@ impl Browser {
     ///
     /// Unlike [`Self::execute`], this path runs synchronously (it is not
     /// streamed or cancellable), does not prompt for `:name` parameters, and
-    /// asks for confirmation even inside an explicit transaction.
+    /// asks for confirmation even inside an explicit transaction. A buffer
+    /// holding psql meta-commands (see [`editor::meta_commands`]) is refused
+    /// before anything runs.
     pub fn execute_all(&mut self) {
         let text = self.query.text();
+        // psql meta-commands (`\copy`, `\i`, …) are not SQL: refuse the whole
+        // run before any statement executes, naming their lines (T786).
+        let meta = editor::meta_commands(&text);
+        if !meta.is_empty() {
+            let lines: Vec<String> = meta.iter().map(|(line, _)| line.to_string()).collect();
+            self.message = Some(t!("msg.db_meta_commands", lines = lines.join(", ")).to_string());
+            return;
+        }
         let stmts: Vec<String> = editor::statement_spans(&text)
             .iter()
             .map(|&(s, e)| {

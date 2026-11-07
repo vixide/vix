@@ -103,7 +103,7 @@ fn separated(
 }
 
 /// RFC-4180: quote when a cell holds a separator, quote, or newline.
-fn csv_cell(cell: &str) -> String {
+pub(crate) fn csv_cell(cell: &str) -> String {
     if cell.contains(['"', ',', '\n', '\r']) {
         format!("\"{}\"", cell.replace('"', "\"\""))
     } else {

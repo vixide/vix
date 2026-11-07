@@ -256,6 +256,9 @@ surus
 dbjoy
 libpq
 Geometrein
+bytea
+setval
+AUTOINCREMENT
 
 # LSP servers / editors referenced in docs
 gopls
