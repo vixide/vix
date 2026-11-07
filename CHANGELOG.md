@@ -6,6 +6,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies.** Rust patch updates in both workspaces (including BUI 0.4.1 for `vix-bui`) and the site's Lily Design System packages (`svelte-headless` 0.8.0). BUI 0.4.1 is GPL-3.0-or-later instead of GPL-2.0-or-later; `vix-bui` stays GPL-3.0-only, and `scripts/check-binary-licenses` now classifies the new id. TypeScript stays on 6 because `svelte-check` does not support 7 yet.
+
 ### Fixed
 
 - **Install docs.** The interim note about 2.0.0's missing files is gone and the Homebrew and npm commands are back, because 2.0.2 ships every channel: installers, Homebrew, npm, Linux packages and the desktop GUIs.
