@@ -9865,12 +9865,33 @@ the generated `release.yml`.
     `sqlite://C:\...`, which `url` parses as host `C`, so no read-only SQLite
     file opened on Windows. Fixed, and the Windows test step now uses
     `--no-fail-fast`, so one run reports every failure.
+  - **`2.0.1-rc.3` (2026-11-07):** macOS arm64 now starts. `--no-fail-fast`
+    gave the first full list of Windows test failures, now T772. The maintainer
+    chose to ship `2.0.1` without them.
   - **Unexplained:** 1.8.0's `host` job failed at `gh release create` with
     `HTTP 403: Resource not accessible by integration` despite `Contents: write`.
     The rc tag tests this; the Homebrew and Linux-package jobs skip prereleases,
     so only `2.0.1` tests them.
   - **After `2.0.1`:** remove the note and restore the Homebrew command in the
     README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
+
+- [ ] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
+  `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
+  on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first
+  failure. Not a 2.0.1 regression. Windows can't be run locally, so each round
+  needs a tag or a `workflow_dispatch`; consider running Windows on `main`.
+  - **Verbatim paths, likely product bugs:** `canonicalize` returns `\\?\C:\...`,
+    which reaches LSP and MCP `file://` URIs, doc links and session matching
+    (`lsp_file_ops`, `lsp_smoke`, `mcp`, `resources_list_and_read_round_trip`).
+    Start here, with one shared path helper.
+  - **Confinement, check first:** `/etc/passwd` is not `is_absolute` on Windows.
+    `vix-http-client` `load_body_file` may let a rooted path out of its folder;
+    also `vix-project-env` detectors and the `vix-acp` `contain` doc test.
+  - **Test setup:** git checks out CRLF on the runner (`stash_worktree`,
+    `integration::git`, `review_panes`).
+  - **Test assumptions:** `ssh://` URLs built from Windows paths (`BadPort`), and
+    a `sqlite:` URL holding `\\?\` in `integration::mcp`.
+  - **Unknown:** `run_configuration_runs_its_before_step_first`.
 
 ## Run U — another GUI front end (2026-11-06)
 

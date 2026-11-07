@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-07
+
 ### Added
 
 - **`vix-bui`: a sixth desktop GUI, on BUI (Blender's UI as a library).** `cargo run --manifest-path gui/Cargo.toml --release -p vix-bui` opens the whole Vix `App` in a native window drawn by [BUI](https://github.com/ppmpreetham/BUI) (`blenderui` 0.4.0): its window, input and canvas painter around the unchanged `ui::draw`. Box-drawing and block characters are drawn as rectangles and every character sits on its own cell. The window draws in a real monospace font (Menlo, Consolas or DejaVu Sans Mono, or `VIX_GUI_FONT`), with real bold and italic faces and per-character fallback for Nerd Font icons and CJK, and in BUI's embedded Inter if no font is found. On macOS it also has the native menu bar, with **File → Open with System Dialog…**. Experimental and source-only: no text shaping, color emoji or IME, and BUI cannot veto the close box (use **File → Quit**). `GPL-3.0-only` (BUI is GPL-2.0-or-later; `scripts/check-binary-licenses` now classifies that license id). See [`gui/vix-bui/spec`](gui/vix-bui/spec/index.md) and [`docs/vix-bui`](docs/vix-bui/index.md).
@@ -14,6 +16,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Install docs for 2.0.0.** The README and Getting Started now say what 2.0.0 actually has: three archives and `cargo install vix-tui`. The Homebrew tap has never been populated and `@vixide/vix` has never been on npm, despite earlier docs. 2.0.1 is meant to bring those, the installer scripts, Linux packages and GUI downloads.
 - **Windows on ARM release build.** The `windows-11-arm` runner has no WiX, so the MSI failed at `candle` and stopped every dist run from reaching the release. The build now installs WiX 3.14, pinned by hash.
+- **`vix-bui` lint off macOS.** `open_files` is used only by the macOS file dialog and tests, so Clippy failed the advisory GUI job on Linux and Windows. Build-only.
+- **Minimal release attach.** The job now waits three hours for the GitHub Release, because the full release can take longer than the old 90 minutes.
 - **SQLite schema on Windows.** Reading a SQLite file's schema failed with "unable to open database file", because the URL turned `C:` into a host name.
 - **macOS on ARM release build.** GitHub no longer serves the `macos-14` runner dist asks for, so the job was cancelled before its first step and `host` never ran. It now builds on `macos-latest`.
 - **`vix-oci` fake engine tests.** Parallel tests could fail with `Text file busy` when one test forked while another still had its script open for writing. Test-only.

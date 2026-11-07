@@ -102,8 +102,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # release.yml creates the Release after its own (longer) builds finish.
-          for i in $(seq 1 90); do
+          # release.yml creates the Release after its own (longer) builds finish,
+          # about 80 minutes or more after the tag.
+          for i in $(seq 1 180); do
             if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
               gh release upload "$GITHUB_REF_NAME" minimal/* --clobber
               exit 0
