@@ -729,6 +729,9 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
         );
         return;
     }
+    // A plan tree (rows carrying marks) gets a wider first column so the
+    // indented node titles stay readable.
+    let plan_tree = b.plan_marks().is_some();
     let widths: Vec<usize> = b
         .grid
         .headers
@@ -742,7 +745,7 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
                 .chain([h.chars().count()])
                 .max()
                 .unwrap_or(1)
-                .clamp(1, 24)
+                .clamp(1, if plan_tree && c == 0 { 60 } else { 24 })
         })
         .collect();
     let cols: Vec<usize> = (b.grid.col_off..b.grid.headers.len()).collect();
@@ -777,7 +780,8 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
 
 /// The data rows of the results grid. A row with staged cell edits is drawn
 /// cell-by-cell so the changed cells stand out (bold yellow); other rows take
-/// the fast single-span path.
+/// the fast single-span path, colored by the row's plan-tree mark (T776):
+/// the slowest nodes bold red, a far-off row estimate yellow.
 fn db_result_rows(
     b: &crate::db::Browser,
     cols: &[usize],
@@ -790,6 +794,7 @@ fn db_result_rows(
     let edited = Style::default()
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
+    let marks = b.plan_marks();
     let mut lines = Vec::new();
     for (i, &ri) in filtered.iter().enumerate().skip(b.grid.scroll).take(height) {
         let selected = i == b.grid.sel && focused;
@@ -818,8 +823,16 @@ fn db_result_rows(
                 let text = b.grid.rows[ri].get(c).map_or("", String::as_str);
                 let _ = write!(out, "{:w$} ", trunc(text, widths[c]), w = widths[c]);
             }
+            let mark = marks.and_then(|m| m.get(ri)).copied().unwrap_or_default();
             let line = if selected {
                 Line::from(Span::styled(out, theme::selected()))
+            } else if mark.hot {
+                Line::from(Span::styled(
+                    out,
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ))
+            } else if mark.warn {
+                Line::from(Span::styled(out, Style::default().fg(Color::Yellow)))
             } else {
                 Line::from(Span::raw(out))
             };

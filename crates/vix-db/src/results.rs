@@ -45,6 +45,17 @@ pub struct Grid {
     pub filtering: bool,
 }
 
+/// How the renderer should emphasize one results row: a `PostgreSQL` plan
+/// tree (T776) marks its slowest nodes and its row misestimates (see
+/// `Browser::plan_marks`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Mark {
+    /// One of the slowest plan nodes.
+    pub hot: bool,
+    /// A plan node whose row estimate is far off.
+    pub warn: bool,
+}
+
 impl Grid {
     /// Replace the table contents, resetting the view state (selection,
     /// scroll, sort and filter all go back to their defaults).

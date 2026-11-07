@@ -122,6 +122,32 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
   first error; the grid shows the last result.
 - **EXPLAIN / EXPLAIN ANALYZE** (`F6` / `F7`; `EXPLAIN QUERY PLAN` on SQLite)
   with a plan-doctor insight flagging full table scans per engine dialect.
+- **Plan tree** (T776, from [dbjoy](https://github.com/agustind/dbjoy); module
+  `plan`) — on PostgreSQL, `F6` / `F7` send `EXPLAIN (FORMAT YAML)` /
+  `EXPLAIN (ANALYZE, FORMAT YAML)` and the results pane shows the plan as a
+  tree, one row per node in pre-order with its title indented by depth (node
+  type, join type, index and relation with alias, `Update on t` for a
+  `ModifyTable`, `InitPlan 1: …` for an init plan or sub-plan) and its key details (index /
+  recheck / hash / merge conditions, join filter, filter, sort and group
+  keys, rows removed). Plain `EXPLAIN` adds estimated rows and cost; with
+  `ANALYZE` the columns are time share, self time, estimated rows, actual
+  rows, loops and a note. A node's **self time** is its actual total time ×
+  loops minus its direct children's (clamped at zero), and its **share** is
+  that over the sum of every node's self time. Up to the 3 slowest nodes with
+  at least 10% of the time are noted and drawn bold red; a node whose row
+  estimate (per loop, counts below one taken as one) is off from the actual
+  by 10× or more either way is noted with the factor and drawn yellow; a node
+  that never ran is noted. The full-scan hint still applies (the titles say
+  `Seq Scan`); otherwise the status line gives the node count and, with
+  `ANALYZE`, the execution time. YAML, not the planned `FORMAT JSON`,
+  because sqlx's `Any` driver cannot decode the `json` column `FORMAT JSON`
+  returns while YAML comes back as `text`; `plan` reads both formats into the
+  same model (a small reader for the YAML subset `explain.c` writes) and is
+  unit-tested on hand-recorded JSON and YAML plans. A plan that does not parse
+  is left as the raw text. MySQL and SQLite keep the text plan unchanged, and
+  the AI assistant's validation and optimize paths still use the text
+  `EXPLAIN` everywhere. `EXPLAIN ANALYZE` of a write still needs write mode
+  and the confirmation, and once confirmed it is shown as a plan too.
 - **Table preview** — `p` on a tree table/view runs `SELECT * … LIMIT 200`
   with engine-correct identifier quoting.
 - **Tree search** — `/` filters the schema tree live, ignoring collapse state.
@@ -243,11 +269,6 @@ above, and its box is checked in `tasks.md`.
   Server notices (`RAISE NOTICE`, warnings) are shown under the result
   instead of being dropped. A spike confirms first that sqlx's `Any` driver
   keeps both.
-- **Plan tree (T776).** On PostgreSQL, `F6`/`F7` request `FORMAT JSON` and
-  show the plan as a tree. Each node shows its share of the total time (with
-  `ANALYZE`), the slowest nodes are highlighted, and a node whose row
-  estimate is off from the actual count by 10× or more is flagged. The
-  full-scan hint stays. MySQL and SQLite keep the text plan.
 - **Staged inserts, deletes and expressions (T777).** Besides cell updates, a
   table preview stages new rows and row deletions, color-coded by kind. `W`
   commits them in one transaction, and every statement must affect exactly

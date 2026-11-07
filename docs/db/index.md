@@ -54,7 +54,10 @@ Type SQL; multiple statements separated by `;` are fine.
   **F9** executes all statements in order (stopping at the first error).
 - **F6** shows the query plan (`EXPLAIN`; `EXPLAIN QUERY PLAN` on SQLite);
   **F7** runs `EXPLAIN ANALYZE`. If the plan contains a full table scan, the
-  message line suggests considering an index.
+  message line suggests considering an index. On PostgreSQL the plan is shown
+  as a tree, one row per step: with **F7** each step shows its share of the
+  total time, the slowest steps are highlighted in red, and a step whose row
+  estimate is off from the real count by 10× or more is flagged in yellow.
 - Statements that **write** (`INSERT`, `UPDATE`, `DELETE`, `DROP`, … — even
   hidden inside a `WITH` CTE) ask for confirmation first: **Enter/y** runs,
   **Esc/n** cancels. `EXPLAIN ANALYZE` of a write asks too, since it really

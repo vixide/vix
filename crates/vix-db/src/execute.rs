@@ -42,6 +42,9 @@ pub(crate) enum PendingRun {
     One(String),
     /// Every statement in the buffer, in order.
     All(Vec<String>),
+    /// An `EXPLAIN ANALYZE` of a write, already wrapped for `kind`; once
+    /// confirmed it runs as an explain (plan tree, plan-doctor insight).
+    Explain(String, connect::Kind),
 }
 
 /// What to do with the reply from an in-flight asynchronous query. Chosen at
@@ -135,6 +138,9 @@ impl Browser {
                 match self.pending_run.take() {
                     Some(PendingRun::One(sql)) => self.run_statement(&sql),
                     Some(PendingRun::All(stmts)) => self.run_all(&stmts),
+                    Some(PendingRun::Explain(sql, kind)) => {
+                        self.start_query(sql, QueryKind::Explain(kind));
+                    }
                     None => {}
                 }
             }
@@ -288,8 +294,10 @@ impl Browser {
     }
 
     /// Run the EXPLAIN (or engine equivalent) of the statement at the cursor,
-    /// with the plan-doctor full-scan insight. `EXPLAIN ANALYZE` really
-    /// executes the statement, so a write inside still needs confirmation.
+    /// with the plan-doctor full-scan insight; on `PostgreSQL` the plan comes
+    /// back structured and is shown as a tree (T776, see [`crate::plan`]).
+    /// `EXPLAIN ANALYZE` really executes the statement, so a write inside
+    /// still needs write mode and confirmation.
     pub fn explain(&mut self, analyze: bool) {
         let Some(kind) = self.conn.as_ref().map(|c| c.kind) else {
             self.message = Some(t!("msg.db_not_connected").to_string());
@@ -299,13 +307,13 @@ impl Browser {
             self.message = Some(t!("msg.db_no_statement").to_string());
             return;
         };
-        let wrapped = catalog::explain_sql(kind, &stmt, analyze);
+        let wrapped = catalog::explain_tree_sql(kind, &stmt, analyze);
         if analyze && editor::is_write_statement(&stmt) {
             if !self.write_enabled {
                 self.message = Some(t!("msg.db_read_only").to_string());
                 return;
             }
-            self.pending_run = Some(PendingRun::One(wrapped));
+            self.pending_run = Some(PendingRun::Explain(wrapped, kind));
             self.view = View::Confirm;
             return;
         }
@@ -473,13 +481,56 @@ impl Browser {
                 });
             }
             QueryKind::Explain(kind) => {
+                let tree = self.show_plan_tree(kind);
                 let insight = catalog::scan_insight(kind, &self.grid.rows);
                 self.message = Some(if insight {
                     t!("msg.db_insight_scan").to_string()
+                } else if let Some(plan) = tree {
+                    let count = plan.nodes.len();
+                    match plan.execution_ms {
+                        Some(ms) => t!("msg.db_plan_timed", count = count, ms = format!("{ms:.3}"))
+                            .to_string(),
+                        None => t!("msg.db_plan", count = count).to_string(),
+                    }
                 } else {
                     t!("msg.db_rows", count = rows).to_string()
                 });
             }
+        }
+    }
+
+    /// On `PostgreSQL`, replace the streamed `QUERY PLAN` text in the grid
+    /// with the parsed plan tree and its row marks, returning the plan. Any
+    /// other engine, or a plan that does not parse, leaves the grid as it
+    /// came back.
+    pub(super) fn show_plan_tree(&mut self, kind: connect::Kind) -> Option<crate::plan::Plan> {
+        self.plan_marks = None;
+        if kind != connect::Kind::Postgres {
+            return None;
+        }
+        let text = self
+            .grid
+            .rows
+            .iter()
+            .filter_map(|r| r.first())
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let plan = crate::plan::parse_yaml(&text).or_else(|| crate::plan::parse_json(&text))?;
+        let (headers, rows, marks) = crate::plan::grid(&plan);
+        self.grid.set(headers, rows.clone());
+        self.plan_marks = Some((rows, marks));
+        Some(plan)
+    }
+
+    /// Each results row's plan-tree mark (indexed like `grid.rows`) while the
+    /// grid shows a `PostgreSQL` plan tree (T776); `None` for any other
+    /// result, including one that replaced the plan since.
+    #[must_use]
+    pub fn plan_marks(&self) -> Option<&[crate::results::Mark]> {
+        match &self.plan_marks {
+            Some((rows, marks)) if *rows == self.grid.rows => Some(marks),
+            _ => None,
         }
     }
 
@@ -637,7 +688,7 @@ impl Browser {
     #[must_use]
     pub fn pending_summary(&self) -> Option<String> {
         match self.pending_run.as_ref()? {
-            PendingRun::One(sql) => Some(sql.clone()),
+            PendingRun::One(sql) | PendingRun::Explain(sql, _) => Some(sql.clone()),
             PendingRun::All(stmts) => Some(format!(
                 "{} × … {}",
                 stmts.len(),
