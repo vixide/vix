@@ -10,19 +10,21 @@
 //! [`session`] so transactions span statements — no external client tools.
 //!
 //! Pure state lives in the submodules ([`catalog`], [`complete`], [`editor`],
-//! [`format`](mod@format), [`highlight`], [`results`]); [`connect`] models the saved
-//! connection and its URL, and [`session`] owns the live connection. This
-//! module is the state machine the host drives with keys — split, where a
-//! cohesive slice of it justified its own file (T516), into `lifecycle`
-//! (connecting/disconnecting), `execute` (running statements, transactions,
-//! cancelling a hung query), [`ai_features`] (Ask/fix-error/explain/
-//! optimize — `pub`, unlike its other siblings, since [`ai_features::
-//! AiRequest`] crosses the crate boundary to the host), `cell_edit`
-//! (previewing an editable table, staging/committing cell edits, the
-//! detail/DDL popup), and `panels` (history/saved/log/ER-diagram/import/
-//! export, and the tree/editor/results panes' own key dispatch). What's
-//! left here is genuinely shared: the `Browser`/`Form`/`Pane`/`View`/
-//! `Popup` state itself and the two top-level dispatchers.
+//! [`format`](mod@format), [`highlight`], [`results`], and for editing a
+//! table preview [`staging`], [`columns`] and [`row_filter`]); [`connect`]
+//! models the saved connection and its URL, and [`session`] owns the live
+//! connection. This module is the state machine the host drives with keys —
+//! split, where a cohesive slice of it justified its own file (T516), into
+//! `lifecycle` (connecting/disconnecting), `execute` (running statements,
+//! transactions, cancelling a hung query), [`ai_features`] (Ask/fix-error/
+//! explain/optimize — `pub`, unlike its other siblings, since
+//! [`ai_features::AiRequest`] crosses the crate boundary to the host),
+//! `cell_edit` (previewing an editable table, staging/committing row changes,
+//! the detail/DDL popup), `row_search` (the server-side row search), and
+//! `panels` (history/saved/log/ER-diagram/import/export, and the
+//! tree/editor/results panes' own key dispatch). What's left here is
+//! genuinely shared: the `Browser`/`Form`/`Pane`/`View`/`Popup` state itself
+//! and the two top-level dispatchers.
 //!
 //! # Architecture and invariants
 //!
@@ -57,6 +59,7 @@ pub mod ai_features;
 pub mod catalog;
 mod cell_edit;
 pub mod chart;
+pub mod columns;
 pub mod complete;
 pub mod connect;
 pub mod editor;
@@ -70,8 +73,11 @@ mod lifecycle;
 mod panels;
 pub mod params;
 pub mod results;
+pub mod row_filter;
+mod row_search;
 pub mod secret;
 pub mod session;
+pub mod staging;
 pub mod store;
 pub mod tunnel;
 
@@ -448,11 +454,26 @@ pub struct Browser {
     pk_cols: Vec<String>,
     /// Staged cell edits, keyed by `(underlying row index, column index)` →
     /// `(original value, new value)`.
-    pub edits: std::collections::HashMap<(usize, usize), (String, String)>,
+    pub edits: staging::CellEdits,
+    /// Staged new rows and row deletions on the editable grid (T777), keyed
+    /// by underlying row index.
+    pub staged: staging::Staged,
+    /// Column facts of the editable table (generated columns, pick lists).
+    pub columns: Vec<columns::ColumnInfo>,
     /// The cell being edited (underlying row, column), and the value typed.
     editing_cell: Option<(usize, usize)>,
     /// The value being typed on the cell editor.
     pub edit_input: String,
+    /// The highlighted value of the cell editor's pick list, if the column
+    /// offers one (an index into [`Browser::edit_choices`]).
+    pub edit_choice: Option<usize>,
+    /// The `(schema, table)` the grid is a preview of, editable or not; the
+    /// server-side row search re-runs it.
+    preview: Option<(String, String)>,
+    /// The row-search form (`F`).
+    pub row_filter: row_filter::FilterForm,
+    /// The `WHERE` condition the current preview was narrowed by, if any.
+    server_filter: Option<String>,
     /// A user query running asynchronously on the worker thread, if any.
     pending_query: Option<execute::Pending>,
     /// The active SSH tunnel, kept alive for the connection's lifetime (drop
@@ -550,9 +571,15 @@ impl Browser {
             tx: TxState::None,
             edit_table: None,
             pk_cols: Vec::new(),
-            edits: std::collections::HashMap::new(),
+            edits: staging::CellEdits::new(),
+            staged: staging::Staged::default(),
+            columns: Vec::new(),
             editing_cell: None,
             edit_input: String::new(),
+            edit_choice: None,
+            preview: None,
+            row_filter: row_filter::FilterForm::default(),
+            server_filter: None,
             pending_query: None,
             tunnel: None,
             pending_connect: None,
@@ -630,6 +657,7 @@ impl Browser {
             View::Connections => self.key_connections(key),
             View::Form => self.key_form(key),
             View::Password => self.key_password(key),
+            View::Workbench if self.row_filter.open => self.key_row_filter(key),
             View::Workbench => self.key_workbench(key, pages),
             View::History | View::Saved => self.key_query_list(key),
             View::SaveName => self.key_save_name(key),

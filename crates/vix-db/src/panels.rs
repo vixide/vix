@@ -541,7 +541,11 @@ impl Browser {
             KeyCode::Char('f') => self.follow_fk(),
             KeyCode::Char('c') => self.chart_results(),
             KeyCode::Char('i') => self.begin_cell_edit(),
+            KeyCode::Char('a') => self.stage_new_row(page),
+            KeyCode::Char('d') => self.toggle_delete_row(),
+            KeyCode::Char('u') => self.discard_row_changes(),
             KeyCode::Char('W') => self.commit_edits(),
+            KeyCode::Char('F') => self.open_row_filter(),
             _ => {}
         }
     }

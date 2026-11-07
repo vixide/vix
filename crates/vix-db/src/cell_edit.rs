@@ -1,31 +1,31 @@
-//! The results grid's editable-cell workflow: previewing a single table so
-//! its rows can be edited (`preview_selected`/`set_editable`), staging and
-//! committing cell edits (`begin_cell_edit`/`key_cell_edit`/`commit_edits`),
-//! following a foreign key, expanding a row into the detail viewer, and the
-//! detail/DDL popup itself. Extracted from `lib.rs` (T516): the one
-//! cohesive slice of [`Browser`]'s methods concerned with *what a single
-//! cell or row means and how it gets changed*, as opposed to running SQL.
+//! The results grid's editable-table workflow: previewing a single table so
+//! its rows can be edited (`preview_selected`/`set_editable`), staging cell
+//! edits, new rows and row deletions (`begin_cell_edit`/`key_cell_edit`,
+//! `stage_new_row`, `toggle_delete_row`) and committing them
+//! (`commit_edits`), following a foreign key, expanding a row into the
+//! detail viewer, and the detail/DDL popup itself. Extracted from `lib.rs`
+//! (T516): the one cohesive slice of [`Browser`]'s methods concerned with
+//! *what a single cell or row means and how it gets changed*, as opposed to
+//! running SQL.
 //!
 //! # Edit model
 //!
 //! A grid is *editable* only when it came from a single-table preview whose
 //! table has a primary key (`edit_table` + `pk_cols`); any other result is
-//! read-only. Edits are **staged** in `Browser::edits`, keyed by the
-//! *underlying* row index (stable across filtering and sorting, see
-//! [`crate::results::Grid::selected_index`]) and column, as `(original, new)`.
-//! Nothing touches the database until `commit_edits`, which for each edit
-//! re-reads the live cell (optimistic conflict check against `original`), then
-//! applies all `UPDATE`s inside one `BEGIN`/`COMMIT`, rolling back on the first
-//! failure. Writes require write mode. Owning spec:
-//! `crates/vix-db/spec/index.md`.
+//! read-only. Changes are **staged** in [`Browser::staged`]
+//! ([`crate::staging::Staged`]), keyed by the *underlying* row index (stable
+//! across filtering and sorting, see
+//! [`crate::results::Grid::selected_index`]); a new row is a blank row
+//! appended to the grid. Nothing touches the database until `commit_edits`,
+//! which builds one statement per changed row ([`crate::staging::statements`]),
+//! re-reads every updated row first (optimistic conflict check), then runs
+//! them all inside one `BEGIN`/`COMMIT`, rolling the whole batch back on an
+//! error or on any statement that does not affect exactly one row (T777).
+//! Writes require write mode. Owning spec: `crates/vix-db/spec/index.md`.
 
 use vix_input::{KeyCode, KeyEvent};
 
-use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, connect};
-
-/// One staged cell edit: `(underlying row index, column index)` →
-/// `(original value, new value)`.
-type CellEdit = ((usize, usize), (String, String));
+use super::{Browser, Outcome, Pane, Popup, TxState, View, catalog, columns, connect, staging};
 
 impl Browser {
     /// The staged new value for a cell, if any (for the grid overlay).
@@ -33,6 +33,47 @@ impl Browser {
     #[must_use]
     pub fn staged_value(&self, row: usize, col: usize) -> Option<&str> {
         self.edits.get(&(row, col)).map(|(_, new)| new.as_str())
+    }
+
+    /// What is staged for a row (modified / inserted / deleted), for the
+    /// grid's colors. `row` is the underlying row index.
+    #[must_use]
+    pub fn row_change(&self, row: usize) -> Option<staging::ChangeKind> {
+        self.staged.row_kind(&self.edits, row)
+    }
+
+    /// Whether anything is staged: a cell edit, a new row or a deletion.
+    #[must_use]
+    pub fn has_staged_changes(&self) -> bool {
+        !self.staged.is_empty(&self.edits)
+    }
+
+    /// The staged `(updated, inserted, deleted)` row counts.
+    #[must_use]
+    pub fn staged_counts(&self) -> (usize, usize, usize) {
+        self.staged.counts(&self.edits)
+    }
+
+    /// The values the cell being edited can be picked from (empty for free
+    /// text): a boolean, enum or `CHECK (col IN (…))` column's values.
+    #[must_use]
+    pub fn edit_choices(&self) -> &[String] {
+        self.editing_cell
+            .and_then(|(_, col)| self.column_info(col))
+            .map_or(&[], |c| c.choices.as_slice())
+    }
+
+    /// The `WHERE` condition the current table preview was narrowed by on
+    /// the server (`F`), if any.
+    #[must_use]
+    pub fn server_filter(&self) -> Option<&str> {
+        self.server_filter.as_deref()
+    }
+
+    /// The facts about grid column `col` of the editable table, if known.
+    fn column_info(&self, col: usize) -> Option<&columns::ColumnInfo> {
+        let name = self.grid.headers.get(col)?;
+        self.columns.iter().find(|c| &c.name == name)
     }
 
     /// Whether the current grid can be edited in place (a single-table view
@@ -87,17 +128,19 @@ impl Browser {
                 self.grid.set(headers, rows);
                 self.last_table = Some(table.clone());
                 self.focus = Pane::Results;
+                self.server_filter = None;
                 self.set_editable(&schema, &table, kind);
             }
             Err(e) => self.message = Some(e.to_string()),
         }
     }
 
-    /// Mark the current grid as an editable single-table view, fetching the
-    /// table's primary key (no key ⇒ not editable). Clears any staged edits.
-    fn set_editable(&mut self, schema: &str, table: &str, kind: connect::Kind) {
-        self.edits.clear();
-        self.editing_cell = None;
+    /// Mark the current grid as a preview of `schema`.`table`, editable when
+    /// the table has a primary key (no key ⇒ read-only), and load its column
+    /// facts. Clears any staged changes.
+    pub(super) fn set_editable(&mut self, schema: &str, table: &str, kind: connect::Kind) {
+        self.clear_staging();
+        self.preview = Some((schema.to_string(), table.to_string()));
         let pk = self
             .run_catalog(&catalog::primary_key_sql(kind, schema, table))
             .map(|(_, rows)| {
@@ -107,20 +150,42 @@ impl Browser {
             })
             .unwrap_or_default();
         if pk.is_empty() {
-            self.set_uneditable();
-        } else {
-            self.pk_cols = pk;
-            self.edit_table = Some((schema.to_string(), table.to_string()));
+            self.edit_table = None;
+            self.pk_cols.clear();
+            return;
         }
+        self.pk_cols = pk;
+        self.edit_table = Some((schema.to_string(), table.to_string()));
+        // Column facts are best effort: a catalog view an older server lacks
+        // only means plain free-text cells.
+        let cols = self
+            .run_catalog(&columns::columns_sql(kind, schema, table))
+            .map(|(_, rows)| rows)
+            .unwrap_or_default();
+        let checks = self
+            .run_catalog(&columns::checks_sql(kind, schema, table))
+            .map(|(_, rows)| rows)
+            .unwrap_or_default();
+        self.columns = columns::from_rows(kind, &cols, &checks);
     }
 
     /// Mark the current grid as read-only (arbitrary query result), discarding
-    /// any staged edits.
+    /// any staged changes and forgetting the preview and its row filter.
     pub(super) fn set_uneditable(&mut self) {
+        self.clear_staging();
         self.edit_table = None;
         self.pk_cols.clear();
+        self.preview = None;
+        self.server_filter = None;
+    }
+
+    /// Drop staged changes, the open cell editor and the column facts.
+    fn clear_staging(&mut self) {
         self.edits.clear();
+        self.staged.clear();
+        self.columns.clear();
         self.editing_cell = None;
+        self.edit_choice = None;
     }
 
     /// Show the selected result row vertically as `column: value` lines in the
@@ -199,7 +264,8 @@ impl Browser {
     }
 
     /// Begin editing the selected cell (staged, not applied until commit).
-    /// Only editable single-table views with a primary key qualify.
+    /// Only editable single-table views with a primary key qualify; a row
+    /// staged for deletion and a generated column cannot be edited.
     pub(super) fn begin_cell_edit(&mut self) {
         if !self.editable() {
             self.message = Some(t!("msg.db_edit_readonly").to_string());
@@ -208,6 +274,15 @@ impl Browser {
         let (Some(row), col) = (self.grid.selected_index(), self.grid.cur_col) else {
             return;
         };
+        if self.staged.row_kind(&self.edits, row) == Some(staging::ChangeKind::Deleted) {
+            self.message = Some(t!("msg.db_edit_deleted_row").to_string());
+            return;
+        }
+        if let Some(info) = self.column_info(col).filter(|c| c.generated) {
+            self.message =
+                Some(t!("msg.db_edit_generated", column = info.name.clone()).to_string());
+            return;
+        }
         let current = self
             .edits
             .get(&(row, col))
@@ -218,15 +293,34 @@ impl Browser {
         };
         self.edit_input = current;
         self.editing_cell = Some((row, col));
+        self.edit_choice = self
+            .edit_choices()
+            .iter()
+            .position(|c| c == &self.edit_input);
         self.view = View::CellEdit;
     }
 
-    /// Keys in the cell editor: `Enter` stages the value, `Esc` cancels.
+    /// Keys in the cell editor: typing edits the value, `↑`/`↓` pick from
+    /// the column's allowed values (when it has some), `Enter` stages the
+    /// value, `Esc` cancels.
     pub(super) fn key_cell_edit(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Char(c) => self.edit_input.push(c),
             KeyCode::Backspace => {
                 self.edit_input.pop();
+            }
+            KeyCode::Up | KeyCode::Down => {
+                let n = self.edit_choices().len();
+                if n > 0 {
+                    let next = match (self.edit_choice, key.code) {
+                        (None, KeyCode::Up) => n - 1,
+                        (None, _) => 0,
+                        (Some(i), KeyCode::Up) => (i + n - 1) % n,
+                        (Some(i), _) => (i + 1) % n,
+                    };
+                    self.edit_input = self.edit_choices()[next].clone();
+                    self.edit_choice = Some(next);
+                }
             }
             KeyCode::Enter => {
                 if let Some((row, col)) = self.editing_cell.take() {
@@ -238,18 +332,16 @@ impl Browser {
                         .cloned()
                         .unwrap_or_default();
                     let new = std::mem::take(&mut self.edit_input);
-                    // Staging the original value again is "undo": drop the entry
-                    // so commit never issues a no-op UPDATE.
-                    if new == original {
-                        self.edits.remove(&(row, col)); // reverting clears the stage
-                    } else {
-                        self.edits.insert((row, col), (original, new));
-                    }
+                    // Staging the original value again is "undo": the entry
+                    // goes, so commit never issues a no-op UPDATE.
+                    staging::set_cell(&mut self.edits, row, col, &original, &new);
                 }
+                self.edit_choice = None;
                 self.view = View::Workbench;
             }
             KeyCode::Esc => {
                 self.editing_cell = None;
+                self.edit_choice = None;
                 self.view = View::Workbench;
             }
             _ => {}
@@ -257,11 +349,90 @@ impl Browser {
         Outcome::Consumed
     }
 
-    /// Commit every staged cell edit as an `UPDATE`, wrapped in one
-    /// transaction, after re-checking each row for a concurrent change. Needs
-    /// write mode.
+    /// Stage a new, blank row (`a`): it is appended to the grid, selected,
+    /// and filled with `i` like any other row; cells left blank take the
+    /// column default on commit. `page` is the results pane height.
+    pub(super) fn stage_new_row(&mut self, page: usize) {
+        if !self.editable() {
+            self.message = Some(t!("msg.db_edit_readonly").to_string());
+            return;
+        }
+        let row = self.grid.rows.len();
+        self.grid
+            .rows
+            .push(vec![String::new(); self.grid.headers.len()]);
+        self.staged.insert_row(row);
+        // A live `/` filter would hide the blank row; drop it so the new row
+        // is visible and selectable.
+        if !self.grid.filtered().contains(&row) {
+            self.grid.filter.clear();
+        }
+        if let Some(pos) = self.grid.filtered().iter().position(|&r| r == row) {
+            self.grid.sel = pos;
+            self.grid.ensure_visible(page.max(1));
+        }
+        if let Some(col) =
+            (0..self.grid.headers.len()).find(|&c| self.column_info(c).is_none_or(|i| !i.generated))
+        {
+            self.grid.cur_col = col;
+        }
+        self.message = Some(t!("msg.db_edit_row_added").to_string());
+    }
+
+    /// Stage the selected row for deletion, or restore it when it already is
+    /// (`d`). A staged new row is simply discarded.
+    pub(super) fn toggle_delete_row(&mut self) {
+        if !self.editable() {
+            self.message = Some(t!("msg.db_edit_readonly").to_string());
+            return;
+        }
+        let Some(row) = self.grid.selected_index() else {
+            return;
+        };
+        if self.staged.is_inserted(row) {
+            self.discard_new_row(row);
+            return;
+        }
+        self.message = Some(if self.staged.toggle_delete(row) {
+            t!("msg.db_edit_row_deleted").to_string()
+        } else {
+            t!("msg.db_edit_row_restored").to_string()
+        });
+    }
+
+    /// Un-stage every change to the selected row (`u`): its cell edits and
+    /// its deletion, or the whole row when it is new.
+    pub(super) fn discard_row_changes(&mut self) {
+        let Some(row) = self.grid.selected_index() else {
+            return;
+        };
+        if self.staged.is_inserted(row) {
+            self.discard_new_row(row);
+            return;
+        }
+        if self.staged.row_kind(&self.edits, row).is_some() {
+            self.staged.discard_row(&mut self.edits, row);
+            self.message = Some(t!("msg.db_edit_row_discarded").to_string());
+        }
+    }
+
+    /// Remove a staged new row from the grid, keeping the selection in range.
+    fn discard_new_row(&mut self, row: usize) {
+        self.staged
+            .remove_inserted(&mut self.edits, row, &mut self.grid.rows);
+        let visible = self.grid.filtered().len();
+        self.grid.sel = self.grid.sel.min(visible.saturating_sub(1));
+        self.grid.scroll = self.grid.scroll.min(self.grid.sel);
+        self.message = Some(t!("msg.db_edit_row_discarded").to_string());
+    }
+
+    /// Commit every staged change (`W`): one `DELETE`, `UPDATE` or `INSERT`
+    /// per row, in one transaction, after re-checking each updated row for a
+    /// concurrent change. If any statement fails, or affects other than
+    /// exactly one row, the whole batch rolls back and nothing is kept.
+    /// Needs write mode.
     pub(super) fn commit_edits(&mut self) {
-        if self.edits.is_empty() {
+        if !self.has_staged_changes() {
             self.message = Some(t!("msg.db_edit_none").to_string());
             return;
         }
@@ -284,116 +455,97 @@ impl Browser {
             self.message = Some(t!("msg.db_edit_readonly").to_string());
             return;
         };
-        let target = if matches!(kind, connect::Kind::Sqlite) {
-            catalog::quote_ident(kind, &table)
-        } else {
-            format!(
-                "{}.{}",
-                catalog::quote_ident(kind, &schema),
-                catalog::quote_ident(kind, &table)
-            )
-        };
-
-        // HashMap order is arbitrary; sort so UPDATEs run in grid order and
-        // any conflict message is deterministic.
-        let mut edits: Vec<CellEdit> = self.edits.iter().map(|(k, v)| (*k, v.clone())).collect();
-        edits.sort_by_key(|(k, _)| *k);
-
-        let Some(updates) = self.build_pending_updates(kind, &target, &pk_idx, &edits) else {
-            return;
-        };
-        let count = updates.len();
-        if !self.apply_updates_in_transaction(&updates) {
+        let target = catalog::table_target(kind, &schema, &table);
+        let statements = staging::statements(
+            &staging::Target {
+                kind,
+                table: &target,
+                headers: &self.grid.headers,
+                pk: &pk_idx,
+                rows: &self.grid.rows,
+                columns: &self.columns,
+            },
+            &self.edits,
+            &self.staged,
+        );
+        if !self.check_conflicts(&statements) {
             return;
         }
+        if !self.apply_in_transaction(&statements) {
+            return;
+        }
+        let (updated, inserted, deleted) = self.staged_counts();
         self.edits.clear();
-        self.message = Some(t!("msg.db_edit_committed", count = count).to_string());
-        self.preview_selected_refresh(&schema, &table, kind);
+        self.staged.clear();
+        self.message = Some(
+            t!(
+                "msg.db_changes_committed",
+                updated = updated,
+                inserted = inserted,
+                deleted = deleted
+            )
+            .to_string(),
+        );
+        self.refresh_preview(&schema, &table, kind);
     }
 
-    /// Build one `UPDATE` statement per staged edit, re-reading each cell first
-    /// to detect a concurrent change (optimistic conflict check). Sets
-    /// `self.message` and returns `None` on the first conflict or read error.
-    fn build_pending_updates(
-        &mut self,
-        kind: connect::Kind,
-        target: &str,
-        pk_idx: &[usize],
-        edits: &[CellEdit],
-    ) -> Option<Vec<String>> {
-        let mut updates = Vec::new();
-        for ((row, col), (original, new)) in edits {
-            // A row that vanished or whose primary key cannot be fully
-            // resolved is skipped rather than risk an UPDATE with a partial
-            // (over-broad) WHERE clause.
-            let Some(cells) = self.grid.rows.get(*row) else {
-                continue;
-            };
-            let where_clause: Vec<String> = pk_idx
-                .iter()
-                .filter_map(|&pi| {
-                    let name = self.grid.headers.get(pi)?;
-                    let value = cells.get(pi)?;
-                    Some(format!(
-                        "{} = {}",
-                        catalog::quote_ident(kind, name),
-                        catalog::quote_literal(value)
-                    ))
-                })
-                .collect();
-            if where_clause.len() != pk_idx.len() {
-                continue;
-            }
-            let where_sql = where_clause.join(" AND ");
-            let column = self.grid.headers.get(*col).cloned().unwrap_or_default();
-            // Conflict check: the cell must still hold the value we loaded.
-            let check = format!(
-                "SELECT {} FROM {target} WHERE {where_sql}",
-                catalog::quote_ident(kind, &column)
-            );
-            match self.run_catalog(&check) {
+    /// Re-read every row an `UPDATE` will touch and compare it with the
+    /// values loaded into the grid (optimistic conflict check). Sets
+    /// `self.message` and returns `false` on the first conflict or read error.
+    fn check_conflicts(&mut self, statements: &[staging::Statement]) -> bool {
+        for check in statements.iter().filter_map(|s| s.check.as_ref()) {
+            match self.run_catalog(&check.sql) {
                 Ok((_, rows)) => {
-                    let live = rows
-                        .first()
-                        .and_then(|r| r.first())
-                        .cloned()
-                        .unwrap_or_default();
-                    if &live != original {
+                    let live = rows.first().cloned().unwrap_or_default();
+                    let changed = check
+                        .columns
+                        .iter()
+                        .enumerate()
+                        .find(|(i, _)| live.get(*i) != check.expected.get(*i));
+                    if let Some((_, column)) = changed {
                         self.message =
-                            Some(t!("msg.db_edit_conflict", column = column).to_string());
-                        return None;
+                            Some(t!("msg.db_edit_conflict", column = column.clone()).to_string());
+                        return false;
                     }
                 }
                 Err(e) => {
                     self.message = Some(e.to_string());
-                    return None;
+                    return false;
                 }
             }
-            updates.push(format!(
-                "UPDATE {target} SET {} = {} WHERE {where_sql}",
-                catalog::quote_ident(kind, &column),
-                catalog::quote_literal(new)
-            ));
         }
-        Some(updates)
+        true
     }
 
-    /// Apply every `UPDATE` in one transaction, rolling back and setting
-    /// `self.message` on the first error. Returns whether the commit succeeded.
+    /// Run every statement in one transaction. Any error, or any statement
+    /// that affects other than exactly one row, rolls the whole batch back
+    /// and sets `self.message`. Returns whether the commit succeeded.
     ///
     /// Uses the real `BEGIN`/`COMMIT` on the persistent session and resets the
     /// client-side [`TxState`] afterwards, since a user transaction cannot be
-    /// open while the edit commit runs.
-    fn apply_updates_in_transaction(&mut self, updates: &[String]) -> bool {
-        if self.run_sql("BEGIN").is_err() {
-            self.message = Some(t!("msg.db_ai_failed").to_string());
+    /// open while the commit runs.
+    fn apply_in_transaction(&mut self, statements: &[staging::Statement]) -> bool {
+        if let Err(e) = self.run_sql("BEGIN") {
+            self.message = Some(e.to_string());
             return false;
         }
-        for sql in updates {
-            if let Err(e) = self.run_sql(sql) {
+        for stmt in statements {
+            let failure = match self.exec_sql(&stmt.sql) {
+                Ok(1) => None,
+                Ok(count) => Some(
+                    t!(
+                        "msg.db_edit_not_one_row",
+                        count = count,
+                        sql = stmt.sql.clone()
+                    )
+                    .to_string(),
+                ),
+                Err(e) => Some(e.to_string()),
+            };
+            if let Some(message) = failure {
                 let _ = self.run_sql("ROLLBACK");
                 self.tx = TxState::None;
-                self.message = Some(e.to_string());
+                self.message = Some(message);
                 return false;
             }
         }
@@ -407,9 +559,13 @@ impl Browser {
         true
     }
 
-    /// Re-run a table preview after a commit to show the persisted values.
-    fn preview_selected_refresh(&mut self, schema: &str, table: &str, kind: connect::Kind) {
-        let sql = catalog::preview_sql(kind, schema, table);
+    /// Re-run the table preview — with the active row filter, if any — to
+    /// show the persisted values.
+    pub(super) fn refresh_preview(&mut self, schema: &str, table: &str, kind: connect::Kind) {
+        let sql = match &self.server_filter {
+            Some(clause) => catalog::filtered_preview_sql(kind, schema, table, clause),
+            None => catalog::preview_sql(kind, schema, table),
+        };
         if let Ok((headers, rows)) = self.run_catalog(&sql) {
             self.grid.set(headers, rows);
             self.set_editable(schema, table, kind);

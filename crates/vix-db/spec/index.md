@@ -92,8 +92,10 @@ The overlay's screens and keys:
     expands the selected row vertically, `f` follows a foreign-key cell to its
     parent row, `c` charts a `(label, number)` result; the pane title shows the
     row count. On an editable table preview (one with a primary key), `i` stages
-    an edit to the selected cell and `W` commits all staged edits as `UPDATE`s
-    in one transaction (with conflict detection).
+    an edit to the selected cell, `a` stages a new row, `d` stages the selected
+    row's deletion, `u` discards the row's staged changes, and `W` commits them
+    all in one transaction; `F` searches the table's rows on the server (see
+    *dbjoy-inspired* below).
   - *AI & data* (see the sections below): `Ctrl+A` ask (prefix `?` for a
     schema question), `Ctrl+O` optimize, `Ctrl+F` fix the last error, `Ctrl+K`
     explain the query; `Ctrl+U` imports a CSV/TSV file into a new table.
@@ -222,6 +224,115 @@ The same surus round added three companion features the AI surface builds on:
   scrollable viewer; `y` yanks the Mermaid text to paste anywhere Mermaid
   renders (including Vix's own Org/Mermaid support).
 
+## dbjoy-inspired: staged row changes and row search
+
+From the reading of [dbjoy](https://github.com/agustind/dbjoy) recorded in
+[`spec/comparisons/dbjoy.md`](../../../spec/comparisons/dbjoy.md).
+
+### Staged inserts, deletes and smarter cells (T777)
+
+A table preview whose table has a primary key is editable; one without a
+primary key, and any other result, stays read only. Changes are staged in
+`db::staging::Staged`, keyed by the grid's underlying row index (stable under
+`/` filtering and sorting), and nothing reaches the database until `W`:
+
+| Key (results pane) | What it does |
+| --- | --- |
+| `i` | edit the selected cell; `Enter` stages the value, `Esc` cancels |
+| `a` | stage a new, blank row at the end of the grid and select it |
+| `d` | stage the selected row's deletion, or restore it; on a new row, discard it |
+| `u` | discard every staged change to the selected row |
+| `W` | commit everything staged, in one transaction |
+
+The grid colors a row by what is staged for it: the changed cells of a
+modified row bold yellow, a new row bold green, a row staged for deletion red
+and struck through. A deleted row cannot be edited until it is restored, and
+its cell edits come back with it.
+
+**Commit.** `db::staging::statements` builds one statement per changed row, in
+the order `DELETE`s, `UPDATE`s (all of a row's edited cells in one `SET`),
+`INSERT`s, so a deleted row's key is free before a new row reuses it. Rows are
+found by their full primary key; a row whose key cannot be resolved is skipped
+rather than risk a broader `WHERE`. Before the transaction, every row an
+`UPDATE` will touch is re-read and compared with the values loaded into the
+grid (the optimistic conflict check, `msg.db_edit_conflict`). Then `BEGIN`,
+each statement through `Session::execute`, and `COMMIT`. If any statement
+fails, or affects other than exactly one row (`msg.db_edit_not_one_row`,
+naming the statement), the whole batch is rolled back and stays staged. A new
+row's blank cells are left out of its `INSERT`, so they take the column
+default; a new row with no values is `INSERT … DEFAULT VALUES` (`() VALUES
+()` on MySQL). Committing needs write mode, then re-runs the preview (with its
+row search, if any).
+
+**Values.** `db::staging::value_sql` turns a typed value into SQL:
+
+- a value starting with `=` is an SQL expression the server computes on
+  commit, inserted unquoted: `=now()`, `=upper('x')`, `=NULL`;
+- `\=` stores literal text that starts with `=` (`\=x` stores `=x`); a lone
+  `=` is the text `=`;
+- anything else is a literal from `catalog::quote_value`: always quoted on
+  PostgreSQL (an untyped literal takes the column's type) and MySQL (where
+  backslashes are doubled too, since they escape in the default `sql_mode`),
+  and a bare number on SQLite, as before.
+
+**Column facts.** When a preview becomes editable, `db::columns` reads each
+column's type and whether the server generates it, with best-effort catalog
+queries (a failing one just means free-text cells):
+
+- *Generated columns* (SQLite `pragma_table_xinfo` hidden 2/3, PostgreSQL
+  `attgenerated` and `GENERATED ALWAYS` identities, MySQL `VIRTUAL GENERATED` /
+  `STORED GENERATED`) are read only: `i` on one says so, and an `INSERT` leaves
+  them out.
+- *Pick lists.* In the cell editor, `↑`/`↓` cycle through a column's allowed
+  values, listed under the input with the current one highlighted; typing
+  still works. The values come from a PostgreSQL enum (`pg_enum`, in sort
+  order), a MySQL `ENUM(…)` column type, a single-column `CHECK (col IN (…))`
+  (parsed by `columns::parse_in_check`, including PostgreSQL's `col = ANY
+  (ARRAY[…])` rewrite and MySQL's `_utf8mb4'…'` introducers; read from
+  `pg_get_constraintdef`, from `information_schema.check_constraints` on MySQL
+  8.0.16 and later, and from the table's `CREATE` statement on SQLite), or a
+  boolean column (`true`/`false` on PostgreSQL, `1`/`0` for MySQL
+  `tinyint(1)` and SQLite `BOOLEAN`).
+
+sqlx's `Any` driver cannot decode a SQLite column declared `BOOLEAN` (or
+`DATE`/`DATETIME`), so previewing such a SQLite table fails before any of this
+applies; that predates T777 and is a driver limitation.
+
+### Server-side row search (T778)
+
+On a table preview, `F` opens a filter row: a **column** (starting on the
+selected one), an **operator** and a **value**. `↑`/`↓` move between the
+three, `←`/`→` choose the column or operator, typing edits the value, `Enter`
+runs the search, `Delete` clears it (back to the plain preview) and `Esc`
+closes. Under the form, the `WHERE` condition it builds is shown live, or why
+it is not complete yet.
+
+`db::row_filter::where_clause` is the pure builder. The column is quoted with
+`catalog::quote_ident` and values with `catalog::quote_value`, so a value can
+never leave its literal:
+
+| Operator | Condition |
+| --- | --- |
+| contains | `CAST(col AS TEXT) ILIKE '%v%'` on PostgreSQL; `LOWER(CAST(col AS CHAR/TEXT)) LIKE LOWER('%v%')` on MySQL and SQLite; `%`, `_` and `!` escaped with `ESCAPE '!'` |
+| `=`, `<>`, `<`, `<=`, `>`, `>=` | `col op v` |
+| between | `col BETWEEN low AND high`, typed `low..high` |
+| `IN` | `col IN (a, b, …)` from a comma-separated list; an item may be single- or double-quoted to hold a comma |
+| `IS NULL`, `IS NOT NULL` | no value |
+| raw SQL | the value is the whole condition, as written |
+
+The preview is re-run as `SELECT * … WHERE <condition> LIMIT 200`, so it finds
+rows the capped preview never loaded, and the result stays editable (a commit
+re-runs the same search). The results title shows the active condition. A
+search is refused while changes are staged (the re-run would drop them), and
+any search whose SQL writes (`editor::is_write_statement`, which only a raw
+condition can trigger) is refused whatever the write mode. `/` still filters
+the loaded rows client-side.
+
+Tests: the builders are unit-tested per engine in `staging`, `columns` and
+`row_filter`, and `tui/tests/db_smoke.rs` runs stage → commit, the
+exactly-one-row rollback (a `DELETE` whose row someone else removed), and the
+row search end to end on SQLite.
+
 ## dbjoy-inspired (planned, Run W)
 
 **Planned, not built.** These come from a reading of
@@ -248,19 +359,6 @@ above, and its box is checked in `tasks.md`.
   `ANALYZE`), the slowest nodes are highlighted, and a node whose row
   estimate is off from the actual count by 10× or more is flagged. The
   full-scan hint stays. MySQL and SQLite keep the text plan.
-- **Staged inserts, deletes and expressions (T777).** Besides cell updates, a
-  table preview stages new rows and row deletions, color-coded by kind. `W`
-  commits them in one transaction, and every statement must affect exactly
-  one row or the whole batch rolls back. Boolean, enum and `CHECK (col IN
-  (…))` columns offer their values to pick from; generated columns are read
-  only. A cell value starting with `=` is an SQL expression the server
-  computes on commit (`=now()`); `\=` stores text that starts with `=`.
-  Tables without a primary key stay read only.
-- **Server-side row search (T778).** On a table preview, a filter row takes a
-  column, an operator (contains, equals, not equal, range, `IN`, `IS NULL`,
-  `IS NOT NULL`, raw SQL) and a value. Vix builds the `WHERE` clause with
-  quoted identifiers and literals and runs it on the server, and the results
-  stay editable. `/` keeps filtering the loaded rows.
 - **Relations (T779).** On a table, a relations view lists outgoing foreign
   keys, incoming foreign keys (the tables that reference this one) and the
   views that depend on it, per engine.

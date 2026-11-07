@@ -858,3 +858,300 @@ fn transaction_state_badge_and_relaxed_confirm() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Replace the editor's text with `sql`, run it, and return the rows.
+fn query_rows(b: &mut Browser, sql: &str) -> Vec<Vec<String>> {
+    b.focus = Pane::Editor;
+    for _ in 0..b.query.text().chars().count() {
+        key(b, KeyCode::Backspace);
+    }
+    type_str(b, sql);
+    key(b, KeyCode::F(5));
+    b.grid.rows.clone()
+}
+
+/// Preview the first table in the tree (`p`) and focus the results.
+fn preview_first_table(b: &mut Browser) {
+    b.focus = Pane::Tree;
+    key(b, KeyCode::Down); // schema → Tables folder
+    key(b, KeyCode::Down); // → the first table
+    key(b, KeyCode::Char('p'));
+    b.focus = Pane::Results;
+}
+
+/// Clear the cell editor's value and type `text` (still in the editor).
+fn retype_cell(b: &mut Browser, text: &str) {
+    for _ in 0..b.edit_input.chars().count() {
+        key(b, KeyCode::Backspace);
+    }
+    type_str(b, text);
+}
+
+fn rows(cells: &[&[&str]]) -> Vec<Vec<String>> {
+    cells
+        .iter()
+        .map(|r| r.iter().map(|c| (*c).to_string()).collect())
+        .collect()
+}
+
+#[test]
+fn staged_inserts_deletes_pickers_and_expressions_commit_together() {
+    use vix::db::staging::ChangeKind;
+    let dir = std::env::temp_dir().join(format!("vix-db-stage-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("stage.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, \
+             size TEXT CHECK (size IN ('S', 'M', 'L')), done INTEGER CHECK (done IN (0, 1)), \
+             total INTEGER GENERATED ALWAYS AS (id * 10) VIRTUAL)",
+            "INSERT INTO items (id, name, size, done) VALUES \
+             (1, 'ada', 'S', 0), (2, 'grace', 'M', 1), (3, 'linus', 'L', 0)",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("stage", &file)]);
+    key(&mut b, KeyCode::Enter);
+    preview_first_table(&mut b);
+    assert!(b.editable(), "{:?}", b.message);
+    assert_eq!(b.grid.headers, ["id", "name", "size", "done", "total"]);
+    let info = |b: &Browser, name: &str| {
+        b.columns
+            .iter()
+            .find(|c| c.name == name)
+            .cloned()
+            .unwrap_or_else(|| panic!("no facts for {name}: {:?}", b.columns))
+    };
+    assert_eq!(info(&b, "size").choices, ["S", "M", "L"], "CHECK IN list");
+    assert_eq!(
+        info(&b, "done").choices,
+        ["0", "1"],
+        "numeric CHECK IN list"
+    );
+    assert!(info(&b, "total").generated, "generated column");
+
+    // A generated column refuses editing.
+    for _ in 0..4 {
+        key(&mut b, KeyCode::Right);
+    }
+    key(&mut b, KeyCode::Char('i'));
+    assert_eq!(b.view, View::Workbench, "generated column is read-only");
+    assert!(b.message.is_some());
+
+    // Row 1: name becomes a server-computed expression, size is picked.
+    key(&mut b, KeyCode::Home);
+    for _ in 0..3 {
+        key(&mut b, KeyCode::Left);
+    }
+    key(&mut b, KeyCode::Char('i'));
+    assert_eq!(b.view, View::CellEdit);
+    retype_cell(&mut b, "=upper('ada')");
+    key(&mut b, KeyCode::Enter);
+    key(&mut b, KeyCode::Right); // → size
+    key(&mut b, KeyCode::Char('i'));
+    assert_eq!(b.edit_choices(), ["S", "M", "L"]);
+    assert_eq!(b.edit_choice, Some(0), "the current value is highlighted");
+    key(&mut b, KeyCode::Down);
+    assert_eq!(b.edit_input, "M", "↓ picks the next allowed value");
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.staged_value(0, 2), Some("M"));
+    assert_eq!(b.row_change(0), Some(ChangeKind::Modified));
+
+    // Row 2 is deleted; editing it is refused while it is.
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('d'));
+    assert_eq!(b.row_change(1), Some(ChangeKind::Deleted));
+    key(&mut b, KeyCode::Char('i'));
+    assert_eq!(b.view, View::Workbench, "a deleted row is not editable");
+
+    // A new row with an explicit id and a literal starting with `=`.
+    key(&mut b, KeyCode::Char('a'));
+    assert_eq!(b.grid.rows.len(), 4);
+    assert_eq!(b.row_change(3), Some(ChangeKind::Inserted));
+    assert_eq!(b.grid.selected_index(), Some(3), "the new row is selected");
+    assert_eq!(b.grid.cur_col, 0);
+    key(&mut b, KeyCode::Char('i'));
+    type_str(&mut b, "7");
+    key(&mut b, KeyCode::Enter);
+    key(&mut b, KeyCode::Right);
+    key(&mut b, KeyCode::Char('i'));
+    type_str(&mut b, "\\=x");
+    key(&mut b, KeyCode::Enter);
+    // A second new row, discarded again with `d`.
+    key(&mut b, KeyCode::Char('a'));
+    assert_eq!(b.grid.rows.len(), 5);
+    key(&mut b, KeyCode::Char('d'));
+    assert_eq!(b.grid.rows.len(), 4, "d discards a staged new row");
+    assert_eq!(b.staged_counts(), (1, 1, 1));
+
+    // W commits all of it in one transaction.
+    key(&mut b, KeyCode::Char('W'));
+    assert!(!b.has_staged_changes(), "committed: {:?}", b.message);
+    assert_eq!(b.grid.rows.len(), 3, "the preview is re-read after commit");
+    assert_eq!(
+        query_rows(
+            &mut b,
+            "SELECT id, name, size, total FROM items ORDER BY id"
+        ),
+        rows(&[
+            &["1", "ADA", "M", "10"],
+            &["3", "linus", "L", "30"],
+            &["7", "=x", "", "70"],
+        ]),
+        "{:?}",
+        b.message
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_commit_rolls_back_unless_every_statement_touches_exactly_one_row() {
+    use vix::db::TxState;
+    let dir = std::env::temp_dir().join(format!("vix-db-one-row-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("one.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO users VALUES (1, 'ada'), (2, 'grace')",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("one", &file)]);
+    key(&mut b, KeyCode::Enter);
+    preview_first_table(&mut b);
+    // Stage both rows for deletion and a new row.
+    key(&mut b, KeyCode::Char('d'));
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Char('d'));
+    key(&mut b, KeyCode::Char('a'));
+    key(&mut b, KeyCode::Char('i'));
+    type_str(&mut b, "3");
+    key(&mut b, KeyCode::Enter);
+
+    // Someone else deletes row 2 first: its DELETE will match no row.
+    let mut other = Session::connect(&format!("sqlite:{}", file.display()), &[]).unwrap();
+    other.run("DELETE FROM users WHERE id = 2").unwrap();
+    drop(other);
+
+    key(&mut b, KeyCode::Char('W'));
+    let message = b.message.clone().unwrap_or_default();
+    assert!(
+        message.contains("DELETE FROM \"users\" WHERE \"id\" = 2"),
+        "the message names the statement: {message}"
+    );
+    assert!(
+        b.has_staged_changes(),
+        "nothing is cleared after a rollback"
+    );
+    assert_eq!(b.tx_state(), TxState::None, "no transaction is left open");
+    assert_eq!(
+        query_rows(&mut b, "SELECT id, name FROM users ORDER BY id"),
+        rows(&[&["1", "ada"]]),
+        "the DELETE of row 1, which ran first, was rolled back, and the INSERT never ran"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn server_side_row_search_narrows_the_preview_and_stays_editable() {
+    use vix::db::row_filter::{OPS, Op};
+    let dir = std::env::temp_dir().join(format!("vix-db-search-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("search.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
+            "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 300) \
+             INSERT INTO users SELECT x, 'user' || x FROM c",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("search", &file)]);
+    key(&mut b, KeyCode::Enter);
+    preview_first_table(&mut b);
+    assert_eq!(b.grid.rows.len(), 200, "the plain preview is capped");
+
+    // Pick an operator by walking the operator field to it.
+    let choose = |b: &mut Browser, op: Op, value: &str| {
+        b.row_filter.field = 1;
+        while b.row_filter.op() != op {
+            key(b, KeyCode::Right);
+        }
+        key(b, KeyCode::Down); // → value
+        for _ in 0..b.row_filter.value.chars().count() {
+            key(b, KeyCode::Backspace);
+        }
+        type_str(b, value);
+        key(b, KeyCode::Enter);
+    };
+
+    // `id = 250`, a row the capped preview never loaded.
+    key(&mut b, KeyCode::Char('F'));
+    assert!(b.row_filter_open());
+    assert_eq!(b.row_filter.column, 0, "starts on the selected column");
+    choose(&mut b, Op::Equals, "250");
+    assert!(!b.row_filter_open(), "{:?}", b.message);
+    assert_eq!(b.grid.rows, rows(&[&["250", "user250"]]));
+    assert_eq!(b.server_filter(), Some("\"id\" = 250"));
+    assert!(b.editable(), "a searched preview stays editable");
+
+    // Edit the found row; the commit re-runs the search.
+    key(&mut b, KeyCode::Right);
+    key(&mut b, KeyCode::Char('i'));
+    retype_cell(&mut b, "two-fifty");
+    key(&mut b, KeyCode::Enter);
+    key(&mut b, KeyCode::Char('W'));
+    assert_eq!(
+        b.grid.rows,
+        rows(&[&["250", "two-fifty"]]),
+        "{:?}",
+        b.message
+    );
+
+    // Contains is case-insensitive, on the name column.
+    key(&mut b, KeyCode::Right);
+    key(&mut b, KeyCode::Char('F'));
+    assert_eq!(b.row_filter.column, 1);
+    choose(&mut b, Op::Contains, "USER29");
+    assert_eq!(b.grid.rows.len(), 11, "user29 and user290–299");
+
+    // IN with a quoted item.
+    key(&mut b, KeyCode::Char('F'));
+    assert_eq!(
+        b.row_filter.column, 0,
+        "the re-run preview selects id again"
+    );
+    choose(&mut b, Op::In, "1, 2, '3'");
+    assert_eq!(b.grid.rows.len(), 3, "{:?}", b.message);
+
+    // A raw condition that writes is refused and nothing changes.
+    key(&mut b, KeyCode::Char('F'));
+    choose(&mut b, Op::Raw, "1 = 1; DELETE FROM users");
+    assert!(b.row_filter_open(), "a writing raw condition is refused");
+    assert!(b.message.is_some());
+    // A valid raw condition runs as written.
+    for _ in 0..b.row_filter.value.chars().count() {
+        key(&mut b, KeyCode::Backspace);
+    }
+    type_str(&mut b, "id % 100 = 0");
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.grid.rows.len(), 3, "100, 200, 300: {:?}", b.message);
+
+    // Delete clears the search; `/` still filters the loaded rows locally.
+    key(&mut b, KeyCode::Char('F'));
+    key(&mut b, KeyCode::Delete);
+    assert!(!b.row_filter_open());
+    assert_eq!(b.server_filter(), None);
+    assert_eq!(b.grid.rows.len(), 200);
+    key(&mut b, KeyCode::Char('/'));
+    type_str(&mut b, "user19");
+    assert_eq!(b.grid.filtered().len(), 11, "user19 and user190–199");
+    assert_eq!(b.grid.rows.len(), 200, "/ does not query the server");
+    assert_eq!(
+        query_rows(&mut b, "SELECT count(*) FROM users"),
+        rows(&[&["300"]])
+    );
+    assert!(OPS.contains(&Op::IsNull));
+    let _ = std::fs::remove_dir_all(&dir);
+}

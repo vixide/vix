@@ -104,6 +104,31 @@ impl Browser {
         self.run_traced(sql, store::Origin::App)
     }
 
+    /// Run a user-initiated `sql` for its effect and return how many rows it
+    /// affected (the staged-change commit, T777), timing and logging it.
+    ///
+    /// # Errors
+    ///
+    /// The driver's error, or a not-connected message when no session is
+    /// open.
+    pub(super) fn exec_sql(&mut self, sql: &str) -> Result<u64, session::SessionError> {
+        let start = std::time::Instant::now();
+        let result = match self.session.as_mut() {
+            Some(session) => session.execute(sql),
+            None => Err(session::SessionError::NotConnected),
+        };
+        self.log.push(store::LogEntry {
+            sql: sql.trim().to_string(),
+            ms: start.elapsed().as_millis(),
+            rows: result
+                .as_ref()
+                .map_or(0, |n| usize::try_from(*n).unwrap_or(usize::MAX)),
+            ok: result.is_ok(),
+            origin: store::Origin::User,
+        });
+        result
+    }
+
     /// Run `sql`, record its duration and outcome in the query log, and return
     /// the result unchanged. Blocks until the statement finishes.
     fn run_traced(

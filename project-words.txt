@@ -256,6 +256,11 @@ surus
 dbjoy
 libpq
 Geometrein
+xinfo
+attgenerated
+constraintdef
+tinyint
+ILIKE
 
 # LSP servers / editors referenced in docs
 gopls
