@@ -37,7 +37,7 @@ use super::{
 /// prompt, exactly like the old synchronous credential waterfall did), or
 /// failed outright (bad credentials, unreachable host, a failing setup
 /// statement, …).
-enum ConnectOutcome {
+pub(crate) enum ConnectOutcome {
     /// The session is open and ready; `tunnel` is `Some` only when this
     /// connection is configured to go over one.
     Connected {
@@ -389,6 +389,7 @@ impl Browser {
             session.cancel();
         }
         self.tunnel = None; // drop → kills the ssh forward
+        self.compare = None; // and the schema compare's target session
         self.write_enabled = false;
         self.log = store::Log::default();
         self.ai = AiState::Idle;
@@ -436,7 +437,7 @@ impl Browser {
 /// `wait_ready` (up to 10s), or an unreachable host's OS TCP timeout
 /// (commonly 60-130s) — which is exactly why it no longer runs on the UI
 /// thread.
-fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> ConnectOutcome {
+pub(crate) fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> ConnectOutcome {
     let password = match password {
         Some(p) => p.to_string(),
         None if !conn.needs_password() => String::new(),

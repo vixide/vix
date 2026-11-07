@@ -256,6 +256,12 @@ surus
 dbjoy
 libpq
 Geometrein
+constraintdef
+functiondef
+indexdef
+triggerdef
+viewdef
+xinfo
 
 # LSP servers / editors referenced in docs
 gopls

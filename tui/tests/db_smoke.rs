@@ -43,10 +43,15 @@ use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 /// for a real per-frame UI tick and need no change.
 fn drain_async(browser: &mut Browser) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while browser.query_running() || browser.connect_running() || browser.reconnect_running() {
+    while browser.query_running()
+        || browser.connect_running()
+        || browser.reconnect_running()
+        || browser.compare_running()
+    {
         browser.poll_query();
         browser.poll_connect();
         browser.poll_reconnect();
+        browser.poll_compare();
         assert!(
             std::time::Instant::now() < deadline,
             "async DB work did not finish within 30s — worker thread stalled or deadlocked"
@@ -856,5 +861,194 @@ fn transaction_state_badge_and_relaxed_confirm() {
         vec![vec!["2".to_string()]],
         "rollback restored the row"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two `SQLite` files for the schema compare: a source with `users`,
+/// `orders` (with a foreign key and an index) and a view, and a target with
+/// an older `users` (one row, an extra column) and a view on that column.
+/// The target connection is read-only. Returns the browser (source first)
+/// and the target file.
+fn compare_fixture(dir: &std::path::Path) -> (Browser, std::path::PathBuf) {
+    let source = dir.join("source.db");
+    let target = dir.join("target.db");
+    seed(
+        &source,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, \
+             user_id INTEGER REFERENCES users(id), total REAL DEFAULT 0)",
+            "CREATE INDEX orders_user_idx ON orders(user_id)",
+            "CREATE VIEW big_orders AS SELECT id, total FROM orders WHERE total > 100",
+        ],
+    );
+    seed(
+        &target,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, legacy TEXT)",
+            "INSERT INTO users VALUES (1, 'ada@example.org', 'x')",
+            "CREATE VIEW v_legacy AS SELECT legacy FROM users",
+        ],
+    );
+    let mut read_only_target = sqlite_connection("target", &target);
+    read_only_target.writable = false;
+    let b = Browser::new(vec![sqlite_connection("source", &source), read_only_target]);
+    (b, target)
+}
+
+#[test]
+fn schema_compare_migrates_one_sqlite_file_to_match_another() {
+    use vix::db::compare::diff::{Action, Object};
+    use vix::db::compare::review::Screen;
+    let dir = std::env::temp_dir().join(format!("vix-db-compare-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut b, target) = compare_fixture(&dir);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+
+    // Ctrl+D opens the compare on the other SQLite connection.
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    let c = b.compare().expect("compare opens");
+    assert_eq!(c.screen, Screen::Pick);
+    assert_eq!(c.candidates, vec![1]);
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().expect("still open");
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    let find = |object: Object, name: &str| {
+        let c = b.compare().unwrap();
+        c.changes
+            .iter()
+            .position(|ch| ch.object == object && ch.name == name)
+            .unwrap_or_else(|| panic!("no {object:?} {name}: {:#?}", c.changes))
+    };
+    let orders = find(Object::Table, "orders");
+    let legacy = find(Object::Column, "legacy");
+    let old_view = find(Object::View, "v_legacy");
+    let new_view = find(Object::View, "big_orders");
+    {
+        let c = b.compare().unwrap();
+        assert_eq!(c.changes[orders].action, Action::Added);
+        assert!(c.changes[legacy].destructive);
+        assert!(!c.checked[legacy], "destructive changes start unchecked");
+        assert!(c.checked[orders] && c.checked[old_view] && c.checked[new_view]);
+        // The script drops the old view before it creates anything.
+        let script = c.script();
+        let at = |needle: &str| script.find(needle).unwrap_or_else(|| panic!("{needle}"));
+        assert!(at("DROP VIEW") < at("CREATE TABLE orders"));
+        assert!(at("CREATE TABLE orders") < at("CREATE INDEX orders_user_idx"));
+        assert!(at("CREATE INDEX orders_user_idx") < at("CREATE VIEW big_orders"));
+        assert!(
+            !script.contains("DROP COLUMN"),
+            "unchecked changes stay out"
+        );
+    }
+
+    // Save the script to a file.
+    key(&mut b, KeyCode::Char('s'));
+    assert_eq!(b.compare().unwrap().screen, Screen::SavePath);
+    for _ in 0..b.compare().unwrap().path.chars().count() {
+        key(&mut b, KeyCode::Backspace);
+    }
+    let saved = dir.join("migration.sql");
+    type_str(&mut b, &saved.display().to_string());
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.compare().unwrap().screen, Screen::Review);
+    let text = std::fs::read_to_string(&saved).unwrap();
+    assert!(text.contains("BEGIN;") && text.contains("COMMIT;"));
+
+    // The target opened read-only: running is refused until F8.
+    key(&mut b, KeyCode::Char('r'));
+    assert_eq!(b.compare().unwrap().screen, Screen::Review);
+    assert!(b.message.is_some());
+    key(&mut b, KeyCode::F(8));
+    assert!(b.compare().unwrap().target_write_enabled());
+    key(&mut b, KeyCode::Char('r'));
+    assert_eq!(b.compare().unwrap().screen, Screen::Confirm);
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    // Re-read after the run: only the unchecked column drop is left.
+    assert_eq!(c.changes.len(), 1, "{:#?}", c.changes);
+    assert_eq!(c.changes[0].name, "legacy");
+
+    // Choose it too and run again: the schemas now match.
+    key(&mut b, KeyCode::Char(' '));
+    key(&mut b, KeyCode::Char('r'));
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert!(c.changes.is_empty(), "{:#?} {:?}", c.changes, b.message);
+
+    // The target really changed, and its row survived.
+    let mut check = Session::connect(&format!("sqlite:{}", target.display()), &[]).unwrap();
+    let (_, rows) = check
+        .run("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
+        .unwrap();
+    let names: Vec<&str> = rows.iter().map(|r| r[0].as_str()).collect();
+    assert_eq!(names, vec!["big_orders", "orders", "users"]);
+    let (_, rows) = check.run("SELECT email FROM users").unwrap();
+    assert_eq!(rows, vec![vec!["ada@example.org".to_string()]]);
+
+    // Opening the script in the editor closes the compare.
+    key(&mut b, KeyCode::Char('o'));
+    assert!(b.compare().is_none());
+    assert_eq!(b.view, View::Workbench);
+    assert!(b.query.text().contains("BEGIN;"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failing_migration_changes_nothing_on_the_target() {
+    use vix::db::compare::review::Screen;
+    let dir = std::env::temp_dir().join(format!("vix-db-compare-fail-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = dir.join("source.db");
+    let target = dir.join("target.db");
+    seed(
+        &source,
+        &[
+            "CREATE TABLE a (id INTEGER PRIMARY KEY)",
+            "CREATE TABLE b (id INTEGER PRIMARY KEY, n INTEGER NOT NULL)",
+        ],
+    );
+    // The target's `b` has rows, so adding a NOT NULL column without a
+    // default fails after `a` was already created.
+    seed(
+        &target,
+        &[
+            "CREATE TABLE b (id INTEGER PRIMARY KEY)",
+            "INSERT INTO b VALUES (1)",
+        ],
+    );
+    let mut b = Browser::new(vec![
+        sqlite_connection("source", &source),
+        sqlite_connection("target", &target),
+    ]);
+    key(&mut b, KeyCode::Enter);
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review, "{:?}", b.message);
+    assert!(
+        c.changes.iter().any(|ch| ch.risky),
+        "NOT NULL without default is risky"
+    );
+    key(&mut b, KeyCode::Char('r'));
+    key(&mut b, KeyCode::Enter);
+    let c = b.compare().unwrap();
+    assert_eq!(c.screen, Screen::Review);
+    assert!(b.message.is_some());
+    // Nothing changed: `a` was rolled back with the rest.
+    let mut check = Session::connect(&format!("sqlite:{}", target.display()), &[]).unwrap();
+    let (_, rows) = check
+        .run("SELECT count(*) FROM sqlite_master WHERE name = 'a'")
+        .unwrap();
+    assert_eq!(rows, vec![vec!["0".to_string()]]);
     let _ = std::fs::remove_dir_all(&dir);
 }

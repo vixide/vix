@@ -37,6 +37,7 @@ impl App {
             "db.commit" => self.with_db(crate::db::Browser::commit_tx),
             "db.rollback" => self.with_db(crate::db::Browser::rollback_tx),
             "db.refresh" => self.with_db(crate::db::Browser::refresh_catalog),
+            "db.schema_compare" => self.with_db(crate::db::Browser::open_compare),
             "db.disconnect" => self.with_db(crate::db::Browser::disconnect),
             _ => return false,
         }
@@ -168,21 +169,23 @@ impl App {
     }
 
     /// Drain a finished asynchronous DB connect (or password-prompted retry)
-    /// into the workbench (Run H, T531). Called each event-loop tick; cheap
-    /// when nothing is running.
+    /// into the workbench (Run H, T531), and the schema compare's background
+    /// work: its target connect and its migration run (T785). Called each
+    /// event-loop tick; cheap when nothing is running.
     pub fn poll_db_connect(&mut self) {
         if let Some(b) = self.db.as_mut() {
             b.poll_connect();
+            b.poll_compare();
         }
     }
 
-    /// Whether a DB connect is running asynchronously (keeps the loop
-    /// polling).
+    /// Whether a DB connect, or schema-compare work, is running
+    /// asynchronously (keeps the loop polling).
     #[must_use]
     pub fn db_connect_running(&self) -> bool {
         self.db
             .as_ref()
-            .is_some_and(crate::db::Browser::connect_running)
+            .is_some_and(|b| b.connect_running() || b.compare_running())
     }
 
     /// Drain a finished asynchronous DB reconnect (a cancelled query's

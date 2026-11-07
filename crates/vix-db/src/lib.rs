@@ -467,6 +467,9 @@ pub struct Browser {
     /// by [`Browser::poll_reconnect`] (Run H, T531/T532). `None` once
     /// resolved either way.
     pending_reconnect: Option<execute::PendingReconnect>,
+    /// The schema compare (T785), a modal layer over the workbench while
+    /// open; see [`Browser::compare`].
+    compare: Option<compare::review::Compare>,
 }
 
 /// State for the bind-parameter prompt: the SQL and its `:name` placeholders,
@@ -558,6 +561,7 @@ impl Browser {
             tunnel: None,
             pending_connect: None,
             pending_reconnect: None,
+            compare: None,
         }
     }
 
@@ -627,6 +631,9 @@ impl Browser {
     /// the latest layout (see [`Pages`]).
     pub fn handle_key(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
         self.message = None;
+        if self.compare.is_some() {
+            return self.key_compare(key, pages.results);
+        }
         match self.view {
             View::Connections => self.key_connections(key),
             View::Form => self.key_form(key),
@@ -650,7 +657,7 @@ impl Browser {
     ///
     /// Order matters: a busy workbench (a query running, or a cancelled
     /// query's reconnect in flight) swallows keys first; then the global chords (F5/F6/F7/F8/F9 run, explain and
-    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U open the sub-views and AI
+    /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U/D open the sub-views and AI
     /// helpers; Alt+F formats); then Tab focus cycling (suppressed while the
     /// autocomplete popup owns Tab); and only then the focused pane's own
     /// handler.
@@ -723,6 +730,10 @@ impl Browser {
             }
             KeyCode::Char('u' | 'U') if ctrl => {
                 self.open_import();
+                return Outcome::Consumed;
+            }
+            KeyCode::Char('d' | 'D') if ctrl => {
+                self.open_compare();
                 return Outcome::Consumed;
             }
             KeyCode::Char('f' | 'F') if alt => {

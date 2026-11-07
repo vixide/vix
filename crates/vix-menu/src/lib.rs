@@ -1681,6 +1681,7 @@ const DB: &[Item] = &[
     Item::leaf("menu.item.db.rollback", "db.rollback", ""),
     SEP,
     Item::leaf("menu.item.db.refresh", "db.refresh", ""),
+    Item::leaf("menu.item.db.schema_compare", "db.schema_compare", "Ctrl D"),
     Item::leaf("menu.item.db.disconnect", "db.disconnect", ""),
 ];
 
