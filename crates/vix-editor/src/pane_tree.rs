@@ -414,4 +414,164 @@ mod tests {
         // Off a divider does nothing.
         assert!(!p.resize_at(area(), 1, 1));
     }
+
+    /// A 2x2 grid: a vertical split whose two halves are split horizontally.
+    /// In-order leaves: 0 top-left, 1 bottom-left, 2 top-right, 3 bottom-right.
+    fn grid() -> Pane {
+        let mut p = Pane::Leaf(0);
+        p.split_leaf(0, SplitDir::Vertical, 2);
+        p.split_leaf(0, SplitDir::Horizontal, 1);
+        p.split_leaf(2, SplitDir::Horizontal, 3);
+        p
+    }
+
+    #[test]
+    fn leaf_tab_set_and_clamp() {
+        let mut p = grid();
+        assert_eq!(p.leaf_tabs(), vec![0, 1, 2, 3]);
+        assert_eq!((p.leaf_tab(3), p.leaf_tab(4)), (Some(3), None));
+        p.set_leaf_tab(1, 7);
+        // An out-of-range leaf is ignored.
+        p.set_leaf_tab(9, 8);
+        assert_eq!(p.leaf_tabs(), vec![0, 7, 2, 3]);
+        p.clamp_tabs(3);
+        assert_eq!(p.leaf_tabs(), vec![0, 2, 2, 2]);
+        // No tabs at all clamps everything to 0 rather than underflowing.
+        p.clamp_tabs(0);
+        assert_eq!(p.leaf_tabs(), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn split_and_remove_out_of_range_leaves_are_no_ops() {
+        let mut p = Pane::Leaf(0);
+        p.split_leaf(5, SplitDir::Vertical, 1);
+        assert_eq!(p, Pane::Leaf(0));
+        let p = grid().remove_leaf(9).unwrap();
+        assert_eq!(p, grid());
+    }
+
+    #[test]
+    fn grid_layout_tiles_the_area_without_overlap() {
+        let p = grid();
+        let boxes = p.layout(area());
+        assert_eq!(
+            boxes.iter().map(|b| (b.leaf, b.tab)).collect::<Vec<_>>(),
+            vec![(0, 0), (1, 1), (2, 2), (3, 3)]
+        );
+        // Each pane plus the three one-cell dividers covers the area exactly.
+        let panes: u32 = boxes
+            .iter()
+            .map(|b| u32::from(b.rect.width) * u32::from(b.rect.height))
+            .sum();
+        let dividers = p.dividers(area());
+        assert_eq!(dividers.len(), 3);
+        let div_cells: u32 = dividers
+            .iter()
+            .map(|(_, r)| u32::from(r.width) * u32::from(r.height))
+            .sum();
+        assert_eq!(panes + div_cells, 80 * 24);
+        for (i, a) in boxes.iter().enumerate() {
+            for b in &boxes[i + 1..] {
+                assert!(
+                    a.rect.intersection(b.rect).is_empty(),
+                    "{a:?} overlaps {b:?}"
+                );
+            }
+        }
+        // Every pane's own cells resolve to it; a divider cell to none.
+        for b in &boxes {
+            assert_eq!(p.leaf_at(area(), b.rect.x, b.rect.y), Some(b.leaf));
+        }
+        let (_, div) = dividers[0];
+        assert_eq!(p.leaf_at(area(), div.x, div.y), None);
+        assert_eq!(p.leaf_at(area(), 80, 0), None, "outside the area");
+    }
+
+    #[test]
+    fn split_geometry_on_tiny_and_offset_areas() {
+        for (dir, area, first, second) in [
+            // 50% of 80 columns, then a 1-column divider.
+            (
+                SplitDir::Vertical,
+                Rect::new(0, 0, 80, 24),
+                Rect::new(0, 0, 40, 24),
+                Rect::new(41, 0, 39, 24),
+            ),
+            (
+                SplitDir::Horizontal,
+                Rect::new(0, 0, 80, 24),
+                Rect::new(0, 0, 80, 12),
+                Rect::new(0, 13, 80, 11),
+            ),
+            // The origin is respected.
+            (
+                SplitDir::Vertical,
+                Rect::new(10, 5, 20, 4),
+                Rect::new(10, 5, 10, 4),
+                Rect::new(21, 5, 9, 4),
+            ),
+            // Too narrow to split evenly: each side still gets what fits.
+            (
+                SplitDir::Vertical,
+                Rect::new(0, 0, 3, 1),
+                Rect::new(0, 0, 1, 1),
+                Rect::new(2, 0, 1, 1),
+            ),
+            (
+                SplitDir::Vertical,
+                Rect::new(0, 0, 1, 1),
+                Rect::new(0, 0, 1, 1),
+                Rect::new(2, 0, 0, 1),
+            ),
+        ] {
+            let mut p = Pane::Leaf(0);
+            p.split_leaf(0, dir, 1);
+            let boxes = p.layout(area);
+            assert_eq!(
+                (boxes[0].rect, boxes[1].rect),
+                (first, second),
+                "{dir:?} {area:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn resize_follows_the_pointer_and_clamps_the_ratio() {
+        let mut p = Pane::Leaf(0);
+        p.split_leaf(0, SplitDir::Vertical, 1);
+        if let Pane::Split { ratio, .. } = &mut p {
+            *ratio = 25;
+        }
+        let div = p.dividers(area())[0].1;
+        assert_eq!(div.x, 20);
+        assert!(p.resize_at(area(), div.x, 3));
+        let Pane::Split { ratio, .. } = &p else {
+            unreachable!("still a split")
+        };
+        assert_eq!(*ratio, 25, "col 20 of 80 is 25%");
+        // A nested divider is found inside its own sub-area.
+        let mut p = grid();
+        let inner = p.dividers(area())[1];
+        assert_eq!(inner.0, SplitDir::Horizontal);
+        assert!(p.resize_at(area(), inner.1.x + 1, inner.1.y));
+        // Pointer ratios for both directions, clamped to 10..=90.
+        for (dir, col, row, want) in [
+            (SplitDir::Vertical, 40, 0, 50),
+            (SplitDir::Vertical, 0, 0, 10),
+            (SplitDir::Vertical, 79, 0, 90),
+            (SplitDir::Horizontal, 0, 6, 25),
+            (SplitDir::Horizontal, 0, 200, 90),
+        ] {
+            assert_eq!(
+                ratio_from_pointer(area(), dir, col, row),
+                want,
+                "{dir:?} {col},{row}"
+            );
+        }
+        // A one-cell area has no room to drag: the middle.
+        assert_eq!(
+            ratio_from_pointer(Rect::new(0, 0, 1, 1), SplitDir::Vertical, 0, 0),
+            50
+        );
+    }
 }
