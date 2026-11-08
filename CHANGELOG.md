@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **ACP: agent terminal output, live.** A command an agent runs (after your yes) now shows its output in the Agent Plan tab and the docked plan pane, updating as it arrives, with its exit status; escape and control sequences are stripped first, and the output stays within the terminal's byte limit (T635).
 - **DB workbench: cancel keeps the session.** `Ctrl+C` on PostgreSQL and MySQL now asks the server to stop the statement, so temporary tables, session settings and an open transaction survive; SQLite, and a cancel the server refuses, still reconnect, and the status line says when a transaction was lost (T774).
 - **DB workbench: errors point at the problem.** A PostgreSQL error moves the editor cursor to the character it names (T775). Server notices are still dropped: sqlx does not expose them, and the spec says what it would take.
 - **DB workbench: plans as a tree.** On PostgreSQL, `F6`/`F7` show the plan as a tree with each step's share of the time, the slowest steps in red and row estimates off by 10× or more in yellow (T776).
@@ -27,6 +28,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **ACP: agent text can no longer reach your terminal raw.** Reply text, tool-call titles, plan entries and permission prompts from an agent were shown without removing escape sequences, so an agent could have sent terminal control codes (to change the window title, move the cursor or clear the screen). They are now cleaned like agent terminal output.
+- **Editor: the `delete` action deletes forward correctly.** With a selection it deletes the whole selection instead of one character of it; inside indentation it deletes one space or tab instead of the whole indent; at the end of the buffer it does nothing instead of deleting the character behind the cursor; and with several carets it deletes at every caret.
 - **DB workbench: every common column type reads.** Table previews, queries, table exports and the MCP `db_query` tool no longer fail on a PostgreSQL `timestamp`, `date`, `interval`, `numeric`, `json`, `uuid`, array, `inet` or enum column, a MySQL `DATETIME`, `DECIMAL`, `TINYINT` or `JSON` column, or a SQLite column declared `BOOLEAN`, `DATE` or `DATETIME`. Values show as the server writes them: timestamps as ISO 8601, numbers exactly, JSON as JSON. Binary data that is not text shows as `\x` hex, and PostgreSQL plan trees are read as JSON again (T787).
 - **Editor: Delete, Go to Line and trim on save.** `Delete` with text selected now deletes the selection instead of one character of it, and inside indentation it deletes one space instead of the whole indent. Go to Line with a column past the end of the line goes to the end of that line instead of a later one. Trim trailing whitespace on save now also trims lines that end in CRLF (T608).
 - **Install docs.** The interim note about 2.0.0's missing files is gone and the Homebrew and npm commands are back, because 2.0.2 ships every channel: installers, Homebrew, npm, Linux packages and the desktop GUIs.

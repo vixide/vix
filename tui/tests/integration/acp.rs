@@ -544,3 +544,141 @@ fn a_terminal_cannot_run_outside_the_workspace() {
     app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }
+
+/// Answer the open terminal prompt with yes.
+fn approve_terminal(app: &mut App) {
+    tick_until(app, |a| {
+        a.prompt
+            .as_ref()
+            .is_some_and(|p| p.kind == PromptKind::AcpPermission)
+    });
+    type_str(app, "y");
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+/// The plan tab's text (empty when it is not open).
+fn plan_tab_text(app: &App) -> String {
+    app.editor
+        .tabs
+        .iter()
+        .find(|t| t.path.as_deref() == Some(Path::new("*agent plan*")))
+        .map(vix_editor::editor::Tab::text)
+        .unwrap_or_default()
+}
+
+/// Start the fake agent with the plan tab open, and write `script` to run.
+fn terminal_app(tag: &str, script: &str) -> (App, PathBuf, PathBuf) {
+    let dir = unique_dir(tag);
+    let (mut app, log) = agent_app(&dir, true);
+    start(&mut app, &log);
+    app.run_action("ai.agent_plan");
+    let path = dir.join("out.sh");
+    fs::write(&path, script).unwrap();
+    (app, log, path)
+}
+
+#[test]
+fn terminal_output_shows_live_in_order_without_control_sequences() {
+    if !python_available() {
+        return;
+    }
+    let script = "printf 'first\\n\\033[31msecond\\033[0m\\n\\033]0;pwned\\007'\nsleep 2\necho third >&2\nexit 4\n";
+    let (mut app, log, script) = terminal_app("acp-term-live", script);
+    send_prompt(&mut app, &format!("term sh {}", script.display()));
+    approve_terminal(&mut app);
+    // Live: the first lines show while the command still sleeps.
+    tick_until(&mut app, |a| plan_tab_text(a).contains("second"));
+    assert!(
+        !log_text(&log).contains("TERM exit"),
+        "shown before the command ended"
+    );
+    assert!(!plan_tab_text(&app).contains("third"));
+    tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
+    app.poll_acp();
+    let text = plan_tab_text(&app);
+    let at = |needle: &str| {
+        text.find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} missing from {text}"))
+    };
+    assert!(at("$ sh ") < at("first") && at("first") < at("second") && at("second") < at("third"));
+    assert!(text.contains("4]"), "the exit status is shown: {text}");
+    assert!(
+        !text.chars().any(|c| c.is_control() && c != '\n'),
+        "no control characters reach the display: {text:?}"
+    );
+    assert!(!text.contains("pwned"), "an OSC title is removed whole");
+    // The docked pane's terminal section holds the same, sanitized, output.
+    let docked = app.acp_terminal_lines().join("\n");
+    assert!(
+        docked.contains("  third") && !docked.contains('\u{1b}'),
+        "{docked}"
+    );
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(script.parent().unwrap()).ok();
+}
+
+#[test]
+fn terminal_output_shown_respects_the_byte_limit() {
+    if !python_available() {
+        return;
+    }
+    let (mut app, log, script) = terminal_app("acp-term-cap", "printf 0123456789abcdefghij\n");
+    send_prompt(&mut app, &format!("termcap 5 sh {}", script.display()));
+    approve_terminal(&mut app);
+    tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
+    app.poll_acp();
+    let text = plan_tab_text(&app);
+    assert!(text.contains("  fghij"), "{text}");
+    assert!(
+        !text.contains("abcde"),
+        "only the newest bytes are kept: {text}"
+    );
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(script.parent().unwrap()).ok();
+}
+
+/// Poll a while and return the plan tab, to show it no longer changes.
+fn settled_plan(app: &mut App) -> String {
+    for _ in 0..5 {
+        app.poll_acp();
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    plan_tab_text(app)
+}
+
+#[test]
+fn a_killed_terminal_stops_updating() {
+    if !python_available() {
+        return;
+    }
+    let script = "while :; do echo tick; sleep 0.05; done\n";
+    let (mut app, log, script) = terminal_app("acp-term-kill", script);
+    send_prompt(&mut app, &format!("termkill sh {}", script.display()));
+    approve_terminal(&mut app);
+    tick_until(&mut app, |_| log_text(&log).contains("TERM killed"));
+    let before = settled_plan(&mut app);
+    assert!(before.contains("  tick"), "{before}");
+    assert_eq!(settled_plan(&mut app), before, "no output after the kill");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(script.parent().unwrap()).ok();
+}
+
+#[test]
+fn a_released_terminal_stops_updating() {
+    if !python_available() {
+        return;
+    }
+    let script = "while :; do echo tick; sleep 0.05; done\n";
+    let (mut app, log, script) = terminal_app("acp-term-release", script);
+    send_prompt(&mut app, &format!("termrel sh {}", script.display()));
+    approve_terminal(&mut app);
+    tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
+    let before = settled_plan(&mut app);
+    assert!(
+        before.contains("  tick"),
+        "the final output is kept: {before}"
+    );
+    assert_eq!(settled_plan(&mut app), before, "a released view is frozen");
+    app.run_action("ai.agent_stop");
+    fs::remove_dir_all(script.parent().unwrap()).ok();
+}

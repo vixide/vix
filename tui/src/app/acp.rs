@@ -10,6 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 
 use serde_json::Value;
+use vix_acp::display::{self, TerminalView, TerminalViews};
 use vix_acp::process::AgentProcess;
 use vix_acp::terminal::Terminal;
 use vix_acp::{Client, Event, PermOption, PlanEntry, policy};
@@ -25,6 +26,12 @@ const PLAN_TAB: &str = "*agent plan*";
 
 /// The most terminals one agent may have open at once.
 const MAX_TERMINALS: usize = 8;
+
+/// The newest output lines of each terminal the plan tab shows.
+const PLAN_TAB_TAIL: usize = 1000;
+
+/// The newest output lines of each terminal the docked plan pane shows.
+const PLAN_DOCK_TAIL: usize = 12;
 
 /// A command the agent asked to run, already checked against the workspace.
 struct TermRun {
@@ -63,7 +70,10 @@ impl Ask {
     fn title(&self) -> String {
         let text = match self {
             Self::Permission { title, .. } => t!("prompt.acp_permission", title = title),
-            Self::Terminal { run, .. } => t!("prompt.acp_terminal", command = run.argv.join(" ")),
+            Self::Terminal { run, .. } => t!(
+                "prompt.acp_terminal",
+                command = display::sanitize(&run.argv.join(" ")).replace('\n', " ")
+            ),
         };
         text.to_string()
     }
@@ -93,6 +103,12 @@ pub(super) struct AcpHost {
     next_terminal: u32,
     /// `terminal/wait_for_exit` requests not yet answered: `(request, terminal)`.
     waits: Vec<(Value, String)>,
+    /// What the user sees of each terminal (sanitized, read-only).
+    term_views: TerminalViews,
+    /// The output generation each live terminal's view last copied.
+    term_seen: HashMap<String, u64>,
+    /// A view was opened or released since the plan surfaces were last synced.
+    term_views_dirty: bool,
 }
 
 impl AcpHost {
@@ -139,10 +155,41 @@ impl AcpHost {
                 self.next_terminal += 1;
                 let id = format!("term-{}", self.next_terminal);
                 self.terminals.insert(id.clone(), term);
+                self.term_views.open(&id, &run.argv);
+                self.term_views_dirty = true;
                 Client::answer_terminal_created(req_id, &id)
             }
             Err(e) => Client::answer_denied(req_id, &format!("could not start: {e}")),
         }
+    }
+
+    /// Copy new output and exit statuses of the live terminals into their
+    /// views. Returns whether anything the user sees changed.
+    fn refresh_terminal_views(&mut self) -> bool {
+        let mut changed = std::mem::take(&mut self.term_views_dirty);
+        for (id, term) in &mut self.terminals {
+            changed |= Self::refresh_view(&mut self.term_views, &mut self.term_seen, id, term);
+        }
+        changed
+    }
+
+    /// Refresh one terminal's view, copying its output only when new chunks
+    /// arrived or its exit status first became known.
+    fn refresh_view(
+        views: &mut TerminalViews,
+        seen: &mut HashMap<String, u64>,
+        id: &str,
+        term: &mut Terminal,
+    ) -> bool {
+        let generation = term.output_generation();
+        let exit = term.try_exit();
+        let known_exit = views.views().iter().any(|v| v.id == id && v.exit.is_some());
+        if seen.get(id) == Some(&generation) && (exit.is_none() || known_exit) {
+            return false;
+        }
+        seen.insert(id.to_string(), generation);
+        let (out, truncated) = term.output();
+        views.update(id, &out, truncated, exit)
     }
 
     /// Answer every `terminal/wait_for_exit` whose command has now exited.
@@ -200,7 +247,19 @@ impl AcpHost {
                 terminal_id,
             } => {
                 // Dropping the terminal kills the command; a waiter is told so.
-                let gone = self.terminals.remove(&terminal_id).is_some();
+                // Its view takes the final output, then freezes.
+                let gone = match self.terminals.remove(&terminal_id) {
+                    Some(mut term) => {
+                        self.term_seen.remove(&terminal_id);
+                        let (out, truncated) = term.output();
+                        let exit = term.try_exit();
+                        self.term_views.update(&terminal_id, &out, truncated, exit);
+                        self.term_views.release(&terminal_id);
+                        self.term_views_dirty = true;
+                        true
+                    }
+                    None => false,
+                };
                 let mut dropped = Vec::new();
                 self.waits.retain(|(r, tid)| {
                     if *tid == terminal_id {
@@ -360,6 +419,9 @@ impl App {
             queue: VecDeque::new(),
             terminals: HashMap::new(),
             next_terminal: 0,
+            term_views: TerminalViews::default(),
+            term_seen: HashMap::new(),
+            term_views_dirty: false,
             waits: Vec::new(),
         });
         self.open_ai_panel();
@@ -392,7 +454,51 @@ impl App {
                 .map(|(_, title, status)| format!("- [{status}] {title}")),
         );
         lines.push(String::new());
+        if !host.term_views.is_empty() {
+            lines.push(t!("ui.acp_terminals_heading").to_string());
+            for view in host.term_views.views() {
+                lines.extend(Self::acp_terminal_view_lines(view, PLAN_TAB_TAIL));
+            }
+            lines.push(String::new());
+        }
         lines.join("\n")
+    }
+
+    /// One terminal as display lines: `$ command  [status]`, a note when older
+    /// output was dropped, then (indented) at most `tail` of its newest output
+    /// lines. The text is already sanitized by [`TerminalViews`].
+    fn acp_terminal_view_lines(view: &TerminalView, tail: usize) -> Vec<String> {
+        let status = match (&view.exit, view.released) {
+            (Some(e), _) => match (&e.code, &e.signal) {
+                (Some(code), _) => t!("ui.acp_term_exit", code = code),
+                (None, Some(signal)) => t!("ui.acp_term_signal", signal = signal),
+                (None, None) => t!("ui.acp_term_ended"),
+            },
+            (None, true) => t!("ui.acp_term_released"),
+            (None, false) => t!("ui.acp_term_running"),
+        };
+        let mut lines = vec![format!("$ {}  [{status}]", view.command)];
+        let output: Vec<&str> = view.output.lines().collect();
+        let skip = output.len().saturating_sub(tail);
+        if view.truncated || skip > 0 {
+            lines.push(format!("  {}", t!("ui.acp_term_truncated")));
+        }
+        lines.extend(output[skip..].iter().map(|l| format!("  {l}")));
+        lines
+    }
+
+    /// The docked plan pane's terminal section: each agent terminal's command,
+    /// status and newest output lines (sanitized, read-only), oldest terminal
+    /// first. Empty when no agent runs or it has opened no terminal.
+    #[must_use]
+    pub fn acp_terminal_lines(&self) -> Vec<String> {
+        self.acp.as_ref().map_or_else(Vec::new, |host| {
+            host.term_views
+                .views()
+                .iter()
+                .flat_map(|v| Self::acp_terminal_view_lines(v, PLAN_DOCK_TAIL))
+                .collect()
+        })
     }
 
     /// The docked plan pane's content as `[plan lines, tool-call lines]`, or
@@ -575,6 +681,9 @@ impl App {
             return;
         }
         host.answer_waits();
+        if host.refresh_terminal_views() {
+            self.acp_sync_plan_tab(&host);
+        }
         if host.asking.is_none()
             && self.prompt.is_none()
             && let Some(ask) = host.queue.pop_front()
@@ -650,7 +759,7 @@ impl App {
 
     /// React to one protocol event.
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
-        match event {
+        match displayable(event) {
             Event::Ready { session_id } => {
                 self.acp_remember_session(&host.command, &session_id);
                 self.status = if host.client.resumed() {
@@ -825,5 +934,104 @@ impl App {
             self.status = t!("status.acp_edit_pending", path = path).to_string();
         }
         None
+    }
+}
+
+/// `event` with every agent-supplied string that Vix shows to the user passed
+/// through [`display::sanitize`]: reply text, tool-call titles and statuses,
+/// plan entries, and permission prompts. The agent is untrusted, so none of
+/// its text may carry terminal control sequences into Vix's own screen.
+/// Protocol fields (ids, paths, commands sent back) are left as they are.
+fn displayable(event: Event) -> Event {
+    match event {
+        Event::AgentText(t) => Event::AgentText(display::sanitize(&t)),
+        Event::ToolCall { id, title, status } => Event::ToolCall {
+            id,
+            title: display::sanitize(&title),
+            status: display::sanitize(&status),
+        },
+        Event::Plan(entries) => Event::Plan(
+            entries
+                .into_iter()
+                .map(|mut e| {
+                    e.content = display::sanitize(&e.content);
+                    e.status = display::sanitize(&e.status);
+                    e
+                })
+                .collect(),
+        ),
+        Event::Permission {
+            req_id,
+            title,
+            options,
+        } => Event::Permission {
+            req_id,
+            title: display::sanitize(&title),
+            options: options
+                .into_iter()
+                .map(|mut o| {
+                    o.name = display::sanitize(&o.name);
+                    o
+                })
+                .collect(),
+        },
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::displayable;
+    use vix_acp::{Event, OptionKind, PermOption, PlanEntry};
+
+    const EVIL: &str = "ok\u{1b}[2J\u{1b}]0;pwned\u{7}\u{1b}[31mred";
+
+    fn clean(s: &str) -> bool {
+        !s.chars().any(|c| c.is_control() && c != '\n')
+    }
+
+    #[test]
+    fn agent_text_shown_to_the_user_carries_no_control_sequences() {
+        let Event::AgentText(t) = displayable(Event::AgentText(EVIL.into())) else {
+            panic!("kind changed");
+        };
+        assert!(clean(&t), "{t:?}");
+        assert!(t.starts_with("ok") && t.ends_with("red"), "{t:?}");
+
+        let Event::ToolCall { id, title, status } = displayable(Event::ToolCall {
+            id: "1\u{1b}".into(),
+            title: EVIL.into(),
+            status: EVIL.into(),
+        }) else {
+            panic!("kind changed");
+        };
+        assert_eq!(id, "1\u{1b}", "protocol ids are left as they are");
+        assert!(clean(&title) && clean(&status));
+
+        let Event::Plan(entries) = displayable(Event::Plan(vec![PlanEntry {
+            content: EVIL.into(),
+            status: EVIL.into(),
+        }])) else {
+            panic!("kind changed");
+        };
+        assert!(
+            entries
+                .iter()
+                .all(|e| clean(&e.content) && clean(&e.status))
+        );
+
+        let Event::Permission { title, options, .. } = displayable(Event::Permission {
+            req_id: serde_json::Value::from(7),
+            title: EVIL.into(),
+            options: vec![PermOption {
+                id: "allow".into(),
+                name: EVIL.into(),
+                kind: OptionKind::AllowOnce,
+            }],
+        }) else {
+            panic!("kind changed");
+        };
+        assert!(clean(&title));
+        assert!(options.iter().all(|o| clean(&o.name) && o.id == "allow"));
     }
 }
