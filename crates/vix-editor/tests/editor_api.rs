@@ -812,6 +812,42 @@ fn delete_forward_undoes() {
 }
 
 #[test]
+fn delete_forward_deletes_at_every_caret_in_one_undo_step() {
+    let mut e = ed_at("ab\ncd\nef", 0);
+    let t = e.active_tab_mut().unwrap();
+    t.editor.add_caret_at(3);
+    t.editor.add_caret_at(6);
+    e.delete_forward();
+    let t = e.active_tab_mut().unwrap();
+    assert_eq!(t.text(), "b\nd\nf");
+    t.editor.undo();
+    assert_eq!(
+        t.text(),
+        "ab\ncd\nef",
+        "one undo restores every caret's char"
+    );
+}
+
+#[test]
+fn delete_forward_undo_restores_the_cursor_and_selection() {
+    let mut e = ed_at("abcd", 2);
+    e.delete_forward();
+    e.active_tab_mut().unwrap().editor.undo();
+    assert_eq!(
+        cur(&e),
+        2,
+        "the cursor goes back where it was, not past the char"
+    );
+
+    let mut e = ed("abcd");
+    e.active_tab_mut().unwrap().editor.set_selection_range(1, 3);
+    e.delete_forward();
+    e.active_tab_mut().unwrap().editor.undo();
+    assert_eq!(text(&e), "abcd");
+    assert_eq!(sel(&mut e), Some((1, 3)), "the selection comes back");
+}
+
+#[test]
 fn whole_buffer_line_edits() {
     type Op = fn(&mut Editor);
     let cases: [(&str, Op, &str, &str); 6] = [

@@ -24,6 +24,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Delete key: one forward delete.** The Delete key and `vix-editor`'s `delete_forward` now use the core editor's forward delete, so it works at every caret in one undo step, and undo puts the cursor (or selection) back where it was instead of after the deleted character.
 - **Dependencies.** Rust patch updates in both workspaces (including BUI 0.4.1 for `vix-bui`) and the site's Lily Design System packages (`svelte-headless` 0.8.0). BUI 0.4.1 is GPL-3.0-or-later instead of GPL-2.0-or-later; `vix-bui` stays GPL-3.0-only, and `scripts/check-binary-licenses` now classifies the new id. TypeScript stays on 6 because `svelte-check` does not support 7 yet.
 
 ### Fixed
