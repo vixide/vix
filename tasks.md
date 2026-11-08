@@ -7687,7 +7687,7 @@ new action.
   `tui/src/…`; `-p vix` → `-p vix-tui` in `scripts/check` and all three
   forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
   `tui/` and `gui/*` packages). **Done.**
-- [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
+- [x] **T644 — Release follow-ups for the `vix-tui` rename (at the next
   release).** *Status 2026-11-06: item (1) is done. (2) is done in the docs but the
   assets are missing from 2.0.0; (4)-(6) moved to T771, and (5)'s rename is moot
   because the tap has never had a formula.* (1) ~~Publish the new crates in dependency order: `vix-input`
@@ -7718,7 +7718,8 @@ new action.
   - **(3) approved 2026-11-08:** `packaging/crates-io-vix/` is a one-file
     `vix` 1.7.2 whose README and `vix` command point to `vix-tui` (the
     command prints `cargo uninstall vix` / `cargo install vix-tui` and exits
-    1). Its own workspace, published by hand.
+    1). Its own workspace, published by hand. Published to crates.io
+    2026-11-08; T644 is complete.
 
 - [x] **T649 — Keep `vix-editor-core` semver-compatible after T598.**
   T598 changed the published `Editor::set_clipboard(&mut self, &str) ->
