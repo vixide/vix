@@ -9953,6 +9953,15 @@ the generated `release.yml`.
     container image (T743): the note is gone, T644 (4) and (6) and T670a are
     done. Deploying the site is the maintainer's call.
 
+- [ ] **T788 — npm trusted publishing.** The npm token expires within 90
+  days. Done 2026-11-08: `.github/workflows/publish-npm.yml` replaces dist's
+  built-in npm job (`publish-jobs = [..., "./publish-npm", ...]`), with
+  `id-token: write` from `github-custom-job-permissions`, Node 24 and npm
+  11.5.1+; provenance is automatic. **Left (maintainer, npmjs.com):** add a
+  trusted publisher on `@vixide/vix` (GitHub Actions, `vixide/vix`,
+  workflow `release.yml`); after the next release publishes through OIDC,
+  delete `NPM_TOKEN` and set the package to refuse tokens.
+
 - [ ] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
   on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first

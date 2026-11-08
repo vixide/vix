@@ -384,6 +384,7 @@ vimdiff
 # Terms found by a full-repo CSpell pass (2026-10-25)
 goreleaser
 nfpm
+npmjs
 INTERP
 rustflags
 createrepo
