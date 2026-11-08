@@ -12,9 +12,13 @@ Set Padding 20
 Set TypingSpeed 60ms
 
 Hide
-Type "cd examples/demo-workspace && vix ."
+Type "cd tui/examples/demo-workspace && HOME=$(mktemp -d) vix ."
 Enter
 Sleep 1s
+# A fresh HOME (above) keeps your own settings and session out of the
+# demo, and makes this a first run: close the Welcome screen.
+Escape
+Sleep 300ms
 Show
 
 # Toggle the file explorer off and back on.

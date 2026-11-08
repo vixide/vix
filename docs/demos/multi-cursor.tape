@@ -12,9 +12,13 @@ Set Padding 20
 Set TypingSpeed 60ms
 
 Hide
-Type "cd examples/demo-workspace && vix rust-app/src/main.rs"
+Type "cd tui/examples/demo-workspace && HOME=$(mktemp -d) vix rust-app/src/main.rs"
 Enter
 Sleep 1s
+# A fresh HOME (above) keeps your own settings and session out of the
+# demo, and makes this a first run: close the Welcome screen.
+Escape
+Sleep 300ms
 Show
 
 # Jump to the first occurrence of "word_counts" and select it.

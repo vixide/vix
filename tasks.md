@@ -9716,6 +9716,19 @@ free-floating chat does not; never pop up on your own.
     features page has an IM entry under "New in 2.0". **Left:** the VHS
     tape in `docs/demos/` (share a selection in the Notes conversation, then
     Enter on its `path:line` reference) and its GIF on the features page.
+  - **Progress 2026-11-08** (`docs/t757-im-demo`): the tape is written,
+    `docs/demos/im-share.tape`, and checked with `scripts/vhs_lite.py`
+    against a real `vix`, each frame replayed in a tmux pane of the same
+    size: lines 22–28 selected, "Send to Notes?" with
+    `rust-app/src/main.rs:22-28`, the snippet in Notes, and Enter back at
+    `main.rs` Ln 22. Found along the way: every tape still did `cd
+    examples/demo-workspace` (moved under `tui/`), and ran Vix with the
+    person's own `$HOME`, so hot exit restored the unsaved text a previous
+    run had typed. Each tape now starts `HOME=$(mktemp -d) vix …` and
+    presses Escape on the first-run Welcome screen, which otherwise takes the
+    keys. `vhs_lite.py` gained `Shift+Up`/`Shift+Down`. **Left:** render
+    the GIF (`scripts/render-demos.sh` needs VHS; the lite pipeline needs
+    `agg`; neither is installed here) and put it on the features page.
 - [ ] **T758 — Matrix bridge (spike first).** Decide between
   `matrix-sdk` in-process (pre-1.0, heavy, but real Olm/Megolm E2EE)
   and talking to a local Pantalaimon or iamb out of process; behind its

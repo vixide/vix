@@ -22,9 +22,13 @@ Type "git init -q && git add notes.txt && git -c user.email=demo@vix.dev -c user
 Enter
 Type "printf 'line ONE\nline two\nline three\nline four\nline FIVE\n' > notes.txt"
 Enter
-Type "vix notes.txt"
+Type "HOME=$(mktemp -d) vix notes.txt"
 Enter
 Sleep 1s
+# A fresh HOME (above) keeps your own settings and session out of the
+# demo, and makes this a first run: close the Welcome screen.
+Escape
+Sleep 300ms
 Show
 
 # Two separate hunks now: the first and last lines both changed.
