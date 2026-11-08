@@ -37,7 +37,7 @@ jobs:
         run: |
           tag=$(printf '%s' "$PLAN" | jq -r '.announcement_tag')
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir npm --pattern '*-npm-package.tar.gz'
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Trusted publishing needs Node 22.14+ and npm 11.5.1+.
           node-version: '24.x'
