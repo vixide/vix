@@ -759,7 +759,7 @@ impl App {
 
     /// React to one protocol event.
     fn acp_event(&mut self, host: &mut AcpHost, event: Event) {
-        match event {
+        match displayable(event) {
             Event::Ready { session_id } => {
                 self.acp_remember_session(&host.command, &session_id);
                 self.status = if host.client.resumed() {
@@ -934,5 +934,104 @@ impl App {
             self.status = t!("status.acp_edit_pending", path = path).to_string();
         }
         None
+    }
+}
+
+/// `event` with every agent-supplied string that Vix shows to the user passed
+/// through [`display::sanitize`]: reply text, tool-call titles and statuses,
+/// plan entries, and permission prompts. The agent is untrusted, so none of
+/// its text may carry terminal control sequences into Vix's own screen.
+/// Protocol fields (ids, paths, commands sent back) are left as they are.
+fn displayable(event: Event) -> Event {
+    match event {
+        Event::AgentText(t) => Event::AgentText(display::sanitize(&t)),
+        Event::ToolCall { id, title, status } => Event::ToolCall {
+            id,
+            title: display::sanitize(&title),
+            status: display::sanitize(&status),
+        },
+        Event::Plan(entries) => Event::Plan(
+            entries
+                .into_iter()
+                .map(|mut e| {
+                    e.content = display::sanitize(&e.content);
+                    e.status = display::sanitize(&e.status);
+                    e
+                })
+                .collect(),
+        ),
+        Event::Permission {
+            req_id,
+            title,
+            options,
+        } => Event::Permission {
+            req_id,
+            title: display::sanitize(&title),
+            options: options
+                .into_iter()
+                .map(|mut o| {
+                    o.name = display::sanitize(&o.name);
+                    o
+                })
+                .collect(),
+        },
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::displayable;
+    use vix_acp::{Event, OptionKind, PermOption, PlanEntry};
+
+    const EVIL: &str = "ok\u{1b}[2J\u{1b}]0;pwned\u{7}\u{1b}[31mred";
+
+    fn clean(s: &str) -> bool {
+        !s.chars().any(|c| c.is_control() && c != '\n')
+    }
+
+    #[test]
+    fn agent_text_shown_to_the_user_carries_no_control_sequences() {
+        let Event::AgentText(t) = displayable(Event::AgentText(EVIL.into())) else {
+            panic!("kind changed");
+        };
+        assert!(clean(&t), "{t:?}");
+        assert!(t.starts_with("ok") && t.ends_with("red"), "{t:?}");
+
+        let Event::ToolCall { id, title, status } = displayable(Event::ToolCall {
+            id: "1\u{1b}".into(),
+            title: EVIL.into(),
+            status: EVIL.into(),
+        }) else {
+            panic!("kind changed");
+        };
+        assert_eq!(id, "1\u{1b}", "protocol ids are left as they are");
+        assert!(clean(&title) && clean(&status));
+
+        let Event::Plan(entries) = displayable(Event::Plan(vec![PlanEntry {
+            content: EVIL.into(),
+            status: EVIL.into(),
+        }])) else {
+            panic!("kind changed");
+        };
+        assert!(
+            entries
+                .iter()
+                .all(|e| clean(&e.content) && clean(&e.status))
+        );
+
+        let Event::Permission { title, options, .. } = displayable(Event::Permission {
+            req_id: serde_json::Value::from(7),
+            title: EVIL.into(),
+            options: vec![PermOption {
+                id: "allow".into(),
+                name: EVIL.into(),
+                kind: OptionKind::AllowOnce,
+            }],
+        }) else {
+            panic!("kind changed");
+        };
+        assert!(clean(&title));
+        assert!(options.iter().all(|o| clean(&o.name) && o.id == "allow"));
     }
 }

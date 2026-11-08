@@ -144,6 +144,13 @@ newline; a tab becomes four spaces, `\r\n` a newline, and a lone `\r` starts the
 line over so a progress bar shows its last state. The agent itself still gets
 the raw output from `terminal/output`.
 
+The same cleaning applies to everything else the agent sends that Vix shows:
+reply text (`agent_message_chunk`), tool-call titles and statuses, plan entries,
+and the permission prompt's title and option labels. The host runs every
+incoming event through one function (`displayable` in `tui/src/app/acp.rs`)
+before it reaches the transcript, the status line, the plan tab or a prompt;
+ids, paths and other protocol fields are left as they are.
+
 `kill` keeps the view (it shows the exit status; a dead command prints nothing
 more). `release` copies the final output, then freezes the view: a released
 view never changes again. At most 16 views are kept; past that the oldest
