@@ -29,6 +29,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Nix: the flake builds again.** `nix build` stopped at the final link because it could not find the SQLite library; the flake now provides SQLite to the build.
 - **ACP: agent text can no longer reach your terminal raw.** Reply text, tool-call titles, plan entries and permission prompts from an agent were shown without removing escape sequences, so an agent could have sent terminal control codes (to change the window title, move the cursor or clear the screen). They are now cleaned like agent terminal output.
 - **Editor: the `delete` action deletes forward correctly.** With a selection it deletes the whole selection instead of one character of it; inside indentation it deletes one space or tab instead of the whole indent; at the end of the buffer it does nothing instead of deleting the character behind the cursor; and with several carets it deletes at every caret.
 - **DB workbench: every common column type reads.** Table previews, queries, table exports and the MCP `db_query` tool no longer fail on a PostgreSQL `timestamp`, `date`, `interval`, `numeric`, `json`, `uuid`, array, `inet` or enum column, a MySQL `DATETIME`, `DECIMAL`, `TINYINT` or `JSON` column, or a SQLite column declared `BOOLEAN`, `DATE` or `DATETIME`. Values show as the server writes them: timestamps as ISO 8601, numbers exactly, JSON as JSON. Binary data that is not text shows as `\x` hex, and PostgreSQL plan trees are read as JSON again (T787).
