@@ -96,13 +96,24 @@ fn trim_trailing_whitespace(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut lines = text.split('\n');
     if let Some(first) = lines.next() {
-        out.push_str(first.trim_end_matches([' ', '\t']));
+        push_trimmed(&mut out, first);
     }
     for line in lines {
         out.push('\n');
-        out.push_str(line.trim_end_matches([' ', '\t']));
+        push_trimmed(&mut out, line);
     }
     out
+}
+
+/// Append `line` (split on `\n`) to `out` without its trailing spaces and
+/// tabs, keeping a CRLF line's `\r`: the blanks before the `\r` are the
+/// trailing ones.
+fn push_trimmed(out: &mut String, line: &str) {
+    let (body, cr) = line
+        .strip_suffix('\r')
+        .map_or((line, ""), |body| (body, "\r"));
+    out.push_str(body.trim_end_matches([' ', '\t']));
+    out.push_str(cr);
 }
 
 /// File extensions opened as images rather than text.
@@ -1150,12 +1161,14 @@ impl Editor {
     /// buffer's range (an out-of-range line would otherwise panic).
     pub fn goto(&mut self, line: usize, col: Option<usize>, area: Rect) {
         if let Some(t) = self.active_tab_mut() {
-            let last = t.editor.code_ref().len_lines().max(1);
-            let line = line.clamp(1, last);
-            let off = t
-                .editor
-                .code_ref()
-                .offset(line - 1, col.unwrap_or(1).saturating_sub(1));
+            let code = t.editor.code_ref();
+            let line = line.clamp(1, code.len_lines().max(1));
+            // A column past the line's end means its end, not a later line.
+            let col = col
+                .unwrap_or(1)
+                .saturating_sub(1)
+                .min(code.line_len(line - 1));
+            let off = code.offset(line - 1, col);
             t.editor.set_cursor(off);
             t.editor.focus(&area);
         }
@@ -1875,20 +1888,23 @@ impl Editor {
         }
     }
 
-    /// Forward-delete (the `Delete` key): step right, then delete back.
+    /// Forward-delete (the `Delete` key): delete a pending selection, else
+    /// select the one character ahead and delete that.
     ///
-    /// At the very end of the buffer there is nothing ahead to delete: the step
-    /// right would be a no-op and the delete would eat the character *behind*
-    /// the cursor, turning forward delete into a backspace. Guard against that,
-    /// unless a selection is pending — that is what gets deleted then.
+    /// Selecting the character (rather than stepping past it and deleting
+    /// back) keeps the delete to exactly that character: a backspace inside
+    /// indentation removes the whole indent, and stepping right first would
+    /// collapse a pending selection. At the very end of the buffer there is
+    /// nothing ahead, so it is a no-op rather than a backspace.
     pub fn delete_forward(&mut self) {
         if let Some(t) = self.active_tab_mut() {
-            let at_end = t.editor.get_cursor() >= t.editor.code_ref().len_chars();
             let selecting = t.editor.get_selection().is_some_and(|s| !s.is_empty());
-            if at_end && !selecting {
-                return;
+            if !selecting {
+                if t.editor.get_cursor() >= t.editor.code_ref().len_chars() {
+                    return;
+                }
+                t.editor.apply(MoveRight { shift: true });
             }
-            t.editor.apply(MoveRight { shift: false });
             t.editor.apply(Delete {});
         }
     }
