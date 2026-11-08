@@ -11,9 +11,13 @@ Set Padding 20
 Set TypingSpeed 60ms
 
 Hide
-Type "cd examples/demo-workspace && vix data/sample.csv"
+Type "cd tui/examples/demo-workspace && HOME=$(mktemp -d) vix data/sample.csv"
 Enter
 Sleep 1s
+# A fresh HOME (above) keeps your own settings and session out of the
+# demo, and makes this a first run: close the Welcome screen.
+Escape
+Sleep 300ms
 Show
 
 # Switch from the plain-text view to the interactive table editor.

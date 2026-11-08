@@ -35,7 +35,7 @@ Supports the directives the current docs/demos/*.tape files use: `Output`,
 `Set` (parsed only for Width/Height/FontSize, to size the pty), `Hide`,
 `Show`, `Sleep`, `Type "..."`, `Enter`, `Escape`, `Tab`, `Backspace [N]`,
 `Down [N]`, `Up [N]`, `Left [N]`, `Right [N]`, and `Ctrl+<key>` /
-`Ctrl+Shift+<arrow>` / `Ctrl+Enter` combos. Extend `key_bytes` if a new
+`Ctrl+Shift+<arrow>` / `Shift+Up` / `Shift+Down` / `Ctrl+Enter` combos. Extend `key_bytes` if a new
 tape needs another key.
 
 Usage: vhs_lite.py some.tape out.cast
@@ -86,6 +86,8 @@ def key_bytes(name: str) -> bytes:
         # recognizes this CSI-u form on sight, independent of whether a real
         # terminal actually negotiated the enhancement.
         return b"\x1b[13;5u"
+    if base in ("Up", "Down") and mods == {"Shift"}:
+        return b"\x1b[1;2A" if base == "Up" else b"\x1b[1;2B"
     if base == "Left" and mods == {"Ctrl", "Shift"}:
         return b"\x1b[1;6D"
     if base == "Right" and mods == {"Ctrl", "Shift"}:
