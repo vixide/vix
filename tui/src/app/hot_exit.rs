@@ -56,6 +56,16 @@ pub(crate) struct HotExitState {
     warned: bool,
 }
 
+impl HotExitState {
+    /// Make the next idle pass due at once, as if [`PASS_INTERVAL`] had
+    /// already elapsed: a test settles the pass this way instead of sleeping
+    /// or depending on how slow its frames happen to be (T773).
+    #[cfg(test)]
+    pub(crate) fn make_pass_due(&mut self) {
+        self.last_pass = None;
+    }
+}
+
 /// A buffer's backup key, owned.
 enum OwnedKey {
     /// A buffer with a file: its identity.
