@@ -187,7 +187,7 @@ same version tag as the terminal app, by `dist` (the repo-root `dist-workspace.t
 `cargo:gui`; `[package.metadata.dist]` in each front end's `Cargo.toml`):
 
 ```sh
-brew install vixide/tap/vix-gpui     # or vix-egui, vix-iced, vix-slint; vix-tui for the terminal app
+brew install vixide/homebrew-tap/vix-gpui     # or vix-egui, vix-iced, vix-slint; vix-tui for the terminal app
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.sh | sh
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.ps1 | iex"
 ```

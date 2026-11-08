@@ -25,8 +25,8 @@
     { value: '0', label: 'glance.unsafe' }
   ] as const;
 
-  // Highlights of the unreleased 2.0, from the main repo's CHANGELOG.md
-  // ([Unreleased]); the full list is on the features page.
+  // Highlights of 2.0, from the main repo's CHANGELOG.md ([2.0.0]); the
+  // full list is on the features page.
   const whatsNew = [
     { title: 'Remote editing over SSH', text: 'work on a folder on another machine from File → Open Remote… or vix ssh://host/path, with nothing installed there (experimental).' },
     { title: 'Cowork', text: 'edit the same files together in real time, encrypted, with no server in between (an opt-in build feature).' },
@@ -153,8 +153,8 @@
 
 <section class="section" aria-labelledby="new-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Coming in 2.0</p>
-    <h2 id="new-heading">What's new in the next release</h2>
+    <p class="section-heading-eyebrow">New in 2.0</p>
+    <h2 id="new-heading">What's new in the latest release</h2>
   </header>
   <div class="prose centered">
     <ul>
@@ -163,7 +163,7 @@
       {/each}
     </ul>
     <p class="small-print">
-      2.0 is not released yet; the current release is 1.8.
+      The current release is 2.0.2.
       <a href="/whats-new/">What’s new in 2.0</a>, or
       <a href="/features/#new">the complete list</a>.
     </p>

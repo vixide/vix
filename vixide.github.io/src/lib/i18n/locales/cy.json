@@ -36,7 +36,7 @@
   "faq.2.q": "Oes angen ategion arnaf i ddechrau?",
   "faq.2.a": "Nac oes. Mae popeth ar y dudalen hon yn dod yn y deuaidd <c>vix</c> sengl. Mae sgriptiau Rhai yno i ychwanegu eich gorchmynion eich hun, nid i lenwi bylchau.",
   "faq.3.q": "Ydy e'n gweithio dros SSH ac mewn tmux?",
-  "faq.3.a": "Ydy. Rhaglen derfynell yw Vix, felly rhedwch hi ar y peiriant pell fel unrhyw un arall. Mae Vix 2.0, sydd heb ei ryddhau eto, hefyd yn agor ffolder ar beiriant arall o'ch Vix lleol dros SSH (<c>vix ssh://host/path</c>, neu Ffeil → Agor o Bell…). Mae hynny'n arbrofol.",
+  "faq.3.a": "Ydy. Rhaglen derfynell yw Vix, felly rhedwch hi ar y peiriant pell fel unrhyw un arall. Ers 2.0, mae Vix hefyd yn agor ffolder ar beiriant arall o'ch Vix lleol dros SSH (<c>vix ssh://host/path</c>, neu Ffeil → Agor o Bell…). Mae hynny'n arbrofol.",
   "faq.4.q": "A all fy nghwmni ei ddefnyddio?",
   "faq.4.a": "Dewiswch pa un o'r pum trwydded sy'n eich siwtio: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 neu GPL-3.0. Ar gyfer peiriannau dan glo, nid yw'r adeiladwaith lleiaf yn gwneud unrhyw gysylltiadau rhwydwaith ac nid yw'n cychwyn unrhyw raglen arall.",
 

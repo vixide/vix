@@ -105,8 +105,9 @@ cargo build --release   # binary at target/release/vix
   does not exist yet.
 - **AUR** (Arch): `vix-tui-bin`, for example `yay -S vix-tui-bin`. Not yet
   pushed to the AUR.
-- **`cargo binstall`**: `cargo binstall vix-tui`. The metadata ships with
-  the next crates.io release of `vix-tui`.
+- **`cargo binstall`**: `cargo binstall vix-tui`. `vix-tui` is on
+  crates.io and the published crate carries the binstall metadata, but
+  nobody has tried it yet.
 - **Nix**: `nix run github:vixide/vix` to try it, `nix profile install
   github:vixide/vix` to install it. The flake has not been built with Nix
   yet.
@@ -115,8 +116,9 @@ cargo build --release   # binary at target/release/vix
   tested.
 - **Container image** (try without installing): `docker run --rm -it
   ghcr.io/vixide/vix` opens Vix on a demo workspace. The image builds and
-  runs from [`docker/Dockerfile`](../../docker/Dockerfile), but it is not
-  published to ghcr.io yet.
+  runs from [`docker/Dockerfile`](../../docker/Dockerfile) and is built and
+  pushed on every version tag, but the ghcr.io package is not public yet, so
+  `docker pull` does not work yet.
 
 ## First launch
 

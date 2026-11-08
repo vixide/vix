@@ -26,9 +26,11 @@ published from there.
      key's passphrase prompt — if `git commit` seems to hang, that's why;
      retry with a longer timeout rather than assuming it's broken. Verify
      with `git log --show-signature -1` if in doubt.
-4. `git checkout main && git merge --no-ff <branch> -m "Merge branch '<branch>'"`
-   — always `--no-ff`, even for a single commit, so the feature boundary
-   stays visible in history.
+4. Merge with `git merge --no-ff <branch> -m "Merge branch '<branch>'"` on
+   `main` — in your own worktree (one with `main` checked out, or a fresh one
+   for the merge), or in the main checkout only when nobody else is using it;
+   never switch a shared checkout's branch (step 1). Always `--no-ff`, even
+   for a single commit, so the feature boundary stays visible in history.
 5. `git branch -d <branch>` — delete it once merged; branches are
    disposable, `main` is the record.
 6. Before pushing: this is outward-facing (three public forges) — confirm
@@ -51,6 +53,22 @@ published from there.
    step failing (shown as an annotation) with the job still `success` is
    working as designed, not a regression — check the job's `conclusion`
    field (`gh run view <id> --json conclusion`), not just the annotation.
+
+## Releasing
+
+- **Tags and GitHub Releases need the maintainer's say-so** (`AI_STATEMENT.md`);
+  never cut one on your own judgment.
+- **Tag only a commit already on `main` on GitHub.** A tag on a commit that
+  is on no branch makes dist's `host` job fail with HTTP 403 (`spec/ci/index.md`).
+- A tag push runs `.github/workflows/release.yml`, which builds and publishes
+  every channel (GitHub Release, installers, Homebrew tap, npm, Linux
+  packages). Watch the run (`gh run watch <id> --repo vixide/vix
+  --exit-status`) and re-run a failed publish job once its cause is fixed.
+  `docs/release/index.md` has the steps.
+- `cargo publish` is pre-authorized under `AI_STATEMENT.md` §1–§5 (version,
+  changelog, green gate, dependency order, publish). crates.io rate-limits new
+  versions (about 30 crates, then about one a minute); the run is resumable by
+  skipping every crate already at the version.
 
 ## `vixide.github.io/`: edit inside `vix`, publish via `git subtree push`
 

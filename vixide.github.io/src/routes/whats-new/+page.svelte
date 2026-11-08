@@ -1,7 +1,7 @@
 <script lang="ts">
   const docs = 'https://vixide.github.io/vix/';
 
-  // Every item is taken from the main repo's CHANGELOG.md ([Unreleased]) and
+  // Every item is taken from the main repo's CHANGELOG.md ([2.0.0]) and
   // docs/whats-new-2-0/index.md; keep the three in agreement.
   const highlights = [
     {
@@ -55,7 +55,7 @@
 </script>
 
 <section class="section prose centered">
-  <p class="section-heading-eyebrow">Not released yet. The current release is 1.8.</p>
+  <p class="section-heading-eyebrow">Released. The current release is 2.0.2.</p>
   <h1>What’s new in Vix 2.0</h1>
   <p>
     2.0 takes Vix off your own machine and out of your own chair: edit a
@@ -143,8 +143,9 @@
   <div class="prose centered">
     <ul>
       <li>
-        The winget, Scoop, AUR, <code>cargo binstall</code>, Nix, mise and
-        container-image channels are not published or verified. Use one of the
+        The winget, Scoop, AUR, Nix and mise channels are not published,
+        <code>cargo binstall</code> is untested, and the container image is
+        built but not public yet. Use one of the
         <a href="/install/">install routes that work today</a>.
       </li>
       <li>There is no apt or dnf repository; update by installing the next package.</li>

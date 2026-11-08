@@ -9,8 +9,8 @@ Development is specification-driven: each crate owns a spec at
 `crates/<crate>/spec/index.md`; cross-cutting and app-level specs live under
 `spec/`. When behavior and spec disagree, decide which is correct and make
 them match. [AGENTS.md](https://github.com/vixide/vix/blob/main/AGENTS.md) is the canonical entry point for both
-human and AI contributors — read it first. The workspace version is 2.0.0
-(unreleased; the latest published release is 1.8.0).
+human and AI contributors — read it first. The workspace version is 2.0.2
+(released 2026-11-07).
 
 ## Start here
 
@@ -48,7 +48,7 @@ human and AI contributors — read it first. The workspace version is 2.0.0
   Everywhere, Refactor… and Organize Imports, run configurations, peek
   definition, CodeLens, postfix completion
 - [What's new in 2.0](https://github.com/vixide/vix/blob/main/docs/whats-new-2-0/index.md): user-facing release notes for
-  the unreleased 2.0 — highlights, upgrading, what is not done
+  2.0 — highlights, upgrading, what is not done
 - [Launch kit](https://github.com/vixide/vix/blob/main/docs/launch/index.md): announcement drafts for 2.0 (never posted)
 - [Remote editing](https://github.com/vixide/vix/blob/main/docs/remote-editing/index.md): open a folder over SSH
   (experimental) — search, git, language servers, terminal, remote agent

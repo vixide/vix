@@ -74,9 +74,9 @@
     <li>Scoop (Windows): <code>scoop install vix-tui</code>, from a Vix bucket</li>
     <li>AUR (Arch): <code>yay -S vix-tui-bin</code></li>
     <li>Nix: <code>nix run github:vixide/vix</code> to try it without installing</li>
-    <li><code>cargo binstall vix-tui</code>: the prebuilt archive instead of compiling</li>
+    <li><code>cargo binstall vix-tui</code>: the prebuilt archive instead of compiling (the published crate carries the metadata, but nobody has tried it yet)</li>
     <li>mise: <code>mise use -g cargo:vix-tui</code></li>
-    <li>A container image: <code>docker run --rm -it ghcr.io/vixide/vix</code></li>
+    <li>A container image: <code>docker run --rm -it ghcr.io/vixide/vix</code> (built and pushed on every version tag, but the ghcr.io package is not public yet, so <code>docker pull</code> fails)</li>
   </ul>
   <p>
     See <a href={`${docs}getting-started/index.html`}>Getting Started</a> for
@@ -120,10 +120,11 @@ cargo build --release --features syntax-all  # with every Tree-sitter grammar`}<
     Markdown, JSON, TOML), since each is a sizeable compiled C parser.
   </p>
   <p>
-    Cowork, real-time co-editing coming in 2.0, is not in the default build
+    Cowork, real-time co-editing new in 2.0, is not in the default build
     or the prebuilt releases, and everyone in a session needs a build with
-    it. Until 2.0 is published, build it from a checkout with
-    <code>cargo build --release --features cowork</code>; after that:
+    it. Install it from crates.io with the <code>cowork</code> feature, or
+    build it from a checkout with
+    <code>cargo build --release --features cowork</code>:
   </p>
   <CopyCommand command="cargo install vix-tui --features cowork" label="Copy the install-with-Cowork command" />
 

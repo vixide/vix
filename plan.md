@@ -31,17 +31,21 @@ editor, but the *platform around it* — extensibility, performance evidence,
 CI, docs depth, onboarding — has not kept pace. The highest-leverage work is
 now in that platform.
 
-**Status (2026-11-06).** The baseline above is historical. Phases 0–5 and
-Runs A–L, N and P are done; the workspace has 146 crates and is versioned
-2.0.0 (unreleased; 1.8.0 is the latest release). `tasks.md` has 321 tasks
-ticked, 13 open and one half done (T608). Run M and Run O are now done except
+**Status (2026-11-07).** The baseline above is historical. Phases 0–5 and
+Runs A–L, N, P and V are done; the workspace has 146 member crates and is
+versioned 2.0.2, released through dist on every channel except a public
+container image. `tasks.md` has 346 tasks ticked, 18 open and one half done
+(T608), counting subtasks. Run M and Run O are now done except
 the open items listed in `tasks.md` § "Suggested execution order". Of the
 2026-10-28 plans,
 Cowork, OC and IDE parity are implemented, and remote editing is done
 except T718 (other authorities). Of Run R, the AI-off switch, MCP server,
-LSP status, Large File Viewer, social cards and theme gallery are done;
-the install channels (T742, T743) exist only as unverified templates.
+LSP status, Large File Viewer, social cards, theme gallery, launch kit
+(T745) and localized landing page (T748) are done;
+the install channels of T742 exist only as unverified templates, and
+T743's container image is built on every version tag but not public yet.
 Of Run S (IM), everything but the demo (T757) and Matrix (T758) is done.
+Of Run W (the DB workbench), T783 is in progress and T787 is open.
 The live list is `tasks.md` § "Suggested execution order".
 
 ## Hard rules (apply to every task)

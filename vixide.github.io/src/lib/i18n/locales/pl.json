@@ -36,7 +36,7 @@
   "faq.2.q": "Czy potrzebuję wtyczek, żeby zacząć?",
   "faq.2.a": "Nie. Wszystko z tej strony jest w jednym pliku binarnym <c>vix</c>. Skrypty Rhai służą do dodawania własnych poleceń, a nie do łatania braków.",
   "faq.3.q": "Czy działa przez SSH i w tmux?",
-  "faq.3.a": "Tak. Vix jest programem terminalowym, więc uruchom go na zdalnej maszynie jak każdy inny. Vix 2.0, jeszcze niewydany, otwiera też folder na innej maszynie z lokalnego Vix przez SSH (<c>vix ssh://host/path</c> lub Plik → Otwórz zdalnie…). To funkcja eksperymentalna.",
+  "faq.3.a": "Tak. Vix jest programem terminalowym, więc uruchom go na zdalnej maszynie jak każdy inny. Od wersji 2.0 Vix otwiera też folder na innej maszynie z lokalnego Vix przez SSH (<c>vix ssh://host/path</c> lub Plik → Otwórz zdalnie…). To funkcja eksperymentalna.",
   "faq.4.q": "Czy moja firma może go używać?",
   "faq.4.a": "Wybierz licencję, która Ci odpowiada, spośród pięciu: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 lub GPL-3.0. Na zablokowanych maszynach wersja minimalna nie nawiązuje połączeń sieciowych i nie uruchamia żadnych innych programów.",
 

@@ -245,11 +245,12 @@ still gets confirmed first.
 
 ### Local release path (T766)
 
-`scripts/release-local` is the local alternative to the tag-triggered pipeline
-above: it builds the Makefile targets, signs `SHA256SUMS` and, only with
-`--publish` and a typed confirmation, uploads with `gh` and `tea`. It never
-creates or pushes a tag (only `--tag`, a local signed tag), so `release.yml` stays
-the manual fallback. See [`spec/local-ci`](../local-ci/index.md).
+The tag-triggered pipeline above is the normal release path (2.0.1 and 2.0.2
+shipped through it). `scripts/release-local` is the local alternative, used for
+real once, for 2.0.0's three archives: it builds the Makefile targets, signs
+`SHA256SUMS` and, only with `--publish` and a typed confirmation, uploads with
+`gh` and `tea`. It never creates or pushes a tag (only `--tag`, a local signed
+tag). See [`spec/local-ci`](../local-ci/index.md).
 
 ### Offline tests (T573)
 

@@ -41,7 +41,39 @@ saved connections.
 
 Three panes — schema tree, query editor, results — cycled with **Tab** /
 **Shift+Tab**. **Esc** returns to the connections list. The hint line at the
-bottom always shows the keys that matter where you are.
+bottom shows the most common keys on one line; this page lists all of them.
+
+These keys work in any pane:
+
+- **F5** / **Ctrl+Enter** run the statement at the cursor, **F9** runs them
+  all, **F6** / **F7** explain (see [Query editor](#query-editor-right-top)).
+- **F8** toggles write mode for the session; connections open read-only.
+- **Ctrl+C** cancels a running statement. On PostgreSQL and MySQL it asks the
+  server to stop it, so temporary tables, session settings and an open
+  transaction survive (a cancelled statement inside a transaction leaves it
+  needing a `ROLLBACK`). On SQLite, or when the server refuses, Vix
+  reconnects instead, and the status line says if a transaction was lost.
+- **Ctrl+L** opens the **query log**: every statement run this session with
+  its duration, row count and outcome, color-coded by latency; **Enter**
+  loads a statement back into the editor.
+- **Ctrl+E** builds an **ER diagram** of the live schema as Mermaid
+  `erDiagram` text in a viewer; **y** copies it.
+- **Ctrl+R**, **Ctrl+S**, **Ctrl+B**: [history and saved queries](#query-history-and-saved-queries).
+- **Ctrl+P** runs a `.sql` file ([below](#running-a-sql-file)), **Ctrl+D**
+  opens [schema compare](#schema-compare), **Ctrl+U**
+  [imports a CSV or TSV file](#importing-a-csv-or-tsv-file).
+- AI helpers, which see only the schema, never a row (all refused when
+  `ai = "off"`):
+  - **Ctrl+A** asks in plain language for SQL: type a question and press
+    **Enter**; the SQL lands in the editor with its plan, and **F5** runs it.
+    Start the question with `?` to get a plain-English answer about the
+    schema instead.
+  - **Ctrl+O** asks for a faster version of the statement at the cursor,
+    sending it with its plan.
+  - **Ctrl+F** fixes the last error: it sends the failed statement and the
+    error message and puts the corrected query in the editor.
+  - **Ctrl+K** explains the statement at the cursor in plain English,
+    without running it.
 
 ### Schema tree (left)
 
@@ -49,8 +81,9 @@ Schemas expand into **Tables / Views / Functions** folders.
 
 - **↑/↓** (or **j/k**) move · **←/→**/**Space** collapse/expand ·
   **Enter** on a table shows its **columns**.
-- **i** indexes · **f** foreign keys · **g** triggers · **x** constraints —
-  each report opens in the results grid.
+- **i** indexes · **f** foreign keys · **g** triggers · **x** constraints ·
+  **s** statistics (row count and size) · **D** the table's `CREATE`
+  statement (DDL) — each report opens in the results grid.
 - **R** shows the table's **relations**: its foreign keys to other tables,
   the foreign keys on other tables that point at it, and the views that read
   from it (on SQLite the view list is a best guess from each view's SQL).
@@ -103,6 +136,9 @@ Type SQL; multiple statements separated by `;` are fine.
   off. Numbers compare numerically.
 - **/** filters rows live (any cell, case-insensitive).
 - **y** copies the selected cell, **Y** the whole row (tab-separated).
+- **x** shows the selected row vertically, one column per line.
+- **f** on a foreign-key cell follows it to the row it references.
+- **c** charts a two-column (label, number) result as a bar chart.
 - **A** copies for AI: the statement, the rows from the top of the visible
   page (at most 50, filter and sort applied) and, on a table preview, the
   column types, as Markdown to paste into a chat. It is your copy to share;
@@ -211,6 +247,15 @@ other database — the **target** — match the one you are connected to.
   changes. A read-only target refuses to run until **F8** allows writes.
 - SQLite can only add and drop columns in place; other SQLite table changes
   show as *manual* notes in the script.
+
+## Importing a CSV or TSV file
+
+**Ctrl+U** asks for the path of a `.csv` or `.tsv` file (a tab for `.tsv` and
+`.tab`, a comma otherwise) and loads it into a new table named after the file:
+the header row becomes the columns, all of type `TEXT`, and the other rows are
+inserted. It creates and writes a table, so write mode (**F8**) must be on; on
+a **production** connection it shows its SQL and asks first. The statements
+run in order and stop at the first error, which can leave the new table empty.
 
 ## Query history and saved queries
 

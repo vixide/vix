@@ -69,9 +69,9 @@
     feature. The <a href={docs}>documentation</a> covers each one in detail.
   </p>
   <p>
-    This page describes Vix as it stands for the 2.0 release, which is not
-    out yet. The features under <a href="#new">New in 2.0</a> are not in the
-    current 1.8 release; the
+    This page describes Vix as of the current release, 2.0.2. The features
+    under <a href="#new">New in 2.0</a> are new since 1.8, and anything
+    marked as not released yet is on <code>main</code> but not in 2.0.2; the
     <a href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">changelog</a>
     has the details. The generated reference lists every one of the 801
     <a href={`${docs}reference/actions.html`}>actions</a> and 101
@@ -88,7 +88,7 @@
 
 <section class="section" id="new" aria-labelledby="new-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Coming in 2.0, not yet released</p>
+    <p class="section-heading-eyebrow">Released in 2.0</p>
     <h2 id="new-heading">New in 2.0</h2>
   </header>
   <div class="prose centered">
@@ -199,6 +199,10 @@
         transactions; <code>:name</code> parameters; staged cell edits; CSV/TSV
         import; a Mermaid ER diagram; SSH tunnels; credentials from the OS keyring;
         and an optional natural-language-to-SQL assistant that sees only the schema.
+        Not released yet (on <code>main</code>, after 2.0.2): schema compare
+        with a generated migration, connection environments such as
+        production that confirm every write, a table's relations, row search
+        run on the server, and whole-table export to CSV, JSON or SQL.
       </li>
       <li><strong>Edit surfaces</strong> — view and edit the active buffer as a CSV/TSV table, a folding prose outline, a JSON or YAML tree, a hex byte dump, or a list of SQL statements.</li>
       <li><strong>HTTP client</strong> — send a request from a <code>.http</code> buffer and read the response in a tab.</li>

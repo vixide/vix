@@ -210,11 +210,13 @@ only fills the message box, it never commits on its own (T125).
 ## DB menu
 
 The database workbench (see [`../../crates/vix-db/spec/index.md`](../../crates/vix-db/spec/index.md)):
-**Connections** / **New Query**, **Execute** / **Execute All** (`F5`/`F9`),
-**Run Buffer in Workbench**,
-**Explain** / **Explain Analyze** (`F6`/`F7`), **Format**, **History** /
-**Saved** / **Save Query…**, **Export…**, **Begin** / **Commit** / **Rollback**,
-**Refresh Schema**, and **Disconnect**. The overlay itself adds read-only-by-
+**Connections…** / **Query Editor**, **Execute at Cursor** / **Execute All**
+(`F5`/`F9`), **Run Buffer in Workbench**, **Explain** / **Explain Analyze**
+(`F6`/`F7`), **Format Query** (`Alt+Shift+F`), **History…** /
+**Saved Queries…** / **Save Query…** (`Ctrl+R`/`Ctrl+B`/`Ctrl+S`),
+**Export Results…**, **Begin Transaction** / **Commit** / **Rollback**,
+**Refresh Schema**, **Schema Compare…** (`db.schema_compare`, `Ctrl+D`), and
+**Disconnect**. The overlay itself adds read-only-by-
 default access, async/streamed execution, an AI SQL assistant, a query log, an
 ER diagram, CSV import, and more.
 

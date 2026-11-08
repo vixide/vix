@@ -866,7 +866,7 @@ impl Browser {
     /// Order matters: a busy workbench (a query running, or a cancelled
     /// query's reconnect in flight) swallows keys first; then the global chords (F5/F6/F7/F8/F9 run, explain and
     /// toggle write mode; Ctrl+R/B/S/L/E/A/O/F/K/U/P/D open the sub-views and AI
-    /// helpers; Alt+F formats); then Tab focus cycling (suppressed while the
+    /// helpers; Alt+Shift+F formats); then Tab focus cycling (suppressed while the
     /// autocomplete popup owns Tab); and only then the focused pane's own
     /// handler.
     fn key_workbench(&mut self, key: KeyEvent, pages: Pages) -> Outcome {

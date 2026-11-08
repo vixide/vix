@@ -94,6 +94,9 @@ Expand `main` → `Tables` and land on `people`:
   `person_id → people.id` foreign key.
 - **s** shows row-count/size statistics; **D** shows the table's `CREATE`
   statement.
+- **R** shows the table's relations: try it on `people` to see `tasks`'
+  foreign key pointing at it (an *incoming* relation), and on `tasks` to see
+  the same key as *outgoing*.
 - **p** previews the table's data (`SELECT * FROM people LIMIT 200`) without
   writing a query.
 - **/** searches the tree live (matches show regardless of collapse state);
@@ -167,7 +170,8 @@ In the results pane:
   where that goes: Vix's own AI assistant is still never shown a row.
 - On a table preview that has a primary key (press **p** on `people` in the
   tree, not this join), **i** stages an edit to the selected cell, **a** a
-  new row and **d** a row's deletion, and **W** commits them all in one
+  new row and **d** a row's deletion, **u** discards a row's changes, and
+  **W** commits them all in one
   transaction, with conflict detection against anyone else's changes in
   between. A value like `=now()` is computed by the database. **F** searches
   the whole table on the server by column and operator, where **/** only
@@ -237,6 +241,8 @@ lists their line numbers.
 - **Ctrl+S** (**DB → Save Query…**) saves the statement at the cursor under
   a name; **Ctrl+B** (**DB → Saved Queries…**) browses them with the same
   keys, persisted separately in `db_queries.toml`.
+- **Ctrl+L** opens the session's **query log**: every statement run since
+  you connected, with its duration, row count and outcome.
 
 ## Named `:param` binds
 
@@ -323,6 +329,16 @@ from, same as `db/demo.sqlite` was) and press Enter. The header becomes a
 comes from the file's stem, columns sanitized to identifiers), and every
 remaining row becomes one multi-row `INSERT`, both run for you. Refresh the
 tree (**r**) to see the new `sample` table alongside `people` and `tasks`.
+
+## Schema compare
+
+**Ctrl+D** (**DB → Schema Compare…**) compares the connected schema with
+another saved connection of the same engine (PostgreSQL or SQLite) and
+writes the migration that makes the other one match. To try it, save a
+second SQLite connection to a fresh file, connect to `db/demo.sqlite`, press
+**Ctrl+D** and pick the new connection: every table shows as a difference to
+create. **Space** toggles a change, **Enter** shows the script, and **y**,
+**s**, **o** or **r** copy, save, open or run it.
 
 ## Where to go next
 
