@@ -23,9 +23,7 @@ pub use ratatui_image::protocol::StatefulProtocol as ImageProtocol;
 /// feature: it can never be constructed, so `Tab::image` is always `None`.
 #[cfg(not(feature = "image"))]
 pub enum ImageProtocol {}
-use vix_editor_core::actions::{
-    Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll,
-};
+use vix_editor_core::actions::{Duplicate, InsertText, MoveDown, MoveUp, SelectAll};
 use vix_editor_core::code::Code;
 pub use vix_editor_core::editor::Editor as CodeEditor;
 use vix_editor_core::utils::get_lang_for;
@@ -1888,24 +1886,15 @@ impl Editor {
         }
     }
 
-    /// Forward-delete (the `Delete` key): delete a pending selection, else
-    /// select the one character ahead and delete that.
-    ///
-    /// Selecting the character (rather than stepping past it and deleting
-    /// back) keeps the delete to exactly that character: a backspace inside
-    /// indentation removes the whole indent, and stepping right first would
-    /// collapse a pending selection. At the very end of the buffer there is
-    /// nothing ahead, so it is a no-op rather than a backspace.
+    /// Forward-delete (the `Delete` key): at every caret, delete its pending
+    /// selection, else exactly the one character ahead (never a whole indent
+    /// unit); a no-op at the end of the buffer. One undo step, which puts the
+    /// cursor and selection back where they were. This is the core
+    /// [`CodeEditor::delete`], so the app, the GUIs and this
+    /// crate share one forward delete.
     pub fn delete_forward(&mut self) {
         if let Some(t) = self.active_tab_mut() {
-            let selecting = t.editor.get_selection().is_some_and(|s| !s.is_empty());
-            if !selecting {
-                if t.editor.get_cursor() >= t.editor.code_ref().len_chars() {
-                    return;
-                }
-                t.editor.apply(MoveRight { shift: true });
-            }
-            t.editor.apply(Delete {});
+            t.editor.delete();
         }
     }
 

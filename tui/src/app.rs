@@ -7034,15 +7034,8 @@ impl App {
     }
 
     /// The shared low-level key handler every keymap's plain-typing/navigation
-    /// falls through to. Already a wide dispatch of small, largely
-    /// independent early-return guards before the actual key reaches the
-    /// editor widget; splitting it would mean threading several of `self`'s
-    /// fields through new helper signatures for no real clarity gain. One
-    /// line over budget as of the T123 signature-help auto-trigger.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "wide, largely-independent early-return guards"
-    )]
+    /// falls through to: a wide dispatch of small, largely independent
+    /// early-return guards before the actual key reaches the editor widget.
     fn editor_key(&mut self, key: KeyEvent) {
         // Image tabs are view-only.
         if self.editor.active_tab().is_some_and(Tab::is_image) {
@@ -7105,17 +7098,8 @@ impl App {
             KeyCode::Home => return self.editor.cursor_line_home(),
             KeyCode::End => return self.editor.cursor_line_end(),
             KeyCode::Delete => {
-                let multi = self
-                    .editor
-                    .active_tab()
-                    .is_some_and(|t| t.editor.has_multi_carets());
-                if multi {
-                    if let Some(t) = self.editor.active_tab_mut() {
-                        t.editor.multi_delete(true);
-                    }
-                } else {
-                    self.editor.delete_forward();
-                }
+                // Every caret, one undo step (vix-editor-core's `delete`).
+                self.editor.delete_forward();
                 self.mark_active_dirty();
                 return;
             }

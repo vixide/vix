@@ -153,7 +153,7 @@ Additional cursor keys handled directly by the editor (not in the menu):
   line, or to column 0 if already there (or if the line is blank). Pressing Home
   again toggles between the two.
 - **End** goes to the end of the current line.
-- **Delete** forward-deletes the character to the right of the cursor.
+- **Delete** forward-deletes at every caret: its selection, else the one character to the right (never a whole indent unit), and nothing at the end of the buffer. `delete_forward` is `vix-editor-core`'s `Editor::delete`, one undo step that puts the cursor and selection back.
 - **Page Up / Page Down** move the cursor by roughly one viewport height.
 - **Match Bracket** (`edit.match_bracket`, `Ctrl+]`) jumps to the partner of the
   bracket at or just before the cursor; a no-op when the cursor is not on a
