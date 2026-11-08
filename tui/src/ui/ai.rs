@@ -220,6 +220,14 @@ pub(super) fn draw_agent_plan_dock(app: &mut App, frame: &mut Frame, area: Rect)
     lines.push(Line::default());
     lines.push(heading(t!("ui.acp_tools_heading").to_string()));
     lines.extend(tools.into_iter().map(Line::from));
+    // Agent terminals last, so their live output stays in view. The text was
+    // sanitized in `vix_acp::display`: it holds no control sequences.
+    let terminals = app.acp_terminal_lines();
+    if !terminals.is_empty() {
+        lines.push(Line::default());
+        lines.push(heading(t!("ui.acp_terminals_heading").to_string()));
+        lines.extend(terminals.into_iter().map(Line::from));
+    }
     // Keep the newest lines in view when the content outgrows the pane.
     let overflow = lines.len().saturating_sub(inner.height as usize);
     let shown: Vec<Line> = lines.into_iter().skip(overflow).collect();

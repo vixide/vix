@@ -31,6 +31,8 @@ struct Captured {
     bytes: Vec<u8>,
     /// Whether older bytes were dropped to stay under `limit`.
     truncated: bool,
+    /// How many chunks have arrived, so a viewer can skip unchanged output.
+    chunks: u64,
 }
 
 /// A running (or finished) agent command.
@@ -49,6 +51,7 @@ fn push_capped(cap: &Mutex<Captured>, chunk: &[u8], limit: usize) {
         return;
     };
     c.bytes.extend_from_slice(chunk);
+    c.chunks = c.chunks.wrapping_add(1);
     if c.bytes.len() > limit {
         let excess = c.bytes.len() - limit;
         c.bytes.drain(..excess);
@@ -130,6 +133,13 @@ impl Terminal {
             String::from_utf8_lossy(&c.bytes[start..]).into_owned(),
             c.truncated,
         )
+    }
+
+    /// A counter that changes whenever new output arrives, so a display can
+    /// skip copying [`Terminal::output`] when nothing is new.
+    #[must_use]
+    pub fn output_generation(&self) -> u64 {
+        self.captured.lock().map_or(0, |c| c.chunks)
     }
 
     /// How the command ended, or `None` while it still runs.
@@ -230,6 +240,7 @@ mod tests {
         .unwrap();
         wait(&mut t);
         assert_eq!(t.output(), ("fghij".to_string(), true));
+        assert!(t.output_generation() > 0, "output bumps the generation");
     }
 
     #[test]

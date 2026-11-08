@@ -2,11 +2,13 @@
 //!
 //! The protocol is pure: [`wire`] frames newline-delimited JSON-RPC,
 //! [`client::Client`] is a state machine with no IO, and [`policy`] decides
-//! which paths and permission options an agent may have. Only [`process`]
+//! which paths and permission options an agent may have, and [`display`] makes
+//! an agent terminal's output safe to show. Only [`process`]
 //! (behind the `process` feature) starts the agent. See `spec/index.md` for the
 //! trust model.
 
 pub mod client;
+pub mod display;
 pub mod policy;
 #[cfg(feature = "process")]
 pub mod process;

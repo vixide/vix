@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **ACP: agent terminal output, live.** A command an agent runs (after your yes) now shows its output in the Agent Plan tab and the docked plan pane, updating as it arrives, with its exit status; escape and control sequences are stripped first, and the output stays within the terminal's byte limit (T635).
 - **DB workbench: cancel keeps the session.** `Ctrl+C` on PostgreSQL and MySQL now asks the server to stop the statement, so temporary tables, session settings and an open transaction survive; SQLite, and a cancel the server refuses, still reconnect, and the status line says when a transaction was lost (T774).
 - **DB workbench: errors point at the problem.** A PostgreSQL error moves the editor cursor to the character it names (T775). Server notices are still dropped: sqlx does not expose them, and the spec says what it would take.
 - **DB workbench: plans as a tree.** On PostgreSQL, `F6`/`F7` show the plan as a tree with each step's share of the time, the slowest steps in red and row estimates off by 10× or more in yellow (T776).

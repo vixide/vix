@@ -16,6 +16,7 @@ The crate is split so the protocol is pure and the process is optional:
 | `wire`    | no | Newline-delimited JSON framing, JSON-RPC builders, `Incoming` parsing |
 | `client`  | no | `Client`, a state machine: no IO, no clock, no threads |
 | `policy`  | no | Path containment, and picking a rejecting permission option |
+| `display` | no | `sanitize` (strip control sequences) and `TerminalViews`, what the user sees of each terminal |
 | `process` | yes | `AgentProcess`: spawn, stdin writer, stdout reader thread |
 | `terminal` | yes | `Terminal`: one approved agent command, merged capped output, exit status |
 
@@ -120,6 +121,34 @@ calls with their status, newest last, following the agent live. With no agent
 running it says so rather than staying blank. It is display only: no key or
 click does anything in it.
 
+### Agent terminals
+
+Both surfaces end with a **Terminals** section once the agent has had a command
+approved: one entry per terminal, oldest first, `$ <command>  [<status>]`
+(running, the exit code, the signal that killed it, or released), a note when
+older output was dropped, then the output indented. The output is what the
+terminal captured, stdout and stderr merged in arrival order and already capped
+at the terminal's byte limit; the plan tab shows each terminal's newest 1000
+lines, the dock its newest 12. It updates live: every tick the host copies a
+terminal's output into its view only when new output arrived
+(`Terminal::output_generation`) or its exit status first became known, and
+rewrites the plan tab only when a view changed. No thread is added; the two
+reader threads `Terminal` already has do the capture.
+
+Agent output never reaches Vix's own terminal raw. `display::sanitize` runs on
+the output (and on the command line, here and in the approval prompt) before it
+is stored for display: CSI, OSC, DCS/SOS/PM/APC and two-byte escape sequences
+are removed whole (an unterminated string sequence swallows the rest), the
+one-byte C1 forms too, and every other control character is dropped except
+newline; a tab becomes four spaces, `\r\n` a newline, and a lone `\r` starts the
+line over so a progress bar shows its last state. The agent itself still gets
+the raw output from `terminal/output`.
+
+`kill` keeps the view (it shows the exit status; a dead command prints nothing
+more). `release` copies the final output, then freezes the view: a released
+view never changes again. At most 16 views are kept; past that the oldest
+released one is forgotten. Stopping the agent drops them all.
+
 ## Resume
 
 When an agent reports its session (`Event::Ready`) the host remembers the
@@ -135,12 +164,13 @@ degrades to a fresh session.
 ## Not yet done
 
 Windows coverage of the fake-agent tests (they need `python3` and Unix tools such
-as `touch`), and any `terminal` output shown live in the UI (the agent sees the
-output; the user sees the command that was approved and its tool-call lines).
+as `touch` and `sh`). Terminal output is shown in its own section rather than
+under the tool call that embedded it (ACP tool-call `content` of type
+`terminal` is not parsed yet).
 
 ## Implemented by
 
-`crates/vix-acp/src/{wire,client,policy,process,terminal}.rs`; the host is
-`tui/src/app/acp.rs`. Tests: unit tests in each module,
+`crates/vix-acp/src/{wire,client,policy,process,terminal,display}.rs`; the host
+is `tui/src/app/acp.rs`, the dock is drawn in `tui/src/ui/ai.rs`. Tests: unit tests in each module,
 `crates/vix-acp/tests/fake_agent.rs` (a scripted fake agent over real pipes),
 and `tui/tests/integration/acp.rs`.
