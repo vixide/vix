@@ -9942,11 +9942,17 @@ the generated `release.yml`.
     a `sqlite:` URL holding `\\?\` in `integration::mcp`.
   - **Unknown:** `run_configuration_runs_its_before_step_first`.
 
-- [ ] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
+- [x] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
   in a gate on a loaded machine (2026-11-07, `left: 3, right: 2` at
   `tui/tests/integration/big_buffer.rs:70`) and passed five times alone. The
   scan counter is thread-local, so another test can't bump it: something in
   the app does one more whole-buffer scan after an edit, depending on timing.
+  **Done** (branch `fix/t773-idle-frames-flake`): the extra scan was hot
+  exit's idle pass (every 2 s) backing up the now-dirty buffer with one
+  `get_content` copy — specified, once per changed revision, not a perf bug.
+  It landed in the test's last five frames only when the run passed 2 s. The
+  test now makes the pass due (`HotExitState::make_pass_due`, `cfg(test)`),
+  asserts exactly that one copy, then no further scan; no product change.
 
 ## Run W — database workbench, from dbjoy (2026-11-07)
 
@@ -10205,7 +10211,7 @@ complete. What is open, by run:
   and T747 are open and need the user's decisions.
 - **Run T:** the spikes T763 and T768 are open.
 - **Run V:** T770 and T771 are done (2.0.2 shipped through dist); T772
-  (the Windows test suite) and T773 (a flaky test) are open.
+  (the Windows test suite) is open; T773 (a flaky test) is done.
 - **Run W:** T774–T782 and T784–T786 are done; T783 is in progress and
   T787 is open.
 - **Run S:** T750-T756 and T759 are done; T757 (docs, site and demo) and
@@ -10326,7 +10332,8 @@ CI-discovered rounds to get genuinely right on Windows).
     the limits in its spec are the follow-ups.
 22. **Run V (2.0.1 release repair, 2026-11-06):** T770, then T771. **Both
     done**: 2.0.2 (2026-11-07) shipped through dist on every channel except
-    a public container image. T772 and T773, found on the way, are open.
+    a public container image. Of T772 and T773, found on the way, T773 is
+    done and T772 is open.
 23. **Run W (database workbench, from dbjoy, 2026-11-07):** T774 first (it
     stops a silent loss of an open transaction), then T775 and T776, T777
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in

@@ -40,7 +40,8 @@ fn idle_frames_make_no_whole_buffer_pass() {
     let dir = unique_dir("t749-idle");
     let path = dir.join("server.log");
     write_log(&path, 5_000);
-    let mut app = app_at(&dir);
+    let _ = fs::remove_dir_all(dir.join("backup"));
+    let mut app = app_at(&dir).with_backup_dir(dir.join("backup"));
     app.open_initial(&path);
     assert!(app.editor.active_tab().is_some_and(|t| t.path.is_some()));
     // The first frames may measure the buffer once.
@@ -63,11 +64,34 @@ fn idle_frames_make_no_whole_buffer_pass() {
     app.on_key(key('x'));
     draw(&mut app);
     let after_edit = full_text_scans();
+    // The buffer is now dirty, so hot exit's idle pass (every 2 s) copies it
+    // once into a backup — specified work, once per changed revision
+    // (`crates/vix-undo-store/spec/hot-exit/index.md`), not idle-frame work.
+    // Whether that pass fell inside the frames below used to depend on how
+    // slow they were, so make it due now: the first tick takes the one copy
+    // (T773).
+    app.hot_exit.make_pass_due();
+    app.tick();
+    draw(&mut app);
+    assert_eq!(
+        full_text_scans(),
+        after_edit + 1,
+        "hot exit backs the changed buffer up with one copy"
+    );
+    let backed_up = full_text_scans();
     for _ in 0..5 {
         app.tick();
         draw(&mut app);
     }
-    assert_eq!(full_text_scans(), after_edit);
+    // A later pass, due or not, finds the backup current and copies nothing.
+    app.hot_exit.make_pass_due();
+    app.tick();
+    draw(&mut app);
+    assert_eq!(
+        full_text_scans(),
+        backed_up,
+        "an idle frame after the backup read the whole buffer"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
