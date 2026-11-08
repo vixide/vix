@@ -44,7 +44,6 @@
 //! ```
 
 use serde_json::{Value, json};
-use std::fmt::Write as _;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -452,8 +451,9 @@ fn error(id: &Value, code: i64, message: &str) -> Value {
 }
 
 /// `file://` URI for an absolute path, percent-encoding everything but
-/// unreserved characters and `/`. Backslashes are treated as separators and
-/// a path without a leading `/` (a Windows drive) gets one.
+/// unreserved characters and `/`. On Windows a verbatim prefix (`\\?\`) is
+/// dropped, backslashes are separators and a drive path gets a leading `/`
+/// (`file:///C:/…`); see [`vix_lsp_core::uri`].
 ///
 /// ```
 /// use std::path::Path;
@@ -464,19 +464,7 @@ fn error(id: &Value, code: i64, message: &str) -> Value {
 /// ```
 #[must_use]
 pub fn file_uri(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
-    let mut out = String::from("file://");
-    if !text.starts_with('/') {
-        out.push('/');
-    }
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
-            out.push(char::from(byte));
-        } else {
-            let _ = write!(out, "%{byte:02X}");
-        }
-    }
-    out
+    vix_lsp_core::uri::file_uri_native(path)
 }
 
 /// The path a `file://` URI names, percent-decoded; `None` for another
@@ -494,28 +482,12 @@ pub fn file_uri(path: &Path) -> String {
 /// ```
 #[must_use]
 pub fn uri_path(uri: &str) -> Option<String> {
-    let rest = uri.strip_prefix("file://")?;
     // Only a local file: an empty host or `localhost`.
-    let rest = rest.strip_prefix("localhost").unwrap_or(rest);
-    if !rest.starts_with('/') {
+    let (host, _) = vix_lsp_core::uri::split_file_uri(uri)?;
+    if !(host.is_empty() || host == "localhost") {
         return None;
     }
-    // Decode bytewise, then validate UTF-8 once at the end, so a split
-    // multi-byte sequence (`%C3%A9`) is handled correctly.
-    let bytes = rest.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            let hex = rest.get(i + 1..i + 3)?;
-            out.push(u8::from_str_radix(hex, 16).ok()?);
-            i += 3;
-        } else {
-            out.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8(out).ok()
+    vix_lsp_core::uri::uri_path(uri, cfg!(windows))
 }
 
 #[cfg(test)]

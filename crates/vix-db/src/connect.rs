@@ -72,7 +72,7 @@ pub fn url_via_local(conn: &Connection, password: &str, local_port: u16) -> Stri
 /// [`url_via_local`] so the credential/TLS encoding exists exactly once.
 fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> String {
     match conn.kind {
-        Kind::Sqlite => format!("sqlite:{}?mode=rwc", conn.file),
+        Kind::Sqlite => crate::catalog::sqlite_url(&conn.file, "rwc"),
         Kind::Postgres | Kind::Mysql => {
             let scheme = if conn.kind == Kind::Postgres {
                 "postgres"

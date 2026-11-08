@@ -124,6 +124,8 @@ pub(crate) fn init_git_repo(dir: &Path, name: &str) {
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
     run(&["config", "user.name", name]);
+    // Windows runners set core.autocrlf=true globally; keep LF (T772).
+    run(&["config", "core.autocrlf", "false"]);
 }
 
 /// Build an app with custom settings and a realistic editor viewport.

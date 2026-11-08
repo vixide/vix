@@ -914,12 +914,28 @@ pub const SQLITE_SCHEMA_SQL: &str = "SELECT m.name, m.type, p.name, p.type \
 /// ```
 #[must_use]
 pub fn sqlite_read_only_url(path: &std::path::Path) -> String {
+    sqlite_url(&path.to_string_lossy(), "ro")
+}
+
+/// The `sqlite:` URL for the database file `path` opened in `mode` (`ro`,
+/// `rw` or `rwc`), with `%`, `?` and `#` in the path percent-encoded as in
+/// [`sqlite_read_only_url`]. sqlx splits the URL at the first raw `?`, so an
+/// unescaped one ends the path early: a Windows verbatim path (`\\?\C:\…`)
+/// does exactly that (T772).
+///
+/// ```
+/// assert_eq!(
+///     vix_db::catalog::sqlite_url(r"\\?\C:\w\a.db", "rwc"),
+///     r"sqlite:\\%3F\C:\w\a.db?mode=rwc"
+/// );
+/// ```
+#[must_use]
+pub fn sqlite_url(path: &str, mode: &str) -> String {
     let path = path
-        .to_string_lossy()
         .replace('%', "%25")
         .replace('?', "%3F")
         .replace('#', "%23");
-    format!("sqlite:{path}?mode=ro")
+    format!("sqlite:{path}?mode={mode}")
 }
 
 /// Read the schema of the `SQLite` database at `path` without writing to it:

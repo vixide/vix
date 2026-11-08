@@ -30,7 +30,8 @@ fn tool_available(program: &str) -> bool {
 
 /// Wants every file operation for `*.rs` files and for folders named `pkg*`,
 /// registers recursive `Cargo.toml` and `*.cfg` watchers dynamically, answers
-/// each `will*Files` with one edit to `argv[2]/imports.rs`, and logs every file
+/// each `will*Files` with one edit to `argv[2]/imports.rs` (`argv[2]` is the
+/// root's `file://` URI), and logs every file
 /// message it receives to `argv[1]`.
 const MOCK_SERVER_FILE_OPS: &str = include_str!("fixtures/mock_lsp_file_ops.py");
 
@@ -59,7 +60,7 @@ impl Fixture {
                 "python3".into(),
                 mock.to_string_lossy().into_owned(),
                 log.to_string_lossy().into_owned(),
-                root.to_string_lossy().into_owned(),
+                vix::lsp::path_to_uri(&root),
             ],
         };
         Self { root, log, server }

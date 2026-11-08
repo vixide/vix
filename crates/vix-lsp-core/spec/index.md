@@ -83,6 +83,25 @@ walk finished within its budget. Globs use `globset` with `*` not crossing
 `/`. `initialize` declares all six `workspace.fileOperations` entries and
 `workspace.didChangeWatchedFiles.dynamicRegistration`.
 
+## File URIs (T772)
+
+`uri` builds `file://` URIs from paths and back, for `vix-lsp` and
+`vix-mcp-server`. Each function takes the platform as a flag (`windows`), so
+the Windows rules are tested on every OS; `file_uri_native` and
+`uri_path_native` pass `cfg!(windows)`.
+
+- On Windows a verbatim prefix is dropped (`\\?\C:\x` → `C:\x`,
+  `\\?\UNC\srv\share` → `\\srv\share`, `strip_verbatim`), `\` is a
+  separator, a drive path is `file:///C:/x`, and a UNC path keeps its server
+  as the host (`file://srv/share/x`). Decoding reverses all of that; a path
+  with no drive, such as a remote POSIX path, is kept as it is.
+- Elsewhere a `\` is an ordinary file-name byte and is percent-encoded.
+- Every byte but the unreserved ones, `/` and the drive's `:` is
+  percent-encoded; decoding refuses bad percent-encoding and bad UTF-8.
+
+`vix-lsp`'s `uri_to_path` also canonicalizes a decoded Windows drive path
+that exists, so it matches the (verbatim) paths of open tabs.
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

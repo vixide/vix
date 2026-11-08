@@ -9965,6 +9965,26 @@ the generated `release.yml`.
   - **Test assumptions:** `ssh://` URLs built from Windows paths (`BadPort`), and
     a `sqlite:` URL holding `\\?\` in `integration::mcp`.
   - **Unknown:** `run_configuration_runs_its_before_step_first`.
+  - **Progress 2026-11-08** (`fix/t772-windows`, approved: push a branch and
+    run CI on it by hand). Fixed from the 2.0.2 log (run 42394890694, 20
+    failures in 9 targets), verified on macOS, not yet on Windows:
+    - URIs: a new `vix_lsp_core::uri` (pure, `windows` flag, tested on every
+      OS) is the one path↔`file://` conversion; `vix-lsp` and
+      `vix-mcp-server` delegate to it. `uri_to_path` canonicalizes a decoded
+      drive path, so it matches the verbatim tab paths. canonicalize itself
+      is unchanged: everything internal agrees on `\\?\` today, and
+      stripping it in one place would break the comparisons in the others.
+    - Confinement (real escapes): `load_body_file` and detector `detect`
+      entries accept only `Normal`/`CurDir` components; `SharedPath::parse`
+      refuses a drive component anywhere (`®\a:` → `®/a:` → drive `a:`).
+      `vix-acp`'s `contain` was safe (it refuses `/w/x` as not absolute);
+      only its doc example was Unix-only.
+    - `sqlite_url`: one escaping builder; `connect.rs`'s rwc URL did not
+      escape `?`/`#`/`%` (a bug on every OS).
+    - Tests: `core.autocrlf false` in test repos; mocks take the root as a
+      URI; remote-session tests write a Windows dir as `/C:/…` in `ssh://`;
+      run-config lines compared trimmed (`cmd`'s `echo x && …` keeps the
+      space); the MCP session test stores paths as the platform writes them.
 
 - [x] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
   in a gate on a loaded machine (2026-11-07, `left: 3, right: 2` at

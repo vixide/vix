@@ -1,6 +1,8 @@
 import sys, json, re
 
 log = open(sys.argv[1], 'a')
+# The workspace root as a file:// URI (built by Vix, so it is a valid URI on
+# Windows too, T772).
 ROOT = sys.argv[2]
 
 def read_msg():
@@ -57,7 +59,7 @@ while True:
             note('%s %s %s' % (op.group(1), op.group(2), names))
         if op.group(1) == 'will':
             send({'jsonrpc':'2.0','id':mid,'result':{'changes':{
-                'file://' + ROOT + '/imports.rs':[{'range':{'start':{'line':0,'character':0},
+                ROOT + '/imports.rs':[{'range':{'start':{'line':0,'character':0},
                     'end':{'line':0,'character':3}},'newText':'use'}]}}})
     elif method == 'workspace/didChangeWatchedFiles':
         for c in msg['params']['changes']:

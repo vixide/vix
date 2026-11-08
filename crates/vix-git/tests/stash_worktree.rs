@@ -49,6 +49,8 @@ fn repo(name: &str) -> PathBuf {
         ("user.email", "test@example.invalid"),
         ("commit.gpgsign", "false"),
         ("core.hooksPath", "/dev/null"),
+        // Windows runners set core.autocrlf=true globally; keep LF (T772).
+        ("core.autocrlf", "false"),
     ] {
         fixture_git(&dir, &["config", k, v]);
     }

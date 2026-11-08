@@ -214,12 +214,16 @@ impl Detector {
     fn valid(&self) -> bool {
         let rel_ok = |p: &String| {
             let path = Path::new(p);
+            // Plain names only: on Windows `/etc/passwd` and `C:x` count as
+            // relative, yet `root.join` would leave the project (T772).
             !p.is_empty()
                 && !p.contains('\0')
-                && path.is_relative()
-                && !path
-                    .components()
-                    .any(|c| matches!(c, std::path::Component::ParentDir))
+                && path.components().all(|c| {
+                    matches!(
+                        c,
+                        std::path::Component::Normal(_) | std::path::Component::CurDir
+                    )
+                })
         };
         !self.name.is_empty()
             && self.name.chars().count() <= 64
@@ -732,6 +736,12 @@ mod tests {
             "[[detector]]\nname=\"n\"\ndetect=[\"a\"]\ncommand=[\"x\\u0000\"]",
         ] {
             assert!(parse_detectors(bad).is_none(), "{bad}");
+        }
+        // Windows: `\\x` and `C:x` count as relative there, yet leave the root.
+        #[cfg(windows)]
+        for bad in [r"\Windows", "C:x", r"C:\x"] {
+            let toml = format!("[[detector]]\nname=\"n\"\ndetect=['{bad}']\ncommand=[\"x\"]");
+            assert!(parse_detectors(&toml).is_none(), "{bad}");
         }
         let many = NIX.repeat(MAX_DETECTORS + 1);
         assert!(parse_detectors(&many).is_none());

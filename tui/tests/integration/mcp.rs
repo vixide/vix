@@ -24,8 +24,9 @@ fn open_buffers_come_from_the_session_for_this_root_only() {
         ..Default::default()
     });
     session.set_workspace(vix::session::WorkspaceSession {
-        root: key.clone(),
-        files: vec![format!("{key}/a.rs")],
+        root: key,
+        // The session stores paths the way the platform writes them.
+        files: vec![root.join("a.rs").to_string_lossy().into_owned()],
         ..Default::default()
     });
     let path = root.join("session.toml");
@@ -46,7 +47,7 @@ fn open_buffers_come_from_the_session_for_this_root_only() {
 fn sqlite_schema_groups_columns_into_tables() {
     let root = scratch("sqlite");
     let file = root.join("app.db");
-    let url = format!("sqlite:{}?mode=rwc", file.display());
+    let url = vix::db::catalog::sqlite_url(&file.to_string_lossy(), "rwc");
     let mut seed = vix::db::session::Session::connect(&url, &[]).unwrap();
     seed.run("CREATE TABLE a (x INTEGER, y TEXT);").unwrap();
     seed.run("CREATE TABLE b (z REAL);").unwrap();
@@ -76,7 +77,7 @@ fn shared_db_server(
 ) {
     let root = scratch(name);
     let app = root.join("app.db");
-    let url = format!("sqlite:{}?mode=rwc", app.display());
+    let url = vix::db::catalog::sqlite_url(&app.to_string_lossy(), "rwc");
     let mut seed = vix::db::session::Session::connect(&url, &[]).unwrap();
     seed.run("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);")
         .unwrap();

@@ -24,7 +24,8 @@ impl SharedPath {
     /// Validate and normalize `raw`.
     ///
     /// Rejects: empty paths, absolute paths (a leading `/` or `\`, a drive
-    /// letter such as `C:`), any `..` component, control characters
+    /// letter such as `C:`, at the start or as any later component), any `..`
+    /// component, control characters
     /// (including NUL), and paths over [`MAX_PATH_BYTES`]. `.` components and
     /// repeated or trailing separators are dropped; `\` is treated as a
     /// separator so a Windows-style escape cannot slip through.
@@ -47,6 +48,12 @@ impl SharedPath {
             match part {
                 "" | "." => {}
                 ".." => return Err(PathProblem::ParentEscape.into()),
+                // Not only at the start: on Windows a later `C:` component is
+                // a drive prefix too, and `under` would leave the root for it
+                // (`a/C:` → `C:`, found by the proptest on Windows, T772).
+                other if has_drive_prefix(other) => {
+                    return Err(PathProblem::Absolute.into());
+                }
                 other => parts.push(other),
             }
         }
@@ -211,6 +218,15 @@ mod tests {
             problem(&"a".repeat(MAX_PATH_BYTES + 1)),
             PathProblem::TooLong
         );
+    }
+
+    #[test]
+    fn a_drive_component_anywhere_is_refused() {
+        for raw in ["a/C:", "a\\c:x", "\u{ae}\\a:", "x/y/Z:/z"] {
+            assert!(SharedPath::parse(raw).is_err(), "{raw:?}");
+        }
+        // A colon later in a name is not a drive.
+        assert!(SharedPath::parse("a/bb:c").is_ok());
     }
 
     #[test]

@@ -36,10 +36,14 @@ pub enum PathError {
 /// ```
 /// use std::path::Path;
 /// use vix_acp::policy::{contain, PathError};
+/// # #[cfg(unix)] {
+/// // On Windows `/w/proj/a.rs` has no drive, so it is not absolute and
+/// // `contain` refuses it with `NotAbsolute`.
 /// let root = Path::new("/w/proj");
 /// assert!(contain(root, "/w/proj/a.rs").is_ok());
 /// assert_eq!(contain(root, "/w/proj/../x"), Err(PathError::Traversal));
-/// assert_eq!(contain(root, "a.rs"), Err(PathError::NotAbsolute));
+/// # }
+/// assert_eq!(contain(Path::new("/w"), "a.rs"), Err(PathError::NotAbsolute));
 /// ```
 ///
 /// # Errors
