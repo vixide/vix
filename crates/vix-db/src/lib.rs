@@ -75,6 +75,7 @@ pub mod format;
 pub mod highlight;
 pub mod import;
 mod lifecycle;
+pub mod mcp_share;
 mod panels;
 pub mod params;
 pub mod plan;
@@ -252,8 +253,12 @@ pub const FORM_STORE: usize = FORM_FIELDS + 1;
 /// (T781). Its value is [`Browser::form_environment`].
 pub const FORM_ENVIRONMENT: usize = FORM_FIELDS + 2;
 
-/// Total navigable form rows (text fields plus the three cycled rows).
-pub const FORM_ROWS: usize = FORM_FIELDS + 3;
+/// Index of the **Share with MCP** row, toggled, not typed (T783). Its
+/// value is [`Browser::form_mcp_sharing`].
+pub const FORM_MCP_SHARED: usize = FORM_FIELDS + 3;
+
+/// Total navigable form rows (text fields plus the four cycled rows).
+pub const FORM_ROWS: usize = FORM_FIELDS + 4;
 
 /// The add/edit connection form.
 #[derive(Debug, Clone, Default)]
@@ -388,6 +393,15 @@ pub struct Browser {
     saved_environments: std::collections::BTreeMap<String, connect::Environment>,
     /// The environment picked on the add/edit form's environment row.
     pub form_environment: connect::Environment,
+    /// The names of the saved connections `vix --mcp` shares with MCP
+    /// clients (mirrors the persisted `db_mcp_shared` setting, T783). The
+    /// host fills it with [`Browser::set_mcp_shared`] and collects changes
+    /// with [`Browser::take_dirty_mcp_shared`].
+    mcp_shared: std::collections::BTreeSet<String>,
+    /// The shared names as last handed to or collected by the host.
+    saved_mcp_shared: std::collections::BTreeSet<String>,
+    /// The add/edit form's **Share with MCP** row.
+    pub form_mcp_sharing: mcp_share::Sharing,
     /// A password taken from a connection string pasted into the open form,
     /// until the form is saved or cancelled. Never persisted.
     form_password: Option<String>,
@@ -588,6 +602,9 @@ impl Browser {
             environments: std::collections::BTreeMap::new(),
             saved_environments: std::collections::BTreeMap::new(),
             form_environment: connect::Environment::Local,
+            mcp_shared: std::collections::BTreeSet::new(),
+            saved_mcp_shared: std::collections::BTreeSet::new(),
+            form_mcp_sharing: mcp_share::Sharing::Private,
             form_password: None,
             held_passwords: std::collections::HashMap::new(),
             grid_source: None,
@@ -738,6 +755,36 @@ impl Browser {
     ) {
         self.saved_environments.clone_from(&environments);
         self.environments = environments;
+    }
+
+    /// Whether the saved connection named `name` is shared with MCP clients
+    /// (T783; off unless the user turned it on).
+    #[must_use]
+    pub fn is_mcp_shared(&self, name: &str) -> bool {
+        self.mcp_shared.contains(name)
+    }
+
+    /// The MCP sharing flags if they changed since the last call (for the
+    /// host to persist as `db_mcp_shared`, one `name = true` entry per shared
+    /// connection), clearing the flag.
+    pub fn take_dirty_mcp_shared(&mut self) -> Option<std::collections::BTreeMap<String, bool>> {
+        if self.mcp_shared == self.saved_mcp_shared {
+            None
+        } else {
+            self.saved_mcp_shared.clone_from(&self.mcp_shared);
+            Some(self.mcp_shared.iter().map(|n| (n.clone(), true)).collect())
+        }
+    }
+
+    /// Load which saved connections are shared with MCP clients (the host's
+    /// `db_mcp_shared` setting); a `false` entry is the same as none.
+    pub fn set_mcp_shared(&mut self, shared: &std::collections::BTreeMap<String, bool>) {
+        self.mcp_shared = shared
+            .iter()
+            .filter(|(_, on)| **on)
+            .map(|(name, _)| name.clone())
+            .collect();
+        self.saved_mcp_shared.clone_from(&self.mcp_shared);
     }
 
     /// Whether the open form holds a password from a pasted connection
@@ -1539,6 +1586,52 @@ mod tests {
         b.handle_key(key(KeyCode::Char('d')), Pages::default());
         assert_eq!(
             b.take_dirty_environments(),
+            Some(std::collections::BTreeMap::new())
+        );
+    }
+
+    #[test]
+    fn share_row_is_off_by_default_and_saves_by_name() {
+        let mut b = browser();
+        b.set_mcp_shared(&std::collections::BTreeMap::from([(
+            "gone".to_string(),
+            false,
+        )]));
+        assert!(b.take_dirty_mcp_shared().is_none());
+        assert!(!b.is_mcp_shared("app"));
+        // A new connection starts unshared.
+        b.handle_key(key(KeyCode::Char('a')), Pages::default());
+        assert!(!b.form_mcp_sharing.is_shared());
+        b.handle_key(key(KeyCode::Esc), Pages::default());
+        // Turn sharing on for `app`.
+        b.handle_key(key(KeyCode::Char('e')), Pages::default());
+        while b.form.sel != FORM_MCP_SHARED {
+            b.handle_key(key(KeyCode::Down), Pages::default());
+        }
+        b.handle_key(key(KeyCode::Char(' ')), Pages::default());
+        assert!(b.form_mcp_sharing.is_shared());
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        assert!(b.is_mcp_shared("app"));
+        let shared = b.take_dirty_mcp_shared().expect("sharing changed");
+        assert_eq!(
+            shared,
+            std::collections::BTreeMap::from([("app".to_string(), true)])
+        );
+        assert!(
+            b.take_dirty_mcp_shared().is_none(),
+            "flag clears after take"
+        );
+        // Renaming carries it; deleting drops it.
+        b.handle_key(key(KeyCode::Char('e')), Pages::default());
+        assert!(b.form_mcp_sharing.is_shared());
+        type_into(&mut b, "2");
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        assert!(b.is_mcp_shared("app2"));
+        assert!(!b.is_mcp_shared("app"));
+        b.handle_key(key(KeyCode::Char('d')), Pages::default());
+        assert!(!b.is_mcp_shared("app2"));
+        assert_eq!(
+            b.take_dirty_mcp_shared(),
             Some(std::collections::BTreeMap::new())
         );
     }

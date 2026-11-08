@@ -326,6 +326,13 @@ pub struct Settings {
     /// connections confirm every write, even inside a transaction. Managed by
     /// the DB workbench's connection form.
     pub db_environments: std::collections::BTreeMap<String, Environment>,
+    /// Which saved database connections `vix --mcp` shares with MCP clients
+    /// (T783), by connection name: a `[db_mcp_shared]` table such as
+    /// `app = true`. A connection with no entry, or `false`, is not shared
+    /// and does not exist for MCP clients. Shared connections are opened
+    /// read-only, with credentials from `password_command` or the OS keyring
+    /// only. Managed by the DB workbench's connection form.
+    pub db_mcp_shared: std::collections::BTreeMap<String, bool>,
     /// The **IM** menu (T752, `spec/instant-message`): your nick, when to
     /// notify, where history lives, blocked nicks and IRC accounts. Written as
     /// an `[im]` table. Passwords are never stored here: an account's SASL
@@ -972,6 +979,7 @@ impl Default for Settings {
             coverage_path: String::new(),
             db_connections: Vec::new(),
             db_environments: std::collections::BTreeMap::new(),
+            db_mcp_shared: std::collections::BTreeMap::new(),
             im: ImSettings::default(),
             jupyter_confirm_evaluate: "untrusted".to_string(),
             jupyter_kernels: std::collections::BTreeMap::new(),
@@ -1296,6 +1304,10 @@ mod tests {
         let again: Settings = toml::from_str(&saved).unwrap();
         assert_eq!(again.db_connections, s.db_connections);
         assert!(again.db_environments.is_empty());
+        assert!(
+            again.db_mcp_shared.is_empty(),
+            "nothing is shared by default"
+        );
     }
 
     /// T584: the DB, debug-adapter and org-capture sections are plain data owned by
@@ -1318,6 +1330,9 @@ sslmode = "verify-full"
 
 [db_environments]
 prod = "production"
+
+[db_mcp_shared]
+prod = true
 
 [[debug_adapters]]
 adapter_id = "codelldb"
@@ -1357,6 +1372,7 @@ clock_in = true
             second.db_environments.get("prod"),
             Some(&crate::Environment::Production)
         );
+        assert_eq!(second.db_mcp_shared.get("prod"), Some(&true));
         assert_eq!(second.org_capture_templates, first.org_capture_templates);
         assert_eq!(
             second.debug_adapters[0].command,

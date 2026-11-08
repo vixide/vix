@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Read-only Model Context Protocol server core: JSON-RPC over stdio exposing a workspace's open buffers, symbols, outline, offline diagnostics and SQLite schema"
+description = "Read-only Model Context Protocol server core: JSON-RPC over stdio exposing a workspace's open buffers, symbols, outline, offline diagnostics and SQLite schema, and the saved DB connections the user shared"
 
 [dependencies]
 serde_json = { workspace = true }

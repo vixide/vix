@@ -179,6 +179,7 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.db_field_access"),
         t!("ui.db_field_store_keyring"),
         t!("ui.db_field_environment"),
+        t!("ui.db_field_mcp_shared"),
     ];
     let on_off = |on: bool| {
         if on {
@@ -202,6 +203,8 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
             }
         } else if i == crate::db::FORM_STORE {
             on_off(b.form.store_keyring).to_string()
+        } else if i == crate::db::FORM_MCP_SHARED {
+            on_off(b.form_mcp_sharing.is_shared()).to_string()
         } else if i == crate::db::FORM_ENVIRONMENT {
             crate::db::environment::badge(b.form_environment)
         } else {

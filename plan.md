@@ -34,7 +34,7 @@ now in that platform.
 **Status (2026-11-07).** The baseline above is historical. Phases 0–5 and
 Runs A–L, N, P and V are done; the workspace has 146 member crates and is
 versioned 2.0.2, released through dist on every channel except a public
-container image. `tasks.md` has 346 tasks ticked, 18 open and one half done
+container image. `tasks.md` has 347 tasks ticked, 17 open and one half done
 (T608), counting subtasks. Run M and Run O are now done except
 the open items listed in `tasks.md` § "Suggested execution order". Of the
 2026-10-28 plans,
@@ -45,7 +45,7 @@ LSP status, Large File Viewer, social cards, theme gallery, launch kit
 the install channels of T742 exist only as unverified templates, and
 T743's container image is built on every version tag but not public yet.
 Of Run S (IM), everything but the demo (T757) and Matrix (T758) is done.
-Of Run W (the DB workbench), T783 is in progress and T787 is open.
+Run W (the DB workbench) is done, T783 included; T787 is open.
 The live list is `tasks.md` § "Suggested execution order".
 
 ## Hard rules (apply to every task)
@@ -651,9 +651,10 @@ MySQL too, with no external tools. Full assessment:
 7. **Schema compare (T785)**, the largest task: diff two connections and
    write an ordered migration, PostgreSQL first.
 
-T783, sharing saved connections with MCP clients, is a decision for the
-maintainer: it relaxes two written MCP safety rules (no keyring, no sockets).
-Its design is in [`spec/mcp-server`](spec/mcp-server/index.md). Not taken:
+T783, sharing saved connections with MCP clients, relaxed two written MCP
+safety rules (no keyring, no sockets), so it waited for the maintainer, who
+accepted it; it is built opt-in per connection and read-only, and the new rules
+are in [`spec/mcp-server`](spec/mcp-server/index.md). Not taken:
 dbjoy's database copy (bundled `pg_dump`/`psql`, drops every schema in the
 target), an assistant that reads query results (Vix's assistant sees the
 schema only), and GUI-only conveniences.
