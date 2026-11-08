@@ -496,12 +496,13 @@ impl Editor {
     pub fn backspace(&mut self) {
         self.apply(Delete {});
     }
-    /// Forward delete (the character at the cursor).
+    /// Forward delete: at every caret, delete its pending selection, else
+    /// exactly the one character at the caret (never an indent unit). At the
+    /// end of the buffer it is a no-op, not a backspace. One undo step.
     pub fn delete(&mut self) {
-        // Implemented as move-right then backspace so it shares `Delete`'s
-        // selection, auto-pair and undo handling.
-        self.apply(MoveRight { shift: false });
-        self.apply(Delete {});
+        // Not "move right, then backspace": stepping right collapses a
+        // selection, and backspace in indentation removes a whole indent unit.
+        self.multi_delete(true);
     }
     /// Undo the last edit.
     pub fn undo(&mut self) {
@@ -581,5 +582,222 @@ impl Editor {
         self.apply(InsertText {
             text: text.to_string(),
         });
+    }
+}
+
+#[cfg(test)]
+mod forward_delete_tests {
+    //! Forward delete (`delete`, the catalog's `delete` action): it removes a
+    //! pending selection, else exactly the one character at the cursor —
+    //! never an indent unit, and never the character behind the cursor.
+
+    use crate::editor::Editor;
+
+    /// A Rust buffer (a known language, so backspace in indentation removes
+    /// the whole indent — the behaviour forward delete must not inherit).
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("rust", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    fn text(e: &Editor) -> String {
+        e.code_ref().get_content()
+    }
+
+    #[test]
+    fn deletes_the_char_at_the_cursor() {
+        let mut e = ed("abcd", 1);
+        e.delete();
+        assert_eq!(text(&e), "acd");
+        assert_eq!(e.get_cursor(), 1);
+    }
+
+    #[test]
+    fn deletes_a_pending_selection_whole() {
+        let mut e = ed("abcd", 0);
+        e.set_selection_range(0, 2);
+        e.delete();
+        assert_eq!(text(&e), "cd");
+        assert_eq!(e.get_cursor(), 0);
+        assert!(e.get_selection().is_none_or(|s| s.is_empty()));
+    }
+
+    #[test]
+    fn deletes_a_backward_selection_whole() {
+        let mut e = ed("abcd", 3);
+        e.set_selection_range(3, 1); // anchor 3, cursor 1
+        e.delete();
+        assert_eq!(text(&e), "ad");
+        assert_eq!(e.get_cursor(), 1);
+    }
+
+    #[test]
+    fn deletes_a_multi_line_selection_whole() {
+        let mut e = ed("ab\ncd\nef", 0);
+        e.set_selection_range(1, 7); // "b\ncd\ne"
+        e.delete();
+        assert_eq!(text(&e), "af");
+        assert_eq!(e.get_cursor(), 1);
+    }
+
+    #[test]
+    fn inside_space_indentation_deletes_one_space() {
+        let mut e = ed("    x", 2);
+        e.delete();
+        assert_eq!(text(&e), "   x");
+        assert_eq!(e.get_cursor(), 2);
+    }
+
+    #[test]
+    fn at_the_end_of_space_indentation_deletes_the_text_char() {
+        let mut e = ed("    xy", 4);
+        e.delete();
+        assert_eq!(text(&e), "    y");
+    }
+
+    #[test]
+    fn inside_tab_indentation_deletes_one_tab() {
+        let mut e = ed("\t\t\tx", 1);
+        e.set_indent(Some("\t".to_string()));
+        e.delete();
+        assert_eq!(text(&e), "\t\tx");
+        assert_eq!(e.get_cursor(), 1);
+    }
+
+    #[test]
+    fn backspace_in_indentation_still_removes_the_whole_indent() {
+        // The contrast case: backward delete keeps its indent-unit behaviour.
+        let mut e = ed("    x", 2);
+        e.backspace();
+        assert_eq!(text(&e), "  x");
+        assert_eq!(e.get_cursor(), 0);
+    }
+
+    #[test]
+    fn at_the_end_of_a_line_joins_the_next_line() {
+        let mut e = ed("ab\ncd", 2);
+        e.delete();
+        assert_eq!(text(&e), "abcd");
+        assert_eq!(e.get_cursor(), 2);
+    }
+
+    #[test]
+    fn at_the_end_of_a_crlf_line_removes_only_the_cr() {
+        // One character at a time, like the cursor moves.
+        let mut e = ed("ab\r\ncd", 2);
+        e.delete();
+        assert_eq!(text(&e), "ab\ncd");
+    }
+
+    #[test]
+    fn at_the_end_of_the_buffer_is_a_no_op() {
+        let mut e = ed("abc", 3);
+        e.delete();
+        assert_eq!(text(&e), "abc");
+        assert_eq!(e.get_cursor(), 3);
+        // Nothing happened, so there is nothing to undo.
+        e.undo();
+        assert_eq!(text(&e), "abc");
+    }
+
+    #[test]
+    fn in_an_empty_buffer_is_a_no_op() {
+        let mut e = ed("", 0);
+        e.delete();
+        assert_eq!(text(&e), "");
+        assert_eq!(e.get_cursor(), 0);
+    }
+
+    #[test]
+    fn deletes_one_multi_byte_char() {
+        let mut e = ed("aéb", 1);
+        e.delete();
+        assert_eq!(text(&e), "ab");
+        let mut e = ed("a😀b", 1);
+        e.delete();
+        assert_eq!(text(&e), "ab");
+    }
+
+    #[test]
+    fn deletes_one_wide_cjk_char() {
+        let mut e = ed("中文字", 1);
+        e.delete();
+        assert_eq!(text(&e), "中字");
+        assert_eq!(e.get_cursor(), 1);
+    }
+
+    #[test]
+    fn deletes_a_base_char_and_leaves_its_combining_mark() {
+        // The editor's unit is the `char` (cursor motion steps one `char`),
+        // so a combining mark is a character of its own.
+        let mut e = ed("e\u{301}x", 0);
+        e.delete();
+        assert_eq!(text(&e), "\u{301}x");
+        let mut e = ed("e\u{301}x", 1);
+        e.delete();
+        assert_eq!(text(&e), "ex");
+    }
+
+    #[test]
+    fn at_every_caret_deletes_one_char_or_its_selection() {
+        let mut e = ed("abcd\nefgh\nij", 1);
+        e.add_caret_at(6); // 'f'
+        e.add_caret_at(10); // 'i'
+        e.delete();
+        assert_eq!(text(&e), "acd\negh\nj");
+    }
+
+    #[test]
+    fn at_every_caret_never_deletes_an_indent_unit() {
+        let mut e = ed("    a\n    b", 1);
+        e.add_caret_at(7);
+        e.delete();
+        assert_eq!(text(&e), "   a\n   b");
+    }
+
+    #[test]
+    fn undo_restores_the_text_and_cursor() {
+        for (src, at, sel) in [
+            ("abcd", 1, None),
+            ("abcd", 0, Some((0, 2))),
+            ("ab\ncd\nef", 0, Some((1, 7))),
+            ("    x", 2, None),
+            ("ab\ncd", 2, None),
+            ("中文字", 1, None),
+        ] {
+            let mut e = ed(src, at);
+            if let Some((a, c)) = sel {
+                e.set_selection_range(a, c);
+            }
+            let before = e.get_cursor();
+            e.delete();
+            assert_ne!(text(&e), src, "{src:?} should change");
+            e.undo();
+            assert_eq!(text(&e), src, "undo of delete in {src:?}");
+            assert_eq!(e.get_cursor(), before, "undo cursor in {src:?}");
+            e.redo();
+            assert_ne!(text(&e), src, "redo of delete in {src:?}");
+        }
+    }
+
+    #[test]
+    fn multi_delete_forward_matches_the_single_caret_rules() {
+        // The Delete key with several carets calls `multi_delete(true)`.
+        let mut e = ed("    a\n    b", 2);
+        e.add_caret_at(8);
+        e.multi_delete(true);
+        assert_eq!(text(&e), "   a\n   b");
+
+        let mut e = ed("中文\ne\u{301}", 0);
+        e.add_caret_at(3);
+        e.multi_delete(true);
+        assert_eq!(text(&e), "文\n\u{301}");
+
+        // At the very end a caret is a no-op, not a backspace.
+        let mut e = ed("ab\ncd", 2);
+        e.add_caret_at(5);
+        e.multi_delete(true);
+        assert_eq!(text(&e), "abcd");
     }
 }
