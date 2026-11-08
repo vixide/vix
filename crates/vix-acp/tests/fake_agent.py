@@ -13,9 +13,15 @@ chooses the behavior:
   termin DIR CMD ARGS  like term, with DIR as the working directory
   term CMD ARGS  ask the client for a terminal running CMD ARGS, wait for it to
                  exit, fetch its output, release it, and log every reply
+  termcap N CMD ARGS   like term, with outputByteLimit N
+  termkill CMD ARGS    start CMD, kill it after 0.5 s, wait for it to exit and
+                 log "TERM killed" (the terminal is not released)
+  termrel CMD ARGS     start CMD, release it after 0.5 s without waiting, and
+                 log "TERM released"
 """
 import json
 import sys
+import time
 
 log = open(sys.argv[1], "a", buffering=1)
 next_id = [1000]
@@ -82,16 +88,29 @@ for line in sys.stdin:
             r = call("fs/write_text_file",
                      {"sessionId": sid, "path": word[1], "content": word[2]})
             log.write("WRITE " + ("error" if "error" in r else "ok") + "\n")
-        elif word[0] in ("term", "termin"):
+        elif word[0] in ("term", "termin", "termcap", "termkill", "termrel"):
             argv = text.split(" ")[1:]
             params = {"sessionId": sid}
             if word[0] == "termin":
                 params["cwd"] = argv.pop(0)
+            if word[0] == "termcap":
+                params["outputByteLimit"] = int(argv.pop(0))
             params["command"] = argv[0]
             params["args"] = argv[1:]
             r = call("terminal/create", params)
             if "error" in r:
                 log.write("TERM denied " + r["error"]["message"] + "\n")
+            elif word[0] == "termkill":
+                tid = r["result"]["terminalId"]
+                time.sleep(0.5)
+                call("terminal/kill", {"sessionId": sid, "terminalId": tid})
+                call("terminal/wait_for_exit", {"sessionId": sid, "terminalId": tid})
+                log.write("TERM killed\n")
+            elif word[0] == "termrel":
+                tid = r["result"]["terminalId"]
+                time.sleep(0.5)
+                call("terminal/release", {"sessionId": sid, "terminalId": tid})
+                log.write("TERM released\n")
             else:
                 tid = r["result"]["terminalId"]
                 w = call("terminal/wait_for_exit",

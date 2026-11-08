@@ -7586,6 +7586,17 @@ new action.
   terminals. Deferred, so T635 stays `[ ]`: Windows coverage of the fake-agent
   tests (needs a Windows machine), and live display of terminal output in the UI
   (the user sees the approved command only).
+  **Follow-up 2026-11-08 (`feat/t635-terminal-output`):** done: live display of
+  agent terminal output. A new pure `vix_acp::display` module (`sanitize`,
+  `TerminalViews`) holds what the user sees; the host refreshes each view on the
+  tick (only when `Terminal::output_generation` moved or the exit became known)
+  and both the plan tab and the docked plan pane end with a Terminals section:
+  command, status (running, exit code, signal, released), the capped output.
+  Control sequences are stripped before display (and from the approval
+  prompt's command line); a released view freezes. Tests: pure sanitize/view
+  tests, and fake-agent tests for live order, the byte cap, stripping, kill and
+  release. Still open, so T635 stays `[ ]`: Windows coverage of the fake-agent
+  tests (needs a Windows machine).
 - [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a
