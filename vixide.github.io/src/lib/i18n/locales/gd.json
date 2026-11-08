@@ -36,7 +36,7 @@
   "faq.2.q": "A bheil plugain a dhìth orm airson tòiseachadh?",
   "faq.2.a": "Chan eil. Tha a h-uile càil air an duilleag seo san aon fhaidhle dhùbailte <c>vix</c>. Tha sgriobtaichean Rhai ann airson na h-àithnean agad fhèin a chur ris, chan ann airson beàrnan a lìonadh.",
   "faq.3.q": "A bheil e ag obair thar SSH agus ann an tmux?",
-  "faq.3.a": "Tha. Is e prògram teirmineil a th' ann am Vix, mar sin ruith air a' mheaisean chèin e mar a dhèanadh tu le prògram sam bith eile. Fosglaidh Vix 2.0, nach deach fhoillseachadh fhathast, pasgan air meaisean eile bhon Vix ionadail agad thar SSH cuideachd (<c>vix ssh://host/path</c>, no Faidhle → Fosgail Cèin…). Tha sin deuchainneach.",
+  "faq.3.a": "Tha. Is e prògram teirmineil a th' ann am Vix, mar sin ruith air a' mheaisean chèin e mar a dhèanadh tu le prògram sam bith eile. Bho thionndadh 2.0, fosglaidh Vix pasgan air meaisean eile bhon Vix ionadail agad thar SSH cuideachd (<c>vix ssh://host/path</c>, no Faidhle → Fosgail Cèin…). Tha sin deuchainneach.",
   "faq.4.q": "An urrainn dhan chompanaidh agam a chleachdadh?",
   "faq.4.a": "Tagh an cead as fheàrr dhut às a' chòig: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 no GPL-3.0. Airson meaisean glaiste, chan eil an togail as lugha a' dèanamh ceanglaichean lìonraidh sam bith agus chan eil i a' tòiseachadh prògram sam bith eile.",
 

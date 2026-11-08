@@ -36,7 +36,7 @@
   "faq.2.q": "Do I need plugins to get started?",
   "faq.2.a": "No. Everything on this page ships in the one <c>vix</c> binary. Rhai scripts are there for adding your own commands, not for filling gaps.",
   "faq.3.q": "Does it work over SSH and in tmux?",
-  "faq.3.a": "Yes. Vix is a terminal program, so run it on the remote machine as you would any other. Vix 2.0, not released yet, also opens a folder on another machine from your local Vix over SSH (<c>vix ssh://host/path</c>, or File → Open Remote…). That is experimental.",
+  "faq.3.a": "Yes. Vix is a terminal program, so run it on the remote machine as you would any other. Since 2.0, Vix also opens a folder on another machine from your local Vix over SSH (<c>vix ssh://host/path</c>, or File → Open Remote…). That is experimental.",
   "faq.4.q": "Can my company use it?",
   "faq.4.a": "Pick whichever of five licenses suits you: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0. For locked-down machines, the minimal build makes no network connections and starts no other program.",
 

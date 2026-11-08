@@ -21,12 +21,13 @@ The site is for a visitor deciding in about 30 seconds whether to try Vix.
 The home page leads with what Vix is (a terminal text editor and IDE in
 Rust, with familiar Ctrl/Cmd keys and a menu bar rather than modal editing
 by default), a copyable install command, a real screenshot, a six-card
-"Why Vix" grid, a short "Coming in 2.0" list, recorded demos, the keys to
+"Why Vix" grid, a short "New in 2.0" list, recorded demos, the keys to
 start with, links to the documentation's `for-*-users` guides and feature
 comparison, the desktop GUIs, and the open-source/licensing facts.
 `/whats-new/` is the 2.0 launch page (T745): highlights, upgrading notes and
-an honest "not in 2.0 yet" list, drawn only from `CHANGELOG.md` and `tasks.md`
-and labelled as not released until 2.0 ships. `/features/` is the grouped feature list with an on-page contents nav, a
+an honest "not in 2.0 yet" list, drawn only from `CHANGELOG.md` and `tasks.md`.
+A version is labelled as not released until it is; 2.0 shipped on
+2026-11-06 and 2.0.2 is the current release. `/features/` is the grouped feature list with an on-page contents nav, a
 "New in 2.0" section, a theme gallery and every demo; `/install/` has every
 published install route (Homebrew, installer script, Linux packages,
 PowerShell, npm, cargo, direct download, the minimal build, the desktop
@@ -35,8 +36,8 @@ channels that are templates only and not yet published, and a first-run
 section. Every claim is checked against the main `vix`
 repo (its `index.md`, `docs/`, crate specs and `CHANGELOG.md`); no number or
 feature appears here that the repo doesn't state. Features from the
-`vix` changelog's `[Unreleased]` section (the coming 2.0) are labelled as
-not released yet wherever they appear, and the only performance numbers
+`vix` changelog's `[Unreleased]` section (work on `main` since the latest
+release) are labelled as not released yet wherever they appear, and the only performance numbers
 quoted are ones in the repo's `docs/performance/index.md`, with the machine
 and conditions it gives.
 
@@ -129,7 +130,7 @@ language picker, and on a first visit the picker's own navigator detection
 Translated: the hero (eyebrow, heading, tagline, install note, buttons),
 the at-a-glance labels, "Who it's for", the "switching editors" heading and
 link texts, the FAQ, the open-source section and the closing call to
-action. Not translated yet: the six "Why Vix" cards, "Coming in 2.0", the
+action. Not translated yet: the six "Why Vix" cards, "New in 2.0", the
 demo captions and alt text, the keys table, the comparison table, the
 desktop section, the header navigation and PickerBar labels, the footer,
 the shared copy button's "Copy"/"Copied", and the other pages
@@ -163,7 +164,7 @@ pnpm run check     # i18n catalog check, then svelte-check
 
 - `/` — home
 - `/features/` — the grouped feature list and every demo
-- `/whats-new/` — what is new in the unreleased 2.0: highlights, upgrading, and what is not done yet (launch kit, T745)
+- `/whats-new/` — what is new in 2.0: highlights, upgrading, and what is not done yet (launch kit, T745)
 - `/install/` — every install option, the minimal build, desktop GUIs, and first run
 
 ## License

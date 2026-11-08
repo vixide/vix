@@ -192,7 +192,7 @@ features).
 
 | Editor | Version | Command (config disabled) |
 | ------ | ------- | ------------------------- |
-| Vix | 2.0.0 (unreleased) | `vix FILE` with a fresh `HOME`; `large_file_mb = 1024` so the 100 MB file opens as text |
+| Vix | 2.0.0 pre-release (commits above) | `vix FILE` with a fresh `HOME`; `large_file_mb = 1024` so the 100 MB file opens as text |
 | Vim | 9.2 | `vim -u NONE -i NONE -n -N FILE` |
 | Neovim | 0.12.6 | `nvim --clean -n FILE` |
 | Helix | 25.07.1 | `hx -c EMPTY.toml FILE` |

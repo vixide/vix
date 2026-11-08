@@ -141,9 +141,10 @@ today.
 
 So that nothing here is a surprise:
 
-- The winget, Scoop, AUR, `cargo binstall`, Nix, mise and container-image
-  install channels have files in the repository but are **not published or
-  verified**; use Homebrew, the installer scripts, npm, a Linux package or
+- The winget, Scoop, AUR, Nix and mise install channels have files in the
+  repository but are **not published or verified**, `cargo binstall` is
+  untested, and the container image is built on every version tag but not
+  public yet; use Homebrew, the installer scripts, npm, a Linux package or
   Cargo.
 - There is no apt or dnf repository; update by installing the next package.
 - Matrix chat, WSL against a real Windows host (Kubernetes is verified on one local cluster only), and the full ACP agent

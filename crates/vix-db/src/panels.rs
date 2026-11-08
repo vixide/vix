@@ -586,8 +586,10 @@ impl Browser {
     ///
     /// `y`/`Y` copy the cell/row (tab-joined), `A` copies the result for AI
     /// as Markdown, `v` views the cell, `e` exports, `x` expands the row, `f`
-    /// follows a foreign key, `c` charts, `i` stages a cell edit and `W`
-    /// commits staged edits.
+    /// follows a foreign key, `c` charts, `i` stages a cell edit, `a` stages a
+    /// new row, `d` stages or restores a row's deletion, `u` discards a row's
+    /// staged changes, `W` commits them, and `F` opens the server-side row
+    /// search.
     pub(super) fn key_results(&mut self, key: KeyEvent, page: usize) {
         if self.grid.filtering {
             match key.code {
@@ -680,7 +682,7 @@ impl Browser {
         });
     }
 
-    /// Beautify the statement at the cursor in place (Alt+F), via
+    /// Beautify the statement at the cursor in place (Alt+Shift+F), via
     /// [`crate::format::beautify`]. A no-op on an empty buffer.
     pub fn format_at_cursor(&mut self) {
         if let Some(stmt) = self.query.statement_at_cursor() {

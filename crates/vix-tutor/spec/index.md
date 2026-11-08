@@ -161,7 +161,8 @@ small, natural follow-on (a `tutor_progress` confy-backed file, mirroring
 
 Lesson bodies are **English-only for v1**, plain files, not routed through
 `t!` — a deliberate choice, not an oversight. Six chapters of instructional
-prose translated into all 14 locales `locales/*.yml` already carries is a
+prose translated into the other 14 of the 15 languages `locales/*.yml`
+fully translates is a
 translation project in its own right (per-string `t!` keys would also
 fragment each lesson's prose across dozens of tiny keys, unlike the
 short, self-contained UI strings `t!` is built for), and it blocks nothing

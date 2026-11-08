@@ -270,9 +270,11 @@ changelog section; and every build tool and cross linker exists. The default and
 tag nothing. Uploading needs `--publish` and a typed line, `publish VERSION to
 github codeberg`, and requires the tag to exist already on both forges (`gh
 release create --verify-tag`), so an upload can never create one. A tag is made
-only by the separate `--tag` flag: a signed local tag, never pushed. `release.yml`
-stays the manual fallback; pushing a tag starts it, so the maintainer decides
-which path is the release. `scripts/packaging render VERSION --sums SHA256SUMS`
+only by the separate `--tag` flag: a signed local tag, never pushed. The normal
+release path is the tag-triggered `release.yml` (2.0.1 and 2.0.2 shipped through
+it, see [`spec/ci`](../ci/index.md)); this script is the local alternative, and
+pushing a tag starts `release.yml` either way, so the maintainer decides which
+path is the release. `scripts/packaging render VERSION --sums SHA256SUMS`
 consumes the checksums (nothing is published); the templates name the `dist`
 targets, which the Makefile does not build, so the handoff is partial. How-to:
 [`docs/release`](../../docs/release/index.md).
@@ -280,8 +282,9 @@ targets, which the Makefile does not build, so the handoff is partial. How-to:
 `scripts/test-release-local` tests the refusal paths, the dry run, signing and
 `--verify-dir`, the confirmation, and that no tag appears without `--tag`, in a
 throwaway repository with a generated key and stub `make`, `gh` and `tea` (no
-network); it runs in the `push` tier and above. Honest limits: never run for real,
-and the `tea` flags are from its documentation, not exercised against Codeberg.
+network); it runs in the `push` tier and above. It was used for real once, to
+build and sign 2.0.0's three archives. Honest limit: the `tea` flags are from its
+documentation, not exercised against Codeberg.
 
 ## Build caching (option 5, T764, implemented)
 

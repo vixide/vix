@@ -25,7 +25,8 @@ The drafts link to those; keep all three in agreement with the
 2. **Numbers come from the repository**, with their conditions
    ([Performance](../performance/index.md)). No comparisons with other editors.
 3. **Never present an unpublished install channel as working.** winget, Scoop,
-   AUR, `cargo binstall`, Nix, mise and the container image are not published.
+   AUR, Nix and mise are not published, `cargo binstall` is untested, and the
+   container image is built on every version tag but not public yet.
 4. **No outward action without approval.** Do not post, submit, email or tag
    anyone from these files.
 

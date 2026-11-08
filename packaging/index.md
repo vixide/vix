@@ -2,7 +2,8 @@
 
 Templates for install channels that Vix does **not publish yet** (T742,
 T743 in [`tasks.md`](../tasks.md)). Nothing here has been submitted
-anywhere. A channel moves into the main install list of
+anywhere, except that the container image is built and pushed to ghcr.io on
+every version tag, where the package is not public yet. A channel moves into the main install list of
 [`docs/getting-started`](../docs/getting-started/index.md) only after a
 maintainer has verified it on a real machine or CI runner and published it.
 
@@ -35,8 +36,8 @@ see [`dist-workspace.toml`](../dist-workspace.toml).
    and the three tokens above; set `PACKAGING_PUBLISH=true`.
 4. Submit the first winget-pkgs pull request by hand and wait for Microsoft's
    review; only then can `wingetcreate update` take over.
-5. Publish `vix-tui` to crates.io (for `cargo binstall`), make the ghcr.io
-   package public, and optionally submit to nixpkgs and mise's registry.
+5. Test `cargo binstall vix-tui` (the metadata is in the published 2.0.2
+   crate, untested), make the ghcr.io package public, and optionally submit to nixpkgs and mise's registry.
 6. Move each verified channel into the main install list of
    [`docs/getting-started`](../docs/getting-started/index.md), the README and
    the site's install page.
@@ -66,10 +67,10 @@ submitted (version, URLs, hashes) before submitting.
 
 - **File:** `[package.metadata.binstall]` in
   [`tui/Cargo.toml`](../tui/Cargo.toml).
-- **Publish:** nothing to submit. The metadata ships with the next
-  `cargo publish` of `vix-tui`; then `cargo binstall vix-tui` downloads the
-  release archive instead of compiling.
-- **Verify first:** after that publish, on macOS, Linux and Windows:
+- **Publish:** nothing to submit. The metadata is in the published
+  `vix-tui` 2.0.2 crate, so `cargo binstall vix-tui` should download the
+  release archive instead of compiling; nobody has tried it yet.
+- **Verify first:** on macOS, Linux and Windows:
   `cargo binstall --no-confirm --disable-strategies quick-install,compile
   vix-tui`, then `vix --version`. The two Windows overrides (`.zip`, binary
   at the root) matter most.
@@ -101,9 +102,8 @@ submitted (version, URLs, hashes) before submitting.
   ```
 
 - **Publish:** the workflow pushes `ghcr.io/vixide/vix:<tag>` and `:latest`
-  on a release tag. It has never run. Before the first tag, run it once by
-  hand (Actions → Container image → Run workflow), which builds both
-  architectures and pushes nothing. After the first tagged push, make the
+  on a release tag, and did for 2.0.2. The package is still
+  private, so an anonymous `docker pull` fails with HTTP 403. Make the
   package public (GitHub → vixide → Packages → vix → Package settings →
   Change visibility) and link it to the repository.
 

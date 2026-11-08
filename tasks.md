@@ -7695,6 +7695,15 @@ new action.
   `brew install vixide/homebrew-tap/vix` to `…/vix-tui`. (6) Add the GUIs
   to the getting-started install page (see `gui/spec/index.md`'s
   Distribution section) once their first release exists.
+  - **Status 2026-11-07 (2.0.2):** (1)-(2) and (4)-(6) are done. (2): the
+    getting-started page, the README and the site's install page use
+    `vix-tui-installer.sh`/`.ps1`, and 2.0.2 ships them. (4): 2.0.2's
+    `publish-homebrew-formula` (after the token was replaced and the job
+    re-run) and `publish-npm` jobs passed (run 42394890707). (5): moot, the
+    tap had no `vix` formula to rename, and the docs say
+    `brew install vixide/homebrew-tap/vix-tui`. (6): getting-started lists
+    the GUIs' Homebrew and installer commands. **Left:** (3), a decision
+    for the maintainer (the `vix` crate is still at 1.7.1).
 
 - [x] **T649 — Keep `vix-editor-core` semver-compatible after T598.**
   T598 changed the published `Editor::set_clipboard(&mut self, &str) ->
@@ -8358,7 +8367,7 @@ widgets, and a markup-hiding Markdown "compose" mode.
     (stub nfpm, in `scripts/check`) tests the selection and dependencies;
     `linux-packages.yml` install-tests the `.apk` on `alpine:3` and the
     `.rpm` on Rocky 8 and 9.
-- [ ] **T670a: confirm the musl release archive and packages on a real
+- [x] **T670a: confirm the musl release archive and packages on a real
   release.** Open follow-up split out of T670.
   - dist's generated release job has no static-binary check; only
     `linux-packages.yml` checks the archive, after the release exists. The
@@ -8373,6 +8382,14 @@ widgets, and a markup-hiding Markdown "compose" mode.
     `alpine:3.22` under amd64 emulation on arm64 Docker, not native x86_64. **Left:** real
     nfpm output and the install tests; `linux-packages.yml` has never run on a
     release. Happens with T771.
+  - **Done 2026-11-07 (2.0.2):** the `custom-linux-packages / linux-packages`
+    job of the 2.0.2 release run (42394890707) passed on an x86_64 runner: its
+    static check (`scripts/check-static-binary`) passed on dist's musl
+    archive, real nfpm built every package, and the install tests passed on
+    Debian 12, Ubuntu 22.04, Fedora 41, Arch, `alpine:3` (the `.apk`) and
+    Rocky 8 and 9 (the static `.rpm`), each running `vix --version`. The
+    `.apk` is still unsigned (`--allow-untrusted`); signing is a separate
+    follow-up, not part of this task.
 - [ ] **T669 — apt and dnf/yum repositories.** Today a user downloads a
   package file, so there is no `apt install vix-tui` from a configured
   source and no updates through `apt upgrade`/`dnf upgrade`.
@@ -9388,6 +9405,9 @@ editor by completion, diagnostics and never losing work first.
 - [ ] **T743 — Try without installing.** `nix run` (from T742) and a
   container image (`ghcr.io/vixide/vix`) so `docker run -it` opens Vix on
   a demo workspace; list both on the README and site. **Small–Medium.**
+  *Open 2026-11-07: the image is built and pushed on every version tag
+  (`2.0.2`, `latest`), but the ghcr.io package is private, so an anonymous
+  `docker pull` fails (HTTP 403); making it public is a maintainer setting.*
   - **Progress 2026-10-30** (`feat/t742-t743-install-channels`):
     - **Image:** `docker/Dockerfile` (multi-stage, `--profile dist`
       default features, non-root `vix` user, the demo workspace as a git
@@ -9838,7 +9858,7 @@ the generated `release.yml`.
 - [x] **T770 — Say what 2.0.0 has, and catch `release.yml` drift.** An interim
   install note in the README and Getting Started, a working 30-second command,
   and the `dist-workflow` CI job (`dist generate --mode ci --check`).
-- [ ] **T771 — A full release through dist.** Approved by the maintainer
+- [x] **T771 — A full release through dist.** Approved by the maintainer
   2026-11-06: tags `2.0.1-rc.1` then `2.0.1`, Homebrew and npm as real channels.
   - **Maintainer:** add the `HOMEBREW_TAP_TOKEN` and `NPM_TOKEN` Actions
     secrets; the repository and org have no secrets today. `vixide/homebrew-tap`
@@ -9892,12 +9912,17 @@ the generated `release.yml`.
     run with every channel able to publish. Tag it on `main`.
   - **`2.0.2` result (2026-11-07):** Release (129 files), installers, a static
     musl archive, `.deb`/`.rpm`/Arch packages for the TUI and every GUI, and the
-    first npm publish of `@vixide/vix`. Homebrew failed at checkout with `Bad
-    credentials`: the stored `HOMEBREW_TAP_TOKEN` was not a valid token. Re-run
-    `publish-homebrew-formula` once it is replaced. crates.io 2.0.2 publishing.
-    The README and Getting Started install note is reverted.
+    first npm publish of `@vixide/vix`. Homebrew first failed at checkout with
+    `Bad credentials`; the maintainer replaced `HOMEBREW_TAP_TOKEN`, the
+    re-run `publish-homebrew-formula` job passed, and the tap has five
+    formulas (vix-tui, vix-gpui, vix-egui, vix-iced, vix-slint). All 147
+    crates are on crates.io at 2.0.2. The README and Getting Started install
+    note is reverted.
   - **After `2.0.1`:** remove the note and restore the Homebrew command in the
     README and Getting Started; T644 (4) and (6); finish T670a; deploy the site.
+  - **Done 2026-11-07:** 2.0.2 shipped every channel except a public
+    container image (T743): the note is gone, T644 (4) and (6) and T670a are
+    done. Deploying the site is the maintainer's call.
 
 - [ ] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
@@ -10143,8 +10168,10 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-11-06** (321 tasks ticked, 13 open, T608 half done; counted as top-level checklist items).
-Runs A–L, N, O (except the two late findings), P and Q (except T718) are
+**Status as of 2026-11-07** (346 tasks ticked, 18 open, T608 half done;
+counted with `grep` over `- [x] **T`, `- [ ] **T` and `[~]`, subtasks
+included). 2.0.2 is released through dist on every channel except a public
+container image. Runs A–L, N, O (except T669), P, Q (except T718) and V are
 complete. What is open, by run:
 
 - **Run M:** T635 and T644 are open (T621, T623 and T624 done 2026-11-02; T621 leaves the optional colorPresentation write-back). T608 is half done (the
@@ -10154,30 +10181,36 @@ complete. What is open, by run:
   step 1 only (the `OVERLAYS` table, `spec/overlay-priority`); step 2 (an
   `Overlay` enum for mutually exclusive modals) is not done. T617 is done
   except function/data breakpoints, breakpoint persistence and keeping the
-  variables tree expanded across steps. T644: the crates were published at
-  1.8.0 (item 1); items 2-6 (installer names, Homebrew rename map, GUI
-  install docs) wait for the next release.
+  variables tree expanded across steps. T644: everything but item 3 (a
+  final `vix` 1.7.x pointing at `vix-tui`, the maintainer's decision) is
+  done with 2.0.2.
 - **Run O:** T659-T667 and T671 are done, three of them in part. T663: the
   Restore / Diff / Discard prompt for an interrupted save is not built (the
   copy is kept and a startup notice counts it). T665: stage/discard and the
   stash-chooser review, re-diffing, no-newline markers and stage-all are built; only the two-pane view is open. T667: user-defined
   detectors and the `.envrc`/mise trust prompt are now done; the detector's
-  own name is not yet shown in the status bar. T668 is done. The late findings T669 (apt/dnf repositories)
-  and T670 (the musl release build crashes) are open: T670's fix (static
-  non-PIE rustflags in `.cargo/config.toml` and `scripts/check-static-binary`
-  in CI) is written but unverified until a release build runs.
+  own name is not yet shown in the status bar. T668 is done. Of the late
+  findings, T670 (the musl release build crashes) and its follow-up T670a
+  are done: 2.0.2 shipped a static musl archive, and its `linux-packages`
+  job passed the static check and the Alpine and Rocky install tests. T669
+  (apt/dnf repositories) is open.
 - **Run Q:** only T718 (other authorities: dev containers,
   `docker exec`/`podman`) is open, and it is in progress.
-- **Run R:** T730-T735, T740, T741, T744 and T749 are done (T734's `jupyter`
-  feature is still opt-in; whether it joins `full` is the user's call).
-  T742 and T743 have their files
-  (templates and a container image) but no channel is verified or
-  published, so neither is done. T745-T748 are open; T746 and T747 need the
-  user's decisions.
+- **Run R:** T730-T735, T740, T741, T744, T745, T748 and T749 are done
+  (T734's `jupyter` feature is still opt-in; whether it joins `full` is the
+  user's call). T742 has its templates but no channel is verified or
+  published. T743's container image is built and pushed on every version
+  tag, but the ghcr.io package is not public yet, so it stays open. T746
+  and T747 are open and need the user's decisions.
+- **Run T:** the spikes T763 and T768 are open.
+- **Run V:** T770 and T771 are done (2.0.2 shipped through dist); T772
+  (the Windows test suite) and T773 (a flaky test) are open.
+- **Run W:** T774–T782 and T784–T786 are done; T783 is in progress and
+  T787 is open.
 - **Run S:** T750-T756 and T759 are done; T757 (docs, site and demo) and
   T758 (Matrix, spike first) are open.
 
-The recommended next order is in items 13–19 below.
+The recommended next order is in items 13–23 below.
 
 **Earlier status (2026-09-14)**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
@@ -10274,10 +10307,11 @@ CI-discovered rounds to get genuinely right on Windows).
 18. **Run R (improvements and promotion, 2026-10-29):** T670 and the
     Run M daily-driver items (T612, T614, T615, T625–T627, T629) first;
     then T730, T740, T732; T742 → T743 → T744 → T745. T746 and T747 wait
-    for the user's decisions. T730–T733, T740, T741, T744 and T749 are done;
-    T670 and the daily-driver items are still open. Next: verify each T742
-    channel on a real machine or runner (Nix first, since T743's `nix run`
-    needs it) and publish the container image.
+    for the user's decisions. T670, T730–T733, T740, T741, T744, T745, T748
+    and T749 are done. The container image is built and pushed on every
+    version tag but not public yet (a maintainer setting). Next: verify each
+    T742 channel on a real machine or runner (Nix first, since T743's `nix
+    run` needs it) and make the ghcr.io package public.
 
 19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
     then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
@@ -10289,11 +10323,15 @@ CI-discovered rounds to get genuinely right on Windows).
 
 21. **Run U (another GUI, 2026-11-06):** T769 (`vix-bui`). First version done;
     the limits in its spec are the follow-ups.
-22. **Run V (2.0.1 release repair, 2026-11-06):** T770, then T771.
+22. **Run V (2.0.1 release repair, 2026-11-06):** T770, then T771. **Both
+    done**: 2.0.2 (2026-11-07) shipped through dist on every channel except
+    a public container image. T772 and T773, found on the way, are open.
 23. **Run W (database workbench, from dbjoy, 2026-11-07):** T774 first (it
     stops a silent loss of an open transaction), then T775 and T776, T777
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
-    slices. T783 waits for the maintainer's decision.
+    slices. T783 waits for the maintainer's decision. **T774–T782 and
+    T784–T786 are done; T783 is in progress and T787 (found while building
+    Run W) is open.**
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
