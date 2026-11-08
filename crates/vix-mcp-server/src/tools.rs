@@ -1,5 +1,9 @@
-//! The six read-only tools: their `tools/list` descriptions and their
+//! The ten read-only tools: their `tools/list` descriptions and their
 //! implementations over the workspace and the [`Host`].
+//!
+//! The four `db_*` connection tools (T783) only shape JSON: the [`Host`]
+//! decides which saved connections are shared, checks statements, logs every
+//! call and opens connections read-only.
 //!
 //! Every tool is read-only and advertises `readOnlyHint: true`; every file
 //! access goes through [`crate::workspace`], so confinement to the root and
@@ -9,8 +13,8 @@
 //! ever sees them). Owning spec: `crates/vix-mcp-server/spec/index.md` and
 //! the repo-level `spec/mcp-server`.
 
-use crate::Host;
 use crate::workspace::{self, WorkspaceError, read_text, relative};
+use crate::{DbDescription, DbTables, Host, HostError, Rows, SharedConnection};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -26,6 +30,18 @@ pub const OUTLINE: &str = "outline";
 pub const DIAGNOSTICS: &str = "diagnostics";
 /// Tool name: SQLite schemas in the workspace.
 pub const DB_SCHEMA: &str = "db_schema";
+/// Tool name: the saved DB connections the user shared (T783).
+pub const DB_CONNECTIONS: &str = "db_connections";
+/// Tool name: the tables of a shared connection's schema.
+pub const DB_TABLES: &str = "db_tables";
+/// Tool name: one table of a shared connection.
+pub const DB_DESCRIBE: &str = "db_describe";
+/// Tool name: one read-only statement on a shared connection.
+pub const DB_QUERY: &str = "db_query";
+
+/// The most rows `db_query` returns (the host enforces it; reported in the
+/// result as `row_limit`).
+pub const DB_QUERY_ROW_LIMIT: usize = 100;
 
 /// The `tools/list` result: every tool with its input schema and read-only
 /// annotations.
@@ -51,6 +67,33 @@ pub fn list() -> Value {
         schema
     };
     let no_args = json!({"type": "object", "properties": {}, "additionalProperties": false});
+    // The DB connection tools: a required `connection` plus the given
+    // string arguments (`required` lists which of them are required too).
+    let db_args = |extra: &[(&str, &str)], required: &[&str]| {
+        let mut properties = serde_json::Map::new();
+        properties.insert(
+            "connection".into(),
+            json!({"type": "string", "description": "A connection name from db_connections."}),
+        );
+        for (name, description) in extra {
+            properties.insert(
+                (*name).to_string(),
+                json!({"type": "string", "description": description}),
+            );
+        }
+        let mut all = vec!["connection"];
+        all.extend_from_slice(required);
+        json!({
+            "type": "object",
+            "properties": properties,
+            "required": all,
+            "additionalProperties": false
+        })
+    };
+    let schema_arg = (
+        "schema",
+        "Schema name; omitted, the default (main for SQLite, public for PostgreSQL, the current database for MySQL).",
+    );
     let tool = |name: &str, title: &str, description: &str, schema: Value| {
         json!({
             "name": name,
@@ -77,8 +120,20 @@ pub fn list() -> Value {
              "Offline diagnostics (unresolved merge-conflict blocks) for one file, or every open buffer when path is omitted. Language-server diagnostics are not available in this headless mode.",
              path_arg(false)),
         tool(DB_SCHEMA, "Database schema",
-             "Tables, views and columns of the SQLite databases inside the workspace, opened read-only. Server databases needing passwords are never opened.",
+             "Tables, views and columns of the SQLite databases inside the workspace, opened read-only.",
+             no_args.clone()),
+        tool(DB_CONNECTIONS, "Shared database connections",
+             "The saved Vix database connections the user chose to share with MCP clients: name, kind, environment and database (never host, user or password). Every DB tool call is logged.",
              no_args),
+        tool(DB_TABLES, "Database tables",
+             "Tables, views and routines in one schema of a shared connection, and the names of its other schemas. Read-only.",
+             db_args(&[schema_arg], &[])),
+        tool(DB_DESCRIBE, "Describe table",
+             "Columns, primary key, indexes, foreign keys and constraints of one table or view on a shared connection, as the engine's catalog reports them. Read-only.",
+             db_args(&[schema_arg, ("table", "Table or view name.")], &["table"])),
+        tool(DB_QUERY, "Query database",
+             "Run one read-only statement (SELECT, WITH, EXPLAIN without ANALYZE, SHOW or VALUES) on a shared connection, inside a read-only transaction with a 30-second timeout that is rolled back. Returns at most 100 rows as text, with the column names, and says when rows were cut off.",
+             db_args(&[("sql", "One SQL statement.")], &["sql"])),
     ]})
 }
 
@@ -97,6 +152,15 @@ pub enum ToolError {
     PathNotString,
     /// The workspace boundary refused the path, or the file could not be read.
     Workspace(WorkspaceError),
+    /// A required string argument (named) is absent or not a string.
+    MissingArgument(&'static str),
+    /// An optional argument (named) is present but not a string.
+    NotAString(&'static str),
+    /// This build has no database support (the `sql` capability).
+    NoSqlCapability,
+    /// The host failed (a refused statement, an unshared connection, a
+    /// database error); its `Display` text is the message.
+    Host(HostError),
 }
 
 impl std::fmt::Display for ToolError {
@@ -106,6 +170,10 @@ impl std::fmt::Display for ToolError {
             Self::MissingPath => f.write_str("missing string argument: path"),
             Self::PathNotString => f.write_str("argument path must be a string"),
             Self::Workspace(e) => e.fmt(f),
+            Self::MissingArgument(name) => write!(f, "missing string argument: {name}"),
+            Self::NotAString(name) => write!(f, "argument {name} must be a string"),
+            Self::NoSqlCapability => f.write_str("this vix build has no `sql` capability"),
+            Self::Host(e) => e.fmt(f),
         }
     }
 }
@@ -114,6 +182,7 @@ impl std::error::Error for ToolError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Workspace(e) => Some(e),
+            Self::Host(e) => Some(e.as_ref()),
             _ => None,
         }
     }
@@ -160,8 +229,126 @@ pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<
         }
         DIAGNOSTICS => diagnostics(root, host, args),
         DB_SCHEMA => Ok(db_schema(root, host)),
+        DB_CONNECTIONS => db_connections(host),
+        DB_TABLES => {
+            let connection = required(args, "connection")?;
+            let schema = optional(args, "schema")?;
+            let tables = host_result(host.db_tables(connection, schema))?;
+            Ok(tables_json(connection, &tables))
+        }
+        DB_DESCRIBE => {
+            let connection = required(args, "connection")?;
+            let table = required(args, "table")?;
+            let schema = optional(args, "schema")?;
+            let description = host_result(host.db_describe(connection, schema, table))?;
+            Ok(describe_json(connection, &description))
+        }
+        DB_QUERY => {
+            let connection = required(args, "connection")?;
+            let sql = required(args, "sql")?;
+            let rows = host_result(host.db_query(connection, sql))?;
+            Ok(query_json(connection, &rows))
+        }
         other => Err(ToolError::UnknownTool(other.to_string())),
     }
+}
+
+/// The string argument `name`, required.
+fn required<'a>(args: &'a Value, name: &'static str) -> Result<&'a str, ToolError> {
+    args.get(name)
+        .and_then(Value::as_str)
+        .ok_or(ToolError::MissingArgument(name))
+}
+
+/// The string argument `name`, optional (`null` counts as absent).
+fn optional<'a>(args: &'a Value, name: &'static str) -> Result<Option<&'a str>, ToolError> {
+    match args.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s)),
+        Some(_) => Err(ToolError::NotAString(name)),
+    }
+}
+
+/// A host answer: `None` is a build without database support.
+fn host_result<T>(answer: Option<Result<T, HostError>>) -> Result<T, ToolError> {
+    match answer {
+        None => Err(ToolError::NoSqlCapability),
+        Some(result) => result.map_err(ToolError::Host),
+    }
+}
+
+/// The `db_connections` tool. Without database support the list is empty
+/// and says why, like `db_schema`.
+fn db_connections<H: Host>(host: &H) -> Result<Value, ToolError> {
+    match host.shared_connections() {
+        None => Ok(json!({
+            "connections": [],
+            "error": ToolError::NoSqlCapability.to_string(),
+        })),
+        Some(result) => Ok(connections_json(&result.map_err(ToolError::Host)?)),
+    }
+}
+
+/// `db_connections` JSON: `{connections: [{name, kind, environment, database}]}`.
+#[must_use]
+pub fn connections_json(connections: &[SharedConnection]) -> Value {
+    json!({"connections": connections.iter().map(|c| json!({
+        "name": c.name,
+        "kind": c.kind,
+        "environment": c.environment,
+        "database": c.database,
+    })).collect::<Vec<_>>()})
+}
+
+/// One result set as `{columns, rows, truncated}`.
+#[must_use]
+pub fn rows_json(rows: &Rows) -> Value {
+    json!({"columns": rows.columns, "rows": rows.rows, "truncated": rows.truncated})
+}
+
+/// `db_tables` JSON: `{connection, schema, schemas, objects: [{name, kind}],
+/// truncated}`.
+#[must_use]
+pub fn tables_json(connection: &str, tables: &DbTables) -> Value {
+    json!({
+        "connection": connection,
+        "schema": tables.schema,
+        "schemas": tables.schemas,
+        "objects": tables.objects.iter()
+            .map(|(name, kind)| json!({"name": name, "kind": kind}))
+            .collect::<Vec<_>>(),
+        "truncated": tables.truncated,
+    })
+}
+
+/// `db_describe` JSON: `{connection, schema, table, columns, primary_key,
+/// indexes, foreign_keys, constraints}`, each report as [`rows_json`].
+#[must_use]
+pub fn describe_json(connection: &str, d: &DbDescription) -> Value {
+    json!({
+        "connection": connection,
+        "schema": d.schema,
+        "table": d.table,
+        "columns": rows_json(&d.columns),
+        "primary_key": rows_json(&d.primary_key),
+        "indexes": rows_json(&d.indexes),
+        "foreign_keys": rows_json(&d.foreign_keys),
+        "constraints": rows_json(&d.constraints),
+    })
+}
+
+/// `db_query` JSON: `{connection, columns, rows, row_count, row_limit,
+/// truncated}`.
+#[must_use]
+pub fn query_json(connection: &str, rows: &Rows) -> Value {
+    json!({
+        "connection": connection,
+        "columns": rows.columns,
+        "rows": rows.rows,
+        "row_count": rows.rows.len(),
+        "row_limit": DB_QUERY_ROW_LIMIT,
+        "truncated": rows.truncated,
+    })
 }
 
 /// The `path` argument, required: absent or non-string is

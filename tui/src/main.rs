@@ -89,9 +89,10 @@ fn query_background_colour() -> Option<(u8, u8, u8)> {
 }
 
 /// The modes that print or serve and exit before anything else runs (no
-/// settings load, which would create `config.toml`; no terminal, clipboard
-/// or keyring): `--version`, `--remote-agent` and `--mcp`. Returns whether
-/// one ran; a failed server exits with status 1.
+/// settings load, which would create `config.toml`; no terminal or
+/// clipboard; the keyring only for `--mcp`, and only when an MCP client uses
+/// a shared DB connection, T783): `--version`, `--remote-agent` and
+/// `--mcp`. Returns whether one ran; a failed server exits with status 1.
 fn run_early_modes(cli: &Cli) -> bool {
     if cli.version {
         if cli.json {

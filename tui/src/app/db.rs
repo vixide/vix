@@ -75,6 +75,7 @@ impl App {
         if self.db.is_none() {
             let mut browser = crate::db::Browser::new(self.settings.db_connections.clone());
             browser.set_environments(self.settings.db_environments.clone());
+            browser.set_mcp_shared(&self.settings.db_mcp_shared);
             browser.history = crate::db::store::load_history();
             browser.saved = crate::db::store::load_saved();
             self.db = Some(browser);
@@ -115,12 +116,19 @@ impl App {
             .db
             .as_mut()
             .and_then(crate::db::Browser::take_dirty_environments);
-        if conns.is_some() || envs.is_some() {
+        let shared = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_mcp_shared);
+        if conns.is_some() || envs.is_some() || shared.is_some() {
             if let Some(conns) = conns {
                 self.settings.db_connections = conns;
             }
             if let Some(envs) = envs {
                 self.settings.db_environments = envs;
+            }
+            if let Some(shared) = shared {
+                self.settings.db_mcp_shared = shared;
             }
             self.store_settings_or_warn();
         }

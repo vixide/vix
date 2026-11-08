@@ -8,7 +8,7 @@ through libpq and bundles `pg_dump` and `psql` for backups and database
 copies.
 
 This page records what was read, what Vix already has, what Vix should take,
-and what it should not. Status as of 2026-11-07: T774–T782 and T784–T786 are built; T783 waits for the maintainer (see each task in `tasks.md`); the
+and what it should not. Status as of 2026-11-07: T774–T786 are all built (see each task in `tasks.md`); the
 "Vix today" column below records what Vix had when this was written. The
 resulting work is Run W in
 [`tasks.md`](../../tasks.md) (T774–T786) and [`plan.md`](../../plan.md). The
@@ -55,7 +55,7 @@ the schema and never a row of data.
 | 13 | Schema compare between two connections, with migration SQL in an order that runs; destructive changes start unchecked, risky ones are flagged; run in one transaction | Nothing | T785 |
 | 14 | Open or drag a `.sql` file into a query tab; psql-only commands (`\copy`, `\connect`) flagged before anything runs | `vix-edit-sql` edits `.sql` files but does not run them | T786 |
 
-## Needs a decision: databases over MCP
+## Decided and built: databases over MCP (T783)
 
 dbjoy lets Claude Code and other MCP clients use the connections the user
 chooses, with the saved password and SSH tunnel, through four read-only
@@ -65,12 +65,16 @@ Its safeguards: every connection starts unshared; only `SELECT`, `WITH`,
 transaction with a 30-second timeout and a row cap; and every request is
 logged where the user can see it.
 
-`vix --mcp` today offers only SQLite files inside the workspace, and its
-spec says why: the server "never reads the OS keyring" and "nothing in this
-mode opens a socket". Sharing a PostgreSQL or MySQL connection needs both.
-It would be a useful feature, but it relaxes two written safety rules, so it
-is proposed as T783 for the maintainer to accept or reject, with the design
-in [`spec/mcp-server`](../mcp-server/index.md#proposed-shared-database-connections-t783).
+`vix --mcp` used to offer only SQLite files inside the workspace, because
+its spec said the server "never reads the OS keyring" and "nothing in this
+mode opens a socket", and sharing a PostgreSQL or MySQL connection needs
+both. The maintainer accepted T783, which narrows those two rules to
+connections the user marks shared: `db_connections`, `db_tables`,
+`db_describe` and `db_query`, with dbjoy's safeguards (opt-in per
+connection, the same five statement kinds, a read-only transaction with a
+30-second timeout, 100 rows, every call logged), credentials without
+prompts, and stdio only — no HTTP listener. The design is in
+[`spec/mcp-server`](../mcp-server/index.md#shared-database-connections-t783).
 
 ## Not taken
 

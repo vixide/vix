@@ -139,6 +139,50 @@ fn run_buffer_in_workbench_loads_and_runs_the_buffer() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// T783: the connection form's **Share with MCP** row is off for a new
+/// connection; turning it on saves a `[db_mcp_shared]` entry by name, and
+/// `vix --mcp`'s host then lists the connection.
+#[test]
+fn share_with_mcp_row_saves_a_db_mcp_shared_entry() {
+    let dir = unique_dir("db-mcp-share");
+    let config = dir.join("config.toml");
+    let _ = fs::remove_file(&config);
+    let mut app = app_at(&dir).with_settings_path(&config);
+    app.run_action("db.connections");
+    app.on_key(key('a'));
+    for c in "notes".chars() {
+        app.on_key(key(c));
+    }
+    assert!(
+        !app.db.as_ref().unwrap().form_mcp_sharing.is_shared(),
+        "off by default"
+    );
+    for _ in 0..vix::db::FORM_MCP_SHARED {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    app.on_key(key(' '));
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.settings.db_mcp_shared.get("notes"), Some(&true));
+    let saved = fs::read_to_string(&config).expect("settings were written");
+    assert!(saved.contains("[db_mcp_shared]"), "{saved}");
+    assert!(saved.contains("notes = true"), "{saved}");
+
+    #[cfg(feature = "sql")]
+    {
+        use vix_mcp_server::Host as _;
+        let host = vix::mcp::McpHost {
+            settings_path: Some(config),
+            db_log_path: Some(dir.join("mcp-db.log")),
+            ..Default::default()
+        };
+        let shared = host.shared_connections().unwrap().unwrap();
+        assert_eq!(shared.len(), 1);
+        assert_eq!(shared[0].name, "notes");
+        assert_eq!(shared[0].kind, "sqlite");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// T781: a connection string pasted into the DB connection form fills it, the
 /// environment row cycles to production, and the saved settings file holds the
 /// connection and its environment but never the pasted password.

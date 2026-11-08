@@ -246,6 +246,7 @@ plpgsql
 pgcrypto
 createdb
 trgm
+analyse
 
 # Database workbench (spec/db)
 sqlx

@@ -10006,13 +10006,14 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   User-initiated only; the assistant's schema-only rule is unchanged, and
   the spec says why.
   Done 2026-11-07: key `A`. Column types appear for table previews only; arbitrary statements would need a new `session::Chunk` variant (a semver break), deferred to the next major version.
-- [ ] **T783 — Decision: share saved connections over MCP.** Needs the
+- [x] **T783 — Decision: share saved connections over MCP.** Needs the
   maintainer's yes or no, because it relaxes two MCP safety rules (no
   keyring reads, no sockets). Design and safeguards in
   [`spec/mcp-server`](spec/mcp-server/index.md): opt-in per connection,
   credentials without prompts, read-only statements in a read-only
   transaction with a 30-second timeout and a 100-row cap, every call
   logged, stdio only.
+  Done 2026-11-07 (accepted): `[db_mcp_shared]` settings table and a **Share with MCP** form row; `db_connections`/`db_tables`/`db_describe`/`db_query` via `vix_db::mcp_share`; log `mcp-db.log` beside the session file, rotated at 1 MiB. SQLite's timeout is client-side only (sqlx `Any` cannot interrupt), and MCP calls do not appear in the workbench query log.
 - [x] **T784 — Whole-table export from one snapshot.** CSV, JSON or NDJSON per
   table, or one SQL file of `INSERT`s in foreign-key order with sequences
   reset, streamed to disk inside one read-only snapshot transaction.
@@ -10168,7 +10169,7 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-11-07** (346 tasks ticked, 18 open, T608 half done;
+**Status as of 2026-11-08** (347 tasks ticked, 17 open, T608 half done;
 counted with `grep` over `- [x] **T`, `- [ ] **T` and `[~]`, subtasks
 included). 2.0.2 is released through dist on every channel except a public
 container image. Runs A–L, N, O (except T669), P, Q (except T718) and V are
@@ -10329,9 +10330,8 @@ CI-discovered rounds to get genuinely right on Windows).
 23. **Run W (database workbench, from dbjoy, 2026-11-07):** T774 first (it
     stops a silent loss of an open transaction), then T775 and T776, T777
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
-    slices. T783 waits for the maintainer's decision. **T774–T782 and
-    T784–T786 are done; T783 is in progress and T787 (found while building
-    Run W) is open.**
+    slices; T783 (accepted by the maintainer) last. **All of Run W (T774–T786)
+    is done; T787 (found while building Run W) is open.**
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
