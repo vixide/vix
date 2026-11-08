@@ -86,6 +86,22 @@ Until T753 the soft-wrap renderer drew only the bar, so a breakpoint or the
 stopped line was missing there; both renderers now share
 `draw_gutter_sign`.
 
+## Forward delete
+
+`delete` (the catalog's `delete` action) is `multi_delete(true)`, so it
+behaves the same with one caret or several, in one undo step:
+
+- A caret with a pending selection deletes the whole selection, single- or
+  multi-line, forward or backward.
+- A caret with no selection deletes exactly the one `char` at the caret —
+  the unit cursor motion steps — so a multi-byte or wide (CJK) character
+  goes whole, and a combining mark counts as a character of its own.
+- In leading indentation it deletes one space or tab, never an indent unit
+  (only backspace removes a whole indent). At the end of a line it joins the
+  next line (a CRLF line loses its `\r` first); at the end of the buffer it
+  is a no-op, never a backspace.
+- Undo restores the text and the cursor from before the delete.
+
 ## Multiple carets (T622)
 
 `multicursor.rs` keeps a primary caret (`cursor` + `selection`) and zero or
