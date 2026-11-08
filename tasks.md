@@ -10032,7 +10032,7 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   `\connect`, `\i` …) before anything runs, listing their lines.
   Done 2026-11-07: `Ctrl+P`, and action `db.run_buffer`. The meta-command check runs in Execute All (`F9`) too. `$$` bodies are still split on `;` (pre-existing).
 
-- [ ] **T787 — Decode every common column type.** Found while building Run W:
+- [x] **T787 — Decode every common column type.** Found while building Run W:
   sqlx's `Any` driver decodes only text, numeric, boolean and byte types, so a
   PostgreSQL `timestamp`, `numeric`, `json`, array or `uuid` column, and a
   SQLite column declared `BOOLEAN`, `DATE` or `DATETIME`, fails a table preview
@@ -10041,6 +10041,12 @@ engine-gated test where PostgreSQL or MySQL behaves differently.
   free-form queries), or a typed connection per engine (`PgConnection`,
   `MySqlConnection`, `SqliteConnection`) behind the session, which would also
   unlock PostgreSQL notices (T775). Spike first, then choose.
+  **Done** (`feat/t787-db-column-types`): typed per-engine connections
+  (private `conn` module) that read each value as the server's own text
+  (`raw_sql` gets text format on PostgreSQL and MySQL), no new dependencies,
+  sqlx `any` feature dropped, plan tree back on `FORMAT JSON`; notices are
+  still unreachable (sqlx 0.9.0 has no hook). Spike in the vix-db spec,
+  "Column types".
 
 **Ideas backlog (from the same reading):** an opt-in, per-connection mode in
 which the assistant may run read-only queries and see their results, with an
@@ -10207,7 +10213,7 @@ complete. What is open, by run:
 - **Run V:** T770 and T771 are done (2.0.2 shipped through dist); T772
   (the Windows test suite) and T773 (a flaky test) are open.
 - **Run W:** T774–T782 and T784–T786 are done; T783 is in progress and
-  T787 is open.
+  T787 is done.
 - **Run S:** T750-T756 and T759 are done; T757 (docs, site and demo) and
   T758 (Matrix, spike first) are open.
 
@@ -10331,7 +10337,7 @@ CI-discovered rounds to get genuinely right on Windows).
     stops a silent loss of an open transaction), then T775 and T776, T777
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
     slices; T783 (accepted by the maintainer) last. **All of Run W (T774–T786)
-    is done; T787 (found while building Run W) is open.**
+    is done; T787 (found while building Run W) is done too.**
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

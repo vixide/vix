@@ -4,7 +4,7 @@
 //! password — passwords are never serialized; the host prompts for one at
 //! connect time and keeps it only in memory. [`url`] renders the connection
 //! (plus that in-memory password) as the `sqlite:` / `postgres:` / `mysql:`
-//! URL that [`crate::session`] hands to sqlx's `Any` driver.
+//! URL that [`crate::session`] hands to the engine's sqlx driver.
 //!
 //! The [`Connection`], [`Kind`] and [`Environment`] types themselves are defined in the
 //! `vix-settings` crate (they are persisted in the settings file) and

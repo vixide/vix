@@ -722,7 +722,7 @@ impl Browser {
             .map(String::as_str)
             .collect::<Vec<_>>()
             .join("\n");
-        let plan = crate::plan::parse_yaml(&text).or_else(|| crate::plan::parse_json(&text))?;
+        let plan = crate::plan::parse_json(&text).or_else(|| crate::plan::parse_yaml(&text))?;
         let (headers, rows, marks) = crate::plan::grid(&plan);
         self.grid.set(headers, rows.clone());
         self.plan_marks = Some((rows, marks));

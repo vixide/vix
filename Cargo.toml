@@ -125,7 +125,7 @@ tree-sitter-rust = { version = "0.24" }
 tree-sitter-toml-ng = { version = "0.7.0" }
 tree-sitter-typescript = { version = "0.23" }
 tree-sitter-yaml = { version = "0.7" }
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "sqlite", "postgres", "mysql"] }
 tokio = { version = "1.54.1", features = ["rt", "net", "time", "sync", "macros"] }
 futures-util = { version = "0.3", default-features = false }
 mimalloc = "0.1"

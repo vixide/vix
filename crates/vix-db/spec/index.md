@@ -50,9 +50,10 @@ Results Display
 ## Implementation notes
 
 Implemented in the `crate::db` module tree; the **DB** menu sits after **AI**
-(mnemonic `Alt+D`). Engines are reached through embedded [sqlx] drivers via
-its runtime `Any` driver — `SQLite` (bundled), and pure-Rust
-`PostgreSQL`/`MySQL` over rustls — so no external client tools are needed.
+(mnemonic `Alt+D`). Engines are reached through embedded [sqlx] drivers,
+each engine's own (see "Column types" below for why not sqlx's runtime `Any`
+driver) — `SQLite` (bundled), and pure-Rust `PostgreSQL`/`MySQL` over
+rustls — so no external client tools are needed.
 Each workbench connection holds **one persistent connection** on a dedicated
 worker thread (`db::session`, a current-thread tokio runtime behind blocking
 channels), which means session state — temporary tables, `search_path`, and
@@ -179,8 +180,8 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
 - **EXPLAIN / EXPLAIN ANALYZE** (`F6` / `F7`; `EXPLAIN QUERY PLAN` on SQLite)
   with a plan-doctor insight flagging full table scans per engine dialect.
 - **Plan tree** (T776, from [dbjoy](https://github.com/agustind/dbjoy); module
-  `plan`) — on PostgreSQL, `F6` / `F7` send `EXPLAIN (FORMAT YAML)` /
-  `EXPLAIN (ANALYZE, FORMAT YAML)` and the results pane shows the plan as a
+  `plan`) — on PostgreSQL, `F6` / `F7` send `EXPLAIN (FORMAT JSON)` /
+  `EXPLAIN (ANALYZE, FORMAT JSON)` and the results pane shows the plan as a
   tree, one row per node in pre-order with its title indented by depth (node
   type, join type, index and relation with alias, `Update on t` for a
   `ModifyTable`, `InitPlan 1: …` for an init plan or sub-plan) and its key details (index /
@@ -195,10 +196,11 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
   by 10× or more either way is noted with the factor and drawn yellow; a node
   that never ran is noted. The full-scan hint still applies (the titles say
   `Seq Scan`); otherwise the status line gives the node count and, with
-  `ANALYZE`, the execution time. YAML, not the planned `FORMAT JSON`,
-  because sqlx's `Any` driver cannot decode the `json` column `FORMAT JSON`
-  returns while YAML comes back as `text`; `plan` reads both formats into the
-  same model (a small reader for the YAML subset `explain.c` writes) and is
+  `ANALYZE`, the execution time. T776 shipped with `FORMAT YAML`, because
+  sqlx's `Any` driver could not decode the `json` column `FORMAT JSON`
+  returns; since T787 reads every column as text, the workbench asks for
+  JSON, as first planned, and tries the JSON reader first. `plan` reads both
+  formats into the same model (a small reader for the YAML subset `explain.c` writes) and is
   unit-tested on hand-recorded JSON and YAML plans. A plan that does not parse
   is left as the raw text. MySQL and SQLite keep the text plan unchanged, and
   the AI assistant's validation and optimize paths still use the text
@@ -316,7 +318,8 @@ and 2.
 - **Cancel keeps the session (T774).** When a session connects, the worker
   reads the server's id for the connection (`SELECT pg_backend_pid()` on
   PostgreSQL, `SELECT CAST(CONNECTION_ID() AS SIGNED)` on MySQL; the cast is
-  needed because sqlx's `Any` row mapping rejects `BIGINT UNSIGNED`) and the
+  was needed because sqlx's `Any` row mapping rejected `BIGINT UNSIGNED`
+  before T787, and is harmless now) and the
   session keeps a `CancelHandle`: its connection URL plus the cancel
   statement, `SELECT pg_cancel_backend(<pid>)` or `KILL QUERY <id>`
   (`session::backend_id_sql`, `session::cancel_sql`, pure and unit-tested).
@@ -356,8 +359,8 @@ and 2.
 - **Server notices: not built (T775 spike).** Notices (`RAISE NOTICE`,
   warnings) cannot be reached through sqlx 0.9.0, so they are still dropped.
   The spike found:
-  - *Positions survive the `Any` driver.* `sqlx-postgres`'s
-    `AnyConnectionBackend::fetch_many` passes errors through unchanged, so a
+  - *Positions survive the driver.* `sqlx-postgres` (through `Any` before
+    T787, directly since) passes errors through unchanged, so a
     `sqlx::Error::Database` still boxes the engine's `PgDatabaseError`, and
     `try_downcast_ref::<sqlx::postgres::PgDatabaseError>()` followed by
     `position()` gives `PgErrorPosition::Original(n)`. The worker stores
@@ -370,15 +373,17 @@ and 2.
     `sqlx::postgres::notice` and reads the next message. `PgConnection` has
     no notice handler or channel, and `AnyConnection` would not expose one
     anyway (its backend is a private `Box<dyn AnyConnectionBackend>`).
+    T787 moved the session to a typed `PgConnection`, which removes the
+    second obstacle but not the first: still no public notice hook in sqlx
+    0.9.0, so notices stay out of reach.
   - *Why not capture the log event.* A process-global `log` or `tracing`
     subscriber filtering that target would see every session's notices
     with nothing to tell which session or statement raised them, only at
     whatever level the subscriber enables, and Vix installs no subscriber.
     That is a hack, not a feature, so it was not done.
   - *What it would take.* A notice hook upstream in sqlx (a callback or
-    channel on `PgConnection`), and a PostgreSQL session that holds a typed
-    `sqlx::PgConnection` instead of `AnyConnection` so the hook is
-    reachable; the worker would then forward notices as a new `Chunk` and
+    channel on `PgConnection`); the session already holds a typed
+    `sqlx::PgConnection` (T787), so the hook would be reachable; the worker would then forward notices as a new `Chunk` and
     the results pane would list them under the grid. MySQL warnings are a
     separate path: the warning count in the OK packet is not exposed through
     `Any` either, but a `SHOW WARNINGS` after each MySQL statement would work
@@ -455,9 +460,9 @@ queries (a failing one just means free-text cells):
   boolean column (`true`/`false` on PostgreSQL, `1`/`0` for MySQL
   `tinyint(1)` and SQLite `BOOLEAN`).
 
-sqlx's `Any` driver cannot decode a SQLite column declared `BOOLEAN` (or
-`DATE`/`DATETIME`), so previewing such a SQLite table fails before any of this
-applies; that predates T777 and is a driver limitation.
+Before T787, sqlx's `Any` driver could not decode a SQLite column declared
+`BOOLEAN` (or `DATE`/`DATETIME`), so previewing such a table failed before
+any of this applied; T787 fixed it (see "Column types").
 
 ### Server-side row search (T778)
 
@@ -655,8 +660,8 @@ From the [dbjoy](https://github.com/agustind/dbjoy) reading
   of the visible page down, in the grid's filtered and sorted order, at most
   **50** rows, under a "Rows (shown of total)" heading. Types are known for a
   table preview (`p`), from the catalog's column report; for an arbitrary
-  statement the copy carries the column names only, because the `Any`
-  driver's per-column type names would need a new variant on the streamed
+  statement the copy carries the column names only, because the driver's
+  per-column type names would need a new variant on the streamed
   `session::Chunk` enum, a semver break deferred to the next major version.
 - **On a schema-tree table or view:** a `## table (engine)` heading, then the
   columns, primary key, foreign keys, constraints and indexes from the
@@ -710,8 +715,8 @@ field; the host loads it with `Browser::set_mcp_shared` and persists it from
   transaction with the 30-second statement timeout, then `ROLLBACK`
   (PostgreSQL `SET LOCAL statement_timeout = '30s'`, MySQL
   `SET SESSION MAX_EXECUTION_TIME = 30000`; SQLite opened `mode=ro` with
-  `query_only` and a client-side deadline, because the `Any` driver cannot
-  interrupt it).
+  `query_only` and a client-side deadline, because sqlx cannot interrupt
+  it).
 - `tables`, `describe` and `query` each open one connection on their own
   current-thread runtime (not a workbench `Session`), run `opening_sql`, the
   catalog queries or the checked statement, `ROLLBACK` and close. Rows are
@@ -754,8 +759,9 @@ triggers, enums (values in order) and sequences (type, start, increment,
 bounds, cache, cycle). PostgreSQL is read with eleven `pg_catalog` queries
 that cast every value to `text` (`format_type(…)`, `pg_get_viewdef(oid)`,
 `pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_functiondef`,
-`pg_get_triggerdef`), because sqlx's `Any` driver decodes only text,
-numbers, booleans and bytes. Objects owned by an extension, partitions,
+`pg_get_triggerdef`), because sqlx's `Any` driver, which the workbench used
+until T787, decoded only text, numbers, booleans and bytes (the casts are
+harmless now and were kept). Objects owned by an extension, partitions,
 internal triggers and identity-owned sequences are left out. SQLite is read
 from `sqlite_master` and the `table_xinfo` / `foreign_key_list` pragmas; its
 unique and check constraints live inside the stored `CREATE TABLE` text, and
@@ -830,6 +836,84 @@ types, column order, statistics and storage options. `ALTER TYPE … ADD
 VALUE` runs inside the transaction (PostgreSQL 12 or later), but the new
 value cannot be used by a later statement of the same migration. A dropped
 serial column's sequence is dropped with `IF EXISTS`.
+
+## Column types (T787)
+
+Every common column type reads as text in the results grid (table previews
+and free-form queries), in table exports (T784) and in the MCP `db_query`,
+`db_tables` and `db_describe` tools (T783).
+
+**Spike (sqlx 0.9.0).** The workbench opened sqlx's runtime `Any`
+connection. Each engine's `Any` backend converts every row with
+`AnyRow::map_from` before handing it over, and that conversion first maps
+the *column's* type to `AnyTypeInfoKind`: a type outside that list fails the
+whole row with `ColumnDecode { … "Any driver does not support …" }`, so it
+was neither a per-cell decode error nor a row-description error, and no
+fallback in our cell code could catch it. What failed:
+
+- *PostgreSQL:* everything but `bool`, `int2/4/8`, `float4/8`, `bytea`,
+  `text`, `varchar` and `citext` — so `timestamp(tz)`, `date`, `time`,
+  `interval`, `numeric`, `json(b)`, `uuid`, every array, `inet`/`cidr`,
+  `name`, `char(n)`, `oid`, `money`, enums and domains.
+- *MySQL:* `TINYINT` (and so `BOOLEAN`), `MEDIUMINT`, `YEAR`, `DECIMAL`,
+  `DATE`, `TIME`, `DATETIME`, `TIMESTAMP`, `BIT`, `SET`, `JSON` (binary
+  collation) and spatial types; signed `SMALLINT`/`INT`/`BIGINT`, floats,
+  text and blobs worked.
+- *SQLite:* a column whose *declared* type sqlx reads as `BOOLEAN`, `DATE`,
+  `TIME`, `DATETIME` or `NUMERIC` (so `DECIMAL(10,2)` too), even though the
+  stored values are plain integers, reals and text.
+
+Options weighed:
+
+- *(a) Cast to `text` in generated SQL.* Cheap for previews, exports and
+  the MCP catalog reads, but a free-form `SELECT` would still fail, and the
+  export would lose typed numbers.
+- *(b) A typed connection per engine* (`PgConnection`, `MySqlConnection`,
+  `SqliteConnection`) behind the existing session, decoding each type
+  through its own Rust type (`chrono`, `rust_decimal`, `uuid`, `serde_json`
+  features). Fixes everything but needs four or five new sqlx features and
+  their crates, and a formatter per type that would never quite match the
+  server's own output (array literals, intervals, time zones, enums).
+- *(c) Typed connections, but read the server's text.* Every workbench
+  statement already runs through `raw_sql`, which PostgreSQL executes with
+  the simple query protocol and MySQL with `COM_QUERY`: both send *every*
+  value in its text form. With the engine's own row, `PgValueRef::as_bytes`
+  (PostgreSQL) and `&[u8]` via `try_get_unchecked` (MySQL) give those bytes
+  for any type, with no type-specific decoding at all.
+
+**Chosen: (c).** The private `conn` module holds a `Conn` enum (one variant
+per engine) and a `TextRow` enum (the engine's row); the session worker, the
+cancel connection, the table export and the MCP read-only connection all use
+it, and the sqlx `any` feature is gone (no new dependencies or features).
+
+- *Grid text.* PostgreSQL and MySQL cells are the server's own text:
+  timestamps as the server formats them (ISO 8601 with PostgreSQL's default
+  `DateStyle`), `numeric` / `DECIMAL` exactly, JSON as JSON text, UUIDs
+  canonical, arrays in PostgreSQL's literal form (`{1,2,3}`), enums by
+  label, `inet` / `cidr` as written. PostgreSQL `bool` still shows `true` /
+  `false` (its text form is `t` / `f`). `SQLite` values are read by storage
+  class: a `BOOLEAN` column shows its stored `1` / `0`, a `DATE` column its
+  text. Binary data (PostgreSQL `bytea` already arrives as `\x…`; MySQL
+  binary strings, blobs and `BIT`; `SQLite` blobs) shows as text when it is
+  valid UTF-8 and as `\x` hex otherwise, instead of replacement characters.
+  `NULL` stays the empty string: the grid has no `NULL` model, and this task
+  did not add one.
+- *Export values.* `table_export::Value` is chosen per column type:
+  integers (PostgreSQL `int2/4/8`, `oid`; MySQL integer types and `YEAR`,
+  when they fit an `i64`) and floats stay numbers, PostgreSQL `bool` a
+  boolean, `bytea` and MySQL binary columns bytes (written as `X'…'` /
+  `'\x…'::bytea` in SQL), and everything else — `numeric` / `DECIMAL`
+  included, so it stays exact — text, quoted in SQL and a string in JSON.
+- *Plan tree.* With JSON readable, `F6`/`F7` on PostgreSQL ask for
+  `FORMAT JSON` again; the YAML reader stays (public, and a fallback).
+- *Notices (T775).* Still out of reach: the typed `PgConnection` has no
+  notice hook in sqlx 0.9.0 either (see "Server notices" above).
+- *Tests.* The decoding and formatting functions are unit-tested with
+  hand-built PostgreSQL and MySQL values; `SQLite` is tested end to end with
+  `BOOLEAN`, `DATE`, `DATETIME`, `DECIMAL(10,2)`, `JSON` and `BLOB` columns
+  through the session, a free-form query and preview
+  (`tui/tests/db_smoke.rs`), every export format and `db_query`. No test
+  reaches a PostgreSQL or MySQL server.
 
 ## Errors (T610)
 

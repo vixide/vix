@@ -27,6 +27,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **DB workbench: every common column type reads.** Table previews, queries, table exports and the MCP `db_query` tool no longer fail on a PostgreSQL `timestamp`, `date`, `interval`, `numeric`, `json`, `uuid`, array, `inet` or enum column, a MySQL `DATETIME`, `DECIMAL`, `TINYINT` or `JSON` column, or a SQLite column declared `BOOLEAN`, `DATE` or `DATETIME`. Values show as the server writes them: timestamps as ISO 8601, numbers exactly, JSON as JSON. Binary data that is not text shows as `\x` hex, and PostgreSQL plan trees are read as JSON again (T787).
 - **Install docs.** The interim note about 2.0.0's missing files is gone and the Homebrew and npm commands are back, because 2.0.2 ships every channel: installers, Homebrew, npm, Linux packages and the desktop GUIs.
 - **Docs and site describe 2.0.2 as released.** The documentation, the website and `llms.txt` no longer call 2.0 unreleased; they say the container image is built but not public yet and that `cargo binstall` is untested. The DB workbench docs now list every key, including the query log, the AI helpers, CSV import and cancel.
 

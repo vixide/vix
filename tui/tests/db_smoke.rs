@@ -313,6 +313,52 @@ fn tree_preview_shows_table_rows() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A table whose declared types sqlx's `Any` driver used to reject (T787):
+/// the preview and a free-form `SELECT` both show every value.
+#[test]
+fn preview_and_query_show_boolean_date_decimal_and_json_columns() {
+    let dir = std::env::temp_dir().join(format!("vix-db-typed-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("typed.db");
+    seed(
+        &file,
+        &[
+            "CREATE TABLE events (id INTEGER PRIMARY KEY, done BOOLEAN, due DATE, \
+             at DATETIME, price DECIMAL(10,2), doc JSON)",
+            "INSERT INTO events VALUES (1, TRUE, '2026-11-08', '2026-11-08 10:15:00', 12.5, \
+             '{\"a\":1}'), (2, FALSE, NULL, NULL, NULL, NULL)",
+        ],
+    );
+    let mut b = Browser::new(vec![sqlite_connection("typed", &file)]);
+    key(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    b.focus = Pane::Tree;
+    key(&mut b, KeyCode::Down);
+    key(&mut b, KeyCode::Down); // schema → Tables → events
+    key(&mut b, KeyCode::Char('p'));
+    assert_eq!(
+        b.grid.headers,
+        vec!["id", "done", "due", "at", "price", "doc"],
+        "{:?}",
+        b.message
+    );
+    let expected = rows(&[
+        &[
+            "1",
+            "1",
+            "2026-11-08",
+            "2026-11-08 10:15:00",
+            "12.5",
+            "{\"a\":1}",
+        ],
+        &["2", "0", "", "", "", ""],
+    ]);
+    assert_eq!(b.grid.rows, expected);
+    let queried = query_rows(&mut b, "SELECT * FROM events ORDER BY id");
+    assert_eq!(queried, expected, "{:?}", b.message);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn query_log_records_metrics_and_erd_maps_foreign_keys() {
     let dir = std::env::temp_dir().join(format!("vix-db-log-erd-{}", std::process::id()));

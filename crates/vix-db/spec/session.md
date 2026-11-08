@@ -8,8 +8,10 @@ driver errors, and no dependency on client tools being installed.
 
 ## What is implemented
 
-- `db::session::Session` — one sqlx `Any` connection per workbench
-  connection, owned by a dedicated worker thread running a current-thread
+- `db::session::Session` — one sqlx connection per workbench
+  connection (the engine's own `PgConnection`, `MySqlConnection` or
+  `SqliteConnection` behind the private `conn::Conn` enum since T787; it was
+  the runtime `Any` connection before), owned by a dedicated worker thread running a current-thread
   tokio runtime. `Session::run(sql)` exchanges one request for one reply over
   channels, so the TUI stays synchronous. `Session::execute(sql)` runs a
   statement for its effect and returns the rows it affected (the
@@ -18,8 +20,10 @@ driver errors, and no dependency on client tools being installed.
   `Session` closes the channel and the worker closes the connection cleanly.
 - Statements execute via `raw_sql` + `AssertSqlSafe` (the workbench runs
   exactly what the user typed — sqlx's dynamic-SQL opt-in, not an injection
-  hazard). Cells decode through a widest-first cascade
-  (i64 → f64 → String → bool → bytes); `NULL` renders empty.
+  hazard). Cells are the server's own text, which `raw_sql` gets for every
+  type on PostgreSQL (simple query protocol) and MySQL (`COM_QUERY`), and a
+  `SQLite` value's storage class; non-UTF-8 bytes show as `\x` hex and
+  `NULL` renders empty (T787; see "Column types" in [index.md](index.md)).
 - URLs come from `db::connect::url` (`sqlite:…?mode=rwc`,
   `postgres://user:pass@host:port/db`, `mysql://…`), with the password
   percent-encoded and living only in that in-memory string.

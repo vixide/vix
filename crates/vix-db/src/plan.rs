@@ -12,9 +12,9 @@
 //!
 //! `PostgreSQL` can emit the plan as JSON (`FORMAT JSON`) or YAML
 //! (`FORMAT YAML`) with exactly the same structure. The workbench requests
-//! **YAML**, because the `json` column type `FORMAT JSON` returns cannot be
-//! decoded by sqlx's `Any` driver (it only maps text, numeric, boolean and
-//! byte types), while YAML comes back as plain `text`. [`parse_json`] and
+//! **JSON** (T787); it asked for YAML while it used sqlx's `Any` driver, which
+//! could not decode the `json` column `FORMAT JSON` returns, and it still
+//! reads a YAML plan (one pasted or run by hand). [`parse_json`] and
 //! [`parse_yaml`] both build the same [`serde_json::Value`] and hand it to
 //! [`from_value`], so one model serves both. The YAML reader is deliberately
 //! a *subset* reader: it understands the indentation-based shape
