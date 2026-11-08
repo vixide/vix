@@ -5,8 +5,8 @@
 //! written to disk), then presents a three-pane workbench — schema tree on
 //! the left, a syntax-highlighted SQL editor with autocomplete on the right,
 //! and a filterable results grid below it. Queries run over one persistent
-//! [`sqlx`] connection per workbench (the `Any` driver: bundled `SQLite`,
-//! pure-Rust `PostgreSQL`/`MySQL` over rustls), held open on a worker thread by
+//! [`sqlx`] connection per workbench (each engine's own driver: bundled
+//! `SQLite`, pure-Rust `PostgreSQL`/`MySQL` over rustls), held open on a worker thread by
 //! [`session`] so transactions span statements — no external client tools.
 //!
 //! Pure state lives in the submodules ([`catalog`], [`complete`], [`editor`],
@@ -63,6 +63,7 @@ pub mod chart;
 pub mod columns;
 pub mod compare;
 pub mod complete;
+mod conn;
 pub mod conn_string;
 pub mod connect;
 mod copy_ai;

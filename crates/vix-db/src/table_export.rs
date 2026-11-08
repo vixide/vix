@@ -38,10 +38,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use futures_util::StreamExt as _;
-use sqlx::Row as _;
 use vix_input::{KeyCode, KeyEvent};
 
 use crate::catalog::{Folder, quote_ident};
+use crate::conn::Conn;
 use crate::connect::Kind;
 use crate::export::{Format, csv_cell};
 use crate::{Browser, Outcome, View, catalog, connect, session};
@@ -73,7 +73,8 @@ pub enum Value {
 
 impl Value {
     /// The cell as plain text (CSV, file names): `NULL` is empty, binary data
-    /// is decoded as lossy UTF-8 (as the results grid shows it).
+    /// is decoded as lossy UTF-8 (the results grid shows non-UTF-8 data as
+    /// `\x` hex instead, T787).
     #[must_use]
     pub fn text(&self) -> String {
         match self {
@@ -664,53 +665,20 @@ fn spawn(job: Job) -> std::io::Result<mpsc::Receiver<Event>> {
 }
 
 /// Execute one statement for its effect.
-async fn exec(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), ExportError> {
-    sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()))
-        .execute(conn)
-        .await?;
+async fn exec(conn: &mut Conn, sql: &str) -> Result<(), ExportError> {
+    conn.execute(sql).await?;
     Ok(())
 }
 
 /// Run a small helper query and return its rows as text.
-async fn rows_of(
-    conn: &mut sqlx::AnyConnection,
-    sql: &str,
-) -> Result<Vec<Vec<String>>, ExportError> {
-    let rows = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()))
-        .fetch_all(conn)
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| (0..row.len()).map(|i| value(row, i).text()).collect())
-        .collect())
-}
-
-/// Decode one cell, trying the `Any` driver's types widest-first (as the
-/// results grid does), but keeping `NULL` and the type.
-fn value(row: &sqlx::any::AnyRow, i: usize) -> Value {
-    if let Ok(v) = row.try_get::<Option<i64>, _>(i) {
-        return v.map_or(Value::Null, Value::Int);
-    }
-    if let Ok(v) = row.try_get::<Option<f64>, _>(i) {
-        return v.map_or(Value::Null, Value::Float);
-    }
-    if let Ok(v) = row.try_get::<Option<String>, _>(i) {
-        return v.map_or(Value::Null, Value::Text);
-    }
-    if let Ok(v) = row.try_get::<Option<bool>, _>(i) {
-        return v.map_or(Value::Null, Value::Bool);
-    }
-    if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(i) {
-        return v.map_or(Value::Null, Value::Bytes);
-    }
-    Value::Null
+async fn rows_of(conn: &mut Conn, sql: &str) -> Result<Vec<Vec<String>>, ExportError> {
+    Ok(conn.fetch_text(sql).await?)
 }
 
 /// Connect, open the snapshot, write every table, and end the snapshot.
 /// Returns the rows written and whether the foreign keys formed a cycle.
 async fn run(job: &Job, tx: &mpsc::Sender<Event>) -> Result<(u64, bool), ExportError> {
-    session::install_drivers();
-    let mut conn = <sqlx::AnyConnection as sqlx::Connection>::connect(&job.url).await?;
+    let mut conn = Conn::connect(&job.url).await?;
     for stmt in &job.setup {
         exec(&mut conn, stmt).await?;
     }
@@ -726,7 +694,7 @@ async fn run(job: &Job, tx: &mpsc::Sender<Event>) -> Result<(u64, bool), ExportE
         "ROLLBACK"
     };
     let ended = exec(&mut conn, end).await;
-    let _ = sqlx::Connection::close(conn).await;
+    let _ = conn.close().await;
     let result = outcome?;
     ended?;
     Ok(result)
@@ -741,7 +709,7 @@ fn part_path(path: &Path) -> PathBuf {
 
 /// Write every chosen table in the job's format.
 async fn write_all(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     job: &Job,
     tx: &mpsc::Sender<Event>,
 ) -> Result<(u64, bool), ExportError> {
@@ -772,7 +740,7 @@ async fn write_all(
 
 /// The column names of a table, failing when there are none.
 async fn columns(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     kind: Kind,
     schema: &str,
     table: &str,
@@ -792,16 +760,16 @@ async fn columns(
 /// Stream every row of `sql`, handing each to `each`, counting into `rows`
 /// and reporting progress every [`PROGRESS_EVERY`] rows.
 async fn stream_rows(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     sql: &str,
     tx: &mpsc::Sender<Event>,
     rows: &mut u64,
     mut each: impl FnMut(&[Value]) -> std::io::Result<()>,
 ) -> Result<(), ExportError> {
-    let mut stream = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string())).fetch(conn);
+    let mut stream = conn.fetch(sql);
     while let Some(row) = stream.next().await {
         let row = row?;
-        let values: Vec<Value> = (0..row.len()).map(|i| value(&row, i)).collect();
+        let values: Vec<Value> = (0..row.len()).map(|i| row.value(i)).collect();
         each(&values)?;
         *rows += 1;
         if (*rows).is_multiple_of(PROGRESS_EVERY) {
@@ -814,7 +782,7 @@ async fn stream_rows(
 
 /// Write one table as CSV, JSON or NDJSON to `path`.
 async fn write_table_file(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     job: &Job,
     schema: &str,
     table: &str,
@@ -863,7 +831,7 @@ async fn write_table_file(
 /// with the sequence resets at the end. Returns whether the foreign keys
 /// formed a cycle.
 async fn write_sql(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     job: &Job,
     tx: &mpsc::Sender<Event>,
     rows: &mut u64,
@@ -891,7 +859,7 @@ async fn write_sql(
 /// sequence resets, inside `BEGIN` / `COMMIT`. The comments are fixed English,
 /// like the SQL around them, so a dump is the same whatever the UI language.
 async fn write_sql_file(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     job: &Job,
     order: &FkOrder,
     path: &Path,
@@ -1452,6 +1420,46 @@ mod tests {
         run_job(&file, &["items"], Format::Ndjson, out.clone());
         let nd = std::fs::read_to_string(out.join("items.ndjson")).unwrap();
         assert_eq!(nd.lines().count(), 25_000);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A table of the declared types `Any` used to reject (T787) exports in
+    /// every format, keeping integers and floats typed and the rest exact.
+    #[test]
+    fn declared_boolean_date_decimal_and_json_columns_export() {
+        let (dir, file) = seeded(
+            "typed",
+            &[
+                "CREATE TABLE typed (id INTEGER PRIMARY KEY, done BOOLEAN, due DATE, \
+                 at DATETIME, price DECIMAL(10,2), doc JSON)",
+                "INSERT INTO typed VALUES (1, TRUE, '2026-11-08', '2026-11-08 10:15:00', \
+                 12.5, '{\"a\":1}'), (2, FALSE, NULL, NULL, NULL, NULL)",
+            ],
+        );
+        let out = dir.join("out");
+        run_job(&file, &["typed"], Format::Csv, out.clone());
+        assert_eq!(
+            std::fs::read_to_string(out.join("typed.csv")).unwrap(),
+            "id,done,due,at,price,doc\n\
+             1,1,2026-11-08,2026-11-08 10:15:00,12.5,\"{\"\"a\"\":1}\"\n\
+             2,0,,,,\n"
+        );
+        run_job(&file, &["typed"], Format::Json, out.clone());
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(out.join("typed.json")).unwrap())
+                .unwrap();
+        assert_eq!(json[0]["done"], 1);
+        assert_eq!(json[0]["due"], "2026-11-08");
+        assert_eq!(json[0]["price"], 12.5);
+        assert_eq!(json[0]["doc"], "{\"a\":1}");
+        assert_eq!(json[1]["due"], serde_json::Value::Null);
+        let dump = dir.join("typed.sql");
+        run_job(&file, &["typed"], Format::Sql, dump.clone());
+        let text = std::fs::read_to_string(&dump).unwrap();
+        assert!(
+            text.contains("VALUES (1, 1, '2026-11-08', '2026-11-08 10:15:00', 12.5, '{\"a\":1}');"),
+            "{text}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

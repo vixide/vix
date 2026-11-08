@@ -1,6 +1,6 @@
 //! The persistent database session: one live sqlx connection per workbench.
 //!
-//! A [`Session`] holds a single [`sqlx`] `Any` connection open for the life of
+//! A [`Session`] holds a single [`sqlx`] connection open for the life of
 //! the workbench connection — so session state (temporary tables,
 //! `search_path`, and above all `BEGIN` / `COMMIT` / `ROLLBACK` transactions)
 //! survives from statement to statement.
@@ -25,8 +25,9 @@
 //!   `Done` or `Err`) before the next is read, so callers must drain one
 //!   statement ([`Session::poll`] until `Done`/`Err`) before reading the
 //!   reply of another.
-//! - **Text-only results.** Every cell is decoded to a `String`; `NULL`
-//!   becomes the empty string (see the private `cell`).
+//! - **Text-only results.** Every cell is read as the server's own text (or a
+//!   `SQLite` value's storage class), whatever its column type; `NULL`
+//!   becomes the empty string (the private `conn` module, T787).
 //! - **Bounded memory.** Rows stream in `BATCH`-sized chunks and stop at
 //!   [`MAX_ROWS`], reported through `Chunk::Done(true)`.
 //! - **No secrets in errors.** Connect failures are passed through
@@ -41,9 +42,9 @@
 //! the `lifecycle` (connect) and `execute` (run/cancel) modules of this crate.
 
 use futures_util::StreamExt as _;
-use sqlx::{Column as _, Row as _};
-use std::sync::Once;
 use std::sync::mpsc;
+
+use crate::conn::Conn;
 
 /// A result set: column headers plus stringified rows.
 pub type Table = (Vec<String>, Vec<Vec<String>>);
@@ -227,8 +228,8 @@ impl QueryError {
 
 /// Where in the statement the server says `e` is (T775): a 1-based character
 /// position into the SQL text that was sent. Only PostgreSQL reports one (the
-/// `P` field of its error response). The `Any` driver passes the engine's own
-/// error through boxed, so it survives a downcast to
+/// `P` field of its error response). The driver's error boxes the engine's
+/// own error, so it survives a downcast to
 /// [`sqlx::postgres::PgDatabaseError`]. A position into an internally
 /// generated query (a PL/pgSQL body) is dropped: it does not point into the
 /// editor's text.
@@ -244,11 +245,6 @@ fn error_position_of(e: &sqlx::Error) -> Option<usize> {
         sqlx::postgres::PgErrorPosition::Internal { .. } => None,
     }
 }
-
-/// Registers sqlx's `Any` drivers exactly once per process. sqlx's `Any`
-/// connection panics on an unregistered scheme, so [`Session::connect`] calls
-/// this before every connect; `Once` makes that cheap and thread-safe.
-static DRIVERS: Once = Once::new();
 
 /// How long a server-side cancel (T774) may take, connect included, before
 /// it counts as failed and the caller falls back to reconnecting.
@@ -294,8 +290,8 @@ pub fn backend_id_sql(kind: crate::connect::Kind) -> Option<&'static str> {
     use crate::connect::Kind;
     match kind {
         Kind::Postgres => Some("SELECT pg_backend_pid()"),
-        // `CONNECTION_ID()` is `BIGINT UNSIGNED`, which sqlx's `Any` row
-        // mapping rejects (its MySQL integer decoding is signed only).
+        // `CONNECTION_ID()` is `BIGINT UNSIGNED`; the cast predates T787,
+        // when sqlx's `Any` row mapping rejected unsigned integers.
         Kind::Mysql => Some("SELECT CAST(CONNECTION_ID() AS SIGNED)"),
         Kind::Sqlite => None,
     }
@@ -376,7 +372,6 @@ impl CancelHandle {
     /// missing privileges for `KILL QUERY`), or [`SessionError::Spawn`]
     /// when no runtime could be built.
     pub fn send(&self) -> Result<bool, SessionError> {
-        DRIVERS.call_once(sqlx::any::install_default_drivers);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -384,13 +379,13 @@ impl CancelHandle {
         let url = self.url.clone();
         let sql = self.sql.clone();
         let attempt = async move {
-            let mut conn = <sqlx::AnyConnection as sqlx::Connection>::connect(&url)
+            let mut conn = Conn::connect(&url)
                 .await
                 .map_err(|e| SessionError::Connect {
                     message: redact_url_secret(&e.to_string(), &url),
                 })?;
-            let reply = query_text(&mut conn, &sql).await;
-            let _ = sqlx::Connection::close(conn).await;
+            let reply = conn.fetch_text(&sql).await;
+            let _ = conn.close().await;
             reply
                 .map(|rows| cancel_reply_ok(&rows))
                 .map_err(|e| SessionError::Query(QueryError::from_sqlx(&e)))
@@ -402,12 +397,6 @@ impl CancelHandle {
                 })
             })
     }
-}
-
-/// Register sqlx's `Any` drivers (once per process) before opening an `Any`
-/// connection — shared with the table-export connection (T784).
-pub(crate) fn install_drivers() {
-    DRIVERS.call_once(sqlx::any::install_default_drivers);
 }
 
 /// A live database connection on its own worker thread.
@@ -449,7 +438,6 @@ impl Session {
     /// credentials, unreachable host, unreadable file, …) or
     /// [`SessionError::Setup`] for a failing setup statement.
     pub fn connect(url: &str, setup: &[String]) -> Result<Session, SessionError> {
-        install_drivers();
         let (req_tx, req_rx) = mpsc::channel::<Request>();
         let (reply_tx, reply_rx) = mpsc::channel::<Chunk>();
         let (ready_tx, ready_rx) = mpsc::channel::<Result<Option<u64>, SessionError>>();
@@ -664,7 +652,7 @@ fn worker(
             return;
         }
     };
-    let mut conn = match rt.block_on(<sqlx::AnyConnection as sqlx::Connection>::connect(url)) {
+    let mut conn = match rt.block_on(Conn::connect(url)) {
         Ok(conn) => conn,
         Err(e) => {
             let _ = ready_tx.send(Err(SessionError::Connect {
@@ -676,7 +664,7 @@ fn worker(
     for stmt in setup {
         if let Err(e) = rt.block_on(exec_one(&mut conn, stmt)) {
             let _ = ready_tx.send(Err(SessionError::Setup { message: e }));
-            let _ = rt.block_on(sqlx::Connection::close(conn));
+            let _ = rt.block_on(conn.close());
             return;
         }
     }
@@ -684,7 +672,7 @@ fn worker(
     // Best effort: without it, cancelling falls back to reconnecting.
     let backend_id = match kind_of_url(url).and_then(backend_id_sql) {
         Some(sql) => rt
-            .block_on(query_text(&mut conn, sql))
+            .block_on(conn.fetch_text(sql))
             .ok()
             .and_then(|rows| rows.first()?.first()?.trim().parse::<u64>().ok()),
         None => None,
@@ -714,11 +702,7 @@ fn worker(
     // that already gave up on its query doesn't then get stuck saying
     // goodbye to it.
     let _ = rt.block_on(async {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            sqlx::Connection::close(conn),
-        )
-        .await
+        tokio::time::timeout(std::time::Duration::from_secs(2), conn.close()).await
     });
 }
 
@@ -748,28 +732,11 @@ fn password_of(url: &str) -> Option<&str> {
 }
 
 /// Execute one statement for its effect only (setup pragmas), discarding rows.
-async fn exec_one(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), String> {
-    let sql = sqlx::AssertSqlSafe(sql.to_string());
-    sqlx::raw_sql(sql)
-        .execute(conn)
+async fn exec_one(conn: &mut Conn, sql: &str) -> Result<(), String> {
+    conn.execute(sql)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
-}
-
-/// Run one short statement and collect every row as text (the backend-id
-/// lookup and the cancel statement, T774).
-async fn query_text(
-    conn: &mut sqlx::AnyConnection,
-    sql: &str,
-) -> Result<Vec<Vec<String>>, sqlx::Error> {
-    let rows = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()))
-        .fetch_all(conn)
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| (0..row.columns().len()).map(|i| cell(row, i)).collect())
-        .collect())
 }
 
 /// Execute one statement for its effect and send the number of rows it
@@ -777,20 +744,17 @@ async fn query_text(
 /// like [`stream_sql`], so the worker stops; a closed `done` channel is not a
 /// reason to stop, since the next request may still be read.
 async fn exec_counted(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     sql: &str,
     done: &mpsc::Sender<Result<u64, QueryError>>,
     cancel_rx: &mut tokio::sync::watch::Receiver<bool>,
 ) -> bool {
-    let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
     let result = tokio::select! {
         biased;
         _ = cancel_rx.changed() => return false,
-        result = query.execute(conn) => result,
+        result = conn.execute(sql) => result,
     };
-    let reply = result
-        .map(|r| r.rows_affected())
-        .map_err(|e| QueryError::from_sqlx(&e));
+    let reply = result.map_err(|e| QueryError::from_sqlx(&e));
     let _ = done.send(reply);
     true
 }
@@ -802,15 +766,14 @@ async fn exec_counted(
 /// worker can stop either way. `AssertSqlSafe` is the intended opt-in for the
 /// workbench's user SQL, not an injection hazard.
 async fn stream_sql(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut Conn,
     sql: &str,
     reply_tx: &mpsc::Sender<Chunk>,
     cancel_rx: &mut tokio::sync::watch::Receiver<bool>,
     error_position: &std::sync::atomic::AtomicUsize,
 ) -> bool {
     error_position.store(0, std::sync::atomic::Ordering::Release);
-    let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
-    let mut stream = query.fetch(conn);
+    let mut stream = conn.fetch(sql);
     let mut head_sent = false;
     let mut batch: Vec<Vec<String>> = Vec::new();
     let mut total = 0usize;
@@ -836,13 +799,13 @@ async fn stream_sql(
         match item {
             Ok(row) => {
                 if !head_sent {
-                    let headers = row.columns().iter().map(|c| c.name().to_string()).collect();
+                    let headers = row.names();
                     if reply_tx.send(Chunk::Head(headers)).is_err() {
                         return false;
                     }
                     head_sent = true;
                 }
-                let cells = (0..row.columns().len()).map(|i| cell(&row, i)).collect();
+                let cells = row.cells();
                 batch.push(cells);
                 total += 1;
                 if batch.len() >= BATCH
@@ -878,33 +841,6 @@ async fn stream_sql(
     reply_tx.send(Chunk::Done(truncated)).is_ok()
 }
 
-/// Decode one cell as display text. The `Any` driver types values at
-/// runtime, so try the common decodings widest-first; `NULL` renders as an
-/// empty string (matching the old CLI output).
-///
-/// Binary values are shown via lossy UTF-8, so non-text blobs display
-/// replacement characters; a value no decoding accepts also renders empty.
-pub(crate) fn cell(row: &sqlx::any::AnyRow, i: usize) -> String {
-    if let Ok(v) = row.try_get::<Option<i64>, _>(i) {
-        return v.map(|x| x.to_string()).unwrap_or_default();
-    }
-    if let Ok(v) = row.try_get::<Option<f64>, _>(i) {
-        return v.map(|x| x.to_string()).unwrap_or_default();
-    }
-    if let Ok(v) = row.try_get::<Option<String>, _>(i) {
-        return v.unwrap_or_default();
-    }
-    if let Ok(v) = row.try_get::<Option<bool>, _>(i) {
-        return v.map(|x| x.to_string()).unwrap_or_default();
-    }
-    if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(i) {
-        return v
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .unwrap_or_default();
-    }
-    String::new()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -928,6 +864,41 @@ mod tests {
                 None => std::thread::yield_now(),
             }
         }
+    }
+
+    /// Columns `SQLite` stores by affinity but `Any` used to reject by their
+    /// declared type (T787): every one now reads back as its stored value.
+    #[test]
+    fn declared_boolean_date_datetime_decimal_and_json_columns_decode() {
+        let mut s = memory();
+        s.run(
+            "CREATE TABLE typed (id INTEGER PRIMARY KEY, done BOOLEAN, due DATE, \
+             at DATETIME, price DECIMAL(10,2), doc JSON, raw BLOB)",
+        )
+        .unwrap();
+        s.run(
+            "INSERT INTO typed VALUES (1, TRUE, '2026-11-08', '2026-11-08 10:15:00', \
+             12.5, '{\"a\": [1, 2]}', X'deadbeef'), \
+             (2, NULL, NULL, NULL, NULL, NULL, NULL)",
+        )
+        .unwrap();
+        let (headers, rows) = s.run("SELECT * FROM typed ORDER BY id").unwrap();
+        assert_eq!(headers, ["id", "done", "due", "at", "price", "doc", "raw"]);
+        assert_eq!(
+            rows,
+            [
+                [
+                    "1",
+                    "1",
+                    "2026-11-08",
+                    "2026-11-08 10:15:00",
+                    "12.5",
+                    "{\"a\": [1, 2]}",
+                    "\\xdeadbeef",
+                ],
+                ["2", "", "", "", "", "", ""],
+            ]
+        );
     }
 
     #[test]

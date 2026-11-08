@@ -3,8 +3,8 @@
 //!
 //! - **Results** (`A` in the results pane): the statement behind the grid in
 //!   an `sql` fence, the column types when they are known (a table preview,
-//!   whose types come from the catalog — sqlx's `Any` driver does not report
-//!   result column types through the workbench's stream), and the rows from
+//!   whose types come from the catalog — the workbench's result stream
+//!   carries column names, not types), and the rows from
 //!   the top of the visible page down, in the grid's filtered and sorted
 //!   order, at most [`ROW_CAP`].
 //! - **Table** (`A` on a schema-tree table or view): its columns, primary key,

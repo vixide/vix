@@ -28,7 +28,6 @@
 //! Owning specs: `spec/mcp-server` and `crates/vix-db/spec/index.md`.
 
 use futures_util::StreamExt as _;
-use sqlx::Row as _;
 use std::time::Duration;
 
 use crate::connect::{self, Connection, Kind};
@@ -372,8 +371,8 @@ fn first_word(sql: &str) -> Option<String> {
 /// [`STATEMENT_TIMEOUT_SECS`] timeout. [`CLOSING_SQL`] ends it.
 ///
 /// - `SQLite`: `PRAGMA query_only = ON` and `BEGIN` (the file is also opened
-///   with `mode=ro`). `SQLite` has no statement timeout and sqlx's `Any`
-///   driver cannot interrupt a running statement, so the timeout is a
+///   with `mode=ro`). `SQLite` has no statement timeout and sqlx
+///   cannot interrupt a running statement, so the timeout is a
 ///   client-side deadline: the tool call fails at 30 seconds and the
 ///   connection is dropped, while the engine may finish the abandoned
 ///   (read-only) statement in the background.
@@ -551,7 +550,7 @@ pub fn query(conn: &Connection, sql: &str) -> Result<Rows, ShareError> {
 /// runs through.
 struct ReadOnly {
     /// The live connection; `None` once it is closed or abandoned.
-    conn: Option<sqlx::AnyConnection>,
+    conn: Option<crate::conn::Conn>,
     /// The SSH forward, held while the connection is open.
     _tunnel: Option<tunnel::Tunnel>,
     /// A current-thread runtime: one connection, one statement at a time.
@@ -567,14 +566,13 @@ impl ReadOnly {
         let password = password(conn)?;
         let tunnel = tunnel::open_batch(conn).map_err(ShareError::Tunnel)?;
         let url = connection_url(conn, &password, tunnel.as_ref().map(|t| t.local_port));
-        session::install_drivers();
         // Every timer below is created inside `block_on`: a `Sleep` needs the
         // runtime's reactor.
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(ShareError::Runtime)?;
-        let connect = <sqlx::AnyConnection as sqlx::Connection>::connect(&url);
+        let connect = crate::conn::Conn::connect(&url);
         let mut live =
             match rt.block_on(async { tokio::time::timeout(CONNECT_TIMEOUT, connect).await }) {
                 Ok(Ok(live)) => live,
@@ -594,7 +592,7 @@ impl ReadOnly {
         let deadline =
             tokio::time::Instant::now() + Duration::from_secs(STATEMENT_TIMEOUT_SECS) + grace;
         for sql in opening_sql(conn.kind) {
-            let run = sqlx::raw_sql(sqlx::AssertSqlSafe((*sql).to_string())).execute(&mut live);
+            let run = live.execute(sql);
             match rt.block_on(async { tokio::time::timeout_at(deadline, run).await }) {
                 Ok(Ok(_)) => {}
                 Ok(Err(e)) => return Err(ShareError::Query(e.to_string())),
@@ -617,7 +615,7 @@ impl ReadOnly {
             return Err(ShareError::Timeout);
         };
         let collect = async {
-            let mut stream = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string())).fetch(live);
+            let mut stream = live.fetch(sql);
             let mut out = Rows::default();
             while let Some(row) = stream.next().await {
                 let row = row.map_err(|e| ShareError::Query(e.to_string()))?;
@@ -626,13 +624,9 @@ impl ReadOnly {
                     break;
                 }
                 if out.columns.is_empty() {
-                    out.columns = sqlx::Row::columns(&row)
-                        .iter()
-                        .map(|c| sqlx::Column::name(c).to_string())
-                        .collect();
+                    out.columns = row.names();
                 }
-                out.rows
-                    .push((0..row.len()).map(|i| session::cell(&row, i)).collect());
+                out.rows.push(row.cells());
             }
             Ok(out)
         };
@@ -654,10 +648,8 @@ impl ReadOnly {
             let rt = &self.rt;
             let _ = rt.block_on(async {
                 tokio::time::timeout(Duration::from_secs(5), async {
-                    let _ = sqlx::raw_sql(sqlx::AssertSqlSafe(CLOSING_SQL.to_string()))
-                        .execute(&mut live)
-                        .await;
-                    let _ = sqlx::Connection::close(live).await;
+                    let _ = live.execute(CLOSING_SQL).await;
+                    let _ = live.close().await;
                 })
                 .await
             });
@@ -901,6 +893,21 @@ mod tests {
             Err(ShareError::Connect(_))
         ));
         assert!(!std::path::Path::new(&missing.file).exists());
+    }
+
+    /// `db_query` reads columns `Any` used to reject by declared type (T787).
+    #[test]
+    fn sqlite_query_reads_boolean_date_and_json_columns() {
+        let conn = sqlite("typed", 0);
+        let mut seed =
+            session::Session::connect(&format!("sqlite:{}?mode=rwc", conn.file), &[]).unwrap();
+        seed.run("CREATE TABLE typed (done BOOLEAN, at DATETIME, doc JSON);")
+            .unwrap();
+        seed.run("INSERT INTO typed VALUES (TRUE, '2026-11-08 10:15:00', '[1]');")
+            .unwrap();
+        drop(seed);
+        let rows = query(&conn, "select done, at, doc from typed").unwrap();
+        assert_eq!(rows.rows, [["1", "2026-11-08 10:15:00", "[1]"]]);
     }
 
     #[test]

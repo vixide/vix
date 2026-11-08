@@ -266,6 +266,10 @@ xinfo
 attgenerated
 constraintdef
 tinyint
+varchar
+citext
+MEDIUMINT
+SMALLINT
 ILIKE
 bytea
 setval
