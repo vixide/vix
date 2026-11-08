@@ -7715,6 +7715,10 @@ new action.
     `brew install vixide/homebrew-tap/vix-tui`. (6): getting-started lists
     the GUIs' Homebrew and installer commands. **Left:** (3), a decision
     for the maintainer (the `vix` crate is still at 1.7.1).
+  - **(3) approved 2026-11-08:** `packaging/crates-io-vix/` is a one-file
+    `vix` 1.7.2 whose README and `vix` command point to `vix-tui` (the
+    command prints `cargo uninstall vix` / `cargo install vix-tui` and exits
+    1). Its own workspace, published by hand.
 
 - [x] **T649 — Keep `vix-editor-core` semver-compatible after T598.**
   T598 changed the published `Editor::set_clipboard(&mut self, &str) ->
