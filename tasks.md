@@ -7043,7 +7043,7 @@ new action.
   coverage gutter reads that format, so the project can use the gutter on
   itself (document this in `docs/`). This also gives real numbers for
   T608 and T609. **Small.**
-- [~] **T608 — DAP mock-adapter tests.** (DAP half done: `crates/vix-dap/tests/mock_adapter.rs`; the vix-editor unit-test half remains.) `crates/vix-dap/src/lib.rs` is
+- [x] **T608 — DAP mock-adapter tests.** (Done: DAP in `crates/vix-dap/tests/mock_adapter.rs`; vix-editor 2026-11-08 in `crates/vix-editor/tests/editor_api.rs` plus `pane_tree` unit tests — crate 2,660 → 2,836 src lines, 116 pub fns, tests 17 → 85 (2 proptest), fixing `delete_forward` with a selection or inside indentation, `goto` past a line's end, and CRLF trim on save.) `crates/vix-dap/src/lib.rs` is
   716 lines with 3 tests, and they cover pure helpers only.
   `handle_event` (`:324`), `handle_response` (`:370`), `configure`
   (`:444`), and request sequencing are untested. LSP has a Python mock
@@ -10175,14 +10175,14 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-11-08** (347 tasks ticked, 17 open, T608 half done;
+**Status as of 2026-11-08** (350 tasks ticked, 17 open;
 counted with `grep` over `- [x] **T`, `- [ ] **T` and `[~]`, subtasks
 included). 2.0.2 is released through dist on every channel except a public
 container image. Runs A–L, N, O (except T669), P, Q (except T718) and V are
 complete. What is open, by run:
 
-- **Run M:** T635 and T644 are open (T621, T623 and T624 done 2026-11-02; T621 leaves the optional colorPresentation write-back). T608 is half done (the
-  DAP mock-adapter tests exist; the `vix-editor` unit-test half remains).
+- **Run M:** T635 and T644 are open (T621, T623 and T624 done 2026-11-02; T621 leaves the optional colorPresentation write-back). T608 is done (DAP
+  mock-adapter tests and `vix-editor` unit tests, 2026-11-08).
   T610 (typed errors) is done in four slices: no public function in `crates/`,
   `gui/` or `tui/src` returns `Result<_, String>` any more. T611 is ticked for
   step 1 only (the `OVERLAYS` table, `spec/overlay-priority`); step 2 (an
