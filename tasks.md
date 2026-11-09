@@ -9418,6 +9418,13 @@ editor by completion, diagnostics and never losing work first.
     three secrets; submit the first winget-pkgs PR by hand; publish `vix-tui`
     to crates.io for binstall; nixpkgs and mise-registry submissions; then
     move each verified channel into the main install lists. T742 stays open.
+  - **Progress 2026-11-09:** the verify jobs ran for the first time, by hand
+    against 2.0.2 (Packaging run 42571740960, after 42568605110 failed on a
+    GitHub 504 and `scripts/packaging` learned to retry): render, `winget
+    validate`, `makepkg` on Arch and `nix flake check`/`nix build` all pass.
+    The templates now carry 2.0.2 and its real sums. **Left:** `flake.lock`;
+    the Scoop bucket, AUR account and the three secrets; the first
+    winget-pkgs pull request; nixpkgs and mise; then the install lists.
 - [ ] **T743 — Try without installing.** `nix run` (from T742) and a
   container image (`ghcr.io/vixide/vix`) so `docker run -it` opens Vix on
   a demo workspace; list both on the README and site. **Small–Medium.**

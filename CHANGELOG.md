@@ -29,6 +29,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **CI: release downloads retry.** The pinned cargo-deny, lychee and dist downloads from GitHub Releases now retry a failed download, and the dist drift check downloads its installer before running it, so a GitHub 504 no longer fails the job with a misleading "dist: command not found".
 - **Packaging: render retries a failed download.** `scripts/packaging render` now retries a `.sha256` download that fails with a server error or a network error (the first run against a real release, 2.0.2, failed on one HTTP 504), and the winget, Scoop and AUR templates now carry 2.0.2 and its real sums (T742).
 - **Windows: paths that could leave their folder.** A REST client `< file` body, a project-environment detector's `detect` entry, and a Cowork guest's path could name a file outside their folder on Windows: `\x` (a root with no drive) and `C:x` (a drive with no root) are not "absolute" there, yet joining them replaced the folder, and a Cowork path's later `C:` component did the same. They are refused now.
 - **Windows: language servers and MCP get real file URIs.** Paths reached LSP and MCP clients as `file://%5C%5C%3F%5CC%3A…` (the `\\?\` form `canonicalize` returns, with escaped backslashes); they are `file:///C:/…` now, and URIs from a server turn back into the same paths as open tabs, so file-operation edits, watched-file events, document links and `resources/read` work on Windows.
