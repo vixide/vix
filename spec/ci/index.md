@@ -588,9 +588,13 @@ after a version/checksum bump ever hits the network at all; the download
 step itself also retries (`curl --retry 3 --retry-all-errors`) for that
 first-run case. Every other pinned download from GitHub Releases (cargo-deny
 and lychee on all three forges, dist's installer) now retries the same way,
-after the **dist-workflow** job failed on a `504` on 2026-11-09. That job
-downloads dist's installer to a file before running it: piped straight into
-`sh`, the failed download had left the install step green with no `dist`.
+after the **dist-workflow** job failed on a `504` on 2026-11-09. That job no
+longer runs dist's installer script (piped into `sh`, a failed download left
+the step green with no `dist`; run from a file, its own download (with no retry) of
+the tarball still hit the 504s of GitHub's anonymous-traffic incident that
+day). It downloads the pinned `cargo-dist-x86_64-unknown-linux-gnu.tar.xz`
+with `gh release download` under the job's token, retrying, checks it
+against the release's `.sha256`, and puts `dist` on the path itself.
 
 ## Docs site (mdBook)
 
