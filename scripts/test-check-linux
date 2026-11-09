@@ -62,9 +62,18 @@ has "exec bash"
 lacks "scripts/check --tier"
 
 echo "== generated command"
-pass "command" "$s"
 msrv=$(sed -n 's/^rust-version *= *"\([0-9.]*\)".*/\1/p' Cargo.toml | head -n 1)
+# The toolchain is the host's rustc (a stub here, so the test does not depend
+# on what is installed), and the MSRV only when there is no rustc at all.
+mkdir -p "$work/rustc" "$work/norustc"
+printf '#!/bin/sh\necho "rustc 1.98.3 (0123abcd 2026-10-01)"\n' >"$work/rustc/rustc"
+chmod +x "$work/rustc/rustc"
+pass "the toolchain follows the host rustc" env PATH="$work/rustc:/usr/bin:/bin" "$s"
+has "FROM rust:1.98.3-bookworm"
+has "vix-check-linux:1.98.3"
+pass "no host rustc: the MSRV" env PATH="$work/norustc:/usr/bin:/bin" "$s"
 has "FROM rust:$msrv-bookworm"
+pass "command" "$s"
 has "rustup component add clippy rustfmt"
 has "-v $root:/src:ro"
 has "vix-check-linux-work:/cache/work"
@@ -73,6 +82,7 @@ has "vix-check-linux-cargo:/cache/cargo"
 has "--user [0-9]*:[0-9]*"
 lacks "--user 0:0"
 lacks "--user root"
+has "--pull=never"
 has "--cap-drop ALL"
 has "no-new-privileges"
 has "RUSTC_WRAPPER="
@@ -94,10 +104,27 @@ VIX_LINUX_IMAGE=my/image:1 pass "VIX_LINUX_IMAGE overrides the tag" "$s"
 has "my/image:1 sh -c"
 VIX_CONTAINER_CLI=podman pass "VIX_CONTAINER_CLI" "$s"
 has "^podman run"
+pass "VIX_LINUX_JOBS sets the cargo jobs" env VIX_LINUX_JOBS=3 "$s"
+has "-e CARGO_BUILD_JOBS=3 "
+fail "VIX_LINUX_JOBS must be a number" env VIX_LINUX_JOBS=many "$s"
+has "positive number"
+fail "VIX_LINUX_JOBS must be positive" env VIX_LINUX_JOBS=0 "$s"
+# The default: one job per 3 GiB of the engine's memory, at most one per CPU,
+# read from `info` (Docker's template first, then Podman's).
+mkdir -p "$work/bin"
+printf '#!/bin/sh\ncase "$*" in *Host.*) echo "8589934592 8" ;; *) exit 1 ;; esac\n' >"$work/bin/podinfo"
+printf '#!/bin/sh\necho "34359738368 6"\n' >"$work/bin/bigvm"
+chmod +x "$work/bin/podinfo" "$work/bin/bigvm"
+pass "jobs from Podman's memory" env PATH="$work/bin:$PATH" VIX_CONTAINER_CLI=podinfo "$s"
+has "-e CARGO_BUILD_JOBS=2 "
+pass "jobs capped at the CPUs" env PATH="$work/bin:$PATH" VIX_CONTAINER_CLI=bigvm "$s"
+has "-e CARGO_BUILD_JOBS=6 "
+pass "no engine to ask: cargo's default" env VIX_CONTAINER_CLI=vix-no-such-cli "$s"
+lacks "CARGO_BUILD_JOBS"
 
 echo "== real mode (stub CLI, no Docker needed)"
 unset VIX_CI_DRY_RUN
-mkdir "$work/bin"
+mkdir -p "$work/bin"
 fail "no container CLI is a clear failure" env PATH="$work/bin:/usr/bin:/bin" VIX_CONTAINER_CLI=vix-no-such-cli "$s"
 has "no container CLI"
 has "colima"
@@ -107,6 +134,50 @@ chmod +x "$work/bin/stub"
 fail "daemon down is a clear failure" env PATH="$work/bin:/usr/bin:/bin" VIX_CONTAINER_CLI=stub "$s"
 has "daemon is not reachable"
 has "colima start"
+
+# A buildx builder (its `build --help` lists --load) that loads the result into
+# the image store only when asked, as the docker-container driver does. A stale
+# image of the same tag already exists, so an `image inspect` cannot tell: the
+# script must pass --load up front, then run with --pull=never. The stub logs
+# every call and keeps the "image" as a file holding its build flags.
+cat >"$work/bin/stub" <<'STUB'
+#!/bin/sh
+case "$1 $2" in "build --help") echo "${STUB_HELP:-}"; exit 0 ;; esac
+echo "$*" >>"$STUB_LOG"
+case "$1" in
+info) exit 0 ;;
+build)
+	cat >/dev/null
+	case " $* " in *" --load "*) echo loaded >"$STUB_IMAGE" ;; esac
+	[ -z "${STUB_ALWAYS_LOADS:-}" ] || echo loaded >"$STUB_IMAGE"
+	exit 0
+	;;
+image) [ -f "$STUB_IMAGE" ] ;;
+run) exit 0 ;;
+esac
+STUB
+chmod +x "$work/bin/stub"
+stub_env() { env PATH="$work/bin:/usr/bin:/bin" VIX_CONTAINER_CLI=stub STUB_LOG="$work/log" STUB_IMAGE="$work/image" "$@"; }
+echo stale >"$work/image"
+pass "buildx gets --load" stub_env STUB_HELP="      --load   Shorthand for --output=type=docker" "$s"
+cp "$work/log" "$work/out"
+has "^build -q --load -t"
+has "^run --rm --pull=never"
+[ "$(cat "$work/image")" = loaded ] && ok "the stale image was replaced" || bad "the stale image was replaced"
+# Podman or the legacy builder: no --load in its help (it would reject the
+# flag), and it always loads.
+rm -f "$work/log" "$work/image"
+pass "a builder without --load gets none" stub_env STUB_ALWAYS_LOADS=1 "$s"
+cp "$work/log" "$work/out"
+has "^build -q -t"
+lacks "--load"
+has "^run --rm --pull=never"
+# A builder that never leaves the image: a clear failure, and no run.
+rm -f "$work/log" "$work/image"
+fail "an image that never appears is a clear failure" stub_env "$s"
+has "did not leave"
+cp "$work/log" "$work/out"
+lacks "^run"
 
 echo
 if [ "$fails" -eq 0 ]; then

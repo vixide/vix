@@ -9856,6 +9856,25 @@ the maintainer's decisions.
   and in-container steps are untested; only the generated command and error
   paths are tested); the Windows recipe has not been run on real Windows
   hardware; the image defaults to the MSRV toolchain, not stable.
+  Update 2026-11-09: the container has now run. `scripts/check-linux` (push
+  tier) passed end to end on an Apple Silicon Mac against Podman 5.8.2
+  (rootless `applehv` machine, 8 CPUs, 12 GiB, `linux/arm64`), both through
+  the Docker 27.5 CLI on Podman's Docker socket and with
+  `VIX_CONTAINER_CLI=podman`, in `rust:1.99.1-bookworm`: 745 s cold with 3
+  cargo jobs (build 313 s, clippy 62 s, tests 278 s), about 80 s warm. The
+  first real runs found six bugs, all fixed: the buildx `docker-container`
+  builder never loaded the image, so `run` went to a registry, or later ran a
+  stale image (now `--load` whenever `build --help` lists it, and
+  `run --pull=never`); tar and git refused the root-owned volume root (the
+  copy now lives in `tree/`); the linker was OOM-killed at one job per CPU
+  (now one job per 3 GiB of engine memory, `VIX_LINUX_JOBS`); MSRV clippy
+  failed `-D warnings` on code stable accepts (the image now follows the host
+  `rustc`, MSRV only as fallback); the image lacked `zip` for
+  `scripts/test-release-local`; and `scripts/build-linux-packages` crashed on
+  Debian 12's Python 3.11.2, which has no `extractall(filter=)` (it now checks
+  members by hand there). Still unverified: Docker Desktop, Colima, OrbStack,
+  an `x86_64` host, the `fast`/`full` tiers and `--shell`; the target volume
+  needs about 45 GB of VM disk.
 - [x] **T766 — Local release path.** `scripts/release-local` builds the three
   targets (the `Makefile` already does so from a Mac), checksums them,
   SSH-signs the checksums and uploads with `gh` and `tea`; `release.yml`
