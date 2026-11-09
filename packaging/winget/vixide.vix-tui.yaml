@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
 # Template (T742): not submitted to microsoft/winget-pkgs. See packaging/README.md.
 PackageIdentifier: vixide.vix-tui
-PackageVersion: 1.8.0
+PackageVersion: 2.0.2
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.9.0

@@ -35,6 +35,8 @@ repository does and does not do with them.
   Sums come from the release's own `<asset>.sha256` files, or from
   `--sums FILE` (lines of `sha256sum` output) for an offline run. Windows ARM
   entries appear only when that asset exists (2.0.0 and later).
+  A download that fails with a server error or a network error is retried
+  up to five times; a 404 means the asset has no sum.
 
 ## CI
 
