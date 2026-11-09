@@ -7540,7 +7540,7 @@ new action.
   same as Browse Log). Add `git.worktree_add`/`list`/`remove`; switching
   worktrees reuses the project-switch path so sessions restore per
   worktree. Tests: temp-repo integration tests. **Small–medium.**
-- [ ] **T635 — Agent Client Protocol (ACP) client.** Zed defined ACP, and
+- [x] **T635 — Agent Client Protocol (ACP) client.** Zed defined ACP, and
   Neovim (CodeCompanion, avante), Emacs (agent-shell), and JetBrains
   support it. Agents that speak it include Claude Code, Gemini CLI,
   Codex, and others. Vix's `vix-ai-core` is one-shot HTTP, and
@@ -7597,6 +7597,10 @@ new action.
   tests, and fake-agent tests for live order, the byte cap, stripping, kill and
   release. Still open, so T635 stays `[ ]`: Windows coverage of the fake-agent
   tests (needs a Windows machine).
+  **Done 2026-11-09 (`test/t635-acp-windows`):** the fake-agent tests run on
+  Windows. They find Python 3 as `python3` or `python`, every command the agent
+  runs is a Python script (no `sh` or `touch`), and a decoder test pins CRLF
+  lines. Verified on `build + test (windows-latest)` in CI run 42578870325.
 - [x] **T636 — Oil/wdired-style directory editing.** The explorer has
   only per-item operations, with no bulk rename. Fix: an
   `explorer.edit_directory` action that opens one line per entry with a
@@ -9990,6 +9994,16 @@ the generated `release.yml`.
   trusted publisher on `@vixide/vix` (GitHub Actions, `vixide/vix`,
   workflow `release.yml`); after the next release publishes through OIDC,
   delete `NPM_TOKEN` and set the package to refuse tokens.
+
+- [ ] **T790 — keyring 4.** `keyring` 4 is a different design: the library
+  moves to `keyring-core`, with one store crate per platform
+  (`apple-native-keyring-store`, `windows-native-keyring-store`, the Secret
+  Service stores) chosen and installed with `set_default_store` at startup;
+  the `apple-native`/`windows-native` features of 3.x are gone. Vix uses
+  `keyring::Entry` in `vix-ai-core/src/secret.rs` and `vix-db/src/secret.rs`.
+  Decide where the store is chosen (once, in the App), keep Linux on the
+  `secret-tool` path, check that entries written by 3.x are still found, and
+  run `cargo deny` on the new crates. Held at 3 on 2026-11-09. **Small–Medium.**
 
 - [x] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
