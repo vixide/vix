@@ -55,6 +55,7 @@ toolkit it is built on) and of the rest of its dependency graph:
 | `vix-iced` | iced (MIT) | Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only | Apache-2.0-only crates (`winit`, `ab_glyph`, …) |
 | `vix-gtk4` | gtk4-rs (MIT); GTK 4 (LGPL-2.1-or-later, dynamic) | Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only | Apache-2.0-only crates (as `vix`) |
 | `vix-slint` | Slint (GPL-3.0-only, or Slint's royalty-free / commercial licenses) | GPL-3.0-only | the framework, used under its GPLv3 option |
+| `vix-zgui` | zgui (Apache-2.0); Servo's Stylo (MPL-2.0) | Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only | Apache-2.0-only crates (`winit`, `wgpu`, zgui itself, …); MPL-2.0 is file-level and allows every option |
 | `vix-bui` | BUI / `blenderui` (GPL-3.0-or-later from 0.4.1, derived from Blender) | GPL-3.0-only | the framework's "or later" is taken as v3 (0.4.0 was GPL-2.0-or-later, and the Apache-2.0-only crates ruled out GPLv2 anyway) |
 
 The table is derived, not authoritative: `scripts/check-binary-licenses`

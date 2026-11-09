@@ -1,16 +1,17 @@
-# Desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`, `vix-bui`)
+# Desktop GUIs (`vix-gpui`, `vix-egui`, `vix-iced`, `vix-gtk4`, `vix-slint`, `vix-bui`, `vix-zgui`)
 
-Native desktop windows for Vix on macOS, Windows and Linux, built six
+Native desktop windows for Vix on macOS, Windows and Linux, built seven
 times — on [GPUI](https://github.com/longbridge/gpui-kit) (via Longbridge's
 GPUI Kit), [egui](https://github.com/emilk/egui) (via eframe),
 [iced](https://github.com/iced-rs/iced), [GTK 4](https://gtk.org) (via
-gtk4-rs), [Slint](https://slint.dev) and
-[BUI](https://github.com/ppmpreetham/BUI) (Blender's UI) — each a complete, independent
+gtk4-rs), [Slint](https://slint.dev),
+[BUI](https://github.com/ppmpreetham/BUI) (Blender's UI) and
+[zgui](https://github.com/zortax/zgui) — each a complete, independent
 implementation, so the toolkits can be tried and compared side by side
 before committing to one.
 
 **Status:** experimental. GUI Phase 0 (T640) and Phase 1 (T641, T642)
-shipped, with iced, GTK 4 and Slint front ends added in T647 and BUI in T769; Phase 2 (native components) not started, and waits on choosing a
+shipped, with iced, GTK 4 and Slint front ends added in T647 BUI in T769 and zgui in T791; Phase 2 (native components) not started, and waits on choosing a
 toolkit.
 
 ```sh
@@ -20,6 +21,7 @@ cargo run --manifest-path gui/Cargo.toml --release -p vix-iced [-- FILE…]
 cargo run --manifest-path gui/Cargo.toml --release -p vix-gtk4 [-- FILE…]   # needs GTK 4 installed
 cargo run --manifest-path gui/Cargo.toml --release -p vix-slint [-- FILE…]
 cargo run --manifest-path gui/Cargo.toml --release -p vix-bui [-- FILE…]    # needs CMake
+cargo run --manifest-path gui/Cargo.toml --release -p vix-zgui [-- FILE…]
 ```
 
 All take the same command line as `vix` (`vix::cli::Cli`).
@@ -37,6 +39,7 @@ with one crate per front end:
 | `vix-gtk4` | The GTK 4 front end: a `DrawingArea` painted with Cairo and Pango, an `IMMulticontext` driven by the key controller, a GIO menu bar (native on every platform), `FileChooserNative`. gtk4-rs 0.11 against the GTK 4.0 API, so it builds with Ubuntu 22.04's GTK 4.6. |
 | `vix-slint` | The Slint front end: `.slint` markup compiled at startup by `slint-interpreter` (Slint's generated Rust contains `unsafe` code, which this workspace forbids), per-row repeaters of background, text and line elements whose models are diffed after each frame, a generated `MenuBar` (native on macOS and Windows), file dialog through `rfd`. Slint pinned `=1.18.1`; used under the GPL-3.0-only, so `vix-slint` itself is `GPL-3.0-only`. |
 | `vix-bui` | The BUI front end: one BUI `canvas` painted from the cell grid in a monospace font found through `fontique` and registered as BUI's default family, elements above it for bold, italic and per-character fallback (which BUI lacks), BUI's own window and input, native menus (macOS) through `muda`, file dialog through `rfd`. `blenderui` pinned `=0.4.0`, GPL-2.0-or-later, so `vix-bui` is `GPL-3.0-only`. Its own spec: [`gui/vix-bui/spec/index.md`](../vix-bui/spec/index.md). |
+| `vix-zgui` | The zgui front end: one zgui custom element that fits the grid to its CSS box and paints it on zgui's quad and glyph pipelines, text shaped through the window's own font system (`Shaper::shape_line`, ligatures off), zgui's window, listeners and timer, native menus (macOS) through zgui's own `with_menu`, file dialog through `rfd`. zgui pinned `=0.1.0` (Apache-2.0). Its own spec: [`gui/vix-zgui/spec/index.md`](../vix-zgui/spec/index.md). |
 
 Each crate also carries its own copy of the parts that do not depend on
 the toolkit: a ratatui cell-grid `Backend` (`grid`), color resolution and
@@ -87,7 +90,8 @@ BSD-3-Clause OR MIT OR GPL-3.0-only` (GPUI is Apache-2.0 only, and every
 toolkit stack links Apache-2.0-only crates, which rule out GPL-2.0-only)
 and `vix-slint` is `GPL-3.0-only` (Slint, used under its GPLv3 option), and so is
 `vix-bui` (BUI is GPL-3.0-or-later from 0.4.1; 0.4.0 was GPL-2.0-or-later,
-and the Apache-2.0-only crates rule out GPLv2 either way).
+and the Apache-2.0-only crates rule out GPLv2 either way); `vix-zgui`
+has the five-way choice (zgui is Apache-2.0, and its Stylo is MPL-2.0).
 A new front end, or a toolkit upgrade, follows the same rule. See
 [`spec/license/index.md`](../../spec/license/index.md) ("Binary licenses").
 
@@ -134,6 +138,7 @@ A new front end, or a toolkit upgrade, follows the same rule. See
 | `vix-gtk4` | Pango over Cairo (software); OS font stack with per-glyph fallback | every platform (GIO menu model; the global bar on macOS) | `FileChooserNative`, every platform | commits through an `IMMulticontext`; candidate window at the cursor | retained `DrawingArea`, `queue_draw` |
 | `vix-slint` | Slint's femtovg renderer (OpenGL) with parley / fontique; per-script fallback, icon spans given the Nerd Font family | macOS and Windows (Slint's `MenuBar`); none on Linux, where it would duplicate the in-grid bar | `rfd` (macOS menu only) | none (Slint enables IME only for a focused `TextInput`) | retained elements; per-row models diffed each frame |
 | `vix-bui` | BUI's FreeType text: the monospace font replaces BUI's default family on the canvas, each character placed at its cell; bold, italic and fallback as elements, fallback chosen here per character from a fixed list (BUI has none; no shaping, no color emoji); box and block characters as rectangles; embedded Inter if no font is found; software raster on macOS | macOS only (`muda`, clicks polled by the tick job) | `rfd` (macOS menu only) | none | one `canvas` plus an element per styled item, rebuilt on a notify (input, or `App::poll_interval` by a timer thread) |
+| `vix-zgui` | parley/fontique through the window's own `Shaper`, one shaped run per span with the cell's baseline imposed on every run; system per-character fallback after the Nerd Font families; wgpu glyph atlas | macOS only (zgui's `with_menu`, muda inside zgui; clicks through `on_menu`) | `rfd` (macOS menu only) | commits type like text (`ime_commit`); no preedit | retained custom element: repainted on an event, a tick that `App::poll_interval` says should redraw, or a resize; idle frames replay it |
 
 Clipboard keys (`Cmd/Ctrl+X/C/V`) arrive as plain keys in every build
 (egui needs `NativeOptions::clipboard_shortcuts = false` for that); Vix
@@ -175,6 +180,9 @@ so the `vix-slint: …` line printed on startup failure is unchanged.
 - `vix-bui` has no text shaping, color emoji or IME, cannot veto the window's close box (so closing it skips the
   unsaved-changes prompt) and drops keys until the pointer has entered the
   window or been clicked in it: all BUI 0.4 limits; see its spec.
+- `vix-zgui` takes light or dark from `VIX_GUI_THEME`, not the desktop,
+  and has no screenshot smoke test (zgui 0.1 publishes no off-screen window
+  or pixel readback); see its spec.
 - Native menu labels are translated at startup; changing the locale at
   runtime does not relabel them until restart.
 - Wide (CJK, emoji) glyphs are drawn at their cell position but sized by
@@ -209,6 +217,9 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/release
   binaries carry that license rather than Vix's five-way choice.
 - **`vix-bui` is not released** either (build it from source; it needs CMake
   and, on Linux, the X11 headers). Its binary would be GPL-3.0-only.
+- **`vix-zgui` has no release binaries** either. It is on crates.io
+  (`cargo install --locked vix-zgui`), and the Homebrew tap's hand-written
+  `vix-zgui` formula compiles that crate (`brew install vixide/tap/vix-zgui`).
 - **Windows** release builds use the `windows` subsystem, so no console
   window opens beside the GUI (which also means `--help` prints nothing
   there); debug builds keep the console.
@@ -260,7 +271,9 @@ painting; iced takes `window::screenshot` (it redraws after every message,
 hidden or not); GTK 4 paints the grid into a Cairo image surface with the
 same paint function, no window capture at all; Slint uses
 `Window::take_snapshot`; BUI renders an off-screen (headless) BUI window
-with its software raster, so it needs no display at all. `vix-gpui`'s feature enables
+with its software raster, so it needs no display at all. `vix-zgui` has
+no `screenshot` feature and is left out of the render loop: zgui 0.1.0's
+published crates have no off-screen window or pixel readback. `vix-gpui`'s feature enables
 `gpui-pre-platform`'s `test-support` directly, because GPUI Kit's own
 `test-support` also pulls in its alternate GPUI Fast backend, whose exact
 version pins conflict with the default backend's.

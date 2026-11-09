@@ -121,6 +121,7 @@
 - [Themes](themes/index.md)
 - [Todo Tree](todo-tree/index.md)
 - [Desktop Window on BUI](vix-bui/index.md)
+- [Desktop Window on zgui](vix-zgui/index.md)
 - [IDE Parity Features](ide-parity/index.md)
 - [Tools](tools/index.md)
 - [Welcome Panel](welcome-panel/index.md)

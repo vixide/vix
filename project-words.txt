@@ -816,6 +816,16 @@ nocontainer
 nosuch
 nosuchctx
 
+# zgui desktop GUI (gui/vix-zgui)
+zgui
+zortax
+Stylo
+vello
+readback
+libwayland
+Leptos
+libxkbcommon
+
 # BUI desktop GUI (gui/vix-bui)
 blenderui
 freetype

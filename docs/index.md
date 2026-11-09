@@ -58,7 +58,8 @@ Highlights:
   [Multiple Cursors](multiple-cursors/index.md) (select-all-occurrences, column
   selection) · [Macros](macros/index.md) (record, save, replay).
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md) ·
-  [Desktop window on BUI](vix-bui/index.md) (the experimental `vix-bui` GUI).
+  [Desktop window on BUI](vix-bui/index.md) (the experimental `vix-bui` GUI) ·
+  [Desktop window on zgui](vix-zgui/index.md) (the experimental `vix-zgui` GUI).
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
   `ai_command` assistant). AI is optional: `ai = "off"` turns it all off.
 - [Scripting](scripting/index.md) (Rhai `.rhai` scripts — new palette

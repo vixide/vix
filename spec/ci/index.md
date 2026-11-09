@@ -300,14 +300,14 @@ points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants prove
 
 `.github/workflows/gui.yml` (GitHub only) builds the desktop GUIs — `gui/`, a separate Cargo
 workspace the main gate never builds: `vix-gpui` (GPUI), `vix-egui`
-(egui), `vix-iced` (iced), `vix-gtk4` (GTK 4), `vix-slint` (Slint) and `vix-bui` (BUI) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
+(egui), `vix-iced` (iced), `vix-gtk4` (GTK 4), `vix-slint` (Slint), `vix-bui` (BUI) and `vix-zgui` (zgui) — on macOS, Windows and Linux: `cargo fmt --check`, pedantic clippy with warnings
 denied over all features, and the unit tests, all via `--manifest-path gui/Cargo.toml
 --locked`. On macOS it also runs each front end's real render (the `screenshot` feature:
-open the window, type into the command palette, save a PNG; `vix-bui`'s renders an off-screen BUI window) and uploads the images. Linux
+open the window, type into the command palette, save a PNG; `vix-bui`'s renders an off-screen BUI window; `vix-zgui` has none, since zgui 0.1 publishes no off-screen window or pixel readback) and uploads the images. Linux
 installs the windowing/font system libraries, GTK 4 and OpenGL/EGL first; macOS installs
 Homebrew's `gtk4`; Windows runners have no GTK, so `vix-gtk4` is excluded there. It is advisory (`continue-on-error`) and runs weekly, on version tags and on demand (T762), no longer on every push or PR. The matrix also includes
 `ubuntu-22.04` and `ubuntu-22.04-arm`, the runners `release.yml` builds the GUIs on: dist
-releases `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` (not `vix-gtk4` or `vix-bui`) from the same tag as `vix-tui` (T645; `dist-workspace.toml`
+releases `vix-gpui`, `vix-egui`, `vix-iced` and `vix-slint` (not `vix-gtk4`, `vix-bui` or `vix-zgui`) from the same tag as `vix-tui` (T645; `dist-workspace.toml`
 members `cargo:.` and `cargo:gui`), so a GUI that does not build there fails the whole release.
 See `gui/spec/index.md`.
 
