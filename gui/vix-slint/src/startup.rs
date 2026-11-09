@@ -25,7 +25,7 @@ pub struct Loaded {
 #[must_use]
 pub fn load(cli: &Cli) -> Loaded {
     vix::clipboard::use_system();
-    vix::db::secret::use_system_keyring();
+    vix::use_system_keyring();
     let (settings, error) = match Settings::try_load() {
         Ok(s) => (s, None),
         Err(e) => (Settings::default(), Some(e.to_string())),

@@ -41,11 +41,16 @@ fn run(program: &str, args: &[&str]) -> Option<String> {
 /// the process argument list either way); on Linux it runs `secret-tool
 /// lookup`. (Run H, T548: Windows support added — the `keyring` crate already
 /// had it, just not enabled.)
+///
+/// On macOS and Windows the entry comes from `keyring-core`'s process-default
+/// store, which the App shell installs once at startup (T790,
+/// `vix::use_system_keyring`). A process that never installs one (the test
+/// suite above all) gets `None` here without touching the OS keyring.
 #[must_use]
 pub fn keyring_get(provider: &str) -> Option<String> {
     #[cfg(any(target_os = "macos", windows))]
     {
-        keyring::Entry::new(SERVICE, provider)
+        keyring_core::Entry::new(SERVICE, provider)
             .ok()?
             .get_password()
             .ok()

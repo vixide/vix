@@ -9995,7 +9995,7 @@ the generated `release.yml`.
   workflow `release.yml`); after the next release publishes through OIDC,
   delete `NPM_TOKEN` and set the package to refuse tokens.
 
-- [ ] **T790 — keyring 4.** `keyring` 4 is a different design: the library
+- [x] **T790 — keyring 4.** `keyring` 4 is a different design: the library
   moves to `keyring-core`, with one store crate per platform
   (`apple-native-keyring-store`, `windows-native-keyring-store`, the Secret
   Service stores) chosen and installed with `set_default_store` at startup;
@@ -10004,6 +10004,17 @@ the generated `release.yml`.
   Decide where the store is chosen (once, in the App), keep Linux on the
   `secret-tool` path, check that entries written by 3.x are still found, and
   run `cargo deny` on the new crates. Held at 3 on 2026-11-09. **Small–Medium.**
+  Done: `vix-ai-core` and `vix-db` use `keyring_core::Entry` only; the new
+  `vix::use_system_keyring` (called by `vix`, `vix --mcp` and the seven GUIs)
+  installs `apple-native-keyring-store` / `windows-native-keyring-store` with
+  `set_default_store`, then opts in the DB workbench. The all-in-one `keyring`
+  4 crate was not used: its `v1` feature locks about 30 D-Bus/Secret Service crates
+  Vix never builds. The store crates are optional deps of `sql`/`ai`, so a
+  `--no-default-features` build still has no keyring crate. A probe linking
+  keyring 3 (`apple-native`) and the new stores wrote with 3, read with 4,
+  wrote with 4, read with 3, then deleted (service `vix-t790-compat-test`);
+  Windows keeps the `<user>.<service>` target. All crates MIT OR Apache-2.0;
+  `cargo deny` passes.
 
 - [ ] **T791 — `vix-zgui`, a desktop GUI on zgui.** A seventh front end in
   `gui/` on [zgui](https://github.com/zortax/zgui) 0.1.0 (Apache-2.0):

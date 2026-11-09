@@ -183,6 +183,31 @@ pub mod db {
         pub fn use_system_keyring() {}
     }
 }
+
+/// Opt this process into the OS keyring (T639, T790): install the platform's
+/// credential store as `keyring-core`'s process default, then turn on the DB
+/// workbench's saved-password lookups ([`db::secret::use_system_keyring`]).
+///
+/// This is the one place Vix chooses a keyring store: the macOS login
+/// Keychain (`apple-native-keyring-store`) or the Windows Credential Manager
+/// (`windows-native-keyring-store`). `vix-ai-core` and `vix-db` only build
+/// `keyring_core::Entry` values from that default, so a process that never
+/// calls this (the test suite above all) never reaches the OS keyring. Linux
+/// installs nothing: both crates use the `secret-tool` CLI there, and neither
+/// does a build without the `sql` and `ai` features, which links no keyring
+/// crate at all (`spec/cargo-features`). A store that fails to open is
+/// skipped, so keyring lookups simply find nothing.
+pub fn use_system_keyring() {
+    #[cfg(all(target_os = "macos", any(feature = "sql", feature = "ai")))]
+    if let Ok(store) = apple_native_keyring_store::keychain::Store::new() {
+        keyring_core::set_default_store(store);
+    }
+    #[cfg(all(windows, any(feature = "sql", feature = "ai")))]
+    if let Ok(store) = windows_native_keyring_store::Store::new() {
+        keyring_core::set_default_store(store);
+    }
+    db::secret::use_system_keyring();
+}
 pub use vix_diff_view as diff_view;
 pub use vix_doctor as doctor;
 pub use vix_edit_bytes as edit_bytes;

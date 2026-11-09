@@ -114,3 +114,15 @@ connection goes straight to the prompt. `vix` and each desktop GUI call it at
 startup, beside `clipboard::use_system`; the test suite never does, so no test
 waits on the host's keyring (a macOS Keychain lookup can take seconds) or
 reads a real credential.
+
+**The keyring store is chosen by the App (T790).** On macOS and Windows this
+crate depends only on `keyring-core` (keyring 4's library) and builds a
+`keyring_core::Entry` from its process-default store; it never picks a store.
+The binaries call `vix::use_system_keyring`, which installs the one platform
+store (`apple-native-keyring-store`'s login Keychain, or
+`windows-native-keyring-store`'s Credential Manager) with
+`keyring_core::set_default_store` and then calls
+`db::secret::use_system_keyring`. Entries keep keyring 3's naming (macOS: a
+generic password with service `vix-db` and account = the connection name;
+Windows: target `<account>.vix-db`), so passwords saved before T790 are still
+found. Linux is unchanged: `secret-tool`, no keyring crate.

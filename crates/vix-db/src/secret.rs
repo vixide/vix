@@ -7,8 +7,9 @@
 //! password can be stored back so later connects skip the prompt.
 //!
 //! The keyring backend is platform-specific: macOS uses the native Security
-//! framework and Windows the native Credential Manager (both via the
-//! `keyring` crate) so the password never appears as a process argument;
+//! framework and Windows the native Credential Manager (both via
+//! `keyring-core`'s process-default store, which the App shell installs at
+//! startup, T790) so the password never appears as a process argument;
 //! Linux uses the `secret-tool` CLI with the secret passed on stdin. All
 //! three keep the plaintext out of the process table. Any other platform has
 //! no supported backend (Run H, T548: Windows support added — the `keyring`
@@ -45,8 +46,9 @@ static SYSTEM_KEYRING: AtomicBool = AtomicBool::new(false);
 
 /// Route [`keyring_get`] / [`keyring_set`] to the OS keyring for the rest of
 /// the process. The `vix` binary and the desktop GUIs call this once at
-/// startup; anything that does not (the test suite above all) never touches
-/// the keyring.
+/// startup, through `vix::use_system_keyring`, which also installs the macOS
+/// or Windows credential store as `keyring-core`'s default (T790); anything
+/// that does not (the test suite above all) never touches the keyring.
 pub fn use_system_keyring() {
     SYSTEM_KEYRING.store(true, Ordering::Relaxed);
 }
@@ -125,7 +127,7 @@ pub fn keyring_get(conn: &Connection) -> Option<String> {
     }
     #[cfg(any(target_os = "macos", windows))]
     {
-        keyring::Entry::new(SERVICE, &account(conn))
+        keyring_core::Entry::new(SERVICE, &account(conn))
             .ok()?
             .get_password()
             .ok()
@@ -154,7 +156,7 @@ pub fn keyring_set(conn: &Connection, password: &str) -> bool {
     }
     #[cfg(any(target_os = "macos", windows))]
     {
-        keyring::Entry::new(SERVICE, &account(conn))
+        keyring_core::Entry::new(SERVICE, &account(conn))
             .and_then(|entry| entry.set_password(password))
             .is_ok()
     }

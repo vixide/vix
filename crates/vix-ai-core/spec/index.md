@@ -53,7 +53,14 @@ one provider name:
    wrapper script; run via `sh -c`, so shell syntax works).
 2. The OS keyring, account name = the provider's name (`"anthropic"` /
    `"openai"` / `"ollama"`), service `"vix-ai"` — macOS via the native
-   Security framework (the `keyring` crate), Linux via `secret-tool lookup`.
+   Security framework (login Keychain), Windows via Credential Manager, Linux
+   via `secret-tool lookup`. On macOS and Windows the lookup is a
+   `keyring_core::Entry` built from `keyring-core`'s process-default store;
+   this crate never picks a store itself. The App shell installs the platform
+   store once at startup (`vix::use_system_keyring`, T790), so a process that
+   never does (the test suite) finds no key and never reaches the Keychain.
+   Entries keep the same service/account naming keyring 3 used, so keys saved
+   before T790 are still found.
 
 Unlike the DB workbench's credential flow, there is no third, interactive
 step: an AI request that needs a key and resolves none simply fails
