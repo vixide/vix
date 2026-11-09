@@ -30,8 +30,9 @@ vix-theme = { workspace = true }
 # a CLI that exposes the plaintext password as a process argument (visible in
 # `ps`/Task Manager). Scoped to these two targets so Linux doesn't pull in the
 # backend; Linux keeps the already-secure `secret-tool` CLI (secret on stdin).
+# Only `keyring-core` (T790): the App shell installs the platform store.
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
-keyring = { workspace = true }
+keyring-core = { workspace = true }
 
 # `t!` expands to `rust_i18n` paths that machete cannot see.
 [package.metadata.cargo-machete]

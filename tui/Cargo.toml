@@ -85,12 +85,12 @@ syntax-all = ["vix-editor-core/syntax-all"]
 # Capability features (T586, spec/cargo-features). All default-on, so a normal
 # build is unchanged. They start empty (no `dep:` yet) and gate nothing but the
 # runtime filter in `src/capability.rs`; later tasks (T588+) attach crates.
-sql = ["dep:vix-db", "dep:vix-edit-sql"]
+sql = ["dep:vix-db", "dep:vix-edit-sql", "dep:keyring-core", "dep:apple-native-keyring-store", "dep:windows-native-keyring-store"]
 image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client", "vix-hl7/net", "vix-fhir/net"]
-ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel", "dep:vix-acp", "vix-acp/process"]
+ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel", "dep:vix-acp", "vix-acp/process", "dep:keyring-core", "dep:apple-native-keyring-store", "dep:windows-native-keyring-store"]
 git = ["tasks", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git", "vix-script?/plugins"]
 jj = ["tasks"]
 # The OC menu (T700-T708): runs the Docker/Podman/nerdctl CLI. Streamed output
@@ -506,6 +506,19 @@ harness = false
 # cfg, so it is only pulled in — and its C code only compiled — for musl builds.
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { workspace = true }
+
+# The OS keyring store (T790): `use_system_keyring` installs the one platform
+# credential store as `keyring-core`'s process default, which `vix-ai-core`
+# and `vix-db` build their entries from. Linux needs none: both crates use the
+# `secret-tool` CLI there.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+keyring-core = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { workspace = true, optional = true }
 
 [lints]
 workspace = true

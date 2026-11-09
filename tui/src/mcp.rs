@@ -442,7 +442,7 @@ pub fn run(files: &[PathBuf], locale: Option<&str>) -> bool {
     }
     // A shared server connection (T783) may take its password from the OS
     // keyring; nothing is read from it unless an MCP client uses one.
-    crate::db::secret::use_system_keyring();
+    crate::use_system_keyring();
     match root_for(files).and_then(|root| serve_stdio(&root)) {
         Ok(()) => true,
         Err(e) => {
