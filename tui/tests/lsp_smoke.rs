@@ -663,11 +663,14 @@ fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
             match ev {
                 LspEvent::ServerRestarted(paths) => {
                     restarts += 1;
-                    assert_eq!(
-                        paths,
-                        vec![file.clone()],
-                        "names the crashed file for replay"
-                    );
+                    // Paths come back from the server's URIs; on Windows
+                    // those are canonicalized to match open tabs (T772).
+                    let want = if cfg!(windows) {
+                        file.canonicalize().unwrap()
+                    } else {
+                        file.clone()
+                    };
+                    assert_eq!(paths, vec![want], "names the crashed file for replay");
                     // Exactly what App::poll_lsp does on this event: replay
                     // didOpen with the file's real (here, unchanged) content.
                     lsp.did_open(&file, "abc\n");

@@ -880,14 +880,22 @@ mod tests {
             SshTarget::parse(&format!("ssh://me@box:2200{}", url_path(&dir))).unwrap(),
         );
         assert!(other.remote_untrusted());
-        assert_eq!(
-            other
-                .load_session()
-                .recent_remotes
-                .first()
-                .map(String::as_str),
-            Some(format!("ssh://me@box:2200{}", url_path(&dir)).as_str())
-        );
+        let recent = other.load_session().recent_remotes.first().cloned();
+        if cfg!(windows) {
+            // The name is built from the App's root, which here is the local
+            // (verbatim) temp dir standing in for a remote POSIX path (T772).
+            assert!(
+                recent
+                    .as_deref()
+                    .is_some_and(|r| r.starts_with("ssh://me@box:2200/")),
+                "{recent:?}"
+            );
+        } else {
+            assert_eq!(
+                recent.as_deref(),
+                Some(format!("ssh://me@box:2200{}", url_path(&dir)).as_str())
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
