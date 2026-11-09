@@ -182,15 +182,25 @@ jobs:
         with:
           persist-credentials: false
       - name: install the pinned dist
+        env:
+          # Authenticated: GitHub throttles anonymous release downloads (504s
+          # on 2026-11-09, also inside dist's own installer script).
+          GH_TOKEN: ${{ github.token }}
         run: |
           version=$(sed -n 's/^cargo-dist-version = "\(.*\)"$/\1/p' dist-workspace.toml)
           test -n "$version"
-          # Download first, then run: piped into sh, a failed download (GitHub
-          # answers 504 now and then) left this step green with no dist.
-          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -LsSf \
-            -o dist-installer.sh \
-            "https://github.com/axodotdev/cargo-dist/releases/download/v$version/cargo-dist-installer.sh"
-          sh dist-installer.sh
+          t=cargo-dist-x86_64-unknown-linux-gnu
+          for i in 1 2 3; do
+            gh release download "v$version" --repo axodotdev/cargo-dist \
+              -p "$t.tar.xz" -p "$t.tar.xz.sha256" --clobber && break
+            test "$i" != 3
+            sleep $((i * 10))
+          done
+          sha256sum -c "$t.tar.xz.sha256"
+          tar xJf "$t.tar.xz"
+          mkdir -p "$HOME/.local/bin"
+          install "$t/dist" "$HOME/.local/bin/dist"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: dist generate --check
         run: dist generate --mode ci --check
 
