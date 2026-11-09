@@ -9,10 +9,11 @@
 #   cargo run --release -p vix-gtk4 [-- FILE…]   # GTK 4 (gtk4-rs)
 #   cargo run --release -p vix-slint [-- FILE…]  # Slint
 #   cargo run --release -p vix-bui [-- FILE…]    # BUI (Blender's UI)
+#   cargo run --release -p vix-zgui [-- FILE…]   # zgui
 
 [workspace]
 resolver = "3"
-members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint", "vix-bui"]
+members = ["vix-gpui", "vix-egui", "vix-iced", "vix-gtk4", "vix-slint", "vix-bui", "vix-zgui"]
 
 [workspace.package]
 version = "2.0.2"
@@ -32,9 +33,9 @@ authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 [workspace.dependencies]
 # The whole editor: `App`, `ui::draw`, settings, menus. Each GUI is another
 # front end over exactly the App shell the terminal binary uses.
-vix = { path = "../tui", package = "vix-tui" }
-vix-input = { path = "../crates/vix-input" }
-vix-i18n = { path = "../crates/vix-i18n" }
+vix = { path = "../tui", package = "vix-tui", version = "2.0.2" }
+vix-input = { path = "../crates/vix-input", version = "2.0.2" }
+vix-i18n = { path = "../crates/vix-i18n", version = "2.0.2" }
 rust-i18n = "4.2.4"
 clap = { version = "4", features = ["derive"] }
 # Same version as the root workspace's, so `ui::draw`'s Frame type matches.

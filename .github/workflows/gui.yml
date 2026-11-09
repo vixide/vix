@@ -1,6 +1,6 @@
 # The desktop GUIs (T641, T642, tasks.md; gui/spec/index.md): `gui/` is its own
 # Cargo workspace -- vix-gpui (GPUI), vix-egui (egui), vix-iced (iced), vix-gtk4
-# (GTK 4), vix-slint (Slint) and vix-bui (BUI), each self-contained -- so no
+# (GTK 4), vix-slint (Slint), vix-bui (BUI) and vix-zgui (zgui), each self-contained -- so no
 # GUI toolkit enters the terminal build, which also means the main CI gate
 # (ci.yml, scripts/check) never builds it. This workflow does, on all three
 # desktop platforms. Advisory for now (`continue-on-error`): both toolkits are

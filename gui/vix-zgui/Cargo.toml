@@ -1,0 +1,37 @@
+[package]
+name = "vix-zgui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# On crates.io (`cargo install vix-zgui`), unlike its siblings: the Homebrew
+# tap's `vix-zgui` formula builds this crate from source (T791).
+publish = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Vix desktop GUI on zgui (reactive, CSS-styled, wgpu-drawn): the full Vix App in a native window."
+keywords = ["editor", "ide", "gui", "zgui", "vix"]
+categories = ["text-editors", "gui"]
+include = ["/src", "/LICENSE", "/spec"]
+
+[dependencies]
+vix = { workspace = true }
+vix-input = { workspace = true }
+vix-i18n = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+# zgui (https://github.com/zortax/zgui), Apache-2.0: fine-grained signals,
+# Stylo CSS and a retained wgpu renderer. Pinned exactly: it is 0.x and
+# changes often. Its default features bring the winit backend (macOS,
+# Windows, X11) and the native Wayland one.
+zgui = "=0.1.0"
+
+# The platform file dialog, for the native menu's Open with System Dialog….
+# zgui builds the macOS menu bar itself (muda inside zgui-platform-winit).
+[target.'cfg(target_os = "macos")'.dependencies]
+rfd = "0.17"
+
+[lints]
+workspace = true

@@ -615,13 +615,19 @@ postponed, not cancelled. Full assessment and the option table:
 
 ## Run U — another GUI front end (2026-11-06)
 
-Vix has five desktop GUIs, each a full, independent implementation so the
+Vix had five desktop GUIs, each a full, independent implementation so the
 toolkits can be compared. T769 adds a sixth on BUI (Blender's UI as a
 library), the first to use a C-kit toolkit. It is deliberately thin: BUI's
 window, input and `canvas` painter around the unchanged `App`, with elements
 only for text the canvas cannot draw. Its spec,
 [`gui/vix-bui/spec`](gui/vix-bui/spec/index.md), lists what works and what does
 not. Task: T769 in `tasks.md`.
+
+T791 adds a seventh on [zgui](https://github.com/zortax/zgui), a reactive,
+CSS-styled Rust framework with a retained wgpu renderer. It is the first
+whose own extension point fits a terminal grid: one custom element paints
+quads and shaped glyph runs on the engine's pipelines, through the window's
+font system. Spec: [`gui/vix-zgui/spec`](gui/vix-zgui/spec/index.md).
 
 ## Run W — database workbench, from dbjoy (researched 2026-11-07)
 

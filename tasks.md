@@ -10005,6 +10005,28 @@ the generated `release.yml`.
   `secret-tool` path, check that entries written by 3.x are still found, and
   run `cargo deny` on the new crates. Held at 3 on 2026-11-09. **Small–Medium.**
 
+- [ ] **T791 — `vix-zgui`, a desktop GUI on zgui.** A seventh front end in
+  `gui/` on [zgui](https://github.com/zortax/zgui) 0.1.0 (Apache-2.0):
+  reactive, Stylo CSS, retained wgpu renderer. It stays thin: the cell grid
+  is one zgui custom element, so it fits, renders and paints on zgui's quad
+  and glyph pipelines, with spans shaped by `Shaper::shape_line` (ligatures
+  off). zgui provides the window, listeners, timer and close-request veto,
+  and its own `with_menu` (macOS) builds the menu bar, so there is no muda of
+  our own. `rfd` provides the file dialog. Spec
+  [`gui/vix-zgui/spec`](gui/vix-zgui/spec/index.md).
+  **Done 2026-11-09:** builds, pedantic clippy, 26 tests (key mapping, and
+  the model driven through it), the license check, and the release window
+  opens and runs on macOS. **Left:** look at a live window (text placement,
+  baseline, cursor, Nerd Font fallback); the native menu bar, dialog,
+  close-box veto and IME on a live window; Linux and Windows on `gui.yml`; a
+  screenshot smoke test once zgui publishes an off-screen window or pixel
+  readback (its `zgui-platform-headless` is not on crates.io). **Small** for
+  what is left.
+  **Published 2026-11-09:** `vix-zgui` 2.0.2 on crates.io (the first GUI crate
+  there) and a hand-written source formula `Formula/vix-zgui.rb` in
+  `vixide/homebrew-tap`. No prebuilt binaries: making `dist` build it is a
+  release decision.
+
 - [x] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
   on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first
