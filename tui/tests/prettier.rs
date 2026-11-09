@@ -3,7 +3,9 @@
 
 #![cfg(all(unix, feature = "tasks"))]
 
-use std::os::unix::fs::PermissionsExt;
+#[path = "support/script.rs"]
+mod script;
+
 use std::path::PathBuf;
 
 use vix::app::App;
@@ -18,8 +20,7 @@ fn project(tag: &str, trusted: bool) -> std::io::Result<(App, PathBuf)> {
     std::fs::create_dir_all(&bin_dir)?;
     let root = root.canonicalize()?;
     let bin = root.join("node_modules").join(".bin").join("prettier");
-    std::fs::write(&bin, "#!/bin/sh\necho '// FAKE-PRETTIER'\ncat\n")?;
-    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755))?;
+    script::write(&bin, "#!/bin/sh\necho '// FAKE-PRETTIER'\ncat\n")?;
     std::fs::write(root.join("a.ts"), "let a=1\n")?;
     std::fs::write(root.join("b.rs"), "fn b(){}\n")?;
 

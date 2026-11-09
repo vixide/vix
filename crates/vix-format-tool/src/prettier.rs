@@ -146,6 +146,28 @@ mod tests {
         Ok(p)
     }
 
+    /// [`format`], retried while the script is "busy" (ETXTBSY, T789):
+    /// another test's fork may still hold the just-written script open for
+    /// writing until it execs. This file may not start a process itself
+    /// (`tui/tests/spawn_sites.rs`), so it retries instead of writing the
+    /// script through `cp` as the other tests do.
+    fn format_settled(
+        bin: &Path,
+        file: &Path,
+        input: &str,
+        timeout: Duration,
+    ) -> Result<String, PrettierError> {
+        for _ in 0..50 {
+            match format(bin, file, input, timeout) {
+                Err(PrettierError::Io(e)) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                other => return other,
+            }
+        }
+        format(bin, file, input, timeout)
+    }
+
     fn tmp(tag: &str) -> std::io::Result<PathBuf> {
         let d = std::env::temp_dir().join(format!("vix-prettier-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
@@ -187,7 +209,7 @@ mod tests {
         let d = tmp("fmt").unwrap();
         let bin = script(&d, "p", r#"echo "// $1 $2"; cat"#).unwrap();
         let file = d.join("a.ts");
-        let out = format(&bin, &file, "let x=1\n", TIMEOUT).unwrap();
+        let out = format_settled(&bin, &file, "let x=1\n", TIMEOUT).unwrap();
         assert_eq!(
             out,
             format!("// --stdin-filepath {}\nlet x=1\n", file.display())
@@ -198,7 +220,7 @@ mod tests {
     fn nonzero_exit_is_failed_with_stderr() {
         let d = tmp("fail").unwrap();
         let bin = script(&d, "p", "echo 'SyntaxError' >&2; exit 2").unwrap();
-        match format(&bin, &d.join("a.ts"), "x", TIMEOUT) {
+        match format_settled(&bin, &d.join("a.ts"), "x", TIMEOUT) {
             Err(PrettierError::Failed(m)) => assert_eq!(m, "SyntaxError"),
             other => panic!("unexpected: {other:?}"),
         }
@@ -208,7 +230,7 @@ mod tests {
     fn hang_times_out() {
         let d = tmp("hang").unwrap();
         let bin = script(&d, "p", "sleep 30").unwrap();
-        let r = format(&bin, &d.join("a.ts"), "x", Duration::from_millis(100));
+        let r = format_settled(&bin, &d.join("a.ts"), "x", Duration::from_millis(100));
         assert!(matches!(r, Err(PrettierError::TimedOut)), "{r:?}");
     }
 

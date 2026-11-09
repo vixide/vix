@@ -12,6 +12,9 @@
     reason = "benches, examples and tests fail loudly on a broken fixture"
 )]
 
+#[path = "support/script.rs"]
+mod script;
+
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -74,8 +77,7 @@ fn fake_engine(dir: &Path) -> PathBuf {
         runs = q(&dir.join("runs.log")),
     );
     let path = dir.join("fake-engine");
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(&path, &script).unwrap();
     path
 }
 
@@ -291,7 +293,7 @@ fn an_upload_into_the_container_is_checksum_verified() {
     let dir = scratch("upload");
     // A stand-in `vix`: right version, but no agent.
     let fake = dir.join("fake-vix");
-    std::fs::write(
+    script::write(
         &fake,
         format!(
             "#!/bin/sh\ncase $1 in --version) printf '{{\"name\":\"vix\",\"version\":\"%s\",\"capabilities\":[]}}\\n' '{}' ;; *) exit 3 ;; esac\n",
@@ -299,7 +301,6 @@ fn an_upload_into_the_container_is_checksum_verified() {
         ),
     )
     .unwrap();
-    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
     let auth = authority(
         &dir,
         "podman://web/x",
