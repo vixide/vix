@@ -633,14 +633,17 @@ efgh
 ello
 
 # Cowork / OC / remote editing plans (2026-10-28)
+applehv
 ASKPASS
 buildah
+buildx
 collab
 Containerfile
 cowork
 crun
 daemonless
 dockable
+extractall
 FHIR
 Intelli
 loro

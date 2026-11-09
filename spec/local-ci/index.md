@@ -106,22 +106,39 @@ what a Mac misses: case-sensitive paths, glibc, anything that only builds with
 Linux tools.
 
 - *CLI.* It uses the `docker` command (`VIX_CONTAINER_CLI` overrides it).
-  Docker Desktop, Colima and OrbStack all provide it. With no CLI, or no
-  reachable daemon, it exits 1 and prints how to install or start Colima,
-  OrbStack or Docker. It installs nothing.
+  Docker Desktop, Colima, OrbStack and Podman's Docker-compatible socket all
+  provide it. With no CLI, or no reachable daemon, it exits 1 and prints how
+  to install or start Colima, OrbStack or Docker. It installs nothing.
 - *Image.* Built locally from a generated Dockerfile on stdin (no build
   context, so nothing of the repository enters the image): the official
-  `rust:<version>-bookworm`, where `<version>` is `rust-version` in the root
-  `Cargo.toml` (the MSRV; `VIX_LINUX_RUST` or `VIX_LINUX_IMAGE` override it),
-  plus clippy, rustfmt, python3, git and a C++ compiler. Hosted CI tracks
-  stable, so a lint added after the MSRV may differ; use `VIX_LINUX_RUST` to
-  match stable.
+  `rust:<version>-bookworm`, where `<version>` is the host's
+  `rustc --version`, plus clippy, rustfmt, python3, git, zip (the
+  `scripts/test-release-local` step packs a real `.zip`) and a C++ compiler.
+  The host toolchain, not the MSRV: the gate's clippy runs with `-D warnings`,
+  and clippy's lints move between releases, so at the MSRV (1.97) it failed on
+  a doc comment that the stable clippy of the local gate and hosted CI accepts.
+  The MSRV is promised only to `cargo check` (ci.yml's `msrv` job), and is the
+  fallback when there is no host `rustc`. `VIX_LINUX_RUST` or
+  `VIX_LINUX_IMAGE` override it. A buildx builder on the `docker-container`
+  driver keeps its result in its own cache, so the script passes `--load`
+  whenever `build --help` lists it (Podman and the legacy builder always load
+  and reject the flag); the run uses `--pull=never`, so a stale or missing
+  image is never looked up on, or fetched from, a registry.
 - *Mounts.* The repository is bind-mounted read-only at `/src` and copied into
-  the named volume `vix-check-linux-work`, where a throwaway git repository
-  (no branch called `main`, so `fast` checks everything) lets the gate's
-  `git diff` checks on generated docs run. `target/` and the cargo home are the
-  named volumes `vix-check-linux-target` and `vix-check-linux-cargo`, so reruns
-  are incremental. There is exactly one host bind mount.
+  `tree/` inside the named volume `vix-check-linux-work`, where a throwaway git
+  repository (no branch called `main`, so `fast` checks everything) lets the
+  gate's `git diff` checks on generated docs run. The copy is a subdirectory
+  because the volume's root belongs to the image's root user, which tar cannot
+  restamp and git refuses as "dubious ownership". `target/` and the cargo home
+  are the named volumes `vix-check-linux-target` and `vix-check-linux-cargo`,
+  so reruns are incremental. There is exactly one host bind mount.
+- *Jobs.* Cargo gets one job per 3 GiB of the engine's memory, at most one
+  per CPU (`VIX_LINUX_JOBS` overrides it). A Mac engine is a VM with no swap,
+  and on `aarch64` Linux GNU ld peaked at 2.5 GiB linking one test binary, so
+  one job per CPU had the linker OOM-killed.
+- *Disk.* The target volume for the `push` tier holds about 45 GB; the
+  engine's VM disk must have room for it, and a build for an older toolchain
+  stays in it until the volume is emptied.
 - *Isolation.* Runs as the caller's uid and gid, never root, with all
   capabilities dropped and `no-new-privileges`. It never mounts `~/.ssh`, git
   or other credentials, or the container socket, and passes no secret
@@ -134,11 +151,30 @@ Linux tools.
   container on Apple Silicon is not the `x86_64` that hosted CI runs.
 
 `scripts/test-check-linux` (part of the `push` tier and above) needs no
-Docker: it checks argument handling and the generated command (the MSRV image,
-non-root user, named volumes, a single read-only bind mount, no credential
-paths, `VIX_*` overrides) in dry-run mode, and the two failure messages with
-a stub CLI. The container itself is exercised only when someone runs the
-script with a real daemon.
+Docker: it checks argument handling and the generated command (the host
+toolchain's image, the MSRV fallback, non-root user, `--pull=never`, named
+volumes, a single read-only bind mount, no credential paths, the job count,
+`VIX_*` overrides) in dry-run mode, and with a stub CLI the two failure
+messages, `--load` for a buildx builder (even over a stale image), none for
+a builder without it, and the missing-image failure. The container itself is
+exercised only when someone runs the script with a real daemon; that was done
+on 2026-11-09 (see "Verified" below).
+
+**Verified (2026-11-09).** `scripts/check-linux` (the `push` tier) passed end
+to end on an Apple Silicon Mac against Podman 5.8.2 (rootless, `applehv`
+machine, 8 CPUs, 12 GiB, `linux/arm64`, a Fedora 43 VM), both through the
+Docker 27.5 CLI on Podman's Docker socket (buildx, `docker-container` driver)
+and with `VIX_CONTAINER_CLI=podman`, in `rust:1.99.1-bookworm`. The first real
+runs found the bugs fixed above: no `--load`, so `run` went to a registry, and
+then ran a stale image; tar and git refused the root-owned volume root; the
+linker was OOM-killed at one job per CPU; MSRV clippy failed `-D warnings`;
+`zip` was missing from the image. They also found one outside the script:
+`scripts/build-linux-packages` passed `filter="data"` to `extractall`, which
+Debian 12's Python 3.11.2 rejects, so it now does the same checks by hand on a
+Python without extraction filters. A cold run with 3 jobs took 745 s (build
+313 s, clippy 62 s, tests 278 s); a warm rerun about 80 s. Not verified:
+Docker Desktop, Colima and OrbStack themselves, an `x86_64` host, the `fast`
+and `full` tiers, and `--shell`.
 
 **Windows.** There is no Windows script, by design: a Windows VM cannot be
 driven from `sh` portably. [`docs/local-ci`](../../docs/local-ci/index.md)

@@ -287,7 +287,22 @@ def nfpm_command():
 def stage_archive(archive, stage, name, spec):
     """Unpack one release archive into `stage` and add the generated files."""
     with tarfile.open(archive) as tar:
-        tar.extractall(stage, filter="data")
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(stage, filter="data")
+        else:
+            # Python before 3.11.4 (Debian 12 ships 3.11.2) has no extraction
+            # filters (PEP 706) and rejects `filter=`. Do what the "data" filter
+            # does for a release archive: plain files and directories only,
+            # every path inside `stage`, no setuid/setgid/sticky or
+            # group/other-write bits.
+            root = os.path.realpath(stage)
+            members = tar.getmembers()
+            for member in members:
+                path = os.path.realpath(os.path.join(stage, member.name))
+                if not (member.isfile() or member.isdir()) or os.path.commonpath([root, path]) != root:
+                    sys.exit(f"{archive}: refusing archive member {member.name!r}")
+                member.mode &= 0o755
+            tar.extractall(stage, members=members)
     # dist archives hold one top-level directory: flatten it.
     (top,) = os.listdir(stage)
     inner = os.path.join(stage, top)

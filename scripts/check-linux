@@ -14,9 +14,11 @@
 #
 # What it does and does not do:
 #   - The image is built locally from a generated Dockerfile (no build context)
-#     on the official rust image whose version is `rust-version` in
-#     Cargo.toml (the MSRV), plus clippy, rustfmt and the few system tools the
-#     gate needs. Override with VIX_LINUX_RUST=<version> or VIX_LINUX_IMAGE.
+#     on the official rust image of the host's `rustc --version` (the
+#     toolchain the local gate uses; `rust-version` in Cargo.toml, the MSRV,
+#     only when there is no host rustc), plus clippy, rustfmt and the few
+#     system tools the gate needs. Override with VIX_LINUX_RUST=<version> or
+#     VIX_LINUX_IMAGE.
 #   - The repository is mounted READ-ONLY at /src and copied (without target/
 #     and .git) into a named volume where a throwaway git repository is made,
 #     because the gate runs `git diff` on the generated docs. Your working tree
@@ -94,8 +96,16 @@ esac
 dry=${VIX_CI_DRY_RUN:-0}
 cli=${VIX_CONTAINER_CLI:-docker}
 
-# The pinned toolchain: the workspace MSRV unless overridden.
+# The toolchain: the host's own `rustc` version, so the container runs the gate
+# with the same clippy and rustfmt as `scripts/check` on this Mac (and as hosted
+# CI, which runs clippy on stable). Not the MSRV: clippy's lints move between
+# releases, so `-D warnings` at the MSRV fails on code that stable accepts; the
+# MSRV is only promised to `cargo check` (ci.yml's msrv job). The MSRV is the
+# fallback when there is no host rustc.
 rust=${VIX_LINUX_RUST:-}
+if [ -z "$rust" ]; then
+	rust=$(rustc --version 2>/dev/null | sed -n 's/^rustc \([0-9][0-9.]*\)[ -].*/\1/p')
+fi
 if [ -z "$rust" ]; then
 	rust=$(sed -n 's/^rust-version *= *"\([0-9.]*\)".*/\1/p' "$root/Cargo.toml" | head -n 1)
 fi
@@ -127,6 +137,35 @@ MSG
 	exit 1
 fi
 
+# Parallel cargo jobs. A Mac engine runs a small VM (Podman, Colima and Docker
+# Desktop default to a few GiB, with no swap), and on aarch64 Linux rustc links
+# with GNU ld, which peaked at 2.5 GiB for one test binary of this workspace:
+# one job per CPU got the linker OOM-killed. So allow one job per 3 GiB of the
+# engine's memory, at most one per CPU. VIX_LINUX_JOBS=<n> overrides it; when
+# the engine's size cannot be read, cargo's own default stands.
+jobs=${VIX_LINUX_JOBS:-}
+if [ -z "$jobs" ]; then
+	size=$("$cli" info --format '{{.MemTotal}} {{.NCPU}}' 2>/dev/null ||
+		"$cli" info --format '{{.Host.MemTotal}} {{.Host.CPUs}}' 2>/dev/null || true)
+	mem=${size% *}
+	cpus=${size#* }
+	case "$mem$cpus" in
+	'' | *[!0-9]*) ;;
+	*)
+		jobs=$((mem / 3221225472))
+		[ "$jobs" -le "$cpus" ] || jobs=$cpus
+		[ "$jobs" -ge 1 ] || jobs=1
+		;;
+	esac
+fi
+case "$jobs" in
+'') ;;
+*[!0-9]* | 0)
+	echo "scripts/check-linux: VIX_LINUX_JOBS must be a positive number, not '$jobs'" >&2
+	exit 2
+	;;
+esac
+
 # The Dockerfile is generated and sent on stdin (no build context, so nothing
 # of the repository enters the image). The cache directories are mode 1777 so a
 # new named volume inherits them and a non-root user can write.
@@ -135,7 +174,7 @@ dockerfile() {
 FROM $base
 RUN rustup component add clippy rustfmt \\
  && apt-get update \\
- && apt-get install -y --no-install-recommends python3 git g++ make pkg-config \\
+ && apt-get install -y --no-install-recommends python3 git g++ make pkg-config zip \\
  && rm -rf /var/lib/apt/lists/* \\
  && mkdir -p /cache/target /cache/cargo /cache/work \\
  && chmod -R 1777 /cache
@@ -144,12 +183,16 @@ DOCKERFILE
 
 # What runs inside: copy the read-only tree into the work volume, make a
 # throwaway repository (no branch named main, so `fast` checks everything),
-# then the gate or a shell.
+# then the gate or a shell. The copy goes in a subdirectory the user creates:
+# the volume's root belongs to the image's root user (rootless Podman keeps
+# that), so tar cannot set its mode or times and git refuses it as a
+# repository of "dubious ownership".
 inner='set -eu
 mkdir -p /tmp/home
 find /cache/work -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-tar -C /src --exclude=./target --exclude=./.git --exclude=./.claude -cf - . | tar -C /cache/work -xf -
-cd /cache/work
+mkdir /cache/work/tree
+tar -C /src --exclude=./target --exclude=./.git --exclude=./.claude -cf - . | tar -C /cache/work/tree -xf -
+cd /cache/work/tree
 git init -q -b work
 git add -A
 git -c user.name=vix -c user.email=vix@localhost commit -q -m snapshot
@@ -165,7 +208,9 @@ fi
 # The one container command, as arguments after the CLI name.
 run_args() {
 	# shellcheck disable=SC2086 # $tty is empty or one flag
-	printf '%s\n' run --rm $tty \
+	# --pull=never: the image is always the one just built here; never fetch a
+	# same-named image from a registry.
+	printf '%s\n' run --rm $tty --pull=never \
 		--user "$(id -u):$(id -g)" \
 		--cap-drop ALL --security-opt no-new-privileges \
 		-v "$root:/src:ro" \
@@ -175,6 +220,7 @@ run_args() {
 		--tmpfs /tmp:exec \
 		-e HOME=/tmp/home -e CARGO_HOME=/cache/cargo -e CARGO_TARGET_DIR=/cache/target \
 		-e RUSTC_WRAPPER= -e CARGO_TERM_COLOR=never \
+		${jobs:+-e CARGO_BUILD_JOBS=$jobs} \
 		-w /cache/work \
 		"$image"
 }
@@ -182,7 +228,7 @@ run_args() {
 if [ "$dry" = 1 ]; then
 	echo "# image (built once from this Dockerfile, sent on stdin):"
 	dockerfile
-	echo "# $cli build -t $image -"
+	echo "# $cli build [--load, when buildx takes it] -t $image -"
 	echo "# run:"
 	echo "$cli $(run_args | tr '\n' ' ')sh -c <script>"
 	echo "# script:"
@@ -191,7 +237,21 @@ if [ "$dry" = 1 ]; then
 fi
 
 echo "== building image $image (cached after the first run)"
-dockerfile | "$cli" build -q -t "$image" -
+# A buildx builder on the docker-container driver keeps the result in its own
+# cache and does not load it into the image store: `run` would then use a stale
+# image of the same tag, or look for it on a registry. So pass `--load` whenever
+# `build` (buildx) accepts it. Plain `podman build` and the legacy builder
+# always load, and reject `--load`.
+load=""
+if "$cli" build --help 2>/dev/null | grep -q -- '--load'; then
+	load="--load"
+fi
+# shellcheck disable=SC2086 # $load is empty or one flag
+dockerfile | "$cli" build -q $load -t "$image" -
+if ! "$cli" image inspect "$image" >/dev/null 2>&1; then
+	echo "scripts/check-linux: '$cli build' did not leave $image in the local image store" >&2
+	exit 1
+fi
 echo "== running scripts/check --tier $tier in $image"
 # Arguments never contain spaces except the script, so word splitting is safe.
 # shellcheck disable=SC2046
