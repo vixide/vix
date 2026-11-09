@@ -501,9 +501,12 @@ which does not reach the linking crate). Vix offers itself under
 dependency with stronger terms would quietly take that choice away from anyone
 who ships a build — this check is what makes that visible. Two consequences
 are already recorded in the tree: `evalexpr` is pinned to 11.x because 12.0.0
-relicensed to AGPL-3.0-only, and `RUSTSEC-2024-0436` (`paste`, unmaintained)
-is ignored with a dated note because it arrives through
-`ratatui-image → icy_sixel → quantette → image/avif → rav1e`.
+relicensed to AGPL-3.0-only, and each ignored advisory in `deny.toml` carries
+a dated note naming the dependency path and what would let it go — for
+example `RUSTSEC-2026-0459` (bundled SQLite before 3.54.0), which arrives
+through `vix-db → sqlx → sqlx-sqlite → libsqlite3-sys` and stays until an sqlx
+release allows `libsqlite3-sys` 0.39.0. An ignore that no longer matches any
+crate is removed (`RUSTSEC-2024-0436`, `paste`, left the tree in 2026-11).
 
 ## Generated reference (T305)
 

@@ -9,15 +9,16 @@
 # its id here with a dated note rather than lowering the bar globally.
 yanked = "deny"
 ignore = [
-    # 2026-07-26: `paste` is unmaintained (no vulnerability). It is a
-    # build-time proc-macro reached only transitively, and not by a path this
-    # workspace chooses:
-    #   ratatui-image -> icy_sixel -> quantette -> image (default-formats
-    #   enables avif) -> ravif -> rav1e -> paste
-    # Sixel image preview is why ratatui-image is here, so the only ways out
-    # are upstream (rav1e dropping paste) or dropping image preview. Revisit
-    # when ratatui-image or rav1e moves.
-    "RUSTSEC-2024-0436",
+    # 2026-11-09: the SQLite bundled by `libsqlite3-sys` < 0.39.0 (SQLite
+    # < 3.54.0) can expose stale memory when a crafted database is opened
+    # with a crafted `-wal` file (CVE-2026-119375). Vix reaches it only
+    # through the DB workbench's SQLite driver:
+    #   vix-db -> sqlx 0.9.0 -> sqlx-sqlite 0.9.0 -> libsqlite3-sys 0.37.0
+    # and sqlx-sqlite 0.9.0, the latest release, pins `<0.38.0`, so no
+    # released sqlx can take the fix. The attack is local: it needs the user
+    # to open a hostile database file pair in the workbench. Remove this
+    # entry as soon as an sqlx release allows libsqlite3-sys >= 0.39.0.
+    "RUSTSEC-2026-0459",
     # 2026-09-02: `smartstring` is unmaintained (no vulnerability; repo
     # archived 2026-05-03). It's a mandatory, non-optional dependency of
     # `rhai` (crates/vix-script's scripting engine, tasks.md T102) — not
