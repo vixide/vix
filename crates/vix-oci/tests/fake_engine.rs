@@ -7,7 +7,9 @@
     reason = "tests fail loudly on a broken fixture"
 )]
 
-use std::os::unix::fs::PermissionsExt;
+#[path = "support/script.rs"]
+mod script;
+
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
@@ -25,8 +27,7 @@ fn serial() -> MutexGuard<'static, ()> {
 
 fn fake(dir: &std::path::Path, body: &str) -> PathBuf {
     let path = dir.join("docker");
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
     path
 }
 

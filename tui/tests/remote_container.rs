@@ -14,7 +14,9 @@
     reason = "benches, examples and tests fail loudly on a broken fixture"
 )]
 
-use std::os::unix::fs::PermissionsExt as _;
+#[path = "support/script.rs"]
+mod script;
+
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -24,8 +26,7 @@ use vix_authority::container::ExecOptions;
 use vix_input::{KeyCode, KeyEvent};
 
 fn script(path: &Path, body: &str) -> PathBuf {
-    std::fs::write(path, format!("#!/bin/sh\n{body}")).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(path, format!("#!/bin/sh\n{body}")).unwrap();
     path.to_path_buf()
 }
 

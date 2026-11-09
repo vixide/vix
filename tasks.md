@@ -9953,7 +9953,7 @@ the generated `release.yml`.
     container image (T743): the note is gone, T644 (4) and (6) and T670a are
     done. Deploying the site is the maintainer's call.
 
-- [ ] **T789 — ETXTBSY in script-running tests.** Tests that write a script
+- [x] **T789 — ETXTBSY in script-running tests.** Tests that write a script
   and run it race with another test's fork: a child forked while the script is
   still open for writing keeps that handle, and the exec fails with ETXTBSY
   ("Text file busy"). Seen in CI in `vix-oci`, `vix-authority`'s container
@@ -9963,6 +9963,17 @@ the generated `release.yml`.
   `tui/tests` files. Fix: one shared test helper that writes the script and
   retries the spawn on `ExecutableFileBusy`, or a lock per test binary.
   **Small.**
+  - **Done 2026-11-09** (`fix/t789-etxtbsy`): a lock only helps if *every*
+    spawn in the binary takes it, so instead no test process ever holds a
+    script open for writing. `script::write` stages the text under another
+    name and has `cp` write the real file, so the only write handle lives in
+    `cp`'s process and no fork here can inherit it; then mode 0755. One copy
+    in `tui/tests/support/script.rs` (seven test binaries, by `#[path]`),
+    one each in `vix-authority` and `vix-oci` (a published crate builds from
+    its own files). `vix-format-tool`'s prettier tests may not start a
+    process from `src/` (`tui/tests/spawn_sites.rs` allowlists spawn sites),
+    so they retry a call that fails with `ExecutableFileBusy` instead. The
+    earlier spawn locks in `vix-oci` and `vix-authority` stay.
 
 - [ ] **T788 — npm trusted publishing.** The npm token expires within 90
   days. Done 2026-11-08: `.github/workflows/publish-npm.yml` replaces dist's

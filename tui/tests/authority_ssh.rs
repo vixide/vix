@@ -12,7 +12,9 @@
     reason = "benches, examples and tests fail loudly on a broken fixture"
 )]
 
-use std::os::unix::fs::PermissionsExt as _;
+#[path = "support/script.rs"]
+mod script;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -35,8 +37,7 @@ fn fake_ssh(dir: &Path) -> PathBuf {
         calls.display()
     );
     let path = dir.join("fake-ssh");
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(&path, &script).unwrap();
     path
 }
 

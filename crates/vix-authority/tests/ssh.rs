@@ -9,6 +9,9 @@
     reason = "benches, examples and tests fail loudly on a broken fixture"
 )]
 
+#[path = "support/script.rs"]
+mod script;
+
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -78,8 +81,7 @@ fn fake_ssh_with(dir: &Path, login_shell: &str, prelude: &str) -> PathBuf {
         log = String::from_utf8(sh_quote(log.to_str().unwrap().as_bytes())).unwrap(),
     );
     let path = dir.join("fake-ssh");
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(&path, &script).unwrap();
     path
 }
 
@@ -486,8 +488,7 @@ fn fake_vix(dir: &Path, version: &str) -> (PathBuf, Vec<u8>) {
     )
     .into_bytes();
     let path = dir.join(format!("fake-vix-{version}"));
-    std::fs::write(&path, &body).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script::write(&path, &body).unwrap();
     (path, body)
 }
 
