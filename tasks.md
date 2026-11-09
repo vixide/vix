@@ -9953,6 +9953,17 @@ the generated `release.yml`.
     container image (T743): the note is gone, T644 (4) and (6) and T670a are
     done. Deploying the site is the maintainer's call.
 
+- [ ] **T789 — ETXTBSY in script-running tests.** Tests that write a script
+  and run it race with another test's fork: a child forked while the script is
+  still open for writing keeps that handle, and the exec fails with ETXTBSY
+  ("Text file busy"). Seen in CI in `vix-oci`, `vix-authority`'s container
+  tests (both now take a spawn lock) and `vix-format-tool`'s prettier tests
+  (coverage job, branch run 42537865540). Still without a lock: prettier.rs,
+  `vix-fileops`, `vix-authority`'s ssh tests, `tui/src/app.rs` and seven
+  `tui/tests` files. Fix: one shared test helper that writes the script and
+  retries the spawn on `ExecutableFileBusy`, or a lock per test binary.
+  **Small.**
+
 - [ ] **T788 — npm trusted publishing.** The npm token expires within 90
   days. Done 2026-11-08: `.github/workflows/publish-npm.yml` replaces dist's
   built-in npm job (`publish-jobs = [..., "./publish-npm", ...]`), with
