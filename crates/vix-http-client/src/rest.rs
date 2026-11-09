@@ -539,9 +539,14 @@ pub fn load_body_file(req: &mut Request, base: &Path) -> Result<(), BodyFileErro
     };
     let rel = rel.trim();
     let path = Path::new(rel);
+    // Only plain names (and `.`) stay inside `base`. `is_absolute` is not
+    // enough on Windows: `/etc/passwd` (a root, no drive) and `C:x` (a drive,
+    // no root) are not absolute, yet `base.join` would replace `base` with
+    // them (T772).
     if rel.is_empty()
-        || path.is_absolute()
-        || path.components().any(|c| matches!(c, Component::ParentDir))
+        || path
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir))
     {
         return Err(BodyFileError::Outside {
             path: rel.to_string(),
@@ -864,6 +869,18 @@ mod tests {
             load_body_file(&mut mk("< /etc/passwd"), &dir),
             Err(BodyFileError::Outside { .. })
         ));
+        // Windows: a root without a drive, or a drive without a root, is not
+        // `is_absolute` there but would still leave the folder (T772).
+        #[cfg(windows)]
+        for body in [r"< \Windows\win.ini", "< C:x", r"< C:\x"] {
+            assert!(
+                matches!(
+                    load_body_file(&mut mk(body), &dir),
+                    Err(BodyFileError::Outside { .. })
+                ),
+                "{body}"
+            );
+        }
         let missing = load_body_file(&mut mk("< nope.json"), &dir).unwrap_err();
         assert!(matches!(missing, BodyFileError::Read { .. }));
         assert!(std::error::Error::source(&missing).is_some());

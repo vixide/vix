@@ -1005,6 +1005,8 @@ pub(crate) fn t634_repo(name: &str) -> PathBuf {
         ("user.name", "Vix Test"),
         ("user.email", "test@example.invalid"),
         ("commit.gpgsign", "false"),
+        // Windows runners set core.autocrlf=true globally; keep LF (T772).
+        ("core.autocrlf", "false"),
     ] {
         t634_git(&dir, &["config", k, v]);
     }

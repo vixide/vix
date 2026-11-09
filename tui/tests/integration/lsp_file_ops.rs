@@ -78,7 +78,7 @@ fn explorer_delete_move_and_copy_reach_the_server() {
             "python3".into(),
             mock.to_string_lossy().into_owned(),
             log.to_string_lossy().into_owned(),
-            root.to_string_lossy().into_owned(),
+            vix::lsp::path_to_uri(&root),
         ],
     });
     let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));

@@ -663,11 +663,14 @@ fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
             match ev {
                 LspEvent::ServerRestarted(paths) => {
                     restarts += 1;
-                    assert_eq!(
-                        paths,
-                        vec![file.clone()],
-                        "names the crashed file for replay"
-                    );
+                    // Paths come back from the server's URIs; on Windows
+                    // those are canonicalized to match open tabs (T772).
+                    let want = if cfg!(windows) {
+                        file.canonicalize().unwrap()
+                    } else {
+                        file.clone()
+                    };
+                    assert_eq!(paths, vec![want], "names the crashed file for replay");
                     // Exactly what App::poll_lsp does on this event: replay
                     // didOpen with the file's real (here, unchanged) content.
                     lsp.did_open(&file, "abc\n");
@@ -1469,7 +1472,8 @@ fn code_lenses_are_requested_resolved_refreshed_and_run_in_a_live_app() {
 }
 
 /// T621: advertises `colorProvider` and `documentLinkProvider`; one red color
-/// on line 0, a file link on line 1 (to `argv[2]/b.rs#L2`) and an unsupported
+/// on line 0, a file link on line 1 (to `argv[2]/b.rs#L2`, `argv[2]` being the
+/// root's `file://` URI) and an unsupported
 /// `command:` link on line 2. Every request's method is appended to `argv[1]`.
 const MOCK_SERVER_DOC_EXTRAS: &str = r"
 import sys, json
@@ -1532,7 +1536,7 @@ while True:
              'additionalTextEdits':[{'range':rng(2,0,0),'newText':'X'}]}]})
     elif method == 'textDocument/documentLink':
         send({'jsonrpc':'2.0','id':mid,'result':[
-            {'range':rng(1,4,8),'target':'file://' + ROOT + '/b.rs#L2'},
+            {'range':rng(1,4,8),'target':ROOT + '/b.rs#L2'},
             {'range':rng(2,0,3),'target':'command:evil'},
             {'range':rng(2,4,6)}]})
     elif method == 'shutdown':
@@ -1574,7 +1578,8 @@ fn document_colors_and_links_are_drawn_and_opened_in_a_live_app() {
             "python3".into(),
             mock.to_string_lossy().into_owned(),
             log.to_string_lossy().into_owned(),
-            root.to_string_lossy().into_owned(),
+            // The root as a URI, so the mock's link is a real one on Windows.
+            vix::lsp::path_to_uri(&root),
         ],
     });
     let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));
@@ -1671,7 +1676,8 @@ fn edit_color_applies_the_picked_color_presentation() {
             "python3".into(),
             mock.to_string_lossy().into_owned(),
             log.to_string_lossy().into_owned(),
-            root.to_string_lossy().into_owned(),
+            // The root as a URI, so the mock's link is a real one on Windows.
+            vix::lsp::path_to_uri(&root),
         ],
     });
     let mut app = App::new(root.clone(), settings).with_backup_dir(root.join(".vix-test-backup"));

@@ -6755,6 +6755,7 @@ version = "2.0.2"
 dependencies = [
  "serde_json",
  "vix-conflict-tool",
+ "vix-lsp-core",
  "vix-markdown-preview",
  "vix-org",
  "vix-palette",

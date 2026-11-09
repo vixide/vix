@@ -200,8 +200,12 @@ fn run_configuration_runs_its_before_step_first() {
         Duration::from_secs(10),
     );
     let lines: Vec<String> = app.bottom_dock.lines.clone();
-    let prep = lines.iter().position(|l| l == "prep-ran").unwrap();
-    let go = lines.iter().position(|l| l == "go-ran").unwrap();
+    // Trimmed: cmd.exe's `echo prep-ran && …` keeps the space before `&&`.
+    let prep = lines
+        .iter()
+        .position(|l| l.trim_end() == "prep-ran")
+        .unwrap();
+    let go = lines.iter().position(|l| l.trim_end() == "go-ran").unwrap();
     assert!(prep < go, "before-launch step ran first: {lines:?}");
     let _ = fs::remove_dir_all(&dir);
 }

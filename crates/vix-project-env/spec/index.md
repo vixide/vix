@@ -39,7 +39,8 @@ values, `null` = unset). Detectors are tried in file order; the first whose
 files exist and whose command yields a non-empty object wins and reports as
 the detector's own `name` in the status bar (`ProjectEnv::label`; `custom` is only the source's generic label). At most 16 detectors; a detector with an empty
 name, no `detect` entries, an empty or NUL-containing `command`, or a `detect`
-entry that is absolute or contains `..`, or a `timeout_secs` outside 1 to 60 makes the whole file invalid and it is
+entry that is anything but plain names and `.` (absolute, `..`, or on Windows a
+root or drive such as `\x` or `C:x`), or a `timeout_secs` outside 1 to 60 makes the whole file invalid and it is
 ignored (never partially applied). A detector runs project-controlled code, so
 it is gated exactly like `direnv`/`mise`: only for a trusted workspace;
 otherwise it is reported in `Resolved::blocked` as `Source::Custom` and

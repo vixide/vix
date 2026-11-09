@@ -822,3 +822,4 @@ freetype
 keysym
 libx
 smallvec
+ETXTBSY

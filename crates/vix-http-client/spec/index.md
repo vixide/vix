@@ -29,7 +29,7 @@ Not yet: `$aadToken` blocks the UI thread for the CLI call (about a second); the
 
 | Variant | Meaning |
 | --- | --- |
-| `Outside { path }` | the `< path` body file is empty, absolute or contains `..` |
+| `Outside { path }` | the `< path` body file is empty, or has anything but plain names and `.` (absolute, `..`, and on Windows a root or drive such as `\x` or `C:x`, which are not absolute there but leave the folder) |
 | `Read { path, source }` | the file inside the folder could not be read (`io::Error`) |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `msg.http_error` line is unchanged.

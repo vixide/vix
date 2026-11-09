@@ -54,7 +54,8 @@ up, never reused). `Permission` is `View` (default) < `Edit` < `EditTerminal`;
 
 `SharedPath::parse` is the one door for a guest-named path. It is lexical:
 empty, absolute (`/`, `\`, `C:`), `..`, control-character and over-long paths
-are refused; `.`, repeated and trailing separators are normalized away. A
+are refused, and so is a drive (`C:`) as any later component, which Windows
+would treat as a new drive (T772); `.`, repeated and trailing separators are normalized away. A
 property test pins that an accepted path joined under a root never leaves it.
 Symlink checks need I/O and live in the App's workspace sharing (T696).
 

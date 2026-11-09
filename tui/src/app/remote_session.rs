@@ -815,6 +815,19 @@ mod tests {
         KeyEvent::from(KeyCode::Char(c))
     }
 
+    /// `dir` as the path part of an `ssh://` name: as it is on Unix; on
+    /// Windows `\\?\C:\x` becomes `/C:/x`, since a backslash or `?` cannot
+    /// sit in the URL (T772).
+    fn url_path(dir: &Path) -> String {
+        let text = dir.to_string_lossy();
+        if cfg!(windows) {
+            let plain = vix_lsp_core::uri::strip_verbatim(&text).replace('\\', "/");
+            format!("/{plain}")
+        } else {
+            text.into_owned()
+        }
+    }
+
     /// Adopting a remote shows the host, keys the session by its `ssh://`
     /// name, turns on the conflict check, and asks about trust; until
     /// trusted, workspace-defined actions are refused and language servers
@@ -822,7 +835,7 @@ mod tests {
     #[test]
     fn an_adopted_remote_is_untrusted_until_the_user_trusts_it() {
         let (mut app, dir) = app("trust");
-        let target = SshTarget::parse(&format!("ssh://me@box:2222{}", dir.display())).unwrap();
+        let target = SshTarget::parse(&format!("ssh://me@box:2222{}", url_path(&dir))).unwrap();
         app.adopt_remote(target);
         assert_eq!(app.remote_host(), Some("me@box:2222"));
         assert!(app.session_key().starts_with("ssh://me@box:2222/"));
@@ -858,23 +871,31 @@ mod tests {
         let session = dir.join("session.toml");
         let mut again = App::new(dir.clone(), Settings::default()).with_session_path(&session);
         again.adopt_remote(
-            SshTarget::parse(&format!("ssh://me@box:2222{}", dir.display())).unwrap(),
+            SshTarget::parse(&format!("ssh://me@box:2222{}", url_path(&dir))).unwrap(),
         );
         assert!(!again.remote_untrusted());
         assert!(again.confirm.is_none());
         let mut other = App::new(dir.clone(), Settings::default()).with_session_path(&session);
         other.adopt_remote(
-            SshTarget::parse(&format!("ssh://me@box:2200{}", dir.display())).unwrap(),
+            SshTarget::parse(&format!("ssh://me@box:2200{}", url_path(&dir))).unwrap(),
         );
         assert!(other.remote_untrusted());
-        assert_eq!(
-            other
-                .load_session()
-                .recent_remotes
-                .first()
-                .map(String::as_str),
-            Some(format!("ssh://me@box:2200{}", dir.display()).as_str())
-        );
+        let recent = other.load_session().recent_remotes.first().cloned();
+        if cfg!(windows) {
+            // The name is built from the App's root, which here is the local
+            // (verbatim) temp dir standing in for a remote POSIX path (T772).
+            assert!(
+                recent
+                    .as_deref()
+                    .is_some_and(|r| r.starts_with("ssh://me@box:2200/")),
+                "{recent:?}"
+            );
+        } else {
+            assert_eq!(
+                recent.as_deref(),
+                Some(format!("ssh://me@box:2200{}", url_path(&dir)).as_str())
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -886,7 +907,7 @@ mod tests {
         let (mut app, dir) = app("lost");
         let lost = io::Error::new(io::ErrorKind::NotConnected, "gone");
         assert!(!app.note_remote_error(&lost), "local: nothing to lose");
-        app.adopt_remote(SshTarget::parse(&format!("ssh://box{}", dir.display())).unwrap());
+        app.adopt_remote(SshTarget::parse(&format!("ssh://box{}", url_path(&dir))).unwrap());
         app.confirm = None;
         assert!(!app.note_remote_error(&io::Error::from(io::ErrorKind::NotFound)));
         assert!(app.note_remote_error(&lost));

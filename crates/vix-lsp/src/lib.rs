@@ -3043,47 +3043,29 @@ fn canonical(path: &Path) -> PathBuf {
 }
 
 /// Build a `file://` URI from a filesystem path, percent-encoding each segment.
+///
+/// On Windows a verbatim path (`\\?\C:\…`, what `canonicalize` returns)
+/// becomes `file:///C:/…` ([`vix_lsp_core::uri`], T772).
 #[must_use]
 pub fn path_to_uri(path: &Path) -> String {
-    let mut uri = String::from("file://");
-    let s = path.to_string_lossy();
-    for byte in s.bytes() {
-        match byte {
-            b'/' => uri.push('/'),
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                uri.push(byte as char);
-            }
-            _ => {
-                const HEX: &[u8; 16] = b"0123456789ABCDEF";
-                uri.push('%');
-                uri.push(HEX[(byte >> 4) as usize] as char);
-                uri.push(HEX[(byte & 0x0f) as usize] as char);
-            }
-        }
-    }
-    uri
+    vix_lsp_core::uri::file_uri_native(path)
 }
 
 /// Turn a `file://` URI back into a filesystem path (percent-decoded).
+///
+/// On Windows `file:///C:/…` becomes `C:\…`, canonicalized when the file
+/// exists so it matches the (verbatim) paths of open tabs; a path with no
+/// drive, such as a remote POSIX path, is kept as it is. A URI that is not
+/// `file://` or does not decode is returned as its text.
 #[must_use]
 pub fn uri_to_path(uri: &str) -> PathBuf {
-    let rest = uri.strip_prefix("file://").unwrap_or(uri);
-    let bytes = rest.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && i + 2 < bytes.len()
-            && let Ok(b) = u8::from_str_radix(&rest[i + 1..i + 3], 16)
-        {
-            out.push(b);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
+    let Some(path) = vix_lsp_core::uri::uri_path_native(uri) else {
+        return PathBuf::from(uri.strip_prefix("file://").unwrap_or(uri));
+    };
+    if cfg!(windows) && path.has_root() && path.is_absolute() {
+        return std::fs::canonicalize(&path).unwrap_or(path);
     }
-    PathBuf::from(String::from_utf8_lossy(&out).into_owned())
+    path
 }
 
 #[cfg(test)]

@@ -20,6 +20,7 @@ pub mod inline_completion;
 pub mod message;
 pub mod position;
 pub mod sync;
+pub mod uri;
 
 pub use position::Encoding;
 

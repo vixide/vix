@@ -9953,6 +9953,17 @@ the generated `release.yml`.
     container image (T743): the note is gone, T644 (4) and (6) and T670a are
     done. Deploying the site is the maintainer's call.
 
+- [ ] **T789 — ETXTBSY in script-running tests.** Tests that write a script
+  and run it race with another test's fork: a child forked while the script is
+  still open for writing keeps that handle, and the exec fails with ETXTBSY
+  ("Text file busy"). Seen in CI in `vix-oci`, `vix-authority`'s container
+  tests (both now take a spawn lock) and `vix-format-tool`'s prettier tests
+  (coverage job, branch run 42537865540). Still without a lock: prettier.rs,
+  `vix-fileops`, `vix-authority`'s ssh tests, `tui/src/app.rs` and seven
+  `tui/tests` files. Fix: one shared test helper that writes the script and
+  retries the spawn on `ExecutableFileBusy`, or a lock per test binary.
+  **Small.**
+
 - [ ] **T788 — npm trusted publishing.** The npm token expires within 90
   days. Done 2026-11-08: `.github/workflows/publish-npm.yml` replaces dist's
   built-in npm job (`publish-jobs = [..., "./publish-npm", ...]`), with
@@ -9962,7 +9973,7 @@ the generated `release.yml`.
   workflow `release.yml`); after the next release publishes through OIDC,
   delete `NPM_TOKEN` and set the package to refuse tokens.
 
-- [ ] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
+- [x] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
   on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first
   failure. Not a 2.0.1 regression. Windows can't be run locally, so each round
@@ -9979,6 +9990,34 @@ the generated `release.yml`.
   - **Test assumptions:** `ssh://` URLs built from Windows paths (`BadPort`), and
     a `sqlite:` URL holding `\\?\` in `integration::mcp`.
   - **Unknown:** `run_configuration_runs_its_before_step_first`.
+  - **Progress 2026-11-08** (`fix/t772-windows`, approved: push a branch and
+    run CI on it by hand). Fixed from the 2.0.2 log (run 42394890694, 20
+    failures in 9 targets), verified on macOS, not yet on Windows:
+    - URIs: a new `vix_lsp_core::uri` (pure, `windows` flag, tested on every
+      OS) is the one path↔`file://` conversion; `vix-lsp` and
+      `vix-mcp-server` delegate to it. `uri_to_path` canonicalizes a decoded
+      drive path, so it matches the verbatim tab paths. canonicalize itself
+      is unchanged: everything internal agrees on `\\?\` today, and
+      stripping it in one place would break the comparisons in the others.
+    - Confinement (real escapes): `load_body_file` and detector `detect`
+      entries accept only `Normal`/`CurDir` components; `SharedPath::parse`
+      refuses a drive component anywhere (`®\a:` → `®/a:` → drive `a:`).
+      `vix-acp`'s `contain` was safe (it refuses `/w/x` as not absolute);
+      only its doc example was Unix-only.
+    - `sqlite_url`: one escaping builder; `connect.rs`'s rwc URL did not
+      escape `?`/`#`/`%` (a bug on every OS).
+    - Tests: `core.autocrlf false` in test repos; mocks take the root as a
+      URI; remote-session tests write a Windows dir as `/C:/…` in `ssh://`;
+      run-config lines compared trimmed (`cmd`'s `echo x && …` keeps the
+      space); the MCP session test stores paths as the platform writes them.
+  - **Done 2026-11-09:** branch run 42537865540 has `build + test
+    (windows-latest)` green, the first time since 2.0.0. Round two fixed MCP's
+    lexical root check (compares without the verbatim prefix), the LSP crash
+    test (expects the canonical path on Windows), the remote-session name
+    check, and a stale `gui/Cargo.lock`. The same run's offline job hit
+    ETXTBSY in `vix-authority`'s container tests, which now share a spawn
+    lock like `vix-oci`'s. Windows CI still runs only on tags, the weekly
+    schedule and dispatch.
 
 - [x] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
   in a gate on a loaded machine (2026-11-07, `left: 3, right: 2` at

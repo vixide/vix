@@ -207,7 +207,13 @@ fn lexical_join(root: &Path, request: &Path) -> Option<PathBuf> {
             Component::RootDir | Component::Prefix(_) => out.push(component.as_os_str()),
         }
     }
-    out.starts_with(root).then_some(out)
+    // Compare without a Windows verbatim prefix: `root` is canonical
+    // (`\\?\C:\w`) while a request decoded from a `file://` URI is plain
+    // (`C:\w\a.rs`), and `starts_with` compares prefixes literally (T772).
+    let plain = |p: &Path| {
+        PathBuf::from(vix_lsp_core::uri::strip_verbatim(&p.to_string_lossy()).into_owned())
+    };
+    plain(&out).starts_with(plain(root)).then_some(out)
 }
 
 /// Whether a workspace-relative path names a file that may hold secrets:
