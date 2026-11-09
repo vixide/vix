@@ -24,6 +24,18 @@ use vix_authority::{Arg, Authority, ProcessSpec, conformance};
 
 static SEQ: AtomicUsize = AtomicUsize::new(0);
 
+/// Writing a fake engine and executing it races with another test's fork:
+/// a child forked while the script is still open for writing keeps that
+/// handle, and the exec then fails with ETXTBSY ("Text file busy"). Every
+/// test takes this lock, so writes and spawns never overlap (as in
+/// `vix-oci`'s fake-engine tests).
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    static SPAWN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    SPAWN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "vix-container-{tag}-{}-{}",
@@ -84,6 +96,7 @@ fn runs(dir: &Path) -> usize {
 
 #[test]
 fn every_kind_conforms_against_a_fake_engine() {
+    let _serial = serial();
     for (name, kind) in [
         ("docker://web/srv", "docker"),
         ("podman://me@web/srv", "podman"),
@@ -104,6 +117,7 @@ fn every_kind_conforms_against_a_fake_engine() {
 
 #[test]
 fn each_engine_gets_its_own_exec_command_line() {
+    let _serial = serial();
     let dir = scratch("argv");
     let prefix = |name: &str, tty: bool, env: &[&str]| {
         let auth = ContainerAuthority::new(
@@ -162,6 +176,7 @@ fn each_engine_gets_its_own_exec_command_line() {
 
 #[test]
 fn docker_passes_environment_values_by_name_never_on_argv() {
+    let _serial = serial();
     let dir = scratch("env");
     let auth = authority(&dir, "docker://web/x", ExecOptions::default());
     let cwd = dir.join("a 'proj'");
@@ -209,6 +224,7 @@ fn docker_passes_environment_values_by_name_never_on_argv() {
 
 #[test]
 fn the_terminal_is_a_login_shell_in_the_workspace() {
+    let _serial = serial();
     let dir = scratch("terminal");
     let auth = authority(&dir, "docker://web/x", ExecOptions::default());
     let cwd = dir.join("proj");
@@ -240,6 +256,7 @@ fn the_terminal_is_a_login_shell_in_the_workspace() {
 
 #[test]
 fn a_missing_container_is_a_lost_connection() {
+    let _serial = serial();
     let dir = scratch("gone");
     let auth = authority(&dir, "docker://gone/x", ExecOptions::default());
     let err = auth.connect().unwrap_err();
@@ -254,6 +271,7 @@ fn a_missing_container_is_a_lost_connection() {
 
 #[test]
 fn without_a_vix_inside_the_shell_scripts_stay() {
+    let _serial = serial();
     let dir = scratch("agent-none");
     let auth = authority(
         &dir,
@@ -269,6 +287,7 @@ fn without_a_vix_inside_the_shell_scripts_stay() {
 
 #[test]
 fn an_upload_into_the_container_is_checksum_verified() {
+    let _serial = serial();
     let dir = scratch("upload");
     // A stand-in `vix`: right version, but no agent.
     let fake = dir.join("fake-vix");
@@ -315,6 +334,7 @@ fn an_upload_into_the_container_is_checksum_verified() {
 
 #[test]
 fn remote_targets_connect_to_the_right_authority() {
+    let _serial = serial();
     let dir = scratch("connect");
     let target = RemoteTarget::parse("docker://web/srv").unwrap();
     let options =
@@ -330,6 +350,7 @@ fn remote_targets_connect_to_the_right_authority() {
 
 #[test]
 fn kinds_name_their_programs() {
+    let _serial = serial();
     assert_eq!(ExecKind::Docker.program(), "docker");
     assert_eq!(ExecKind::Kubernetes.scheme(), "k8s");
 }
@@ -340,6 +361,7 @@ fn kinds_name_their_programs() {
 /// Nothing runs without it.
 #[test]
 fn a_real_docker_container_conforms() {
+    let _serial = serial();
     let Some(value) = std::env::var_os("VIX_TEST_DOCKER") else {
         return;
     };
@@ -385,6 +407,7 @@ fn a_real_docker_container_conforms() {
 /// nothing. Nothing runs without it.
 #[test]
 fn a_real_kubernetes_container_conforms() {
+    let _serial = serial();
     let Some(value) = std::env::var_os("VIX_TEST_K8S") else {
         return;
     };
