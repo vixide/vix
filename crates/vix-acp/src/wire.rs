@@ -235,6 +235,16 @@ mod tests {
     }
 
     #[test]
+    fn crlf_lines_decode() {
+        // A Windows agent writing in text mode ends lines with `\r\n`.
+        let mut d = LineDecoder::new();
+        d.push(b"{\"a\":1}\r\n\r\n{\"b\":2}\r\n");
+        assert_eq!(d.pop(), Some(json!({"a": 1})));
+        assert_eq!(d.pop(), Some(json!({"b": 2})));
+        assert_eq!(d.malformed(), 0);
+    }
+
+    #[test]
     fn oversized_line_is_dropped_and_stream_resyncs() {
         let mut d = LineDecoder::new();
         d.push(&vec![b'x'; MAX_LINE + 10]);
