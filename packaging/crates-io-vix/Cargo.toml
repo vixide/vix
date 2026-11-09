@@ -1,0 +1,22 @@
+# The last release of the old `vix` crate (T644 item 3). Vix moved to the
+# `vix-tui` crate at 1.8.0; this package only tells people so. It is its own
+# one-package workspace, outside the main one, and is published by hand:
+#   cd packaging/crates-io-vix && cargo publish
+[package]
+name = "vix"
+version = "1.7.2"
+edition = "2021"
+rust-version = "1.70"
+description = "Vix moved to the vix-tui crate: cargo install vix-tui"
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/vixide/vix"
+homepage = "https://vixide.github.io"
+readme = "README.md"
+keywords = ["editor", "terminal", "tui", "ide"]
+categories = ["text-editors", "command-line-utilities"]
+
+[[bin]]
+name = "vix"
+path = "src/main.rs"
+
+[workspace]

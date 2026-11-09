@@ -49,6 +49,11 @@
           # Tree-sitter grammars and other vendored C/C++ code.
           nativeBuildInputs = [ pkgs.pkg-config ];
 
+          # SQLite for the DB workbench (sqlx). Cargo asks for the bundled
+          # copy, but the Nix build linked `-lsqlite3` from the system
+          # (Packaging run 42533263758, nixpkgs 2026-11-07), so provide it.
+          buildInputs = [ pkgs.sqlite ];
+
           # The test suite is `scripts/check`'s job, on every forge's CI.
           doCheck = false;
 

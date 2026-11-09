@@ -7687,7 +7687,7 @@ new action.
   `tui/src/…`; `-p vix` → `-p vix-tui` in `scripts/check` and all three
   forges' CI; ~120 docs/specs re-pathed (`check-docs` taught about the
   `tui/` and `gui/*` packages). **Done.**
-- [ ] **T644 — Release follow-ups for the `vix-tui` rename (at the next
+- [x] **T644 — Release follow-ups for the `vix-tui` rename (at the next
   release).** *Status 2026-11-06: item (1) is done. (2) is done in the docs but the
   assets are missing from 2.0.0; (4)-(6) moved to T771, and (5)'s rename is moot
   because the tap has never had a formula.* (1) ~~Publish the new crates in dependency order: `vix-input`
@@ -7715,6 +7715,11 @@ new action.
     `brew install vixide/homebrew-tap/vix-tui`. (6): getting-started lists
     the GUIs' Homebrew and installer commands. **Left:** (3), a decision
     for the maintainer (the `vix` crate is still at 1.7.1).
+  - **(3) approved 2026-11-08:** `packaging/crates-io-vix/` is a one-file
+    `vix` 1.7.2 whose README and `vix` command point to `vix-tui` (the
+    command prints `cargo uninstall vix` / `cargo install vix-tui` and exits
+    1). Its own workspace, published by hand. Published to crates.io
+    2026-11-08; T644 is complete.
 
 - [x] **T649 — Keep `vix-editor-core` semver-compatible after T598.**
   T598 changed the published `Editor::set_clipboard(&mut self, &str) ->
@@ -9948,7 +9953,16 @@ the generated `release.yml`.
     container image (T743): the note is gone, T644 (4) and (6) and T670a are
     done. Deploying the site is the maintainer's call.
 
-- [ ] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
+- [ ] **T788 — npm trusted publishing.** The npm token expires within 90
+  days. Done 2026-11-08: `.github/workflows/publish-npm.yml` replaces dist's
+  built-in npm job (`publish-jobs = [..., "./publish-npm", ...]`), with
+  `id-token: write` from `github-custom-job-permissions`, Node 24 and npm
+  11.5.1+; provenance is automatic. **Left (maintainer, npmjs.com):** add a
+  trusted publisher on `@vixide/vix` (GitHub Actions, `vixide/vix`,
+  workflow `release.yml`); after the next release publishes through OIDC,
+  delete `NPM_TOKEN` and set the package to refuse tokens.
+
+- [x] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
   on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first
   failure. Not a 2.0.1 regression. Windows can't be run locally, so each round
@@ -9985,6 +9999,14 @@ the generated `release.yml`.
       URI; remote-session tests write a Windows dir as `/C:/…` in `ssh://`;
       run-config lines compared trimmed (`cmd`'s `echo x && …` keeps the
       space); the MCP session test stores paths as the platform writes them.
+  - **Done 2026-11-09:** branch run 42537865540 has `build + test
+    (windows-latest)` green, the first time since 2.0.0. Round two fixed MCP's
+    lexical root check (compares without the verbatim prefix), the LSP crash
+    test (expects the canonical path on Windows), the remote-session name
+    check, and a stale `gui/Cargo.lock`. The same run's offline job hit
+    ETXTBSY in `vix-authority`'s container tests, which now share a spawn
+    lock like `vix-oci`'s. Windows CI still runs only on tags, the weekly
+    schedule and dispatch.
 
 - [x] **T773 — Flaky `idle_frames_make_no_whole_buffer_pass`.** Failed once
   in a gate on a loaded machine (2026-11-07, `left: 3, right: 2` at

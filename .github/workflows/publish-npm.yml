@@ -1,0 +1,57 @@
+# Publish the release's npm package (@vixide/vix) with npm trusted
+# publishing (OIDC) — see spec/ci/index.md.
+#
+# dist runs this as a custom publish job (`publish-jobs` in
+# dist-workspace.toml) once the GitHub Release exists, passing its plan. It
+# replaces dist's built-in npm job, which can only publish with a long-lived
+# token. npm checks the *calling* workflow, so the trusted publisher on
+# npmjs.com names `release.yml`, not this file. Both callers need
+# `id-token: write` (`github-custom-job-permissions` gives it to the caller).
+#
+# NPM_TOKEN stays as a fallback until the trusted publisher is configured:
+# the npm CLI tries OIDC first and only then the token. Once a release has
+# published through OIDC, delete the secret and set the package to refuse
+# tokens (npmjs.com → package → Settings → Publishing access).
+
+name: Publish npm
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN: ${{ inputs.plan }}
+    steps:
+      - name: Download the release's npm packages
+        run: |
+          tag=$(printf '%s' "$PLAN" | jq -r '.announcement_tag')
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir npm --pattern '*-npm-package.tar.gz'
+      - uses: actions/setup-node@v6
+        with:
+          # Trusted publishing needs Node 22.14+ and npm 11.5.1+.
+          node-version: '24.x'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Use npm 11.5.1 or later
+        run: |
+          npm --version
+          npm install --global 'npm@>=11.5.1'
+          npm --version
+      # Provenance is automatic with OIDC from a public repository.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in npm/*-npm-package.tar.gz; do
+            npm publish --access public "$pkg"
+          done

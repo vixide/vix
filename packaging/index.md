@@ -12,6 +12,15 @@ installers, npm, the MSI, `.deb`/`.rpm`/Arch packages and the release
 archives) are all built by `dist` and `.github/workflows/linux-packages.yml`;
 see [`dist-workspace.toml`](../dist-workspace.toml).
 
+## The old `vix` crate
+
+[`crates-io-vix/`](crates-io-vix/) is the last release of the `vix` crate
+(1.7.2, T644). Vix moved to `vix-tui` at 1.8.0; this package's `vix`
+command only prints how to switch and exits with status 1. It is its own
+one-package workspace and is published by hand
+(`cd packaging/crates-io-vix && cargo publish`), never by `dist` or the
+release workflow.
+
 ## Tooling and CI (spec: [`spec/packaging`](../spec/packaging/index.md))
 
 - `scripts/packaging check` (offline; part of `scripts/check`) keeps the
