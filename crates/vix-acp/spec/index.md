@@ -168,10 +168,19 @@ via `Client::resuming`. A saved id never widens what may run: the command is
 re-checked against the current setting, and an agent that has forgotten the id
 degrades to a fresh session.
 
+## Tests on every OS
+
+The fake agent (`tests/fake_agent.py`) and every command the tests ask it to
+run are Python 3 scripts, found as `python3` or else `python` (Windows usually
+has only `python`, and its `python3` can be the Store stub). No test needs a
+POSIX shell or tools such as `touch`, so the fake-agent tests in this crate and
+in `tui/tests/integration/acp.rs` build and run on Windows as well. A line
+ending in `\r\n`, as a Windows agent writing in text mode sends, decodes the
+same as one ending in `\n`.
+
 ## Not yet done
 
-Windows coverage of the fake-agent tests (they need `python3` and Unix tools such
-as `touch` and `sh`). Terminal output is shown in its own section rather than
+Terminal output is shown in its own section rather than
 under the tool call that embedded it (ACP tool-call `content` of type
 `terminal` is not parsed yet).
 

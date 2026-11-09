@@ -1,25 +1,53 @@
 //! T635: the Agent Client Protocol host. The "agent" is a scripted fake
 //! (`crates/vix-acp/tests/fake_agent.py`) run over real pipes; nothing here
 //! touches a network or a real assistant. The trust tests prove an untrusted
-//! workspace never spawns the agent at all.
-#![cfg(unix)]
+//! workspace never spawns the agent at all. Everything the agent runs is
+//! Python too, so the suite needs no POSIX shell and runs on Windows.
 
 use crate::integration::common::*;
 
+/// The first of `python3` and `python` that runs and is Python 3: Windows
+/// usually has only `python` (and its `python3` may be the Store stub).
+fn python() -> Option<&'static str> {
+    ["python3", "python"].into_iter().find(|p| {
+        std::process::Command::new(p)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| {
+                o.status.success()
+                    && String::from_utf8_lossy(&[o.stdout, o.stderr].concat()).contains("Python 3")
+            })
+    })
+}
+
 fn python_available() -> bool {
-    std::process::Command::new("python3")
-        .arg("--version")
-        .output()
-        .is_ok()
+    python().is_some()
+}
+
+/// The interpreter for commands the tests build (`python3` when none is found;
+/// such tests return early anyway).
+fn py() -> &'static str {
+    python().unwrap_or("python3")
 }
 
 fn fake_agent_command(log: &Path) -> String {
-    format!(
-        "python3 {}/../crates/vix-acp/tests/fake_agent.py {}",
-        env!("CARGO_MANIFEST_DIR"),
-        log.display()
-    )
+    let script =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/vix-acp/tests/fake_agent.py");
+    format!("{} {} {}", py(), script.display(), log.display())
 }
+
+/// Write a Python script named `name` into `dir` for the agent to run.
+fn py_script(dir: &Path, name: &str, code: &str) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, code).unwrap();
+    path
+}
+
+/// A script that creates the file named by its argument.
+const TOUCH: &str = "import sys\nopen(sys.argv[1], 'w').close()\n";
+
+/// A script that prints `tick` until it is stopped.
+const TICKER: &str = "import sys, time\nwhile True:\n    sys.stdout.buffer.write(b'tick\\n')\n    sys.stdout.flush()\n    time.sleep(0.05)\n";
 
 /// An app rooted at `dir` whose only configured agent is the fake one,
 /// with this workspace recorded as trusted when `trusted`.
@@ -488,7 +516,11 @@ fn a_terminal_runs_only_after_the_user_says_yes() {
     let (mut app, log) = agent_app(&dir, true);
     start(&mut app, &log);
     let marker = dir.join("made-by-agent");
-    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    let touch = py_script(&dir, "touch.py", TOUCH);
+    send_prompt(
+        &mut app,
+        &format!("term {} {} {}", py(), touch.display(), marker.display()),
+    );
     tick_until(&mut app, |a| {
         a.prompt
             .as_ref()
@@ -518,7 +550,11 @@ fn a_denied_terminal_runs_nothing() {
     let (mut app, log) = agent_app(&dir, true);
     start(&mut app, &log);
     let marker = dir.join("made-by-agent");
-    send_prompt(&mut app, &format!("term touch {}", marker.display()));
+    let touch = py_script(&dir, "touch.py", TOUCH);
+    send_prompt(
+        &mut app,
+        &format!("term {} {} {}", py(), touch.display(), marker.display()),
+    );
     tick_until(&mut app, |a| a.prompt.is_some());
     app.on_key(esc());
     tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
@@ -535,12 +571,26 @@ fn a_terminal_cannot_run_outside_the_workspace() {
     let dir = unique_dir("acp-term-cwd");
     let (mut app, log) = agent_app(&dir, true);
     start(&mut app, &log);
-    send_prompt(&mut app, "termin / touch /should-never-exist");
+    // The workspace's parent directory is outside it on every OS.
+    let outside = dir.parent().unwrap().to_path_buf();
+    let touch = py_script(&dir, "touch.py", TOUCH);
+    let marker = outside.join("acp-should-never-exist");
+    send_prompt(
+        &mut app,
+        &format!(
+            "termin {} {} {} {}",
+            outside.display(),
+            py(),
+            touch.display(),
+            marker.display()
+        ),
+    );
     tick_until(&mut app, |_| log_text(&log).contains("TERM denied"));
     assert!(
         app.prompt.is_none(),
         "an escaping directory is refused without even asking"
     );
+    assert!(!marker.exists());
     app.run_action("ai.agent_stop");
     fs::remove_dir_all(&dir).ok();
 }
@@ -566,14 +616,14 @@ fn plan_tab_text(app: &App) -> String {
         .unwrap_or_default()
 }
 
-/// Start the fake agent with the plan tab open, and write `script` to run.
+/// Start the fake agent with the plan tab open, and write the Python `script`
+/// to run.
 fn terminal_app(tag: &str, script: &str) -> (App, PathBuf, PathBuf) {
     let dir = unique_dir(tag);
     let (mut app, log) = agent_app(&dir, true);
     start(&mut app, &log);
     app.run_action("ai.agent_plan");
-    let path = dir.join("out.sh");
-    fs::write(&path, script).unwrap();
+    let path = py_script(&dir, "out.py", script);
     (app, log, path)
 }
 
@@ -582,9 +632,14 @@ fn terminal_output_shows_live_in_order_without_control_sequences() {
     if !python_available() {
         return;
     }
-    let script = "printf 'first\\n\\033[31msecond\\033[0m\\n\\033]0;pwned\\007'\nsleep 2\necho third >&2\nexit 4\n";
+    let script = "import sys, time\n\
+                  sys.stdout.buffer.write(b'first\\n\\x1b[31msecond\\x1b[0m\\n\\x1b]0;pwned\\x07')\n\
+                  sys.stdout.flush()\n\
+                  time.sleep(2)\n\
+                  sys.stderr.buffer.write(b'third\\n')\n\
+                  sys.exit(4)\n";
     let (mut app, log, script) = terminal_app("acp-term-live", script);
-    send_prompt(&mut app, &format!("term sh {}", script.display()));
+    send_prompt(&mut app, &format!("term {} {}", py(), script.display()));
     approve_terminal(&mut app);
     // Live: the first lines show while the command still sleeps.
     tick_until(&mut app, |a| plan_tab_text(a).contains("second"));
@@ -600,7 +655,9 @@ fn terminal_output_shows_live_in_order_without_control_sequences() {
         text.find(needle)
             .unwrap_or_else(|| panic!("{needle:?} missing from {text}"))
     };
-    assert!(at("$ sh ") < at("first") && at("first") < at("second") && at("second") < at("third"));
+    assert!(
+        at("$ python") < at("first") && at("first") < at("second") && at("second") < at("third")
+    );
     assert!(text.contains("4]"), "the exit status is shown: {text}");
     assert!(
         !text.chars().any(|c| c.is_control() && c != '\n'),
@@ -622,8 +679,14 @@ fn terminal_output_shown_respects_the_byte_limit() {
     if !python_available() {
         return;
     }
-    let (mut app, log, script) = terminal_app("acp-term-cap", "printf 0123456789abcdefghij\n");
-    send_prompt(&mut app, &format!("termcap 5 sh {}", script.display()));
+    let (mut app, log, script) = terminal_app(
+        "acp-term-cap",
+        "import sys\nsys.stdout.buffer.write(b'0123456789abcdefghij')\n",
+    );
+    send_prompt(
+        &mut app,
+        &format!("termcap 5 {} {}", py(), script.display()),
+    );
     approve_terminal(&mut app);
     tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
     app.poll_acp();
@@ -651,9 +714,8 @@ fn a_killed_terminal_stops_updating() {
     if !python_available() {
         return;
     }
-    let script = "while :; do echo tick; sleep 0.05; done\n";
-    let (mut app, log, script) = terminal_app("acp-term-kill", script);
-    send_prompt(&mut app, &format!("termkill sh {}", script.display()));
+    let (mut app, log, script) = terminal_app("acp-term-kill", TICKER);
+    send_prompt(&mut app, &format!("termkill {} {}", py(), script.display()));
     approve_terminal(&mut app);
     tick_until(&mut app, |_| log_text(&log).contains("TERM killed"));
     let before = settled_plan(&mut app);
@@ -668,9 +730,8 @@ fn a_released_terminal_stops_updating() {
     if !python_available() {
         return;
     }
-    let script = "while :; do echo tick; sleep 0.05; done\n";
-    let (mut app, log, script) = terminal_app("acp-term-release", script);
-    send_prompt(&mut app, &format!("termrel sh {}", script.display()));
+    let (mut app, log, script) = terminal_app("acp-term-release", TICKER);
+    send_prompt(&mut app, &format!("termrel {} {}", py(), script.display()));
     approve_terminal(&mut app);
     tick_until(&mut app, |_| log_text(&log).contains("TERM released"));
     let before = settled_plan(&mut app);

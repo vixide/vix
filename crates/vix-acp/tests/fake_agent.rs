@@ -1,6 +1,6 @@
 //! Drives the real `AgentProcess` and `Client` against the scripted fake agent
 //! (`fake_agent.py`) over real pipes. No network.
-#![cfg(all(unix, feature = "process"))]
+#![cfg(feature = "process")]
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -8,11 +8,22 @@ use std::time::{Duration, Instant};
 use vix_acp::process::AgentProcess;
 use vix_acp::{Client, Event, Phase};
 
+/// The first of `python3` and `python` that runs and is Python 3: Windows
+/// usually has only `python` (and its `python3` may be the Store stub).
+fn python() -> Option<&'static str> {
+    ["python3", "python"].into_iter().find(|p| {
+        std::process::Command::new(p)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| {
+                o.status.success()
+                    && String::from_utf8_lossy(&[o.stdout, o.stderr].concat()).contains("Python 3")
+            })
+    })
+}
+
 fn python_available() -> bool {
-    std::process::Command::new("python3")
-        .arg("--version")
-        .output()
-        .is_ok()
+    python().is_some()
 }
 
 fn temp(name: &str) -> PathBuf {
@@ -34,7 +45,8 @@ struct Rig {
 impl Rig {
     fn start(dir: &Path) -> Self {
         let log = dir.join("log.txt");
-        let argv = vec!["python3".into(), script(), log.display().to_string()];
+        let py = python().unwrap_or("python3");
+        let argv = vec![py.into(), script(), log.display().to_string()];
         let mut agent = AgentProcess::spawn(&argv, dir).unwrap_or_else(|e| panic!("{e}"));
         let mut client = Client::new(&dir.display().to_string());
         for m in client.start() {
