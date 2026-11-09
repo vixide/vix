@@ -48,6 +48,7 @@ fn draw_screen(
     selection: Option<Selection>,
 ) {
     let (rows, cols) = screen.size();
+    let (rows, cols) = (rows.get(), cols.get());
     let mut lines: Vec<Line> = Vec::with_capacity(rows as usize);
     for row in 0..rows.min(inner.height) {
         let mut spans: Vec<Span> = Vec::with_capacity(cols as usize);

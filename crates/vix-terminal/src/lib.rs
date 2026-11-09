@@ -52,6 +52,11 @@ pub const DEFAULT_SCROLLBACK: usize = 2000;
 /// is roughly 360 MB; the default is a twenty-fifth of that.
 pub const MAX_SCROLLBACK: usize = 50_000;
 
+/// `n` as the non-zero size `vt100` takes (0 becomes 1).
+fn nonzero(n: u16) -> std::num::NonZeroU16 {
+    std::num::NonZeroU16::new(n).unwrap_or(std::num::NonZeroU16::MIN)
+}
+
 /// The scrollback a terminal keeps for a configured `lines`: at most
 /// [`MAX_SCROLLBACK`] (0 turns scrollback off).
 #[must_use]
@@ -239,8 +244,8 @@ impl Terminal {
             cwd: cwd.to_path_buf(),
         };
         let parser = Arc::new(Mutex::new(vt100::Parser::new(
-            rows,
-            cols,
+            nonzero(rows),
+            nonzero(cols),
             clamp_scrollback(scrollback),
         )));
         let osc_cwd = Arc::new(Mutex::new(None));
@@ -366,7 +371,7 @@ impl Terminal {
         let screen = parser.screen();
         let (_, cols) = screen.size();
         screen
-            .contents_between(row, 0, row, cols)
+            .contents_between(row, 0, row, cols.get())
             .trim_end()
             .to_string()
     }
@@ -527,7 +532,7 @@ impl Terminal {
         // resized separately because `vt100` knows nothing about the PTY.
         let _ = self.master.resize(size);
         if let Ok(mut p) = self.parser.lock() {
-            p.screen_mut().set_size(rows, cols);
+            p.screen_mut().set_size(nonzero(rows), nonzero(cols));
         }
     }
 }
@@ -996,7 +1001,7 @@ mod tests {
     /// A 5-row parser keeping `cap` scrollback lines, fed `lines` numbered
     /// lines.
     fn fed(cap: usize, lines: usize) -> vt100::Parser {
-        let mut p = vt100::Parser::new(5, 20, cap);
+        let mut p = vt100::Parser::new(nonzero(5), nonzero(20), cap);
         for i in 1..=lines {
             p.process(format!("line {i}\r\n").as_bytes());
         }
@@ -1042,7 +1047,7 @@ mod tests {
 
     #[test]
     fn a_selection_copies_in_reading_order() {
-        let mut p = vt100::Parser::new(3, 10, 0);
+        let mut p = vt100::Parser::new(nonzero(3), nonzero(10), 0);
         p.process(b"hello\r\nworld");
         let sel = Selection {
             anchor: (1, 2),

@@ -1284,7 +1284,8 @@ impl App {
             return;
         };
         let (rows, cols) = screen.size();
-        let bytes = screen.state_formatted();
+        let (rows, cols) = (rows.get(), cols.get());
+        let bytes = screen.state_formatted().into_bytes();
         let Some(host) = self.cowork.host.as_mut() else {
             return;
         };
@@ -1304,9 +1305,10 @@ impl App {
             return;
         };
         let (rows, cols) = screen.size();
+        let (rows, cols) = (rows.get(), cols.get());
         let out = host
             .session
-            .terminal_for(peer, rows, cols, &screen.state_formatted());
+            .terminal_for(peer, rows, cols, screen.state_formatted().as_bytes());
         self.cowork_send(&out);
     }
 
@@ -1333,14 +1335,15 @@ impl App {
             return;
         };
         let (rows, cols) = screen.size();
+        let (rows, cols) = (rows.get(), cols.get());
         let same_size = self
             .cowork
             .term_sent
             .as_ref()
-            .is_some_and(|prev| prev.size() == (rows, cols));
+            .is_some_and(|prev| prev.size() == screen.size());
         let bytes = match self.cowork.term_sent.as_ref() {
-            Some(prev) if same_size => screen.state_diff(prev),
-            _ => screen.state_formatted(),
+            Some(prev) if same_size => screen.state_diff(prev).into_bytes(),
+            _ => screen.state_formatted().into_bytes(),
         };
         if bytes.is_empty() {
             return;
@@ -1379,7 +1382,9 @@ impl App {
     /// Guest: the host sent its whole terminal screen.
     fn cowork_terminal_screen(&mut self, rows: u16, cols: u16, screen: &[u8]) {
         let first = self.cowork.term_mirror.is_none();
-        let mut mirror = vt100::Parser::new(rows, cols, 0);
+        // A peer's 0 is drawn as 1, as for a local terminal.
+        let size = |n| std::num::NonZeroU16::new(n).unwrap_or(std::num::NonZeroU16::MIN);
+        let mut mirror = vt100::Parser::new(size(rows), size(cols), 0);
         mirror.process(screen);
         self.cowork.term_mirror = Some(mirror);
         if first {
@@ -2384,20 +2389,28 @@ mod tests {
     /// diff ends up with exactly the host's screen, cursor included.
     #[test]
     fn a_terminal_mirror_replays_the_hosts_screen_exactly() {
-        let mut host = vt100::Parser::new(6, 20, 0);
+        let mut host = vt100::Parser::new(
+            std::num::NonZeroU16::new(6).unwrap(),
+            std::num::NonZeroU16::new(20).unwrap(),
+            0,
+        );
         host.process(b"$ ls\r\n\x1b[1;31msrc\x1b[0m  tests\r\n$ ");
         let mut sent = host.screen().clone();
         assert!(host.screen().state_diff(&sent).is_empty(), "idle is silent");
 
-        let mut guest = vt100::Parser::new(6, 20, 0);
-        guest.process(&sent.state_formatted());
+        let mut guest = vt100::Parser::new(
+            std::num::NonZeroU16::new(6).unwrap(),
+            std::num::NonZeroU16::new(20).unwrap(),
+            0,
+        );
+        guest.process(sent.state_formatted().as_bytes());
         for chunk in [
             &b"echo hi\r\nhi\r\n$ "[..],
             b"\x1b[2J\x1b[H$ clear done",
             b"\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7",
         ] {
             host.process(chunk);
-            guest.process(&host.screen().state_diff(&sent));
+            guest.process(host.screen().state_diff(&sent).as_bytes());
             sent = host.screen().clone();
             assert_eq!(guest.screen().contents(), host.screen().contents());
             assert_eq!(
