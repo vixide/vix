@@ -54,20 +54,21 @@ release workflow.
 ## What the release really ships
 
 Every template below points at the real assets of a GitHub Release, checked
-against the 1.8.0 release:
+against the 2.0.2 release:
 
-- Tags have no `v` prefix: `releases/download/1.8.0/…`.
+- Tags have no `v` prefix: `releases/download/2.0.2/…`.
 - Archives are `vix-tui-<target>.tar.xz` (macOS, Linux) with the files under
   a `vix-tui-<target>/` directory: `vix`, `vix.1`, `README.md`,
   `CHANGELOG.md`, `LICENSE`.
 - Windows is `vix-tui-<target>.zip` with `vix.exe` (and the same files) at
   the root, plus an `.msi`.
 - Every archive has a `<name>.sha256` beside it.
-- `aarch64-pc-windows-msvc` (T658c) is new in 2.0.0, so 1.8.0 has no
-  Windows ARM assets.
+- `aarch64-pc-windows-msvc` (T658c) is new in 2.0.0; releases before it
+  have no Windows ARM assets.
 
-The templates carry version 1.8.0 and its real SHA-256 sums, so they can be
-checked against a release that exists. Bump them to the release being
+The templates carry version 2.0.2 and its real SHA-256 sums (rendered with
+`scripts/packaging render 2.0.2`), so they can be checked against a release
+that exists. Bump them to the release being
 submitted (version, URLs, hashes) before submitting.
 
 ## The channels

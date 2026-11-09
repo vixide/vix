@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -166,14 +167,27 @@ def check(root):
     return 0
 
 
-def fetch_sum(version, name):
-    try:
-        with urllib.request.urlopen(url(version, name) + ".sha256", timeout=30) as r:
-            return r.read().decode().split()[0].lower()
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
+def fetch_sum(version, name, attempts=5):
+    """The release's SHA-256 for asset NAME, or None when it has none (404).
+
+    GitHub's release download redirect sometimes answers 5xx or times out, so a
+    server error or network failure is retried with a growing pause.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url(version, name) + ".sha256", timeout=30) as r:
+                return r.read().decode().split()[0].lower()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            if e.code < 500 or attempt == attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == attempts:
+                raise
+        print(f"retrying {name}.sha256 (attempt {attempt} failed)", file=sys.stderr)
+        time.sleep(2 * attempt)
+    return None
 
 
 def render(root, version, sums_file, date):

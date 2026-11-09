@@ -2,16 +2,19 @@
 # Template (T742): not submitted to microsoft/winget-pkgs. See packaging/README.md.
 # The release's portable `.zip` holds `vix.exe` at its root.
 PackageIdentifier: vixide.vix-tui
-PackageVersion: 1.8.0
+PackageVersion: 2.0.2
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
   - RelativeFilePath: vix.exe
     PortableCommandAlias: vix
-ReleaseDate: 2026-10-25
+ReleaseDate: 2026-11-09
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/vixide/vix/releases/download/1.8.0/vix-tui-x86_64-pc-windows-msvc.zip
-    InstallerSha256: 6907EE0EA350F5713287D06268A77824B00889C75B1ECA6779FEE00D0635BF48
+    InstallerUrl: https://github.com/vixide/vix/releases/download/2.0.2/vix-tui-x86_64-pc-windows-msvc.zip
+    InstallerSha256: F52DEB4AC3ABD0F173D31F32E92414A2027CCDA55ED7BFD78D391B4B2730B3D0
+  - Architecture: arm64
+    InstallerUrl: https://github.com/vixide/vix/releases/download/2.0.2/vix-tui-aarch64-pc-windows-msvc.zip
+    InstallerSha256: 7DBDAB54F6263AF9AC223B5B8B4CF5A5BFE72856A508CFCF8229C2A092BD4C6D
 ManifestType: installer
 ManifestVersion: 1.9.0

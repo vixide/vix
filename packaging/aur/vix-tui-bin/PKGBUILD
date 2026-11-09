@@ -3,7 +3,7 @@
 # Template (T742): an AUR `-bin` package that repackages the release's own
 # glibc archive. Not pushed to the AUR. See packaging/README.md.
 pkgname=vix-tui-bin
-pkgver=1.8.0
+pkgver=2.0.2
 pkgrel=1
 pkgdesc='Vix: a keyboard-friendly terminal text editor and IDE (the vix command)'
 arch=('x86_64' 'aarch64')
@@ -17,8 +17,8 @@ conflicts=('vix-tui')
 options=('!strip' '!debug')
 source_x86_64=("${url}/releases/download/${pkgver}/vix-tui-x86_64-unknown-linux-gnu.tar.xz")
 source_aarch64=("${url}/releases/download/${pkgver}/vix-tui-aarch64-unknown-linux-gnu.tar.xz")
-sha256sums_x86_64=('98402d053e5a674e7f032e0f537c63f995e08a69d3d315ab733252a0dd05a895')
-sha256sums_aarch64=('9299c9f86b4f62b34922088caea58fe2474e48ac29bf15a6b02b89113686b562')
+sha256sums_x86_64=('8820d74839d13c95cb035a60c1d0fac6b6fbac4a5f3d0355a4198c42f7679d18')
+sha256sums_aarch64=('1ce2ad051af5e911bc4ec9acdf1370799ae6b82188562063a35ebff1de144db9')
 
 package() {
   cd "vix-tui-${CARCH}-unknown-linux-gnu"
