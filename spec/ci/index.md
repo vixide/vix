@@ -586,8 +586,11 @@ problem, but avoidable: the job now caches the verified binary keyed on
 `LYCHEE_VERSION`+`LYCHEE_SHA256` (`actions/cache@v4`), so only the *first* run
 after a version/checksum bump ever hits the network at all; the download
 step itself also retries (`curl --retry 3 --retry-all-errors`) for that
-first-run case. GitLab's and Codeberg's equivalent downloads have not (yet)
-shown this failure, so they are unchanged — revisit if one does.
+first-run case. Every other pinned download from GitHub Releases (cargo-deny
+and lychee on all three forges, dist's installer) now retries the same way,
+after the **dist-workflow** job failed on a `504` on 2026-11-09. That job
+downloads dist's installer to a file before running it: piped straight into
+`sh`, the failed download had left the install step green with no `dist`.
 
 ## Docs site (mdBook)
 

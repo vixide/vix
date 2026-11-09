@@ -95,7 +95,7 @@ deny:
     CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
   script:
     - tarball="cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl.tar.gz"
-    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$tarball"
+    - curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$tarball"
     - echo "$CARGO_DENY_SHA256  $tarball" | sha256sum --check --strict
     - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl/cargo-deny"
     # `--all-features` so the optional Tree-sitter grammar features are in the
@@ -111,7 +111,7 @@ docs-links:
     LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
   script:
     - tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
-    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+    - curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
     - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
     - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
     - scripts/ci docs-links
@@ -128,7 +128,7 @@ docs-links-external:
     LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
   script:
     - tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
-    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+    - curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
     - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
     - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
     - scripts/ci docs-links-external

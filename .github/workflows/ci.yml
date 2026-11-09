@@ -185,7 +185,12 @@ jobs:
         run: |
           version=$(sed -n 's/^cargo-dist-version = "\(.*\)"$/\1/p' dist-workspace.toml)
           test -n "$version"
-          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v$version/cargo-dist-installer.sh" | sh
+          # Download first, then run: piped into sh, a failed download (GitHub
+          # answers 504 now and then) left this step green with no dist.
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -LsSf \
+            -o dist-installer.sh \
+            "https://github.com/axodotdev/cargo-dist/releases/download/v$version/cargo-dist-installer.sh"
+          sh dist-installer.sh
       - name: dist generate --check
         run: dist generate --mode ci --check
 
