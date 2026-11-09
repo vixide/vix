@@ -54,6 +54,12 @@ fn dark_appearance() -> bool {
 /// The working directory becomes the workspace root (falling back to `.`).
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
+    // Before anything opens or loads: `--version` prints and exits, as in the
+    // terminal binary (the Homebrew formula's test runs it).
+    if cli.version {
+        println!("vix-zgui {}", env!("CARGO_PKG_VERSION"));
+        return std::process::ExitCode::SUCCESS;
+    }
     let loaded = startup::load(&cli);
     let dark = dark_appearance();
     let (app, title) = match startup::start(&cli, loaded, dark) {
