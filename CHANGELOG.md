@@ -46,6 +46,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Demo scripts run again.** The VHS tapes in `docs/demos/` changed to a `demo-workspace` path that no longer exists (it moved under `tui/`), and they ran Vix with your own settings and session, so text left unsaved by an earlier run came back in the next demo. Each tape now starts Vix with a fresh, empty home directory and closes the first-run Welcome screen. A new tape, `im-share.tape`, shares a selection in IM Notes and opens its `path:line` reference (T757).
 - **Docs and site describe 2.0.2 as released.** The documentation, the website and `llms.txt` no longer call 2.0 unreleased; they say the container image is built but not public yet and that `cargo binstall` is untested. The DB workbench docs now list every key, including the query log, the AI helpers, CSV import and cancel.
 
+### Security
+
+- **RUSTSEC-2026-0459 (bundled SQLite before 3.54.0) is ignored for now.** It lets a crafted SQLite database opened together with a crafted `-wal` file expose stale memory. Vix bundles the affected SQLite through the DB workbench's driver (`sqlx` 0.9.0 → `libsqlite3-sys` 0.37.0), and no `sqlx` release accepts the fixed `libsqlite3-sys` 0.39.0 yet, so `deny.toml` ignores the advisory with a dated note until one does. Until then, don't open SQLite files you don't trust in the workbench. The stale ignore for `paste` (RUSTSEC-2024-0436), which is no longer a dependency, is removed.
+
 ## [2.0.2] - 2026-11-07
 
 ### Fixed
