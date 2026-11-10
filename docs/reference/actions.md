@@ -57,6 +57,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `cursor_up` | Cursor Up | Catalog |
 | `cut` | Cut | Catalog |
 | `cut_line` | Cut Line | Catalog |
+| `cut_to_line_end` | Cut to Line End | Catalog |
 | `cycle_autocomplete_back` | Cycle Autocomplete Back | Catalog |
 | `db.begin` | Begin Transaction | Menu |
 | `db.commit` | Commit | Menu |
@@ -660,6 +661,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `select_to_start_of_text` | Select to First Non-Blank | Catalog |
 | `select_to_start_of_text_toggle` | Select to First Non-Blank (Toggle) | Catalog |
 | `select_up` | Select Up | Catalog |
+| `select_word` | Select Word | Catalog |
 | `select_word_left` | Select Word Left | Catalog |
 | `select_word_right` | Select Word Right | Catalog |
 | `shell_mode` | Shell Mode | Catalog |
@@ -844,4 +846,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**837 actions.**
+**839 actions.**

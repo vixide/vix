@@ -4373,6 +4373,8 @@ impl App {
             _ if self.run_cursor_action(id, view_h) => {}
             "delete_word_right" => edm!(delete_word_right),
             "delete_word_left" => edm!(delete_word_left),
+            "cut_to_line_end" => edm!(cut_to_line_end),
+            "select_word" => ed!(select_word),
             "delete_sub_word_right" => edm!(delete_sub_word_right),
             "delete_sub_word_left" => edm!(delete_sub_word_left),
             // editing

@@ -573,6 +573,38 @@ impl Editor {
         self.select_line();
         self.apply(Cut {});
     }
+    /// Cut from the cursor to the end of its line to the clipboard (Emacs's
+    /// `kill-line`). At the end of a line, cut the line break instead, which
+    /// joins the next line; at the end of the buffer, do nothing.
+    pub fn cut_to_line_end(&mut self) {
+        let cur = self.get_cursor();
+        let end = self.line_end(cur);
+        let to = if end > cur {
+            end
+        } else if end < self.code_ref().len_chars() {
+            end + 1
+        } else {
+            return;
+        };
+        self.set_selection(Some(Selection::new(cur, to)));
+        self.set_cursor(to);
+        self.apply(Cut {});
+    }
+    /// Select the word under the cursor, or the word that ends just before
+    /// it. Does nothing when the cursor touches no word.
+    pub fn select_word(&mut self) {
+        let cur = self.get_cursor();
+        let code = self.code_ref();
+        let (mut start, mut end) = code.word_boundaries(cur);
+        if start >= end && cur > 0 {
+            (start, end) = code.word_boundaries(cur - 1);
+        }
+        if start >= end {
+            return;
+        }
+        self.set_selection(Some(Selection::new(start, end)));
+        self.set_cursor(end);
+    }
     /// Drop the selection, keeping the cursor.
     pub fn deselect(&mut self) {
         self.clear_selection();
@@ -582,6 +614,59 @@ impl Editor {
         self.apply(InsertText {
             text: text.to_string(),
         });
+    }
+}
+
+#[cfg(test)]
+mod cut_to_line_end_and_select_word_tests {
+    use crate::editor::Editor;
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("rust", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    fn text(e: &Editor) -> String {
+        e.code_ref().get_content()
+    }
+
+    #[test]
+    fn cut_to_line_end_cuts_the_rest_of_the_line() {
+        let mut e = ed("hello world\nnext", 5);
+        e.cut_to_line_end();
+        assert_eq!(text(&e), "hello\nnext");
+        assert_eq!(e.get_cursor(), 5);
+    }
+
+    #[test]
+    fn cut_to_line_end_at_line_end_joins_the_next_line() {
+        let mut e = ed("ab\ncd", 2);
+        e.cut_to_line_end();
+        assert_eq!(text(&e), "abcd");
+    }
+
+    #[test]
+    fn cut_to_line_end_at_buffer_end_does_nothing() {
+        let mut e = ed("ab", 2);
+        e.cut_to_line_end();
+        assert_eq!(text(&e), "ab");
+    }
+
+    #[test]
+    fn select_word_selects_the_word_under_the_cursor() {
+        let mut e = ed("one two three", 5);
+        e.select_word();
+        let s = e.get_selection().unwrap();
+        assert_eq!((s.start.min(s.end), s.start.max(s.end)), (4, 7));
+    }
+
+    #[test]
+    fn select_word_just_after_a_word_selects_it() {
+        let mut e = ed("one two", 3);
+        e.select_word();
+        let s = e.get_selection().unwrap();
+        assert_eq!((s.start.min(s.end), s.start.max(s.end)), (0, 3));
     }
 }
 

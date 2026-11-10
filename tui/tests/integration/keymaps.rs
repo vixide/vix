@@ -224,6 +224,21 @@ fn fresh_keymap_signature_bindings() {
 }
 
 #[test]
+fn fresh_keymap_ctrl_k_cuts_to_line_end_and_ctrl_h_deletes_a_word() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:fresh");
+    type_str(&mut app, "one two");
+    // Ctrl+H deletes the word before the cursor.
+    app.on_key(ctrl('h'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "one ");
+    // Ctrl+K cuts from the cursor to the end of the line.
+    app.on_key(keycode(KeyCode::Home));
+    app.on_key(keycode(KeyCode::Right));
+    app.on_key(ctrl('k'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "o");
+}
+
+#[test]
 fn ttt_keymap_ctrl_k_chords() {
     let mut app = app_at(Path::new("."));
     app.run_action("view.keymap:ttt");

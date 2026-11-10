@@ -187,12 +187,13 @@ editor with GUI-style keys:
 - `Ctrl+E` focus the file explorer, `Ctrl+B` toggle it.
 - `Ctrl+F` find, `Ctrl+R` replace, `Ctrl+Shift+N` find previous, `Ctrl+G`
   go to line, `Ctrl+]` jump to the matching bracket.
-- `Ctrl+D` add a cursor at the next match, `Ctrl+L` select line, `Ctrl+T`
-  transpose characters, `Ctrl+/` comment.
+- `Ctrl+D` add a cursor at the next match, `Ctrl+L` select line, `Ctrl+W`
+  select word, `Ctrl+T` transpose characters, `Ctrl+/` comment.
+- `Ctrl+K` cut to the end of the line, `Ctrl+H` delete the word before the
+  cursor.
 
-Not bound yet, because Vix has no matching action: `Ctrl+K` delete to the end
-of the line, `Ctrl+W` select word, `Ctrl+H` delete word backward. Fresh's
-Quick Open also runs commands after a `>`; in Vix, use the command palette.
+Fresh's Quick Open also runs commands after a `>`; in Vix, use the command
+palette.
 
 ### ttt
 
