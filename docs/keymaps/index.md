@@ -174,8 +174,12 @@ Zed's default Linux shortcuts (on macOS Zed uses `Cmd` where Linux uses
   `Ctrl+Shift+T` / `Ctrl+Q` new / save / save as / close / close all /
   reopen closed / quit.
 
-Zed's two-key `Ctrl+K` chords (for example `Ctrl+K Ctrl+T` for the theme
-picker) are not bound yet; use the command palette.
+- `Ctrl+K` then: `Ctrl+L` toggle fold, `Ctrl+0` fold all, `Ctrl+J` unfold
+  all, `Ctrl+C` comment, `Ctrl+S` keyboard shortcuts, `Ctrl+W` close all,
+  `Ctrl+Z` soft wrap, `Ctrl+O` open a path, `V` Markdown preview.
+
+Zed's other `Ctrl+K` chords (the theme picker, pane splits with the arrow
+keys, `Ctrl+K Ctrl+[`/`Ctrl+]` recursive folds) are not bound yet.
 
 ### Fresh
 

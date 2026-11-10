@@ -211,6 +211,22 @@ fn zed_keymap_signature_bindings() {
 }
 
 #[test]
+fn zed_keymap_ctrl_k_chord_runs_the_second_key() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:zed");
+    type_str(&mut app, "x");
+    // Ctrl+K Ctrl+C toggles a comment instead of copying or typing.
+    let before = app.editor.active_tab().unwrap().lines()[0].clone();
+    app.on_key(ctrl('k'));
+    app.on_key(ctrl('c'));
+    assert_ne!(
+        app.editor.active_tab().unwrap().lines()[0],
+        before,
+        "Ctrl+K Ctrl+C changes the line (comment toggled)"
+    );
+}
+
+#[test]
 fn fresh_keymap_signature_bindings() {
     let mut app = app_at(Path::new("."));
     app.run_action("view.keymap:fresh");

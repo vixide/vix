@@ -453,6 +453,9 @@ mod tests {
         assert_eq!(lookup("zed", "", "C-."), Some("lsp.code_action"));
         // Ctrl+D stays unbound so the editor's own add-next-occurrence runs.
         assert_eq!(lookup("zed", "", "C-d"), None);
+        // Ctrl+K is the prefix of Zed's two-key chords.
+        assert_eq!(lookup("zed", "C-k", "C-l"), Some("editor.fold_toggle"));
+        assert_eq!(lookup("zed", "C-k", "v"), Some("tools.markdown_preview"));
     }
 
     #[test]
