@@ -148,6 +148,18 @@ const CTRL_K: &[Binding] = &[
         key_token: ",",
         action_id: "vix.settings",
     },
+    Binding {
+        key_token: "[",
+        action_id: "editor.fold_toggle",
+    },
+    Binding {
+        key_token: "0",
+        action_id: "editor.fold_all",
+    },
+    Binding {
+        key_token: "9",
+        action_id: "editor.unfold_all",
+    },
 ];
 
 /// The second key of ttt's `Ctrl+L …` (language) chords.

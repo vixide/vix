@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **ttt keymap: fold chords.** `Ctrl+K [` toggles a fold, `Ctrl+K 0` folds all and `Ctrl+K 9` unfolds all, as in ttt.
 - **Zed keymap: `Ctrl+K` chords.** `Ctrl+K Ctrl+L` toggles a fold, `Ctrl+K Ctrl+0`/`Ctrl+J` fold and unfold all, `Ctrl+K Ctrl+C` comments, `Ctrl+K Ctrl+S` shows the keyboard shortcuts, `Ctrl+K Ctrl+W` closes all, `Ctrl+K Ctrl+Z` toggles soft wrap, `Ctrl+K Ctrl+O` opens a path and `Ctrl+K V` opens the Markdown preview, as in Zed.
 - **Cut to Line End and Select Word.** Two new editor actions, `cut_to_line_end` (cut from the cursor to the end of the line, or the line break when the cursor is already there) and `select_word` (select the word at the cursor), both in the command palette and in `keybindings.toml`. The Fresh keymap now binds them to `Ctrl+K` and `Ctrl+W`, and `Ctrl+H` to delete the word before the cursor, as in Fresh.
 - **Fresh and ttt keymaps.** **View → Keymap → Fresh** binds [Fresh](https://github.com/sinelaw/fresh)'s default keys (`Ctrl+P` Quick Open, `Ctrl+E`/`Ctrl+B` file explorer, `Ctrl+]` matching bracket, …), and **View → Keymap → ttt** binds [ttt](https://github.com/eugenioenko/ttt)'s, including its two-key `Ctrl+K …` and `Ctrl+L …` chords (`Ctrl+K P` files, `Ctrl+K S` save as, `Ctrl+L F` format). Any table-driven keymap can now have such chord prefixes. Vix now has thirteen keymaps; see [`docs/keymaps`](docs/keymaps/index.md#fresh).

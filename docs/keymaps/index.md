@@ -215,7 +215,7 @@ chords: press `Ctrl+K` or `Ctrl+L`, release, then press the letter.
   search, `R` project replace, `C` Git changes, `T` terminal, `I` hover,
   `L` select all matches, `K` delete line, `J` join lines, `O` sort lines,
   `M` matching bracket, `B` bottom panel, `Y` keyboard shortcuts, `,`
-  settings.
+  settings, `[` toggle fold, `0` fold all, `9` unfold all.
 - `Ctrl+L` (language) then: `F` format, `R` references, `I` go to
   implementation, `T` go to type definition, `O` organize imports.
 
