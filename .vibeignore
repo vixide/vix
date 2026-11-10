@@ -1,0 +1,184 @@
+# Vibe ignore patterns for Vix project
+# This file tells the Vibe CLI which files and directories to ignore
+
+# Build artifacts
+target/
+Cargo.lock
+*.rs.bk
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+
+# Logs
+*.log
+logs/
+.vix/logs/
+
+# Environment and secrets
+.env
+.env.*
+.env.local
+.envrc
+.envrc.*
+.vix/env/
+!**/.envrc
+!**/.envrc.*
+
+# Node.js
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS specific files
+*.iml
+*.ipr
+*.iws
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# Vix specific
+.vix/session/
+.vix/recovery/
+.vix/state/
+.vix/keymaps/
+.vix/scripts/
+.vix/themes/
+.vix/config.toml
+.vix/config.toml.bak
+.vix/config.toml.old
+
+# Cache directories
+.cache/
+.kache/
+.sccache/
+
+# Build tool caches
+.cargo/
+
+# Documentation build
+site/
+docs/.vitepress/
+
+# Fuzz targets
+fuzz/target/
+fuzz/Cargo.lock
+
+# GUI build artifacts
+gui/target/
+
+# Test artifacts
+*.profraw
+*.profdata
+coverage/
+
+# Local configuration overrides
+*.local
+*.override
+
+# Backup files
+*.orig
+*.rej
+
+# Patch files
+*.patch
+*.diff
+
+# Compressed archives
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.rar
+*.7z
+
+# Binary files
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# System files
+core
+core.*
+
+# Process files
+*.pid
+*.pidfile
+*.lock
+
+# Test and benchmark output
+*.out
+*.output
+benchmark/
+
+# Package managers
+.pnp/
+.pnp.js
+.yarn/
+
+# Rust specific
+*.rlib
+*.rmeta
+incremental/
+debug/
+release/
+
+# Documentation
+doc/
+**/doc/
+
+# Misc
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Hidden files (except .vibeignore itself)
+.*
+!.vibeignore
+!.gitignore
+!.gitmodules
+!.github/
+!.gitlab/
+!.forgejo/
+!.vscode/
+!.idea/
