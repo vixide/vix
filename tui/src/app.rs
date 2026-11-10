@@ -1449,8 +1449,10 @@ enum Keymap {
     IntelliJWindows,
     /// Eclipse (Windows) shortcuts.
     Eclipse,
-    /// Sublime Text shortcuts, with `Ctrl` standing in for `Cmd`.
+    /// Sublime shortcuts, with `Ctrl` standing in for `Cmd`.
     Sublime,
+    /// Zed shortcuts (its Linux defaults), with `Ctrl` standing in for `Cmd`.
+    Zed,
 }
 
 impl Keymap {
@@ -1474,6 +1476,7 @@ impl Keymap {
             "intellij-windows" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
             "sublime" => Keymap::Sublime,
+            "zed" => Keymap::Zed,
             _ => return None,
         })
     }
@@ -6394,7 +6397,7 @@ impl App {
 
     /// The persisted/script key-binding override choke point (T104i),
     /// run between `org_table_key` and every keymap's own dispatch — the
-    /// *only* new call site, covering all 10 keymaps at once (see
+    /// *only* new call site, covering all 11 keymaps at once (see
     /// `crates/vix-keybindings/spec/index.md`'s "One choke point"/
     /// "Override layer"). Builds the incoming key's plain `vix-macros`
     /// token — the shared grammar every override source is authored in,
@@ -10690,7 +10693,7 @@ impl App {
                 }
             }
             id @ ("vi" | "emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
-            | "intellij-windows" | "eclipse" | "sublime" | "apple") => {
+            | "intellij-windows" | "eclipse" | "sublime" | "zed" | "apple") => {
                 for (action, keys) in Self::table_rows_for(id) {
                     add(action, keys);
                 }

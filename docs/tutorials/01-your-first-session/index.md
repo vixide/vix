@@ -33,7 +33,7 @@ reopen it from **Help → Welcome…**. See
 [`docs/welcome-panel/index.md`](../../welcome-panel/index.md).
 
 Everything below shows the default **Apple** keymap. Vix ships nine other
-keymaps (VS Code, Emacs, Vim, Spacemacs, IntelliJ, Eclipse, Sublime Text,
+keymaps (VS Code, Emacs, Vim, Spacemacs, IntelliJ, Eclipse, Sublime, Zed,
 …) — switch under **View → Keymap**, and see
 [`docs/keymaps/index.md`](../../keymaps/index.md). Whichever keymap you
 use, every action in this tutorial is also reachable from its menu or the

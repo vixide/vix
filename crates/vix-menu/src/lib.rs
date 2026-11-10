@@ -798,6 +798,7 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.intellij_win", "view.keymap:intellij-windows", ""),
     Item::leaf("menu.name.eclipse", "view.keymap:eclipse", ""),
     Item::leaf("menu.name.sublime", "view.keymap:sublime", ""),
+    Item::leaf("menu.name.zed", "view.keymap:zed", ""),
 ];
 
 /// The Vix (application) menu: About, License, Website.

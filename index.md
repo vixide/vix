@@ -39,7 +39,7 @@ quit. Other ways to install, including Windows, Linux packages and
 |                     |                                                                 |
 | ------------------- | --------------------------------------------------------------- |
 | **One binary**      | No plugin manager, no runtime, nothing to assemble first        |
-| **10 keymaps**      | Apple, VS Code, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime |
+| **11 keymaps**      | Apple, VS Code, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime, Zed |
 | **21 themes**       | Plus a theme editor and your own JSON themes                     |
 | **15 languages**    | The whole interface, from Arabic to Welsh                        |
 | **0 `unsafe`**      | `unsafe` Rust is forbidden in every crate                        |
@@ -49,9 +49,9 @@ quit. Other ways to install, including Windows, Linux packages and
 
 - **Familiar keys, no modes by default.** Ctrl/Cmd shortcuts, a real menu bar
   (Vix File Edit View Go Run AI DB JJ Git IM Org Project OC Tools Help), mouse
-  support, and `F1` for every shortcut. Ten keymaps — Apple (the default),
+  support, and `F1` for every shortcut. Eleven keymaps — Apple (the default),
   VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows),
-  Eclipse and Sublime Text — switchable live from **View → Keymap**.
+  Eclipse, Sublime and Zed — switchable live from **View → Keymap**.
 - **An IDE, not just an editor.** Language Server Protocol, a DAP debugger,
   Tree-sitter highlighting, Git (hunk staging, blame, an interactive commit
   graph, conflict resolver) and Jujutsu, a test runner, project tasks and an
@@ -119,7 +119,7 @@ editor? See the pages for
 [VS Code](docs/for-visual-studio-code-users/index.md),
 [IntelliJ](docs/for-intellij-users/index.md),
 [Eclipse](docs/for-eclipse-users/index.md),
-[Sublime Text](docs/for-sublime-users/index.md) and
+[Sublime](docs/for-sublime-users/index.md) and
 [Zed](docs/for-zed-users/index.md) users.
 
 ## Install

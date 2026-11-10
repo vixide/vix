@@ -53,7 +53,7 @@ Shared terms used across the code, specs, and docs.
 - **Keymap** — the keyboard navigation style: **Apple** (modifier shortcuts, the
   default), **VSCode macOS**, **VSCode Windows**, **Emacs** (`Ctrl` chords),
   **Vi** (modal), **Spacemacs** (Vi + `Space` leader), **IntelliJ macOS**,
-  **IntelliJ Windows**, **Eclipse**, or **Sublime Text**. Exactly one is active;
+  **IntelliJ Windows**, **Eclipse**, **Sublime**, or **Zed**. Exactly one is active;
   chosen in **View → Keymap…** and persisted in the `keymap` setting (id `vi`,
   `intellij-mac`, …).
 - **Mode (Vi)** — within the Vi keymap, **Normal** (motions/commands) vs

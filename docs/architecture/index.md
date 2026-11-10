@@ -25,7 +25,7 @@ examples:
 | `git` / `conflict_tool`      | Git status/diff/staging via the git CLI; merge-conflict marker parsing. |
 | `calendar_panel`             | Calendar date/time strings and the navigable Monday-first month grid (owns `jiff`). |
 | `theme_model`                | Monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
-| `locale_model` / `keymap_model` | Available UI languages; the ten keyboard navigation styles (Apple, VSCode macOS/Windows, Emacs, Vi, Spacemacs, IntelliJ macOS/Windows, Eclipse, Sublime Text). |
+| `locale_model` / `keymap_model` | Available UI languages; the eleven keyboard navigation styles (Apple, VSCode macOS/Windows, Emacs, Vi, Spacemacs, IntelliJ macOS/Windows, Eclipse, Sublime, Zed). |
 | `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/model crates is **data and logic in the crate, host

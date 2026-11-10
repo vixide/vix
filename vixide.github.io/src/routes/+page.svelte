@@ -122,7 +122,7 @@
       <p class="card-description">
         No modes, no config project. <kbd>Ctrl+S</kbd> saves, a real menu bar
         shows what exists, and <kbd>F1</kbd> lists every shortcut. Prefer Vim,
-        Emacs, VS Code or IntelliJ keys? Ten keymaps switch live.
+        Emacs, VS Code or IntelliJ keys? Eleven keymaps switch live.
       </p>
     </Card>
     <Card heading="An IDE, not a kit to assemble" href="/features/#code">

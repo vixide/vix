@@ -1,5 +1,5 @@
-//! The Sublime Text keymap's built-in bindings (`tui/src/app.rs`'s
-//! `sublime_key`), converted from that function's former hardcoded
+//! The Sublime keymap's built-in bindings (dispatched by `tui/src/app/keymap.rs`'s
+//! `table_ctrl_key`), converted from the former `sublime_key`'s hardcoded
 //! `match`.
 //!
 //! All-`Ctrl`, no chords — one flat `""` context, same shape as VS Code,
@@ -11,7 +11,7 @@
 
 use crate::{Binding, ChordContext};
 
-/// Sublime Text's Ctrl-key bindings (its only context), with Shift encoded explicitly in the token.
+/// Sublime's Ctrl-key bindings (its only context), with Shift encoded explicitly in the token.
 const NORMAL: &[Binding] = &[
     Binding {
         key_token: "C-S-p",
@@ -114,7 +114,7 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
-/// Sublime Text's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
+/// Sublime's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
 pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
     name: "",
     bindings: NORMAL,

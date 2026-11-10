@@ -1,6 +1,6 @@
-# Vix™ for Sublime Text users
+# Vix™ for Sublime users
 
-Sublime Text made a promise the rest of the industry spent a decade catching up
+Sublime made a promise the rest of the industry spent a decade catching up
 to: an editor can be *fast*, beautiful, and powerful at the same time. Goto
 Anything changed how everyone navigates. If Sublime is still your daily driver,
 you value speed and minimalism over kitchen sinks — which is exactly the crowd
@@ -10,14 +10,14 @@ layer (LSP, debugger, git) built in instead of bolted on.
 ## The one-minute pitch
 
 Vix is a terminal IDE written in Rust: one native binary, instant startup, no
-Package Control, no license nag. It ships a **Sublime Text keymap**, and its
+Package Control, no license nag. It ships a **Sublime keymap**, and its
 command palette speaks Sublime's dialect — `Ctrl+P` opens Goto Anything-style
 fuzzy finding, and the same palette does `@` symbols, `:` line numbers, and `>`
 commands, just like the editor you know.
 
 ```sh
 cargo run                    # open Vix in the current directory
-# then: View -> Keymap -> Sublime Text
+# then: View -> Keymap -> Sublime
 ```
 
 In the terminal, `Ctrl` stands in for `Cmd` on macOS.
@@ -80,7 +80,7 @@ caret on every occurrence, and `Alt+Shift+Up/Down` grows a rectangular
 ## An honest experiment
 
 1. `cargo build --release`; put `vix` on your `PATH`.
-2. In a project: `vix .` — press `Ctrl+P`, type `keymap`, pick **Sublime Text**.
+2. In a project: `vix .` — press `Ctrl+P`, type `keymap`, pick **Sublime**.
 3. Navigate like home: `Ctrl+P` to a file, `Ctrl+R` to a symbol, `Ctrl+D` to
    multi-edit a word, `Ctrl+Shift+D`/`Ctrl+Shift+K` to shuffle lines.
 4. Then try what Sublime needs plugins for: hover an LSP diagnostic, rename a

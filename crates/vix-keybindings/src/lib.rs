@@ -6,15 +6,16 @@
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
 //! (T104b, for a leader-style multi-character sequence table),
 //! [`lookup_shared`] (T104g, for the keymap-agnostic bindings every
-//! keymap shares) — and all 10 keymap ids are fully converted: Emacs
+//! keymap shares) — and all 11 keymap ids are populated: Emacs
 //! (`emacs`, T104a), Vi (`vi`) and Spacemacs (`spacemacs`, T104b), VS Code
 //! (`vscode-macos`/`vscode-windows`, T104c — one shared table, since VS
 //! Code's bindings don't differ by host OS in a terminal), `IntelliJ`
 //! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
 //! tables this time, unlike VS Code's shared one), Eclipse (`eclipse`,
-//! T104e), Sublime Text (`sublime`, T104f), and Apple (`apple`, T104g).
+//! T104e), Sublime (`sublime`, T104f), Apple (`apple`, T104g), and Zed
+//! (`zed`).
 //! Their dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
-//! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `sublime_key`,
+//! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `table_ctrl_key`,
 //! `apple_ctrl_key`) all now go through [`TABLES`] instead of their own
 //! hardcoded `match`/const. `global_shared_key` (called by every keymap,
 //! not itself keyed on one) is now backed by [`SHARED`]/[`lookup_shared`]
@@ -51,6 +52,7 @@ mod sublime;
 pub mod user_bindings;
 mod vim;
 mod vscode;
+mod zed;
 
 pub use overrides::{Conflict, Override, Resolved, Shadow, Source, resolve};
 pub use shared::{SHARED, lookup_shared};
@@ -80,7 +82,7 @@ pub struct ChordContext {
 }
 
 /// Every built-in binding for one keymap, keyed on
-/// `vix_keymap_model::Keymap::id` (10 values — `vscode-macos` and
+/// `vix_keymap_model::Keymap::id` (11 values — `vscode-macos` and
 /// `vscode-windows` get identical tables, since VS Code's bindings don't
 /// differ by host OS in a terminal; deliberate duplication over inventing a
 /// second, coarser keymap enum just to avoid it).
@@ -134,6 +136,10 @@ pub const TABLES: &[KeymapTable] = &[
     KeymapTable {
         keymap_id: "sublime",
         contexts: sublime::CONTEXTS,
+    },
+    KeymapTable {
+        keymap_id: "zed",
+        contexts: zed::CONTEXTS,
     },
 ];
 
@@ -223,6 +229,7 @@ mod tests {
             "intellij-windows",
             "eclipse",
             "sublime",
+            "zed",
         ];
         for id in ids {
             assert_eq!(
@@ -268,7 +275,7 @@ mod tests {
 
     #[test]
     fn every_keymap_table_is_populated() {
-        // All 10 ids are converted as of T104g -- no more "still empty,
+        // All 11 ids are populated (T104g, plus Zed) -- no more "still empty,
         // filled in by a later task" tables left to probe.
         for table in TABLES {
             assert!(
@@ -417,6 +424,16 @@ mod tests {
         // IntelliJ/Eclipse.
         assert_eq!(lookup("sublime", "", "C-p"), Some("file.open"));
         assert_eq!(lookup("sublime", "", "C-S-p"), Some("tools.palette"));
+    }
+
+    #[test]
+    fn zed_binds_its_signature_shortcuts() {
+        assert_eq!(lookup("zed", "", "C-p"), Some("file.open"));
+        assert_eq!(lookup("zed", "", "C-S-p"), Some("tools.palette"));
+        assert_eq!(lookup("zed", "", "C-S-g"), Some("git.changes"));
+        assert_eq!(lookup("zed", "", "C-."), Some("lsp.code_action"));
+        // Ctrl+D stays unbound so the editor's own add-next-occurrence runs.
+        assert_eq!(lookup("zed", "", "C-d"), None);
     }
 
     #[test]

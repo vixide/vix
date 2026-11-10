@@ -251,7 +251,7 @@ fn nerd_palette_click_inserts_glyph() {
 }
 
 // ----- vix-keybindings registry conversion (improvement plan T104f) -------
-// sublime_key now dispatches through vix_keybindings::lookup instead of its
+// Sublime's dispatch now goes through vix_keybindings::lookup instead of its
 // own hardcoded match; this covers plain Ctrl+P (Goto Anything) staying
 // distinct from Ctrl+Shift+P (Command Palette, already covered above) --
 // the two must not collide even though a terminal can report Ctrl+Shift+p
