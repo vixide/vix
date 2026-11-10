@@ -226,7 +226,7 @@
   </header>
   <div class="prose centered">
     <ul>
-      <li><strong>Eleven keymaps</strong> — Apple (the default), VS Code for macOS and Windows, Emacs, Vi, Spacemacs, IntelliJ for macOS and Windows, Eclipse, Sublime and Zed, switchable live from <strong>View → Keymap</strong>. On macOS, <kbd>Command</kbd> works wherever <kbd>Control</kbd> does.</li>
+      <li><strong>Thirteen keymaps</strong> — Apple (the default), VS Code for macOS and Windows, Emacs, Vi, Spacemacs, IntelliJ for macOS and Windows, Eclipse, Sublime, Zed, Fresh and ttt, switchable live from <strong>View → Keymap</strong>. On macOS, <kbd>Command</kbd> works wherever <kbd>Control</kbd> does.</li>
       <li><strong>Discoverable</strong> — a menu bar for every action, a searchable overlay of every shortcut (<kbd>F1</kbd>), and full mouse support.</li>
       <li><strong>Themes</strong> — 21 bundled, including high-contrast and Catppuccin (see the <a href="#themes">theme gallery</a>); <code>theme = "auto"</code> follows your terminal's light or dark background; a theme editor; and your own JSON themes.</li>
       <li><strong>Languages</strong> — the interface is translated into 15 languages, including Arabic, Bengali, Chinese, Hindi, Japanese, Russian, Welsh, Irish and Scottish Gaelic.</li>
