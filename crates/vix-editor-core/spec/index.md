@@ -154,6 +154,19 @@ edit.
   terminal paste) with exactly one line per caret (ignoring one trailing
   newline) puts one line at each caret in buffer order, and otherwise puts
   the whole text at every caret (`multi_paste`, no re-indenting).
+- **Per-caret edits.** For keymaps that compute one edit per selection
+  (Helix), `caret_anchors` lists every caret as `(anchor, cursor)` (the
+  primary first, then the extras in add order; a primary whose cursor is
+  inside its selection, as Select All leaves it, reads as `(start, end)`),
+  `set_caret_anchors` and `map_carets` install new ones, and
+  `edit_selections(&[SelectionEdit])` replaces one range per caret with
+  its own text, leaving each caret on a chosen part of what it inserted,
+  as one undo step. Ranges are in the text before the edit; they are
+  applied in buffer order with a running offset, and a range that starts
+  inside one already applied, or repeats it exactly, merges into it.
+  `indent_carets(outdent)` indents (or, with `outdent`, removes one indent from) every line any caret
+  touches once, keeping each caret on its text. `multi_insert` and the
+  paste are built on `edit_selections`.
 - **Undo.** A multi-caret edit is one undo step. The history records only
   the primary caret, so Undo and Redo collapse the carets into it, at its
   position before (Undo) or after (Redo) the edit.

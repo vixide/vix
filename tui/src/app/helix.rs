@@ -20,11 +20,17 @@
 //! the last change semantically: [`HelixState`] remembers *what* changed
 //! (`d`, `c` plus the typed text, `r<char>`, …), and `.` applies that again
 //! to whatever is selected now.
+//!
+//! Every motion and change acts on **every selection** (the editor's
+//! carets, from `C` or `s`): motions move each one through
+//! `Editor::map_carets`, and changes build one `SelectionEdit` per
+//! selection for `Editor::edit_selections`, which applies them as one
+//! undo step.
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, AppFlags, Focus};
-use crate::editor_core::actions::InsertText;
+use crate::editor_core::multicursor::{CaretMove, SelectionEdit};
 
 /// A buffer snapshot: its text, the cursor, and the sorted non-empty
 /// selection, if any.
@@ -72,9 +78,10 @@ pub(super) enum Edit {
 pub(super) struct HelixState {
     /// What `.` repeats; `None` until the first change.
     last_change: Option<Edit>,
-    /// While Insert mode runs after `c`/`i`/`a`: where typing started, and
-    /// the change to record (with the typed text) on `Esc`.
-    insert: Option<(usize, Edit)>,
+    /// While Insert mode runs after `c`/`i`/`a`: where typing started, the
+    /// buffer's length then (in characters), and the change to record (with
+    /// the typed text) on `Esc`.
+    insert: Option<(usize, usize, Edit)>,
 }
 
 /// The `vix-keybindings` context a pending prefix key names, if it is one.
@@ -157,15 +164,17 @@ impl App {
     fn helix_run_counted(&mut self, action: &str) {
         let count = self.modal_count.value().min(MAX_REPEAT);
         match action {
-            "edit.undo" | "edit.redo" | "indent_selection" | "outdent_selection" => {
+            "edit.undo" | "edit.redo" => {
                 for _ in 0..count {
                     self.run_action(action);
                 }
-                match action {
-                    "indent_selection" => self.helix_record(Edit::Indent),
-                    "outdent_selection" => self.helix_record(Edit::Outdent),
-                    _ => {}
+            }
+            "indent_selection" | "outdent_selection" => {
+                let outdent = action == "outdent_selection";
+                for _ in 0..count {
+                    self.helix_indent(outdent);
                 }
+                self.helix_record(if outdent { Edit::Outdent } else { Edit::Indent });
             }
             _ => self.run_action(action),
         }
@@ -292,11 +301,7 @@ impl App {
                 self.helix_select(true, count, |t, p| hx::long_word_end(t, p, 1));
             }
             "helix.select_line" => self.helix_select_line(count),
-            "helix.collapse" => {
-                if let Some(tab) = self.editor.active_tab_mut() {
-                    tab.editor.clear_selection();
-                }
-            }
+            "helix.collapse" => self.helix_map(|_, _, c| (c, c)),
             "helix.toggle_select" => {
                 self.modal_mode = if self.modal_mode == vix_modal::Mode::Visual {
                     vix_modal::Mode::Normal
@@ -363,17 +368,64 @@ impl App {
         Some((tab.editor.get_content(), tab.editor.get_cursor(), sel))
     }
 
-    /// `h`/`j`/`k`/`l`: move the cursor `count` times. Normal mode drops
-    /// the selection first; Select mode extends it instead (the editor's
-    /// own shift-motion keeps the anchor, as Vi's Visual mode does). The
-    /// count stops mattering past the buffer's length, so it is capped
-    /// there.
+    /// Whether the active editor has more than one selection.
+    fn helix_multi(&self) -> bool {
+        self.editor
+            .active_tab()
+            .is_some_and(|t| t.editor.has_multi_carets())
+    }
+
+    /// Move every selection with `f(text, anchor, cursor) -> (anchor,
+    /// cursor)`. With one selection this is the editor's own selection
+    /// setter; with several, [`Editor::map_carets`].
+    ///
+    /// [`Editor::map_carets`]: crate::editor_core::editor::Editor::map_carets
+    fn helix_map(&mut self, mut f: impl FnMut(&str, usize, usize) -> (usize, usize)) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        if tab.editor.has_multi_carets() {
+            tab.editor.map_carets(|a, c| f(&text, a, c));
+        } else {
+            let (a, c) = f(
+                &text,
+                tab.editor.selection_anchor(),
+                tab.editor.get_cursor(),
+            );
+            tab.editor.set_selection_range(a, c);
+        }
+    }
+
+    /// `h`/`j`/`k`/`l`: move every cursor `count` times. Normal mode drops
+    /// the selections first; Select mode extends them instead (the
+    /// editor's own shift-motion keeps the anchor, as Vi's Visual mode
+    /// does). The count stops mattering past the buffer's length, so it is
+    /// capped there.
     fn helix_move(&mut self, code: KeyCode, count: usize) {
         let Some((text, _, _)) = self.helix_state() else {
             return;
         };
         let steps = count.min(text.chars().count().max(1));
-        if self.helix_extending() {
+        let extend = self.helix_extending();
+        if self.helix_multi() {
+            let dir = match code {
+                KeyCode::Left => CaretMove::Left,
+                KeyCode::Right => CaretMove::Right,
+                KeyCode::Up => CaretMove::Up,
+                _ => CaretMove::Down,
+            };
+            if let Some(tab) = self.editor.active_tab_mut() {
+                if !extend {
+                    tab.editor.map_carets(|_, c| (c, c));
+                }
+                for _ in 0..steps {
+                    tab.editor.multi_move(dir, extend);
+                }
+            }
+            return;
+        }
+        if extend {
             for _ in 0..steps {
                 self.editor_key(KeyEvent::new(code, KeyModifiers::SHIFT));
             }
@@ -387,79 +439,57 @@ impl App {
         }
     }
 
-    /// A selecting motion: select from the cursor to where `f` lands (one
-    /// past it when `inclusive`). In Select mode the existing anchor stays
-    /// put and only the cursor end moves.
-    ///
-    /// With a count, `f` runs `count` times and, as in Helix, each step
-    /// starts a fresh selection where the last one ended, so `3w` selects
-    /// the third word (in Select mode, everything up to it). A motion that
-    /// stops moving (at the buffer's end) ends the count early.
+    /// A selecting motion, on every selection: select from its cursor to
+    /// where `f` lands (one past it when `inclusive`), `count` times; see
+    /// [`vix_modal::helix::select_by`]. In Select mode each anchor stays put
+    /// and only the cursor end moves.
     fn helix_select(&mut self, inclusive: bool, count: usize, f: impl Fn(&str, usize) -> usize) {
-        let extend = self.helix_extending();
-        let Some(tab) = self.editor.active_tab_mut() else {
-            return;
+        let how = vix_modal::helix::Select {
+            extend: self.helix_extending(),
+            inclusive,
+            count,
         };
-        let text = tab.editor.get_content();
-        let len = text.chars().count();
-        let pos = tab.editor.get_cursor();
-        let (mut prev, mut target) = (pos, f(&text, pos));
-        for _ in 1..count {
-            let next = f(&text, target);
-            if next == target {
-                break;
-            }
-            (prev, target) = (target, next);
-        }
-        let past = |p: usize| if inclusive { (p + 1).min(len) } else { p };
-        let anchor = if extend {
-            tab.editor.selection_anchor()
-        } else if prev == pos {
-            pos
-        } else {
-            past(prev)
-        };
-        tab.editor.set_selection_range(anchor, past(target));
+        self.helix_map(|text, a, c| vix_modal::helix::select_by(text, (a, c), how, &f));
     }
 
-    /// `f`/`t`/`F`/`T` + `target`: select up to (`t`/`T`) or through
-    /// (`f`/`F`) the next or previous `target` on the line. A miss leaves
-    /// everything as it was.
-    /// With a count, the `count`th `target` (`3fx`).
+    /// `f`/`t`/`F`/`T` + `target`, on every selection: select up to
+    /// (`t`/`T`) or through (`f`/`F`) the next or previous `target` on its
+    /// line. A selection with no such `target` stays as it was. With a
+    /// count, the `count`th `target` (`3fx`).
     fn helix_find(&mut self, find: char, target: char, count: usize) {
-        let Some((text, pos, _)) = self.helix_state() else {
-            return;
+        let how = vix_modal::helix::Select {
+            extend: self.helix_extending(),
+            inclusive: matches!(find, 'f' | 't'),
+            count: 1,
         };
-        let hit = match find {
-            'f' => vix_modal::motion::find_char_forward(&text, pos, target, count),
-            't' => vix_modal::motion::till_char_forward(&text, pos, target, count),
-            'F' => vix_modal::motion::find_char_backward(&text, pos, target, count),
-            _ => vix_modal::motion::till_char_backward(&text, pos, target, count),
-        };
-        let Some(hit) = hit else {
-            return;
-        };
-        self.helix_select(matches!(find, 'f' | 't'), 1, |_, _| hit);
+        self.helix_map(|text, a, c| {
+            let hit = match find {
+                'f' => vix_modal::motion::find_char_forward(text, c, target, count),
+                't' => vix_modal::motion::till_char_forward(text, c, target, count),
+                'F' => vix_modal::motion::find_char_backward(text, c, target, count),
+                _ => vix_modal::motion::till_char_backward(text, c, target, count),
+            };
+            hit.map_or((a, c), |hit| {
+                vix_modal::helix::select_by(text, (a, c), how, |_, _| hit)
+            })
+        });
     }
 
-    /// `x`: select the whole line(s) under the selection, or grow a
-    /// whole-line selection by one more line; a count adds that many lines
-    /// (`2x` on a bare cursor selects two).
+    /// `x`, on every selection: select the whole line(s) under it, or grow
+    /// a whole-line selection by one more line; a count adds that many
+    /// lines (`2x` on a bare cursor selects two).
     fn helix_select_line(&mut self, count: usize) {
-        let Some((text, pos, sel)) = self.helix_state() else {
-            return;
-        };
-        let (mut a, mut b) = sel.unwrap_or((pos, pos));
-        for _ in 0..count {
-            let next = vix_modal::helix::select_lines(&text, a, b);
-            if next == (a, b) {
-                break;
+        self.helix_map(|text, a, c| {
+            let (mut a, mut b) = (a, c);
+            for _ in 0..count {
+                let next = vix_modal::helix::select_lines(text, a, b);
+                if next == (a.min(b), a.max(b)) {
+                    break;
+                }
+                (a, b) = next;
             }
-            (a, b) = next;
-        }
-        if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.set_selection_range(a, b);
-        }
+            (a, b)
+        });
     }
 
     /// Refuse an edit on a read-only buffer, with the usual status note.
@@ -471,13 +501,36 @@ impl App {
         false
     }
 
-    /// The text of the effective range (the selection, or the character
-    /// under the cursor), with its bounds.
-    fn helix_effective(&mut self) -> Option<(usize, usize, String)> {
-        let (text, pos, sel) = self.helix_state()?;
-        let (start, end) = vix_modal::helix::effective(&text, sel, pos);
-        let picked: String = text.chars().skip(start).take(end - start).collect();
-        Some((start, end, picked))
+    /// Every selection's effective range (the selection, or the character
+    /// under its cursor), primary first, with the buffer text.
+    fn helix_ranges(&mut self) -> Option<(String, Vec<(usize, usize)>)> {
+        let tab = self.editor.active_tab_mut()?;
+        let text = tab.editor.get_content();
+        let ranges = tab
+            .editor
+            .caret_anchors()
+            .into_iter()
+            .map(|(a, c)| {
+                let sel = (a != c).then_some((a.min(c), a.max(c)));
+                vix_modal::helix::effective(&text, sel, c)
+            })
+            .collect();
+        Some((text, ranges))
+    }
+
+    /// The text of each non-empty range, in buffer order, joined into one
+    /// register value ([`vix_modal::helix::join_selections`]).
+    fn helix_pieces(text: &str, ranges: &[(usize, usize)]) -> String {
+        let chars: Vec<char> = text.chars().collect();
+        let mut sorted = ranges.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        let pieces: Vec<String> = sorted
+            .into_iter()
+            .filter_map(|(s, e)| chars.get(s..e).filter(|p| !p.is_empty()))
+            .map(|p| p.iter().collect())
+            .collect();
+        vix_modal::helix::join_selections(&pieces)
     }
 
     /// Write `text` to the unnamed register (the clipboard), remembering
@@ -492,53 +545,67 @@ impl App {
         self.modal_write_register(text, kind);
     }
 
-    /// `d` (and `c`, when `change`): cut the effective range to the
-    /// register, then — for `c` — enter Insert mode where it was.
+    /// Apply one edit per selection as one undo step and mark the buffer
+    /// dirty.
+    fn helix_edit(&mut self, edits: &[SelectionEdit]) {
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.edit_selections(edits);
+        }
+        self.mark_active_dirty();
+    }
+
+    /// `d` (and `c`, when `change`): cut every effective range to the
+    /// register, then — for `c` — enter Insert mode, typing at every cursor.
     fn helix_delete(&mut self, change: bool) {
         if self.helix_cut("") && change {
             self.vim_enter_insert();
         }
     }
 
-    /// Cut the effective range to the register and put `with` in its place
-    /// in one edit (so `.` of a `c` is one undo step), leaving the cursor
-    /// after it and Normal mode on. Returns false on a read-only buffer.
+    /// Cut every effective range to the register (joined, in buffer order)
+    /// and put `with` in each one's place in one edit (so `.` of a `c` is
+    /// one undo step), leaving each cursor after it and Normal mode on.
+    /// Returns false on a read-only buffer.
     fn helix_cut(&mut self, with: &str) -> bool {
         if self.helix_blocked() {
             return false;
         }
-        let Some((start, end, removed)) = self.helix_effective() else {
+        let Some((text, ranges)) = self.helix_ranges() else {
             return true;
         };
-        if start < end || !with.is_empty() {
-            if start < end {
+        if ranges.iter().any(|(s, e)| s < e) || !with.is_empty() {
+            let removed = Self::helix_pieces(&text, &ranges);
+            if !removed.is_empty() {
                 self.helix_write_register(removed);
             }
-            if let Some(tab) = self.editor.active_tab_mut() {
-                tab.editor.set_selection_range(start, end);
-                tab.editor.apply(InsertText {
-                    text: with.to_string(),
-                });
-            }
-            self.mark_active_dirty();
+            let edits: Vec<_> = ranges
+                .iter()
+                .map(|&(s, e)| SelectionEdit::new(s, e, with))
+                .collect();
+            self.helix_edit(&edits);
         }
         self.modal_mode = vix_modal::Mode::Normal;
         true
     }
 
-    /// `y`: copy the effective range to the register; the selection stays.
+    /// `y`: copy every effective range to the register (joined, in buffer
+    /// order); the selections stay.
     fn helix_yank(&mut self) {
-        let Some((start, end, picked)) = self.helix_effective() else {
+        let Some((text, ranges)) = self.helix_ranges() else {
             return;
         };
-        if start < end {
+        let picked = Self::helix_pieces(&text, &ranges);
+        if !picked.is_empty() {
             self.helix_write_register(picked);
         }
         self.modal_mode = vix_modal::Mode::Normal;
     }
 
     /// `p`/`P` (`before`): paste the register (`count` copies of it) after
-    /// or before the effective range, then select what was pasted.
+    /// or before every effective range, then select what was pasted. With
+    /// several selections and one register line per selection, each gets
+    /// its own line ([`vix_modal::helix::split_selections`]), in buffer
+    /// order; otherwise each gets the whole register.
     fn helix_paste(&mut self, before: bool, count: usize) {
         if self.helix_blocked() {
             return;
@@ -549,45 +616,82 @@ impl App {
         if clip.is_empty() {
             return;
         }
-        let Some((text, pos, sel)) = self.helix_state() else {
+        let Some((text, ranges)) = self.helix_ranges() else {
             return;
         };
-        let (start, end) = vix_modal::helix::effective(&text, sel, pos);
-        let clip = clip.repeat(count.max(1));
-        let plan = vix_modal::helix::paste(&text, start, end, &clip, before);
-        if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.clear_selection();
-            tab.editor.set_cursor(plan.at);
-            tab.editor.apply(InsertText { text: plan.text });
-            tab.editor.set_selection_range(plan.select.0, plan.select.1);
+        let split = vix_modal::helix::split_selections(&clip, ranges.len());
+        let mut order: Vec<usize> = (0..ranges.len()).collect();
+        order.sort_by_key(|&i| ranges[i]);
+        let mut rank = vec![0; ranges.len()];
+        for (r, &i) in order.iter().enumerate() {
+            rank[i] = r;
         }
-        self.mark_active_dirty();
+        let edits: Vec<_> = ranges
+            .iter()
+            .enumerate()
+            .map(|(i, &(start, end))| {
+                let piece = split
+                    .as_ref()
+                    .map_or(clip.as_str(), |p| p[rank[i]].as_str());
+                let piece = piece.repeat(count.max(1));
+                let plan = vix_modal::helix::paste(&text, start, end, &piece, before);
+                SelectionEdit::new(plan.at, plan.at, &plan.text)
+                    .selecting(plan.select.0 - plan.at, plan.select.1 - plan.at)
+            })
+            .collect();
+        self.helix_edit(&edits);
         self.modal_mode = vix_modal::Mode::Normal;
     }
 
-    /// `r<char>` and `~`: replace the effective range with `f` of its text,
-    /// keeping the result selected.
-    fn helix_rewrite(&mut self, f: impl FnOnce(&str) -> String) {
+    /// `r<char>` and `~`: replace every effective range with `f` of its
+    /// text, keeping each result selected.
+    fn helix_rewrite(&mut self, f: impl Fn(&str) -> String) {
         if self.helix_blocked() {
             return;
         }
-        let Some((start, end, picked)) = self.helix_effective() else {
+        let Some((text, ranges)) = self.helix_ranges() else {
             return;
         };
-        if start == end {
+        if ranges.iter().all(|(s, e)| s == e) {
             return;
         }
-        let new = f(&picked);
-        let len = new.chars().count();
+        let chars: Vec<char> = text.chars().collect();
+        let edits: Vec<_> = ranges
+            .iter()
+            .map(|&(s, e)| {
+                let old: String = chars.get(s..e).unwrap_or_default().iter().collect();
+                let new = f(&old);
+                let n = new.chars().count();
+                SelectionEdit::new(s, e, &new).selecting(0, n)
+            })
+            .collect();
+        self.helix_edit(&edits);
+    }
+
+    /// `>`/`<` (`outdent`): indent or outdent the selection's lines. With
+    /// several selections every line any of them touches moves once, in
+    /// one undo step ([`Editor::indent_carets`]).
+    ///
+    /// [`Editor::indent_carets`]: crate::editor_core::editor::Editor::indent_carets
+    fn helix_indent(&mut self, outdent: bool) {
+        if !self.helix_multi() {
+            self.run_action(if outdent {
+                "outdent_selection"
+            } else {
+                "indent_selection"
+            });
+            return;
+        }
+        if self.helix_blocked() {
+            return;
+        }
         if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.set_selection_range(start, end);
-            tab.editor.apply(InsertText { text: new });
-            tab.editor.set_selection_range(start, start + len);
+            tab.editor.indent_carets(outdent);
         }
         self.mark_active_dirty();
     }
 
-    /// `i` (or `a`, when `after`): enter Insert mode at the selection's
+    /// `i` (or `a`, when `after`): enter Insert mode at every selection's
     /// start (or end). With nothing selected `a` steps past the cursor's
     /// character, like Vi's `a`.
     fn helix_insert(&mut self, after: bool) {
@@ -596,22 +700,14 @@ impl App {
         self.vim_enter_insert();
     }
 
-    /// Where `i` (or `a`, when `after`) starts typing: the selection's
-    /// start (or end), the selection dropped.
+    /// Where `i` (or `a`, when `after`) starts typing: every selection's
+    /// start (or end), the selections dropped
+    /// ([`vix_modal::helix::insert_point`]).
     fn helix_insert_at(&mut self, after: bool) {
-        let Some((_, _, sel)) = self.helix_state() else {
-            return;
-        };
-        match sel {
-            Some((start, end)) => {
-                if let Some(tab) = self.editor.active_tab_mut() {
-                    tab.editor.clear_selection();
-                    tab.editor.set_cursor(if after { end } else { start });
-                }
-            }
-            None if after => self.editor_motion(KeyCode::Right),
-            None => {}
-        }
+        self.helix_map(|text, a, c| {
+            let p = vix_modal::helix::insert_point(text, (a, c), after);
+            (p, p)
+        });
     }
 
     /// Remember `change` as what `.` repeats.
@@ -620,34 +716,50 @@ impl App {
     }
 
     /// Insert mode just opened for `change` (`c`, `i` or `a`): note where
-    /// typing starts, so `Esc` can record what was typed.
+    /// typing starts and how long the buffer is, so `Esc` can record what
+    /// was typed.
     fn helix_begin_insert(&mut self, change: Edit) {
         if !self.flags.contains(AppFlags::MODAL_INSERT) {
             return;
         }
-        let at = self
-            .editor
-            .active_tab()
-            .map_or(0, |tab| tab.editor.get_cursor());
-        self.helix.insert = Some((at, change));
+        let (at, len) = self.editor.active_tab().map_or((0, 0), |tab| {
+            (
+                tab.editor.get_cursor(),
+                tab.editor.get_content().chars().count(),
+            )
+        });
+        self.helix.insert = Some((at, len, change));
     }
 
     /// `Esc` ended an Insert-mode session `c`/`i`/`a` opened: record it,
-    /// with the text from where typing started to the cursor, as what `.`
-    /// repeats. An `i`/`a` that typed nothing changed nothing and is not
-    /// recorded.
+    /// with the text typed, as what `.` repeats. With one cursor that is
+    /// the text from where typing started to the cursor; with several, each
+    /// typed the same text, so it is the buffer's growth split evenly,
+    /// ending at the primary cursor. An `i`/`a` that typed nothing changed
+    /// nothing and is not recorded.
     fn helix_finish_insert(&mut self) {
-        let Some((start, change)) = self.helix.insert.take() else {
+        let Some((start, len_before, change)) = self.helix.insert.take() else {
             return;
         };
         let Some((text, cursor, _)) = self.helix_state() else {
             return;
         };
-        let typed: String = text
-            .chars()
-            .skip(start)
-            .take(cursor.saturating_sub(start))
-            .collect();
+        let carets = self
+            .editor
+            .active_tab()
+            .map_or(1, |t| t.editor.caret_count());
+        let width = if carets > 1 {
+            let grown = text.chars().count().saturating_sub(len_before);
+            if grown % carets == 0 {
+                grown / carets
+            } else {
+                0
+            }
+        } else {
+            cursor.saturating_sub(start)
+        };
+        let from = cursor.saturating_sub(width);
+        let typed: String = text.chars().skip(from).take(cursor - from).collect();
         match change {
             Edit::Change(_) => self.helix_record(Edit::Change(typed)),
             Edit::Insert { after, .. } if !typed.is_empty() => {
@@ -685,23 +797,26 @@ impl App {
                 self.helix_rewrite(|s| vix_modal::helix::replace_chars(s, with));
             }
             Edit::SwitchCase => self.helix_rewrite(vix_modal::helix::swap_case),
-            Edit::Indent => self.run_action("indent_selection"),
-            Edit::Outdent => self.run_action("outdent_selection"),
+            Edit::Indent => self.helix_indent(false),
+            Edit::Outdent => self.helix_indent(true),
             Edit::Paste { before, count } => self.helix_paste(*before, *count),
         }
     }
 
-    /// Type `text` at the cursor, as Insert mode would have.
+    /// Type `text` at every cursor, as Insert mode would have.
     fn helix_type(&mut self, text: &str) {
         if text.is_empty() || self.helix_blocked() {
             return;
         }
-        if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.clear_selection();
-            tab.editor.apply(InsertText {
-                text: text.to_string(),
-            });
-        }
-        self.mark_active_dirty();
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let edits: Vec<_> = tab
+            .editor
+            .caret_anchors()
+            .into_iter()
+            .map(|(_, c)| SelectionEdit::new(c, c, text))
+            .collect();
+        self.helix_edit(&edits);
     }
 }

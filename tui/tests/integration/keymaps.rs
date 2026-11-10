@@ -1260,6 +1260,169 @@ fn helix_dot_repeats_switch_case() {
     assert_eq!(helix_text(&app), "AB CD");
 }
 
+// ----- Helix: every selection at once --------------------------------------
+
+/// Every selection as a sorted `(start, end)` range (empty for a bare
+/// cursor), in buffer order.
+fn helix_ranges(app: &App) -> Vec<(usize, usize)> {
+    let mut v: Vec<_> = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .caret_anchors()
+        .into_iter()
+        .map(|(a, c)| (a.min(c), a.max(c)))
+        .collect();
+    v.sort_unstable();
+    v
+}
+
+/// `s` + `pattern` + Enter: select every match inside the selection.
+fn helix_select_matches(app: &mut App, pattern: &str) {
+    app.on_key(key('s'));
+    type_str(app, pattern);
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+#[test]
+fn helix_d_deletes_every_regex_match() {
+    let mut app = helix_app("foo bar foo baz foo", 0);
+    app.on_key(key('%'));
+    helix_select_matches(&mut app, "foo");
+    assert_eq!(
+        helix_ranges(&app).len(),
+        3,
+        "s made one selection per match"
+    );
+    app.on_key(key('d'));
+    assert_eq!(helix_text(&app), " bar  baz ");
+    app.on_key(key('u'));
+    assert_eq!(
+        helix_text(&app),
+        "foo bar foo baz foo",
+        "one u undoes the whole multi-selection delete"
+    );
+}
+
+#[test]
+fn helix_c_x_d_deletes_two_lines() {
+    let mut app = helix_app("one\ntwo\nthree\n", 0);
+    app.on_key(key('C'));
+    app.on_key(key('x'));
+    assert_eq!(helix_ranges(&app), vec![(0, 4), (4, 8)], "x on each cursor");
+    app.on_key(key('d'));
+    assert_eq!(helix_text(&app), "three\n");
+}
+
+#[test]
+fn helix_c_changes_every_match_and_dot_repeats_on_every_selection() {
+    let mut app = helix_app("a1 b1 c1", 0);
+    app.on_key(key('%'));
+    helix_select_matches(&mut app, "1");
+    app.on_key(key('c'));
+    type_str(&mut app, "XY");
+    app.on_key(esc());
+    assert_eq!(
+        helix_text(&app),
+        "aXY bXY cXY",
+        "typing reached every cursor"
+    );
+    // Select each `XY` again, then `.` repeats the change with its text.
+    app.on_key(key('%'));
+    helix_select_matches(&mut app, "XY");
+    type_str(&mut app, "y");
+    app.on_key(key('%'));
+    helix_select_matches(&mut app, "[abc]");
+    app.on_key(key('.'));
+    assert_eq!(
+        helix_text(&app),
+        "XYXY XYXY XYXY",
+        ". changed every selection"
+    );
+    app.on_key(key('u'));
+    assert_eq!(
+        helix_text(&app),
+        "aXY bXY cXY",
+        "the repeat is one undo step"
+    );
+}
+
+#[test]
+fn helix_r_and_tilde_act_on_every_selection() {
+    let mut app = helix_app("ab cd ef", 0);
+    app.on_key(key('%'));
+    helix_select_matches(&mut app, "[ace]");
+    type_str(&mut app, "rz");
+    assert_eq!(helix_text(&app), "zb zd zf");
+    assert_eq!(
+        helix_ranges(&app),
+        vec![(0, 1), (3, 4), (6, 7)],
+        "still selected"
+    );
+    app.on_key(key('~'));
+    assert_eq!(helix_text(&app), "Zb Zd Zf");
+    app.on_key(key('.'));
+    assert_eq!(
+        helix_text(&app),
+        "zb zd zf",
+        ". repeats ~ on every selection"
+    );
+}
+
+#[test]
+fn helix_w_and_semicolon_act_on_every_selection() {
+    let mut app = helix_app("foo bar\nbaz qux", 0);
+    app.on_key(key('C'));
+    app.on_key(key('w'));
+    assert_eq!(
+        helix_ranges(&app),
+        vec![(0, 4), (8, 12)],
+        "w on each cursor"
+    );
+    app.on_key(key('e'));
+    assert_eq!(helix_ranges(&app), vec![(4, 7), (12, 15)]);
+    app.on_key(key(';'));
+    assert_eq!(
+        helix_ranges(&app),
+        vec![(7, 7), (15, 15)],
+        "; collapses all"
+    );
+    type_str(&mut app, "hh");
+    assert_eq!(
+        helix_ranges(&app),
+        vec![(5, 5), (13, 13)],
+        "h moves every cursor"
+    );
+    type_str(&mut app, "fx");
+    assert_eq!(
+        helix_ranges(&app),
+        vec![(5, 5), (13, 15)],
+        "f moves only the selection that finds its char"
+    );
+    app.on_key(key(','));
+    assert_eq!(helix_ranges(&app).len(), 1, ", keeps only the primary");
+}
+
+#[test]
+fn helix_indent_and_dot_act_on_every_selection() {
+    let mut app = helix_app("a\nb\nc\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .code_mut()
+        .set_indent(Some("  ".to_string()));
+    app.on_key(key('C'));
+    app.on_key(key('C'));
+    app.on_key(key('>'));
+    assert_eq!(helix_text(&app), "  a\n  b\n  c\n");
+    app.on_key(key('.'));
+    assert_eq!(helix_text(&app), "    a\n    b\n    c\n");
+    app.on_key(key('<'));
+    assert_eq!(helix_text(&app), "  a\n  b\n  c\n");
+}
+
 #[test]
 fn modal_indicator_shows_the_count_and_operator_being_typed() {
     let mut app = app_at(Path::new("."));

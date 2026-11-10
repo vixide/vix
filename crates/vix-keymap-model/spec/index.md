@@ -305,8 +305,32 @@ While `g`, `m`, or `Space` is pending, the which-key popup lists its keys.
 | `Space ?` | Command palette |
 
 **Insert mode** lets typing through to the editor; `Esc` returns to Normal.
-Typing at several cursors (after `C`) uses the editor's own multi-cursor
-insert.
+Typing at several cursors (after `C`, `s`, or a `c` on several selections)
+uses the editor's own multi-cursor insert.
+
+**Several selections.** The selections are the editor's carets (from `C`
+or `s`), and every key above acts on all of them, as in Helix:
+
+- The motions — `h`/`j`/`k`/`l`, `w`/`b`/`e`, `W`/`B`/`E`, `f`/`t`/`F`/`T`
+  and `x` — move every selection, each from its own cursor (a `f`/`t` that
+  finds nothing leaves that selection alone); `;` collapses every one and
+  `,` keeps only the primary.
+- `d`, `c`, `r`, `~`, `p`/`P` and `i`/`a` act on every selection's
+  effective range (the selection, or the character under its cursor); `c`,
+  `i` and `a` then type at every cursor. `>`/`<` move every line any
+  selection touches once.
+- Each such change is **one undo step**, whatever the number of
+  selections. Undo restores the text and collapses to the primary cursor
+  (the editor's history keeps only the primary).
+- `y`, `d` and `c` put every selection's text in the one register, in
+  buffer order, each followed by a newline unless it already ends with one
+  (so `x`-selected lines stay whole lines). `p`/`P` into the same number of
+  selections as the register has lines puts one line at each, in buffer
+  order; otherwise every selection gets the whole register. Helix keeps one
+  register value per selection instead; Vix's one clipboard keeps one.
+- `.` repeats the last change on every current selection. After a `c` or
+  `i`/`a` on several selections, the text recorded is what each cursor
+  typed (the buffer's growth split evenly).
 
 The **`:` command line** is the Vi one, so every Vi command above works
 (`:w`, `:q`, `:q!`, `:wq`, `:x`, `:N`, `:e path`, `:Ex`), plus Helix's
@@ -317,11 +341,11 @@ names: `:write`, `:quit`, `:quit!`, `:write-quit`, and `:o` / `:open`
 
 These Helix features are not implemented in Vix yet:
 
-- Multiple selections as first-class objects: `d`/`c`/`y`/`p`/`r`/`~`, the
-  motions, and Select mode act on the primary selection only; extra cursors
-  (from `C` or `s`) are the editor's multi-cursor carets, which typing in
-  Insert mode honors. No `Alt-s` split here (use Edit → Select → Split
-  Selection into Lines), no `(`/`)` rotate, no `Alt-;` flip.
+- Per-selection registers: several selections share one register value
+  (see § Several selections). No `Alt-s` split here (use Edit → Select →
+  Split Selection into Lines), no `(`/`)` rotate, no `Alt-;` flip. The
+  goto keys, `J`, `I`/`A`, `o`/`O`, `*` and search act on the primary
+  selection only.
 - Named registers (`"a`); Helix's yank register and the system clipboard
   are one clipboard here, so `Space p`/`Space y` behave like `p`/`y`.
 - Match mode beyond `m m` (`m s` surround, `m i`/`m a` text objects).
