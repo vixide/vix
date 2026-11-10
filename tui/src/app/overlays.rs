@@ -35,6 +35,9 @@ pub(crate) enum OverlayId {
     WorkspaceSearch,
     /// The `KeybindingEditor` layer.
     KeybindingEditor,
+    /// The `GitPanel` layer (below `Confirm`: its Discard and smart-commit
+    /// confirmations open over it).
+    GitPanel,
     /// The `GitRebase` layer (below `Prompt`: its reword prompt opens over it).
     GitRebase,
     /// The `Prompt` layer.
@@ -53,8 +56,6 @@ pub(crate) enum OverlayId {
     SpellSuggest,
     /// The `ContextMenu` layer.
     ContextMenu,
-    /// The `GitPanel` layer.
-    GitPanel,
     /// The `BranchChooser` layer.
     BranchChooser,
     /// The `TaskChooser` layer.
@@ -342,6 +343,9 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(Palette, palette, palette_key),
     unit!(WorkspaceSearch, workspace_search, workspace_search_key),
     unit!(KeybindingEditor, keybinding_editor, keybinding_editor_key),
+    // Below `Confirm`: `d` (Discard) and `c` with nothing staged (T577) open
+    // a confirmation over the panel, and the confirmation has to win the key.
+    unit!(GitPanel, git_panel, git_panel_key),
     // Below `Prompt`: `r` opens a reword prompt over the rebase overlay, and the
     // prompt has to win the key.
     unit!(GitRebase, git_rebase, git_rebase_key),
@@ -353,7 +357,6 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(Unsaved, unsaved, unsaved_key),
     unit!(SpellSuggest, spell_suggest, spell_suggest_key),
     unit!(ContextMenu, context_menu, context_menu_key),
-    unit!(GitPanel, git_panel, git_panel_key),
     chooser!(BranchChooser, branch, branch_key),
     chooser!(TaskChooser, task, tasks_key),
     chooser!(StashChooser, stash, stash_chooser_key),
@@ -570,6 +573,25 @@ mod tests {
         a.route_overlay_key(esc());
         assert!(a.palette.is_none());
         assert!(!a.overlay_capturing_keys());
+    }
+
+    #[test]
+    fn a_confirmation_opened_over_the_git_panel_takes_the_key() {
+        // The panel's Discard and smart-commit confirmations open while the
+        // panel stays up; the confirmation must be drawn over it and answer
+        // first, or `y`/`n`/Esc land on the panel instead.
+        let mut a = app();
+        a.git_panel = Some(crate::app::GitPanel { selected: 0 });
+        a.confirm = Some(crate::app::Confirm {
+            message: String::new(),
+            paths: Vec::new(),
+            kind: ConfirmKind::StageAllAndCommit,
+        });
+        let drawn: Vec<OverlayId> = a.open_overlays().map(|o| o.id).collect();
+        assert_eq!(drawn, [OverlayId::GitPanel, OverlayId::Confirm]);
+        a.route_overlay_key(esc());
+        assert!(a.confirm.is_none(), "Esc declines the confirmation");
+        assert!(a.git_panel.is_some(), "and leaves the panel open");
     }
 
     #[test]

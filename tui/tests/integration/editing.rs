@@ -3143,8 +3143,8 @@ fn editor_gutter_marks_round_trip() {
     assert!(t.editor.gutter_marks().is_none());
 }
 
+#[cfg(feature = "git")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn revert_hunk_restores_committed_text() {
     let dir = unique_dir("reverthunk");
     fs::create_dir_all(&dir).unwrap();
@@ -3153,13 +3153,7 @@ fn revert_hunk_restores_committed_text() {
     // diff gutter and revert key the HEAD cache off that shared prefix.
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\n").unwrap();
     run(&["add", "."]);
@@ -3180,20 +3174,14 @@ fn revert_hunk_restores_committed_text() {
     fs::remove_dir_all(&dir).ok();
 }
 
+#[cfg(feature = "git")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn stage_hunk_stages_only_the_cursor_hunk() {
     let dir = unique_dir("stagehunk");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -3207,15 +3195,7 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
     app.run_action("git.stage_hunk"); // cursor on line 0
 
     // The staged (index) version now has the change; HEAD still has "one".
-    let staged = String::from_utf8(
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(["show", ":a.txt"])
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .unwrap();
+    let staged = fixture_git(&dir, &["show", ":a.txt"]);
     assert_eq!(
         staged, "ONE\ntwo\nthree\n",
         "the hunk is staged into the index"
@@ -3223,20 +3203,14 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
     fs::remove_dir_all(&dir).ok();
 }
 
+#[cfg(feature = "git")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn unstage_hunk_removes_the_cursor_hunk_from_index() {
     let dir = unique_dir("unstagehunk");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -3251,15 +3225,7 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
     app.run_action("git.unstage_hunk"); // cursor on line 0
 
     // The index now matches HEAD again ("one"); the working tree keeps "ONE".
-    let staged = String::from_utf8(
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(["show", ":a.txt"])
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .unwrap();
+    let staged = fixture_git(&dir, &["show", ":a.txt"]);
     assert_eq!(
         staged, "one\ntwo\nthree\n",
         "the hunk is removed from the index"
@@ -3267,19 +3233,13 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
     fs::remove_dir_all(&dir).ok();
 }
 
+#[cfg(feature = "git")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo with branches"]
 fn branch_chooser_switches_branches() {
     let dir = unique_dir("gitbranch");
     fs::create_dir_all(&dir).unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     fs::write(dir.join("a.txt"), "hello\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "init"]);

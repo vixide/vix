@@ -12,12 +12,24 @@
 
 use crate::integration::common::*;
 
-#[test]
-#[ignore = "needs git and an in-tree checkout"]
-fn git_gutter_marks_a_modified_line() {
-    let mut app = app_at(Path::new("."));
+/// A throwaway repo with one committed file, `a.txt`, and an app rooted at
+/// it with that file open. The gutter tests used to borrow this checkout's
+/// own `Cargo.toml`, which tied them to running inside a git work tree
+/// (T792).
+fn app_with_a_committed_file(tag: &str) -> (PathBuf, App) {
+    let dir = unique_dir(tag).canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    commit_all(&dir, "seed");
+    let mut app = app_at(&dir);
     app.refresh_git();
-    app.open_initial(&PathBuf::from("Cargo.toml"));
+    app.open_initial(&dir.join("a.txt"));
+    (dir, app)
+}
+
+#[test]
+fn git_gutter_marks_a_modified_line() {
+    let (dir, mut app) = app_with_a_committed_file("gutter-marks");
     app.on_key(key('x')); // modify the first line
     app.refresh_git_gutter();
     let marks = app
@@ -29,17 +41,15 @@ fn git_gutter_marks_a_modified_line() {
         .cloned()
         .unwrap_or_default();
     assert!(!marks.is_empty(), "a modified line is marked in the gutter");
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
-#[ignore = "needs git and an in-tree checkout"]
 fn git_gutter_refresh_skips_recompute_until_the_buffer_revision_changes() {
     // T510: `refresh_git_gutter` is called every redraw, so it must not
     // recompute the diff (and thus repopulate the gutter) when neither the
     // active path nor the buffer's edit revision changed since the last call.
-    let mut app = app_at(Path::new("."));
-    app.refresh_git();
-    app.open_initial(&PathBuf::from("Cargo.toml"));
+    let (dir, mut app) = app_with_a_committed_file("gutter-cache");
     app.on_key(key('x')); // modify the first line
     app.refresh_git_gutter();
     assert!(
@@ -83,10 +93,10 @@ fn git_gutter_refresh_skips_recompute_until_the_buffer_revision_changes() {
             .is_some_and(|m| !m.is_empty()),
         "a new edit invalidates the cache, so the gutter is recomputed"
     );
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_stages_and_commits() {
     let dir = unique_dir("gitpanel");
     fs::create_dir_all(&dir).unwrap();
@@ -118,7 +128,6 @@ fn git_panel_stages_and_commits() {
 /// T577: with nothing staged but a dirty tree, Git → Commit asks (default),
 /// stages everything without asking ("always"), or refuses ("never").
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn smart_commit_ask_always_and_never() {
     let dir = unique_dir("smartcommit");
     fs::create_dir_all(&dir).unwrap();
@@ -178,7 +187,6 @@ fn smart_commit_ask_always_and_never() {
 /// message box, it never commits on its own.
 #[cfg(feature = "ai")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_generates_a_commit_message_from_the_staged_diff() {
     let dir = unique_dir("gitpanel-ai-commit");
     fs::create_dir_all(&dir).unwrap();
@@ -186,10 +194,15 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
     fs::write(dir.join("a.txt"), "hello\n").unwrap();
 
     // Deterministic `ai_command`: ignores its input, always prints the same
-    // message -- no real assistant needed to exercise the wiring.
+    // message -- no real assistant needed to exercise the wiring. The reply
+    // lives outside the repo so it is not a change of its own, and is printed
+    // with `type` under Windows' `cmd.exe`, `cat` elsewhere.
+    let reply = unique_dir("gitpanel-ai-commit-reply").join("reply.txt");
+    fs::write(&reply, "Add a.txt with a greeting").unwrap();
     let settings = {
         let mut s = Settings::default();
-        s.ai_command = "printf '%s' 'Add a.txt with a greeting'".to_string();
+        let print = if cfg!(windows) { "type" } else { "cat" };
+        s.ai_command = format!("{print} {}", reply.display());
         s
     };
     let mut app = app_at_with(&dir, settings);
@@ -229,7 +242,6 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
 /// command never runs and no commit prompt opens.
 #[cfg(feature = "ai")]
 #[test]
-#[ignore = "needs git; creates a throwaway repo"]
 fn git_panel_generates_no_commit_message_with_ai_off() {
     let dir = unique_dir("gitpanel-ai-off");
     fs::create_dir_all(&dir).unwrap();
@@ -239,7 +251,11 @@ fn git_panel_generates_no_commit_message_with_ai_off() {
     let settings = {
         let mut s = Settings::default();
         s.ai = "off".to_string();
-        s.ai_command = format!("touch {}", marker.display());
+        s.ai_command = if cfg!(windows) {
+            format!("type nul > {}", marker.display())
+        } else {
+            format!("touch {}", marker.display())
+        };
         s
     };
     let mut app = app_at_with(&dir, settings);
@@ -256,19 +272,12 @@ fn git_panel_generates_no_commit_message_with_ai_off() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_stash_and_pop_round_trip() {
     let dir = unique_dir("gitstash");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "one\n").unwrap();
     run(&["add", "."]);
@@ -288,18 +297,11 @@ fn git_stash_and_pop_round_trip() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_blame_annotates_the_current_line() {
     let dir = unique_dir("gitblame");
     fs::create_dir_all(&dir).unwrap();
     init_git_repo(&dir, "Ada Lovelace");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -328,18 +330,11 @@ fn git_blame_annotates_the_current_line() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_blame_flags_an_uncommitted_line() {
     let dir = unique_dir("gitblameunc");
     fs::create_dir_all(&dir).unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "committed\n").unwrap();
     run(&["add", "."]);
@@ -360,19 +355,12 @@ fn git_blame_flags_an_uncommitted_line() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_browse_log_lists_commits_and_enter_opens_the_diff_tab() {
     let dir = unique_dir("gitlog");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     fs::write(dir.join("a.txt"), "one\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "first commit"]);
@@ -411,19 +399,12 @@ fn git_browse_log_lists_commits_and_enter_opens_the_diff_tab() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_file_history_lists_only_commits_touching_the_active_file() {
     let dir = unique_dir("gitfilehistory");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     fs::write(dir.join("a.txt"), "a1\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "add a"]);
@@ -459,19 +440,12 @@ fn git_file_history_lists_only_commits_touching_the_active_file() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_open_at_revision_shows_the_files_old_content_read_only() {
     let dir = unique_dir("gitrevision");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "old content\n").unwrap();
     run(&["add", "."]);
@@ -503,19 +477,12 @@ fn git_open_at_revision_shows_the_files_old_content_read_only() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_open_at_revision_with_an_unknown_revision_reports_an_error() {
     let dir = unique_dir("gitrevisionbad");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     let file = dir.join("a.txt");
     fs::write(&file, "content\n").unwrap();
     run(&["add", "."]);
@@ -661,16 +628,7 @@ fn app_in_repo_subdir(tag: &str) -> (PathBuf, App) {
     init_git_repo(&dir, "Ada Lovelace");
     fs::write(dir.join("f"), "root one\nroot two\n").unwrap();
     fs::write(dir.join("sub/f"), "sub one\nsub two\n").unwrap();
-    for args in [
-        &["add", "."][..],
-        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
-    ] {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    }
+    commit_all(&dir, "seed");
     let mut app = app_at(&dir.join("sub"));
     app.refresh_git();
     (dir, app)
@@ -678,16 +636,10 @@ fn app_in_repo_subdir(tag: &str) -> (PathBuf, App) {
 
 /// The staged (index) content of `path` in the repo at `dir`.
 fn index_content(dir: &Path, path: &str) -> String {
-    let out = std::process::Command::new("git")
-        .current_dir(dir)
-        .args(["show", &format!(":{path}")])
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    fixture_git(dir, &["show", &format!(":{path}")])
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_works_when_vix_is_rooted_in_a_repo_subdirectory() {
     let (dir, mut app) = app_in_repo_subdir("gitsubdir");
     assert!(app.flags.contains(AppFlags::GIT_REPO));
@@ -715,7 +667,10 @@ fn git_works_when_vix_is_rooted_in_a_repo_subdirectory() {
     assert_eq!(index_content(&dir, "sub/f"), "xsub one\nsub two\n");
     assert_eq!(index_content(&dir, "f"), "root one\nroot two\n");
 
-    // Blame names the subdirectory file's commit.
+    // Blame names the subdirectory file's commit. Line 1 now holds the
+    // unsaved edit, which blames as "not committed yet" (T657), so ask about
+    // the untouched line 2.
+    app.on_key(keycode(KeyCode::Down));
     app.run_action("git.blame");
     assert!(app.status.contains("Ada Lovelace"), "{}", app.status);
 
@@ -726,7 +681,6 @@ fn git_works_when_vix_is_rooted_in_a_repo_subdirectory() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_stage_selected_works_from_a_repo_subdirectory() {
     let (dir, mut app) = app_in_repo_subdir("gitsubpanel");
     fs::write(dir.join("sub/f"), "sub changed\n").unwrap();
@@ -753,23 +707,13 @@ fn git_panel_stage_selected_works_from_a_repo_subdirectory() {
 /// discards them after a confirmation; `git.diff_index` diffs against the
 /// staged copy; an untracked file is never deleted by Discard.
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_opens_and_discards_changes() {
     let dir = unique_dir("gitpanel-open-changes");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
     fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
-    for args in [
-        &["add", "."][..],
-        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
-    ] {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    }
+    commit_all(&dir, "seed");
     fs::write(dir.join("a.txt"), "one\nTWO\n").unwrap();
     let mut app = app_at(&dir);
     app.run_action("git.changes");
@@ -808,23 +752,13 @@ fn git_panel_opens_and_discards_changes() {
 
 /// T657: inline/line blame follows unsaved edits rather than the copy on disk.
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn blame_follows_unsaved_edits() {
     let dir = unique_dir("blame-unsaved");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
     fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
-    for args in [
-        &["add", "."][..],
-        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
-    ] {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    }
+    commit_all(&dir, "seed");
     let mut app = app_at(&dir);
     app.open_initial(&dir.join("a.txt"));
     // Insert a new first line without saving; the cursor stays on it.
@@ -853,15 +787,7 @@ fn graph_repo(tag: &str) -> PathBuf {
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     init_git_repo(&dir, "Test");
-    let run = |args: &[&str]| {
-        let out = std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(["-c", "commit.gpgsign=false"])
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "git {args:?}");
-    };
+    let run = |args: &[&str]| fixture_git(&dir, args);
     fs::write(dir.join("a.txt"), "a\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "base"]);
@@ -877,7 +803,6 @@ fn graph_repo(tag: &str) -> PathBuf {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_graph_lists_lanes_searches_filters_and_opens_the_diff_tab() {
     let dir = graph_repo("gitgraph");
     let mut app = app_at(&dir);
@@ -920,16 +845,12 @@ fn git_graph_lists_lanes_searches_filters_and_opens_the_diff_tab() {
 }
 
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_graph_checkout_branch_and_cherry_pick_confirm_before_acting() {
     let dir = graph_repo("gitgraphact");
     let head = |dir: &Path| {
-        let out = std::process::Command::new("git")
-            .current_dir(dir)
-            .args(["rev-parse", "--abbrev-ref", "HEAD"])
-            .output()
-            .unwrap();
-        String::from_utf8_lossy(&out.stdout).trim().to_string()
+        fixture_git(dir, &["rev-parse", "--abbrev-ref", "HEAD"])
+            .trim()
+            .to_string()
     };
     let mut app = app_at(&dir);
     app.run_action("git.graph");
@@ -971,48 +892,17 @@ fn git_graph_checkout_branch_and_cherry_pick_confirm_before_acting() {
     fs::remove_dir_all(&dir).ok();
 }
 
-/// A fixture `git` for the T634 tests: isolated from the developer's global
-/// and system config on this command alone, never through the process env.
-pub(crate) fn t634_git(dir: &Path, args: &[&str]) {
-    let out = std::process::Command::new("git")
-        .current_dir(dir)
-        .env(
-            "GIT_CONFIG_GLOBAL",
-            if cfg!(windows) { "NUL" } else { "/dev/null" },
-        )
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 /// A one-commit repository under `<unique>/repo`; its local config carries
-/// the identity and turns signing off, so the app's own git calls need no
-/// global setup.
+/// the identity and turns signing off (see [`init_git_repo`]), so the app's
+/// own git calls need no global setup.
 pub(crate) fn t634_repo(name: &str) -> PathBuf {
     let base = unique_dir(name);
     let dir = base.join("repo");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
-    t634_git(&dir, &["init", "-q"]);
-    for (k, v) in [
-        ("user.name", "Vix Test"),
-        ("user.email", "test@example.invalid"),
-        ("commit.gpgsign", "false"),
-        // Windows runners set core.autocrlf=true globally; keep LF (T772).
-        ("core.autocrlf", "false"),
-    ] {
-        t634_git(&dir, &["config", k, v]);
-    }
+    init_git_repo(&dir, "Vix Test");
     fs::write(dir.join("a.txt"), "one\n").unwrap();
-    t634_git(&dir, &["add", "a.txt"]);
-    t634_git(&dir, &["commit", "-q", "-m", "init"]);
+    commit_all(&dir, "init");
     dir
 }
 
@@ -1052,7 +942,7 @@ fn git_stash_list_chooser_shows_pops_and_drops_after_confirming() {
     app.on_key(key('a'));
     assert!(app.chooser.stash().is_none());
     assert_eq!(fs::read_to_string(&file).unwrap(), "one\ntwo\n");
-    t634_git(&dir, &["checkout", "--", "a.txt"]);
+    fixture_git(&dir, &["checkout", "--", "a.txt"]);
 
     // Enter shows its diff in a read-only tab.
     app.run_action("git.stash_list");
@@ -1150,7 +1040,6 @@ fn gutter_base_setting_defaults_to_head_and_normalizes() {
 /// `disk` it marks only unsaved edits; against a branch it marks the whole
 /// difference from that branch. The chooser action lists every base.
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn gutter_base_changes_what_the_gutter_marks() {
     let (dir, mut app) = app_in_repo_subdir("gutterbase");
     app.open_initial(&dir.join("sub/f"));
@@ -1182,11 +1071,7 @@ fn gutter_base_changes_what_the_gutter_marks() {
     assert_eq!(marks(&app), 0, "saved edit is no longer a difference");
 
     // Branch: a branch cut before the edit differs by that edit.
-    std::process::Command::new("git")
-        .current_dir(&dir)
-        .args(["branch", "base-branch", "HEAD"])
-        .output()
-        .unwrap();
+    fixture_git(&dir, &["branch", "base-branch", "HEAD"]);
     app.set_gutter_base("branch:base-branch");
     app.refresh_git_gutter();
     assert_eq!(marks(&app), 1, "branch base marks the uncommitted edit");
@@ -1313,18 +1198,10 @@ fn review_hunk_navigation_wraps_and_needs_a_review_tab() {
 /// T665: `git.review` asks for a range and reviews what git reports for it,
 /// both for an `a..b` range and for a single commit.
 #[test]
-#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn review_range_and_single_commit_use_real_git_diffs() {
     let dir = unique_dir("review-git").canonicalize().unwrap();
     init_git_repo(&dir, "Ada Lovelace");
-    let git = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(["-c", "commit.gpgsign=false"])
-            .args(args)
-            .output()
-            .unwrap();
-    };
+    let git = |args: &[&str]| fixture_git(&dir, args);
     fs::write(dir.join("f"), "one\ntwo\n").unwrap();
     git(&["add", "."]);
     git(&["commit", "-q", "-m", "seed"]);
@@ -1350,17 +1227,7 @@ fn review_range_and_single_commit_use_real_git_diffs() {
 
 /// The subjects of `dir`'s commits, newest first (T633).
 fn t633_subjects(dir: &Path) -> Vec<String> {
-    let out = std::process::Command::new("git")
-        .current_dir(dir)
-        .env(
-            "GIT_CONFIG_GLOBAL",
-            if cfg!(windows) { "NUL" } else { "/dev/null" },
-        )
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .args(["log", "--format=%s"])
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout)
+    fixture_git(dir, &["log", "--format=%s"])
         .lines()
         .map(str::to_string)
         .collect()
@@ -1378,8 +1245,8 @@ fn git_interactive_rebase_squashes_reorders_and_rewords() {
         ("three.txt", "three"),
     ] {
         fs::write(dir.join(file), subject).unwrap();
-        t634_git(&dir, &["add", file]);
-        t634_git(&dir, &["commit", "-q", "-m", subject]);
+        fixture_git(&dir, &["add", file]);
+        fixture_git(&dir, &["commit", "-q", "-m", subject]);
     }
     let mut app = app_at(&dir);
     app.refresh_git();
@@ -1438,8 +1305,8 @@ fn git_rebase_edit_continue_abort_and_cherry_pick() {
     let dir = t634_repo("t633edit");
     for (file, subject) in [("one.txt", "one"), ("two.txt", "two")] {
         fs::write(dir.join(file), subject).unwrap();
-        t634_git(&dir, &["add", file]);
-        t634_git(&dir, &["commit", "-q", "-m", subject]);
+        fixture_git(&dir, &["add", file]);
+        fixture_git(&dir, &["commit", "-q", "-m", subject]);
     }
     let mut app = app_at(&dir);
     app.refresh_git();
@@ -1468,7 +1335,7 @@ fn git_rebase_edit_continue_abort_and_cherry_pick() {
 
     // Cherry-pick `one` onto a side branch made before it.
     let main = vix::git::branch(&dir).unwrap();
-    t634_git(&dir, &["switch", "-q", "-c", "side", "HEAD~2"]);
+    fixture_git(&dir, &["switch", "-q", "-c", "side", "HEAD~2"]);
     app.refresh_git();
     app.run_action("git.cherry_pick");
     type_str(&mut app, &main);
@@ -1497,27 +1364,12 @@ fn git_rebase_edit_continue_abort_and_cherry_pick() {
 
 /// `git diff` of `dir` with the prefixes Review expects.
 pub(crate) fn t665_diff(dir: &Path) -> String {
-    t665_run(dir, &["diff", "--src-prefix=a/", "--dst-prefix=b/"])
+    fixture_git(dir, &["diff", "--src-prefix=a/", "--dst-prefix=b/"])
 }
 
 /// `git diff --cached` of `dir`.
 pub(crate) fn t665_cached(dir: &Path) -> String {
-    t665_run(dir, &["diff", "--cached"])
-}
-
-/// Stdout of `git <args>` in `dir`, with the user's git config ignored.
-pub(crate) fn t665_run(dir: &Path, args: &[&str]) -> String {
-    let out = std::process::Command::new("git")
-        .current_dir(dir)
-        .env(
-            "GIT_CONFIG_GLOBAL",
-            if cfg!(windows) { "NUL" } else { "/dev/null" },
-        )
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .args(args)
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    fixture_git(dir, &["diff", "--cached"])
 }
 
 /// T665 follow-up: with the cursor in a hunk of the review, Stage Review Hunk
@@ -1594,7 +1446,7 @@ fn review_stage_all_stages_a_whole_stash() {
     app.refresh_git();
     fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
     fs::write(dir.join("b.txt"), "bee\n").unwrap();
-    t665_run(&dir, &["add", "b.txt"]);
+    fixture_git(&dir, &["add", "b.txt"]);
     app.run_action("git.stash");
     assert!(!t665_cached(&dir).contains("+two"));
     app.run_action("git.stash_list");
@@ -1640,8 +1492,8 @@ fn review_stages_a_hunk_with_a_no_newline_marker() {
 fn review_discard_all_confirms_with_counts_then_reverts_every_hunk() {
     let dir = t634_repo("t665discardall");
     fs::write(dir.join("b.txt"), "x\n").unwrap();
-    t634_git(&dir, &["add", "b.txt"]);
-    t634_git(&dir, &["commit", "-q", "-m", "b"]);
+    fixture_git(&dir, &["add", "b.txt"]);
+    fixture_git(&dir, &["commit", "-q", "-m", "b"]);
     let mut app = app_at(&dir);
     app.refresh_git();
     fs::write(dir.join("a.txt"), "ONE\n").unwrap();

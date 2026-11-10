@@ -61,6 +61,13 @@ this only matters when two layers are open at once. The cases that moved:
   if/else-if chain and are now stacked in that same order.
 - A host's Cowork share confirmation is its own row (`CoworkConfirm`) just
   above the shared terminal, so it still answers before the terminal.
+- The Git changes panel (`GitPanel`) sits below `Prompt` and `Confirm`,
+  beside the rebase overlay (T792). Its Discard (`d`) and smart-commit (`c`
+  with nothing staged, T577) confirmations open while the panel stays up.
+  T611 first put the panel above `Confirm`, its old drawing height, so the
+  confirmation was drawn under the panel and `y`/`n`/Esc went to the panel:
+  Discard never discarded and the smart-commit question could not be
+  declined. Before T611 the key chain had happened to offer `Confirm` first.
 
 ## Step 2: the `Overlay` enum (choosers)
 
