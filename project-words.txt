@@ -3,6 +3,7 @@
 # dictionary referenced by cspell.json; CSpell appends here when you "add word".
 
 # Project / product
+nocapture
 vixide
 vix
 

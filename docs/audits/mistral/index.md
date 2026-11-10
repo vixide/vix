@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-**Vix is an exceptionally well-architected terminal IDE** with impressive breadth: 147 focused crates, 14 keymaps, 21 themes, 15 languages, LSP/DAP, Git/Jujutsu, DB workbench, Org mode, HTTP client, container tools, AI integration, and 8 desktop GUI frontends. The project demonstrates **exemplary software engineering practices**: spec-driven development, zero `unsafe` code, pedantic clippy, exhaustive documentation requirements, internationalization, and a rigorous CI/CD pipeline.
+**Vix is an exceptionally well-architected terminal IDE** with impressive breadth: 147 focused crates, 14 keymaps, 21 themes, 15 languages, LSP/DAP, Git/Jujutsu, DB workbench, Org mode, HTTP client, container tools, AI integration, and 8 desktop GUI front ends. The project demonstrates **exemplary software engineering practices**: spec-driven development, zero `unsafe` code, pedantic clippy, exhaustive documentation requirements, internationalization, and a rigorous CI/CD pipeline.
 
 **Current State**: Version 2.0.2, recently released with major features including remote editing (SSH), Cowork (real-time collaboration), IM menu, Large File Viewer, and comprehensive IDE parity features. The project is **mature, production-ready, and moving rapidly**.
 
@@ -510,7 +510,7 @@ Based on **impact/effort ratio**, here are the 10 most impactful actions to take
 - **Create Discord server** with channels: #general, #help, #development, #features, #showcase
 - **Weekly office hours** (1 hour/week on Discord voice)
 - **Monthly community call** (Zoom/YouTube Live)
-- **Hackathon/bug bash** events (quarterly)
+- **Hack day and bug bash** events (quarterly)
 - **Contributor spotlight** (blog post featuring contributors)
 - **Bounty program** for critical features/bugs (via GitHub Sponsors or Open Collective)
 
