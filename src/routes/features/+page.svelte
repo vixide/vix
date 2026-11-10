@@ -88,7 +88,6 @@
 
 <section class="section" id="new" aria-labelledby="new-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Released in 2.0</p>
     <h2 id="new-heading">New in 2.0</h2>
   </header>
   <div class="prose centered">
@@ -118,7 +117,6 @@
 
 <section class="section" id="editing" aria-labelledby="editing-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Core</p>
     <h2 id="editing-heading">Editing</h2>
   </header>
   <div class="prose centered">
@@ -137,7 +135,6 @@
 
 <section class="section" id="navigation" aria-labelledby="navigation-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Finding things</p>
     <h2 id="navigation-heading">Navigation and search</h2>
   </header>
   <div class="prose centered">
@@ -153,7 +150,6 @@
 
 <section class="section" id="files" aria-labelledby="files-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Working set</p>
     <h2 id="files-heading">Files and projects</h2>
   </header>
   <div class="prose centered">
@@ -169,7 +165,6 @@
 
 <section class="section" id="code" aria-labelledby="code-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Code intelligence</p>
     <h2 id="code-heading">Code intelligence and version control</h2>
   </header>
   <div class="prose centered">
@@ -186,7 +181,6 @@
 
 <section class="section" id="data" aria-labelledby="data-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Data</p>
     <h2 id="data-heading">Data and documents</h2>
   </header>
   <div class="prose centered">
@@ -213,7 +207,6 @@
 
 <section class="section" id="org" aria-labelledby="org-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Notes and outlines</p>
     <h2 id="org-heading">Org mode</h2>
   </header>
   <div class="prose centered">
@@ -229,7 +222,6 @@
 
 <section class="section" id="keys" aria-labelledby="keys-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Look and feel</p>
     <h2 id="keys-heading">Keys, themes and languages</h2>
   </header>
   <div class="prose centered">
@@ -245,7 +237,6 @@
 
 <section class="section" id="themes" aria-labelledby="themes-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">21 bundled themes</p>
     <h2 id="themes-heading">Theme gallery</h2>
   </header>
   <div class="prose centered">
@@ -261,7 +252,6 @@
 
 <section class="section" id="trust" aria-labelledby="trust-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Careful by default</p>
     <h2 id="trust-heading">Safety and control</h2>
   </header>
   <div class="prose centered">
@@ -276,7 +266,6 @@
 
 <section class="section" id="tools" aria-labelledby="tools-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Extras</p>
     <h2 id="tools-heading">Other tools</h2>
   </header>
   <div class="prose centered">
@@ -292,7 +281,6 @@
 
 <section class="section" id="desktop" aria-labelledby="desktop-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Beyond the terminal</p>
     <h2 id="desktop-heading">Desktop GUIs</h2>
   </header>
   <div class="prose centered">
@@ -308,7 +296,6 @@
 
 <section class="section" id="demos" aria-labelledby="demos-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Recorded in a real terminal</p>
     <h2 id="demos-heading">Demos</h2>
   </header>
   <div class="demo-grid">

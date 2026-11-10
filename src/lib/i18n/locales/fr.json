@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Éditeur de texte et IDE pour terminal · Rust · Libre et open source",
-  "hero.title": "L'IDE de terminal qui connaît déjà vos raccourcis.",
-  "hero.tagline": "Enregistrer, c'est <k>Ctrl+S</k>, rechercher, c'est <k>Ctrl+F</k>, et tout le reste se trouve dans une barre de menus ou dans la palette de commandes <k>Ctrl+P</k> — aucun mode à apprendre d'abord. Serveurs de langage, débogueur, Git, mode Org et atelier de bases de données sont intégrés : Vix est utile avant même que vous configuriez quoi que ce soit.",
+  "hero.title": "Bienvenue dans Vix, l'IDE qui connaît déjà vos raccourcis.",
+  "hero.tagline": "Enregistrez avec <k>Ctrl+S</k>, cherchez avec <k>Ctrl+F</k> et accédez à tout le reste depuis une barre de menus ou la palette de commandes <k>Ctrl+P</k>. Serveurs de langage, débogueur, Git, Org mode et atelier de bases de données sont intégrés, dans votre terminal ou une fenêtre native : Vix est utile dès son ouverture.",
   "hero.installNote": "Ou utilisez le script d'installation, PowerShell, npm ou <c>cargo install vix-tui</c> — voir <a>toutes les options d'installation</a>. La commande est <c>vix</c>.",
   "hero.copyBrew": "Copier la commande d'installation Homebrew",
   "hero.install": "Installer Vix",
   "hero.features": "Voir toutes les fonctionnalités",
 
-  "glance.heading": "Vix en un coup d'œil",
-  "glance.binary": "binaire, rien à assembler",
-  "glance.keymaps": "dispositions de touches, modifiables à chaud",
-  "glance.themes": "thèmes fournis",
-  "glance.languages": "langues d'interface",
-  "glance.unsafe": "lignes de Rust unsafe",
-
-  "who.eyebrow": "À qui il s'adresse",
   "who.title": "Pensé pour votre façon de travailler",
   "who.1.heading": "Vous vivez dans le terminal mais votre IDE vous manque",
   "who.1.text": "Aller à la définition, renommer, un débogueur et un panneau Git, via SSH ou dans tmux, sans projet de configuration.",
@@ -25,11 +16,9 @@
   "who.4.heading": "Vous travaillez avec des données et des API",
   "who.4.text": "Interrogez une base de données, envoyez une requête HTTP, inspectez un conteneur et modifiez le CSV qu'il a produit, dans une seule fenêtre.",
 
-  "from.eyebrow": "Vous changez d'éditeur ?",
   "from.title": "Lisez le guide de votre éditeur d'origine",
   "from.link": "Vix pour les utilisateurs de {name}",
 
-  "faq.eyebrow": "Questions",
   "faq.title": "Questions fréquentes",
   "faq.1.q": "Dois-je apprendre l'édition modale ?",
   "faq.1.a": "Non. La disposition par défaut utilise les mêmes raccourcis que vos autres applications. Les dispositions Vi et Spacemacs sont à un choix de menu si vous les voulez.",
@@ -40,7 +29,6 @@
   "faq.4.q": "Mon entreprise peut-elle l'utiliser ?",
   "faq.4.a": "Choisissez la licence qui vous convient parmi cinq : Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 ou GPL-3.0. Pour les machines verrouillées, la version minimale n'établit aucune connexion réseau et ne lance aucun autre programme.",
 
-  "open.eyebrow": "Open source",
   "open.title": "Libre, et construit au grand jour",
   "open.text": "Le code source de Vix est placé, à votre choix, sous Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 ou GPL-3.0. Le développement est piloté par les spécifications : chaque crate possède une spécification que le code met en œuvre. La manière dont le projet recourt à l'assistance de l'IA est exposée dans sa <a>déclaration sur l'IA</a>.",
   "open.source": "Code source sur GitHub",

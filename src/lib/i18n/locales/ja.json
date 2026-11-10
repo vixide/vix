@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "ターミナル用テキストエディタ兼 IDE · Rust · 無料のオープンソース",
-  "hero.title": "あなたのキー操作をすでに知っているターミナル IDE。",
-  "hero.tagline": "保存は <k>Ctrl+S</k>、検索は <k>Ctrl+F</k>、それ以外はすべてメニューバーか <k>Ctrl+P</k> のコマンドパレットにあります。先に覚えるモードはありません。言語サーバー、デバッガー、Git、Org モード、データベースワークベンチが組み込まれているので、何も設定しなくても Vix はすぐ役に立ちます。",
+  "hero.title": "Vix へようこそ。あなたのキー操作をすでに知っている IDE です。",
+  "hero.tagline": "<k>Ctrl+S</k> で保存、<k>Ctrl+F</k> で検索、そのほかはすべてメニューバーか <k>Ctrl+P</k> のコマンドパレットから。言語サーバー、デバッガー、Git、Org mode、データベースワークベンチを内蔵し、ターミナルでもネイティブウィンドウでも、開いたその瞬間から役に立ちます。",
   "hero.installNote": "インストーラースクリプト、PowerShell、npm、または <c>cargo install vix-tui</c> も使えます。<a>すべてのインストール方法</a>をご覧ください。コマンドは <c>vix</c> です。",
   "hero.copyBrew": "Homebrew のインストールコマンドをコピー",
   "hero.install": "Vix をインストール",
   "hero.features": "すべての機能を見る",
 
-  "glance.heading": "Vix の概要",
-  "glance.binary": "個のバイナリ、組み立て不要",
-  "glance.keymaps": "種類のキーマップ、その場で切り替え可能",
-  "glance.themes": "個の同梱テーマ",
-  "glance.languages": "言語のインターフェース",
-  "glance.unsafe": "行の unsafe な Rust",
-
-  "who.eyebrow": "対象となる方",
   "who.title": "いつもの作業スタイルのために",
   "who.1.heading": "ターミナルで暮らしているが、IDE が恋しい",
   "who.1.text": "定義へ移動、名前の変更、デバッガー、Git パネルを、SSH 経由や tmux 内で、設定プロジェクトなしで使えます。",
@@ -25,11 +16,9 @@
   "who.4.heading": "データや API を扱う",
   "who.4.text": "データベースへのクエリ、HTTP リクエストの送信、コンテナーの調査、生成された CSV の編集を、ひとつのウィンドウで行えます。",
 
-  "from.eyebrow": "エディタを乗り換えますか？",
   "from.title": "これまで使っていたエディタ向けのガイドをお読みください",
   "from.link": "{name} ユーザー向けの Vix",
 
-  "faq.eyebrow": "質問",
   "faq.title": "よくある質問",
   "faq.1.q": "モーダル編集を覚える必要はありますか？",
   "faq.1.a": "いいえ。既定のキーマップは、他のアプリと同じショートカットを使います。Vi や Spacemacs のキーマップが必要なら、メニューで選ぶだけです。",
@@ -40,7 +29,6 @@
   "faq.4.q": "会社で使えますか？",
   "faq.4.a": "5 つのライセンスから合うものを選べます。Apache-2.0、BSD-3-Clause、MIT、GPL-2.0、GPL-3.0 です。制限の厳しいマシン向けに、最小ビルドはネットワーク接続を一切行わず、他のプログラムも起動しません。",
 
-  "open.eyebrow": "オープンソース",
   "open.title": "自由で、公開の場で開発されています",
   "open.text": "Vix のソースコードは、Apache-2.0、BSD-3-Clause、MIT、GPL-2.0、GPL-3.0 の中からお好きなライセンスで利用できます。開発は仕様駆動で、各 crate にはコードが実装する仕様があります。プロジェクトが AI 支援をどのように使うかは、<a>AI に関する声明</a>に記されています。",
   "open.source": "GitHub のソースコード",

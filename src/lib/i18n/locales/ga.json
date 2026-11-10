@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Eagarthóir téacs agus IDE don teirminéal · Rust · Saor in aisce agus foinse oscailte",
-  "hero.title": "An IDE teirminéil a bhfuil aithne aige ar do chuid eochracha cheana féin.",
-  "hero.tagline": "Is é <k>Ctrl+S</k> an t-ordú sábhála, is é <k>Ctrl+F</k> an t-ordú cuardaigh, agus tá gach rud eile i mbarra roghchláir nó sa phailéad orduithe <k>Ctrl+P</k> — gan aon mhodh le foghlaim ar dtús. Tá freastalaithe teanga, dífhabhtóir, Git, mód Org agus bainc oibre bunachair sonraí ionsuite, mar sin tá Vix úsáideach sula gcumraíonn tú aon rud.",
+  "hero.title": "Fáilte go Vix, an IDE a bhfuil d'eochracha ar eolas aige cheana.",
+  "hero.tagline": "Sábháil le <k>Ctrl+S</k>, aimsigh le <k>Ctrl+F</k> agus faigh gach rud eile ón mbarra roghchláir nó ó phailéad orduithe <k>Ctrl+P</k>. Tá freastalaithe teanga, dífhabhtóir, Git, Org mode agus binse oibre bunachar sonraí ionsuite, i do theirminéal nó i bhfuinneog dhúchasach, mar sin tá Vix úsáideach ón nóiméad a osclaíonn sé.",
   "hero.installNote": "Nó úsáid an script suiteála, PowerShell, npm, nó <c>cargo install vix-tui</c> — féach <a>gach rogha suiteála</a>. Is é <c>vix</c> an t-ordú.",
   "hero.copyBrew": "Cóipeáil an t-ordú suiteála Homebrew",
   "hero.install": "Suiteáil Vix",
   "hero.features": "Féach ar gach gné",
 
-  "glance.heading": "Vix i mbeagán focal",
-  "glance.binary": "comhad dénártha, níl aon rud le cur le chéile",
-  "glance.keymaps": "mapa eochrach, inathraithe láithreach",
-  "glance.themes": "téama ionsuite",
-  "glance.languages": "teanga comhéadain",
-  "glance.unsafe": "líne de Rust unsafe",
-
-  "who.eyebrow": "Cé dó é",
   "who.title": "Déanta don chaoi a n-oibríonn tú cheana féin",
   "who.1.heading": "Tá tú i do chónaí sa teirminéal ach tá uaigneas ort i ndiaidh do IDE",
   "who.1.text": "Téigh chuig an sainmhíniú, athainmnigh, dífhabhtóir agus painéal Git, thar SSH nó i tmux, gan tionscadal cumraíochta.",
@@ -25,11 +16,9 @@
   "who.4.heading": "Oibríonn tú le sonraí agus APInna",
   "who.4.text": "Iarr bunachar sonraí, seol iarratas HTTP, scrúdaigh coimeádán agus cuir eagar ar an CSV a tháirg sé, i bhfuinneog amháin.",
 
-  "from.eyebrow": "Ag athrú eagarthóra?",
   "from.title": "Léigh an treoir don eagarthóir as a dtagann tú",
   "from.link": "Vix d'úsáideoirí {name}",
 
-  "faq.eyebrow": "Ceisteanna",
   "faq.title": "Ceisteanna coitianta",
   "faq.1.q": "An gcaithfidh mé eagarthóireacht mhódúil a fhoghlaim?",
   "faq.1.a": "Ní chaithfidh. Úsáideann an mapa eochrach réamhshocraithe na haicearraí céanna le d'aipeanna eile. Tá mapaí eochrach Vi agus Spacemacs ach rogha roghchláir amháin uait má theastaíonn siad.",
@@ -40,7 +29,6 @@
   "faq.4.q": "An féidir le mo chuideachta é a úsáid?",
   "faq.4.a": "Roghnaigh cibé ceann de chúig cheadúnas is fearr duit: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 nó GPL-3.0. Do mheaisíní faoi ghlas, ní dhéanann an tógáil íosta aon naisc líonra agus ní thosaíonn sí aon chlár eile.",
 
-  "open.eyebrow": "Foinse oscailte",
   "open.title": "Saor in aisce, agus tógtha go hoscailte",
   "open.text": "Tá foinse Vix ceadúnaithe faoi Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 nó GPL-3.0, de réir do rogha. Tá an fhorbairt treoraithe ag sonraíochtaí: tá sonraíocht ag gach crate a chuireann an cód i bhfeidhm. Tá an chaoi a n-úsáideann an tionscadal cúnamh AI leagtha amach ina <a>ráiteas AI</a>.",
   "open.source": "Foinse ar GitHub",

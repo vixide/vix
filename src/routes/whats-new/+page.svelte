@@ -55,7 +55,6 @@
 </script>
 
 <section class="section prose centered">
-  <p class="section-heading-eyebrow">Released. The current release is 2.0.2.</p>
   <h1>What’s new in Vix 2.0</h1>
   <p>
     2.0 takes Vix off your own machine and out of your own chair: edit a
@@ -74,7 +73,6 @@
 
 <section class="section" aria-labelledby="highlights-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Highlights</p>
     <h2 id="highlights-heading">The big six</h2>
   </header>
   <div class="prose centered">
@@ -90,7 +88,6 @@
 
 <section class="section" aria-labelledby="more-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">And more</p>
     <h2 id="more-heading">Also new</h2>
   </header>
   <div class="prose centered">
@@ -107,7 +104,6 @@
 
 <section class="section" aria-labelledby="upgrading-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Before you upgrade</p>
     <h2 id="upgrading-heading">Upgrading</h2>
   </header>
   <div class="prose centered">
@@ -137,7 +133,6 @@
 
 <section class="section" aria-labelledby="not-yet-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Honest limits</p>
     <h2 id="not-yet-heading">Not in 2.0 yet</h2>
   </header>
   <div class="prose centered">
