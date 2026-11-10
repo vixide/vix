@@ -82,7 +82,8 @@
     { slug: 'for-spacemacs-users', name: 'Spacemacs' },
     { slug: 'for-intellij-users', name: 'IntelliJ' },
     { slug: 'for-eclipse-users', name: 'Eclipse' },
-    { slug: 'for-sublime-users', name: 'Sublime Text' }
+    { slug: 'for-sublime-users', name: 'Sublime' },
+    { slug: 'for-zed-users', name: 'Zed' }
   ];
 </script>
 

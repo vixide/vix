@@ -50,6 +50,7 @@
 - [Coming from Sublime Text](for-sublime-users/index.md)
 - [Coming from Vim](for-vim-users/index.md)
 - [Coming from Visual Studio Code](for-visual-studio-code-users/index.md)
+- [Coming from Zed](for-zed-users/index.md)
 
 # Features
 
