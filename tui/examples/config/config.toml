@@ -342,6 +342,9 @@ history = "session"
 history_days = 30
 blocked = []
 accounts = []
+# The `vix-matrix` helper for Matrix accounts (a build with the `matrix`
+# feature); empty looks beside vix, then on PATH.
+matrix_helper = ""
 # An IRC account, commented out. The SASL password comes only from the
 # environment variable VIX_IM_PASSWORD_<NAME> (here VIX_IM_PASSWORD_LIBERA),
 # never from this file.
@@ -353,6 +356,15 @@ accounts = []
 # tls = true
 # channels = ["#vix"]
 # sasl_user = "ana"
+#
+# A Matrix account (needs the `matrix` feature and the vix-matrix helper).
+# The password, used once at first sign-in, comes from VIX_IM_PASSWORD_HOME.
+#
+# [[im.accounts]]
+# name = "Home"
+# protocol = "matrix"
+# homeserver = "https://matrix.org"
+# user = "@ana:matrix.org"
 
 # Which Jupyter kernelspec runs each language (docs/jupyter/index.md), for a
 # build with the `jupyter` feature. Empty uses the first installed kernelspec

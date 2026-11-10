@@ -38,7 +38,8 @@ unflagged: it has no payoff and the heaviest coupling.
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
 | `cowork` | `cowork.*` | `vix-cowork`, `vix-cowork-net` (real-time collaboration, T690-T697; `cowork_off.rs` stand-ins). **Not** in `full` or `default`: the default build has no collaboration or listening code. See `spec/cowork` |
 | `jupyter` | `jupyter.*` | `vix-jupyter` with its `process` feature (starting Jupyter kernels from their kernelspec argv and the ZeroMQ transport, T734b; `vix-jupyter-core` is pure and needs no feature); the Run → Jupyter wiring in `tui/src/app/jupyter.rs` (T734c/d; `jupyter_off.rs` stand-ins). **Not** in `full` or `default` until T734h measures its size inside Vix. See `spec/jupyter` |
-| `full` | umbrella for every capability except `cowork` and `jupyter` (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
+| `matrix` | (none: Matrix accounts use the `im.*` actions) | implies `im`; `vix-im-matrix/net` (finding and starting the separate `vix-matrix` helper and pumping its JSON lines; the protocol types and codec stay compiled) and `tui/src/app/im_matrix.rs`. Adds no crates to `vix`. **Not** in `full`, `net` or `default` until the helper ships through the release channels; without it a Matrix account says the feature is missing (T793). See `spec/instant-message/matrix.md` |
+| `full` | umbrella for every capability except `cowork`, `jupyter` and `matrix` (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql`, `im` | everything that can reach the network (`cowork` is separate: it is opt-in) |
 
 `syntax-*` / `lang-*` (Tree-sitter grammars) are a separate, older axis and are

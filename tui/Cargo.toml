@@ -120,6 +120,11 @@ cowork = ["dep:vix-cowork", "dep:vix-cowork-net", "terminal"]
 # protocol core and the ZeroMQ transport; T734c/d wire it into the App
 # (Run → Jupyter, `tui/src/app/jupyter.rs`).
 jupyter = ["dep:vix-jupyter", "vix-jupyter/process"]
+# Matrix accounts in the IM menu (T793, spec/instant-message/matrix.md):
+# starts the separate `vix-matrix` helper (the `matrix/` workspace) and pumps
+# its JSON lines. Adds no crates to `vix`. Opt-in and NOT part of `full`,
+# `net` or `default` until the helper ships through the release channels.
+matrix = ["im", "vix-im-matrix/net"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -383,6 +388,9 @@ vix-im = { workspace = true }
 vix-im-panel = { workspace = true }
 # IRCv3 client for IM; its connection thread is behind the `im` feature.
 vix-im-irc = { workspace = true }
+# Matrix bridge for IM: the helper protocol (always), the helper process
+# behind the `matrix` feature.
+vix-im-matrix = { workspace = true }
 # Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
 vix-roam = { workspace = true }
 # Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the

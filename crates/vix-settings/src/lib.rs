@@ -378,8 +378,13 @@ pub struct ImSettings {
     pub history_days: u32,
     /// Nicks whose messages and mentions are hidden.
     pub blocked: Vec<String>,
-    /// IRC accounts for **IM → Connect…**, as `[[im.accounts]]` tables.
+    /// IRC and Matrix accounts for **IM → Connect…**, as `[[im.accounts]]`
+    /// tables.
     pub accounts: Vec<ImAccount>,
+    /// The `vix-matrix` helper program for Matrix accounts. Empty (the
+    /// default) looks for `vix-matrix` beside the `vix` executable, then on
+    /// `PATH`.
+    pub matrix_helper: String,
 }
 
 impl Default for ImSettings {
@@ -391,11 +396,12 @@ impl Default for ImSettings {
             history_days: 30,
             blocked: Vec::new(),
             accounts: Vec::new(),
+            matrix_helper: String::new(),
         }
     }
 }
 
-/// One IRC account (an `[[im.accounts]]` table).
+/// One IRC or Matrix account (an `[[im.accounts]]` table).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 #[non_exhaustive]
@@ -403,17 +409,24 @@ pub struct ImAccount {
     /// The name shown in the account picker; also names the password variable
     /// `VIX_IM_PASSWORD_<NAME>` (upper-cased, other characters as `_`).
     pub name: String,
-    /// The server's host name.
+    /// `"irc"` (the default) or `"matrix"`. Any other value is refused at
+    /// connect time.
+    pub protocol: String,
+    /// IRC: the server's host name.
     pub server: String,
-    /// The server's port (default 6697, IRC over TLS).
+    /// IRC: the server's port (default 6697, IRC over TLS).
     pub port: u16,
-    /// Whether to use TLS (default `true`). Plaintext needs `tls = false`
+    /// IRC: whether to use TLS (default `true`). Plaintext needs `tls = false`
     /// and is flagged in the conversation.
     pub tls: bool,
-    /// Channels to join once connected.
+    /// IRC: channels to join once connected.
     pub channels: Vec<String>,
-    /// The SASL account name; empty (the default) skips SASL.
+    /// IRC: the SASL account name; empty (the default) skips SASL.
     pub sasl_user: String,
+    /// Matrix: the homeserver URL, such as `https://matrix.org`.
+    pub homeserver: String,
+    /// Matrix: the user id (`@alice:example.org`).
+    pub user: String,
 }
 
 impl Default for ImAccount {
@@ -423,8 +436,11 @@ impl Default for ImAccount {
             server: String::new(),
             port: 6697,
             tls: true,
+            protocol: "irc".to_string(),
             channels: Vec::new(),
             sasl_user: String::new(),
+            homeserver: String::new(),
+            user: String::new(),
         }
     }
 }

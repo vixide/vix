@@ -55,6 +55,8 @@ mod http;
 mod http_off;
 mod ide_parity;
 pub(crate) mod im;
+#[cfg(feature = "matrix")]
+mod im_matrix;
 #[cfg(feature = "im")]
 mod im_net;
 #[cfg(not(feature = "im"))]

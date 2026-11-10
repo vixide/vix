@@ -1,0 +1,35 @@
+[package]
+name = "vix-im-matrix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Matrix bridge for Vix IM: the JSON-lines protocol spoken with the vix-matrix helper, and an optional thread that starts and pumps the helper."
+
+[features]
+# Finding and starting the `vix-matrix` helper process and the threads that
+# pump its stdin and stdout (`net`). Off by default so a build without the
+# App's `matrix` feature carries no process code from this crate; the
+# protocol types and the codec are always compiled.
+net = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[[test]]
+# Its own `main`: run with `VIX_FAKE_MATRIX_HELPER` set, the test binary is a
+# fake helper speaking the protocol, so the tests can start it as a child
+# process without libtest writing to its stdout.
+name = "fake_helper"
+path = "tests/fake_helper.rs"
+harness = false
+required-features = ["net"]
+
+[lints]
+workspace = true

@@ -1,0 +1,74 @@
+# Supply-chain policy for the `matrix/` workspace (the `vix-matrix` helper,
+# T793): a copy of the repo root's `deny.toml` (tasks.md T003), kept in step
+# with it. Its advisory ignores are the root's that match the helper's
+# dependency graph (the rhai and loro ones do not, so they are left out and
+# `cargo deny` does not warn about unmatched ignores) plus the helper's own.
+#
+# Checked by `cargo deny --manifest-path matrix/Cargo.toml --workspace
+# --all-features check` in `.github/workflows/matrix.yml`.
+# Four checks: advisories, licenses, bans, sources.
+
+[advisories]
+# An unpatched RUSTSEC advisory fails the build. When one has no fix yet, add
+# its id here with a dated note rather than lowering the bar globally.
+yanked = "deny"
+ignore = [
+    # 2026-11-10: `anymap2` is unmaintained (no vulnerability). It is a
+    # direct, non-optional dependency of `matrix-sdk` (the helper's Matrix
+    # client, T758/T793, spec/instant-message/matrix.md):
+    #   vix-matrix -> matrix-sdk 0.19.1 -> anymap2 0.13.0
+    # No fixed version exists. The way out is upstream (matrix-sdk dropping
+    # it); revisit with each matrix-sdk release.
+    "RUSTSEC-2026-0319",
+    # 2026-11-09: the SQLite bundled by `libsqlite3-sys` < 0.39.0 (SQLite
+    # < 3.54.0) can expose stale memory when a crafted database is opened
+    # with a crafted `-wal` file (CVE-2026-119375). The root workspace
+    # ignores it for the DB workbench (sqlx pins `<0.38.0`); the helper
+    # reaches it through matrix-sdk's encrypted store:
+    #   matrix-sdk-sqlite 0.19.1 -> rusqlite 0.40.2 -> libsqlite3-sys 0.38.2
+    # and rusqlite 0.40, the version matrix-sdk-sqlite 0.19 requires, pins
+    # `^0.38.2`. The databases are the helper's own files under Vix's data
+    # directory, never ones a user opens, so the attack needs a local
+    # attacker who can already write there. Remove this entry once a
+    # matrix-sdk release moves to libsqlite3-sys >= 0.39.0.
+    "RUSTSEC-2026-0459",
+]
+
+[licenses]
+# Vix's source is offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR
+# GPL-2.0-only OR GPL-3.0-only" (workspace.package.license); each distributed
+# binary declares the subset its linked crates allow (T648, spec/license,
+# scripts/check-binary-licenses -- Apache-2.0-only crates rule out GPLv2). A dependency whose terms are more
+# restrictive than the weakest of those takes that choice away from anyone who
+# ships a build, so the allowance below is permissive licenses only, plus
+# MPL-2.0, whose copyleft is per-file and does not reach the linking crate.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "NCSA",
+    "Unicode-3.0",
+    "Unlicense",
+    "X11",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate major versions are allowed but visible: they are how a vulnerable
+# transitive copy survives an upgrade of its sibling.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

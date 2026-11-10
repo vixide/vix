@@ -1,0 +1,50 @@
+[package]
+name = "vix-matrix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "The Matrix helper for the Vix editor's IM: a matrix-sdk client with an encrypted SQLite store and end-to-end encryption, driven by Vix over JSON lines on stdin and stdout."
+keywords = ["matrix", "chat", "e2ee", "vix", "editor"]
+categories = ["command-line-utilities", "network-programming"]
+publish = true
+include = ["/src", "/spec"]
+
+[dependencies]
+# The protocol (types and JSON-lines codec) Vix speaks; never redefined here.
+# Without `net`: the helper needs no process-spawning code.
+vix-im-matrix = { path = "../../crates/vix-im-matrix", version = "2.0.2" }
+# Default features off: they include `rustls-aws-lc-rs`, which would pull in
+# aws-lc. `matrix-sdk` turns on `reqwest/rustls-no-provider` itself, and the
+# helper installs `ring` as the process's rustls provider (`main`).
+# `bundled-sqlite` builds SQLite from source, so a release binary does not
+# depend on the system's SQLite version.
+matrix-sdk = { version = "0.19.1", default-features = false, features = ["e2e-encryption", "sqlite", "bundled-sqlite"] }
+# Vix's own rustls line: `ring`, no aws-lc, no logging.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zeroize = "1"
+getrandom = "0.4"
+etcetera = "0.11"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+
+# The OS keyring, as the `vix` binary uses it (T790): the macOS login
+# Keychain and the Windows Credential Manager through `keyring-core`; Linux
+# uses the `secret-tool` CLI instead (secret on stdin, argv only, no shell).
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+keyring-core = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { version = "1", default-features = false }
+
+[lints]
+workspace = true

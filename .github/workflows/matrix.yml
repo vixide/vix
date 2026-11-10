@@ -1,0 +1,96 @@
+# The Matrix helper (T793, spec/instant-message/matrix.md): `matrix/` is its
+# own Cargo workspace -- the `vix-matrix` binary, a matrix-sdk client with an
+# encrypted SQLite store -- so `libsqlite3-sys` 0.38 never meets the DB
+# workbench's in the root lockfile. That also means the main CI gate (ci.yml,
+# scripts/check) never builds it; this workflow does, on all three desktop
+# platforms: fmt, clippy (pedantic, -D warnings) and the tests, plus
+# `cargo deny` against matrix/deny.toml on Linux. No job ever contacts a
+# Matrix server: the tests run the request loop over in-memory pipes and an
+# in-memory keyring. GitHub only; see spec/ci/index.md.
+
+name: Matrix
+
+on:
+  push:
+    branches: [main]
+    tags: ['**[0-9]+.[0-9]+.[0-9]+*']
+    # Path filters are not applied to tag pushes, so every release tag runs.
+    paths:
+      - 'matrix/**'
+      - 'crates/vix-im-matrix/**'
+      - '.github/workflows/matrix.yml'
+  pull_request:
+    paths:
+      - 'matrix/**'
+      - 'crates/vix-im-matrix/**'
+      - '.github/workflows/matrix.yml'
+  schedule:
+    # Weekly, Tuesday 05:00 UTC, with ci.yml: catches advisories and
+    # toolchain breaks while nothing under matrix/ changes.
+    - cron: "0 5 * * 2"
+  workflow_dispatch:
+
+concurrency:
+  group: matrix-${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # The same pinned, checksummed cargo-deny as security.yml. Bump together.
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+
+jobs:
+  matrix:
+    name: matrix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: matrix
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path matrix/Cargo.toml --all --check
+      - name: cargo clippy (pedantic, -D warnings)
+        run: cargo clippy --manifest-path matrix/Cargo.toml --locked --workspace --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --manifest-path matrix/Cargo.toml --locked --workspace
+
+  deny:
+    name: cargo deny (matrix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cargo-deny-matrix
+          workspaces: matrix
+      - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}
+        run: |
+          tarball="cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$tarball"
+          echo "$CARGO_DENY_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
+            "cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl/cargo-deny"
+      # Run from matrix/ so cargo-deny finds matrix/deny.toml, not the root's.
+      - name: cargo deny check
+        working-directory: matrix
+        run: cargo deny --workspace --all-features check

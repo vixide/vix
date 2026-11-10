@@ -1,6 +1,7 @@
 //! The `im` capability's network half (T752): IRC connections through
 //! `vix-im-irc`'s connection thread, and the event pump that turns its
-//! [`Event`]s into `vix-im` messages.
+//! [`Event`]s into `vix-im` messages. Matrix accounts (T793, feature
+//! `matrix`) are links too; their side is `im_matrix.rs`.
 //!
 //! Every received string reaches the inbox through [`vix_im::Inbox::push`]
 //! (or a sanitized conversation title), which strips control characters,
@@ -15,9 +16,10 @@ use vix_im_irc::{Command, Config, ErrorKind, Event, Password, Sasl};
 use super::App;
 use super::im::{Route, irc_id, is_channel, now_ms};
 
-/// The environment variable holding an account's SASL password:
+/// The environment variable holding an account's password (IRC SASL or
+/// Matrix login):
 /// `VIX_IM_PASSWORD_` plus the name upper-cased, every other character `_`.
-fn password_var(account: &str) -> String {
+pub(super) fn password_var(account: &str) -> String {
     let name: String = account
         .chars()
         .map(|c| {
@@ -31,12 +33,65 @@ fn password_var(account: &str) -> String {
     format!("VIX_IM_PASSWORD_{name}")
 }
 
-/// One open IRC connection.
+/// One open IRC connection or Matrix helper.
 pub(crate) struct Link {
     /// The `[[im.accounts]]` name.
     pub(crate) account: String,
-    /// The connection thread.
-    handle: Handle,
+    /// The connection thread or helper process.
+    pub(super) handle: Backend,
+}
+
+/// What is behind a [`Link`].
+pub(super) enum Backend {
+    /// An IRC connection thread.
+    Irc(Handle),
+    /// A `vix-matrix` helper process (T793).
+    #[cfg(feature = "matrix")]
+    Matrix(vix_im_matrix::net::Handle),
+}
+
+impl Backend {
+    /// Whether the thread or process has ended.
+    fn is_finished(&self) -> bool {
+        match self {
+            Backend::Irc(h) => h.is_finished(),
+            #[cfg(feature = "matrix")]
+            Backend::Matrix(h) => h.is_finished(),
+        }
+    }
+}
+
+/// One event from a [`Link`].
+enum LinkEvent {
+    /// From IRC.
+    Irc(Event),
+    /// From the Matrix helper.
+    #[cfg(feature = "matrix")]
+    Matrix(vix_im_matrix::Reply),
+}
+
+impl Backend {
+    /// Every event waiting (never blocks).
+    fn drain(&self) -> Vec<LinkEvent> {
+        match self {
+            Backend::Irc(h) => std::iter::from_fn(|| h.try_recv())
+                .map(LinkEvent::Irc)
+                .collect(),
+            #[cfg(feature = "matrix")]
+            Backend::Matrix(h) => std::iter::from_fn(|| h.try_recv())
+                .map(LinkEvent::Matrix)
+                .collect(),
+        }
+    }
+
+    /// Close it and return its last events.
+    fn close(self) -> Vec<LinkEvent> {
+        match self {
+            Backend::Irc(h) => h.close().into_iter().map(LinkEvent::Irc).collect(),
+            #[cfg(feature = "matrix")]
+            Backend::Matrix(h) => h.close().into_iter().map(LinkEvent::Matrix).collect(),
+        }
+    }
 }
 
 impl App {
@@ -49,6 +104,22 @@ impl App {
             self.status =
                 t!("status.im_already_connected", name = account.name.as_str()).to_string();
             return;
+        }
+        match account.protocol.as_str() {
+            "irc" | "" => {}
+            "matrix" => {
+                self.im_matrix_connect(&account);
+                return;
+            }
+            other => {
+                self.status = t!(
+                    "status.im_unknown_protocol",
+                    name = account.name.as_str(),
+                    protocol = other
+                )
+                .to_string();
+                return;
+            }
         }
         let server = self.im_ensure_conversation(
             irc_id(&account.name, None),
@@ -94,10 +165,16 @@ impl App {
         ));
         self.im.links.push(Link {
             account: account.name.clone(),
-            handle,
+            handle: Backend::Irc(handle),
         });
         self.im.panel.select(&mut self.im.inbox, &server);
         self.status = t!("status.im_connecting", name = account.name.as_str()).to_string();
+    }
+
+    /// A Matrix account in a build without the `matrix` feature.
+    #[cfg(not(feature = "matrix"))]
+    fn im_matrix_connect(&mut self, _account: &crate::settings::ImAccount) {
+        self.status = t!("msg.capability_missing", name = "matrix").to_string();
     }
 
     /// **IM → Disconnect**: close the active account's connection.
@@ -112,7 +189,7 @@ impl App {
         };
         let link = self.im.links.remove(at);
         for event in link.handle.close() {
-            self.im_irc_event(&account, event);
+            self.im_link_event(&account, event);
         }
         self.status = t!("status.im_disconnected", name = account.as_str()).to_string();
     }
@@ -123,13 +200,25 @@ impl App {
     }
 
     /// Send a command on `account`'s connection. `false` when it is not
-    /// connected (or its thread has ended).
+    /// connected (or its thread has ended). A Matrix link turns the IRC
+    /// command into a helper request; one Matrix has no counterpart for
+    /// sets the status line and counts as sent.
     pub(super) fn im_send(&mut self, account: &str, command: Command) -> bool {
-        self.im
-            .links
-            .iter()
-            .find(|l| l.account == account)
-            .is_some_and(|l| l.handle.send(command))
+        let Some(link) = self.im.links.iter().find(|l| l.account == account) else {
+            return false;
+        };
+        match &link.handle {
+            Backend::Irc(h) => h.send(command),
+            #[cfg(feature = "matrix")]
+            Backend::Matrix(h) => {
+                if let Some(request) = super::im_matrix::request_for(command) {
+                    h.send(request)
+                } else {
+                    self.status = t!("status.im_matrix_unsupported").to_string();
+                    true
+                }
+            }
+        }
     }
 
     /// Drain every connection's events; drop connections whose thread ended.
@@ -142,7 +231,7 @@ impl App {
             if link.handle.is_finished() {
                 ended.push(i);
             }
-            while let Some(event) = link.handle.try_recv() {
+            for event in link.handle.drain() {
                 events.push((link.account.clone(), event));
             }
         }
@@ -150,7 +239,16 @@ impl App {
             self.im.links.remove(i);
         }
         for (account, event) in events {
-            self.im_irc_event(&account, event);
+            self.im_link_event(&account, event);
+        }
+    }
+
+    /// One event from a link.
+    fn im_link_event(&mut self, account: &str, event: LinkEvent) {
+        match event {
+            LinkEvent::Irc(event) => self.im_irc_event(account, event),
+            #[cfg(feature = "matrix")]
+            LinkEvent::Matrix(reply) => self.im_matrix_reply(account, reply),
         }
     }
 
@@ -179,7 +277,7 @@ impl App {
     }
 
     /// A system line in a conversation.
-    fn im_system(&mut self, id: &ConversationId, text: &str) {
+    pub(super) fn im_system(&mut self, id: &ConversationId, text: &str) {
         self.im_deliver(id, Message::system(now_ms(), text));
     }
 

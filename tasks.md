@@ -9772,7 +9772,7 @@ free-floating chat does not; never pop up on your own.
   deprecated libolm) and iamb (no API to drive). Plain client-server HTTP
   over the existing `ureq` adds no crates but reaches unencrypted rooms
   only; kept as a possible later fallback.
-- [ ] **T793 — Matrix bridge: the `vix-matrix` helper and `vix-im-matrix`.**
+- [x] **T793 — Matrix bridge: the `vix-matrix` helper and `vix-im-matrix`.**
   The first slice of T758's decision
   ([`spec/instant-message/matrix.md`](spec/instant-message/matrix.md),
   "First slice"): the `matrix/` helper workspace (`matrix-sdk` 0.19 with
@@ -9783,6 +9783,22 @@ free-floating chat does not; never pop up on your own.
   its `spawn_sites.rs` row, and tests against a fake helper (never a real
   server). Not in it: device verification, key backup, media, SSO, and
   shipping the helper through the release channels. **Large.**
+  *Done 2026-11-10.* `matrix/vix-matrix` (2,082 lines): resume-first login
+  with the session (token, device, store passphrase) in one OS keyring entry,
+  the SQLite store under `<data_dir>/matrix/<account>/`, sync turned into
+  `room`/`message`/`undecryptable`/`left`, no echo of this device's sends,
+  `tracing` capped at `warn` on stderr; 26 tests with in-memory keyrings; its
+  own `deny.toml` (adds RUSTSEC-2026-0319) and `.github/workflows/matrix.yml`.
+  macOS release build 79 s, 28.3 MB stripped. `crates/vix-im-matrix`: the
+  protocol (password inside `login`; `restore` folded into it), a total codec
+  with property tests, and the `net` pump (a fake-helper test binary, an
+  in-memory `Handle::pair`). App: `tui/src/app/im_matrix.rs`, senders by
+  user id, the verified mark following the latest message, `/nick`,
+  `/topic` and new direct rooms reported as unsupported. **Not yet run
+  against a real homeserver**, and the helper's Linux/Windows builds are
+  first checked by `matrix.yml`. Follow-ups: device verification, key
+  backup, re-sending events that become decryptable, `check-binary-licenses`
+  over `matrix/` (needs `BSD-1-Clause` in its table), shipping the helper.
 - [x] **T759 — Follow, presence and session notes (after T693/T695).**
   Show who is in which file in the panel, follow a peer, and one shared
   Markdown notes buffer per session. **Medium.**

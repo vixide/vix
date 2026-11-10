@@ -173,7 +173,16 @@ port = 6697                  # TLS only; plaintext needs tls = false
 tls = true
 channels = ["#vix"]
 sasl_user = "ana"            # password from the env var VIX_IM_PASSWORD_<NAME>, never from the file
+
+[[im.accounts]]
+name = "Home"
+protocol = "matrix"          # "irc" (default) | "matrix" (T793; the `matrix` feature)
+homeserver = "https://matrix.org"
+user = "@ana:matrix.org"     # first sign-in reads VIX_IM_PASSWORD_HOME; then the saved session
 ```
+
+`im.matrix_helper` (default `""`) names the `vix-matrix` helper; empty looks
+beside `vix`, then on `PATH`. Matrix is specified in [matrix.md](matrix.md).
 
 History is in memory only by default. `history = "disk"` writes JSONL per
 conversation under the platform data directory (not the workspace), pruned

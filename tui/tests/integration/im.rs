@@ -468,6 +468,244 @@ mod irc {
     }
 }
 
+/// A Matrix account (T793) with no helper behind it yet.
+#[cfg(feature = "im")]
+fn matrix_settings(helper: &str) -> Settings {
+    let mut settings = Settings::default();
+    settings.im.nick = "ana".into();
+    settings.im.matrix_helper = helper.into();
+    let mut account = vix::settings::ImAccount::default();
+    account.name = "Home".into();
+    account.protocol = "matrix".into();
+    account.homeserver = "https://matrix.invalid".into();
+    account.user = "@ana:matrix.invalid".into();
+    settings.im.accounts = vec![account];
+    settings
+}
+
+#[cfg(feature = "im")]
+#[test]
+fn a_matrix_account_needs_its_fields_and_the_feature() {
+    let mut settings = matrix_settings("");
+    settings.im.accounts[0].homeserver = String::new();
+    let mut app =
+        App::new(Path::new(".").to_path_buf(), settings).with_session_path(isolated_session_path());
+    app.run_action("im.connect");
+    assert!(app.im.links.is_empty(), "no homeserver: nothing starts");
+
+    let mut settings = matrix_settings("");
+    settings.im.accounts[0].protocol = "xmpp".into();
+    let mut app =
+        App::new(Path::new(".").to_path_buf(), settings).with_session_path(isolated_session_path());
+    app.run_action("im.connect");
+    assert!(app.im.links.is_empty(), "an unknown protocol is refused");
+
+    #[cfg(not(feature = "matrix"))]
+    {
+        let mut app = App::new(Path::new(".").to_path_buf(), matrix_settings(""))
+            .with_session_path(isolated_session_path());
+        app.run_action("im.connect");
+        assert!(app.im.links.is_empty(), "no `matrix` feature: no helper");
+    }
+}
+
+#[cfg(feature = "matrix")]
+mod matrix {
+    use super::*;
+    use vix_im_matrix::net::Handle;
+    use vix_im_matrix::{ErrorKey, MessageKind as Kind, Reply, Request};
+
+    const ROOM: &str = "!room:matrix.invalid";
+
+    fn room() -> ConversationId {
+        ConversationId::new(format!("matrix/Home/{ROOM}"))
+    }
+
+    fn home() -> ConversationId {
+        ConversationId::new("matrix/Home")
+    }
+
+    fn message(sender: &str, body: &str, kind: Kind, verified: bool) -> Reply {
+        Reply::Message {
+            room: ROOM.into(),
+            event_id: "$e".into(),
+            sender: sender.into(),
+            sender_name: Some("Ana".into()),
+            time: 1_762_732_800_000,
+            body: body.into(),
+            kind,
+            encrypted: true,
+            verified,
+        }
+    }
+
+    fn system_lines(app: &App, id: &ConversationId) -> usize {
+        app.im.inbox.get(id).map_or(0, |c| {
+            c.messages
+                .iter()
+                .filter(|m| m.kind == MessageKind::System)
+                .count()
+        })
+    }
+
+    /// What the stand-in helper says after login.
+    fn incoming() -> Vec<Reply> {
+        vec![
+            Reply::Ready {
+                helper: "test".into(),
+                protocol: 1,
+            },
+            Reply::LoggedIn {
+                user_id: "@ana:matrix.invalid".into(),
+                device_id: "DEV".into(),
+                restored: false,
+            },
+            Reply::Room {
+                id: ROOM.into(),
+                name: "Vix \u{1b}[31mdev\u{202e}".into(),
+                encrypted: true,
+                direct: false,
+            },
+            Reply::Room {
+                id: "!dm:matrix.invalid".into(),
+                name: "Bob".into(),
+                encrypted: true,
+                direct: true,
+            },
+            message(
+                "@bob:matrix.invalid",
+                "hi ana see src/a.rs:2",
+                Kind::Text,
+                true,
+            ),
+            message(
+                "@eve:matrix.invalid",
+                "\u{1b}[31mred\u{202e}txt",
+                Kind::Emote,
+                false,
+            ),
+            Reply::Undecryptable {
+                room: ROOM.into(),
+                event_id: "$u".into(),
+                sender: "@carol:matrix.invalid".into(),
+                time: 0,
+            },
+            Reply::error(ErrorKey::NoSession),
+            Reply::error_with(ErrorKey::Network, "M_LIMIT_EXCEEDED"),
+        ]
+    }
+
+    #[test]
+    fn rooms_messages_and_sends_go_through_the_helper() {
+        let settings = matrix_settings("");
+        let account = settings.im.accounts[0].clone();
+        let mut app = App::new(Path::new(".").to_path_buf(), settings)
+            .with_session_path(isolated_session_path());
+        let (handle, peer) = Handle::pair();
+        app.im_matrix_start(&account, handle);
+        let sent = peer.drain();
+        assert!(
+            matches!(sent.as_slice(), [Request::Login { account, homeserver, user, .. }]
+                if account == "Home" && homeserver == "https://matrix.invalid"
+                    && user == "@ana:matrix.invalid"),
+            "{sent:?}"
+        );
+        assert!(!app.im.open, "connecting does not open the panel");
+
+        for reply in incoming() {
+            assert!(peer.reply(reply));
+        }
+        app.poll_im();
+
+        let conv = app.im.inbox.get(&room()).unwrap();
+        assert_eq!(conv.title, "Vix dev", "the room name is sanitized");
+        assert_eq!(
+            app.im
+                .inbox
+                .get(&ConversationId::new("matrix/Home/!dm:matrix.invalid"))
+                .unwrap()
+                .kind,
+            vix_im::ConversationKind::Direct
+        );
+        let people: Vec<&Message> = conv
+            .messages
+            .iter()
+            .filter(|m| !m.author.is_empty())
+            .collect();
+        assert_eq!(people.len(), 2);
+        assert_eq!(people[0].author, "@bob:matrix.invalid", "shown by user id");
+        assert_eq!(people[0].body, "hi ana see src/a.rs:2");
+        assert_eq!(people[1].kind, MessageKind::Action);
+        assert_eq!(people[1].body, "redtxt", "escapes and bidi are stripped");
+        assert!(!app.im.unverified(&room(), "@bob:matrix.invalid"));
+        assert!(app.im.unverified(&room(), "@eve:matrix.invalid"));
+        assert_eq!(system_lines(&app, &room()), 1, "the undecryptable event");
+        assert!(system_lines(&app, &home()) >= 3, "signed in, two errors");
+        assert!(!app.im.open, "receiving does not open the panel");
+
+        // Typing into the room sends `m.text`, `/me` sends `m.emote`.
+        app.run_action("im.panel");
+        app.im.panel.select(&mut app.im.inbox, &room());
+        type_line(&mut app, "hello from vix");
+        type_line(&mut app, "/me waves");
+        assert_eq!(
+            peer.drain(),
+            vec![
+                Request::Send {
+                    room: ROOM.into(),
+                    body: "hello from vix".into(),
+                    kind: Kind::Text
+                },
+                Request::Send {
+                    room: ROOM.into(),
+                    body: "waves".into(),
+                    kind: Kind::Emote
+                },
+            ]
+        );
+        let last = app.im.inbox.get(&room()).unwrap().messages.last().cloned();
+        assert_eq!(last.map(|m| m.body), Some("waves".to_string()));
+
+        // `/nick` and `/topic` have no Matrix counterpart yet; nothing is sent.
+        type_line(&mut app, "/nick other");
+        type_line(&mut app, "/topic new");
+        assert_eq!(peer.drain(), Vec::<Request>::new());
+
+        // A later message from a device that is not cross-signed clears
+        // the sender's verified mark.
+        assert!(peer.reply(message("@bob:matrix.invalid", "again", Kind::Text, false)));
+        app.poll_im();
+        assert!(app.im.unverified(&room(), "@bob:matrix.invalid"));
+
+        // `/part` leaves; the helper's `left` removes the conversation.
+        type_line(&mut app, "/part");
+        assert_eq!(peer.drain(), vec![Request::Leave { room: ROOM.into() }]);
+        assert!(peer.reply(Reply::Left { id: ROOM.into() }));
+        app.poll_im();
+        assert!(app.im.inbox.get(&room()).is_none());
+
+        app.run_action("im.disconnect");
+        assert!(app.im.links.is_empty());
+        assert_eq!(peer.drain(), vec![Request::Quit]);
+    }
+
+    #[test]
+    fn a_missing_helper_says_so_and_the_link_ends() {
+        let missing = unique_dir("matrix-missing").join("no-vix-matrix");
+        let settings = matrix_settings(&missing.to_string_lossy());
+        let mut app = App::new(Path::new(".").to_path_buf(), settings)
+            .with_session_path(isolated_session_path());
+        app.run_action("im.connect");
+        app.poll_im();
+        assert!(app.im.links.is_empty(), "the ended link is dropped");
+        assert_eq!(
+            system_lines(&app, &home()),
+            2,
+            "helper missing, then closed"
+        );
+    }
+}
+
 // ----- anchored threads (T753) ---------------------------------------------
 
 /// A fresh workspace (no thread files left from an earlier run) with
