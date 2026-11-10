@@ -1881,6 +1881,11 @@ mod tests {
 
     /// A throwaway repository: `f` and `sub/f` at the top level and in a
     /// subdirectory, with distinct contents, committed. Returns the top level.
+    ///
+    /// The fixture's own git commands never read the developer's global or
+    /// system config, and the repo's local config turns signing off, so a
+    /// global `commit.gpgsign=true` neither signs nor waits for a
+    /// passphrase (T792).
     #[cfg(feature = "process")]
     fn scratch_repo(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("vix-git-{tag}-{}", std::process::id()));
@@ -1889,23 +1894,21 @@ mod tests {
         std::fs::write(dir.join("f"), "root one\nroot two\n").unwrap();
         std::fs::write(dir.join("sub/f"), "sub one\nsub two\n").unwrap();
         for args in [
-            &["init", "-q"][..],
+            &["init", "-q", "-b", "main"][..],
+            &["config", "user.name", "Test"],
+            &["config", "user.email", "t@example.com"],
+            &["config", "commit.gpgsign", "false"],
+            &["config", "core.autocrlf", "false"],
             &["add", "."],
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=t@example.com",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "-q",
-                "-m",
-                "seed",
-            ],
+            &["commit", "-q", "-m", "seed"],
         ] {
             let ok = Command::new("git")
                 .current_dir(&dir)
+                .env(
+                    "GIT_CONFIG_GLOBAL",
+                    if cfg!(windows) { "NUL" } else { "/dev/null" },
+                )
+                .env("GIT_CONFIG_NOSYSTEM", "1")
                 .env("GIT_TERMINAL_PROMPT", "0")
                 .args(args)
                 .status()
@@ -1918,7 +1921,6 @@ mod tests {
 
     #[cfg(feature = "process")]
     #[test]
-    #[ignore = "needs git; creates a throwaway repo"]
     fn runners_resolve_paths_from_a_subdirectory_root() {
         // T650: Vix rooted at `sub/` names files relative to `sub/`, but git
         // reads `HEAD:<p>`, `:<p>` and `--cacheinfo` paths from the top level.
@@ -1996,7 +1998,6 @@ mod tests {
 
     #[cfg(feature = "process")]
     #[test]
-    #[ignore = "needs git; creates a throwaway repo"]
     fn file_paths_are_literal_not_globs() {
         // T651: `app/[id]/p` (a Next.js-style route folder) used to match
         // `app/i/p` as a glob character class.
@@ -2023,14 +2024,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&top);
     }
 
-    // Runner smoke test against this very repository. Ignored by default because
-    // it assumes `git` is installed and the tests run inside the work tree.
+    // Runner smoke test. It used to run against this very checkout (and so
+    // was ignored outside a git work tree); a scratch repo needs only `git`.
     #[cfg(feature = "process")]
     #[test]
-    #[ignore = "needs git and an in-tree checkout"]
-    fn runners_report_branch_in_this_repo() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        assert!(is_repo(dir));
-        assert!(branch(dir).is_some());
+    fn runners_report_the_branch_of_a_repo() {
+        let dir = scratch_repo("branch");
+        assert!(is_repo(&dir));
+        assert_eq!(branch(&dir).as_deref(), Some("main"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

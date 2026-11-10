@@ -103,29 +103,74 @@ pub(crate) fn unique_dir(tag: &str) -> PathBuf {
     dir
 }
 
-/// Initialize a git repo at `dir` with a deterministic identity, for tests
-/// that need a throwaway repo. Extracted (Run H, T523) after this exact
-/// `git init` + two `git config` calls were found copy-pasted at 13 call
-/// sites across `git.rs`/`editing.rs`. `name` is the commit author name —
-/// almost every caller wants the literal `"Test"`; one test (proving `git
-/// blame` surfaces the real author, not a hardcoded placeholder) passes a
-/// distinctive one instead. Callers still declare their own `run` closure
-/// for whatever git commands they need after this (`add`, `commit`, …) —
-/// only the init/identity sequence itself was ever actually duplicated.
+/// Run `git <args>` in `dir` for a test fixture and return its stdout,
+/// failing the test (with git's stderr) if git fails.
+///
+/// The one place a test talks to git directly (T792). It never reads the
+/// developer's global or system config (`GIT_CONFIG_GLOBAL` pointed at the
+/// null device, `GIT_CONFIG_NOSYSTEM`) and never prompts
+/// (`GIT_TERMINAL_PROMPT=0`), so a global `commit.gpgsign=true`, a signing
+/// key that wants a passphrase, a global hooks path or `init.defaultBranch`
+/// can neither hang nor change a fixture. It isolates this one command only,
+/// never the process environment: the app's own git calls still read global
+/// config, which is why [`init_git_repo`] also writes the settings that
+/// matter into the repository's local config.
+#[cfg(feature = "git")]
+pub(crate) fn fixture_git(dir: &Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git")
+        .current_dir(dir)
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .args(args)
+        .output()
+        .expect("git must be on PATH to build a fixture repo");
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// Initialize a git repo at `dir` on branch `main` with a deterministic
+/// identity, for tests that need a throwaway repo. Extracted (Run H, T523)
+/// after this `git init` + `git config` sequence was found copy-pasted at 13
+/// call sites across `git.rs`/`editing.rs`. `name` is the commit author
+/// name: almost every caller wants the literal `"Test"`; one test (proving
+/// `git blame` surfaces the real author, not a hardcoded placeholder) passes
+/// a distinctive one instead.
+///
+/// The local config also turns signing off and points hooks at the repo's
+/// own (sample-only) hooks directory (T792): the app's git calls in this
+/// repo read the developer's global config, and local settings override it,
+/// so a global `commit.gpgsign=true` or `core.hooksPath` never reaches a
+/// fixture. The branch is named explicitly so `init.defaultBranch` (which
+/// differs by machine) never leaks into a test.
+#[cfg(feature = "git")]
 pub(crate) fn init_git_repo(dir: &Path, name: &str) {
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(dir)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .args(args)
-            .output()
-            .unwrap();
-    };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", name]);
-    // Windows runners set core.autocrlf=true globally; keep LF (T772).
-    run(&["config", "core.autocrlf", "false"]);
+    fixture_git(dir, &["init", "-q", "-b", "main"]);
+    for (key, value) in [
+        ("user.email", "t@example.com"),
+        ("user.name", name),
+        ("commit.gpgsign", "false"),
+        ("tag.gpgsign", "false"),
+        ("core.hooksPath", ".git/hooks"),
+        // Windows runners set core.autocrlf=true globally; keep LF (T772).
+        ("core.autocrlf", "false"),
+    ] {
+        fixture_git(dir, &["config", key, value]);
+    }
+}
+
+/// Stage everything in `dir` and commit it with `message`.
+#[cfg(feature = "git")]
+pub(crate) fn commit_all(dir: &Path, message: &str) {
+    fixture_git(dir, &["add", "-A"]);
+    fixture_git(dir, &["commit", "-q", "-m", message]);
 }
 
 /// Build an app with custom settings and a realistic editor viewport.

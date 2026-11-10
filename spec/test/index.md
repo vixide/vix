@@ -61,6 +61,23 @@ assert_eq!(app.editor.active_tab().unwrap().text(), "ello");
   (`vix_clipboard::use_system`, called only by `main`), so a test run cannot
   overwrite what the developer copied; files go under a temp directory keyed by
   `std::process::id()`.
+- **Git is assumed; the developer's git config is not.** The suite needs `git`
+  on `PATH` (the snapshot and T634 tests always have), so a test that needs a
+  repository builds a throwaway one and runs by default — never `#[ignore]`,
+  and never this checkout, which a source tarball does not have. Build it with
+  `common.rs`'s `init_git_repo` (branch `main`, a fixed identity, and local
+  `commit.gpgsign`/`tag.gpgsign` off, `core.hooksPath` at the repo's own hooks,
+  `core.autocrlf` off) and talk to git only through `fixture_git` /
+  `commit_all`, which point `GIT_CONFIG_GLOBAL` at the null device, set
+  `GIT_CONFIG_NOSYSTEM` and `GIT_TERMINAL_PROMPT=0`, and fail on a git error.
+  The app's own git calls still read global config, so the local settings are
+  what keep a global `commit.gpgsign=true` or a passphrase-protected SSH key
+  from signing, failing or hanging a test (T792).
+- **`#[ignore]` is for what CI cannot provide**, with the reason in the
+  attribute: the untracked `./dictionaries` set, a real `rust-analyzer`, and a
+  test that only runs as another test's child process. Run them by hand with
+  `cargo test -p vix-tui --lib -- --ignored` (and `--test lsp_smoke`,
+  `-p vix-spellcheck`).
 
 ## Snapshot testing
 
@@ -123,7 +140,8 @@ new scenario:
   `master`/`main`/a custom default) and set `commit.gpgsign false` locally,
   so the fixture's commit never inherits the developer's real
   `commit.gpgsign=true` and invokes their actual signing key just to build
-  a throwaway test fixture.
+  a throwaway test fixture (the integration tests' `init_git_repo` does all
+  of this; see above).
 
 After writing a new scenario, run the suite **twice** (a plain `cargo test
 --test snapshots` after the `INSTA_UPDATE=always` pass) — a fixture keyed

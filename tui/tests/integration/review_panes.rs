@@ -97,7 +97,7 @@ fn clicks_and_wheel_map_onto_rows() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-use super::git::{t634_git, t634_repo, t665_cached, t665_diff};
+use super::git::{t634_repo, t665_cached, t665_diff};
 use std::fs;
 
 /// Put the review cursor on the buffer row whose text is exactly `text`.
@@ -118,8 +118,8 @@ fn cursor_to(app: &mut App, text: &str) {
 fn line_repo(name: &str) -> (std::path::PathBuf, App) {
     let dir = t634_repo(name);
     fs::write(dir.join("a.txt"), "a\nb\nc\nd\n").unwrap();
-    t634_git(&dir, &["add", "a.txt"]);
-    t634_git(&dir, &["commit", "-q", "-m", "four"]);
+    fixture_git(&dir, &["add", "a.txt"]);
+    fixture_git(&dir, &["commit", "-q", "-m", "four"]);
     let mut app = app_at(&dir);
     app.refresh_git();
     fs::write(dir.join("a.txt"), "a\nb2\nc\nd\ne\n").unwrap();
@@ -203,8 +203,8 @@ fn discard_lines_confirms_then_reverts_only_those_lines() {
 fn stage_lines_refuses_to_split_a_missing_final_newline() {
     let dir = t634_repo("t665lines-nonl");
     fs::write(dir.join("a.txt"), "one\ntwo").unwrap();
-    t634_git(&dir, &["add", "a.txt"]);
-    t634_git(&dir, &["commit", "-q", "-m", "nonl"]);
+    fixture_git(&dir, &["add", "a.txt"]);
+    fixture_git(&dir, &["commit", "-q", "-m", "nonl"]);
     let mut app = app_at(&dir);
     app.refresh_git();
     fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();

@@ -10057,6 +10057,28 @@ the generated `release.yml`.
   `vixide/homebrew-tap`. No prebuilt binaries: making `dist` build it is a
   release decision.
 
+- [x] **T792 — The ignored git tests run by default.** 28 tests in
+  `vix-git` and `tui/tests/integration/{git,editing}.rs` were `#[ignore =
+  "needs git; …"]` since June 2026 (from the time `git` on PATH was not
+  assumed), and nothing ran `--ignored`, so three had rotted. **Done:** two
+  were one product bug: T611's overlay table put `GitPanel` above `Confirm`,
+  so the panel's Discard and smart-commit confirmations were drawn under it
+  and lost their keys (`d` `y` never discarded; Esc could not decline);
+  `GitPanel` now sits below `Prompt`/`Confirm`, with a unit test. The third
+  was stale: T650's subdirectory test blamed the line it had just edited,
+  which T657 made "not committed yet"; it blames an untouched line now.
+  Git on PATH is already assumed by the regular suite (the snapshot and
+  T634 tests), so the `#[ignore]`s are gone rather than adding an
+  `--ignored` step. One shared fixture helper (`common.rs`: `fixture_git`,
+  `init_git_repo`, `commit_all`) isolates fixture git from global and system
+  config and writes `main`, an identity, signing off and a local hooks path
+  into each repo, replacing 12 per-test closures, `t634_git`, `t665_run` and
+  scattered `-c commit.gpgsign=false`; the two tests that borrowed this
+  checkout (and `vix-git`'s branch smoke test) use a throwaway repo. All pass
+  with a hostile global config (signing on with a missing key, a failing
+  global `pre-commit`, `init.defaultBranch=trunk`). Five `#[ignore]`s remain:
+  dictionaries, rust-analyzer, and a child-process test.
+
 - [x] **T772 — The Windows test suite.** 19 tests in 8 targets fail on
   `windows-latest` (run 42351739083). Windows CI runs on tags only and has failed
   on 2.0.0 and every rc, and until `--no-fail-fast` it stopped at the first
