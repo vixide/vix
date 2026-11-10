@@ -187,7 +187,7 @@ in the conversation.
 
 Matrix needs a Vix built with the opt-in `matrix` feature
 (`cargo install vix-tui --features matrix`) and the separate `vix-matrix`
-helper (`cargo install vix-matrix`), which does the Matrix work, including
+helper from crates.io (`cargo install --locked vix-matrix`), which does the Matrix work, including
 end-to-end encryption, in its own process. Vix finds the helper beside the
 `vix` program, then on `PATH`, or at `im.matrix_helper` when you set it. Add
 an account:
