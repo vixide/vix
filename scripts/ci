@@ -110,7 +110,7 @@ job_feature_combos() {
 	run cargo test -p vix-tui --features jupyter --test jupyter
 	run cargo clippy -p vix-tui --features matrix --all-targets -- -D warnings
 	run cargo test -p vix-tui --features matrix --lib matrix
-	run cargo test -p vix-im-matrix --features net
+	run cargo test -p vix-matrix-protocol --features net
 	run cargo hack check -p vix-tui --each-feature --no-dev-deps
 }
 job_docs_check() { run python3 scripts/check-docs; }

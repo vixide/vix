@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use vix_im_matrix::net::{Handle, SpawnOptions};
-use vix_im_matrix::{
+use vix_matrix_protocol::net::{Handle, SpawnOptions};
+use vix_matrix_protocol::{
     ErrorKey, MessageKind, PROTOCOL_VERSION, Reply, Request, decode_request, encode_reply,
 };
 
@@ -92,7 +92,7 @@ fn fake_helper() -> ExitCode {
         match decode_request(&line) {
             Err(e) => say(&Reply::error_with(ErrorKey::BadRequest, e.to_string())),
             Ok(Request::Login { password, .. }) => {
-                if password.as_ref().map(vix_im_matrix::Password::expose) == Some("s3cret") {
+                if password.as_ref().map(vix_matrix_protocol::Password::expose) == Some("s3cret") {
                     logged_in = true;
                     say(&Reply::LoggedIn {
                         user_id: "@me:fake".into(),
@@ -150,7 +150,8 @@ fn fake_path() -> Result<PathBuf, String> {
     static PATH: std::sync::OnceLock<Result<PathBuf, String>> = std::sync::OnceLock::new();
     PATH.get_or_init(|| {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let dir = std::env::temp_dir().join(format!("vix-im-matrix-fake-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vix-matrix-protocol-fake-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let copy = dir.join(format!("{FAKE}{}", std::env::consts::EXE_SUFFIX));
         std::fs::copy(&exe, &copy).map_err(|e| e.to_string())?;
@@ -183,7 +184,7 @@ fn login(password: Option<&str>) -> Request {
         account: "fake".into(),
         homeserver: "https://fake.invalid".into(),
         user: "@me:fake".into(),
-        password: password.map(|p| vix_im_matrix::Password::new(p.to_string())),
+        password: password.map(|p| vix_matrix_protocol::Password::new(p.to_string())),
     }
 }
 

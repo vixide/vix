@@ -229,7 +229,7 @@ if in_tier full; then
 	# helper, and the helper pump against a fake helper process (no server).
 	cargo clippy -p vix-tui --features matrix --all-targets -- -D warnings
 	cargo test -p vix-tui --features matrix --lib matrix
-	cargo test -p vix-im-matrix --features net
+	cargo test -p vix-matrix-protocol --features net
 	if command -v cargo-hack >/dev/null 2>&1; then
 		cargo hack check -p vix-tui --each-feature --no-dev-deps
 	else
@@ -285,7 +285,7 @@ if in_tier full; then
 	if [ "$semver_ok" = yes ]; then
 		# A crate with no crates.io release yet has no baseline to compare against:
 		# add `--exclude <crate>` until its first publish.
-		cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-matrix --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
+		cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-matrix-protocol --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
 	else
 		echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
 	fi

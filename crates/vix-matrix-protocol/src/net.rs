@@ -172,7 +172,7 @@ impl Handle {
         };
         let (tx, requests) = mpsc::channel::<Request>();
         let writer = thread::Builder::new()
-            .name("vix-im-matrix-in".to_string())
+            .name("vix-matrix-protocol-in".to_string())
             .spawn(move || {
                 for request in requests {
                     let mut line = encode_request(&request);
@@ -189,7 +189,7 @@ impl Handle {
             });
         let flag = Arc::clone(&done);
         let reader = thread::Builder::new()
-            .name("vix-im-matrix-out".to_string())
+            .name("vix-matrix-protocol-out".to_string())
             .spawn(move || pump_replies(stdout, &reply_tx, &flag));
         let threads = [writer, reader]
             .into_iter()
@@ -412,7 +412,8 @@ mod tests {
 
     #[test]
     fn the_helper_is_found_beside_vix_then_on_path() {
-        let base = std::env::temp_dir().join(format!("vix-im-matrix-find-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("vix-matrix-protocol-find-{}", std::process::id()));
         let (near, far) = (base.join("bin"), base.join("path"));
         let name = format!("{HELPER}{}", std::env::consts::EXE_SUFFIX);
         for d in [&near, &far] {

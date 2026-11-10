@@ -1,8 +1,8 @@
 //! `vix-matrix`: the Matrix helper for Vix's IM (`spec/index.md`).
 //!
 //! Vix starts this program and talks to it over JSON lines: requests on
-//! stdin, replies on stdout, with the protocol of the `vix-im-matrix` crate
-//! (`crates/vix-im-matrix`, `spec/instant-message/matrix.md` at the repo
+//! stdin, replies on stdout, with the protocol of the `vix-matrix-protocol` crate
+//! (`crates/vix-matrix-protocol`, `spec/instant-message/matrix.md` at the repo
 //! root). It is a `matrix-sdk` client with an encrypted SQLite store and
 //! end-to-end encryption; it runs out of process because `matrix-sdk`'s
 //! SQLite cannot share a lockfile with Vix's.

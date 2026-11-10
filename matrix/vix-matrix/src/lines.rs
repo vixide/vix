@@ -12,7 +12,7 @@ use std::sync::mpsc as std_mpsc;
 use std::thread::JoinHandle;
 
 use tokio::sync::mpsc;
-use vix_im_matrix::{MAX_LINE, Reply, encode_reply};
+use vix_matrix_protocol::{MAX_LINE, Reply, encode_reply};
 
 /// One line read from stdin, before it is decoded.
 #[derive(Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub enum Input {
 
 /// Start the reader thread. The returned channel yields one [`Input`] per
 /// line and closes at end of input (or on a read error), which the request
-/// loop treats like [`vix_im_matrix::Request::Quit`].
+/// loop treats like [`vix_matrix_protocol::Request::Quit`].
 pub fn spawn_reader<R: BufRead + Send + 'static>(mut input: R) -> mpsc::UnboundedReceiver<Input> {
     let (tx, rx) = mpsc::unbounded_channel();
     std::thread::spawn(move || {

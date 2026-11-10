@@ -8,8 +8,8 @@ SQLite store and end-to-end encryption (Olm/Megolm through vodozemac).
 This is the helper half of the Matrix bridge of Vix's IM feature (task
 T793). The decision to run Matrix out of process, and why, is
 [`spec/instant-message/matrix.md`](../../../spec/instant-message/matrix.md).
-Vix's half, and the protocol itself, is the `vix-im-matrix` crate
-([`crates/vix-im-matrix/spec/index.md`](../../../crates/vix-im-matrix/spec/index.md)).
+Vix's half, and the protocol itself, is the `vix-matrix-protocol` crate
+([`crates/vix-matrix-protocol/spec/index.md`](../../../crates/vix-matrix-protocol/spec/index.md)).
 The helper depends on that crate for the protocol types and the codec and
 never redefines them.
 
@@ -20,7 +20,7 @@ never redefines them.
    0.38 and the DB workbench's `sqlx` needs it below 0.38, and Cargo allows
    one `links = "sqlite3"` package per lockfile. The root workspace never
    builds the helper, and the helper links nothing of Vix but
-   `vix-im-matrix`'s protocol types.
+   `vix-matrix-protocol`'s protocol types.
 2. **stdout is the protocol.** Only reply lines are written there, by one
    writer thread. Every line is flushed. `Ready` is always the first line
    and `Closed` always the last. Diagnostics go to stderr.
@@ -58,15 +58,15 @@ and Windows builds are unmeasured.
 ## Input and output
 
 - Requests arrive on stdin, one JSON object per line
-  (`vix_im_matrix::decode_request`). A line longer than
-  `vix_im_matrix::MAX_LINE` is discarded without being buffered whole.
+  (`vix_matrix_protocol::decode_request`). A line longer than
+  `vix_matrix_protocol::MAX_LINE` is discarded without being buffered whole.
   A blank line is ignored. A line that is not UTF-8, is too long, or does
   not decode gets `Error { key: bad_request }` and the helper keeps reading.
   Its `detail` names the kind of failure only (`not_utf8`, `too_long`,
   `not_an_object`, `version`, `invalid`). serde's message is never passed
   on because it can quote the line, and the line can hold a password.
 - End of input is handled like `Quit`.
-- Replies leave on stdout, one `vix_im_matrix::encode_reply` line each.
+- Replies leave on stdout, one `vix_matrix_protocol::encode_reply` line each.
 
 ## Store and keyring
 
@@ -172,7 +172,7 @@ OAuth login, refresh tokens, threads, reactions, edits as edits and
 redactions, invites, typing notifications and read receipts, and shipping
 the helper through dist, Homebrew, npm or the Linux packages. The helper is
 a source build, and its crate is published on crates.io (`publish = true`,
-after `vix-im-matrix`).
+after `vix-matrix-protocol`).
 
 ## License
 

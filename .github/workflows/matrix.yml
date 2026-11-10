@@ -17,12 +17,12 @@ on:
     # Path filters are not applied to tag pushes, so every release tag runs.
     paths:
       - 'matrix/**'
-      - 'crates/vix-im-matrix/**'
+      - 'crates/vix-matrix-protocol/**'
       - '.github/workflows/matrix.yml'
   pull_request:
     paths:
       - 'matrix/**'
-      - 'crates/vix-im-matrix/**'
+      - 'crates/vix-matrix-protocol/**'
       - '.github/workflows/matrix.yml'
   schedule:
     # Weekly, Tuesday 05:00 UTC, with ci.yml: catches advisories and

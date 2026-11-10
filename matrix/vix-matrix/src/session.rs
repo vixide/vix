@@ -19,7 +19,7 @@ use matrix_sdk::sync::SyncResponse;
 use matrix_sdk::{Client, ClientBuildError, Room, RoomState, SessionMeta, SessionTokens};
 use tokio::task::JoinHandle;
 use tracing::warn;
-use vix_im_matrix::{ErrorKey, MessageKind, Reply};
+use vix_matrix_protocol::{ErrorKey, MessageKind, Reply};
 use zeroize::Zeroize as _;
 
 use crate::events::{self, Encryption, Me};
