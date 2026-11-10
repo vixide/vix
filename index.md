@@ -118,8 +118,9 @@ editor? See the pages for
 [Helix](docs/for-helix-users/index.md),
 [VS Code](docs/for-visual-studio-code-users/index.md),
 [IntelliJ](docs/for-intellij-users/index.md),
-[Eclipse](docs/for-eclipse-users/index.md) and
-[Sublime Text](docs/for-sublime-users/index.md) users.
+[Eclipse](docs/for-eclipse-users/index.md),
+[Sublime Text](docs/for-sublime-users/index.md) and
+[Zed](docs/for-zed-users/index.md) users.
 
 ## Install
 
