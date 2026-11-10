@@ -247,7 +247,7 @@ jobs:
       - name: install cargo-hack
         run: cargo install cargo-hack --locked
       # T767: clippy and test with no default features, every grammar's
-      # textobjects, the opt-in cowork and jupyter features, and each feature
+      # textobjects, the opt-in cowork, jupyter and matrix features, and each feature
       # alone -- all in scripts/ci feature-combos.
       - name: scripts/ci feature-combos
         run: scripts/ci feature-combos
@@ -275,7 +275,7 @@ jobs:
       - name: cargo semver-checks
         # A crate with no crates.io release yet has no baseline to compare
         # against: add `--exclude <crate>` until its first publish.
-        run: cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
+        run: cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-matrix --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
 
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the

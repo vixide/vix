@@ -855,3 +855,8 @@ libx
 smallvec
 ETXTBSY
 NOSYSTEM
+backon
+bytesize
+decryptable
+libiconv
+msgtype

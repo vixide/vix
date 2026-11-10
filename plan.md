@@ -32,7 +32,7 @@ CI, docs depth, onboarding — has not kept pace. The highest-leverage work is
 now in that platform.
 
 **Status (2026-11-07).** The baseline above is historical. Phases 0–5 and
-Runs A–L, N, P and V are done; the workspace has 146 member crates and is
+Runs A–L, N, P and V are done; the workspace has 147 member crates and is
 versioned 2.0.2, released through dist on every channel except a public
 container image. `tasks.md` has 347 tasks ticked, 17 open and one half done
 (T608), counting subtasks. Run M and Run O are now done except

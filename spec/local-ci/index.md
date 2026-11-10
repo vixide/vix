@@ -50,7 +50,7 @@ not opt in sees a change. An unknown tier prints usage and exits 2.
 | ---- | ---- | --- |
 | `fast` | `cargo fmt --check`, clippy (pedantic, `-D warnings`) and `cargo test` on only the packages with files changed since the merge base with `main` (committed, staged, unstaged or untracked, mapped to the nearest `Cargo.toml`). If a root `Cargo.toml`, `Cargo.lock`, toolchain, lint config, `.cargo/` file or `scripts/check` changed, or there is no `main`, it uses the whole workspace; if no crate changed it skips clippy and tests. | the edit loop |
 | `push` | `fast`'s checks on the whole workspace, plus `cargo build`, the full test suite, `cargo doc`, the generated reference docs and man page, and `scripts/check-docs`. | before a push to a branch |
-| `full` | `push` plus the feature combinations (`--no-default-features`, `syntax-all`, `cowork`, `jupyter`, each-feature), the headless examples and chaos smoke, semver, packaging templates and the per-binary license check. | the landing bar |
+| `full` | `push` plus the feature combinations (`--no-default-features`, `syntax-all`, `cowork`, `jupyter`, `matrix`, each-feature), the headless examples and chaos smoke, semver, packaging templates and the per-binary license check. | the landing bar |
 
 Every step prints its wall-clock time and the run ends with a summary table
 (also printed when a step fails), so slow steps are measured rather than

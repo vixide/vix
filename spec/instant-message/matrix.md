@@ -1,7 +1,10 @@
 # IM — the Matrix bridge decision (T758 spike)
 
-**Status:** spike done 2026-11-10; the bridge itself is T793 in
-[`tasks.md`](../../tasks.md). Parent spec: [IM](index.md).
+**Status:** spike done 2026-11-10; the first slice of the bridge (T793 in
+[`tasks.md`](../../tasks.md)) landed the same day: the `vix-matrix` helper
+in [`matrix/`](../../matrix/Cargo.toml), the
+[`vix-im-matrix`](../../crates/vix-im-matrix/spec/index.md) crate and the
+opt-in `matrix` feature. Parent spec: [IM](index.md).
 
 **Decision.** Matrix runs **out of process**, in a small Vix-owned helper
 binary, `vix-matrix`, built on `matrix-sdk` with its SQLite store and real
@@ -189,26 +192,35 @@ without it shows Matrix accounts as *"Matrix is not included in this build"*
 (`msg.capability_missing`). The helper is found as `vix-matrix` beside the
 `vix` executable, then on `PATH`, or at `im.matrix_helper` when set.
 
-## Protocol sketch (for T793 to fix)
+## Protocol
 
-One JSON object per line, UTF-8, and nothing else on stdout. The helper's
-own diagnostics go to stderr, and Vix drops them unless debugging is on.
-Every message carries `"v": 1`.
+Fixed by T793; the full table is in
+[`vix-im-matrix`'s spec](../../crates/vix-im-matrix/spec/index.md). One JSON
+object per line, UTF-8, every one with `"v": 1`, and nothing else on stdout.
+The helper's own diagnostics go to stderr, which Vix drops unless
+`VIX_MATRIX_LOG` names a file to append them to.
 
-- **Vix → helper:** `login` (homeserver, user id; the password follows on
-  the next line and is never put in argv or the environment), `restore`
-  (resume from the store), `send` (room id, body, optional `m.notice` or
-  `m.emote`), `join`, `leave`, `rooms`, `logout`, `quit`.
+- **Vix → helper:** `login` (account, homeserver, user id, and the password
+  when Vix has one), `send` (room id, body, `text`, `emote` or `notice`),
+  `join`, `leave`, `rooms`, `logout`, `quit`.
 - **Helper → Vix:** `ready` (the helper and protocol versions), `logged_in`
-  (user id, device id), `room` (id, display name, `encrypted`, `direct`),
-  `message` (room, event id, sender, origin time in UTC, body, `encrypted`,
-  and `verified`: whether the sender's device is cross-signed), `undecryptable`
-  (room, event id, sender: shown as a System line), `error` (an i18n key and
-  arguments, never a pre-formatted English string), `closed`.
+  (user id, device id, whether a saved session was resumed), `room` (id,
+  display name, `encrypted`, `direct`), `left`, `message` (room, event id,
+  sender, origin time in UTC, body, kind, `encrypted`, and `verified`:
+  whether the sender's device is cross-signed), `undecryptable` (room, event
+  id, sender: shown as a System line), `error` (an error key and optional
+  detail, never a pre-formatted English sentence), `closed`.
+
+Two changes from the spike's sketch: `restore` folded into `login`, which
+resumes a saved session first and uses the password only when there is none;
+and the password travels inside `login` as a JSON string instead of on a
+line of its own, so a password with any character in it survives. It is
+still only on stdin, never in argv or the environment.
 
 Received bodies go through `vix_im::sanitize` before they are stored or drawn,
 like IRC. Formatted (`org.matrix.custom.html`) bodies are dropped in favor
-of the plain `body`.
+of the plain `body`. Senders are shown by user id, not display name: display
+names aren't unique, so one could pass for another person.
 
 ## E2EE story
 
@@ -227,7 +239,7 @@ of the plain `body`.
   `tracing` output of `matrix-sdk` is capped at `warn` and goes only to
   stderr.
 
-## First slice (T793)
+## First slice (T793, done)
 
 1. A `matrix/` workspace (excluded from the root one, like `gui/`) with
    the `vix-matrix` binary: `matrix-sdk` 0.19 with `default-features =
@@ -257,8 +269,13 @@ npm or the Linux packages.
 
 - The size and build-time delta **inside `vix`**. Option A cannot be built
   in the workspace at all, and option E adds nothing to `vix`.
-- The helper's size with `bundled-sqlite`, and builds on Linux and Windows
-  (everything above was measured on macOS arm64).
+- Builds of the helper on Linux and Windows (everything here was measured on
+  macOS arm64). *Measured by T793 on macOS:* the real helper, with
+  `bundled-sqlite` and the release profile, builds clean in 79 s and strips
+  to 28.3 MB, with 289 packages in its normal and build tree and no aws-lc.
+- Behavior against a real homeserver: T793's tests use fake helpers and
+  in-memory keyrings, so login, resume, sync and send have not yet run
+  against a server.
 - Runtime: memory, first-sync time on a large account, and battery cost of
   the long-poll sync.
 - Whether `sqlx` and `matrix-sdk-sqlite` will ever agree on one

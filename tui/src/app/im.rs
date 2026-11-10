@@ -469,6 +469,15 @@ impl App {
         (names.len() == 1).then(|| names[0].clone())
     }
 
+    /// Whether `account` is a `protocol = "matrix"` account.
+    pub(crate) fn im_is_matrix(&self, account: &str) -> bool {
+        self.settings
+            .im
+            .accounts
+            .iter()
+            .any(|a| a.name == account && a.protocol == "matrix")
+    }
+
     /// The selected conversation's IRC route with a target (a room or a
     /// direct conversation), if it has one.
     fn im_selected_target(&self) -> Option<(ConversationId, Route)> {
@@ -528,6 +537,11 @@ impl App {
             self.status = t!("status.im_not_connected").to_string();
             return false;
         };
+        if self.im_is_matrix(&account) {
+            // Opening a Matrix direct room is not in T793's slice.
+            self.status = t!("status.im_matrix_unsupported").to_string();
+            return false;
+        }
         let id = self.im_ensure_conversation(
             irc_id(&account, Some(nick)),
             ConversationKind::Direct,

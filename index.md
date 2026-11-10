@@ -342,7 +342,7 @@ feature.
 ## Contributing
 
 Vix is a Cargo workspace: a thin app shell (the `vix-tui` package in `tui/`)
-over about 146 focused `vix-*` crates in `crates/`, with the desktop GUIs in
+over about 147 focused `vix-*` crates in `crates/`, with the desktop GUIs in
 `gui/`. Development is specification-driven — each crate's spec at
 `crates/<crate>/spec/index.md` is the source of truth. Start with
 [`AGENTS.md`](AGENTS.md) (conventions, workflow and crate map, for humans and

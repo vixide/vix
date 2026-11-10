@@ -1,0 +1,58 @@
+# The Matrix helper, `vix-matrix` (T793, spec/instant-message/matrix.md). A
+# separate workspace on purpose, like `gui/` and `fuzz/`: `matrix-sdk`'s
+# SQLite store needs `libsqlite3-sys` 0.38, while the DB workbench's `sqlx`
+# pins it below 0.38, and Cargo allows only one `links = "sqlite3"` package in
+# a lockfile. So the helper has its own lockfile, is never built by
+# `cargo build` / `cargo test --workspace` / clippy at the repo root, and
+# `vix` talks to it over JSON lines on stdin/stdout (`crates/vix-im-matrix`).
+#
+#   cargo build --release --manifest-path matrix/Cargo.toml
+#   # then put matrix/target/release/vix-matrix beside `vix` or on PATH
+
+[workspace]
+resolver = "3"
+members = ["vix-matrix"]
+
+[workspace.package]
+version = "2.0.2"
+edition = "2024"
+rust-version = "1.97"
+# The helper binary's license (T648, spec/license): the subset of Vix's five
+# source licenses that every crate it links allows. `matrix-sdk` and its
+# `matrix-sdk-*` crates, `vodozemac`, `matrix-pickle`, `ring`, `prost`,
+# `backon`, `bytesize` and `sync_wrapper` are Apache-2.0 only, which the FSF
+# holds incompatible with GPL-2.0-only, so that one is dropped; every linked
+# crate allows the other four. The same set as `vix` itself.
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
+repository = "https://github.com/vixide/vix"
+homepage = "https://github.com/vixide/vix"
+authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
+
+# Same lint policy as the root workspace's `[workspace.lints]` — a separate
+# workspace cannot inherit it, so it is restated here and must be kept in step.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+allow_attributes_without_reason = "warn"
+redundant_clone = "warn"
+clone_on_ref_ptr = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+
+# The root's release settings (thin LTO, strip, size-optimized), restated
+# because profiles are not inherited across workspaces.
+[profile.release]
+lto = "thin"
+strip = true
+opt-level = "z"
+
+# The profile `dist` builds release artifacts with, should the helper join
+# the release channels later.
+[profile.dist]
+inherits = "release"
+lto = "thin"

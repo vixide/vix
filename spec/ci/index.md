@@ -376,7 +376,11 @@ runs the same three (the `cargo hack` step is skipped with a note when
 `jupyter` feature is handled the same way: `cargo clippy --features jupyter
 --all-targets -- -D warnings`, `cargo test --features jupyter --lib jupyter`
 and `cargo test --features jupyter --test jupyter` (the App against an
-in-process fake kernel; no Python). The same job (and `scripts/check`) runs
+in-process fake kernel; no Python). The opt-in `matrix` feature (T793) too:
+`cargo clippy --features matrix --all-targets -- -D warnings`, `cargo test
+--features matrix --lib matrix` (the App against an in-memory helper) and
+`cargo test -p vix-im-matrix --features net` (the helper pump against a fake
+helper process; no Matrix server). The same job (and `scripts/check`) runs
 `cargo test -p vix-editor-core --features syntax-all --lib textobject` (T616):
 it compiles every bundled `textobjects.scm` against its grammar and runs the
 per-language fixtures, which the default grammar set would skip. The checks that read source text or render the
@@ -395,7 +399,7 @@ release type is inferred from the version in `Cargo.toml`, and an unchanged
 version counts as a patch release, so a breaking public-API change fails until
 the affected crates are bumped to a new major version. A crate never yet published (no
 baseline) is excluded by name until its first release, then the `--exclude`
-is dropped. `vix-encoding` (new in T661) is excluded now; `vix-input` and
+is dropped. `vix-encoding` (new in T661) and `vix-im-matrix` (T793) are excluded now; `vix-input` and
 `vix-tui` were, until their first publish in 1.8.0 (T644). `scripts/check` runs the
 same command and skips it with a note when `cargo-semver-checks` (>= 0.51) isn't
 installed. GitHub only for now: it needs network access to crates.io and

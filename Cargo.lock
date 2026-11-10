@@ -6558,6 +6558,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-im-matrix"
+version = "2.0.2"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
 name = "vix-im-panel"
 version = "2.0.2"
 dependencies = [
@@ -7123,6 +7133,7 @@ dependencies = [
  "vix-i18n",
  "vix-im",
  "vix-im-irc",
+ "vix-im-matrix",
  "vix-im-panel",
  "vix-input",
  "vix-jupyter",

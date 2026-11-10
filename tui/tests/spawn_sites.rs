@@ -158,6 +158,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "relaunches the kernel on restart and kills it on shutdown (T734b)",
         "`process` feature, enabled only by root `jupyter` (opt-in, not in `full`)",
     ),
+    (
+        "crates/vix-im-matrix/src/net.rs",
+        "the `vix-matrix` helper for Matrix accounts (T793): no arguments, no extra environment, the password only over stdin",
+        "`net` feature, enabled only by root `matrix` (opt-in, not in `full`)",
+    ),
 ];
 
 /// Text that means "this file can start a process". Thread builders

@@ -183,6 +183,47 @@ TLS is the default and the certificate is checked against the Mozilla root
 store bundled with Vix. `tls = false` connects in plaintext and puts a warning
 in the conversation.
 
+## Connecting to Matrix
+
+Matrix needs a Vix built with the opt-in `matrix` feature
+(`cargo install vix-tui --features matrix`) and the separate `vix-matrix`
+helper (`cargo install vix-matrix`), which does the Matrix work, including
+end-to-end encryption, in its own process. Vix finds the helper beside the
+`vix` program, then on `PATH`, or at `im.matrix_helper` when you set it. Add
+an account:
+
+```toml
+[[im.accounts]]
+name = "Home"
+protocol = "matrix"
+homeserver = "https://matrix.org"
+user = "@ana:matrix.org"
+```
+
+**IM → Connect…** starts the helper and signs in. The first time, the
+password comes from `VIX_IM_PASSWORD_<NAME>` (`VIX_IM_PASSWORD_HOME` here),
+as for IRC. Vix hands it to the helper once, over a pipe, never on a command
+line. The helper then saves the session in your system keyring, and later
+connects resume it without a password. The encrypted message store lives
+under the platform data directory (for example
+`~/.local/share/vix/matrix/Home/`), never in the workspace.
+
+Every room you have joined shows up as a conversation; direct-message rooms
+show as direct conversations. People are shown by their Matrix user id
+(`@bob:matrix.org`), not their display name, because display names are not
+unique. A message from a device its owner has not cross-signed is marked
+`(unverified)`, like an IRC nick the server didn't vouch for. A message this
+device has no key for (for example one sent before it signed in) shows as a
+system line saying it can't be decrypted. **Join Room…** takes a room alias
+(`#vix:matrix.org`) or id, and **Leave Room** and `/me` work as for IRC.
+
+Not yet: verifying devices (emoji or QR), restoring older messages from key
+backup, starting a new direct conversation, `/nick`, `/topic`, threads,
+reactions, edits, files and images, and single sign-on. The `vix-matrix`
+helper is not yet in the release archives, Homebrew, npm or the Linux
+packages. Set `VIX_MATRIX_LOG` to a file path to keep the helper's warnings;
+it never logs messages, tokens or keys.
+
 ## Status and notifications
 
 - **IM → Status ▸ Available / Away / Busy** sets your presence. It is local:
@@ -215,7 +256,8 @@ selected conversation's messages and its file, after asking.
 | `im.history` | `"session"` | `"session"` (memory only) or `"disk"`. |
 | `im.history_days` | `30` | Days of disk history to keep. |
 | `im.blocked` | `[]` | Nicks whose messages and mentions are hidden. |
-| `im.accounts` | `[]` | IRC accounts: `name`, `server`, `port` (6697), `tls` (true), `channels`, `sasl_user`. |
+| `im.accounts` | `[]` | Accounts: `name` and `protocol` (`"irc"`, the default, or `"matrix"`); IRC: `server`, `port` (6697), `tls` (true), `channels`, `sasl_user`; Matrix: `homeserver`, `user`. |
+| `im.matrix_helper` | `""` | The `vix-matrix` helper's path; empty looks beside `vix`, then on `PATH`. |
 
 ## Security
 
