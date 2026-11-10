@@ -456,6 +456,7 @@ mod tests {
         // Ctrl+K is the prefix of Zed's two-key chords.
         assert_eq!(lookup("zed", "C-k", "C-l"), Some("editor.fold_toggle"));
         assert_eq!(lookup("zed", "C-k", "v"), Some("tools.markdown_preview"));
+        assert_eq!(lookup("zed", "", "A-."), Some("git.diff_next"));
     }
 
     #[test]

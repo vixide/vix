@@ -168,6 +168,8 @@ Zed's default Linux shortcuts (on macOS Zed uses `Cmd` where Linux uses
 - `Ctrl+Shift+D` duplicate line, `Ctrl+Shift+K` delete line, `Ctrl+/` comment.
 - `Ctrl+F` find, `Ctrl+H` replace, `Ctrl+Shift+F` project search.
 - `Ctrl+.` code actions, `Ctrl+Shift+M` diagnostics.
+- `Alt+Up` / `Alt+Down` move the line, `Alt+.` / `Alt+,` next / previous
+  Git change.
 - `Ctrl+B` left dock (the file explorer), `Ctrl+Shift+E` focus the explorer,
   `Ctrl+J` bottom dock, `` Ctrl+` `` terminal, `Ctrl+Shift+G` Git panel,
   `Ctrl+,` settings.
