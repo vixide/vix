@@ -9,6 +9,10 @@ language = "en"
 git-repository-url = "https://github.com/vixide/vix"
 edit-url-template = "https://github.com/vixide/vix/edit/main/{path}"
 
+# Old page addresses that moved, so existing links keep working.
+[output.html.redirect]
+"/comparison/index.html" = "../compare/index.html"
+
 [output.html.fold]
 enable = true
 level = 1

@@ -16,7 +16,7 @@ database workbench come built in, so Vix is useful the moment it opens.
 [Install](#install) ·
 [Documentation](https://vixide.github.io/vix/) ·
 [Getting Started](docs/getting-started/index.md) ·
-[Compare](docs/comparison/index.md) ·
+[Compare](docs/compare/index.md) ·
 [Changelog](CHANGELOG.md)
 
 ![Vix overview: open a file, edit, save, find, and browse keyboard shortcuts](docs/demos/overview.gif)
@@ -96,17 +96,21 @@ More recordings — Org-roam, edit surfaces and themes — are in
 
 ## How Vix compares
 
-| | Vix | Vim | Helix | Micro | Zed |
+| | Vix | Vim | Emacs | Helix | Zed |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| Runs in a terminal | ✓ | ✓ | ✓ | ✓ | ✗ |
-| Familiar keys by default (no modes) | ✓ | ✗ | ✗ | ✓ | ✓ |
-| LSP, debugger and Tree-sitter built in | ✓ | ✗ | ✓ | ✗ | ✓ |
-| Git client built in | ✓ | ✗ | ~ | ✗ | ✓ |
-| Integrated terminal | ✓ | ✓ | ✗ | ✗ | ✓ |
-| Org mode | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Runs in a terminal | ✓ | ✓ | ✓ | ✓ | - |
+| Familiar keys by default (no modes) | ✓ | - | - | - | ✓ |
+| Menu bar | ✓ | - | ✓ | - | ✓ |
+| LSP, debugger and Tree-sitter built in | ✓ | - | ~ | ✓ | ✓ |
+| Git client built in | ✓ | - | ~ | ~ | ✓ |
+| Jujutsu client built in | ✓ | - | - | - | - |
+| Integrated terminal | ✓ | ✓ | ✓ | - | ✓ |
+| Org mode | ✓ | - | ✓ | - | - |
+| Database workbench | ✓ | - | ~ | - | - |
 
+`✓` built in, `-` not built in (a plugin or package may exist), `~` partial.
 The full matrix, with footnotes and the places where Vix is behind, is in
-[the feature comparison](docs/comparison/index.md). Coming from another
+[the feature comparison](docs/compare/index.md). Coming from another
 editor? See the pages for
 [Vim](docs/for-vim-users/index.md),
 [Emacs](docs/for-emacs-users/index.md),

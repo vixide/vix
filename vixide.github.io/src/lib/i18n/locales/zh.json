@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "终端文本编辑器与 IDE · Rust · 免费开源",
-  "hero.title": "早已熟知你快捷键的终端 IDE。",
-  "hero.tagline": "保存是 <k>Ctrl+S</k>，查找是 <k>Ctrl+F</k>，其余一切都在菜单栏或 <k>Ctrl+P</k> 命令面板中——无需先学习任何模式。语言服务器、调试器、Git、Org 模式和数据库工作台均已内置，所以不用配置任何东西，Vix 就能派上用场。",
+  "hero.title": "欢迎使用 Vix，一个早已熟悉你快捷键的 IDE。",
+  "hero.tagline": "用 <k>Ctrl+S</k> 保存，用 <k>Ctrl+F</k> 查找，其余一切都能从菜单栏或 <k>Ctrl+P</k> 命令面板找到。语言服务器、调试器、Git、Org mode 和数据库工作台均已内置，可在终端或原生窗口中使用，打开即可用。",
   "hero.installNote": "也可以使用安装脚本、PowerShell、npm 或 <c>cargo install vix-tui</c>——参见<a>全部安装方式</a>。命令是 <c>vix</c>。",
   "hero.copyBrew": "复制 Homebrew 安装命令",
   "hero.install": "安装 Vix",
   "hero.features": "查看全部功能",
 
-  "glance.heading": "Vix 速览",
-  "glance.binary": "个可执行文件，无需组装",
-  "glance.keymaps": "套键位映射，可即时切换",
-  "glance.themes": "个内置主题",
-  "glance.languages": "种界面语言",
-  "glance.unsafe": "行 unsafe Rust 代码",
-
-  "who.eyebrow": "适合谁",
   "who.title": "为你已有的工作方式而生",
   "who.1.heading": "你生活在终端里，却怀念自己的 IDE",
   "who.1.text": "跳转到定义、重命名、调试器和 Git 面板，通过 SSH 或在 tmux 中使用，无需配置项目。",
@@ -25,11 +16,9 @@
   "who.4.heading": "你要处理数据和 API",
   "who.4.text": "查询数据库、发送 HTTP 请求、检查容器，并编辑它生成的 CSV，全都在一个窗口里完成。",
 
-  "from.eyebrow": "正在更换编辑器？",
   "from.title": "阅读适合你原来编辑器的指南",
   "from.link": "给 {name} 用户的 Vix 指南",
 
-  "faq.eyebrow": "常见问题",
   "faq.title": "常见问题解答",
   "faq.1.q": "我必须学习模式化编辑吗？",
   "faq.1.a": "不必。默认键位映射使用与你其他应用相同的快捷键。如果需要，Vi 和 Spacemacs 键位映射只需在菜单中选一下即可。",
@@ -40,7 +29,6 @@
   "faq.4.q": "我的公司可以使用它吗？",
   "faq.4.a": "从五种许可证中选择适合你的：Apache-2.0、BSD-3-Clause、MIT、GPL-2.0 或 GPL-3.0。对于受限制的机器，最小构建不会建立任何网络连接，也不会启动其他程序。",
 
-  "open.eyebrow": "开源",
   "open.title": "自由，且公开构建",
   "open.text": "Vix 的源代码可由你在 Apache-2.0、BSD-3-Clause、MIT、GPL-2.0 或 GPL-3.0 中任选其一授权。开发以规格说明为驱动：每个 crate 都有一份由代码实现的规格说明。项目如何使用 AI 辅助，详见其 <a>AI 声明</a>。",
   "open.source": "GitHub 上的源代码",

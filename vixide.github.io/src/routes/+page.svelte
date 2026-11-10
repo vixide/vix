@@ -15,15 +15,20 @@
     { file: 'db-workbench', title: 'Database workbench', text: 'Connect to a SQLite file, run a join, read the results grid.' }
   ];
 
-  // At-a-glance facts. Every number is stated in the main repo (README.md,
-  // tui/themes/, crates/vix-i18n/locales/, docs/keymaps/).
-  const glance = [
-    { value: '1', label: 'glance.binary' },
-    { value: '10', label: 'glance.keymaps' },
-    { value: '21', label: 'glance.themes' },
-    { value: '15', label: 'glance.languages' },
-    { value: '0', label: 'glance.unsafe' }
-  ] as const;
+
+  // The eight front ends, vix-tui first, then alphabetically: the same
+  // two sentences as the main repo's README ("TUI & GUI capabilities").
+  // `brew` is whether vixide/homebrew-tap has a formula for it.
+  const frontends = [
+    { name: 'vix-tui', brew: true, what: 'The terminal editor, the vix command, and the App every other front end wraps.', why: 'Start here for the most complete and most tested Vix: it runs in any terminal on macOS, Windows and Linux, over SSH and inside tmux.' },
+    { name: 'vix-bui', brew: false, what: 'Vix in a native window drawn by BUI, Blender’s user-interface toolkit used as a library.', why: 'Try it if you like Blender’s dense, flat look; it is GPL-3.0-only and needs CMake to build.' },
+    { name: 'vix-egui', brew: true, what: 'Vix in a native window drawn by egui through eframe, an immediate-mode GUI.', why: 'Try it for the simplest GPU front end, with input-method typing and a native macOS menu bar.' },
+    { name: 'vix-gpui', brew: true, what: 'Vix in a native window on GPUI, the GPU framework behind the Zed editor.', why: 'Try it for the operating system’s own text rendering and a native menu bar on macOS, Windows and Linux.' },
+    { name: 'vix-gtk4', brew: false, what: 'Vix in a GTK 4 window, with text drawn by Pango and Cairo.', why: 'Try it on a GNOME or other GTK desktop, where it fits in natively with full input-method support; it needs GTK 4 installed.' },
+    { name: 'vix-iced', brew: true, what: 'Vix in a native window on iced, an Elm-style Rust GUI library.', why: 'Try it for advanced text shaping and per-glyph font fallback that handle mixed scripts well.' },
+    { name: 'vix-slint', brew: true, what: 'Vix in a native window on Slint, a declarative UI toolkit drawn with OpenGL.', why: 'Try it for native menu bars on macOS and Windows; it is GPL-3.0-only.' },
+    { name: 'vix-zgui', brew: true, what: 'Vix in a native window on zgui, a reactive Rust GUI with CSS styling and a wgpu renderer.', why: 'Try it for the newest front end, with text shaped by parley; it is a first version.' }
+  ];
 
   // Highlights of 2.0, from the main repo's CHANGELOG.md ([2.0.0]); the
   // full list is on the features page.
@@ -39,16 +44,30 @@
   // Their copy is in the message catalog (who.N.heading / who.N.text).
   const audiences = [1, 2, 3, 4] as const;
 
-  // A short slice of docs/comparison/index.md; the full matrix, with
-  // footnotes, lives there.
-  const compareEditors = ['Vix', 'Vim', 'Helix', 'Micro', 'Zed'];
+  // Built into a stock install, with no plugin or extension. `✓` built
+  // in, `-` not built in (a plugin or extension may exist), `partial`
+  // limited (see the small print). The docs' comparison page has the
+  // footnoted version for the first columns, Fresh and ttt included.
+  const compareEditors = ['Vix', 'Vim', 'Emacs', 'Neovim', 'Helix', 'VS Code', 'Zed', 'Fresh', 'ttt'];
   const compareRows: { feature: string; marks: string[] }[] = [
-    { feature: 'Runs in a terminal', marks: ['✓', '✓', '✓', '✓', '✗'] },
-    { feature: 'Familiar keys by default (no modes)', marks: ['✓', '✗', '✗', '✓', '✓'] },
-    { feature: 'LSP, debugger and Tree-sitter built in', marks: ['✓', '✗', '✓', '✗', '✓'] },
-    { feature: 'Git client built in', marks: ['✓', '✗', 'partial', '✗', '✓'] },
-    { feature: 'Integrated terminal', marks: ['✓', '✓', '✗', '✗', '✓'] },
-    { feature: 'Org mode', marks: ['✓', '✗', '✗', '✗', '✗'] }
+    { feature: 'Runs in a terminal', marks: ['✓', '✓', '✓', '✓', '✓', '-', '-', '✓', '✓'] },
+    { feature: 'Native desktop window', marks: ['✓', '✓', '✓', '-', '-', '✓', '✓', '✓', '-'] },
+    { feature: 'Common shortcuts by default (Ctrl+S, Ctrl+C, Ctrl+V)', marks: ['✓', '-', '-', '-', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Menu bar', marks: ['✓', '-', '✓', '-', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Command palette and fuzzy file finder', marks: ['✓', '-', 'partial', '-', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Multiple cursors', marks: ['✓', '-', '-', '-', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Language servers (LSP)', marks: ['✓', '-', '✓', '✓', '✓', 'partial', '✓', '✓', '✓'] },
+    { feature: 'Debugger (DAP)', marks: ['✓', '-', '-', '-', '✓', '✓', '✓', '-', '-'] },
+    { feature: 'Tree-sitter highlighting', marks: ['✓', '-', 'partial', '✓', '✓', '-', '✓', '✓', '-'] },
+    { feature: 'Integrated terminal', marks: ['✓', '✓', '✓', '✓', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Git client', marks: ['✓', '-', 'partial', '-', 'partial', '✓', '✓', 'partial', '✓'] },
+    { feature: 'Jujutsu client', marks: ['✓', '-', '-', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Remote editing over SSH', marks: ['✓', '✓', '✓', '✓', '-', '-', '✓', 'partial', '-'] },
+    { feature: 'Database workbench', marks: ['✓', '-', 'partial', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'HTTP client for .http files', marks: ['✓', '-', '-', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Org mode', marks: ['✓', '-', '✓', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Themes built in', marks: ['✓', '✓', '✓', '✓', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Interface in many languages', marks: ['✓', '✓', '-', '✓', '-', '-', '-', '✓', '-'] }
   ];
 
   // Their copy is in the message catalog (faq.N.q / faq.N.a).
@@ -68,7 +87,6 @@
 </script>
 
 <section class="site-hero" aria-labelledby="hero-heading">
-  <p class="section-heading-eyebrow">{t('hero.eyebrow')}</p>
   <h1 id="hero-heading">{t('hero.title')}</h1>
   <p class="site-hero-tagline"><Rich text={t('hero.tagline')} /></p>
   <div class="site-hero-install">
@@ -92,60 +110,53 @@
   <figcaption>Opening, editing, saving and searching in a demo workspace.</figcaption>
 </figure>
 
-<section class="section" aria-labelledby="glance-heading">
-  <h2 id="glance-heading" class="visually-hidden">{t('glance.heading')}</h2>
-  <ul class="stat-strip">
-    {#each glance as item (item.label)}
-      <li><span class="stat-value">{item.value}</span> <span class="stat-label">{t(item.label)}</span></li>
-    {/each}
-  </ul>
-</section>
 
 <section class="section" aria-labelledby="why-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Why Vix</p>
-    <h2 id="why-heading">An IDE in your terminal, without the assembly</h2>
+    <h2 id="why-heading">Why developers pick Vix</h2>
   </header>
 
   <div class="card-grid">
-    <Card heading="Familiar keys, no modes" href="/features/#keys">
+    <Card heading="Productive in the first minute" href="/features/#keys">
       <p class="card-description">
-        Ctrl/Cmd shortcuts, a real menu bar, mouse support and <kbd>F1</kbd>
-        for every shortcut. Ten keymaps — Apple, VS Code, Emacs, Vi,
-        Spacemacs, IntelliJ, Eclipse, Sublime Text — switchable live.
+        No modes, no config project. <kbd>Ctrl+S</kbd> saves, a real menu bar
+        shows what exists, and <kbd>F1</kbd> lists every shortcut. Prefer Vim,
+        Emacs, VS Code or IntelliJ keys? Ten keymaps switch live.
       </p>
     </Card>
-    <Card heading="Code intelligence built in" href="/features/#code">
+    <Card heading="An IDE, not a kit to assemble" href="/features/#code">
       <p class="card-description">
-        Language servers, a DAP debugger, Tree-sitter highlighting, a test
-        runner, project tasks and an integrated terminal, in one binary.
+        Language servers, a debugger, Tree-sitter highlighting, a test runner,
+        tasks and an integrated terminal come in the box, so there are no
+        plugins to choose, install or keep working.
       </p>
     </Card>
-    <Card heading="Git and Jujutsu" href="/features/#code">
+    <Card heading="Git and Jujutsu without leaving the file" href="/features/#code">
       <p class="card-description">
-        Stage, unstage or revert one hunk at a time, blame, stash, branches,
-        an interactive commit graph and a merge-conflict resolver — plus a
-        full Jujutsu menu.
+        Stage or revert one hunk at a time, blame a line, browse the commit
+        graph and resolve merge conflicts in place, with a full Jujutsu menu
+        beside Git.
       </p>
     </Card>
-    <Card heading="Beyond code" href="/features/#data">
+    <Card heading="One window for code, notes and data" href="/features/#data">
       <p class="card-description">
-        An Org-mode suite with Org-roam, a SQLite/PostgreSQL/MySQL workbench,
-        a REST client for <code>.http</code> files, a container menu for
-        Docker and Podman, and table, JSON/YAML and hex editing views.
+        Org mode with Org-roam, a SQLite, PostgreSQL and MySQL workbench, an
+        HTTP client, a container menu and spreadsheet, JSON and hex views
+        replace a handful of separate tools.
       </p>
     </Card>
-    <Card heading="Careful by default" href="/features/#trust">
+    <Card heading="Works where you work" href="/features/#keys">
       <p class="card-description">
-        No <code>unsafe</code> Rust. Scripts get no file, network or process
-        access. The database workbench opens read-only. A minimal build leaves
-        out every network and shell feature.
+        Over SSH, inside tmux and in any terminal on macOS, Windows and Linux,
+        or in a native desktop window, with the whole interface in 15
+        languages.
       </p>
     </Card>
-    <Card heading="Terminal or desktop" href="#desktop">
+    <Card heading="Safe by construction" href="/features/#trust">
       <p class="card-description">
-        The same editor runs in a native window on macOS, Windows and Linux
-        through experimental desktop front ends.
+        No <code>unsafe</code> Rust anywhere, sandboxed scripts, a database
+        workbench that opens read-only, and a minimal build with no network
+        or shell features at all.
       </p>
     </Card>
   </div>
@@ -153,7 +164,6 @@
 
 <section class="section" aria-labelledby="new-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">New in 2.0</p>
     <h2 id="new-heading">What's new in the latest release</h2>
   </header>
   <div class="prose centered">
@@ -172,7 +182,6 @@
 
 <section class="section" aria-labelledby="demos-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">See it work</p>
     <h2 id="demos-heading">Recorded in a real terminal</h2>
   </header>
   <div class="demo-grid">
@@ -194,7 +203,6 @@
 
 <section class="section" aria-labelledby="who-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">{t('who.eyebrow')}</p>
     <h2 id="who-heading">{t('who.title')}</h2>
   </header>
   <div class="card-grid">
@@ -208,7 +216,6 @@
 
 <section class="section" aria-labelledby="start-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Your first minute</p>
     <h2 id="start-heading">The keys to start with</h2>
   </header>
   <div class="prose centered">
@@ -237,7 +244,6 @@
 
 <section class="section" aria-labelledby="from-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">{t('from.eyebrow')}</p>
     <h2 id="from-heading">{t('from.title')}</h2>
   </header>
   <ul class="link-grid">
@@ -249,7 +255,6 @@
 
 <section class="section" aria-labelledby="compare-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">How it compares</p>
     <h2 id="compare-heading">Built in, not bolted on</h2>
   </header>
   <div class="prose centered table-scroll">
@@ -270,36 +275,52 @@
       </tbody>
     </table>
     <p class="small-print">
-      Built in means no plugin needed. The
-      <a href={`${docs}comparison/index.html`}>full comparison</a> has footnotes
-      and the places where Vix is behind.
+      ✓ built in, with no plugin or extension. - not built in (a plugin or
+      extension may exist). Partial: Emacs’s M-x completion is not a fuzzy
+      palette, its Tree-sitter needs grammars installed, its VC commits and
+      blames but stages no hunks, and its SQL mode is a console rather than a
+      workbench; VS Code bundles language servers for
+      only a few web languages; Helix has Git gutters, not a Git panel; Fresh has a Git log, grep and
+      file finder but no staging, and its SSH workspaces are part of its
+      Orchestrator. Fresh and ttt are marked from their own READMEs and
+      manifests, as read on 10 November 2026. Vix’s remote editing and desktop windows
+      are experimental. The
+      <a href={`${docs}compare/index.html`}>full comparison</a> has
+      footnotes and the places where Vix is behind.
     </p>
   </div>
 </section>
 
-<section class="section" id="desktop" aria-labelledby="desktop-heading">
+<section class="section" id="install" aria-labelledby="install-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">Desktop</p>
-    <h2 id="desktop-heading">The same editor in a native window</h2>
+    <h2 id="install-heading">Install</h2>
   </header>
   <div class="prose centered">
     <p>
-      Every panel, overlay and dock of Vix also runs in a desktop window on
-      macOS, Windows and Linux. Releases ship four front ends, each a
-      complete implementation on a different toolkit so they can be compared:
-      <code>vix-gpui</code> (GPUI), <code>vix-egui</code> (egui),
-      <code>vix-iced</code> (iced) and <code>vix-slint</code> (Slint). Three more,
-      <code>vix-gtk4</code> (GTK 4), <code>vix-bui</code> (BUI, Blender's UI) and
-      <code>vix-zgui</code> (zgui), build from source. They are
-      <strong>experimental</strong>.
+      Vix is one editor with eight front ends: the terminal app and seven
+      native desktop windows, each on a different toolkit. Every one installs
+      with <code>cargo install</code> (Rust 1.97 or newer); most also install
+      with Homebrew on macOS and Linux. The desktop front ends are
+      experimental. <a href="/install/">More install options</a> cover the
+      installer scripts, PowerShell, npm and Linux packages.
     </p>
-    <CopyCommand command="brew install vixide/homebrew-tap/vix-gpui" label="Copy the vix-gpui Homebrew install command" />
+  </div>
+  <div class="frontend-list">
+    {#each frontends as fe (fe.name)}
+      <article class="frontend" aria-labelledby={`fe-${fe.name}`}>
+        <h3 id={`fe-${fe.name}`}><a href={`https://crates.io/crates/${fe.name}`}>{fe.name}</a></h3>
+        <p>{fe.what} {fe.why}</p>
+        {#if fe.brew}
+          <CopyCommand command={`brew install vixide/homebrew-tap/${fe.name}`} label={`Copy the ${fe.name} Homebrew install command`} />
+        {/if}
+        <CopyCommand command={`cargo install --locked ${fe.name}`} label={`Copy the ${fe.name} cargo install command`} />
+      </article>
+    {/each}
   </div>
 </section>
 
 <section class="section" aria-labelledby="faq-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">{t('faq.eyebrow')}</p>
     <h2 id="faq-heading">{t('faq.title')}</h2>
   </header>
   <div class="prose centered faq">
@@ -314,7 +335,6 @@
 
 <section class="section" aria-labelledby="open-heading">
   <header class="section-heading">
-    <p class="section-heading-eyebrow">{t('open.eyebrow')}</p>
     <h2 id="open-heading">{t('open.title')}</h2>
   </header>
   <div class="prose centered">

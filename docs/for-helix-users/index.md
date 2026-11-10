@@ -92,7 +92,7 @@ Helix leaves out on purpose," this is worth the afternoon.
 
 ## See also
 
-- [`docs/comparison/index.md`](../comparison/index.md) — the full
+- [`docs/compare/index.md`](../compare/index.md) — the full
   feature-parity matrix.
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every
   binding.

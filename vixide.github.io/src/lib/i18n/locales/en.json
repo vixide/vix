@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Terminal text editor and IDE · Rust · Free and open source",
-  "hero.title": "The terminal IDE that already knows your keys.",
-  "hero.tagline": "Save is <k>Ctrl+S</k>, find is <k>Ctrl+F</k>, and everything else is in a menu bar or the <k>Ctrl+P</k> command palette — no modes to learn first. Language servers, a debugger, Git, Org mode and a database workbench are built in, so Vix is useful before you configure anything.",
+  "hero.title": "Welcome to Vix, the IDE that already knows your keys.",
+  "hero.tagline": "Save with <k>Ctrl+S</k>, find with <k>Ctrl+F</k> and reach everything else from a menu bar or the <k>Ctrl+P</k> command palette. Language servers, a debugger, Git, Org mode and a database workbench are built in, in your terminal or a native window, so Vix is useful the moment it opens.",
   "hero.installNote": "Or use the installer script, PowerShell, npm, or <c>cargo install vix-tui</c> — see <a>all install options</a>. The command is <c>vix</c>.",
   "hero.copyBrew": "Copy the Homebrew install command",
   "hero.install": "Install Vix",
   "hero.features": "See all features",
 
-  "glance.heading": "Vix at a glance",
-  "glance.binary": "binary, nothing to assemble",
-  "glance.keymaps": "keymaps, switchable live",
-  "glance.themes": "bundled themes",
-  "glance.languages": "interface languages",
-  "glance.unsafe": "lines of unsafe Rust",
-
-  "who.eyebrow": "Who it's for",
   "who.title": "Made for the way you already work",
   "who.1.heading": "You live in the terminal but miss your IDE",
   "who.1.text": "Go to definition, rename, a debugger and a Git panel, over SSH or in tmux, without a config project.",
@@ -25,11 +16,9 @@
   "who.4.heading": "You work with data and APIs",
   "who.4.text": "Query a database, send an HTTP request, inspect a container and edit the CSV it produced, in one window.",
 
-  "from.eyebrow": "Switching editors?",
   "from.title": "Read the guide for where you're coming from",
   "from.link": "Vix for {name} users",
 
-  "faq.eyebrow": "Questions",
   "faq.title": "Frequently asked",
   "faq.1.q": "Do I have to learn modal editing?",
   "faq.1.a": "No. The default keymap uses the same shortcuts as your other apps. Vi and Spacemacs keymaps are one menu choice away if you want them.",
@@ -40,7 +29,6 @@
   "faq.4.q": "Can my company use it?",
   "faq.4.a": "Pick whichever of five licenses suits you: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0. For locked-down machines, the minimal build makes no network connections and starts no other program.",
 
-  "open.eyebrow": "Open source",
   "open.title": "Free, and built in the open",
   "open.text": "Vix's source is licensed under your choice of Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0. Development is specification-driven: each of its crates has a spec that the code implements. How the project uses AI assistance is set out in its <a>AI statement</a>.",
   "open.source": "Source on GitHub",

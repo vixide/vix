@@ -47,7 +47,7 @@ Highlights:
   · [Prettier](prettier/index.md) · [FHIR Client](fhir-client/index.md) ·
   [HL7](hl7/index.md).
 - Start and switch: [Getting Started](getting-started/index.md) ·
-  [Comparison](comparison/index.md) · pages for users of
+  [Comparison](compare/index.md) · pages for users of
   [Vim](for-vim-users/index.md), [Emacs](for-emacs-users/index.md),
   [Helix](for-helix-users/index.md),
   [VS Code](for-visual-studio-code-users/index.md),

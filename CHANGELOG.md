@@ -27,6 +27,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Comparisons lead with Vim and Emacs.** The feature comparison moved to `docs/compare/` (the old `/vix/comparison/` address redirects) and now compares Vix with stock Vim and Emacs first, then Helix, Zed, [Fresh](https://github.com/sinelaw/fresh) and [ttt](https://github.com/eugenioenko/ttt), with new rows for the menu bar, Jujutsu, the database workbench, the HTTP client, themes and interface languages; Micro is no longer compared. Not-built-in cells show `-` instead of `✗`, here, in the README and on the site, and the docs no longer say Vix lacks SSH remote editing (experimental since 2.0).
+- **Site home page.** A new welcome and value propositions, an Install section with `brew install` and `cargo install` for all eight front ends, and a comparison table with Vim, Emacs, Neovim, Helix, VS Code, Zed, Fresh and ttt. The at-a-glance number tiles and the small headings above each section are gone.
 - **Delete key: one forward delete.** The Delete key and `vix-editor`'s `delete_forward` now use the core editor's forward delete, so it works at every caret in one undo step, and undo puts the cursor (or selection) back where it was instead of after the deleted character.
 - **Dependencies.** Rust patch updates in both workspaces (including BUI 0.4.1 for `vix-bui`) and the site's Lily Design System packages (`svelte-headless` 0.8.0). BUI 0.4.1 is GPL-3.0-or-later instead of GPL-2.0-or-later; `vix-bui` stays GPL-3.0-only, and `scripts/check-binary-licenses` now classifies the new id. TypeScript stays on 6 because `svelte-check` does not support 7 yet. Later: `vt100` 0.16 → 0.18 (terminal sizes are now non-zero types; a 0 size is still clamped to 1), `toml` 1.2 and fresh lockfiles; `evalexpr` stays at 11 (license).
 - **Keyring 4.** Saved database passwords and AI provider API keys on macOS and Windows now go through keyring 4's `keyring-core` with the native `apple-native-keyring-store` (login Keychain) and `windows-native-keyring-store` (Credential Manager), replacing `keyring` 3. The App picks the store once at startup (`vix::use_system_keyring`); entries keep the same service and account names, so secrets saved by earlier versions are still found. Linux still uses `secret-tool`, and a build without `sql` and `ai` links no keyring crate (T790).
@@ -857,7 +859,7 @@ Vix 2.0 is a feature release for people who edit code in a terminal. The `vix` c
   (a claimed `Alt+Up`/`Alt+Down` move-line binding that doesn't exist;
   `Ctrl+Shift+K` cuts a line rather than deleting it) and added the
   honest gaps it was missing (no `Ctrl+D` incremental multi-select, no
-  `F5` one-key debug start). `docs/comparison/index.md` rewritten into a
+  `F5` one-key debug start). `docs/compare/index.md` rewritten into a
   13-row feature-parity matrix against Vim, Helix, Micro, and Zed.
 - **Man page** (improvement plan T307): `man vix` works wherever Vix was
   installed via a package manager. Generated from the real CLI flag
