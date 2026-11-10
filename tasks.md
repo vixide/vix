@@ -9745,10 +9745,44 @@ free-floating chat does not; never pop up on your own.
     keys. `vhs_lite.py` gained `Shift+Up`/`Shift+Down`. **Left:** render
     the GIF (`scripts/render-demos.sh` needs VHS; the lite pipeline needs
     `agg`; neither is installed here) and put it on the features page.
-- [ ] **T758 — Matrix bridge (spike first).** Decide between
+- [x] **T758 — Matrix bridge (spike first).** Decide between
   `matrix-sdk` in-process (pre-1.0, heavy, but real Olm/Megolm E2EE)
   and talking to a local Pantalaimon or iamb out of process; behind its
   own Cargo feature either way. **Large.**
+  *Spike done 2026-11-10; the bridge is T793.* Decision and evidence:
+  [`spec/instant-message/matrix.md`](spec/instant-message/matrix.md).
+  **Out of process, in a Vix-owned helper:** a `vix-matrix` binary in its
+  own workspace (like `gui/`) on `matrix-sdk` with its SQLite store and
+  vodozemac E2EE, speaking JSON lines over stdio to a new `vix-im-matrix`
+  crate behind a new opt-in `matrix` feature (not in `full`/`net` until the
+  helper ships). Measured with `matrix-sdk` 0.19.1 (`default-features =
+  false`, `e2e-encryption`, `ring` as the rustls provider, no aws-lc):
+  95 new crate names and 16 second versions against Vix's `Cargo.lock`
+  with SQLite (87/14 with the memory store); 59 s / 54 s clean release
+  builds and a +24.6 MB / +18.9 MB stripped binary over a tokio+rustls
+  baseline with Vix's release profile (macOS arm64); MSRV 1.96, under
+  Vix's 1.97; `cargo deny` licenses and bans ok, advisories one new
+  unmaintained crate (`anymap2`, RUSTSEC-2026-0319). **In process is
+  blocked:** `matrix-sdk-sqlite` → `rusqlite` 0.40.2 needs
+  `libsqlite3-sys` ^0.38.2, `sqlx-sqlite` 0.9.0 needs `<0.38.0`, both are
+  `links = "sqlite3"`, and resolution fails even with `matrix-sdk`
+  optional (the lockfile resolves every optional dependency); the memory
+  store builds but loses the E2EE keys on every exit. **Rejected:**
+  Pantalaimon (repository archived 2026-04-08, last release 2022, on the
+  deprecated libolm) and iamb (no API to drive). Plain client-server HTTP
+  over the existing `ureq` adds no crates but reaches unencrypted rooms
+  only; kept as a possible later fallback.
+- [ ] **T793 — Matrix bridge: the `vix-matrix` helper and `vix-im-matrix`.**
+  The first slice of T758's decision
+  ([`spec/instant-message/matrix.md`](spec/instant-message/matrix.md),
+  "First slice"): the `matrix/` helper workspace (`matrix-sdk` 0.19 with
+  `e2e-encryption`, `sqlite`, `bundled-sqlite`; its own lockfile,
+  `deny.toml` and CI job), the JSON-lines protocol, `crates/vix-im-matrix`
+  (codec always compiled, `net` spawns the helper), `protocol = "matrix"`
+  accounts, App wiring in `im_net.rs`, the opt-in `matrix` Cargo feature and
+  its `spawn_sites.rs` row, and tests against a fake helper (never a real
+  server). Not in it: device verification, key backup, media, SSO, and
+  shipping the helper through the release channels. **Large.**
 - [x] **T759 — Follow, presence and session notes (after T693/T695).**
   Show who is in which file in the panel, follow a peer, and one shared
   Markdown notes buffer per session. **Medium.**
@@ -9906,7 +9940,7 @@ the maintainer's decisions.
   workflow each; record what each cannot do (`act` cannot run macOS or
   Windows jobs) and whether any beats T760–T767. **Small.**
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
-T759 wait for Cowork on `main`; T758 last.
+T759 wait for Cowork on `main`; T758 last, then T793.
 
 ## Run V — 2.0.1 release repair (2026-11-06)
 
@@ -10403,8 +10437,8 @@ complete. What is open, by run:
   (the Windows test suite) is open; T773 (a flaky test) is done.
 - **Run W:** T774–T782 and T784–T786 are done; T783 is in progress and
   T787 is done.
-- **Run S:** T750-T756 and T759 are done; T757 (docs, site and demo) and
-  T758 (Matrix, spike first) are open.
+- **Run S:** T750-T756, T758 (the Matrix spike) and T759 are done; T757
+  (docs, site and demo) and T793 (the Matrix bridge itself) are open.
 
 The recommended next order is in items 13–23 below.
 
@@ -10511,7 +10545,8 @@ CI-discovered rounds to get genuinely right on Windows).
 
 19. **Run S (IM, 2026-10-29):** T750 and T751 in parallel, then T752,
     then T753–T755. T756 and T759 after Cowork's link is on `main`; T758
-    last. **T750–T756 and T759 are done**; T757 and T758 are open.
+    last. **T750–T756, T758 (spike) and T759 are done**; T757 and T793
+    (the Matrix bridge) are open.
 
 20. **Run T (local-first CI, 2026-11-04):** T760 → T761 → T762 (with T764),
     then T767, T765, T766; T763 and T768 are spikes. See
