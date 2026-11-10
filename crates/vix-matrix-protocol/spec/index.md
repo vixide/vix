@@ -1,4 +1,4 @@
-# Matrix bridge (vix-im-matrix)
+# Matrix bridge (vix-matrix-protocol)
 
 Matrix bridge for Vix IM: the JSON-lines protocol spoken with the
 `vix-matrix` helper, and an optional thread that starts and pumps the helper.
@@ -67,8 +67,8 @@ malformed message. A trailing CR/LF is ignored.
 - `Handle::spawn(&SpawnOptions)` always returns a handle. It starts the
   program with no arguments, piped stdin and stdout, and stderr dropped or
   appended to `stderr_log` (the App sets it from `VIX_MATRIX_LOG`). A thread
-  named `vix-im-matrix-in` writes requests and a thread named
-  `vix-im-matrix-out` reads replies, so the App never blocks on the helper.
+  named `vix-matrix-protocol-in` writes requests and a thread named
+  `vix-matrix-protocol-out` reads replies, so the App never blocks on the helper.
   A missing program ends at once with `error` `helper_missing` and `closed`,
   and a program that won't start with `helper_exited` and `closed`.
 - The reader turns a line that does not decode into `error` `protocol` and
@@ -81,14 +81,14 @@ malformed message. A trailing CR/LF is ignored.
 - `Handle::pair()` returns a handle wired to an in-memory `Peer` instead of
   a process, for the App's tests.
 
-Starting the helper is a process spawn, so `crates/vix-im-matrix/src/net.rs`
+Starting the helper is a process spawn, so `crates/vix-matrix-protocol/src/net.rs`
 is in `tui/tests/spawn_sites.rs`, gated on `matrix`.
 
 ## Tests
 
-Unit tests per module; `crates/vix-im-matrix/tests/props.rs` (proptest: decoding
+Unit tests per module; `crates/vix-matrix-protocol/tests/props.rs` (proptest: decoding
 never panics, requests and replies round-trip on one line);
-`crates/vix-im-matrix/tests/fake_helper.rs` (feature `net`, `harness = false`):
+`crates/vix-matrix-protocol/tests/fake_helper.rs` (feature `net`, `harness = false`):
 the test binary copies itself to `vix-matrix-fake` and runs that copy as a
 fake helper. It covers `ready` first, a request before login, a login with a
 right, wrong or missing password, a body with line breaks coming back whole,

@@ -3621,15 +3621,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "vix-im-matrix"
-version = "2.0.2"
-dependencies = [
- "serde",
- "serde_json",
- "zeroize",
-]
-
-[[package]]
 name = "vix-matrix"
 version = "2.0.2"
 dependencies = [
@@ -3644,8 +3635,17 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "vix-im-matrix",
+ "vix-matrix-protocol",
  "windows-native-keyring-store",
+ "zeroize",
+]
+
+[[package]]
+name = "vix-matrix-protocol"
+version = "2.0.2"
+dependencies = [
+ "serde",
+ "serde_json",
  "zeroize",
 ]
 

@@ -16,7 +16,7 @@ include = ["/src", "/spec"]
 [dependencies]
 # The protocol (types and JSON-lines codec) Vix speaks; never redefined here.
 # Without `net`: the helper needs no process-spawning code.
-vix-im-matrix = { path = "../../crates/vix-im-matrix", version = "2.0.2" }
+vix-matrix-protocol = { path = "../../crates/vix-matrix-protocol", version = "2.0.2" }
 # Default features off: they include `rustls-aws-lc-rs`, which would pull in
 # aws-lc. `matrix-sdk` turns on `reqwest/rustls-no-provider` itself, and the
 # helper installs `ring` as the process's rustls provider (`main`).

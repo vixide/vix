@@ -236,7 +236,7 @@ vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "2.0.2" }
 vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "2.0.2" }
 vix-hl7 = { path = "crates/vix-hl7", version = "2.0.2" }
 vix-im-irc = { path = "crates/vix-im-irc", version = "2.0.2" }
-vix-im-matrix = { path = "crates/vix-im-matrix", version = "2.0.2" }
+vix-matrix-protocol = { path = "crates/vix-matrix-protocol", version = "2.0.2" }
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "2.0.2" }
 vix-http-client = { path = "crates/vix-http-client", version = "2.0.2" }
 vix-i18n = { path = "crates/vix-i18n", version = "2.0.2" }

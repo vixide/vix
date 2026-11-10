@@ -6558,16 +6558,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-im-matrix"
-version = "2.0.2"
-dependencies = [
- "proptest",
- "serde",
- "serde_json",
- "zeroize",
-]
-
-[[package]]
 name = "vix-im-panel"
 version = "2.0.2"
 dependencies = [
@@ -6707,6 +6697,16 @@ version = "2.0.2"
 dependencies = [
  "pulldown-cmark",
  "vix-outline-panel",
+]
+
+[[package]]
+name = "vix-matrix-protocol"
+version = "2.0.2"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "zeroize",
 ]
 
 [[package]]
@@ -7133,7 +7133,6 @@ dependencies = [
  "vix-i18n",
  "vix-im",
  "vix-im-irc",
- "vix-im-matrix",
  "vix-im-panel",
  "vix-input",
  "vix-jupyter",
@@ -7151,6 +7150,7 @@ dependencies = [
  "vix-lsp-core",
  "vix-macros",
  "vix-markdown-preview",
+ "vix-matrix-protocol",
  "vix-mcp-server",
  "vix-media-type",
  "vix-menu",

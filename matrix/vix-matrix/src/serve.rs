@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tracing::warn;
-use vix_im_matrix::{DecodeError, ErrorKey, PROTOCOL_VERSION, Reply, Request, decode_request};
+use vix_matrix_protocol::{
+    DecodeError, ErrorKey, PROTOCOL_VERSION, Reply, Request, decode_request,
+};
 
 use crate::lines::{self, Input, Out};
 use crate::secrets::SecretStore;
@@ -118,7 +120,7 @@ async fn handle(request: Request, session: &mut Option<Session>, env: &Env, out:
                 account: &account,
                 homeserver: &homeserver,
                 user: &user,
-                password: password.as_ref().map(vix_im_matrix::Password::expose),
+                password: password.as_ref().map(vix_matrix_protocol::Password::expose),
             };
             match session::login(params, &env.secrets, env.data_dir.as_deref(), out).await {
                 Ok(started) => *session = Some(started),
@@ -164,7 +166,7 @@ fn not_logged_in(out: &Out) -> Flow {
 mod tests {
     use std::io::Cursor;
 
-    use vix_im_matrix::{MessageKind, Password, decode_reply, encode_request};
+    use vix_matrix_protocol::{MessageKind, Password, decode_reply, encode_request};
 
     use super::*;
     use crate::secrets::memory::{BrokenKeyring, MemoryKeyring};
@@ -405,7 +407,7 @@ mod tests {
     async fn an_overlong_line_is_a_bad_request() {
         let dir = scratch("long");
         let replies = run(
-            &["x".repeat(vix_im_matrix::MAX_LINE + 1)],
+            &["x".repeat(vix_matrix_protocol::MAX_LINE + 1)],
             env(Arc::new(MemoryKeyring::default()), &dir),
         )
         .await;

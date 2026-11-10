@@ -14,8 +14,8 @@ use std::path::Path;
 
 use vix_im::{ConversationId, ConversationKind, Message};
 use vix_im_irc::Command;
-use vix_im_matrix::net::{Handle, SpawnOptions, find_helper};
-use vix_im_matrix::{ErrorKey, MessageKind, Password, Reply, Request};
+use vix_matrix_protocol::net::{Handle, SpawnOptions, find_helper};
+use vix_matrix_protocol::{ErrorKey, MessageKind, Password, Reply, Request};
 
 use super::App;
 use super::im::Route;

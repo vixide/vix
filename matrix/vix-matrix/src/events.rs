@@ -9,7 +9,7 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use vix_im_matrix::{MessageKind, Reply};
+use vix_matrix_protocol::{MessageKind, Reply};
 
 /// Who "we" are: the logged-in user and this device.
 #[derive(Debug, Clone, Copy)]

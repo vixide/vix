@@ -9753,7 +9753,7 @@ free-floating chat does not; never pop up on your own.
   [`spec/instant-message/matrix.md`](spec/instant-message/matrix.md).
   **Out of process, in a Vix-owned helper:** a `vix-matrix` binary in its
   own workspace (like `gui/`) on `matrix-sdk` with its SQLite store and
-  vodozemac E2EE, speaking JSON lines over stdio to a new `vix-im-matrix`
+  vodozemac E2EE, speaking JSON lines over stdio to a new `vix-matrix-protocol`
   crate behind a new opt-in `matrix` feature (not in `full`/`net` until the
   helper ships). Measured with `matrix-sdk` 0.19.1 (`default-features =
   false`, `e2e-encryption`, `ring` as the rustls provider, no aws-lc):
@@ -9772,12 +9772,12 @@ free-floating chat does not; never pop up on your own.
   deprecated libolm) and iamb (no API to drive). Plain client-server HTTP
   over the existing `ureq` adds no crates but reaches unencrypted rooms
   only; kept as a possible later fallback.
-- [x] **T793 — Matrix bridge: the `vix-matrix` helper and `vix-im-matrix`.**
+- [x] **T793 — Matrix bridge: the `vix-matrix` helper and `vix-matrix-protocol`.**
   The first slice of T758's decision
   ([`spec/instant-message/matrix.md`](spec/instant-message/matrix.md),
   "First slice"): the `matrix/` helper workspace (`matrix-sdk` 0.19 with
   `e2e-encryption`, `sqlite`, `bundled-sqlite`; its own lockfile,
-  `deny.toml` and CI job), the JSON-lines protocol, `crates/vix-im-matrix`
+  `deny.toml` and CI job), the JSON-lines protocol, `crates/vix-matrix-protocol`
   (codec always compiled, `net` spawns the helper), `protocol = "matrix"`
   accounts, App wiring in `im_net.rs`, the opt-in `matrix` Cargo feature and
   its `spawn_sites.rs` row, and tests against a fake helper (never a real
@@ -9789,7 +9789,7 @@ free-floating chat does not; never pop up on your own.
   `room`/`message`/`undecryptable`/`left`, no echo of this device's sends,
   `tracing` capped at `warn` on stderr; 26 tests with in-memory keyrings; its
   own `deny.toml` (adds RUSTSEC-2026-0319) and `.github/workflows/matrix.yml`.
-  macOS release build 79 s, 28.3 MB stripped. `crates/vix-im-matrix`: the
+  macOS release build 79 s, 28.3 MB stripped. `crates/vix-matrix-protocol`: the
   protocol (password inside `login`; `restore` folded into it), a total codec
   with property tests, and the `net` pump (a fake-helper test binary, an
   in-memory `Handle::pair`). App: `tui/src/app/im_matrix.rs`, senders by

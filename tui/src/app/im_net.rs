@@ -47,7 +47,7 @@ pub(super) enum Backend {
     Irc(Handle),
     /// A `vix-matrix` helper process (T793).
     #[cfg(feature = "matrix")]
-    Matrix(vix_im_matrix::net::Handle),
+    Matrix(vix_matrix_protocol::net::Handle),
 }
 
 impl Backend {
@@ -67,7 +67,7 @@ enum LinkEvent {
     Irc(Event),
     /// From the Matrix helper.
     #[cfg(feature = "matrix")]
-    Matrix(vix_im_matrix::Reply),
+    Matrix(vix_matrix_protocol::Reply),
 }
 
 impl Backend {

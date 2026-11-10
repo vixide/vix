@@ -3,7 +3,7 @@
 **Status:** spike done 2026-11-10; the first slice of the bridge (T793 in
 [`tasks.md`](../../tasks.md)) landed the same day: the `vix-matrix` helper
 in [`matrix/`](../../matrix/Cargo.toml), the
-[`vix-im-matrix`](../../crates/vix-im-matrix/spec/index.md) crate and the
+[`vix-matrix-protocol`](../../crates/vix-matrix-protocol/spec/index.md) crate and the
 opt-in `matrix` feature. Parent spec: [IM](index.md).
 
 **Decision.** Matrix runs **out of process**, in a small Vix-owned helper
@@ -11,7 +11,7 @@ binary, `vix-matrix`, built on `matrix-sdk` with its SQLite store and real
 Olm/Megolm end-to-end encryption (vodozemac). The helper lives in its own
 Cargo workspace (like [`gui/`](../../gui/Cargo.toml)), so it has its own
 lockfile, and talks to Vix over JSON lines on stdin/stdout. Inside Vix the
-bridge is a new crate, `vix-im-matrix`, behind a new Cargo feature `matrix`.
+bridge is a new crate, `vix-matrix-protocol`, behind a new Cargo feature `matrix`.
 Linking `matrix-sdk` into `vix` itself is rejected for now: the two cannot
 share a lockfile today (see "The SQLite `links` conflict"). Pantalaimon and
 iamb are rejected too.
@@ -165,7 +165,7 @@ A separate program avoids every blocker above:
 - **`vix` stays the same size.** The ~25 MB lands in a second binary that
   only Matrix users need (the helper's real size with `bundled-sqlite` and
   the release profile is *unmeasured*).
-- **One familiar shape.** `vix-im-matrix` gives the App the same pattern as
+- **One familiar shape.** `vix-matrix-protocol` gives the App the same pattern as
   `vix-im-irc`: a `connect(options) -> Handle`, a `Command` enum in and an
   `Event` enum out over `std::sync::mpsc`, read on a background thread. The
   App converts events into `vix-im` messages exactly as `im_net.rs` does for
@@ -184,7 +184,7 @@ new process spawn, so `tui/tests/spawn_sites.rs` gets a row gated on
 
 | Feature | Gates | Pulls into `vix` |
 | --- | --- | --- |
-| `matrix` | `vix-im-matrix/net`: finding and starting the `vix-matrix` helper and the JSON-lines pump thread; with it, the Matrix rows of `im.connect` and the account picker | Nothing new: `vix-im-matrix` uses `serde`/`serde_json`, already in the lockfile. The protocol types and codec stay compiled in every build, as `vix-im-irc`'s codec does |
+| `matrix` | `vix-matrix-protocol/net`: finding and starting the `vix-matrix` helper and the JSON-lines pump thread; with it, the Matrix rows of `im.connect` and the account picker | Nothing new: `vix-matrix-protocol` uses `serde`/`serde_json`, already in the lockfile. The protocol types and codec stay compiled in every build, as `vix-im-irc`'s codec does |
 
 `matrix` is **not** in `full`, `net` or `default` until the helper ships
 through the release channels, the same rule `jupyter` follows. A build
@@ -195,7 +195,7 @@ without it shows Matrix accounts as *"Matrix is not included in this build"*
 ## Protocol
 
 Fixed by T793; the full table is in
-[`vix-im-matrix`'s spec](../../crates/vix-im-matrix/spec/index.md). One JSON
+[`vix-matrix-protocol`'s spec](../../crates/vix-matrix-protocol/spec/index.md). One JSON
 object per line, UTF-8, every one with `"v": 1`, and nothing else on stdout.
 The helper's own diagnostics go to stderr, which Vix drops unless
 `VIX_MATRIX_LOG` names a file to append them to.
@@ -247,7 +247,7 @@ names aren't unique, so one could pass for another person.
    the `rustls` provider. It implements password login, restore, sync,
    joined rooms, send, join and leave, and the protocol above, and has its
    own lockfile, `deny.toml` and CI job.
-2. `crates/vix-im-matrix`: the protocol types, the JSON-lines codec with
+2. `crates/vix-matrix-protocol`: the protocol types, the JSON-lines codec with
    property tests (always compiled), and `net`, which spawns and pumps the
    helper.
 3. `[[im.accounts]]` gains `protocol = "matrix"` (IRC stays the default)

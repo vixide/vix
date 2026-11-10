@@ -1,5 +1,5 @@
 [package]
-name = "vix-im-matrix"
+name = "vix-matrix-protocol"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

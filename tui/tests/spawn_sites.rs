@@ -159,7 +159,7 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `jupyter` (opt-in, not in `full`)",
     ),
     (
-        "crates/vix-im-matrix/src/net.rs",
+        "crates/vix-matrix-protocol/src/net.rs",
         "the `vix-matrix` helper for Matrix accounts (T793): no arguments, no extra environment, the password only over stdin",
         "`net` feature, enabled only by root `matrix` (opt-in, not in `full`)",
     ),

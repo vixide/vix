@@ -4,7 +4,7 @@
 # pins it below 0.38, and Cargo allows only one `links = "sqlite3"` package in
 # a lockfile. So the helper has its own lockfile, is never built by
 # `cargo build` / `cargo test --workspace` / clippy at the repo root, and
-# `vix` talks to it over JSON lines on stdin/stdout (`crates/vix-im-matrix`).
+# `vix` talks to it over JSON lines on stdin/stdout (`crates/vix-matrix-protocol`).
 #
 #   cargo build --release --manifest-path matrix/Cargo.toml
 #   # then put matrix/target/release/vix-matrix beside `vix` or on PATH

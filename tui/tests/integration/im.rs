@@ -512,8 +512,8 @@ fn a_matrix_account_needs_its_fields_and_the_feature() {
 #[cfg(feature = "matrix")]
 mod matrix {
     use super::*;
-    use vix_im_matrix::net::Handle;
-    use vix_im_matrix::{ErrorKey, MessageKind as Kind, Reply, Request};
+    use vix_matrix_protocol::net::Handle;
+    use vix_matrix_protocol::{ErrorKey, MessageKind as Kind, Reply, Request};
 
     const ROOM: &str = "!room:matrix.invalid";
 

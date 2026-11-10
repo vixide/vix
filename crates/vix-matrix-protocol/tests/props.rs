@@ -2,7 +2,7 @@
 //! every request and reply survives a round trip on one line.
 
 use proptest::prelude::*;
-use vix_im_matrix::{
+use vix_matrix_protocol::{
     MessageKind, Reply, Request, decode_reply, decode_request, encode_reply, encode_request,
 };
 
