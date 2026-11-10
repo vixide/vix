@@ -699,6 +699,30 @@ the crate's own unit tests something concrete to assert on (7 tests,
   script), so leaving them stale until the next full restart would have
   been a real, if quiet, bug.
 
+### Helix, born a table
+
+The Helix keymap (`helix`) arrived after the T104 epic, so it never had a
+hardcoded `match` to convert: `helix.rs` is its table from the start. It
+uses four contexts — the shape Emacs's chord families and Vi's pending
+operators already established, not a schema change:
+
+- `""` — Normal (and Select) mode's single keys, encoded with
+  `vix_macros::encode_key` like Vi's (`w`, `W`, `%`, `Left`).
+- `"g"` — goto mode, the key after `g` (`g e` → `edit.go_last`).
+- `"m"` — match mode, the key after `m` (`m m` → `edit.match_bracket`).
+- `"Space"` — the space-mode leader, the key after `Space` (`Space f` →
+  `file.open`). Helix's leader is one key deep, so a plain `lookup` in a
+  context fits; Spacemacs's multi-key `lookup_sequence` isn't needed.
+
+As with Vi, entering a prefix (`g`, `m`, `Space`) is a mode transition and
+stays host-side, and so do the keys that take a character argument
+(`f`/`t`/`F`/`T`/`r`), `:`, `Esc` and Insert mode. The selection-first
+commands are `helix.*` action ids (`helix.select_word_next`,
+`helix.delete`, …, `run_helix_action` in `tui/src/app/helix.rs`); every
+other row reuses an existing Vix action id (`edit.undo`, `nav.goto_definition`,
+`file.open`, …). The F1 overlay shows all four contexts (`table_rows_for`),
+and the which-key popup lists a pending prefix's context.
+
 ## What's deliberately not in scope here
 
 - **Rewriting Vim/Spacemacs's operator/motion grammar.** `vix-modal`

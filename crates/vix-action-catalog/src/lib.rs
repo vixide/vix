@@ -242,6 +242,90 @@ pub const CATALOG: &[Action] = &[
         title: "action.half_page_up",
     },
     Action {
+        id: "helix.append",
+        title: "action.helix.append",
+    },
+    Action {
+        id: "helix.change",
+        title: "action.helix.change",
+    },
+    Action {
+        id: "helix.collapse",
+        title: "action.helix.collapse",
+    },
+    Action {
+        id: "helix.delete",
+        title: "action.helix.delete",
+    },
+    Action {
+        id: "helix.insert",
+        title: "action.helix.insert",
+    },
+    Action {
+        id: "helix.move_down",
+        title: "action.helix.move_down",
+    },
+    Action {
+        id: "helix.move_left",
+        title: "action.helix.move_left",
+    },
+    Action {
+        id: "helix.move_right",
+        title: "action.helix.move_right",
+    },
+    Action {
+        id: "helix.move_up",
+        title: "action.helix.move_up",
+    },
+    Action {
+        id: "helix.paste_after",
+        title: "action.helix.paste_after",
+    },
+    Action {
+        id: "helix.paste_before",
+        title: "action.helix.paste_before",
+    },
+    Action {
+        id: "helix.select_line",
+        title: "action.helix.select_line",
+    },
+    Action {
+        id: "helix.select_long_word_end",
+        title: "action.helix.select_long_word_end",
+    },
+    Action {
+        id: "helix.select_long_word_next",
+        title: "action.helix.select_long_word_next",
+    },
+    Action {
+        id: "helix.select_long_word_prev",
+        title: "action.helix.select_long_word_prev",
+    },
+    Action {
+        id: "helix.select_word_end",
+        title: "action.helix.select_word_end",
+    },
+    Action {
+        id: "helix.select_word_next",
+        title: "action.helix.select_word_next",
+    },
+    Action {
+        id: "helix.select_word_prev",
+        title: "action.helix.select_word_prev",
+    },
+    Action {
+        id: "helix.switch_case",
+        title: "action.helix.switch_case",
+    },
+    Action {
+        id: "helix.toggle_select",
+        title: "action.helix.toggle_select",
+    },
+    Action {
+        id: "helix.yank",
+        title: "action.helix.yank",
+    },
+    Action {
         id: "hsplit",
         title: "action.hsplit",
     },
@@ -789,6 +873,7 @@ pub mod dispatch_scan {
         ("tui/src/app/textobjects.rs", "run_textobject_action"),
         ("tui/src/app/insert_tools.rs", "run_tools_action"),
         ("tui/src/app/keymap.rs", "run_vim_action"),
+        ("tui/src/app/helix.rs", "run_helix_action"),
         ("tui/src/app/git.rs", "run_git_action"),
         ("tui/src/app/git_review.rs", "run_git_review_action"),
         (

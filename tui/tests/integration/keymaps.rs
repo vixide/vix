@@ -138,6 +138,7 @@ fn view_keymap_submenu_actions_set_the_keymap() {
         "intellij-windows",
         "eclipse",
         "sublime",
+        "helix",
     ] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
@@ -145,7 +146,7 @@ fn view_keymap_submenu_actions_set_the_keymap() {
 
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "sublime");
+    assert_eq!(app.settings.keymap, "helix");
 }
 
 #[test]
@@ -799,4 +800,256 @@ fn key_override_wins_over_a_builtin_keymap_binding() {
             .any(|m| matches!(m.level, vix::messages::Level::Info)),
         "shadowing a built-in is reported informationally"
     );
+}
+
+// ----- Helix (selection-first) ---------------------------------------------
+
+/// An app on the Helix keymap whose buffer holds `text`, cursor at `cursor`.
+fn helix_app(text: &str, cursor: usize) -> App {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "helix".to_string();
+    buffer_with(&mut app, text, cursor);
+    app
+}
+
+/// The active buffer's selected text, if any.
+fn selected(app: &mut App) -> Option<String> {
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .get_selection_text()
+}
+
+#[test]
+fn helix_w_selects_a_word_and_d_deletes_it() {
+    let mut app = helix_app("foo bar baz", 0);
+    app.on_key(key('w'));
+    assert_eq!(selected(&mut app).as_deref(), Some("foo "), "w selects");
+    app.on_key(key('w'));
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("bar "),
+        "a second w replaces the selection with the next word"
+    );
+    app.on_key(key('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "foo baz");
+    assert_eq!(selected(&mut app), None, "d leaves nothing selected");
+    // `u` undoes it.
+    app.on_key(key('u'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "foo bar baz");
+}
+
+#[test]
+fn helix_e_and_b_select_and_d_with_no_selection_deletes_one_char() {
+    let mut app = helix_app("foo bar", 0);
+    app.on_key(key('e'));
+    assert_eq!(selected(&mut app).as_deref(), Some("foo"), "e: to word end");
+    app.on_key(key('b'));
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("foo"),
+        "b: back to start"
+    );
+    // `;` collapses; `d` then acts on the character under the cursor.
+    app.on_key(key(';'));
+    assert_eq!(selected(&mut app), None);
+    app.on_key(key('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "oo bar");
+}
+
+#[test]
+fn helix_x_selects_whole_lines_and_grows() {
+    let mut app = helix_app("one\ntwo\nthree", 1);
+    app.on_key(key('x'));
+    assert_eq!(selected(&mut app).as_deref(), Some("one\n"));
+    app.on_key(key('x'));
+    assert_eq!(selected(&mut app).as_deref(), Some("one\ntwo\n"));
+    app.on_key(key('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "three");
+}
+
+#[test]
+fn helix_percent_selects_all() {
+    let mut app = helix_app("a\nb", 0);
+    app.on_key(key('%'));
+    assert_eq!(selected(&mut app).as_deref(), Some("a\nb"));
+}
+
+#[test]
+fn helix_v_extends_and_esc_returns_to_normal() {
+    let mut app = helix_app("foo bar baz", 0);
+    let normal = app.mode_indicator();
+    app.on_key(key('v'));
+    assert_ne!(
+        app.mode_indicator(),
+        normal,
+        "Select mode has its own indicator"
+    );
+    app.on_key(key('w'));
+    app.on_key(key('w'));
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("foo bar "),
+        "in Select mode motions extend the selection"
+    );
+    app.on_key(key('l'));
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("foo bar b"),
+        "l extends"
+    );
+    app.on_key(esc());
+    assert_eq!(app.mode_indicator(), normal, "Esc returns to Normal");
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("foo bar b"),
+        "leaving Select mode keeps the selection"
+    );
+    // Back in Normal, a motion replaces instead of extending.
+    app.on_key(key('w'));
+    assert_eq!(selected(&mut app).as_deref(), Some("az"));
+}
+
+#[test]
+fn helix_c_changes_the_selection_in_insert_mode() {
+    let mut app = helix_app("foo bar", 0);
+    let normal = app.mode_indicator();
+    app.on_key(key('w'));
+    app.on_key(key('c'));
+    assert_ne!(app.mode_indicator(), normal, "c enters Insert mode");
+    type_str(&mut app, "new ");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "new bar");
+    app.on_key(esc());
+    assert_eq!(app.mode_indicator(), normal, "Esc returns to Normal");
+    // Normal mode letters are commands again, not text.
+    app.on_key(key('h'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "new bar");
+}
+
+#[test]
+fn helix_insert_entry_keys() {
+    let mut app = helix_app("abc", 0);
+    // `a` with nothing selected appends after the cursor's character.
+    app.on_key(key('a'));
+    type_str(&mut app, "X");
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().text(), "aXbc");
+    // `A` appends at the line end, `I` inserts at its start.
+    app.on_key(key('A'));
+    type_str(&mut app, "!");
+    app.on_key(esc());
+    app.on_key(key('I'));
+    type_str(&mut app, ">");
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().text(), ">aXbc!");
+    // `i` with a selection inserts at its start: `gl` to the line end,
+    // `b` selects back over the last word.
+    app.on_key(key('g'));
+    app.on_key(key('l'));
+    app.on_key(key('b'));
+    assert_eq!(selected(&mut app).as_deref(), Some("aXbc!"));
+    app.on_key(key('i'));
+    type_str(&mut app, "_");
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().text(), ">_aXbc!");
+}
+
+#[test]
+fn helix_goto_mode_gg_and_ge() {
+    let mut app = helix_app("one\ntwo\nthree", 0);
+    app.on_key(key('g'));
+    assert!(app.which_key().is_some(), "g shows its goto hints");
+    app.on_key(key('e'));
+    assert_eq!(app.editor.cursor_1based().0, 3, "ge goes to the last line");
+    assert!(app.which_key().is_none(), "the prefix is consumed");
+    app.on_key(key('g'));
+    app.on_key(key('g'));
+    assert_eq!(app.editor.cursor_1based().0, 1, "gg goes to the top");
+}
+
+#[test]
+fn helix_find_replace_and_switch_case() {
+    let mut app = helix_app("ab.cd", 0);
+    // `f.` selects through the dot, `r-` replaces each selected char.
+    app.on_key(key('f'));
+    app.on_key(key('.'));
+    assert_eq!(selected(&mut app).as_deref(), Some("ab."));
+    app.on_key(key('r'));
+    app.on_key(key('-'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "---cd");
+    // `t` selects up to a char; `~` swaps the selection's case.
+    let mut app = helix_app("abc def", 0);
+    app.on_key(key('t'));
+    app.on_key(key(' '));
+    assert_eq!(selected(&mut app).as_deref(), Some("abc"));
+    app.on_key(key('~'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ABC def");
+    assert_eq!(selected(&mut app).as_deref(), Some("ABC"), "still selected");
+}
+
+#[test]
+fn helix_space_f_opens_the_file_picker() {
+    let mut app = helix_app("", 0);
+    app.on_key(key(' '));
+    let (title, rows) = app.which_key().expect("Space shows its leader hints");
+    assert_eq!(title, "SPC");
+    assert!(rows.iter().any(|(_, action)| action == "file.open"));
+    app.on_key(key('f'));
+    assert!(app.file_browser.is_some(), "Space f opens the file picker");
+    assert!(
+        app.editor.active_tab().unwrap().text().is_empty(),
+        "Space never types"
+    );
+}
+
+#[test]
+fn helix_colon_w_saves() {
+    let dir = unique_dir("helix-save");
+    let file = dir.join("note.txt");
+    fs::write(&file, "hello world\n").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.keymap = "helix".to_string();
+    app.editor.open(&file, false).unwrap();
+    app.on_key(key('w'));
+    app.on_key(key('c'));
+    type_str(&mut app, "bye ");
+    app.on_key(esc());
+    app.on_key(key(':'));
+    type_str(&mut app, "w");
+    assert_eq!(app.mode_indicator().as_deref(), Some(":w"));
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "bye world\n");
+    // Helix's long command name works too.
+    app.on_key(key('%'));
+    app.on_key(key('d'));
+    app.on_key(key(':'));
+    type_str(&mut app, "write");
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(fs::read_to_string(&file).unwrap().trim(), "");
+}
+
+#[test]
+fn helix_switching_keymaps_resets_select_mode() {
+    let mut app = helix_app("abc", 0);
+    let normal = app.mode_indicator();
+    app.on_key(key('v'));
+    app.run_action("view.keymap:vi");
+    app.run_action("view.keymap:helix");
+    assert_eq!(
+        app.mode_indicator(),
+        normal,
+        "a fresh keymap starts in Normal"
+    );
+}
+
+#[test]
+fn helix_help_overlay_lists_its_prefix_chords() {
+    let mut app = helix_app("", 0);
+    app.run_action("help.shortcuts");
+    let h = app.help.as_ref().expect("open");
+    let keys: Vec<&str> = h.rows.iter().map(|s| s.keys.as_str()).collect();
+    assert!(keys.contains(&"x"), "Normal-mode keys listed: {keys:?}");
+    assert!(keys.contains(&"g e"), "goto chords listed: {keys:?}");
+    assert!(keys.contains(&"Space f"), "Space chords listed: {keys:?}");
 }

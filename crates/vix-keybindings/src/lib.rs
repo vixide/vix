@@ -12,7 +12,8 @@
 //! Code's bindings don't differ by host OS in a terminal), `IntelliJ`
 //! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
 //! tables this time, unlike VS Code's shared one), Eclipse (`eclipse`,
-//! T104e), Sublime Text (`sublime`, T104f), and Apple (`apple`, T104g).
+//! T104e), Sublime Text (`sublime`, T104f), and Apple (`apple`, T104g);
+//! Helix (`helix`) was born a table, with `g`/`m`/`Space` prefix contexts.
 //! Their dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
 //! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `sublime_key`,
 //! `apple_ctrl_key`) all now go through [`TABLES`] instead of their own
@@ -43,6 +44,7 @@
 mod apple;
 mod eclipse;
 mod emacs;
+mod helix;
 mod intellij;
 pub mod overrides;
 mod shared;
@@ -135,6 +137,10 @@ pub const TABLES: &[KeymapTable] = &[
         keymap_id: "sublime",
         contexts: sublime::CONTEXTS,
     },
+    KeymapTable {
+        keymap_id: "helix",
+        contexts: helix::CONTEXTS,
+    },
 ];
 
 /// The action bound to `token` in `keymap_id`'s `context` (top level =
@@ -223,6 +229,7 @@ mod tests {
             "intellij-windows",
             "eclipse",
             "sublime",
+            "helix",
         ];
         for id in ids {
             assert_eq!(
@@ -424,6 +431,20 @@ mod tests {
         // Ctrl+` (console) is a non-alphanumeric char token, not a named
         // key — confirms the token grammar handles it like any other char.
         assert_eq!(lookup("sublime", "", "C-`"), Some("tools.terminal"));
+    }
+
+    #[test]
+    fn helix_selects_first_and_has_goto_match_and_space_contexts() {
+        assert_eq!(lookup("helix", "", "w"), Some("helix.select_word_next"));
+        assert_eq!(lookup("helix", "", "x"), Some("helix.select_line"));
+        assert_eq!(lookup("helix", "", "d"), Some("helix.delete"));
+        assert_eq!(lookup("helix", "", "U"), Some("edit.redo"));
+        assert_eq!(lookup("helix", "g", "e"), Some("edit.go_last"));
+        assert_eq!(lookup("helix", "m", "m"), Some("edit.match_bracket"));
+        assert_eq!(lookup("helix", "Space", "f"), Some("file.open"));
+        // The prefix keys themselves are host-side mode transitions.
+        assert_eq!(lookup("helix", "", "g"), None);
+        assert_eq!(lookup("helix", "", "m"), None);
     }
 
     #[test]

@@ -151,6 +151,7 @@
 - [IntelliJ Windows Keybindings](reference/keybindings-intellij-windows.md)
 - [Eclipse Keybindings](reference/keybindings-eclipse.md)
 - [Sublime Text Keybindings](reference/keybindings-sublime.md)
+- [Helix Keybindings](reference/keybindings-helix.md)
 
 # Contributing
 

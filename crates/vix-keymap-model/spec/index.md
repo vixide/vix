@@ -24,6 +24,7 @@ Vix ships ten keymaps. **Apple** is the default and matches Vix's own bindings.
 | IntelliJ Windows | `intellij-windows` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
 | Eclipse | `eclipse` | Eclipse (Windows) defaults — `Ctrl+Shift+R` Open Resource, `Ctrl+Shift+T` Open Type, `Ctrl+3` Quick Access, `F3` Open Declaration. |
 | Sublime Text | `sublime` | Sublime Text defaults, `Ctrl` for `Cmd` — `Ctrl+P` Goto Anything, `Ctrl+Shift+P` Command Palette, `Ctrl+R` Goto Symbol, `Ctrl+J` Join Lines, `Ctrl+Shift+D` Duplicate. |
+| Helix | `helix` | Selection-first modal editing: in Normal mode a motion selects (`w`, `x`, `%`) and an action acts on the selection (`d`, `c`, `y`); `v` Select mode, `g` goto, `Space` leader, `:` command line. |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
 shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse, Sublime Text) try
@@ -52,6 +53,7 @@ model order, and is kept in sync with the keymap model by a test.
 | IntelliJ Windows | `view.keymap:intellij-windows` |
 | Eclipse | `view.keymap:eclipse` |
 | Sublime Text | `view.keymap:sublime` |
+| Helix | `view.keymap:helix` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
 
@@ -69,6 +71,7 @@ never inherits a stale mode:
 
 - Vi begins in **Normal** mode (Insert mode off, no open `:` command line).
 - Spacemacs begins in **Normal** mode with no pending `Space` leader.
+- Helix begins in **Normal** mode (not Select mode) with no pending prefix.
 - The Emacs `Ctrl+X` chord prefix is cleared.
 
 ## Emacs chords
@@ -195,6 +198,116 @@ following key extends the sequence:
 The leader table lives in `App::spacemacs_leader_lookup` (sequence → action id);
 the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 
+## Helix modes, selections and leader
+
+The Helix keymap is modal like Vi, but **selection-first**: in Normal mode a
+motion *selects* text, and an action then acts on the selection. `w` selects
+from the cursor to the next word start, `x` the whole line, `%` the buffer;
+`d` then deletes what is selected, `c` deletes it and enters Insert mode, and
+`y` copies it. With nothing selected, an action acts on the one character
+under the cursor (Helix never acts on nothing). The status-bar mode
+indicator shows **Normal**, **Insert**, **Select** (`status.helix_select`), or
+the live `:` command line.
+
+It reuses the Vi keymap's machinery rather than a second engine: the same
+Insert-mode flag and mode field (Select mode is `vix_modal::Mode::Visual`),
+the same `:` command line, the same pending-key slot, the `vim.*` insert
+entries, the unnamed register (the clipboard), and `vix_modal::motion`'s
+pure motions. The selection is the editor's own `[anchor, cursor)` selection;
+the selection arithmetic (`x` growing by lines, `p` placement, `r`, `~`,
+`WORD` motions) is `vix_modal::helix`. Keys look up `vix-keybindings`'
+`"helix"` table, whose `helix.*` action ids carry the selection model.
+
+**Normal mode** swallows ordinary keys so they never type. Modifier combos
+and function keys go to the shared layer (menu mnemonics, `F10`). Like Vi,
+`:` works from any pane; every other key acts only over the editor.
+
+| Key | Action |
+| --- | ------ |
+| `h` `j` `k` `l` (and the arrows) | Move; Normal mode drops the selection, Select mode extends it |
+| `w` / `b` / `e` | Select to the next word start / previous word start / word end |
+| `W` / `B` / `E` | The same over `WORD`s (runs of non-whitespace) |
+| `f` / `t` + char | Select through / up to the next char on the line |
+| `F` / `T` + char | Select back to / just after the previous char on the line |
+| `x` | Select the whole line; again to grow by the next line |
+| `%` | Select the whole buffer |
+| `d` / `c` | Delete the selection (to the register) / delete it and enter Insert |
+| `y` | Copy the selection to the register |
+| `p` / `P` | Paste after / before the selection, then select the pasted text (text ending in a newline pastes as whole lines) |
+| `r` + char | Replace every selected character with char (line breaks kept) |
+| `~` | Switch the case of the selection |
+| `>` / `<` | Indent / outdent |
+| `J` | Join lines |
+| `u` / `U` | Undo / redo |
+| `;` | Collapse the selection to the cursor |
+| `,` | Keep only the primary selection (drop extra cursors) |
+| `C` | Add a cursor on the line below |
+| `s` | Select regex matches within the selection (prompts) |
+| `*` | Jump to the next occurrence of the selection |
+| `/` / `?` then `n` / `N` | Find; next / previous match |
+| `v` | Toggle Select mode, where motions extend instead of replace |
+| `i` / `a` | Insert before the selection / append after it |
+| `I` / `A` | Insert at the first non-blank / append at the line end |
+| `o` / `O` | Open a line below / above and enter Insert |
+| `Esc` | Leave Select mode (the selection stays) |
+| `:` | Open the command line |
+
+`g`, `m`, and `Space` are prefixes; `f`, `t`, `F`, `T`, and `r` wait for a
+character. The next key completes them, and `Esc` or an unbound key cancels.
+While `g`, `m`, or `Space` is pending, the which-key popup lists its keys.
+
+| Goto (`g`) | Action |
+| ---------- | ------ |
+| `g g` / `g e` | File start / file end |
+| `g h` / `g l` / `g s` | Line start / line end / first non-blank |
+| `g d` / `g D` / `g y` / `g i` | Definition / declaration / type definition / implementation |
+| `g r` | References |
+| `g n` / `g p` | Next / previous buffer |
+| `m m` | Matching bracket |
+
+| Space leader | Action |
+| ------------ | ------ |
+| `Space f` | File picker |
+| `Space b` | Buffer picker |
+| `Space s` / `Space S` | Symbol picker / workspace symbol picker |
+| `Space /` | Global search |
+| `Space k` | Hover |
+| `Space r` | Rename symbol |
+| `Space a` | Code action |
+| `Space d` | Diagnostics |
+| `Space p` / `Space P` / `Space y` | Paste after / paste before / yank |
+| `Space ?` | Command palette |
+
+**Insert mode** lets typing through to the editor; `Esc` returns to Normal.
+Typing at several cursors (after `C`) uses the editor's own multi-cursor
+insert.
+
+The **`:` command line** is the Vi one, so every Vi command above works
+(`:w`, `:q`, `:q!`, `:wq`, `:x`, `:N`, `:e path`, `:Ex`), plus Helix's
+names: `:write`, `:quit`, `:quit!`, `:write-quit`, and `:o` / `:open`
+(`:o path` opens `path`; bare `:o` opens the file picker).
+
+### Helix: not yet
+
+These Helix features are not implemented in Vix yet:
+
+- Counts (`3w`, `2x`) and the `.` repeat.
+- Multiple selections as first-class objects: `d`/`c`/`y`/`p`/`r`/`~`, the
+  motions, and Select mode act on the primary selection only; extra cursors
+  (from `C` or `s`) are the editor's multi-cursor carets, which typing in
+  Insert mode honors. No `Alt-s` split here (use Edit → Select → Split
+  Selection into Lines), no `(`/`)` rotate, no `Alt-;` flip.
+- Named registers (`"a`); Helix's yank register and the system clipboard
+  are one clipboard here, so `Space p`/`Space y` behave like `p`/`y`.
+- Match mode beyond `m m` (`m s` surround, `m i`/`m a` text objects).
+- View mode (`z`), window mode (`Ctrl+w`), jump list (`Ctrl+o`/`Ctrl+i`),
+  macros (`q`/`Q`), `.` and `Alt-.` repeat, `gw` jump labels.
+- `?` searches forward like `/` (no reverse search), and `*` jumps to the
+  next occurrence rather than only setting the search pattern.
+- In Select mode the goto keys (`gg`, `ge`, `gh`, `gl`) move the cursor
+  rather than extend the selection.
+- The block cursor and per-mode cursor shape.
+
 ## As implemented in Vix
 
 The list of keymaps is pure data in the `keymap_model` module
@@ -226,5 +339,8 @@ The host wiring lives in `tui/src/app.rs`:
   `App::modal_key` (`tui/src/app/modal.rs`, the `vix-modal` engine) first.
 - `mode_indicator` — the status-bar string: Vi's `:`-line / Insert / Normal, or
   Emacs's pending `C-x-` prefix; `None` for keymaps with nothing to show.
+- Helix lives in `tui/src/app/helix.rs`: `helix_key` (dispatch, prefixes,
+  character arguments), `run_helix_action` (the `helix.*` actions),
+  `run_helix_command` (Helix's `:` command names), and `helix_which_key`.
 
 The default keymap is set in `crates/vix-settings/src/lib.rs` (`keymap: "apple"`).

@@ -148,6 +148,50 @@ Sublime's signature shortcuts (with `Ctrl` standing in for `Cmd`):
 - `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Shift+T` save / save as /
   close / reopen closed.
 
+### Helix
+
+Selection-first modal editing, as in Helix: in Normal mode a motion
+*selects*, then an action acts on the selection. With nothing selected, an
+action acts on the character under the cursor.
+
+- **Select:** `w` / `b` / `e` (and `W` / `B` / `E` over runs of
+  non-whitespace) select to the next word start / previous word start / word
+  end; `f` / `t` / `F` / `T` + a character select to it on the line; `x`
+  selects the line (press again to add the next line); `%` selects
+  everything. `h` / `j` / `k` / `l` move and drop the selection.
+- **Act:** `d` delete, `c` change (delete, then Insert mode), `y` yank,
+  `p` / `P` paste after / before, `r` + a character replace each selected
+  character, `~` switch case, `>` / `<` indent / outdent, `J` join lines,
+  `u` / `U` undo / redo.
+- **Selections:** `v` toggles Select mode, where motions extend the
+  selection; `;` collapses it; `,` drops extra cursors; `C` adds a cursor
+  on the line below; `s` selects regex matches inside the selection; `*`
+  jumps to the next occurrence of the selection.
+- **Insert:** `i` / `a` before / after the selection, `I` / `A` at the line
+  start / end, `o` / `O` a new line below / above; `Esc` returns to Normal.
+- **Goto (`g`):** `gg` / `ge` file start / end, `gh` / `gl` / `gs` line start
+  / end / first non-blank, `gd` definition, `gD` declaration, `gy` type
+  definition, `gi` implementation, `gr` references, `gn` / `gp` next /
+  previous buffer; `mm` matching bracket.
+- **Space leader:** `Space f` file picker, `Space b` buffers, `Space s` /
+  `Space S` symbols / workspace symbols, `Space /` global search, `Space k`
+  hover, `Space r` rename, `Space a` code action, `Space d` diagnostics,
+  `Space p` / `Space P` / `Space y` paste / yank, `Space ?` command palette.
+  The which-key popup lists the keys after `g`, `m`, or `Space`.
+- **Command line and search:** `:w`, `:q`, `:q!`, `:wq` / `:x`, `:N`, plus
+  Helix's `:write`, `:quit`, `:write-quit`, and `:o path` / `:open path`
+  (bare `:o` opens the file picker); `/` and `?` find, `n` / `N` next /
+  previous.
+
+The status bar shows `-- NORMAL --`, `-- INSERT --`, `-- SELECT --`, or the
+`:` command line.
+
+Not yet: counts and `.` repeat; actions on every selection at once (they act
+on the primary one; typing in Insert mode does reach every cursor); named
+registers (yank and paste use the one clipboard); match mode beyond `mm`;
+view mode (`z`), window mode (`Ctrl+w`), the jump list, macros, and jump
+labels; reverse search with `?`; and the block cursor.
+
 ## Not Yet Built
 
 The following are described in the broader keymap philosophy but are **not**

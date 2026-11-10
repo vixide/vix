@@ -46,6 +46,7 @@ mod git_rebase;
 mod git_review;
 #[cfg(feature = "git")]
 mod git_stash_worktree;
+mod helix;
 mod hierarchy;
 mod hl7;
 mod hot_exit;
@@ -1451,6 +1452,9 @@ enum Keymap {
     Eclipse,
     /// Sublime Text shortcuts, with `Ctrl` standing in for `Cmd`.
     Sublime,
+    /// Helix's selection-first modal editing: motions select, actions act
+    /// on the selection, plus `g` goto and `Space` leader prefixes.
+    Helix,
 }
 
 impl Keymap {
@@ -1474,6 +1478,7 @@ impl Keymap {
             "intellij-windows" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
             "sublime" => Keymap::Sublime,
+            "helix" => Keymap::Helix,
             _ => return None,
         })
     }
@@ -3387,6 +3392,7 @@ impl App {
             a if self.run_tools_action(a) => {}
             a if self.run_text_tool_action(a) => {}
             a if self.run_vim_action(a) => {}
+            a if self.run_helix_action(a) => {}
             other if self.run_view_action(other) => {}
             #[cfg(feature = "git")]
             other if self.run_git_action(other) => {}
@@ -10690,7 +10696,7 @@ impl App {
                 }
             }
             id @ ("vi" | "emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
-            | "intellij-windows" | "eclipse" | "sublime" | "apple") => {
+            | "intellij-windows" | "eclipse" | "sublime" | "helix" | "apple") => {
                 for (action, keys) in Self::table_rows_for(id) {
                     add(action, keys);
                 }

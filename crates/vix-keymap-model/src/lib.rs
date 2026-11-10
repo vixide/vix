@@ -12,6 +12,8 @@
 //!   (e.g. `SPC f f` find file, `SPC g s` git status).
 //! - **`IntelliJ` macOS / Windows**, **Eclipse**, **Sublime Text** — the
 //!   signature bindings of those editors.
+//! - **Helix** — selection-first modal editing: a motion selects, then an
+//!   action (`d`, `c`, `y`) acts on the selection, plus a `Space` leader.
 //!
 //! This crate is pure data: it lists the keymaps. The host persists the choice
 //! (the View → Keymap submenu is built from [`KEYMAPS`]) and maps it onto key
@@ -80,6 +82,11 @@ pub const KEYMAPS: &[Keymap] = &[
         id: "sublime",
         name: "Sublime Text",
         tooltip: "Sublime Text bindings",
+    },
+    Keymap {
+        id: "helix",
+        name: "Helix",
+        tooltip: "Helix selection-first modes",
     },
 ];
 

@@ -21,6 +21,7 @@
 
 // Each module documents itself with an inner `//!` block.
 pub mod count;
+pub mod helix;
 pub mod mode;
 pub mod motion;
 pub mod operator;
