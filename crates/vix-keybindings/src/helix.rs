@@ -10,7 +10,7 @@
 //! (`"Space"`). Entering a prefix is a mode transition, not an action, so
 //! -- like Vi's `g`/`d`/`y` -- the prefix keys themselves stay host-side.
 //! So do the keys that take a character argument (`f`/`t`/`F`/`T`/`r`),
-//! `:` (the command line), `Esc`, and Insert mode.
+//! the count digits, `:` (the command line), `Esc`, and Insert mode.
 
 use crate::{Binding, ChordContext};
 
@@ -103,6 +103,10 @@ const NORMAL: &[Binding] = &[
     Binding {
         key_token: "~",
         action_id: "helix.switch_case",
+    },
+    Binding {
+        key_token: ".",
+        action_id: "helix.repeat_last_change",
     },
     Binding {
         key_token: ">",

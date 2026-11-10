@@ -271,6 +271,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `helix.move_up` | Move Up | Catalog |
 | `helix.paste_after` | Paste After Selection | Catalog |
 | `helix.paste_before` | Paste Before Selection | Catalog |
+| `helix.repeat_last_change` | Repeat Last Change | Catalog |
 | `helix.select_line` | Select Line | Catalog |
 | `helix.select_long_word_end` | Select to WORD End | Catalog |
 | `helix.select_long_word_next` | Select to Next WORD | Catalog |
@@ -844,4 +845,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**837 actions.**
+**838 actions.**
