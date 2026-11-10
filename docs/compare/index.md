@@ -2,8 +2,8 @@
 
 An honest feature-parity matrix, first against the two editors Vix is most
 often weighed against: **Vim** and **Emacs**, both stock, with no plugins or
-packages (the baseline the [for-vim-users](../for-vim-users/index.md) and
-[for-emacs-users](../for-emacs-users/index.md) pages also assume). Then
+packages (the baseline the [vix-for-vim-users](../vix-for-vim-users/index.md) and
+[vix-for-emacs-users](../vix-for-emacs-users/index.md) pages also assume). Then
 **Helix** (the other "modern terminal editor written in Rust"), **Zed** (a
 modern GUI editor, included as the "if you'd consider a GUI" comparison
 point), and two
@@ -12,9 +12,9 @@ Vix: [**Fresh**](https://github.com/sinelaw/fresh) (Rust, GPL-3.0-or-later)
 and [**ttt**](https://github.com/eugenioenko/ttt) (Go, MIT). Fresh and ttt
 are marked from their own READMEs and manifests as read on 2026-11-10; both
 move fast, so check them for anything that matters to you. See also
-[for-emacs-users](../for-emacs-users/index.md),
-[for-visual-studio-code-users](../for-visual-studio-code-users/index.md),
-and [for-helix-users](../for-helix-users/index.md) for the prose version
+[vix-for-emacs-users](../vix-for-emacs-users/index.md),
+[vix-for-visual-studio-code-users](../vix-for-visual-studio-code-users/index.md),
+and [vix-for-helix-users](../vix-for-helix-users/index.md) for the prose version
 of some of these same comparisons.
 
 `✓` built in, no plugin needed. `-` not built in (a plugin may exist).
@@ -48,7 +48,7 @@ of some of these same comparisons.
     [`gui/spec/index.md`](../../gui/spec/index.md).
 [^gvim]: A GUI build (`gvim`) exists alongside the terminal one; the
     comparison above is against stock terminal Vim, matching the
-    [for-vim-users](../for-vim-users/index.md) page's own baseline.
+    [vix-for-vim-users](../vix-for-vim-users/index.md) page's own baseline.
 [^fresh-gui]: Fresh Desktop, a separate standalone build.
 [^keymap]: Off by default (the **Apple** keymap), but a **Vi**,
     **Spacemacs** (Vi-modal plus a `Space` leader) or **Helix**

@@ -50,7 +50,7 @@ still open — T115 didn't touch Visual mode's own vocabulary. `cw`'s "acts
 like `ce`" special case and `cc`'s indentation preservation remain
 deliberately unimplemented too. None of the open items above are in this
 spec's own cut list; they're documented gaps, not silent omissions —
-`docs/for-vim-users/index.md`'s "Where Vim still wins" states the same list
+`docs/vix-for-vim-users/index.md`'s "Where Vim still wins" states the same list
 in user-facing terms.
 
 ## The audit
@@ -96,7 +96,7 @@ arm at all. `x` is its own hardcoded forward-delete-one-char action, not
 
 **No counts.** No count field anywhere; a bare digit before a motion is
 silently dropped (`3dw`, `5j`, `2gg` all do nothing useful — corroborated
-by the project's own `docs/for-vim-users/index.md`: "no counts (`3w`)").
+by the project's own `docs/vix-for-vim-users/index.md`: "no counts (`3w`)").
 
 **No named registers.** `dd`/`yy`/`p` all go through the single OS
 clipboard (`vix_clipboard`, with an in-memory fallback) — the same one
@@ -380,7 +380,7 @@ replaces `vim_normal_key`'s Normal-mode dispatch entirely once active for
 Vi and Spacemacs alike (Spacemacs keeps delegating for its shared
 vocabulary, just to the new engine instead of the old function); the `:`
 line and `SPC`-leader are untouched either way. T115 also updates
-`docs/for-vim-users/index.md`'s honest "where Vim still wins" section to
+`docs/vix-for-vim-users/index.md`'s honest "where Vim still wins" section to
 state exactly what v1 now covers — that page's current list ("no counts,
 no text objects, …") is this spec's whole reason to exist, and it should
 stop being true incrementally as T112–T115 land, not all at once at the

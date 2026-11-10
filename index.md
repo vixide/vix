@@ -112,15 +112,15 @@ More recordings — Org-roam, edit surfaces and themes — are in
 The full matrix, with footnotes and the places where Vix is behind, is in
 [the feature comparison](docs/compare/index.md). Coming from another
 editor? See the pages for
-[Vim](docs/for-vim-users/index.md),
-[Emacs](docs/for-emacs-users/index.md),
-[Spacemacs](docs/for-spacemacs-users/index.md),
-[Helix](docs/for-helix-users/index.md),
-[VS Code](docs/for-visual-studio-code-users/index.md),
-[IntelliJ](docs/for-intellij-users/index.md),
-[Eclipse](docs/for-eclipse-users/index.md),
-[Sublime](docs/for-sublime-users/index.md) and
-[Zed](docs/for-zed-users/index.md) users.
+[Vim](docs/vix-for-vim-users/index.md),
+[Emacs](docs/vix-for-emacs-users/index.md),
+[Spacemacs](docs/vix-for-spacemacs-users/index.md),
+[Helix](docs/vix-for-helix-users/index.md),
+[VS Code](docs/vix-for-visual-studio-code-users/index.md),
+[IntelliJ](docs/vix-for-intellij-users/index.md),
+[Eclipse](docs/vix-for-eclipse-users/index.md),
+[Sublime](docs/vix-for-sublime-users/index.md) and
+[Zed](docs/vix-for-zed-users/index.md) users.
 
 ## Install
 

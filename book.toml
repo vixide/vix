@@ -12,6 +12,15 @@ edit-url-template = "https://github.com/vixide/vix/edit/main/{path}"
 # Old page addresses that moved, so existing links keep working.
 [output.html.redirect]
 "/comparison/index.html" = "../compare/index.html"
+"/for-eclipse-users/index.html" = "../vix-for-eclipse-users/index.html"
+"/for-emacs-users/index.html" = "../vix-for-emacs-users/index.html"
+"/for-helix-users/index.html" = "../vix-for-helix-users/index.html"
+"/for-intellij-users/index.html" = "../vix-for-intellij-users/index.html"
+"/for-spacemacs-users/index.html" = "../vix-for-spacemacs-users/index.html"
+"/for-sublime-users/index.html" = "../vix-for-sublime-users/index.html"
+"/for-vim-users/index.html" = "../vix-for-vim-users/index.html"
+"/for-visual-studio-code-users/index.html" = "../vix-for-visual-studio-code-users/index.html"
+"/for-zed-users/index.html" = "../vix-for-zed-users/index.html"
 
 [output.html.fold]
 enable = true

@@ -94,9 +94,9 @@ the weight underneath, Vix is that idea, compiled.
 ## See also
 
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`docs/for-vim-users/index.md`](../for-vim-users/index.md) — the Vi keymap's
+- [`docs/vix-for-vim-users/index.md`](../vix-for-vim-users/index.md) — the Vi keymap's
   fuller modal vocabulary.
-- [`docs/for-emacs-users/index.md`](../for-emacs-users/index.md) — the Emacs
+- [`docs/vix-for-emacs-users/index.md`](../vix-for-emacs-users/index.md) — the Emacs
   keymap and Org story.
 - [`index.md`](../../index.md) — the full feature tour.
 

@@ -118,7 +118,7 @@ fn visual_mode_does_not_intercept_keys_it_does_not_recognize() {
 
 #[test]
 fn a_count_multiplies_h_and_l() {
-    // The old table has no count support at all -- `docs/for-vim-users`'s
+    // The old table has no count support at all -- `docs/vix-for-vim-users`'s
     // own gap list says so -- so this is real new behavior, not a
     // pre-existing path.
     let mut app = vi_app("modal-count-hl", "hello world\n", true);
