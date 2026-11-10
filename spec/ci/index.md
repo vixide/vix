@@ -399,7 +399,7 @@ release type is inferred from the version in `Cargo.toml`, and an unchanged
 version counts as a patch release, so a breaking public-API change fails until
 the affected crates are bumped to a new major version. A crate never yet published (no
 baseline) is excluded by name until its first release, then the `--exclude`
-is dropped. `vix-encoding` (new in T661) and `vix-matrix-protocol` (T793) are excluded now; `vix-input` and
+is dropped. `vix-encoding` (new in T661) is excluded now (`vix-matrix-protocol` was, until its first publish in 2.0.2); `vix-input` and
 `vix-tui` were, until their first publish in 1.8.0 (T644). `scripts/check` runs the
 same command and skips it with a note when `cargo-semver-checks` (>= 0.51) isn't
 installed. GitHub only for now: it needs network access to crates.io and
