@@ -474,6 +474,7 @@ mod tests {
         assert_eq!(lookup("ttt", "C-k", "p"), Some("file.open"));
         assert_eq!(lookup("ttt", "C-k", "s"), Some("file.save_as"));
         assert_eq!(lookup("ttt", "C-l", "f"), Some("lsp.format"));
+        assert_eq!(lookup("ttt", "C-k", "["), Some("editor.fold_toggle"));
         // The prefixes themselves are contexts, not bindings.
         assert_eq!(lookup("ttt", "", "C-k"), None);
     }
