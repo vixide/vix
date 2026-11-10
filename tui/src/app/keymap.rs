@@ -780,6 +780,19 @@ impl App {
             }
             return true;
         }
+        // `Alt` with punctuation or a non-character key (`Alt+.`, `Alt+Up`)
+        // is looked up as itself; `Alt`+letter stays a menu mnemonic.
+        if Self::alt(&key)
+            && !Self::ctrl(&key)
+            && !matches!(key.code, KeyCode::Char(c) if c.is_alphanumeric())
+        {
+            let token = crate::macros::encode_key(key);
+            if let Some(action) = vix_keybindings::lookup(keymap_id, "", &token) {
+                self.run_action(action);
+                return true;
+            }
+            return false;
+        }
         let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };

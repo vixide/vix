@@ -466,6 +466,8 @@ mod tests {
             Some("view.toggle_explorer_focus")
         );
         assert_eq!(lookup("fresh", "", "C-d"), None);
+        assert_eq!(lookup("fresh", "", "A-Up"), Some("edit.move_line_up"));
+        assert_eq!(lookup("ttt", "", "A-."), Some("tab.next"));
     }
 
     #[test]
