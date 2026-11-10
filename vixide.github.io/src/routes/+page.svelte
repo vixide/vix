@@ -47,27 +47,27 @@
   // Built into a stock install, with no plugin or extension. `✓` built
   // in, `-` not built in (a plugin or extension may exist), `partial`
   // limited (see the small print). The docs' comparison page has the
-  // footnoted version for the first columns.
-  const compareEditors = ['Vix', 'Vim', 'Emacs', 'Neovim', 'Helix', 'VS Code', 'Zed'];
+  // footnoted version for the first columns, Fresh and ttt included.
+  const compareEditors = ['Vix', 'Vim', 'Emacs', 'Neovim', 'Helix', 'VS Code', 'Zed', 'Fresh', 'ttt'];
   const compareRows: { feature: string; marks: string[] }[] = [
-    { feature: 'Runs in a terminal', marks: ['✓', '✓', '✓', '✓', '✓', '-', '-'] },
-    { feature: 'Native desktop window', marks: ['✓', '✓', '✓', '-', '-', '✓', '✓'] },
-    { feature: 'Common shortcuts by default (Ctrl+S, Ctrl+C, Ctrl+V)', marks: ['✓', '-', '-', '-', '-', '✓', '✓'] },
-    { feature: 'Menu bar', marks: ['✓', '-', '✓', '-', '-', '✓', '✓'] },
-    { feature: 'Command palette and fuzzy file finder', marks: ['✓', '-', 'partial', '-', '✓', '✓', '✓'] },
-    { feature: 'Multiple cursors', marks: ['✓', '-', '-', '-', '✓', '✓', '✓'] },
-    { feature: 'Language servers (LSP)', marks: ['✓', '-', '✓', '✓', '✓', 'partial', '✓'] },
-    { feature: 'Debugger (DAP)', marks: ['✓', '-', '-', '-', '✓', '✓', '✓'] },
-    { feature: 'Tree-sitter highlighting', marks: ['✓', '-', 'partial', '✓', '✓', '-', '✓'] },
-    { feature: 'Integrated terminal', marks: ['✓', '✓', '✓', '✓', '-', '✓', '✓'] },
-    { feature: 'Git client', marks: ['✓', '-', 'partial', '-', 'partial', '✓', '✓'] },
-    { feature: 'Jujutsu client', marks: ['✓', '-', '-', '-', '-', '-', '-'] },
-    { feature: 'Remote editing over SSH', marks: ['✓', '✓', '✓', '✓', '-', '-', '✓'] },
-    { feature: 'Database workbench', marks: ['✓', '-', 'partial', '-', '-', '-', '-'] },
-    { feature: 'HTTP client for .http files', marks: ['✓', '-', '-', '-', '-', '-', '-'] },
-    { feature: 'Org mode', marks: ['✓', '-', '✓', '-', '-', '-', '-'] },
-    { feature: 'Themes built in', marks: ['✓', '✓', '✓', '✓', '✓', '✓', '✓'] },
-    { feature: 'Interface in many languages', marks: ['✓', '✓', '-', '✓', '-', '-', '-'] }
+    { feature: 'Runs in a terminal', marks: ['✓', '✓', '✓', '✓', '✓', '-', '-', '✓', '✓'] },
+    { feature: 'Native desktop window', marks: ['✓', '✓', '✓', '-', '-', '✓', '✓', '✓', '-'] },
+    { feature: 'Common shortcuts by default (Ctrl+S, Ctrl+C, Ctrl+V)', marks: ['✓', '-', '-', '-', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Menu bar', marks: ['✓', '-', '✓', '-', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Command palette and fuzzy file finder', marks: ['✓', '-', 'partial', '-', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Multiple cursors', marks: ['✓', '-', '-', '-', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Language servers (LSP)', marks: ['✓', '-', '✓', '✓', '✓', 'partial', '✓', '✓', '✓'] },
+    { feature: 'Debugger (DAP)', marks: ['✓', '-', '-', '-', '✓', '✓', '✓', '-', '-'] },
+    { feature: 'Tree-sitter highlighting', marks: ['✓', '-', 'partial', '✓', '✓', '-', '✓', '✓', '-'] },
+    { feature: 'Integrated terminal', marks: ['✓', '✓', '✓', '✓', '-', '✓', '✓', '✓', '✓'] },
+    { feature: 'Git client', marks: ['✓', '-', 'partial', '-', 'partial', '✓', '✓', 'partial', '✓'] },
+    { feature: 'Jujutsu client', marks: ['✓', '-', '-', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Remote editing over SSH', marks: ['✓', '✓', '✓', '✓', '-', '-', '✓', 'partial', '-'] },
+    { feature: 'Database workbench', marks: ['✓', '-', 'partial', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'HTTP client for .http files', marks: ['✓', '-', '-', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Org mode', marks: ['✓', '-', '✓', '-', '-', '-', '-', '-', '-'] },
+    { feature: 'Themes built in', marks: ['✓', '✓', '✓', '✓', '✓', '✓', '✓', '✓', '✓'] },
+    { feature: 'Interface in many languages', marks: ['✓', '✓', '-', '✓', '-', '-', '-', '✓', '-'] }
   ];
 
   // Their copy is in the message catalog (faq.N.q / faq.N.a).
@@ -280,7 +280,10 @@
       palette, its Tree-sitter needs grammars installed, its VC commits and
       blames but stages no hunks, and its SQL mode is a console rather than a
       workbench; VS Code bundles language servers for
-      only a few web languages; Helix has Git gutters, not a Git panel. Vix’s remote editing and desktop windows
+      only a few web languages; Helix has Git gutters, not a Git panel; Fresh has a Git log, grep and
+      file finder but no staging, and its SSH workspaces are part of its
+      Orchestrator. Fresh and ttt are marked from their own READMEs and
+      manifests, as read on 10 November 2026. Vix’s remote editing and desktop windows
       are experimental. The
       <a href={`${docs}compare/index.html`}>full comparison</a> has
       footnotes and the places where Vix is behind.
