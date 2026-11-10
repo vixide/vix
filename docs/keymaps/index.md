@@ -243,6 +243,14 @@ action acts on the character under the cursor.
   selection; `;` collapses it; `,` drops extra cursors; `C` adds a cursor
   on the line below; `s` selects regex matches inside the selection; `*`
   jumps to the next occurrence of the selection.
+- **Several selections:** with more than one selection (after `C` or `s`),
+  the motions (`w` / `b` / `e`, `W` / `B` / `E`, `f` / `t` / `F` / `T`,
+  `x`, `h` / `j` / `k` / `l`) move every one, and `d`, `c` (then typing at
+  every cursor), `r`, `~`, `>` / `<`, `p` / `P` and `.` act on every one,
+  each as one undo step. `y` copies them all into the one register, joined
+  by newlines in buffer order; pasting into the same number of selections
+  puts one line back at each. The goto keys, `J`, `I` / `A`, `o` / `O`, `*`
+  and search still act on the primary selection only.
 - **Insert:** `i` / `a` before / after the selection, `I` / `A` at the line
   start / end, `o` / `O` a new line below / above; `Esc` returns to Normal.
 - **Counts:** a number before a command repeats it: `3w` selects the third
@@ -268,9 +276,8 @@ action acts on the character under the cursor.
 The status bar shows `-- NORMAL --`, `-- INSERT --`, `-- SELECT --`, or the
 `:` command line.
 
-Not yet: actions on every selection at once (they act
-on the primary one; typing in Insert mode does reach every cursor); named
-registers (yank and paste use the one clipboard); match mode beyond `mm`;
+Not yet: named registers (yank and paste use the one clipboard, so several
+selections share one register value); match mode beyond `mm`;
 view mode (`z`), window mode (`Ctrl+w`), the jump list, macros, `Alt-.`,
 and jump labels; reverse search with `?`; and the block cursor.
 

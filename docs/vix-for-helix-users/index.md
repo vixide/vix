@@ -43,9 +43,10 @@ cargo run                    # open Vix in the current directory
   `d`, `c`, `y` or `p` act; `v` extends; `g` goto, `mm`, the `Space` leader
   (`Space f`, `Space s`, `Space /`, `Space k`, `Space r`, `Space a`) and the
   `:` command line work as in Helix, with which-key hints after each
-  prefix, and so do counts (`3w`, `2x`, `5j`) and `.` repeat. What's
-  missing: actions on every selection at once (they act on the primary one), named registers, view and window
-  modes, and the block cursor. See
+  prefix, and so do counts (`3w`, `2x`, `5j`) and `.` repeat. With
+  several selections (`C`, `s`), motions and actions apply to every one.
+  What's missing: named registers (`y` joins several selections into one
+  register value), view and window modes, and the block cursor. See
   [`docs/keymaps/index.md`](../keymaps/index.md#helix).
 - **Not modal by default.** Vix starts in the **Apple** keymap; Helix is
   one menu choice away and the choice persists.
@@ -63,7 +64,8 @@ cargo run                    # open Vix in the current directory
 ## Where Helix still wins
 
 - **The full selection-first model.** Vix's Helix keymap covers the core,
-  but not multi-selection actions or Helix's other modes. If you rely on those daily, you'll notice.
+  multiple selections included, but not per-selection registers, rotating
+  or flipping selections, or Helix's other modes. If you rely on those daily, you'll notice.
 - **A tighter, more opinionated core.** Helix's smaller surface area is a
   deliberate design choice, not a gap to fill — some people prefer that.
 
@@ -80,7 +82,7 @@ Give it one afternoon on a real task:
    breakpoint from **Run** and step through it.
 
 If you depend on the parts of Helix's model Vix doesn't have yet
-(multi-selection actions, view and window modes), Vix won't replace Helix for
+(named registers, view and window modes), Vix won't replace Helix for
 you yet — and that's a fair place to land. But if
 what you actually wanted was "zero-config IDE, one binary, plus the things
 Helix leaves out on purpose," this is worth the afternoon.

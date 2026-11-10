@@ -263,9 +263,164 @@ pub fn paste(text: &str, start: usize, end: usize, clip: &str, before: bool) -> 
     }
 }
 
+/// How a selecting motion treats the selection it starts from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Select {
+    /// Select mode (`v`): keep the anchor and move only the cursor end.
+    pub extend: bool,
+    /// Select one past where the motion lands (`e`, `f`, `t`).
+    pub inclusive: bool,
+    /// How many times to run the motion (at least once).
+    pub count: usize,
+}
+
+/// One selection after a selecting motion: from `(anchor, cursor)`, select
+/// from the cursor to where `f(text, cursor)` lands (one past it when
+/// [`Select::inclusive`]), returning the new `(anchor, cursor)`. With
+/// [`Select::extend`] the anchor stays put.
+///
+/// With a count, `f` runs that many times and, as in Helix, each step
+/// starts afresh where the last one ended, so `3w` selects the third word
+/// (in Select mode, everything up to it). A motion that stops moving (at
+/// the buffer's end) ends the count early. The host applies this to every
+/// selection.
+///
+/// # Examples
+/// ```
+/// use vix_modal::helix::{select_by, Select};
+/// let next = |t: &str, p: usize| vix_modal::motion::word_forward(t, p, 1);
+/// let once = Select { extend: false, inclusive: false, count: 1 };
+/// assert_eq!(select_by("foo bar baz", (0, 0), once, next), (0, 4));
+/// let twice = Select { count: 2, ..once };
+/// assert_eq!(select_by("foo bar baz", (0, 0), twice, next), (4, 8));
+/// ```
+#[must_use]
+pub fn select_by(
+    text: &str,
+    (anchor, pos): (usize, usize),
+    how: Select,
+    f: impl Fn(&str, usize) -> usize,
+) -> (usize, usize) {
+    let len = text.chars().count();
+    let (mut prev, mut target) = (pos, f(text, pos));
+    for _ in 1..how.count {
+        let next = f(text, target);
+        if next == target {
+            break;
+        }
+        (prev, target) = (target, next);
+    }
+    let past = |p: usize| if how.inclusive { (p + 1).min(len) } else { p };
+    let anchor = if how.extend {
+        anchor
+    } else if prev == pos {
+        pos
+    } else {
+        past(prev)
+    };
+    (anchor, past(target))
+}
+
+/// `y`/`d`/`c` with several selections: their texts (in buffer order) as
+/// one register value. Each piece is followed by a newline unless it
+/// already ends with one or is the last, so whole-line pieces (`x`) stay
+/// whole lines and word pieces become one line each. [`split_selections`]
+/// splits it back for a paste into the same number of selections.
+///
+/// # Examples
+/// ```
+/// use vix_modal::helix::join_selections;
+/// assert_eq!(join_selections(&["foo", "bar"]), "foo\nbar");
+/// assert_eq!(join_selections(&["a\n", "b\n"]), "a\nb\n");
+/// ```
+#[must_use]
+pub fn join_selections<S: AsRef<str>>(pieces: &[S]) -> String {
+    let mut out = String::new();
+    for (i, piece) in pieces.iter().enumerate() {
+        let piece = piece.as_ref();
+        out.push_str(piece);
+        if i + 1 < pieces.len() && !piece.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// `p`/`P` into `n` selections: when `clip` holds exactly one line per
+/// selection, those lines (each keeping its newline when `clip` is whole
+/// lines), so a [`join_selections`] register pastes back one piece per
+/// selection; otherwise `None`, and every selection gets all of `clip`.
+///
+/// # Examples
+/// ```
+/// use vix_modal::helix::split_selections;
+/// assert_eq!(split_selections("foo\nbar", 2), Some(vec!["foo".into(), "bar".into()]));
+/// assert_eq!(split_selections("a\nb\n", 2), Some(vec!["a\n".into(), "b\n".into()]));
+/// assert_eq!(split_selections("foo\nbar", 3), None);
+/// ```
+#[must_use]
+pub fn split_selections(clip: &str, n: usize) -> Option<Vec<String>> {
+    if n < 2 {
+        return None;
+    }
+    let pieces: Vec<String> = if clip.ends_with('\n') {
+        clip.split_inclusive('\n').map(str::to_string).collect()
+    } else {
+        clip.split('\n').map(str::to_string).collect()
+    };
+    (pieces.len() == n).then_some(pieces)
+}
+
+/// Where `i` (or `a`, when `after`) starts typing for one selection: its
+/// start (or end), or, with nothing selected, the cursor (or one past it,
+/// like Vi's `a`).
+///
+/// # Examples
+/// ```
+/// use vix_modal::helix::insert_point;
+/// assert_eq!(insert_point("abc", (0, 2), true), 2);
+/// assert_eq!(insert_point("abc", (2, 0), false), 0);
+/// assert_eq!(insert_point("abc", (1, 1), true), 2);
+/// ```
+#[must_use]
+pub fn insert_point(text: &str, (anchor, cursor): (usize, usize), after: bool) -> usize {
+    match (anchor == cursor, after) {
+        (true, true) => (cursor + 1).min(text.chars().count()),
+        (true, false) => cursor,
+        (false, true) => anchor.max(cursor),
+        (false, false) => anchor.min(cursor),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn select_by_extends_in_select_mode_and_stops_at_the_end() {
+        let end = |t: &str, p: usize| crate::motion::word_end(t, p, 1);
+        let how = Select {
+            extend: true,
+            inclusive: true,
+            count: 9,
+        };
+        assert_eq!(select_by("ab cd", (1, 1), how, end), (1, 5));
+    }
+
+    #[test]
+    fn join_and_split_selections_round_trip() {
+        for pieces in [vec!["x", "y", "z"], vec!["one\n", "two\n"]] {
+            let joined = join_selections(&pieces);
+            let back = split_selections(&joined, pieces.len()).unwrap();
+            assert_eq!(back, pieces);
+        }
+        assert_eq!(join_selections::<&str>(&[]), "");
+        assert_eq!(
+            split_selections("a\nb", 1),
+            None,
+            "one selection takes it all"
+        );
+    }
 
     #[test]
     fn effective_prefers_a_nonempty_selection_and_sorts_it() {

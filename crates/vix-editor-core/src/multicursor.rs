@@ -108,6 +108,45 @@ pub enum CaretMove {
     BufferEnd,
 }
 
+/// One caret's edit for [`Editor::edit_selections`]: replace the range
+/// `[start, end)` (character offsets, in either order) with `text`, then
+/// leave the caret on `select` — a `(from, to)` range of character offsets
+/// *within* `text`, selected with the cursor at `to` (a bare caret when the
+/// two are equal).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectionEdit {
+    /// One end of the replaced range.
+    pub start: usize,
+    /// The other end of the replaced range.
+    pub end: usize,
+    /// The replacement text.
+    pub text: String,
+    /// What to select afterward, relative to the start of `text`.
+    pub select: (usize, usize),
+}
+
+impl SelectionEdit {
+    /// Replace `[start, end)` with `text`, leaving a bare caret after it.
+    #[must_use]
+    pub fn new(start: usize, end: usize, text: &str) -> Self {
+        let n = text.chars().count();
+        Self {
+            start,
+            end,
+            text: text.to_string(),
+            select: (n, n),
+        }
+    }
+
+    /// Select `[from, to)` of the inserted text afterward instead, with the
+    /// cursor at `to`.
+    #[must_use]
+    pub fn selecting(mut self, from: usize, to: usize) -> Self {
+        self.select = (from, to);
+        self
+    }
+}
+
 /// The start of a caret's replaced range: its selection's start, or its
 /// position when it has no selection.
 fn range_start((pos, anchor): (usize, Option<usize>)) -> usize {
@@ -216,15 +255,112 @@ impl Editor {
 
     /// Replace every caret's selection (or insert at a bare caret) with its own
     /// text — `texts[0]` for the primary, then one per extra caret in add
-    /// order — as one undo step. Carets are processed in ascending order with a
-    /// running offset `shift`, so each edit's coordinates stay valid in the
-    /// live buffer.
+    /// order — as one undo step, leaving a bare caret after each inserted
+    /// text. See [`Self::edit_selections`].
     fn multi_replace(&mut self, texts: &[&str]) {
-        let carets = self.gather();
-        // By the start of each caret's replaced range, so an enclosing selection
-        // is applied before a caret inside it.
-        let mut order: Vec<usize> = (0..carets.len()).collect();
-        order.sort_by_key(|&i| range_start(carets[i]));
+        let edits: Vec<SelectionEdit> = self
+            .gather()
+            .into_iter()
+            .enumerate()
+            .map(|(i, caret)| {
+                let (pos, anchor) = caret;
+                let end = anchor.map_or(pos, |a| a.max(pos));
+                SelectionEdit::new(range_start(caret), end, texts.get(i).copied().unwrap_or(""))
+            })
+            .collect();
+        self.edit_selections(&edits);
+    }
+
+    /// Every caret as an `(anchor, cursor)` pair — the primary first, then
+    /// the extras in add order. A caret with no selection has `anchor ==
+    /// cursor`. The selection-first keymaps (Helix) compute one edit or
+    /// motion per pair and hand the results back to
+    /// [`Self::set_caret_anchors`] or [`Self::edit_selections`].
+    ///
+    /// A primary selection whose cursor sits at neither end (Select All
+    /// leaves the cursor where it was) reads as `(start, end)`, so the pair
+    /// still covers the whole selection.
+    #[must_use]
+    pub fn caret_anchors(&self) -> Vec<(usize, usize)> {
+        let mut out: Vec<(usize, usize)> = self
+            .gather()
+            .into_iter()
+            .map(|(pos, anchor)| (anchor.unwrap_or(pos), pos))
+            .collect();
+        if let Some(s) = self.selection.filter(|s| !s.is_empty())
+            && self.cursor != s.start
+            && self.cursor != s.end
+        {
+            out[0] = (s.start, s.end);
+        }
+        out
+    }
+
+    /// Replace the carets with `carets`, `(anchor, cursor)` pairs in the
+    /// [`Self::caret_anchors`] order (the first becomes the primary). Offsets
+    /// are clamped to the buffer, and a caret landing on an earlier caret's
+    /// position merges into it. An empty slice leaves the carets alone.
+    pub fn set_caret_anchors(&mut self, carets: &[(usize, usize)]) {
+        if carets.is_empty() {
+            return;
+        }
+        self.scatter(
+            carets
+                .iter()
+                .map(|&(anchor, pos)| (pos, (anchor != pos).then_some(anchor)))
+                .collect(),
+        );
+    }
+
+    /// Move every caret with `f(anchor, cursor) -> (anchor, cursor)`, as
+    /// [`Self::set_caret_anchors`] would install the results.
+    pub fn map_carets(&mut self, mut f: impl FnMut(usize, usize) -> (usize, usize)) {
+        let moved: Vec<_> = self
+            .caret_anchors()
+            .into_iter()
+            .map(|(a, c)| f(a, c))
+            .collect();
+        self.set_caret_anchors(&moved);
+    }
+
+    /// Apply one [`SelectionEdit`] per caret as **one undo step**, then make
+    /// the carets the edits' results, in the order given (the first becomes
+    /// the primary). Edits are applied in buffer order with a running offset,
+    /// so each one's coordinates (all in the text as it was before any of
+    /// them) stay valid. An edit whose range starts inside one already
+    /// applied, or repeats its exact range, is dropped and its caret merges
+    /// into the earlier one (T575). Does nothing for an empty slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vix_editor_core::editor::Editor;
+    /// use vix_editor_core::multicursor::SelectionEdit;
+    ///
+    /// let mut ed = Editor::new("text", "ab cd", Vec::new()).unwrap();
+    /// ed.edit_selections(&[
+    ///     SelectionEdit::new(0, 2, "XY").selecting(0, 2),
+    ///     SelectionEdit::new(3, 5, "Z"),
+    /// ]);
+    /// assert_eq!(ed.get_content(), "XY Z");
+    /// assert_eq!(ed.caret_anchors(), vec![(0, 2), (4, 4)]);
+    /// ```
+    pub fn edit_selections(&mut self, edits: &[SelectionEdit]) {
+        if edits.is_empty() {
+            return;
+        }
+        let len = self.code_ref().len_chars();
+        let ranges: Vec<(usize, usize)> = edits
+            .iter()
+            .map(|e| {
+                let (s, t) = (e.start.min(len), e.end.min(len));
+                (s.min(t), s.max(t))
+            })
+            .collect();
+        // By range start, so an enclosing selection is applied before a
+        // caret inside it.
+        let mut order: Vec<usize> = (0..edits.len()).collect();
+        order.sort_by_key(|&i| ranges[i]);
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         // One transaction for all carets so a single Undo reverts the lot, and
@@ -232,39 +368,102 @@ impl Editor {
         code.tx();
         code.set_state_before(primary.0, primary.1);
         let mut shift: isize = 0;
-        // Indexed by the caret's original slot so add order survives the
+        // Indexed by the edit's slot so the given order survives the
         // position-sorted processing; merged-away carets stay `None`.
-        let mut result: Vec<Option<(usize, Option<usize>)>> = vec![None; carets.len()];
-        // End of the span the previous caret already replaced, in the original
-        // text. A caret that starts inside it overlaps that edit: its text is
-        // already gone, so it is merged into the earlier caret rather than
-        // applied at a shifted offset that no longer exists (T575).
-        let mut prev_end = 0;
-        let len = code.len_chars();
+        let mut result: Vec<Option<(usize, Option<usize>)>> = vec![None; edits.len()];
+        // The range the previous edit replaced, in the original text. An
+        // edit that starts inside it overlaps that edit: its text is already
+        // gone, so it merges into the earlier caret rather than applying at a
+        // shifted offset that no longer exists (T575).
+        let mut prev: Option<(usize, usize)> = None;
         for i in order {
-            let (pos, anchor) = carets[i];
-            let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
-            let (rstart, rend) = match anchor.filter(|&a| a != pos) {
-                Some(a) => (a.min(pos), a.max(pos)),
-                None => (pos, pos),
-            };
-            if rstart < prev_end {
+            let (start, end) = ranges[i];
+            if prev.is_some_and(|(ps, pe)| start < pe || (start, end) == (ps, pe)) {
                 continue;
             }
-            prev_end = rend;
-            let text = texts.get(i).copied().unwrap_or("");
-            let added = text.chars().count();
-            let at = shifted(rstart, shift);
-            if rend > rstart {
-                code.remove(at, shifted(rend, shift));
+            prev = Some((start, end));
+            let edit = &edits[i];
+            let added = edit.text.chars().count();
+            let at = shifted(start, shift);
+            if end > start {
+                code.remove(at, shifted(end, shift));
             }
-            code.insert(at, text);
-            shift += signed(added) - signed(rend - rstart);
-            result[i] = Some((at + added, None));
+            code.insert(at, &edit.text);
+            shift += signed(added) - signed(end - start);
+            let (from, to) = (edit.select.0.min(added), edit.select.1.min(added));
+            result[i] = Some((at + to, (from != to).then_some(at + from)));
         }
         let result: Vec<_> = result.into_iter().flatten().collect();
-        if let Some(&(p, _)) = result.first() {
-            code.set_state_after(p, None);
+        if let Some(&(p, a)) = result.first() {
+            code.set_state_after(p, a.map(|a| Selection::from_anchor_and_cursor(a, p)));
+        }
+        code.commit();
+        self.scatter(result);
+    }
+
+    /// Indent (or, when `outdent`, outdent) every line any caret touches —
+    /// a selection's lines, or a bare caret's own line — once each, as one
+    /// undo step, keeping every caret on its text. Indenting puts the
+    /// language's indent unit at column 0, as [`crate::actions::Indent`]
+    /// does; outdenting removes up to one unit of leading whitespace, as
+    /// [`crate::actions::UnIndent`] does.
+    pub fn indent_carets(&mut self, outdent: bool) {
+        let carets = self.gather();
+        let code = self.code_ref();
+        let mut rows: Vec<usize> = Vec::new();
+        for &caret in &carets {
+            let (pos, anchor) = caret;
+            let (r0, _) = code.point(range_start(caret));
+            let (r1, _) = code.point(anchor.map_or(pos, |a| a.max(pos)));
+            rows.extend(r0..=r1);
+        }
+        rows.sort_unstable();
+        rows.dedup();
+        let indent = code.indent();
+        let unit = indent.chars().count();
+        let primary = (self.cursor, self.selection);
+        let code = self.code_mut();
+        code.tx();
+        code.set_state_before(primary.0, primary.1);
+        // `(line start, chars added or removed)`, in original offsets: the
+        // rows go last to first, so an edit never moves a row still to come.
+        let mut changes: Vec<(usize, usize)> = Vec::new();
+        for &row in rows.iter().rev() {
+            let start = code.line_to_char(row);
+            if outdent {
+                let n = code.find_indent_at_line_start(row).unwrap_or(0).min(unit);
+                if n > 0 {
+                    code.remove(start, start + n);
+                    changes.push((start, n));
+                }
+            } else {
+                code.insert(start, &indent);
+                changes.push((start, unit));
+            }
+        }
+        let moved = |p: usize| -> usize {
+            if outdent {
+                let gone: usize = changes
+                    .iter()
+                    .filter(|&&(s, _)| s < p)
+                    .map(|&(s, n)| n.min(p - s))
+                    .sum();
+                p - gone
+            } else {
+                let added: usize = changes
+                    .iter()
+                    .filter(|&&(s, _)| s <= p)
+                    .map(|&(_, n)| n)
+                    .sum();
+                p + added
+            }
+        };
+        let result: Vec<_> = carets
+            .iter()
+            .map(|&(pos, anchor)| (moved(pos), anchor.map(moved)))
+            .collect();
+        if let Some(&(p, a)) = result.first() {
+            code.set_state_after(p, a.map(|a| Selection::from_anchor_and_cursor(a, p)));
         }
         code.commit();
         self.scatter(result);
@@ -785,6 +984,7 @@ fn occurrences(hay: &[char], needle: &[char]) -> Vec<usize> {
 #[cfg(test)]
 mod caret_tests {
     use crate::editor::Editor;
+    use crate::multicursor::SelectionEdit;
 
     fn ed(text: &str, cursor: usize) -> Editor {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();
@@ -1185,5 +1385,69 @@ mod caret_tests {
             mirror.splice(s.offset..s.offset + s.delete, s.insert.chars());
         }
         assert_eq!(mirror.into_iter().collect::<String>(), e.get_content());
+    }
+
+    #[test]
+    fn caret_anchors_round_trip_through_set_caret_anchors() {
+        let mut e = two("ab\ncd", 1, 4);
+        assert_eq!(e.caret_anchors(), vec![(1, 1), (4, 4)]);
+        e.set_caret_anchors(&[(0, 2), (3, 5)]);
+        assert_eq!(e.caret_anchors(), vec![(0, 2), (3, 5)]);
+        assert_eq!(e.caret_selection_texts(), vec!["ab", "cd"]);
+        e.map_carets(|_, c| (c, c));
+        assert_eq!(sorted_positions(&e), vec![2, 5]);
+        assert!(e.caret_selections().is_empty(), "map_carets collapsed them");
+        let mut e = ed("abcdef", 2);
+        e.apply(crate::actions::SelectAll);
+        assert_eq!(
+            e.caret_anchors(),
+            vec![(0, 6)],
+            "cursor inside the selection"
+        );
+    }
+
+    #[test]
+    fn edit_selections_edits_every_range_in_one_undo_step() {
+        let mut e = ed("foo bar foo", 0);
+        e.set_caret_anchors(&[(8, 11), (0, 3)]);
+        e.edit_selections(&[
+            SelectionEdit::new(8, 11, "ZZZZ").selecting(0, 4),
+            SelectionEdit::new(0, 3, "Q").selecting(0, 1),
+        ]);
+        assert_eq!(e.get_content(), "Q bar ZZZZ");
+        assert_eq!(e.caret_anchors(), vec![(6, 10), (0, 1)], "order kept");
+        e.undo();
+        assert_eq!(e.get_content(), "foo bar foo", "one undo step");
+    }
+
+    #[test]
+    fn edit_selections_merges_overlapping_and_repeated_ranges() {
+        let mut e = ed("abcdef", 0);
+        e.edit_selections(&[
+            SelectionEdit::new(0, 4, ""),
+            SelectionEdit::new(2, 5, "X"),
+            SelectionEdit::new(0, 4, ""),
+        ]);
+        assert_eq!(e.get_content(), "ef");
+        assert_eq!(e.caret_count(), 1);
+    }
+
+    #[test]
+    fn indent_carets_indents_each_touched_line_once() {
+        let mut e = ed("ab\ncd\nef", 0);
+        e.code_mut().set_indent(Some("  ".to_string()));
+        e.set_caret_anchors(&[(0, 0), (1, 1), (6, 7)]);
+        e.indent_carets(false);
+        assert_eq!(e.get_content(), "  ab\ncd\n  ef", "line 0 indented once");
+        assert_eq!(
+            e.caret_anchors(),
+            vec![(2, 2), (3, 3), (10, 11)],
+            "carets stay on their text"
+        );
+        e.indent_carets(true);
+        assert_eq!(e.get_content(), "ab\ncd\nef");
+        assert_eq!(e.caret_anchors(), vec![(0, 0), (1, 1), (6, 7)]);
+        e.undo();
+        assert_eq!(e.get_content(), "  ab\ncd\n  ef", "one undo step");
     }
 }

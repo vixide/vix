@@ -345,6 +345,23 @@ model needs, all over **character offsets** like everything else here:
   newline pastes as whole lines below the last selected line (or above the
   first), anything else right after the range end (or before its start);
   the result names the range to select afterward, the pasted text.
+- `select_by(text, (anchor, cursor), Select { extend, inclusive, count },
+  f)` — one selection after a selecting motion `f` (`w`, `e`, `f<char>`,
+  …): run `count` times, each step selecting afresh where the last ended,
+  the anchor kept in Select mode.
+- `insert_point(text, (anchor, cursor), after)` — where `i`/`a` start
+  typing for one selection.
+- `join_selections(pieces)` / `split_selections(clip, n)` — several
+  selections' texts as one register value (each piece followed by a
+  newline unless it already ends with one) and back, one line per
+  selection, for a paste into the same number of selections.
+
+**Several selections.** Every helper takes one selection, so the host
+applies it to each of the editor's carets: motions through
+`Editor::map_carets`, edits as one `SelectionEdit` per caret through
+`Editor::edit_selections` (one undo step), and `>`/`<` through
+`Editor::indent_carets` (`crates/vix-editor-core/spec/index.md`, §
+Multiple carets).
 
 Counts and `.` reuse this crate too, host-side. A count accumulates in the
 same `Count` the Vi keymap uses (`1`-`9` start it, `0` continues it) and
