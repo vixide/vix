@@ -4,10 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+keywords = ["editor", "ide", "gui", "gtk4", "vix"]
+categories = ["text-editors", "gui"]
+exclude = ["/wix"]
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+# The repository README, shown on crates.io (its "TUI & GUI capabilities"
+# section compares the front ends).
+readme = "../../README.md"
 description = "Vix desktop GUI on GTK 4 (gtk4-rs): the full Vix App in a native window."
 
 [dependencies]
@@ -35,3 +41,8 @@ screenshot = ["dep:cairo-rs"]
 
 [lints]
 workspace = true
+
+# Not in the release archives yet (source-only: `cargo install vix-gtk4`). dist
+# would otherwise ship every publishable binary.
+[package.metadata.dist]
+dist = false

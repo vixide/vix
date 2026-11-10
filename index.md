@@ -264,6 +264,20 @@ start with the [menus](docs/menus/index.md), the
 [action reference](docs/reference/actions.md) and
 [configuration](docs/configuration/index.md).
 
+## TUI & GUI capabilities
+
+Vix is one editor with eight front ends, every one on crates.io
+(`cargo install <name>`):
+
+- [**vix-tui**](https://crates.io/crates/vix-tui) is the terminal editor, the `vix` command, built on ratatui, and the App every other front end wraps. Try it first for the most complete and most tested Vix: it runs in any terminal on macOS, Windows and Linux, over SSH and inside tmux, and every release ships it on every channel.
+- [**vix-bui**](https://crates.io/crates/vix-bui) is Vix in a native window drawn by BUI, Blender's user-interface toolkit used as a library. Try it if you like Blender's dense, flat look or want to see an editor built on a toolkit made for 3D tools; it is GPL-3.0-only and needs CMake to build.
+- [**vix-egui**](https://crates.io/crates/vix-egui) is Vix in a native window drawn by egui through eframe, an immediate-mode GUI that redraws each frame. Try it for the simplest GPU front end, with input-method (IME) typing and a native macOS menu bar.
+- [**vix-gpui**](https://crates.io/crates/vix-gpui) is Vix in a native window on GPUI, the GPU-accelerated framework behind the Zed editor, through GPUI Kit. Try it for the operating system's own text rendering (CoreText, DirectWrite) and a native menu bar on macOS, Windows and Linux; it has no IME typing yet.
+- [**vix-gtk4**](https://crates.io/crates/vix-gtk4) is Vix in a GTK 4 window, with text drawn by Pango and Cairo. Try it on a GNOME or other GTK desktop, where it fits in natively, with a real menu bar and file dialog on every platform and full IME support; it needs GTK 4 installed.
+- [**vix-iced**](https://crates.io/crates/vix-iced) is Vix in a native window on iced, an Elm-style Rust GUI library, with text shaped by cosmic-text. Try it for its advanced text shaping and built-in per-glyph font fallback, which handle mixed scripts well, plus IME typing.
+- [**vix-slint**](https://crates.io/crates/vix-slint) is Vix in a native window on Slint, a declarative UI toolkit, drawn with OpenGL. Try it for native menu bars on macOS and Windows from a toolkit built for both desktop and embedded apps; it is GPL-3.0-only and has no IME typing yet.
+- [**vix-zgui**](https://crates.io/crates/vix-zgui) is Vix in a native window on zgui, a reactive Rust GUI with CSS styling and a retained wgpu renderer. Try it for the newest front end, with text shaped by parley and an idle window that replays its last frame instead of redrawing; it is a first version.
+
 ## Desktop GUIs
 
 The same editor — every panel, overlay and dock — also runs in a native window
@@ -272,8 +286,8 @@ installed like `vix-tui` under their own names (for example
 `brew install vixide/homebrew-tap/vix-gpui`): `vix-gpui` (GPUI), `vix-egui`
 (egui), `vix-iced` (iced) and `vix-slint` (Slint, GPL-3.0-only). Three more,
 `vix-gtk4` (GTK 4), `vix-bui` (BUI, Blender's UI library; GPL-3.0-only, needs
-CMake) and `vix-zgui` ([zgui](https://github.com/zortax/zgui); `cargo install
-vix-zgui` or `brew install vixide/tap/vix-zgui`), build from source. They are **experimental**, built side
+CMake) and `vix-zgui` ([zgui](https://github.com/zortax/zgui); also
+`brew install vixide/tap/vix-zgui`), build from source with `cargo install`. They are **experimental**, built side
 by side so the toolkits can be compared; see
 [`gui/spec/index.md`](gui/spec/index.md).
 

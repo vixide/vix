@@ -25,7 +25,9 @@ rust-version = "1.97"
 # the FSF holds incompatible with GPL-2.0-only. vix-slint overrides this with
 # GPL-3.0-only (Slint). `scripts/check-binary-licenses` recomputes it.
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
-publish = false
+# Every front end is on crates.io (`cargo install vix-egui`, …), published
+# after `vix-tui`, `vix-input` and `vix-i18n` at the same version.
+publish = true
 repository = "https://github.com/vixide/vix"
 homepage = "https://github.com/vixide/vix"
 authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]

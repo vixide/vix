@@ -4,10 +4,16 @@ version.workspace = true
 edition.workspace = true
 license = "GPL-3.0-only"
 publish.workspace = true
+keywords = ["editor", "ide", "gui", "bui", "vix"]
+categories = ["text-editors", "gui"]
+exclude = ["/wix"]
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+# The repository README, shown on crates.io (its "TUI & GUI capabilities"
+# section compares the front ends).
+readme = "../../README.md"
 description = "Vix desktop GUI on BUI (Blender's UI as a library): the full Vix App in a native window."
 
 [dependencies]
@@ -48,3 +54,8 @@ rfd = "0.17"
 
 [lints]
 workspace = true
+
+# Not in the release archives yet (source-only: `cargo install vix-bui`). dist
+# would otherwise ship every publishable binary.
+[package.metadata.dist]
+dist = false
