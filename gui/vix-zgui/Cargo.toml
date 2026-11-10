@@ -3,13 +3,16 @@ name = "vix-zgui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-# On crates.io (`cargo install vix-zgui`), unlike its siblings: the Homebrew
+# On crates.io (`cargo install vix-zgui`), like its siblings: the Homebrew
 # tap's `vix-zgui` formula builds this crate from source (T791).
-publish = true
+publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+# The repository README, shown on crates.io (its "TUI & GUI capabilities"
+# section compares the front ends).
+readme = "../../README.md"
 description = "Vix desktop GUI on zgui (reactive, CSS-styled, wgpu-drawn): the full Vix App in a native window."
 keywords = ["editor", "ide", "gui", "zgui", "vix"]
 categories = ["text-editors", "gui"]
@@ -35,3 +38,8 @@ rfd = "0.17"
 
 [lints]
 workspace = true
+
+# Not in the release archives yet (source-only: `cargo install vix-zgui`). dist
+# would otherwise ship every publishable binary.
+[package.metadata.dist]
+dist = false

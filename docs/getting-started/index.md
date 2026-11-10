@@ -43,7 +43,7 @@ brew install vixide/homebrew-tap/vix-gpui
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/latest/download/vix-gpui-installer.sh | sh
 ```
 
-`vix-slint` is GPL-3.0-only, `vix-gtk4` and `vix-bui` (GPL-3.0-only) are source-only for now, and `vix-zgui` compiles from source through `cargo install --locked vix-zgui` or `brew install vixide/tap/vix-zgui`. See
+`vix-slint` is GPL-3.0-only. `vix-gtk4`, `vix-bui` (GPL-3.0-only) and `vix-zgui` have no release binaries yet. Every GUI is on crates.io and compiles from source with `cargo install --locked <name>` (for example `cargo install --locked vix-egui`), and `vix-zgui` also has `brew install vixide/tap/vix-zgui`. See
 [`gui/spec/index.md`](../../gui/spec/index.md) (Distribution) for platforms
 and run-time libraries.
 

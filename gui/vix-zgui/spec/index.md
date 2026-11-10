@@ -9,7 +9,7 @@ zgui's retained wgpu renderer. It is the seventh front end in `gui/`, beside
 on macOS, and its window opens and runs there. Its pixels have not been
 checked yet, and no screenshot smoke test exists (see
 [Verified and unverified](#verified-and-unverified)). It is not part of `dist`
-releases. Unlike its siblings it is on crates.io, and the Homebrew tap has a
+releases. Like its siblings it is on crates.io, and the Homebrew tap has a
 `vix-zgui` formula that compiles that crate:
 
 ```sh
@@ -226,7 +226,8 @@ loop leaves vix-zgui out, and there is no `screenshot` feature.
 
 ## Distribution
 
-- **crates.io:** `vix-zgui` is the one GUI crate with `publish = true`. Its
+- **crates.io:** `vix-zgui` was the first GUI crate on crates.io; now every
+  front end is (`publish = true` for the workspace). Its
   workspace dependencies (`vix-tui`, `vix-input`, `vix-i18n`) carry
   `version = "2.0.2"` beside their paths, so the published crate builds
   against the published editor. Publish it after those crates, at the same

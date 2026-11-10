@@ -217,9 +217,16 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/vixide/vix/release
   binaries carry that license rather than Vix's five-way choice.
 - **`vix-bui` is not released** either (build it from source; it needs CMake
   and, on Linux, the X11 headers). Its binary would be GPL-3.0-only.
-- **`vix-zgui` has no release binaries** either. It is on crates.io
-  (`cargo install --locked vix-zgui`), and the Homebrew tap's hand-written
-  `vix-zgui` formula compiles that crate (`brew install vixide/tap/vix-zgui`).
+- **`vix-zgui` has no release binaries** either. The Homebrew tap's
+  hand-written `vix-zgui` formula compiles its crates.io crate
+  (`brew install vixide/tap/vix-zgui`).
+- **crates.io:** every front end is published (`publish = true` in this
+  workspace), so `cargo install --locked vix-egui` and the like build it from
+  source. Each `Cargo.toml` points `readme` at the repository `README.md`, whose
+  "TUI & GUI capabilities" section compares them. Publish them after
+  `vix-tui`, `vix-input` and `vix-i18n`, at the same version. `vix-gtk4`,
+  `vix-bui` and `vix-zgui` set `[package.metadata.dist] dist = false`,
+  because `dist` would otherwise ship every publishable binary.
 - **Windows** release builds use the `windows` subsystem, so no console
   window opens beside the GUI (which also means `--help` prints nothing
   there); debug builds keep the console.
