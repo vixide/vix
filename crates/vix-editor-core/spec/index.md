@@ -238,6 +238,8 @@ edit.
 | `copy-line` | `copy_line` | `CopyLine` |
 | `cut` | `cut` | `Cut` |
 | `cut-line` | `cut_line` | `CutLine` |
+| `cut-to-line-end` | `cut_to_line_end` | `CutToLineEnd` |
+| `select-word` | `select_word` | `SelectWord` |
 | `duplicate` | `duplicate` | `Duplicate` |
 | `duplicate-line` | `duplicate_line` | `DuplicateLine` |
 | `delete-line` | `delete_line` | `DeleteLine` |

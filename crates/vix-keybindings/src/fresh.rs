@@ -5,9 +5,7 @@
 //! All-`Ctrl`, no chords: one flat `""` context, the same shape as the
 //! Sublime and Zed tables, with Shift written out explicitly in each token.
 //! `Ctrl+D` (Fresh's add cursor at next match) is deliberately unbound so it
-//! reaches the editor's own `Ctrl+D`, which does the same. Fresh bindings
-//! with no Vix action yet (`Ctrl+K` delete to line end, `Ctrl+W` select
-//! word, `Ctrl+H` delete word backward) are left out.
+//! reaches the editor's own `Ctrl+D`, which does the same.
 
 use crate::{Binding, ChordContext};
 
@@ -69,6 +67,18 @@ const NORMAL: &[Binding] = &[
     Binding {
         key_token: "C-t",
         action_id: "edit.transpose_chars",
+    },
+    Binding {
+        key_token: "C-k",
+        action_id: "cut_to_line_end",
+    },
+    Binding {
+        key_token: "C-w",
+        action_id: "select_word",
+    },
+    Binding {
+        key_token: "C-h",
+        action_id: "delete_word_left",
     },
     // Many terminals emit the same control byte (0x1F) for Ctrl+/,
     // Ctrl+7, and Ctrl+_, so accept all three for Comment.

@@ -138,6 +138,10 @@ pub const CATALOG: &[Action] = &[
         title: "action.cut_line",
     },
     Action {
+        id: "cut_to_line_end",
+        title: "action.cut_to_line_end",
+    },
+    Action {
         id: "cycle_autocomplete_back",
         title: "action.cycle_autocomplete_back",
     },
@@ -616,6 +620,10 @@ pub const CATALOG: &[Action] = &[
     Action {
         id: "select_up",
         title: "action.select_up",
+    },
+    Action {
+        id: "select_word",
+        title: "action.select_word",
     },
     Action {
         id: "select_word_left",
