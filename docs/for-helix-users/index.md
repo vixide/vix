@@ -29,7 +29,7 @@ cargo run                    # open Vix in the current directory
   over/into, call stack, variables, watches) rather than Helix's own
   keybindings, but it's the same "already wired up" deal.
 - **Multiple cursors as a first-class feature.** **Edit → Select All
-  Occurrences** (bound to `Ctrl+D` in the **Sublime Text** keymap,
+  Occurrences** (bound to `Ctrl+D` in the **Sublime** keymap,
   `Ctrl+Shift+L` under **VSCode**), column (rectangular) selection, and
   manual multi-cursor placement are all built in — see
   [`docs/multiple-cursors/index.md`](../multiple-cursors/index.md).

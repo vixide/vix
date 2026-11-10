@@ -1,7 +1,7 @@
 //! Keyboard dispatch: the modal-overlay routing chain (`on_key`,
 //! `route_overlay_key` over the one table in `overlays.rs`), the ten
 //! keymap-specific dispatchers (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/
-//! Eclipse/Sublime and their `*_token` helpers), and the small pieces that
+//! Eclipse/Sublime/Zed and their `*_token` helpers), and the small pieces that
 //! read the active keymap for display (`mode_indicator`, `which_key`).
 //!
 //! Moved out of `app.rs` verbatim (T141, first slice); every other feature's
@@ -298,7 +298,12 @@ impl App {
                 }
             }
             Keymap::Sublime => {
-                if self.sublime_key(key) || self.global_shared_key(key) {
+                if self.table_ctrl_key("sublime", key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
+            Keymap::Zed => {
+                if self.table_ctrl_key("zed", key) || self.global_shared_key(key) {
                     return;
                 }
             }
@@ -706,18 +711,19 @@ impl App {
         }
     }
 
-    // ----- keymap: Sublime Text -------------------------------------------
+    // ----- keymaps: Sublime and Zed ---------------------------------------
 
-    /// Sublime Text keymap dispatch (`Ctrl` stands in for `Cmd` on macOS),
-    /// looked up in `vix-keybindings`' `"sublime"` table (T104f — see
-    /// `crates/vix-keybindings/src/sublime.rs`). Editing chords (undo/cut/
+    /// Dispatch for a flat, `Ctrl`-only keymap (`Ctrl` stands in for `Cmd`
+    /// on macOS): Sublime (T104f, `crates/vix-keybindings/src/sublime.rs`)
+    /// and Zed (`crates/vix-keybindings/src/zed.rs`), looked up in
+    /// `keymap_id`'s `vix-keybindings` table. Editing chords (undo/cut/
     /// copy/paste/select-all) fall through to the editor widget. Returns
     /// true if consumed.
-    fn sublime_key(&mut self, key: KeyEvent) -> bool {
+    fn table_ctrl_key(&mut self, keymap_id: &str, key: KeyEvent) -> bool {
         let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };
-        if let Some(action) = vix_keybindings::lookup("sublime", "", &token) {
+        if let Some(action) = vix_keybindings::lookup(keymap_id, "", &token) {
             self.run_action(action);
             return true;
         }

@@ -26,9 +26,11 @@ vix .                                      # open the current directory
 - **Zero-config language support.** Open a file and you get diagnostics,
   go-to-definition and highlighting. You don't install an extension per
   language, only the language server itself.
-- **Command palette and fuzzy file finder.** `Ctrl+Shift+P` and `Ctrl+P` in
-  the **VSCode** keymaps, which are the closest match to Zed's default
-  bindings, since Zed's own defaults follow VS Code.
+- **Your Zed shortcuts.** The **Zed** keymap (**View → Keymap → Zed**) binds
+  Zed's default keys, with `Ctrl` standing in for `Cmd`: `Ctrl+P` file
+  finder, `Ctrl+Shift+P` command palette, `Ctrl+Shift+O` outline, `Ctrl+T`
+  project symbols, `Ctrl+.` code actions, `Ctrl+Shift+G` Git panel and more.
+  See [`docs/keymaps/index.md`](../keymaps/index.md#zed).
 - **Multiple cursors.** Select all occurrences, column selection and manual
   cursor placement are built in. See
   [`docs/multiple-cursors/index.md`](../multiple-cursors/index.md).
@@ -87,8 +89,8 @@ vix .                                      # open the current directory
 Give it one afternoon on a real task:
 
 1. Install Vix and open a project: `vix .`
-2. Pick the **VSCode** keymap (**View → Keymap…**), so your Zed reflexes
-   mostly work, or **Vi** if you use Zed's Vim mode.
+2. Pick the **Zed** keymap (**View → Keymap…**), so your Zed reflexes
+   work, or **Vi** if you use Zed's Vim mode.
 3. Do what you'd do in Zed: jump to a definition, rename a symbol, stage a
    hunk from **Git → Changes…**, run a test in the integrated terminal.
 4. Then try what Zed can't: `ssh` into a server and run `vix` there, or open
@@ -105,8 +107,6 @@ worth the afternoon.
   matrix, including Zed.
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every
   binding.
-- [`docs/for-visual-studio-code-users/index.md`](../for-visual-studio-code-users/index.md)
-  — much of it applies, since Zed's defaults follow VS Code.
 - [`index.md`](../../index.md) — the full feature tour.
 
 ---

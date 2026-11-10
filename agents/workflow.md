@@ -152,7 +152,7 @@ the repo-root `spec/`. Notable ones:
 | `spec/worldwide`                        | No feature may favor one country or region    |
 | `spec/llms-json-and-llms-txt`, `spec/monorepo-github-pages` | AI maps; the website subproject |
 | `crates/vix-menu/spec`                  | Menu bar structure and every item             |
-| `crates/vix-keymap-model/spec`          | The ten keymaps and how keys dispatch         |
+| `crates/vix-keymap-model/spec`          | The eleven keymaps and how keys dispatch         |
 | `crates/vix-palette/spec`               | Palette modes and behavior                    |
 | `crates/vix-editor/spec`                | The editor host: tabs, splits, per-action specs |
 | `crates/vix-editor-core/spec`           | The editor widget: buffer, wrap, brackets, history |

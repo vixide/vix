@@ -1,7 +1,7 @@
 # Keybinding registry & override layer
 
 An exhaustive, queryable registry of every built-in keybinding across all
-10 keymaps, plus the user/script override layer built on it.
+11 keymaps, plus the user/script override layer built on it.
 `vix-script`'s `bind_key(key_token, command_id)` (T102) already lets a
 script *ask* for a key; `LoadedScript::bindings` already *records* the
 request. Nothing checks it against a real key event yet — that was T104's
@@ -11,9 +11,9 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: all 10 keymap ids are fully converted — T104a (Emacs), T104b
+**Status**: all 11 keymap ids are populated (Zed was added later, directly as a table) — T104a (Emacs), T104b
 (Vi + Spacemacs), T104c (VS Code), T104d (`IntelliJ`), T104e (Eclipse),
-T104f (Sublime Text), and T104g (Apple + `global_shared_key`, the last
+T104f (Sublime), and T104g (Apple + `global_shared_key`, the last
 slice). This spec now describes built behavior throughout, not intent —
 each conversion updated this file if reality and design turned out to
 disagree, same as T104a and T104b each already did once (§ "Schema
@@ -82,7 +82,8 @@ match self.active_keymap() {
     Keymap::IntelliJMacOS => { if self.intellij_key(key, false) || self.global_shared_key(key) { return; } }
     Keymap::IntelliJWindows => { if self.intellij_key(key, true) || self.global_shared_key(key) { return; } }
     Keymap::Eclipse => { if self.eclipse_key(key) || self.global_shared_key(key) { return; } }
-    Keymap::Sublime => { if self.sublime_key(key) || self.global_shared_key(key) { return; } }
+    Keymap::Sublime => { if self.table_ctrl_key("sublime", key) || self.global_shared_key(key) { return; } }
+    Keymap::Zed => { if self.table_ctrl_key("zed", key) || self.global_shared_key(key) { return; } }
 }
 ```
 
@@ -474,7 +475,7 @@ lesson again: a keymap not needing a schema change doesn't mean it has no
 real shape to get right, just that the *existing* shape (one flat context)
 happens to still fit.
 
-Sublime Text (T104f) reconfirmed the same shape and the same
+Sublime (T104f) reconfirmed the same shape and the same
 Shift-bit-explicit token need with no wrinkle of its own — the first
 keymap in the chain to find nothing new at all, itself worth recording as
 evidence the pattern had stabilized (not a gap in the audit).

@@ -138,6 +138,7 @@ fn view_keymap_submenu_actions_set_the_keymap() {
         "intellij-windows",
         "eclipse",
         "sublime",
+        "zed",
     ] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
@@ -145,7 +146,7 @@ fn view_keymap_submenu_actions_set_the_keymap() {
 
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "sublime");
+    assert_eq!(app.settings.keymap, "zed");
 }
 
 #[test]
@@ -171,6 +172,38 @@ fn an_unrecognized_persisted_keymap_id_is_reported_and_corrected_at_startup() {
             .iter()
             .any(|m| matches!(m.level, vix::messages::Level::Error)),
         "the unknown id is reported, not silently swallowed"
+    );
+}
+
+#[test]
+fn zed_keymap_signature_bindings() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:zed");
+    assert_eq!(app.settings.keymap, "zed");
+    // Ctrl+P is the file finder, Ctrl+Shift+P the command palette.
+    app.on_key(ctrl('p'));
+    assert!(app.file_browser.is_some(), "Ctrl+P opens the file finder");
+    assert!(app.palette.is_none());
+    app.on_key(esc());
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert!(
+        app.palette.is_some(),
+        "Ctrl+Shift+P opens the command palette"
+    );
+    app.on_key(esc());
+    // Ctrl+Shift+D duplicates the current line, as in Zed.
+    type_str(&mut app, "solo");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('d'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[..2],
+        ["solo", "solo"],
+        "Ctrl+Shift+D duplicates"
     );
 }
 

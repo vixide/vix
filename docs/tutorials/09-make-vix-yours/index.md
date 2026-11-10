@@ -80,7 +80,7 @@ A keymap decides what your keys *do*, not what they look like. Open
 **View → Keymap** — a submenu, not an overlay — and you'll find ten
 entries: **Apple** (the default), **VSCode macOS**, **VSCode Windows**,
 **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**, **IntelliJ
-Windows**, **Eclipse**, and **Sublime Text**. Selecting one applies it
+Windows**, **Eclipse**, **Sublime**, and **Zed**. Selecting one applies it
 immediately and saves it to the `keymap` setting, so it's what you get
 next launch too.
 

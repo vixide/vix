@@ -47,7 +47,7 @@
 - [Coming from Helix](for-helix-users/index.md)
 - [Coming from IntelliJ](for-intellij-users/index.md)
 - [Coming from Spacemacs](for-spacemacs-users/index.md)
-- [Coming from Sublime Text](for-sublime-users/index.md)
+- [Coming from Sublime](for-sublime-users/index.md)
 - [Coming from Vim](for-vim-users/index.md)
 - [Coming from Visual Studio Code](for-visual-studio-code-users/index.md)
 - [Coming from Zed](for-zed-users/index.md)
@@ -150,7 +150,8 @@
 - [IntelliJ macOS Keybindings](reference/keybindings-intellij-macos.md)
 - [IntelliJ Windows Keybindings](reference/keybindings-intellij-windows.md)
 - [Eclipse Keybindings](reference/keybindings-eclipse.md)
-- [Sublime Text Keybindings](reference/keybindings-sublime.md)
+- [Sublime Keybindings](reference/keybindings-sublime.md)
+- [Zed Keybindings](reference/keybindings-zed.md)
 
 # Contributing
 

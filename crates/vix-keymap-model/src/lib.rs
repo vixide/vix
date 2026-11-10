@@ -10,7 +10,7 @@
 //! - **Vi** — modal editing, where keys mean different things per mode.
 //! - **Spacemacs** — Vi-style modal editing plus a `Space` leader for menus
 //!   (e.g. `SPC f f` find file, `SPC g s` git status).
-//! - **`IntelliJ` macOS / Windows**, **Eclipse**, **Sublime Text** — the
+//! - **`IntelliJ` macOS / Windows**, **Eclipse**, **Sublime** — the
 //!   signature bindings of those editors.
 //!
 //! This crate is pure data: it lists the keymaps. The host persists the choice
@@ -78,8 +78,13 @@ pub const KEYMAPS: &[Keymap] = &[
     },
     Keymap {
         id: "sublime",
-        name: "Sublime Text",
-        tooltip: "Sublime Text bindings",
+        name: "Sublime",
+        tooltip: "Sublime bindings",
+    },
+    Keymap {
+        id: "zed",
+        name: "Zed",
+        tooltip: "Zed bindings",
     },
 ];
 

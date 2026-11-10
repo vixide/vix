@@ -1,9 +1,9 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix™ ships ten keymaps — **Apple**, **VSCode macOS**,
+file explorer, and more. Vix™ ships eleven keymaps — **Apple**, **VSCode macOS**,
 **VSCode Windows**, **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**,
-**IntelliJ Windows**, **Eclipse**, and **Sublime Text** — and exactly one is
+**IntelliJ Windows**, **Eclipse**, **Sublime**, and **Zed** — and exactly one is
 active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
@@ -24,6 +24,8 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | IntelliJ macOS | IntelliJ (macOS) | `Control-Shift-O` (Go to File) | `Control-Q` |
 | IntelliJ Windows | IntelliJ (Windows) | `Control-Shift-N` (Go to File) | `Control-Q` |
 | Eclipse     | Eclipse (Windows)        | `Control-Shift-R` (Open Resource) | `Control-Q` |
+| Sublime     | Sublime bindings         | `Control-P` (Goto Anything) | — |
+| Zed         | Zed bindings             | `Control-P` (file finder)  | `Control-Q`   |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
 
@@ -133,7 +135,7 @@ Modal editing:
 
 The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
 
-### Sublime Text
+### Sublime
 
 Sublime's signature shortcuts (with `Ctrl` standing in for `Cmd`):
 
@@ -147,6 +149,29 @@ Sublime's signature shortcuts (with `Ctrl` standing in for `Cmd`):
 - `Ctrl+B` build (runs the test suite), `` Ctrl+` `` the console (terminal).
 - `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Shift+T` save / save as /
   close / reopen closed.
+
+### Zed
+
+Zed's default Linux shortcuts (on macOS Zed uses `Cmd` where Linux uses
+`Ctrl`; here `Ctrl` stands in for both):
+
+- `Ctrl+P` (or `Ctrl+E`) file finder, `Ctrl+Shift+P` Command Palette.
+- `Ctrl+Shift+O` outline (symbols in this file), `Ctrl+T` project symbols,
+  `Ctrl+G` go to line.
+- `Ctrl+D` select the next occurrence, `Ctrl+Shift+L` select all occurrences,
+  `Ctrl+L` select line, `Ctrl+M` jump to the enclosing bracket.
+- `Ctrl+Shift+D` duplicate line, `Ctrl+Shift+K` delete line, `Ctrl+/` comment.
+- `Ctrl+F` find, `Ctrl+H` replace, `Ctrl+Shift+F` project search.
+- `Ctrl+.` code actions, `Ctrl+Shift+M` diagnostics.
+- `Ctrl+B` left dock (the file explorer), `Ctrl+Shift+E` focus the explorer,
+  `Ctrl+J` bottom dock, `` Ctrl+` `` terminal, `Ctrl+Shift+G` Git panel,
+  `Ctrl+,` settings.
+- `Ctrl+N` / `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Shift+W` /
+  `Ctrl+Shift+T` / `Ctrl+Q` new / save / save as / close / close all /
+  reopen closed / quit.
+
+Zed's two-key `Ctrl+K` chords (for example `Ctrl+K Ctrl+T` for the theme
+picker) are not bound yet; use the command palette.
 
 ## Not Yet Built
 
