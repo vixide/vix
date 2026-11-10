@@ -346,6 +346,18 @@ model needs, all over **character offsets** like everything else here:
   first), anything else right after the range end (or before its start);
   the result names the range to select afterward, the pasted text.
 
+Counts and `.` reuse this crate too, host-side. A count accumulates in the
+same `Count` the Vi keymap uses (`1`-`9` start it, `0` continues it) and
+the next command reads it: the host runs a word motion that many times,
+each step selecting afresh from where the last ended (`3w` selects the
+third word), `select_lines` that many times (`2x`), and passes it straight
+to `motion`'s `f`/`t`/`F`/`T` functions. `.` is **semantic**, unlike the Vi
+keymap's keystroke replay (§ Design: dot-repeat): Helix acts on whatever
+is selected when `.` is pressed, so the host records *what* the last change
+was (delete, change with its typed text, insert with its typed text,
+replace with a char, switch case, indent, outdent, paste with its count)
+and applies it again with these same helpers.
+
 ## v1 cut line, summarized
 
 Explicit, per `tasks.md` T111 ("no ex commands, no macros — Vix already has

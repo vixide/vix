@@ -217,7 +217,8 @@ the live `:` command line.
 
 It reuses the Vi keymap's machinery rather than a second engine: the same
 Insert-mode flag and mode field (Select mode is `vix_modal::Mode::Visual`),
-the same `:` command line, the same pending-key slot, the `vim.*` insert
+the same `:` command line, the same pending-key slot, the same count
+accumulator (`modal_count`), the `vim.*` insert
 entries, the unnamed register (the clipboard), and `vix_modal::motion`'s
 pure motions. The selection is the editor's own `[anchor, cursor)` selection;
 the selection arithmetic (`x` growing by lines, `p` placement, `r`, `~`,
@@ -255,8 +256,27 @@ and function keys go to the shared layer (menu mnemonics, `F10`). Like Vi,
 | `i` / `a` | Insert before the selection / append after it |
 | `I` / `A` | Insert at the first non-blank / append at the line end |
 | `o` / `O` | Open a line below / above and enter Insert |
+| `.` | Repeat the last change on the current selection |
 | `Esc` | Leave Select mode (the selection stays) |
 | `:` | Open the command line |
+
+**Counts.** `1`-`9` start a count and `0` continues one; the next command
+uses it, as in Helix. `h`/`j`/`k`/`l` move that many times. `w`/`b`/`e`
+and `W`/`B`/`E` run that many times, each step selecting afresh from where
+the last ended, so `3w` selects the third word (in Select mode the anchor
+stays, so `v3w` selects through it). `x` adds that many lines (`2x` selects
+two), `f`/`t`/`F`/`T` find the count-th character, `p`/`P` paste that many
+copies, `u`/`U`/`>`/`<` run that many times, `{N}gg` goes to line `N`, and
+`{N}.` repeats `N` times. Other commands ignore a count. A motion that
+stops moving (at the buffer's end) ends its count early; repeats are capped
+at 10,000.
+
+**`.` repeat.** `.` repeats the last change on what is selected *now* (or
+the character under the cursor): `d`; `c` and the text typed before `Esc`;
+`i`/`a` and the text typed before `Esc`; `r` + char; `~`; `>`/`<`; and
+`p`/`P` with their count. The change is remembered by what it did, not by
+its keys, so `w d w .` deletes the next word too. Motions, `y`, undo and
+redo do not change what `.` repeats. A repeated `c` is one undo step.
 
 `g`, `m`, and `Space` are prefixes; `f`, `t`, `F`, `T`, and `r` wait for a
 character. The next key completes them, and `Esc` or an unbound key cancels.
@@ -297,7 +317,6 @@ names: `:write`, `:quit`, `:quit!`, `:write-quit`, and `:o` / `:open`
 
 These Helix features are not implemented in Vix yet:
 
-- Counts (`3w`, `2x`) and the `.` repeat.
 - Multiple selections as first-class objects: `d`/`c`/`y`/`p`/`r`/`~`, the
   motions, and Select mode act on the primary selection only; extra cursors
   (from `C` or `s`) are the editor's multi-cursor carets, which typing in
@@ -307,7 +326,7 @@ These Helix features are not implemented in Vix yet:
   are one clipboard here, so `Space p`/`Space y` behave like `p`/`y`.
 - Match mode beyond `m m` (`m s` surround, `m i`/`m a` text objects).
 - View mode (`z`), window mode (`Ctrl+w`), jump list (`Ctrl+o`/`Ctrl+i`),
-  macros (`q`/`Q`), `.` and `Alt-.` repeat, `gw` jump labels.
+  macros (`q`/`Q`), `Alt-.` (repeat the last motion), `gw` jump labels.
 - `?` searches forward like `/` (no reverse search), and `*` jumps to the
   next occurrence rather than only setting the search pattern.
 - In Select mode the goto keys (`gg`, `ge`, `gh`, `gl`) move the cursor

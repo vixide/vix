@@ -716,9 +716,11 @@ operators already established, not a schema change:
 
 As with Vi, entering a prefix (`g`, `m`, `Space`) is a mode transition and
 stays host-side, and so do the keys that take a character argument
-(`f`/`t`/`F`/`T`/`r`), `:`, `Esc` and Insert mode. The selection-first
-commands are `helix.*` action ids (`helix.select_word_next`,
-`helix.delete`, …, `run_helix_action` in `tui/src/app/helix.rs`); every
+(`f`/`t`/`F`/`T`/`r`), the count digits (a count is state, not an
+action), `:`, `Esc` and Insert mode. The selection-first commands are
+`helix.*` action ids (`helix.select_word_next`, `helix.delete`, `.` →
+`helix.repeat_last_change`, …, `run_helix_action` in
+`tui/src/app/helix.rs`, which reads the pending count); every
 other row reuses an existing Vix action id (`edit.undo`, `nav.goto_definition`,
 `file.open`, …). The F1 overlay shows all four contexts (`table_rows_for`),
 and the which-key popup lists a pending prefix's context.

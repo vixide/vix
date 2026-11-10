@@ -2785,6 +2785,9 @@ pub struct App {
     /// exactly what `.` replays, `{count}.` overriding its recorded count.
     /// Empty until the first such change happens.
     modal_last_change: Vec<KeyEvent>,
+    /// The Helix keymap's `.` state: the last change and the Insert-mode
+    /// session `c`/`i`/`a` opened (`tui/src/app/helix.rs`).
+    helix: helix::HelixState,
 }
 
 impl App {
@@ -3129,6 +3132,7 @@ impl App {
             modal_pending_text_object: None,
             modal_recording: Vec::new(),
             modal_last_change: Vec::new(),
+            helix: helix::HelixState::default(),
         };
         app.validate_keymap();
         app
@@ -10666,6 +10670,7 @@ impl App {
         self.modal_pending_text_object = None;
         self.modal_recording.clear();
         self.modal_last_change.clear();
+        self.helix = helix::HelixState::default();
         self.vim_cmd = None;
         self.spacemacs_leader = None;
         self.vim_pending = None;

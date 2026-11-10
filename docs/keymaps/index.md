@@ -242,6 +242,12 @@ action acts on the character under the cursor.
   jumps to the next occurrence of the selection.
 - **Insert:** `i` / `a` before / after the selection, `I` / `A` at the line
   start / end, `o` / `O` a new line below / above; `Esc` returns to Normal.
+- **Counts:** a number before a command repeats it: `3w` selects the third
+  word (`v3w` everything through it), `2x` two lines, `5j` moves down five,
+  `3fx` finds the third `x`, `2p` pastes twice, `10gg` goes to line 10.
+- **Repeat:** `.` repeats the last change on the current selection: `d`,
+  `c` with what you typed, `i` / `a` with what you typed, `r`, `~`, `>` /
+  `<`, and `p` / `P`. `3.` repeats it three times.
 - **Goto (`g`):** `gg` / `ge` file start / end, `gh` / `gl` / `gs` line start
   / end / first non-blank, `gd` definition, `gD` declaration, `gy` type
   definition, `gi` implementation, `gr` references, `gn` / `gp` next /
@@ -259,11 +265,11 @@ action acts on the character under the cursor.
 The status bar shows `-- NORMAL --`, `-- INSERT --`, `-- SELECT --`, or the
 `:` command line.
 
-Not yet: counts and `.` repeat; actions on every selection at once (they act
+Not yet: actions on every selection at once (they act
 on the primary one; typing in Insert mode does reach every cursor); named
 registers (yank and paste use the one clipboard); match mode beyond `mm`;
-view mode (`z`), window mode (`Ctrl+w`), the jump list, macros, and jump
-labels; reverse search with `?`; and the block cursor.
+view mode (`z`), window mode (`Ctrl+w`), the jump list, macros, `Alt-.`,
+and jump labels; reverse search with `?`; and the block cursor.
 
 ## Not Yet Built
 

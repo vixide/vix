@@ -1158,3 +1158,104 @@ fn helix_help_overlay_lists_its_prefix_chords() {
     assert!(keys.contains(&"g e"), "goto chords listed: {keys:?}");
     assert!(keys.contains(&"Space f"), "Space chords listed: {keys:?}");
 }
+
+/// The active buffer's text.
+fn helix_text(app: &App) -> String {
+    app.editor.active_tab().unwrap().text()
+}
+
+/// The active buffer's cursor offset.
+fn helix_cursor(app: &App) -> usize {
+    app.editor.active_tab().unwrap().editor.get_cursor()
+}
+
+#[test]
+fn helix_count_w_selects_the_third_word_and_d_deletes_it() {
+    let mut app = helix_app("one two three four", 0);
+    type_str(&mut app, "3w");
+    assert_eq!(
+        selected(&mut app).as_deref(),
+        Some("three "),
+        "as in Helix, 3w lands on the third word"
+    );
+    app.on_key(key('d'));
+    assert_eq!(helix_text(&app), "one two four");
+}
+
+#[test]
+fn helix_count_w_in_select_mode_extends_through_the_third_word() {
+    let mut app = helix_app("one two three four", 0);
+    type_str(&mut app, "v3w");
+    assert_eq!(selected(&mut app).as_deref(), Some("one two three "));
+}
+
+#[test]
+fn helix_count_x_selects_lines_and_d_deletes_them() {
+    let mut app = helix_app("a\nb\nc\n", 0);
+    type_str(&mut app, "2x");
+    assert_eq!(selected(&mut app).as_deref(), Some("a\nb\n"));
+    app.on_key(key('d'));
+    assert_eq!(helix_text(&app), "c\n");
+}
+
+#[test]
+fn helix_count_j_moves_down_lines_and_zero_continues_a_count() {
+    let mut app = helix_app("a\nb\nc\nd", 0);
+    type_str(&mut app, "2j");
+    assert_eq!(helix_cursor(&app), 4, "2j lands on the third line");
+    app.on_key(key('k'));
+    assert_eq!(helix_cursor(&app), 2, "the count was used up");
+    let mut app = helix_app("abcdefghijkl", 0);
+    type_str(&mut app, "10l");
+    assert_eq!(helix_cursor(&app), 10, "0 continues a count");
+}
+
+#[test]
+fn helix_count_gg_goes_to_that_line() {
+    let mut app = helix_app("a\nb\nc\nd", 0);
+    type_str(&mut app, "3gg");
+    assert_eq!(helix_cursor(&app), 4);
+}
+
+#[test]
+fn helix_dot_repeats_a_delete_on_the_new_selection() {
+    let mut app = helix_app("foo bar baz qux", 0);
+    type_str(&mut app, "wd");
+    assert_eq!(helix_text(&app), "bar baz qux");
+    type_str(&mut app, "w.");
+    assert_eq!(helix_text(&app), "baz qux");
+    // `{count}.` repeats that many times (on the character under the cursor).
+    type_str(&mut app, "2.");
+    assert_eq!(helix_text(&app), "z qux");
+}
+
+#[test]
+fn helix_dot_repeats_a_change_with_its_typed_text() {
+    let mut app = helix_app("foo bar baz", 0);
+    type_str(&mut app, "wcnew ");
+    app.on_key(esc());
+    assert_eq!(helix_text(&app), "new bar baz");
+    type_str(&mut app, "w.");
+    assert_eq!(helix_text(&app), "new new baz");
+    // `.` leaves Normal mode on: the next letters are commands, not text.
+    app.on_key(key('u'));
+    assert_eq!(helix_text(&app), "new bar baz", "u undoes the repeat");
+}
+
+#[test]
+fn helix_dot_repeats_a_replace() {
+    let mut app = helix_app("abc def", 0);
+    type_str(&mut app, "erx");
+    assert_eq!(helix_text(&app), "xxx def");
+    type_str(&mut app, "e.");
+    assert_eq!(helix_text(&app), "xxxxxxx");
+}
+
+#[test]
+fn helix_dot_repeats_switch_case() {
+    let mut app = helix_app("ab cd", 0);
+    type_str(&mut app, "w~");
+    assert_eq!(helix_text(&app), "AB cd");
+    type_str(&mut app, "w.");
+    assert_eq!(helix_text(&app), "AB CD");
+}

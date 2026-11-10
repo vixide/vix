@@ -290,6 +290,10 @@ pub const CATALOG: &[Action] = &[
         title: "action.helix.paste_before",
     },
     Action {
+        id: "helix.repeat_last_change",
+        title: "action.helix.repeat_last_change",
+    },
+    Action {
         id: "helix.select_line",
         title: "action.helix.select_line",
     },
@@ -881,7 +885,8 @@ pub mod dispatch_scan {
         ("tui/src/app/textobjects.rs", "run_textobject_action"),
         ("tui/src/app/insert_tools.rs", "run_tools_action"),
         ("tui/src/app/keymap.rs", "run_vim_action"),
-        ("tui/src/app/helix.rs", "run_helix_action"),
+        ("tui/src/app/helix.rs", "run_helix_motion"),
+        ("tui/src/app/helix.rs", "run_helix_edit"),
         ("tui/src/app/git.rs", "run_git_action"),
         ("tui/src/app/git_review.rs", "run_git_review_action"),
         (
