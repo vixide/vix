@@ -137,7 +137,8 @@ Modal editing:
 - **Command line:** `:w`, `:q`, `:q!`, `:wq` / `:x`, `:N` (go to line),
   `:e [path]`, `:Ex`.
 
-The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
+The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line,
+followed by any count or operator you've typed so far (`-- NORMAL -- 2d3`).
 
 ### Sublime
 
@@ -219,7 +220,9 @@ chords: press `Ctrl+K` or `Ctrl+L`, release, then press the letter.
 - `Ctrl+L` (language) then: `F` format, `R` references, `I` go to
   implementation, `T` go to type definition, `O` organize imports.
 
-An unbound second key ends the chord and is not typed.
+An unbound second key ends the chord and is not typed. While a chord is
+pending, the status bar shows `C-k-` (or `C-l-`) and the which-key popup lists
+the second keys.
 
 ### Helix
 

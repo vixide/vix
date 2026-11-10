@@ -1259,3 +1259,34 @@ fn helix_dot_repeats_switch_case() {
     type_str(&mut app, "w.");
     assert_eq!(helix_text(&app), "AB CD");
 }
+
+#[test]
+fn modal_indicator_shows_the_count_and_operator_being_typed() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:vi");
+    let normal = app.mode_indicator().unwrap();
+    app.on_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+    assert_eq!(app.mode_indicator().unwrap(), format!("{normal} 2"));
+    app.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    assert_eq!(app.mode_indicator().unwrap(), format!("{normal} 2d3"));
+    app.on_key(esc());
+    app.run_action("view.keymap:helix");
+    let normal = app.mode_indicator().unwrap();
+    app.on_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
+    assert_eq!(app.mode_indicator().unwrap(), format!("{normal} 4"));
+}
+
+#[test]
+fn table_keymap_shows_a_pending_chord_and_its_which_key_rows() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:ttt");
+    assert_eq!(app.mode_indicator(), None);
+    app.on_key(ctrl('k'));
+    assert_eq!(app.mode_indicator().as_deref(), Some("C-k-"));
+    let (title, rows) = app.which_key().expect("which-key lists the chord");
+    assert_eq!(title, "C-k");
+    assert!(rows.iter().any(|(k, a)| k == "p" && a == "file.open"));
+    app.on_key(esc());
+    assert_eq!(app.mode_indicator(), None, "the chord ends");
+}

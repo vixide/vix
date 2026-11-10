@@ -421,11 +421,37 @@ impl App {
             Keymap::Helix => Some(if let Some(cmd) = &self.vim_cmd {
                 format!(":{cmd}")
             } else if self.modal_mode == vix_modal::Mode::Visual {
-                t!("status.helix_select").to_string()
+                self.with_pending_keys(t!("status.helix_select").to_string())
             } else {
                 self.modal_mode_indicator()
             }),
+            // A table keymap's pending chord prefix (ttt's or Zed's `Ctrl+K`).
+            Keymap::Sublime | Keymap::Zed | Keymap::Fresh | Keymap::Ttt => {
+                self.table_chord.map(|c| format!("{c}-"))
+            }
             _ => None,
+        }
+    }
+
+    /// `indicator` followed by the keys typed so far toward a modal command
+    /// (Vim's `showcmd`): a pending operator with its count, then the count
+    /// being typed, as in `-- NORMAL -- 2d3`. Just `indicator` when nothing
+    /// is pending.
+    fn with_pending_keys(&self, indicator: String) -> String {
+        let mut keys = String::new();
+        if let Some(op) = self.modal_pending_operator {
+            if self.modal_operator_count > 1 {
+                keys.push_str(&self.modal_operator_count.to_string());
+            }
+            keys.push(op);
+        }
+        if !self.modal_count.is_empty() {
+            keys.push_str(&self.modal_count.value().to_string());
+        }
+        if keys.is_empty() {
+            indicator
+        } else {
+            format!("{indicator} {keys}")
         }
     }
 
@@ -434,12 +460,13 @@ impl App {
     /// [`vix_modal::Mode`], not just Insert/Normal, so this stays correct
     /// once `Settings::modal_engine` starts producing Visual states too.
     fn modal_mode_indicator(&self) -> String {
-        match self.modal_mode {
+        let indicator = match self.modal_mode {
             vix_modal::Mode::Insert => t!("status.vim_insert").to_string(),
             vix_modal::Mode::Visual => t!("status.vim_visual").to_string(),
             vix_modal::Mode::VisualLine => t!("status.vim_visual_line").to_string(),
             vix_modal::Mode::Normal => t!("status.vim_normal").to_string(),
-        }
+        };
+        self.with_pending_keys(indicator)
     }
 
     /// The which-key hint for a pending key prefix: `(title, [(keys, action)])`.
@@ -491,6 +518,9 @@ impl App {
                 Some((format!("SPC {seq}"), rows))
             }
             Keymap::Helix => self.helix_which_key(),
+            table @ (Keymap::Sublime | Keymap::Zed | Keymap::Fresh | Keymap::Ttt) => self
+                .table_chord
+                .map(|c| (c.to_string(), Self::context_rows(table.id(), c))),
             _ => None,
         }
     }
@@ -501,9 +531,15 @@ impl App {
     /// overlay from the one registry instead of each walking its own copy
     /// of the table.
     fn emacs_context_rows(context: &str) -> Vec<(String, String)> {
+        Self::context_rows("emacs", context)
+    }
+
+    /// Every `(key_token, action_id)` binding in keymap `keymap_id`'s
+    /// `context`, as owned strings for display.
+    fn context_rows(keymap_id: &str, context: &str) -> Vec<(String, String)> {
         vix_keybindings::TABLES
             .iter()
-            .find(|t| t.keymap_id == "emacs")
+            .find(|t| t.keymap_id == keymap_id)
             .into_iter()
             .flat_map(|t| t.contexts)
             .find(|c| c.name == context)
