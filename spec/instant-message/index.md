@@ -6,7 +6,8 @@ crates, the IRC client, the IM menu, panel and App wiring (`im` Cargo
 feature), anchored threads in the editor, status-bar unread and mention
 indicators with the notify policy, disk history, session chat over Cowork,
 and the session roster, `/follow` and shared session notes. Not yet: Matrix
-(T758); threads are shared through Git only, not over Cowork. User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
+(T758's spike chose a helper process, [Matrix](matrix.md); the bridge is
+T793); threads are shared through Git only, not over Cowork. User guide: [`docs/im`](../../docs/im/index.md). Related: [Cowork](../cowork/index.md)
 (real-time co-editing, whose v1 explicitly leaves chat out) and
 [Worldwide](../worldwide/index.md).
 
@@ -272,7 +273,7 @@ state is text (`3 unread`, `@`), not color alone.
 
 Voice and video, file transfer, a Vix-run chat server, Slack/Teams/Discord
 clients, read receipts, typing indicators, end-to-end encryption on IRC
-(Matrix E2EE is T758).
+(Matrix E2EE is [Matrix](matrix.md), T793).
 
 ## Tasks
 
@@ -280,5 +281,6 @@ T750–T759 in [`tasks.md`](../../tasks.md): T750 research check and
 `vix-im` core; T751 `vix-im-irc`; T752 the IM menu, panel and App wiring;
 T753 anchored threads; T754 notifications and status bar; T755 disk
 history; T756 session chat over Cowork (after Cowork's link lands on
-`main`); T757 docs and site; T758 Matrix bridge (spike first); T759
+`main`); T757 docs and site; T758 Matrix bridge (spike first, done: see
+[Matrix](matrix.md)) and T793 the bridge itself; T759
 follow mode, presence and shared session notes (after Cowork presence).

@@ -701,6 +701,24 @@ reanchor
 libera
 SASL
 CTCP
+# Matrix bridge spike (T758, spec/instant-message/matrix.md)
+anymap
+dalek
+hashlink
+homeserver
+imbl
+inout
+itertools
+libolm
+panctl
+prost
+redactions
+reqwest
+ruma
+rusqlite
+undecryptable
+vodozemac
+xoshiro
 # Cowork (T690-T697): CRDT candidates and crypto vocabulary
 Loro
 automerge
