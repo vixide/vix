@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Deasaiche teacsa agus IDE airson an teirmineil · Rust · An-asgaidh agus le tùs fosgailte",
-  "hero.title": "An IDE teirmineil aig a bheil eòlas air na iuchraichean agad mu thràth.",
-  "hero.tagline": "Is e <k>Ctrl+S</k> a shàbhaileas, is e <k>Ctrl+F</k> a lorgas, agus tha a h-uile càil eile ann am bàr clàr-taice no sa phailead àithne <k>Ctrl+P</k> — gun modhan ri ionnsachadh an toiseach. Tha frithealaichean cànain, dì-bhugair, Git, modh Org agus bocsa-obrach stòr-dàta ann mar-thà, agus mar sin tha Vix feumail mus rèitich thu dad.",
+  "hero.title": "Fàilte gu Vix, an IDE aig a bheil fios air na h-iuchraichean agad mu thràth.",
+  "hero.tagline": "Sàbhail le <k>Ctrl+S</k>, lorg le <k>Ctrl+F</k> agus ruig a h-uile càil eile o bhàr clàr-taice no o phaileid àitheantan <k>Ctrl+P</k>. Tha frithealaichean cànain, dì-bhugadair, Git, Org mode agus being-obrach stòr-dàta na bhroinn, sa chrìochnaidhear agad no ann an uinneag dhùthchasach, mar sin tha Vix feumail bhon mhionaid a dh'fhosglas e.",
   "hero.installNote": "No cleachd an sgriobt stàlaidh, PowerShell, npm, no <c>cargo install vix-tui</c> — faic <a>a h-uile roghainn stàlaidh</a>. Is e <c>vix</c> an àithne.",
   "hero.copyBrew": "Dèan lethbhreac den àithne stàlaidh Homebrew",
   "hero.install": "Stàlaich Vix",
   "hero.features": "Faic a h-uile feart",
 
-  "glance.heading": "Sùil luath air Vix",
-  "glance.binary": "faidhle dùbailte, chan eil dad ri chur ri chèile",
-  "glance.keymaps": "mapa iuchrach, ath-chruthaichte sa bhad",
-  "glance.themes": "cuspair a tha air a thoirt a-steach",
-  "glance.languages": "cànan eadar-aghaidh",
-  "glance.unsafe": "loidhne de Rust unsafe",
-
-  "who.eyebrow": "Dhan cò e",
   "who.title": "Air a dhèanamh airson an dòigh san obraich thu mu thràth",
   "who.1.heading": "Tha thu a' fuireach san teirminil ach tha thu ag ionndrainn an IDE agad",
   "who.1.text": "Rach dhan mhìneachadh, cuir ainm ùr air, dì-bhugair agus panal Git, thar SSH no ann an tmux, gun phròiseact rèiteachaidh.",
@@ -25,11 +16,9 @@
   "who.4.heading": "Bidh thu ag obair le dàta agus APIan",
   "who.4.text": "Ceasnaich stòr-dàta, cuir iarrtas HTTP, sgrùd soitheach agus deasaich an CSV a rinn e, ann an aon uinneag.",
 
-  "from.eyebrow": "A' atharrachadh deasaiche?",
   "from.title": "Leugh an stiùireadh airson an deasaiche às a bheil thu a' tighinn",
   "from.link": "Vix airson luchd-cleachdaidh {name}",
 
-  "faq.eyebrow": "Ceistean",
   "faq.title": "Ceistean cumanta",
   "faq.1.q": "Am feum mi deasachadh modhail ionnsachadh?",
   "faq.1.a": "Chan fheum. Cleachdaidh am mapa iuchrach bunaiteach na h-aon ath-ghoiridean ris na h-aplacaidean eile agad. Tha mapaichean iuchrach Vi agus Spacemacs dìreach aon roghainn clàr-taice air falbh ma tha iad a dhìth ort.",
@@ -40,7 +29,6 @@
   "faq.4.q": "An urrainn dhan chompanaidh agam a chleachdadh?",
   "faq.4.a": "Tagh an cead as fheàrr dhut às a' chòig: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 no GPL-3.0. Airson meaisean glaiste, chan eil an togail as lugha a' dèanamh ceanglaichean lìonraidh sam bith agus chan eil i a' tòiseachadh prògram sam bith eile.",
 
-  "open.eyebrow": "Tùs fosgailte",
   "open.title": "An-asgaidh, agus air a thogail gu fosgailte",
   "open.text": "Tha tùs Vix fo chead Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 no GPL-3.0, mar a thaghas tu. Tha leasachadh stiùirichte le mion-chuingeadan: tha mion-chuingeadh aig gach crate a bhios an còd a' buileachadh. Tha mar a chleachdas am pròiseact taic AI air a mhìneachadh san <a>aithris AI</a> aige.",
   "open.source": "Tùs air GitHub",

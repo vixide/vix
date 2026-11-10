@@ -6,12 +6,17 @@ Simpler than Fresh Editor (~/github/sinelaw/fresh) because:
 - No TypeScript
 - No remote editing
 
-More advanced than Micro Editor (~/github/micro-editor-micro) because:
+More integrated out of the box than stock Vim and Emacs because:
+- LSP, DAP, Tree-sitter, a fuzzy palette, multiple cursors and a Git client
+  with hunk staging need no plugins or packages
 - Left-side drawer is a file explorer
 - Right-side drawer is a message explorer
 - Bottom dock for logs/output/data (Run Command, workspace search)
 - Switchable themes (Dark, Light, and more — all JSON themes)
 - Switchable UI language (internationalization)
+
+Vim and Emacs are the primary comparisons in every user-facing comparison
+(README, `docs/compare`, the site); Micro is no longer one.
 
 Easier for novices than vim because:
 - The default keymap (Apple) is not modal — keyboard shortcuts are typical of

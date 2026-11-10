@@ -3551,7 +3551,7 @@ and its own gate run, zero intended behavior change unless stated.
   any keymap — Move Up/Down is menu-only), and `Ctrl+Shift+K` "deletes"
   a line (it cuts to clipboard, matching `edit.cut_line`, not a bare
   delete); added the honest gaps it was missing (no `Ctrl+D` incremental
-  multi-select, no `F5` one-key debug start). `docs/comparison/index.md`
+  multi-select, no `F5` one-key debug start). `docs/compare/index.md`
   rewritten into the requested feature-parity matrix (Vix / Vim / Helix
   / Micro / Zed, 13 rows, footnoted where a flat ✓/✗ would be dishonest
   — e.g. Vim's `undofile` gives real persistence and branches, just no

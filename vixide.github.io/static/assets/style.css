@@ -296,14 +296,6 @@ a.card:hover { color: inherit; }
   text-align: center;
   margin-bottom: 2rem;
 }
-.section-heading-eyebrow {
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--vix-primary);
-  margin: 0 0 0.5rem;
-}
 .section-heading h2 {
   margin: 0;
 }
@@ -463,22 +455,6 @@ kbd {
 .centered { margin-left: auto; margin-right: auto; }
 
 /* At-a-glance numbers under the hero. */
-.stat-strip {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 1rem;
-  text-align: center;
-}
-.stat-strip li {
-  padding: 1rem 0.5rem;
-  border: 1px solid var(--vix-border);
-  border-radius: 8px;
-}
-.stat-value { display: block; font-size: 2rem; font-weight: 700; color: var(--vix-primary); }
-.stat-label { color: var(--vix-text-muted); }
 
 /* Home-page comparison slice. */
 .table-scroll { overflow-x: auto; }
@@ -652,3 +628,23 @@ kbd {
     scroll-behavior: auto !important;
   }
 }
+
+/* Home page Install section: one entry per front end (vix-tui, then the GUIs). */
+.frontend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  max-width: 72rem;
+  margin: 1.5rem auto 0;
+}
+.frontend {
+  background: var(--vix-card-bg);
+  border: 1px solid var(--vix-border);
+  border-radius: var(--vix-radius-lg);
+  box-shadow: var(--vix-shadow);
+  padding: 1.25rem 1.5rem;
+  min-width: 0;
+}
+.frontend h3 { margin: 0 0 0.5rem; font-family: var(--vix-font-mono); }
+.frontend p { margin: 0 0 0.75rem; }
+.frontend .copy-command { margin-top: 0.5rem; }

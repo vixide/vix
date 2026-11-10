@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Editor de texto e IDE para terminal · Rust · Libre y de código abierto",
-  "hero.title": "El IDE de terminal que ya conoce tus atajos.",
-  "hero.tagline": "Guardar es <k>Ctrl+S</k>, buscar es <k>Ctrl+F</k>, y todo lo demás está en una barra de menús o en la paleta de comandos <k>Ctrl+P</k>, sin modos que aprender antes. Servidores de lenguaje, depurador, Git, modo Org y un banco de trabajo de bases de datos vienen integrados, así que Vix es útil antes de que configures nada.",
+  "hero.title": "Bienvenido a Vix, el IDE que ya conoce tus atajos.",
+  "hero.tagline": "Guarda con <k>Ctrl+S</k>, busca con <k>Ctrl+F</k> y llega a todo lo demás desde la barra de menús o la paleta de comandos <k>Ctrl+P</k>. Servidores de lenguaje, un depurador, Git, Org mode y un banco de trabajo de bases de datos vienen incluidos, en tu terminal o en una ventana nativa, así que Vix es útil desde que se abre.",
   "hero.installNote": "O usa el script instalador, PowerShell, npm o <c>cargo install vix-tui</c>; consulta <a>todas las opciones de instalación</a>. El comando es <c>vix</c>.",
   "hero.copyBrew": "Copiar el comando de instalación de Homebrew",
   "hero.install": "Instalar Vix",
   "hero.features": "Ver todas las funciones",
 
-  "glance.heading": "Vix de un vistazo",
-  "glance.binary": "binario, nada que ensamblar",
-  "glance.keymaps": "mapas de teclas, intercambiables al instante",
-  "glance.themes": "temas incluidos",
-  "glance.languages": "idiomas de interfaz",
-  "glance.unsafe": "líneas de Rust unsafe",
-
-  "who.eyebrow": "Para quién es",
   "who.title": "Hecho para tu forma de trabajar",
   "who.1.heading": "Vives en la terminal pero echas de menos tu IDE",
   "who.1.text": "Ir a la definición, renombrar, un depurador y un panel de Git, por SSH o en tmux, sin un proyecto de configuración.",
@@ -25,11 +16,9 @@
   "who.4.heading": "Trabajas con datos y APIs",
   "who.4.text": "Consulta una base de datos, envía una petición HTTP, inspecciona un contenedor y edita el CSV que produjo, todo en una ventana.",
 
-  "from.eyebrow": "¿Cambias de editor?",
   "from.title": "Lee la guía de donde vienes",
   "from.link": "Vix para usuarios de {name}",
 
-  "faq.eyebrow": "Preguntas",
   "faq.title": "Preguntas frecuentes",
   "faq.1.q": "¿Tengo que aprender la edición modal?",
   "faq.1.a": "No. El mapa de teclas predeterminado usa los mismos atajos que tus otras aplicaciones. Los mapas de Vi y Spacemacs están a una opción de menú si los quieres.",
@@ -40,7 +29,6 @@
   "faq.4.q": "¿Puede usarlo mi empresa?",
   "faq.4.a": "Elige la licencia que te convenga entre cinco: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 o GPL-3.0. Para equipos restringidos, la compilación mínima no hace conexiones de red ni inicia ningún otro programa.",
 
-  "open.eyebrow": "Código abierto",
   "open.title": "Libre y construido a la vista de todos",
   "open.text": "El código fuente de Vix se licencia a tu elección bajo Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 o GPL-3.0. El desarrollo se guía por especificaciones: cada crate tiene una especificación que el código implementa. El uso de la asistencia de IA en el proyecto se explica en su <a>declaración sobre IA</a>.",
   "open.source": "Código en GitHub",

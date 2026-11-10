@@ -1,20 +1,11 @@
 {
-  "hero.eyebrow": "Golygydd testun ac IDE ar gyfer y derfynell · Rust · Rhad ac am ddim a ffynhonnell agored",
-  "hero.title": "Yr IDE terfynell sy'n adnabod eich bysellau eisoes.",
-  "hero.tagline": "Cadw yw <k>Ctrl+S</k>, chwilio yw <k>Ctrl+F</k>, ac mae popeth arall mewn bar dewislen neu yn y palet gorchmynion <k>Ctrl+P</k> — dim moddau i'w dysgu ymlaen llaw. Mae gweinyddion iaith, dadfygiwr, Git, modd Org a mainc waith cronfa ddata wedi'u cynnwys, felly mae Vix yn ddefnyddiol cyn i chi ffurfweddu dim.",
+  "hero.title": "Croeso i Vix, yr IDE sydd eisoes yn gwybod eich bysellau.",
+  "hero.tagline": "Cadwch gyda <k>Ctrl+S</k>, chwiliwch gyda <k>Ctrl+F</k> a chyrraedd popeth arall o far dewislen neu balet gorchmynion <k>Ctrl+P</k>. Mae gweinyddion iaith, dadfygiwr, Git, Org mode a mainc waith cronfa ddata wedi'u cynnwys, yn eich terfynell neu mewn ffenestr frodorol, felly mae Vix yn ddefnyddiol o'r eiliad y mae'n agor.",
   "hero.installNote": "Neu defnyddiwch y sgript gosod, PowerShell, npm, neu <c>cargo install vix-tui</c> — gweler <a>pob dewis gosod</a>. Y gorchymyn yw <c>vix</c>.",
   "hero.copyBrew": "Copïo'r gorchymyn gosod Homebrew",
   "hero.install": "Gosod Vix",
   "hero.features": "Gweld pob nodwedd",
 
-  "glance.heading": "Vix ar un olwg",
-  "glance.binary": "deuaidd, dim i'w gydosod",
-  "glance.keymaps": "map bysellau, y gellir eu newid ar unwaith",
-  "glance.themes": "thema wedi'u cynnwys",
-  "glance.languages": "iaith rhyngwyneb",
-  "glance.unsafe": "llinell o Rust unsafe",
-
-  "who.eyebrow": "I bwy mae e",
   "who.title": "Wedi'i wneud ar gyfer y ffordd rydych chi'n gweithio eisoes",
   "who.1.heading": "Rydych chi'n byw yn y derfynell ond yn colli eich IDE",
   "who.1.text": "Mynd i'r diffiniad, ailenwi, dadfygiwr a phanel Git, dros SSH neu mewn tmux, heb brosiect ffurfweddu.",
@@ -25,11 +16,9 @@
   "who.4.heading": "Rydych chi'n gweithio gyda data ac APIau",
   "who.4.text": "Holwch gronfa ddata, anfonwch gais HTTP, archwiliwch gynhwysydd a golygwch y CSV a gynhyrchodd, mewn un ffenestr.",
 
-  "from.eyebrow": "Yn newid golygydd?",
   "from.title": "Darllenwch y canllaw ar gyfer ble rydych chi'n dod ohono",
   "from.link": "Vix ar gyfer defnyddwyr {name}",
 
-  "faq.eyebrow": "Cwestiynau",
   "faq.title": "Cwestiynau cyffredin",
   "faq.1.q": "Oes rhaid i mi ddysgu golygu moddol?",
   "faq.1.a": "Nac oes. Mae'r map bysellau rhagosodedig yn defnyddio'r un llwybrau byr â'ch apiau eraill. Mae mapiau bysellau Vi a Spacemacs un dewis dewislen i ffwrdd os ydych eu heisiau.",
@@ -40,7 +29,6 @@
   "faq.4.q": "A all fy nghwmni ei ddefnyddio?",
   "faq.4.a": "Dewiswch pa un o'r pum trwydded sy'n eich siwtio: Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 neu GPL-3.0. Ar gyfer peiriannau dan glo, nid yw'r adeiladwaith lleiaf yn gwneud unrhyw gysylltiadau rhwydwaith ac nid yw'n cychwyn unrhyw raglen arall.",
 
-  "open.eyebrow": "Ffynhonnell agored",
   "open.title": "Rhad ac am ddim, ac wedi'i adeiladu'n agored",
   "open.text": "Mae ffynhonnell Vix wedi'i thrwyddedu dan Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 neu GPL-3.0, eich dewis chi. Mae'r datblygu'n seiliedig ar fanylebau: mae gan bob crate fanyleb y mae'r cod yn ei gweithredu. Mae sut mae'r prosiect yn defnyddio cymorth AI wedi'i nodi yn ei <a>ddatganiad AI</a>.",
   "open.source": "Ffynhonnell ar GitHub",
