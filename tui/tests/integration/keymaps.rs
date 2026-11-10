@@ -1453,3 +1453,19 @@ fn table_keymap_shows_a_pending_chord_and_its_which_key_rows() {
     app.on_key(esc());
     assert_eq!(app.mode_indicator(), None, "the chord ends");
 }
+
+#[test]
+fn ttt_alt_comma_and_period_switch_tabs_and_alt_letters_stay_menus() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:ttt");
+    app.run_action("file.new");
+    app.run_action("file.new");
+    let last = app.editor.active;
+    app.on_key(KeyEvent::new(KeyCode::Char(','), KeyModifiers::ALT));
+    assert_ne!(app.editor.active, last, "Alt+, goes to the previous tab");
+    app.on_key(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::ALT));
+    assert_eq!(app.editor.active, last, "Alt+. goes to the next tab");
+    // Alt+F still opens the File menu.
+    app.on_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::ALT));
+    assert!(app.menu.is_open(), "Alt+letter is still a menu mnemonic");
+}

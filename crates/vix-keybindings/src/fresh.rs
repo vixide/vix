@@ -94,6 +94,31 @@ const NORMAL: &[Binding] = &[
         key_token: "C-_",
         action_id: "edit.toggle_comment",
     },
+    // Alt with punctuation or an arrow (Alt+letter stays a menu mnemonic).
+    Binding {
+        key_token: "A-Up",
+        action_id: "edit.move_line_up",
+    },
+    Binding {
+        key_token: "A-Down",
+        action_id: "edit.move_line_down",
+    },
+    Binding {
+        key_token: "A-.",
+        action_id: "lsp.code_action",
+    },
+    Binding {
+        key_token: "A-Left",
+        action_id: "nav.back",
+    },
+    Binding {
+        key_token: "A-Right",
+        action_id: "nav.forward",
+    },
+    Binding {
+        key_token: "A-/",
+        action_id: "search.workspace",
+    },
 ];
 
 /// Fresh's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].

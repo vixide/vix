@@ -196,6 +196,8 @@ editor with GUI-style keys:
   select word, `Ctrl+T` transpose characters, `Ctrl+/` comment.
 - `Ctrl+K` cut to the end of the line, `Ctrl+H` delete the word before the
   cursor.
+- `Alt+Up` / `Alt+Down` move the line, `Alt+Left` / `Alt+Right` go back /
+  forward, `Alt+.` code actions, `Alt+/` project search.
 
 Fresh's Quick Open also runs commands after a `>`; in Vix, use the command
 palette.
@@ -212,6 +214,7 @@ chords: press `Ctrl+K` or `Ctrl+L`, release, then press the letter.
   terminal.
 - `Ctrl+F` find, `Ctrl+R` replace, `Ctrl+G` go to line, `Ctrl+D` select the
   next match, `Ctrl+/` comment, `Ctrl+U` complete, `Ctrl+.` code actions.
+- `Alt+.` / `Alt+,` next / previous tab, `Alt+Up` / `Alt+Down` move the line.
 - `Ctrl+K` then: `P` Quick Open, `S` save as, `E` explorer, `F` project
   search, `R` project replace, `C` Git changes, `T` terminal, `I` hover,
   `L` select all matches, `K` delete line, `J` join lines, `O` sort lines,
@@ -220,7 +223,9 @@ chords: press `Ctrl+K` or `Ctrl+L`, release, then press the letter.
 - `Ctrl+L` (language) then: `F` format, `R` references, `I` go to
   implementation, `T` go to type definition, `O` organize imports.
 
-An unbound second key ends the chord and is not typed. While a chord is
+Their `Alt`+letter keys are left out, because in every Vix keymap
+`Alt`+letter opens a menu. An unbound second key ends a chord and is not
+typed. While a chord is
 pending, the status bar shows `C-k-` (or `C-l-`) and the which-key popup lists
 the second keys.
 

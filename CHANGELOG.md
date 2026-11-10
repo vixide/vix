@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fresh and ttt keymaps: Alt keys.** `Alt+Up`/`Alt+Down` move the line in both; ttt's `Alt+.`/`Alt+,` switch tabs; Fresh's `Alt+Left`/`Alt+Right` go back and forward, `Alt+.` opens code actions and `Alt+/` searches the project. `Alt`+letter keeps opening menus.
 - **Helix keymap: every selection at once.** With several selections (after `C` or `s`), the motions (`w`/`b`/`e`, `W`/`B`/`E`, `f`/`t`/`F`/`T`, `x`, `h`/`j`/`k`/`l`) move every one, and `d`, `c` (then typing at every cursor), `r`, `~`, `>`/`<`, `p`/`P`, `i`/`a` and `.` act on every one, as in Helix; `;` collapses them all. Each change is one undo step. `y` copies every selection into the one register, joined by newlines in buffer order, and a paste into the same number of selections puts one line back at each. See [`docs/keymaps`](docs/keymaps/index.md#helix).
 - **ttt keymap: fold chords.** `Ctrl+K [` toggles a fold, `Ctrl+K 0` folds all and `Ctrl+K 9` unfolds all, as in ttt.
 - **The status bar shows what you're typing.** In the Vi, Spacemacs and Helix keymaps, the mode indicator now shows a count and operator in progress (`-- NORMAL -- 2d3`), as Vim does. In the Sublime, Zed, Fresh and ttt keymaps, a pending chord shows as `C-k-` and the which-key popup lists its second keys.

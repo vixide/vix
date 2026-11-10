@@ -80,6 +80,23 @@ const NORMAL: &[Binding] = &[
         key_token: "C-_",
         action_id: "edit.toggle_comment",
     },
+    // Alt with punctuation or an arrow (Alt+letter stays a menu mnemonic).
+    Binding {
+        key_token: "A-Up",
+        action_id: "edit.move_line_up",
+    },
+    Binding {
+        key_token: "A-Down",
+        action_id: "edit.move_line_down",
+    },
+    Binding {
+        key_token: "A-.",
+        action_id: "tab.next",
+    },
+    Binding {
+        key_token: "A-,",
+        action_id: "tab.prev",
+    },
 ];
 
 /// The second key of ttt's `Ctrl+K …` chords.
