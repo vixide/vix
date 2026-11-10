@@ -801,6 +801,7 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.zed", "view.keymap:zed", ""),
     Item::leaf("menu.name.fresh", "view.keymap:fresh", ""),
     Item::leaf("menu.name.ttt", "view.keymap:ttt", ""),
+    Item::leaf("menu.name.helix", "view.keymap:helix", ""),
 ];
 
 /// The Vix (application) menu: About, License, Website.

@@ -196,7 +196,7 @@ hyperlinks. Terminals without these features ignore the escapes.
    without dispatching; the two must be changed together.
 4. Org-table context keys, when the cursor is inside a pipe table.
 5. The active **keymap** (Apple, VSCode macOS/Windows, Emacs, Vi, Spacemacs,
-   IntelliJ macOS/Windows, Eclipse, Sublime, Zed, Fresh, ttt — see
+   IntelliJ macOS/Windows, Eclipse, Sublime, Zed, Fresh, ttt, Helix — see
    [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md)),
    which translates keys into `run_action` ids and editor motions rather than
    duplicating behavior.

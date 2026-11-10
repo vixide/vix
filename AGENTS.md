@@ -140,7 +140,7 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
   library and is tested without a TTY. Rendering lives only in `tui/src/ui.rs`.
 - **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
   (Apple / VSCode macOS / VSCode Windows / Emacs / Vi / Spacemacs / IntelliJ
-  macOS / IntelliJ Windows / Eclipse / Sublime / Zed / Fresh / ttt) in `App::on_key`; keymaps
+  macOS / IntelliJ Windows / Eclipse / Sublime / Zed / Fresh / ttt / Helix) in `App::on_key`; keymaps
   translate keys into the same `run_action` calls and editor motions rather than
   duplicating behavior. On macOS, `Command` is folded into `Control` first, so
   every keymap sees a chord it already knows. See `crates/vix-keymap-model/spec`.

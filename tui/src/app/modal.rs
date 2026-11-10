@@ -513,7 +513,11 @@ impl App {
     /// command, or the unnamed register (real `vix_clipboard`) when none
     /// was — consuming `modal_active_register` either way, since a register
     /// selection only ever applies to the very next operator or paste.
-    fn modal_write_register(&mut self, text: String, kind: vix_modal::register::RegisterKind) {
+    pub(super) fn modal_write_register(
+        &mut self,
+        text: String,
+        kind: vix_modal::register::RegisterKind,
+    ) {
         if let Some(name) = self.modal_active_register.take() {
             self.modal_registers
                 .set(name, vix_modal::register::RegisterValue { text, kind });

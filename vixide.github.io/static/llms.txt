@@ -34,7 +34,7 @@ human and AI contributors — read it first. The workspace version is 2.0.2
 - [Configuration](https://github.com/vixide/vix/blob/main/docs/configuration/index.md): settings file, every key, CLI
   flags
 - [Keymaps](https://github.com/vixide/vix/blob/main/docs/keymaps/index.md): Apple, VSCode, Emacs, Vi, Spacemacs,
-  IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt
+  IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt, Helix
 - [Menus](https://github.com/vixide/vix/blob/main/docs/menus/index.md), [Themes](https://github.com/vixide/vix/blob/main/docs/themes/index.md),
   [Internationalization](https://github.com/vixide/vix/blob/main/docs/internationalization/index.md)
 - [Generated action reference](https://github.com/vixide/vix/blob/main/docs/reference/actions.md): every action id,

@@ -6,14 +6,15 @@
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
 //! (T104b, for a leader-style multi-character sequence table),
 //! [`lookup_shared`] (T104g, for the keymap-agnostic bindings every
-//! keymap shares) — and all 13 keymap ids are populated: Emacs
+//! keymap shares) — and all 14 keymap ids are populated: Emacs
 //! (`emacs`, T104a), Vi (`vi`) and Spacemacs (`spacemacs`, T104b), VS Code
 //! (`vscode-macos`/`vscode-windows`, T104c — one shared table, since VS
 //! Code's bindings don't differ by host OS in a terminal), `IntelliJ`
 //! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
 //! tables this time, unlike VS Code's shared one), Eclipse (`eclipse`,
 //! T104e), Sublime (`sublime`, T104f), Apple (`apple`, T104g), Zed
-//! (`zed`), Fresh (`fresh`), and ttt (`ttt`).
+//! (`zed`), Fresh (`fresh`), and ttt (`ttt`); Helix (`helix`) was born a
+//! table, with `g`/`m`/`Space` prefix contexts.
 //! Their dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
 //! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `table_ctrl_key`,
 //! `apple_ctrl_key`) all now go through [`TABLES`] instead of their own
@@ -45,6 +46,7 @@ mod apple;
 mod eclipse;
 mod emacs;
 mod fresh;
+mod helix;
 mod intellij;
 pub mod overrides;
 mod shared;
@@ -84,7 +86,7 @@ pub struct ChordContext {
 }
 
 /// Every built-in binding for one keymap, keyed on
-/// `vix_keymap_model::Keymap::id` (13 values — `vscode-macos` and
+/// `vix_keymap_model::Keymap::id` (14 values — `vscode-macos` and
 /// `vscode-windows` get identical tables, since VS Code's bindings don't
 /// differ by host OS in a terminal; deliberate duplication over inventing a
 /// second, coarser keymap enum just to avoid it).
@@ -150,6 +152,10 @@ pub const TABLES: &[KeymapTable] = &[
     KeymapTable {
         keymap_id: "ttt",
         contexts: ttt::CONTEXTS,
+    },
+    KeymapTable {
+        keymap_id: "helix",
+        contexts: helix::CONTEXTS,
     },
 ];
 
@@ -242,6 +248,7 @@ mod tests {
             "zed",
             "fresh",
             "ttt",
+            "helix",
         ];
         for id in ids {
             assert_eq!(
@@ -287,7 +294,7 @@ mod tests {
 
     #[test]
     fn every_keymap_table_is_populated() {
-        // All 13 ids are populated (T104g, plus Zed, Fresh and ttt) -- no more "still empty,
+        // All 14 ids are populated (T104g, plus Zed, Fresh, ttt and Helix) -- no more "still empty,
         // filled in by a later task" tables left to probe.
         for table in TABLES {
             assert!(
@@ -473,6 +480,20 @@ mod tests {
         // Ctrl+` (console) is a non-alphanumeric char token, not a named
         // key — confirms the token grammar handles it like any other char.
         assert_eq!(lookup("sublime", "", "C-`"), Some("tools.terminal"));
+    }
+
+    #[test]
+    fn helix_selects_first_and_has_goto_match_and_space_contexts() {
+        assert_eq!(lookup("helix", "", "w"), Some("helix.select_word_next"));
+        assert_eq!(lookup("helix", "", "x"), Some("helix.select_line"));
+        assert_eq!(lookup("helix", "", "d"), Some("helix.delete"));
+        assert_eq!(lookup("helix", "", "U"), Some("edit.redo"));
+        assert_eq!(lookup("helix", "g", "e"), Some("edit.go_last"));
+        assert_eq!(lookup("helix", "m", "m"), Some("edit.match_bracket"));
+        assert_eq!(lookup("helix", "Space", "f"), Some("file.open"));
+        // The prefix keys themselves are host-side mode transitions.
+        assert_eq!(lookup("helix", "", "g"), None);
+        assert_eq!(lookup("helix", "", "m"), None);
     }
 
     #[test]

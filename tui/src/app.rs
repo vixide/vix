@@ -46,6 +46,7 @@ mod git_rebase;
 mod git_review;
 #[cfg(feature = "git")]
 mod git_stash_worktree;
+mod helix;
 mod hierarchy;
 mod hl7;
 mod hot_exit;
@@ -1457,6 +1458,9 @@ enum Keymap {
     Fresh,
     /// ttt shortcuts, including its `Ctrl+K …` and `Ctrl+L …` chords.
     Ttt,
+    /// Helix's selection-first modal editing: motions select, actions act
+    /// on the selection, plus `g` goto and `Space` leader prefixes.
+    Helix,
 }
 
 impl Keymap {
@@ -1483,6 +1487,7 @@ impl Keymap {
             "zed" => Keymap::Zed,
             "fresh" => Keymap::Fresh,
             "ttt" => Keymap::Ttt,
+            "helix" => Keymap::Helix,
             _ => return None,
         })
     }
@@ -1504,6 +1509,7 @@ impl Keymap {
             Keymap::Zed => "zed",
             Keymap::Fresh => "fresh",
             Keymap::Ttt => "ttt",
+            Keymap::Helix => "helix",
         }
     }
 }
@@ -3420,6 +3426,7 @@ impl App {
             a if self.run_tools_action(a) => {}
             a if self.run_text_tool_action(a) => {}
             a if self.run_vim_action(a) => {}
+            a if self.run_helix_action(a) => {}
             other if self.run_view_action(other) => {}
             #[cfg(feature = "git")]
             other if self.run_git_action(other) => {}
@@ -6427,7 +6434,7 @@ impl App {
 
     /// The persisted/script key-binding override choke point (T104i),
     /// run between `org_table_key` and every keymap's own dispatch — the
-    /// *only* new call site, covering all 13 keymaps at once (see
+    /// *only* new call site, covering all 14 keymaps at once (see
     /// `crates/vix-keybindings/spec/index.md`'s "One choke point"/
     /// "Override layer"). Builds the incoming key's plain `vix-macros`
     /// token — the shared grammar every override source is authored in,
@@ -10725,7 +10732,7 @@ impl App {
             }
             id @ ("vi" | "emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
             | "intellij-windows" | "eclipse" | "sublime" | "zed" | "fresh" | "ttt"
-            | "apple") => {
+            | "helix" | "apple") => {
                 for (action, keys) in Self::table_rows_for(id) {
                     add(action, keys);
                 }

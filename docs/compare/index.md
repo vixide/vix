@@ -50,9 +50,10 @@ of some of these same comparisons.
     comparison above is against stock terminal Vim, matching the
     [for-vim-users](../for-vim-users/index.md) page's own baseline.
 [^fresh-gui]: Fresh Desktop, a separate standalone build.
-[^keymap]: Off by default (the **Apple** keymap), but a full **Vi** or
-    **Spacemacs** (Vi-modal plus a `Space` leader) keymap is one menu
-    choice away — see [keymaps](../keymaps/index.md).
+[^keymap]: Off by default (the **Apple** keymap), but a **Vi**,
+    **Spacemacs** (Vi-modal plus a `Space` leader) or **Helix**
+    (select-then-act) keymap is one menu choice away — see
+    [keymaps](../keymaps/index.md).
 [^ttt-modes]: Vim and Emacs editing are plugins from ttt's Plugins sidebar.
 [^textmate]: ttt highlights with TextMate grammars (a Go port of VS Code's
     engine), not Tree-sitter.

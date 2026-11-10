@@ -139,7 +139,7 @@ just falls back to plainer characters.
 ## The 10 things to learn first
 
 Vix's keybindings vary by **keymap** (Apple, VSCode, Emacs, Vi, Spacemacs,
-IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt — see **View → Keymap**, and
+IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt, Helix — see **View → Keymap**, and
 [`docs/reference/`](../reference/actions.md) for the full binding tables).
 Everything below shows the **Apple** keymap, Vix's default — every action is
 also always reachable from its menu or the command palette regardless of
@@ -189,7 +189,7 @@ keymap.
   reference and how to switch keymaps.
 - The `for-*-users` pages (in
   [`docs/SUMMARY.md`](../SUMMARY.md#guides)) if you're coming from Vim,
-  Emacs, Spacemacs, IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt, or VS Code.
+  Emacs, Spacemacs, IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt, Helix, or VS Code.
 
 ---
 

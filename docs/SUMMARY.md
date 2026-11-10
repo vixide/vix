@@ -154,6 +154,7 @@
 - [Zed Keybindings](reference/keybindings-zed.md)
 - [Fresh Keybindings](reference/keybindings-fresh.md)
 - [ttt Keybindings](reference/keybindings-ttt.md)
+- [Helix Keybindings](reference/keybindings-helix.md)
 
 # Contributing
 

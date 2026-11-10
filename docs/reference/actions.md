@@ -260,6 +260,27 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `go.prev_error` | Previous Error | Menu |
 | `half_page_down` | Half Page Down | Catalog |
 | `half_page_up` | Half Page Up | Catalog |
+| `helix.append` | Append After Selection | Catalog |
+| `helix.change` | Change Selection | Catalog |
+| `helix.collapse` | Collapse Selection | Catalog |
+| `helix.delete` | Delete Selection | Catalog |
+| `helix.insert` | Insert Before Selection | Catalog |
+| `helix.move_down` | Move Down | Catalog |
+| `helix.move_left` | Move Left | Catalog |
+| `helix.move_right` | Move Right | Catalog |
+| `helix.move_up` | Move Up | Catalog |
+| `helix.paste_after` | Paste After Selection | Catalog |
+| `helix.paste_before` | Paste Before Selection | Catalog |
+| `helix.select_line` | Select Line | Catalog |
+| `helix.select_long_word_end` | Select to WORD End | Catalog |
+| `helix.select_long_word_next` | Select to Next WORD | Catalog |
+| `helix.select_long_word_prev` | Select to Previous WORD | Catalog |
+| `helix.select_word_end` | Select to Word End | Catalog |
+| `helix.select_word_next` | Select to Next Word | Catalog |
+| `helix.select_word_prev` | Select to Previous Word | Catalog |
+| `helix.switch_case` | Switch Case | Catalog |
+| `helix.toggle_select` | Toggle Select Mode | Catalog |
+| `helix.yank` | Yank Selection | Catalog |
 | `help.doctor` | Run Diagnostics | Menu |
 | `help.license` | License | Menu |
 | `help.privacy` | Privacy Statement | Menu |
@@ -823,4 +844,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**816 actions.**
+**837 actions.**

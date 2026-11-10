@@ -1,7 +1,7 @@
 # Keybinding registry & override layer
 
 An exhaustive, queryable registry of every built-in keybinding across all
-13 keymaps, plus the user/script override layer built on it.
+14 keymaps, plus the user/script override layer built on it.
 `vix-script`'s `bind_key(key_token, command_id)` (T102) already lets a
 script *ask* for a key; `LoadedScript::bindings` already *records* the
 request. Nothing checks it against a real key event yet — that was T104's
@@ -11,7 +11,7 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: all 13 keymap ids are populated (Zed, Fresh and ttt were added later, directly as tables; ttt's `C-k`/`C-l` contexts are chord prefixes that `table_ctrl_key` recognizes from the table itself) — T104a (Emacs), T104b
+**Status**: all 14 keymap ids are populated (Zed, Fresh, ttt and Helix were added later, directly as tables; ttt's `C-k`/`C-l` contexts are chord prefixes that `table_ctrl_key` recognizes from the table itself) — T104a (Emacs), T104b
 (Vi + Spacemacs), T104c (VS Code), T104d (`IntelliJ`), T104e (Eclipse),
 T104f (Sublime), and T104g (Apple + `global_shared_key`, the last
 slice). This spec now describes built behavior throughout, not intent —
@@ -698,6 +698,30 @@ the crate's own unit tests something concrete to assert on (7 tests,
   reloads (that's the whole point of hand-editing and reloading a
   script), so leaving them stale until the next full restart would have
   been a real, if quiet, bug.
+
+### Helix, born a table
+
+The Helix keymap (`helix`) arrived after the T104 epic, so it never had a
+hardcoded `match` to convert: `helix.rs` is its table from the start. It
+uses four contexts — the shape Emacs's chord families and Vi's pending
+operators already established, not a schema change:
+
+- `""` — Normal (and Select) mode's single keys, encoded with
+  `vix_macros::encode_key` like Vi's (`w`, `W`, `%`, `Left`).
+- `"g"` — goto mode, the key after `g` (`g e` → `edit.go_last`).
+- `"m"` — match mode, the key after `m` (`m m` → `edit.match_bracket`).
+- `"Space"` — the space-mode leader, the key after `Space` (`Space f` →
+  `file.open`). Helix's leader is one key deep, so a plain `lookup` in a
+  context fits; Spacemacs's multi-key `lookup_sequence` isn't needed.
+
+As with Vi, entering a prefix (`g`, `m`, `Space`) is a mode transition and
+stays host-side, and so do the keys that take a character argument
+(`f`/`t`/`F`/`T`/`r`), `:`, `Esc` and Insert mode. The selection-first
+commands are `helix.*` action ids (`helix.select_word_next`,
+`helix.delete`, …, `run_helix_action` in `tui/src/app/helix.rs`); every
+other row reuses an existing Vix action id (`edit.undo`, `nav.goto_definition`,
+`file.open`, …). The F1 overlay shows all four contexts (`table_rows_for`),
+and the which-key popup lists a pending prefix's context.
 
 ## What's deliberately not in scope here
 

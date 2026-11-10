@@ -1,7 +1,8 @@
 //! Keyboard dispatch: the modal-overlay routing chain (`on_key`,
 //! `route_overlay_key` over the one table in `overlays.rs`), the ten
 //! keymap-specific dispatchers (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/
-//! Eclipse/Sublime/Zed and their `*_token` helpers), and the small pieces that
+//! Eclipse/Sublime/Zed and their `*_token` helpers; Helix's own lives in
+//! `helix.rs`), and the small pieces that
 //! read the active keymap for display (`mode_indicator`, `which_key`).
 //!
 //! Moved out of `app.rs` verbatim (T141, first slice); every other feature's
@@ -302,6 +303,11 @@ impl App {
                     return;
                 }
             }
+            Keymap::Helix => {
+                if self.helix_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
         }
         match self.focus {
             Focus::Editor => {
@@ -411,6 +417,14 @@ impl App {
             } else {
                 self.modal_mode_indicator()
             }),
+            // Helix calls Visual "Select" mode (`v`, motions extend).
+            Keymap::Helix => Some(if let Some(cmd) = &self.vim_cmd {
+                format!(":{cmd}")
+            } else if self.modal_mode == vix_modal::Mode::Visual {
+                t!("status.helix_select").to_string()
+            } else {
+                self.modal_mode_indicator()
+            }),
             _ => None,
         }
     }
@@ -476,6 +490,7 @@ impl App {
                     .collect();
                 Some((format!("SPC {seq}"), rows))
             }
+            Keymap::Helix => self.helix_which_key(),
             _ => None,
         }
     }
@@ -1290,12 +1305,17 @@ impl App {
 
     /// Handle a key while the Vim `:` command line is open. The in-progress text
     /// is reflected live by the mode indicator, so this only mutates state.
-    fn vim_cmd_key(&mut self, key: KeyEvent) {
+    pub(super) fn vim_cmd_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.vim_cmd = None,
             KeyCode::Enter => {
                 let cmd = self.vim_cmd.take().unwrap_or_default();
-                self.run_vim_command(cmd.trim());
+                // Helix shares this command line, with its own long names.
+                if self.active_keymap() == Keymap::Helix {
+                    self.run_helix_command(cmd.trim());
+                } else {
+                    self.run_vim_command(cmd.trim());
+                }
             }
             KeyCode::Backspace => {
                 // Backspacing past the empty `:` closes the command line.
@@ -1315,7 +1335,7 @@ impl App {
     }
 
     /// Run a Vim ex command (the text after `:`).
-    fn run_vim_command(&mut self, cmd: &str) {
+    pub(super) fn run_vim_command(&mut self, cmd: &str) {
         match cmd {
             "w" => self.run_action("file.save"),
             "q" => self.run_action("file.close"),

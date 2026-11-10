@@ -38,19 +38,17 @@ cargo run                    # open Vix in the current directory
 
 ## What's genuinely different
 
-- **No selection-first modal.** Helix's defining idea — select a range,
-  *then* act on it, so you always see what you're about to change — has no
-  equivalent in Vix. Vix's closest modal option, the **Vi** keymap, is
-  traditional Vim-style verb-then-motion (`dw`, not select-then-`d`). If
-  the selection-first model is *why* you use Helix, Vix's Vi keymap will
-  feel like a step backward, not a lateral move — this is the honest
-  answer, not a sales pitch.
-- **A leader-key alternative, if you want one.** The **Spacemacs** keymap
-  (Vi-modal plus a `Space` leader — `SPC f f` find file, `SPC g s` git
-  status — with a which-key popup showing candidate keys) is the nearest
-  thing Vix has to "modal editing with discoverable chords," which is
-  closer in spirit to Helix's own discoverable-by-design command set than
-  plain Vi mode is.
+- **A Helix keymap, newer and smaller than Helix.** **View → Keymap →
+  Helix** gives you select-then-act editing: `w`, `x` or `%` select, then
+  `d`, `c`, `y` or `p` act; `v` extends; `g` goto, `mm`, the `Space` leader
+  (`Space f`, `Space s`, `Space /`, `Space k`, `Space r`, `Space a`) and the
+  `:` command line work as in Helix, with which-key hints after each
+  prefix. What's missing: counts, `.` repeat, actions on every selection at
+  once (they act on the primary one), named registers, view and window
+  modes, and the block cursor. See
+  [`docs/keymaps/index.md`](../keymaps/index.md#helix).
+- **Not modal by default.** Vix starts in the **Apple** keymap; Helix is
+  one menu choice away and the choice persists.
 - **Vix keeps things Helix deliberately excludes.** An integrated
   terminal, a git client (stage/commit/log/blame, not just a diff gutter),
   and a menu bar are all in scope for Vix; Helix's own stated design keeps
@@ -64,13 +62,11 @@ cargo run                    # open Vix in the current directory
 
 ## Where Helix still wins
 
-- **The selection-first editing model itself**, if that's what you're
-  actually here for — see above. Vix does not replicate it.
+- **The full selection-first model.** Vix's Helix keymap covers the core,
+  but not multi-selection actions, counts, `.` repeat or Helix's other
+  modes. If you rely on those daily, you'll notice.
 - **A tighter, more opinionated core.** Helix's smaller surface area is a
   deliberate design choice, not a gap to fill — some people prefer that.
-- **Kakoune-lineage muscle memory.** If your reflexes came from Kakoune or
-  Helix specifically, Vix's Vi keymap won't match them; Vim's will, more or
-  less, and Helix's own won't be replicated by either.
 
 ## An honest experiment
 
@@ -78,15 +74,15 @@ Give it one afternoon on a real task:
 
 1. `cargo build --release` and put `vix` on your `PATH`.
 2. Open a project: `vix .`
-3. Try the **Spacemacs** keymap first (`Ctrl+P`, type `keymap`) — its
-   which-key popup is the closest thing here to Helix's own discoverability.
-   If verb-then-motion is fine, try plain **Vi** instead.
+3. Pick the **Helix** keymap (**View → Keymap → Helix**), then edit the way
+   you do in Helix: `w` then `d`, `x` then `y`, `Space f` for files.
 4. Try what Helix leaves to you: stage a hunk from **Git → Changes…**, open
    the integrated terminal (`` Ctrl+` `` in most keymaps), or set a
    breakpoint from **Run** and step through it.
 
-If the selection-first model turns out to be the whole reason you're here,
-Vix won't replace Helix for you — and that's a fair place to land. But if
+If you depend on the parts of Helix's model Vix doesn't have yet
+(multi-selection actions, counts, `.` repeat), Vix won't replace Helix for
+you yet — and that's a fair place to land. But if
 what you actually wanted was "zero-config IDE, one binary, plus the things
 Helix leaves out on purpose," this is worth the afternoon.
 

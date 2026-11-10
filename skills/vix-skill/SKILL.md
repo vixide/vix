@@ -33,10 +33,10 @@ to type and filter instead of memorizing this list.
 
 ## Keymaps — pick the navigation style you already know
 
-**View → Keymap…** switches between thirteen keyboard styles, and the choice
+**View → Keymap…** switches between fourteen keyboard styles, and the choice
 persists (`keymap` setting): **Apple** (default), **VSCode macOS/Windows**,
 **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS/Windows**, **Eclipse**,
-**Sublime**, **Zed**, **Fresh**, and **ttt**. On macOS, `Command` does whatever `Control` does in every
+**Sublime**, **Zed**, **Fresh**, **ttt**, and **Helix**. On macOS, `Command` does whatever `Control` does in every
 keymap (the terminal must forward the shortcut for this to work). If someone
 says "this doesn't feel like Vix, it feels like my old editor" — that's the
 point; ask which keymap they're on, or suggest switching to the one matching

@@ -39,7 +39,7 @@ quit. Other ways to install, including Windows, Linux packages and
 |                     |                                                                 |
 | ------------------- | --------------------------------------------------------------- |
 | **One binary**      | No plugin manager, no runtime, nothing to assemble first        |
-| **13 keymaps**      | Apple, VS Code, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt |
+| **14 keymaps**      | Apple, VS Code, Emacs, Vi, Spacemacs, Helix, IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt |
 | **21 themes**       | Plus a theme editor and your own JSON themes                     |
 | **15 languages**    | The whole interface, from Arabic to Welsh                        |
 | **0 `unsafe`**      | `unsafe` Rust is forbidden in every crate                        |
@@ -49,8 +49,8 @@ quit. Other ways to install, including Windows, Linux packages and
 
 - **Familiar keys, no modes by default.** Ctrl/Cmd shortcuts, a real menu bar
   (Vix File Edit View Go Run AI DB JJ Git IM Org Project OC Tools Help), mouse
-  support, and `F1` for every shortcut. Thirteen keymaps — Apple (the default),
-  VS Code (macOS/Windows), Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows),
+  support, and `F1` for every shortcut. Fourteen keymaps — Apple (the default),
+  VS Code (macOS/Windows), Emacs, Vi, Spacemacs, Helix, IntelliJ (macOS/Windows),
   Eclipse, Sublime, Zed, Fresh and ttt — switchable live from **View → Keymap**.
 - **An IDE, not just an editor.** Language Server Protocol, a DAP debugger,
   Tree-sitter highlighting, Git (hunk staging, blame, an interactive commit

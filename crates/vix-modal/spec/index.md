@@ -321,6 +321,31 @@ the letters nvim-treesitter-textobjects configurations conventionally use:
   Vim's own `]]`/`[[` section motions and `]c` (next diff hunk, in diff
   mode) are not bound; `]c` means class here, as in those configurations.
 
+## Helix selections
+
+The Helix keymap (`crates/vix-keymap-model/spec/index.md`, § Helix modes,
+selections and leader) is selection-first: a motion selects, then an action
+acts on the selection. It is not a second engine: the host
+(`tui/src/app/helix.rs`) reuses this crate's `Mode` (Select mode is
+`Mode::Visual`), `motion`'s `w`/`b`/`e`/`f`/`t`/`F`/`T` functions, and
+`register`'s kinds, and keeps the selection in the editor's own
+`[anchor, cursor)` selection. The `helix` module adds the pure pieces that
+model needs, all over **character offsets** like everything else here:
+
+- `effective(text, sel, cursor)` — the range an action acts on: the
+  selection, or the one character under the cursor when nothing is
+  selected (Helix never acts on nothing).
+- `select_lines(text, start, end)` — `x`: every line the range touches,
+  newline included; a range that already is exactly that grows by the next
+  line, so `x x x` selects three lines.
+- `long_word_forward` / `long_word_backward` / `long_word_end` — `W`/`B`/`E`
+  over `WORD`s (runs of non-whitespace), the `w`/`b`/`e` shape.
+- `swap_case` (`~`) and `replace_chars` (`r<char>`, line breaks kept).
+- `paste(text, start, end, clip, before)` — `p`/`P`: text ending in a
+  newline pastes as whole lines below the last selected line (or above the
+  first), anything else right after the range end (or before its start);
+  the result names the range to select afterward, the pasted text.
+
 ## v1 cut line, summarized
 
 Explicit, per `tasks.md` T111 ("no ex commands, no macros — Vix already has
@@ -332,7 +357,9 @@ macros") plus the per-section cuts above, gathered in one place:
 - **No macro-via-`q`/`@`** — Vix's existing Edit-menu macro recorder is a
   separate, already-shipped feature; not being duplicated or replaced.
 - **No Visual Block.** Character and line-wise Visual only.
-- **No WORD motions** (`W`/`B`/`E`), no `;`/`,`, no `*`/`#`.
+- **No WORD motions** (`W`/`B`/`E`) in the Vi keymap, no `;`/`,`, no
+  `*`/`#`. (The Helix keymap's `W`/`B`/`E` use `helix::long_word_*`, § Helix
+  selections; Vi doesn't bind them.)
 - **No operators beyond `d c y (x) p P`** (no `>`/`<`/`~`/`gu`/`gU`).
 - **No register persistence, no uppercase/numbered/special registers.**
 - **No sentence/paragraph/tag text objects** — delimiter and word objects
