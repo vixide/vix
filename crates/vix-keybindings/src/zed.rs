@@ -2,9 +2,12 @@
 //! (on macOS Zed uses `Cmd` where Linux uses `Ctrl`; here `Ctrl` stands in
 //! for both, as in the VS Code and Sublime keymaps).
 //!
-//! All-`Ctrl`, no chords: one flat `""` context, the same shape as VS Code
-//! and Sublime, with Shift written out explicitly in each token (`"C-S-p"`)
-//! because the dispatch reads the Shift modifier bit, not letter case.
+//! `Ctrl` keys in a `""` context, with Shift written out explicitly in each
+//! token (`"C-S-p"`) because the dispatch reads the Shift modifier bit, not
+//! letter case, plus a `"C-k"` context for Zed's two-key `Ctrl+K …` chords
+//! (from `assets/keymaps/default-linux.json`, read on 2026-11-10). Chords
+//! whose second key is `Ctrl+[`, `Ctrl+]`, `Ctrl+I` or an arrow are left
+//! out: terminals send those as Esc, Esc, Tab and escape sequences.
 //! `Ctrl+D` (Zed's select next occurrence) is deliberately unbound here so
 //! it reaches the editor's own `Ctrl+D`, which adds the next occurrence.
 
@@ -149,8 +152,54 @@ const NORMAL: &[Binding] = &[
     },
 ];
 
-/// Zed's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
-pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
-    name: "",
-    bindings: NORMAL,
-}];
+/// The second key of Zed's `Ctrl+K …` chords that have a Vix action.
+const CTRL_K: &[Binding] = &[
+    Binding {
+        key_token: "C-l",
+        action_id: "editor.fold_toggle",
+    },
+    Binding {
+        key_token: "C-0",
+        action_id: "editor.fold_all",
+    },
+    Binding {
+        key_token: "C-j",
+        action_id: "editor.unfold_all",
+    },
+    Binding {
+        key_token: "C-c",
+        action_id: "edit.toggle_comment",
+    },
+    Binding {
+        key_token: "C-s",
+        action_id: "help.shortcuts",
+    },
+    Binding {
+        key_token: "C-w",
+        action_id: "file.close_all",
+    },
+    Binding {
+        key_token: "C-z",
+        action_id: "view.soft_wrap",
+    },
+    Binding {
+        key_token: "C-o",
+        action_id: "file.open_path",
+    },
+    Binding {
+        key_token: "v",
+        action_id: "tools.markdown_preview",
+    },
+];
+
+/// Zed's chord contexts (the top level and `Ctrl+K`), wired into [`crate::TABLES`].
+pub(crate) const CONTEXTS: &[ChordContext] = &[
+    ChordContext {
+        name: "",
+        bindings: NORMAL,
+    },
+    ChordContext {
+        name: "C-k",
+        bindings: CTRL_K,
+    },
+];
