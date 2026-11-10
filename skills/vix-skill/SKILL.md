@@ -166,7 +166,7 @@ specifics you're not sure of:
   workspace to AI agents (`docs/mcp-server`).
 
 If a checkout is available, `docs/` has one directory per topic above (and
-many more — `docs/for-emacs-users/`, `docs/for-vim-users/`, etc., for
+many more — `docs/vix-for-emacs-users/`, `docs/vix-for-vim-users/`, etc., for
 migrating from another editor); `index.md` at the repo root has the full
 feature list and an ASCII screenshot of the layout.
 

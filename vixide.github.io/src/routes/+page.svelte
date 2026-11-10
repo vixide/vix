@@ -75,15 +75,15 @@
 
   // The docs' for-*-users guides, in the main repo's docs/.
   const comingFrom = [
-    { slug: 'for-vim-users', name: 'Vim' },
-    { slug: 'for-emacs-users', name: 'Emacs' },
-    { slug: 'for-visual-studio-code-users', name: 'VS Code' },
-    { slug: 'for-helix-users', name: 'Helix' },
-    { slug: 'for-spacemacs-users', name: 'Spacemacs' },
-    { slug: 'for-intellij-users', name: 'IntelliJ' },
-    { slug: 'for-eclipse-users', name: 'Eclipse' },
-    { slug: 'for-sublime-users', name: 'Sublime' },
-    { slug: 'for-zed-users', name: 'Zed' }
+    { slug: 'vix-for-vim-users', name: 'Vim' },
+    { slug: 'vix-for-emacs-users', name: 'Emacs' },
+    { slug: 'vix-for-visual-studio-code-users', name: 'VS Code' },
+    { slug: 'vix-for-helix-users', name: 'Helix' },
+    { slug: 'vix-for-spacemacs-users', name: 'Spacemacs' },
+    { slug: 'vix-for-intellij-users', name: 'IntelliJ' },
+    { slug: 'vix-for-eclipse-users', name: 'Eclipse' },
+    { slug: 'vix-for-sublime-users', name: 'Sublime' },
+    { slug: 'vix-for-zed-users', name: 'Zed' }
   ];
 </script>
 

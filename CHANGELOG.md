@@ -31,6 +31,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Guides for users of other editors moved** from `docs/for-*-users/` to `docs/vix-for-*-users/` (for example [`docs/vix-for-vim-users`](docs/vix-for-vim-users/index.md)). The old docs addresses redirect to the new ones.
 - **"Sublime Text" is now "Sublime"** in the View → Keymap menu, the docs and the site.
 - **Comparisons lead with Vim and Emacs.** The feature comparison moved to `docs/compare/` (the old `/vix/comparison/` address redirects) and now compares Vix with stock Vim and Emacs first, then Helix, Zed, [Fresh](https://github.com/sinelaw/fresh) and [ttt](https://github.com/eugenioenko/ttt), with new rows for the menu bar, Jujutsu, the database workbench, the HTTP client, themes and interface languages; Micro is no longer compared. Not-built-in cells show `-` instead of `✗`, here, in the README and on the site, and the docs no longer say Vix lacks SSH remote editing (experimental since 2.0).
 - **Site home page.** A new welcome and value propositions, an Install section with `brew install` and `cargo install` for all eight front ends, and a comparison table with Vim, Emacs, Neovim, Helix, VS Code, Zed, Fresh and ttt. The at-a-glance number tiles and the small headings above each section are gone.
