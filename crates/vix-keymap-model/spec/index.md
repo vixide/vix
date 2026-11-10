@@ -8,7 +8,7 @@ it. Switching keymaps changes the meaning of keys, not the available actions: th
 same commands (open, save, find, move the cursor) stay reachable; only the keys
 that trigger them differ.
 
-Vix ships eleven keymaps. **Apple** is the default and matches Vix's own bindings.
+Vix ships thirteen keymaps. **Apple** is the default and matches Vix's own bindings.
 
 ## The keymaps
 
@@ -25,20 +25,22 @@ Vix ships eleven keymaps. **Apple** is the default and matches Vix's own binding
 | Eclipse | `eclipse` | Eclipse (Windows) defaults — `Ctrl+Shift+R` Open Resource, `Ctrl+Shift+T` Open Type, `Ctrl+3` Quick Access, `F3` Open Declaration. |
 | Sublime | `sublime` | Sublime defaults, `Ctrl` for `Cmd` — `Ctrl+P` Goto Anything, `Ctrl+Shift+P` Command Palette, `Ctrl+R` Goto Symbol, `Ctrl+J` Join Lines, `Ctrl+Shift+D` Duplicate. |
 | Zed | `zed` | Zed's Linux defaults, `Ctrl` for `Cmd` — `Ctrl+P` file finder, `Ctrl+Shift+P` Command Palette, `Ctrl+Shift+O` outline, `Ctrl+T` project symbols, `Ctrl+.` code actions, `Ctrl+Shift+G` Git panel, `Ctrl+D` select next occurrence. |
+| Fresh | `fresh` | [Fresh](https://github.com/sinelaw/fresh)'s default keymap — `Ctrl+P` Quick Open, `Ctrl+E` focus the file explorer, `Ctrl+B` toggle it, `Ctrl+G` go to line, `Ctrl+]` matching bracket, `Ctrl+T` transpose. |
+| ttt | `ttt` | [ttt](https://github.com/eugenioenko/ttt)'s defaults — `Ctrl+P` command palette, `Ctrl+T` terminal, and two-key `Ctrl+K …` (`Ctrl+K P` files, `Ctrl+K S` save as, `Ctrl+K F` project search) and `Ctrl+L …` language chords (`Ctrl+L F` format, `Ctrl+L R` references). |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
-shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse, Sublime, Zed) try
+shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt) try
 their own handling and then fall back to a **shared** layer (menu-bar mnemonics
 like `Alt+F` and function keys like `F10`) before the focused pane handles the
 key. A mnemonic toggles its menu: pressing the open menu's own letter closes the
 dropdown, and another menu's letter switches to it, whether or not a dropdown is
-already open. The IntelliJ, Eclipse, Sublime, and Zed keymaps let editing chords
+already open. The IntelliJ, Eclipse, Sublime, Zed, Fresh, and ttt keymaps let editing chords
 (`Ctrl+Z/X/C/V/A`) fall through to the editor widget.
 
 ## Choosing a keymap
 
 The keymap is selected from the **View → Keymap** submenu in the top menu bar.
-The submenu lists the eleven keymaps by their proper names (not translated), in
+The submenu lists the thirteen keymaps by their proper names (not translated), in
 model order, and is kept in sync with the keymap model by a test.
 
 | Item | Action |
@@ -54,6 +56,8 @@ model order, and is kept in sync with the keymap model by a test.
 | Eclipse | `view.keymap:eclipse` |
 | Sublime | `view.keymap:sublime` |
 | Zed | `view.keymap:zed` |
+| Fresh | `view.keymap:fresh` |
+| ttt | `view.keymap:ttt` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
 

@@ -139,6 +139,8 @@ fn view_keymap_submenu_actions_set_the_keymap() {
         "eclipse",
         "sublime",
         "zed",
+        "fresh",
+        "ttt",
     ] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
@@ -146,7 +148,7 @@ fn view_keymap_submenu_actions_set_the_keymap() {
 
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "zed");
+    assert_eq!(app.settings.keymap, "ttt");
 }
 
 #[test]
@@ -205,6 +207,45 @@ fn zed_keymap_signature_bindings() {
         ["solo", "solo"],
         "Ctrl+Shift+D duplicates"
     );
+}
+
+#[test]
+fn fresh_keymap_signature_bindings() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:fresh");
+    // Ctrl+P is Fresh's Quick Open (the file finder).
+    app.on_key(ctrl('p'));
+    assert!(app.file_browser.is_some(), "Ctrl+P opens Quick Open");
+    app.on_key(esc());
+    // Ctrl+G is go to line.
+    app.on_key(ctrl('g'));
+    assert!(app.palette.is_some(), "Ctrl+G opens Go to Line");
+}
+
+#[test]
+fn ttt_keymap_ctrl_k_chords() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keymap:ttt");
+    // Ctrl+P is ttt's command palette.
+    app.on_key(ctrl('p'));
+    assert!(app.palette.is_some(), "Ctrl+P opens the command palette");
+    app.on_key(esc());
+    // Ctrl+K then P opens the file finder: the chord, not plain P.
+    type_str(&mut app, "x");
+    app.on_key(ctrl('k'));
+    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    assert!(app.file_browser.is_some(), "Ctrl+K P opens the file finder");
+    app.on_key(esc());
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "x",
+        "the chord's second key is not typed"
+    );
+    // An unbound second key ends the chord without typing it.
+    app.on_key(ctrl('k'));
+    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "xy");
 }
 
 #[test]

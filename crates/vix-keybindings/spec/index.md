@@ -1,7 +1,7 @@
 # Keybinding registry & override layer
 
 An exhaustive, queryable registry of every built-in keybinding across all
-11 keymaps, plus the user/script override layer built on it.
+13 keymaps, plus the user/script override layer built on it.
 `vix-script`'s `bind_key(key_token, command_id)` (T102) already lets a
 script *ask* for a key; `LoadedScript::bindings` already *records* the
 request. Nothing checks it against a real key event yet — that was T104's
@@ -11,7 +11,7 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: all 11 keymap ids are populated (Zed was added later, directly as a table) — T104a (Emacs), T104b
+**Status**: all 13 keymap ids are populated (Zed, Fresh and ttt were added later, directly as tables; ttt's `C-k`/`C-l` contexts are chord prefixes that `table_ctrl_key` recognizes from the table itself) — T104a (Emacs), T104b
 (Vi + Spacemacs), T104c (VS Code), T104d (`IntelliJ`), T104e (Eclipse),
 T104f (Sublime), and T104g (Apple + `global_shared_key`, the last
 slice). This spec now describes built behavior throughout, not intent —
@@ -82,8 +82,7 @@ match self.active_keymap() {
     Keymap::IntelliJMacOS => { if self.intellij_key(key, false) || self.global_shared_key(key) { return; } }
     Keymap::IntelliJWindows => { if self.intellij_key(key, true) || self.global_shared_key(key) { return; } }
     Keymap::Eclipse => { if self.eclipse_key(key) || self.global_shared_key(key) { return; } }
-    Keymap::Sublime => { if self.table_ctrl_key("sublime", key) || self.global_shared_key(key) { return; } }
-    Keymap::Zed => { if self.table_ctrl_key("zed", key) || self.global_shared_key(key) { return; } }
+    table @ (Keymap::Sublime | Keymap::Zed | Keymap::Fresh | Keymap::Ttt) => { if self.table_ctrl_key(table.id(), key) || self.global_shared_key(key) { return; } }
 }
 ```
 

@@ -6,14 +6,14 @@
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
 //! (T104b, for a leader-style multi-character sequence table),
 //! [`lookup_shared`] (T104g, for the keymap-agnostic bindings every
-//! keymap shares) — and all 11 keymap ids are populated: Emacs
+//! keymap shares) — and all 13 keymap ids are populated: Emacs
 //! (`emacs`, T104a), Vi (`vi`) and Spacemacs (`spacemacs`, T104b), VS Code
 //! (`vscode-macos`/`vscode-windows`, T104c — one shared table, since VS
 //! Code's bindings don't differ by host OS in a terminal), `IntelliJ`
 //! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
 //! tables this time, unlike VS Code's shared one), Eclipse (`eclipse`,
-//! T104e), Sublime (`sublime`, T104f), Apple (`apple`, T104g), and Zed
-//! (`zed`).
+//! T104e), Sublime (`sublime`, T104f), Apple (`apple`, T104g), Zed
+//! (`zed`), Fresh (`fresh`), and ttt (`ttt`).
 //! Their dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
 //! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `table_ctrl_key`,
 //! `apple_ctrl_key`) all now go through [`TABLES`] instead of their own
@@ -44,11 +44,13 @@
 mod apple;
 mod eclipse;
 mod emacs;
+mod fresh;
 mod intellij;
 pub mod overrides;
 mod shared;
 mod spacemacs;
 mod sublime;
+mod ttt;
 pub mod user_bindings;
 mod vim;
 mod vscode;
@@ -82,7 +84,7 @@ pub struct ChordContext {
 }
 
 /// Every built-in binding for one keymap, keyed on
-/// `vix_keymap_model::Keymap::id` (11 values — `vscode-macos` and
+/// `vix_keymap_model::Keymap::id` (13 values — `vscode-macos` and
 /// `vscode-windows` get identical tables, since VS Code's bindings don't
 /// differ by host OS in a terminal; deliberate duplication over inventing a
 /// second, coarser keymap enum just to avoid it).
@@ -140,6 +142,14 @@ pub const TABLES: &[KeymapTable] = &[
     KeymapTable {
         keymap_id: "zed",
         contexts: zed::CONTEXTS,
+    },
+    KeymapTable {
+        keymap_id: "fresh",
+        contexts: fresh::CONTEXTS,
+    },
+    KeymapTable {
+        keymap_id: "ttt",
+        contexts: ttt::CONTEXTS,
     },
 ];
 
@@ -230,6 +240,8 @@ mod tests {
             "eclipse",
             "sublime",
             "zed",
+            "fresh",
+            "ttt",
         ];
         for id in ids {
             assert_eq!(
@@ -275,7 +287,7 @@ mod tests {
 
     #[test]
     fn every_keymap_table_is_populated() {
-        // All 11 ids are populated (T104g, plus Zed) -- no more "still empty,
+        // All 13 ids are populated (T104g, plus Zed, Fresh and ttt) -- no more "still empty,
         // filled in by a later task" tables left to probe.
         for table in TABLES {
             assert!(
@@ -434,6 +446,26 @@ mod tests {
         assert_eq!(lookup("zed", "", "C-."), Some("lsp.code_action"));
         // Ctrl+D stays unbound so the editor's own add-next-occurrence runs.
         assert_eq!(lookup("zed", "", "C-d"), None);
+    }
+
+    #[test]
+    fn fresh_binds_its_signature_shortcuts() {
+        assert_eq!(lookup("fresh", "", "C-p"), Some("file.open"));
+        assert_eq!(
+            lookup("fresh", "", "C-e"),
+            Some("view.toggle_explorer_focus")
+        );
+        assert_eq!(lookup("fresh", "", "C-d"), None);
+    }
+
+    #[test]
+    fn ttt_has_ctrl_k_and_ctrl_l_chord_contexts() {
+        assert_eq!(lookup("ttt", "", "C-p"), Some("tools.palette"));
+        assert_eq!(lookup("ttt", "C-k", "p"), Some("file.open"));
+        assert_eq!(lookup("ttt", "C-k", "s"), Some("file.save_as"));
+        assert_eq!(lookup("ttt", "C-l", "f"), Some("lsp.format"));
+        // The prefixes themselves are contexts, not bindings.
+        assert_eq!(lookup("ttt", "", "C-k"), None);
     }
 
     #[test]

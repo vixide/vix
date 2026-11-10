@@ -86,6 +86,16 @@ pub const KEYMAPS: &[Keymap] = &[
         name: "Zed",
         tooltip: "Zed bindings",
     },
+    Keymap {
+        id: "fresh",
+        name: "Fresh",
+        tooltip: "Fresh bindings",
+    },
+    Keymap {
+        id: "ttt",
+        name: "ttt",
+        tooltip: "ttt bindings",
+    },
 ];
 
 /// The keymap with the given `id`, if known.

@@ -18,7 +18,7 @@ The host assembles the rows from every active source, deduplicated on
    action name is the item's translated label);
 3. the **active keymap's chord tables**, for every keymap id (`vi`,
    `emacs`, `vscode-macos`, `vscode-windows`, `intellij-macos`,
-   `intellij-windows`, `eclipse`, `sublime`, `zed`, `apple` — T560 closed the last
+   `intellij-windows`, `eclipse`, `sublime`, `zed`, `fresh`, `ttt`, `apple` — T560 closed the last
    gap here, adding `vi`, which had been silently missing since T104b);
    Spacemacs additionally shows its own `SPC` leader map (`SPC f f`, …)
    *plus* the shared `vi` table, since Spacemacs's own Normal mode
