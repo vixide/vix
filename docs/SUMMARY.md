@@ -152,6 +152,8 @@
 - [Eclipse Keybindings](reference/keybindings-eclipse.md)
 - [Sublime Keybindings](reference/keybindings-sublime.md)
 - [Zed Keybindings](reference/keybindings-zed.md)
+- [Fresh Keybindings](reference/keybindings-fresh.md)
+- [ttt Keybindings](reference/keybindings-ttt.md)
 
 # Contributing
 

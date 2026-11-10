@@ -34,7 +34,7 @@ human and AI contributors — read it first. The workspace version is 2.0.2
 - [Configuration](docs/configuration/index.md): settings file, every key, CLI
   flags
 - [Keymaps](docs/keymaps/index.md): Apple, VSCode, Emacs, Vi, Spacemacs,
-  IntelliJ, Eclipse, Sublime, Zed
+  IntelliJ, Eclipse, Sublime, Zed, Fresh, ttt
 - [Menus](docs/menus/index.md), [Themes](docs/themes/index.md),
   [Internationalization](docs/internationalization/index.md)
 - [Generated action reference](docs/reference/actions.md): every action id,

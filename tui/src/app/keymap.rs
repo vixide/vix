@@ -297,13 +297,8 @@ impl App {
                     return;
                 }
             }
-            Keymap::Sublime => {
-                if self.table_ctrl_key("sublime", key) || self.global_shared_key(key) {
-                    return;
-                }
-            }
-            Keymap::Zed => {
-                if self.table_ctrl_key("zed", key) || self.global_shared_key(key) {
+            table @ (Keymap::Sublime | Keymap::Zed | Keymap::Fresh | Keymap::Ttt) => {
+                if self.table_ctrl_key(table.id(), key) || self.global_shared_key(key) {
                     return;
                 }
             }
@@ -711,18 +706,41 @@ impl App {
         }
     }
 
-    // ----- keymaps: Sublime and Zed ---------------------------------------
+    // ----- keymaps: Sublime, Zed, Fresh and ttt --------------------------
 
-    /// Dispatch for a flat, `Ctrl`-only keymap (`Ctrl` stands in for `Cmd`
-    /// on macOS): Sublime (T104f, `crates/vix-keybindings/src/sublime.rs`)
-    /// and Zed (`crates/vix-keybindings/src/zed.rs`), looked up in
-    /// `keymap_id`'s `vix-keybindings` table. Editing chords (undo/cut/
-    /// copy/paste/select-all) fall through to the editor widget. Returns
-    /// true if consumed.
+    /// Dispatch for a table-driven `Ctrl` keymap (`Ctrl` stands in for
+    /// `Cmd` on macOS): Sublime (T104f), Zed, Fresh and ttt, looked up in
+    /// `keymap_id`'s `vix-keybindings` table (`crates/vix-keybindings/src/
+    /// {sublime,zed,fresh,ttt}.rs`). A `Ctrl` key that names one of the
+    /// table's chord contexts (ttt's `Ctrl+K` and `Ctrl+L`) starts a chord;
+    /// the next key is looked up in that context and always ends it.
+    /// Editing chords (undo/cut/copy/paste/select-all) fall through to the
+    /// editor widget. Returns true if consumed.
     fn table_ctrl_key(&mut self, keymap_id: &str, key: KeyEvent) -> bool {
+        if let Some(context) = self.table_chord.take() {
+            let token = Self::ctrl_token(&key, false).or_else(|| match key.code {
+                KeyCode::Char(c) => Some(c.to_string()),
+                _ => None,
+            });
+            if let Some(action) =
+                token.and_then(|t| vix_keybindings::lookup(keymap_id, context, &t))
+            {
+                self.run_action(action);
+            }
+            return true;
+        }
         let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };
+        let prefix = vix_keybindings::TABLES
+            .iter()
+            .filter(|t| t.keymap_id == keymap_id)
+            .flat_map(|t| t.contexts)
+            .find(|c| !c.name.is_empty() && c.name == token);
+        if let Some(context) = prefix {
+            self.table_chord = Some(context.name);
+            return true;
+        }
         if let Some(action) = vix_keybindings::lookup(keymap_id, "", &token) {
             self.run_action(action);
             return true;

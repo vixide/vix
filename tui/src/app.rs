@@ -1453,6 +1453,10 @@ enum Keymap {
     Sublime,
     /// Zed shortcuts (its Linux defaults), with `Ctrl` standing in for `Cmd`.
     Zed,
+    /// Fresh shortcuts (its default keymap).
+    Fresh,
+    /// ttt shortcuts, including its `Ctrl+K …` and `Ctrl+L …` chords.
+    Ttt,
 }
 
 impl Keymap {
@@ -1477,8 +1481,30 @@ impl Keymap {
             "eclipse" => Keymap::Eclipse,
             "sublime" => Keymap::Sublime,
             "zed" => Keymap::Zed,
+            "fresh" => Keymap::Fresh,
+            "ttt" => Keymap::Ttt,
             _ => return None,
         })
+    }
+
+    /// The persisted id of a keymap with a single id (`vix_keymap_model`'s
+    /// `Keymap::id`). `Vscode` covers two ids and answers `"vscode-macos"`;
+    /// its dispatch reads `settings.keymap` instead.
+    fn id(self) -> &'static str {
+        match self {
+            Keymap::Apple => "apple",
+            Keymap::Vscode => "vscode-macos",
+            Keymap::Emacs => "emacs",
+            Keymap::Vi => "vi",
+            Keymap::Spacemacs => "spacemacs",
+            Keymap::IntelliJMacOS => "intellij-macos",
+            Keymap::IntelliJWindows => "intellij-windows",
+            Keymap::Eclipse => "eclipse",
+            Keymap::Sublime => "sublime",
+            Keymap::Zed => "zed",
+            Keymap::Fresh => "fresh",
+            Keymap::Ttt => "ttt",
+        }
     }
 }
 
@@ -2669,6 +2695,9 @@ pub struct App {
     dock_resize: Option<DockResize>,
     /// Which Emacs chord prefix is pending, if any (T149 — see [`EmacsChord`]).
     emacs_chord: EmacsChord,
+    /// The pending chord context of a table-driven keymap (ttt's `"C-k"` or
+    /// `"C-l"`), set by its prefix key and consumed by the next key.
+    table_chord: Option<&'static str>,
     /// The interactive Org agenda view backing the current agenda buffer, if one
     /// is open — maps buffer lines to source tasks so `t` can toggle them.
     agenda: Option<AgendaView>,
@@ -3012,6 +3041,7 @@ impl App {
             src_edit: None,
             table_rectangle_clip: None,
             emacs_chord: EmacsChord::None,
+            table_chord: None,
             pending_link_target: None,
             expand_selection_dir: None,
             linked_ranges: None,
@@ -6397,7 +6427,7 @@ impl App {
 
     /// The persisted/script key-binding override choke point (T104i),
     /// run between `org_table_key` and every keymap's own dispatch — the
-    /// *only* new call site, covering all 11 keymaps at once (see
+    /// *only* new call site, covering all 13 keymaps at once (see
     /// `crates/vix-keybindings/spec/index.md`'s "One choke point"/
     /// "Override layer"). Builds the incoming key's plain `vix-macros`
     /// token — the shared grammar every override source is authored in,
@@ -10615,6 +10645,7 @@ impl App {
     /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
     fn reset_keymap_modes(&mut self) {
         self.emacs_chord = EmacsChord::None;
+        self.table_chord = None;
         self.flags.remove(AppFlags::MODAL_INSERT);
         self.modal_mode = vix_modal::Mode::Normal;
         self.modal_count.reset();
@@ -10693,7 +10724,8 @@ impl App {
                 }
             }
             id @ ("vi" | "emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
-            | "intellij-windows" | "eclipse" | "sublime" | "zed" | "apple") => {
+            | "intellij-windows" | "eclipse" | "sublime" | "zed" | "fresh" | "ttt"
+            | "apple") => {
                 for (action, keys) in Self::table_rows_for(id) {
                     add(action, keys);
                 }

@@ -1,0 +1,93 @@
+//! The Fresh keymap's built-in bindings, from Fresh's default keymap
+//! (`crates/fresh-editor-core/keymaps/default.json` in
+//! <https://github.com/sinelaw/fresh>, read on 2026-11-10).
+//!
+//! All-`Ctrl`, no chords: one flat `""` context, the same shape as the
+//! Sublime and Zed tables, with Shift written out explicitly in each token.
+//! `Ctrl+D` (Fresh's add cursor at next match) is deliberately unbound so it
+//! reaches the editor's own `Ctrl+D`, which does the same. Fresh bindings
+//! with no Vix action yet (`Ctrl+K` delete to line end, `Ctrl+W` select
+//! word, `Ctrl+H` delete word backward) are left out.
+
+use crate::{Binding, ChordContext};
+
+/// Fresh's Ctrl-key bindings (its only context), with Shift encoded explicitly in the token.
+const NORMAL: &[Binding] = &[
+    // Fresh's Quick Open (files; Fresh also takes `>` for commands).
+    Binding {
+        key_token: "C-p",
+        action_id: "file.open",
+    },
+    Binding {
+        key_token: "C-e",
+        action_id: "view.toggle_explorer_focus",
+    },
+    Binding {
+        key_token: "C-b",
+        action_id: "view.explorer",
+    },
+    Binding {
+        key_token: "C-n",
+        action_id: "file.new",
+    },
+    Binding {
+        key_token: "C-o",
+        action_id: "file.open_path",
+    },
+    Binding {
+        key_token: "C-s",
+        action_id: "file.save",
+    },
+    Binding {
+        key_token: "C-q",
+        action_id: "file.quit",
+    },
+    Binding {
+        key_token: "C-f",
+        action_id: "edit.find",
+    },
+    Binding {
+        key_token: "C-r",
+        action_id: "edit.replace",
+    },
+    Binding {
+        key_token: "C-S-n",
+        action_id: "edit.find_prev",
+    },
+    Binding {
+        key_token: "C-g",
+        action_id: "nav.goto_line",
+    },
+    Binding {
+        key_token: "C-]",
+        action_id: "edit.match_bracket",
+    },
+    Binding {
+        key_token: "C-l",
+        action_id: "edit.select_line",
+    },
+    Binding {
+        key_token: "C-t",
+        action_id: "edit.transpose_chars",
+    },
+    // Many terminals emit the same control byte (0x1F) for Ctrl+/,
+    // Ctrl+7, and Ctrl+_, so accept all three for Comment.
+    Binding {
+        key_token: "C-/",
+        action_id: "edit.toggle_comment",
+    },
+    Binding {
+        key_token: "C-7",
+        action_id: "edit.toggle_comment",
+    },
+    Binding {
+        key_token: "C-_",
+        action_id: "edit.toggle_comment",
+    },
+];
+
+/// Fresh's chord contexts (a single top-level `""` context), wired into [`crate::TABLES`].
+pub(crate) const CONTEXTS: &[ChordContext] = &[ChordContext {
+    name: "",
+    bindings: NORMAL,
+}];

@@ -1,9 +1,10 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix™ ships eleven keymaps — **Apple**, **VSCode macOS**,
+file explorer, and more. Vix™ ships thirteen keymaps — **Apple**, **VSCode macOS**,
 **VSCode Windows**, **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**,
-**IntelliJ Windows**, **Eclipse**, **Sublime**, and **Zed** — and exactly one is
+**IntelliJ Windows**, **Eclipse**, **Sublime**, **Zed**, **Fresh**, and **ttt** — and
+exactly one is
 active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
@@ -26,6 +27,8 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | Eclipse     | Eclipse (Windows)        | `Control-Shift-R` (Open Resource) | `Control-Q` |
 | Sublime     | Sublime bindings         | `Control-P` (Goto Anything) | — |
 | Zed         | Zed bindings             | `Control-P` (file finder)  | `Control-Q`   |
+| Fresh       | Fresh bindings           | `Control-P` (Quick Open)   | `Control-Q`   |
+| ttt         | ttt bindings             | `Control-K P` (Quick Open) | `Control-Q`   |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
 
@@ -172,6 +175,45 @@ Zed's default Linux shortcuts (on macOS Zed uses `Cmd` where Linux uses
 
 Zed's two-key `Ctrl+K` chords (for example `Ctrl+K Ctrl+T` for the theme
 picker) are not bound yet; use the command palette.
+
+### Fresh
+
+The default keymap of [Fresh](https://github.com/sinelaw/fresh), a terminal
+editor with GUI-style keys:
+
+- `Ctrl+P` Quick Open (the file finder), `Ctrl+O` open a file by path,
+  `Ctrl+N` new, `Ctrl+S` save, `Ctrl+Q` quit.
+- `Ctrl+E` focus the file explorer, `Ctrl+B` toggle it.
+- `Ctrl+F` find, `Ctrl+R` replace, `Ctrl+Shift+N` find previous, `Ctrl+G`
+  go to line, `Ctrl+]` jump to the matching bracket.
+- `Ctrl+D` add a cursor at the next match, `Ctrl+L` select line, `Ctrl+T`
+  transpose characters, `Ctrl+/` comment.
+
+Not bound yet, because Vix has no matching action: `Ctrl+K` delete to the end
+of the line, `Ctrl+W` select word, `Ctrl+H` delete word backward. Fresh's
+Quick Open also runs commands after a `>`; in Vix, use the command palette.
+
+### ttt
+
+The default keybindings of [ttt](https://github.com/eugenioenko/ttt), a
+terminal editor with GUI-style keys. ttt groups many commands under two-key
+chords: press `Ctrl+K` or `Ctrl+L`, release, then press the letter.
+
+- `Ctrl+P` command palette, `Ctrl+N` new, `Ctrl+S` save, `Ctrl+W` close,
+  `Ctrl+Q` quit.
+- `Ctrl+B` toggle the sidebar (file explorer), `Ctrl+0` focus it, `Ctrl+T`
+  terminal.
+- `Ctrl+F` find, `Ctrl+R` replace, `Ctrl+G` go to line, `Ctrl+D` select the
+  next match, `Ctrl+/` comment, `Ctrl+U` complete, `Ctrl+.` code actions.
+- `Ctrl+K` then: `P` Quick Open, `S` save as, `E` explorer, `F` project
+  search, `R` project replace, `C` Git changes, `T` terminal, `I` hover,
+  `L` select all matches, `K` delete line, `J` join lines, `O` sort lines,
+  `M` matching bracket, `B` bottom panel, `Y` keyboard shortcuts, `,`
+  settings.
+- `Ctrl+L` (language) then: `F` format, `R` references, `I` go to
+  implementation, `T` go to type definition, `O` organize imports.
+
+An unbound second key ends the chord and is not typed.
 
 ## Not Yet Built
 
