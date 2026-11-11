@@ -106,14 +106,16 @@ submitted (version, URLs, hashes) before submitting.
 - **Try it locally:**
 
   ```sh
-  docker build -f docker/Dockerfile -t vix .
-  docker run --rm -it vix                              # the demo workspace
-  docker run --rm -it -v "$PWD:/work" -w /work vix .   # your own files
+  podman build -f docker/Dockerfile -t vix .
+  podman run --rm -it vix                              # the demo workspace
+  podman run --rm -it -v "$PWD:/work" -w /work vix .   # your own files
   ```
+
+  **Note:** `docker` commands work identically (Podman provides a Docker-compatible CLI).
 
 - **Publish:** the workflow pushes `ghcr.io/vixide/vix:<tag>` and `:latest`
   on a release tag, and did for 2.0.2. The package is still
-  private, so an anonymous `docker pull` fails with HTTP 403. Make the
+  private, so an anonymous `podman pull` fails with HTTP 403. Make the
   package public (GitHub → vixide → Packages → vix → Package settings →
   Change visibility) and link it to the repository.
 

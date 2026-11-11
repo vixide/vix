@@ -56,17 +56,19 @@ This guide helps you set up your development environment for contributing to Vix
    - Linux: GNOME Terminal, Konsole, Alacritty, Kitty, WezTerm
    - Windows: Windows Terminal, ConEmu, Alacritty
 
-3. **Docker**: For running Linux builds on macOS
+3. **Podman**: For running Linux builds on macOS (Docker-compatible)
    ```sh
    # macOS
-   brew install docker
+   brew install podman
    
    # Ubuntu/Debian
-   sudo apt install docker.io
+   sudo apt install podman
    
-   # Start Docker daemon
-   sudo systemctl start docker
+   # Start Podman machine
+   podman machine start
    ```
+
+   **Note:** Podman provides a Docker-compatible CLI, so `docker` commands also work.
 
 ---
 
@@ -431,18 +433,21 @@ make clean
 
 ## Running in Different Environments
 
-### Running in Docker
+### Running in Podman
 
 ```sh
-# Build the Docker image
-docker build -f docker/Dockerfile -t vix .
+# Build the Podman image
+podman build -f docker/Dockerfile -t vix .
 
 # Run Vix in the demo workspace
-docker run --rm -it vix
+podman run --rm -it vix
 
 # Run Vix on your own files
-docker run --rm -it -v "$PWD:/work" -w /work vix .
+podman run --rm -it -v "$PWD:/work" -w /work vix .
 ```
+
+**Note:** Podman is rootless by default and provides a Docker-compatible CLI.
+Use `podman` or `docker` commands interchangeably.
 
 ### Running in Development Mode
 

@@ -3,13 +3,15 @@
 # Try Vix without installing it (T743): a container image that opens the
 # `vix` terminal editor on the demo workspace (tui/examples/demo-workspace).
 #
-#   docker build -f docker/Dockerfile -t vix .
-#   docker run --rm -it vix                                # the demo workspace
-#   docker run --rm -it -v "$PWD:/work" -w /work vix .     # your own files
+#   podman build -f docker/Dockerfile -t vix .
+#   podman run --rm -it vix                                # the demo workspace
+#   podman run --rm -it -v "$PWD:/work" -w /work vix .     # your own files
 #
 # The build context is the repository root. The published image, once it
 # exists, is ghcr.io/vixide/vix (see .github/workflows/container.yml and
 # packaging/README.md). It is not published yet.
+#
+# Note: Podman provides a Docker-compatible CLI, so `docker` commands also work.
 
 # ---- Build stage: compile `vix` from source with the default features ----
 FROM rust:1.99.1-slim-trixie AS build

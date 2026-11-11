@@ -1,5 +1,6 @@
 # The container image (T743): ghcr.io/vixide/vix, built from docker/Dockerfile,
-# so `docker run --rm -it ghcr.io/vixide/vix` opens Vix on the demo workspace.
+# so `podman run --rm -it ghcr.io/vixide/vix` opens Vix on the demo workspace.
+# Note: Podman provides a Docker-compatible CLI, so `docker run` also works.
 #
 # Same tag trigger as release.yml, never a push to a branch. A manual run
 # (workflow_dispatch) builds both architectures as a dry run and pushes

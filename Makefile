@@ -36,9 +36,9 @@
 # ----------------------------------------------------------------------------
 # `cross` (the container-based cross-compiler) only publishes x86_64 build
 # images. On an arm64 Mac those run under QEMU emulation, where rustc segfaults
-# ("qemu: uncaught target signal 11"). Docker vs Podman makes no difference --
-# both hit the same emulation layer. So instead we cross-compile with plain
+# ("qemu: uncaught target signal 11"). So instead we cross-compile with plain
 # cargo and point it at NATIVE cross-toolchains: no containers, no emulation.
+# Use Podman for container operations (Docker-compatible CLI).
 #
 # ----------------------------------------------------------------------------
 # Prerequisites
