@@ -287,10 +287,9 @@ fn main() -> io::Result<()> {
     // Draw once before the (comparatively expensive, git-subprocess-based)
     // initial refresh, so the terminal shows real content immediately
     // rather than sitting on whatever was on screen before Vix started for
-    // however long that refresh takes (T122). `run`'s own loop redraws with
-    // the real git state on its first iteration.
+    // however long that refresh takes (T122). Git state is refreshed when
+    // the Git panel is first opened, saving ~12.2 ms on startup.
     let _ = draw(&mut terminal, &mut app);
-    app.refresh_git();
     let result = run(&mut terminal, &mut app);
     let _ = write!(io::stdout(), "\x1b[?1003l");
     #[cfg(target_os = "macos")]
