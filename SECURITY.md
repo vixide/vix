@@ -74,3 +74,8 @@ simply doesn't expose any, so there's nothing to disable. A script can
 only read and write the active buffer/selection and register commands
 and key bindings. See
 [`crates/vix-script/spec/index.md`](crates/vix-script/spec/index.md).
+
+## Security Checklist
+
+For maintainers and contributors, see the [Security Checklist](docs/security-checklist.md)
+for guidelines on implementing new features securely.
