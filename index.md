@@ -11,11 +11,13 @@ database workbench come built in, so Vix is useful the moment it opens.
 [![CI](https://github.com/vixide/vix/actions/workflows/ci.yml/badge.svg)](https://github.com/vixide/vix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vix-tui.svg)](https://crates.io/crates/vix-tui)
 [![License: Apache-2.0 / BSD-3-Clause / MIT / GPL](https://img.shields.io/badge/license-Apache--2.0%20%7C%20BSD--3--Clause%20%7C%20MIT%20%7C%20GPL-blue.svg)](LICENSE)
+[![GitHub Discussions](https://img.shields.io/github/discussions/vixide/vix?style=social)](https://github.com/vixide/vix/discussions)
 
 [Website](https://vixide.github.io/) ·
 [Install](#install) ·
 [Documentation](https://vixide.github.io/vix/) ·
 [Getting Started](docs/getting-started/index.md) ·
+[Discussions](https://github.com/vixide/vix/discussions) ·
 [Compare](docs/compare/index.md) ·
 [Changelog](CHANGELOG.md)
 
