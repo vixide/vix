@@ -17,6 +17,7 @@ database workbench come built in, so Vix is useful the moment it opens.
 [Install](#install) ·
 [Documentation](https://vixide.github.io/vix/) ·
 [Getting Started](docs/getting-started/index.md) ·
+[FAQ](docs/faq.md) ·
 [Discussions](https://github.com/vixide/vix/discussions) ·
 [Compare](docs/compare/index.md) ·
 [Changelog](CHANGELOG.md)
