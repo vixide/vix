@@ -91,10 +91,13 @@ test:
 check:
 	./scripts/check
 
-# Install the repository hooks (T761): sets core.hooksPath so the pre-push hook
-# refuses to push main or a tag without a valid full-tier gate attestation
-# (scripts/attest). It only sets git config; `git config --unset core.hooksPath`
-# removes it.
+# Install the repository hooks (T761, T760): sets core.hooksPath so the hooks
+# in scripts/hooks/ are used. Includes:
+#   - pre-push: refuses to push main or a tag without a valid full-tier gate
+#     attestation (scripts/attest)
+#   - pre-commit: runs cargo fmt on staged Rust files for consistent formatting
+# It only sets git config; `git config --unset core.hooksPath` removes it.
+# Skip pre-commit formatting with VIX_SKIP_PRECOMMIT_FMT=1.
 hooks:
 	git config core.hooksPath scripts/hooks
 	@echo "hooks installed: core.hooksPath = scripts/hooks"

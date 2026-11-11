@@ -1,0 +1,56 @@
+#!/bin/sh
+# pre-commit hook for automatic formatting (T760, T761)
+# Installed by `make hooks` (sets core.hooksPath to scripts/hooks).
+#
+# Runs cargo fmt on staged Rust files to ensure consistent formatting.
+# This hook is optional and can be skipped with --no-verify or
+# by setting VIX_SKIP_PRECOMMIT_FMT=1.
+#
+# The gate (scripts/check) already checks formatting, so this hook is a
+# convenience to avoid having to re-format manually.
+
+top=$(git rev-parse --show-toplevel) || exit 1
+
+# Skip if explicitly requested
+if [ "${VIX_SKIP_PRECOMMIT_FMT:-}" = 1 ]; then
+    exit 0
+fi
+
+# Get staged Rust files
+staged_rust_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$')
+
+# If there are staged Rust files, run cargo fmt
+if [ -n "$staged_rust_files" ]; then
+    echo "pre-commit: running cargo fmt on staged Rust files..." >&2
+    
+    # Format all files (not just staged ones) for consistency
+    if ! cargo fmt --; then
+        echo "pre-commit: cargo fmt failed. Run 'cargo fmt' manually." >&2
+        exit 1
+    fi
+    
+    # Add formatted files back to staging
+    git add -u
+    
+    echo "pre-commit: formatted $(echo "$staged_rust_files" | wc -l) Rust file(s)." >&2
+fi
+
+# Also check for markdown files that might need formatting
+staged_md_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$')
+if [ -n "$staged_md_files" ]; then
+    # For now, just check if there are any markdown formatting tools
+    # In the future, we could add prettier or other formatters
+    if command -v prettier >/dev/null 2>&1; then
+        echo "pre-commit: running prettier on staged Markdown files..." >&2
+        for file in $staged_md_files; do
+            prettier --write "$file" || {
+                echo "pre-commit: prettier failed on $file" >&2
+                exit 1
+            }
+        done
+        git add -u
+        echo "pre-commit: formatted Markdown files." >&2
+    fi
+fi
+
+exit 0
