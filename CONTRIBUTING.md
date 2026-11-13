@@ -42,7 +42,7 @@ That's it! Vix will open in your terminal.
 | **Tests** | Add test coverage | Medium | Developers |
 | **Translations** | Add/improve i18n strings | Medium | Multilingual contributors |
 | **Themes** | Create new color themes | Easy | Designers |
-| **Scripts** | Write Rhai scripts | Medium | Scripters |
+| **Scripts** | Write Rhai scripts | Medium | Script authors |
 
 ---
 
@@ -173,7 +173,7 @@ vix/
 │   ├── vix-lsp/         # LSP client
 │   ├── vix-git/         # Git integration
 │   └── ...              # Many more
-├── gui/                 # Desktop GUI frontends
+├── gui/                 # Desktop GUI front ends
 └── spec/                # Cross-cutting specifications
 ```
 
@@ -442,7 +442,7 @@ We follow a **respectful, inclusive** code of conduct:
 |----------|-------------|
 | [crates/](crates/) | 147 feature crates |
 | [tui/](tui/) | Main app shell |
-| [gui/](gui/) | Desktop GUI frontends |
+| [gui/](gui/) | Desktop GUI front ends |
 | [scripts/](scripts/) | Build and check scripts |
 
 ### Learning

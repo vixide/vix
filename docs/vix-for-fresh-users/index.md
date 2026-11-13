@@ -142,7 +142,7 @@ separate tools or plugins for:
 
 ### Desktop GUIs
 
-- **8 desktop frontends**: Same editor, native window (GPUI, egui, iced,
+- **7 desktop front ends**: Same editor, native window (GPUI, egui, iced,
   slint, gtk4, bui, zgui)
 
 ## Key Differences to Be Aware Of
