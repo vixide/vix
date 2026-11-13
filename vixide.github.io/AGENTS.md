@@ -15,6 +15,14 @@ editor — see [index.md](index.md) for scope.
 - **License**: Apache-2.0 or BSD-3-Clause or MIT or GPL-2.0 or GPL-3.0
 - **Contact**: Joel Parker Henderson (joel@joelparkerhenderson.com)
 
+## Specification Driven Development
+
+**The `spec/` directory is the source of truth.**
+
+- Before doing anything, read every file in the `spec/` directory.
+- Treat all files inside `spec/` as strict requirements. Where any file disagrees with the spec, the spec wins: fix the file, or change the spec on purpose and bring the other files into line in the same commit.
+- Do not improvise structure, style, or citation practice.
+
 ## Working rules
 
 - Uses [Lily Design System](https://lilydesignsystem.com/)'s headless
