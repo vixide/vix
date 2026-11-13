@@ -1,0 +1,20 @@
+Say hello and tell us how you use Vix
+
+Welcome! This thread is for getting to know each other. Introduce yourself, and tell us a little about how Vix fits into your work.
+
+I'll go first: I'm Joel, and I maintain Vix. [To fill in: one or two sentences on how you use Vix.]
+
+## One question
+
+**What are you editing with Vix, and which keymap are you using?**
+
+A sentence or two is plenty. It helps us see which parts of Vix matter most to you.
+
+## Where other topics belong
+
+- **Questions** go to [Q&A](https://github.com/vixide/vix/discussions/categories/q-a), where an answer can be marked as accepted.
+- **Feature ideas** go to [Ideas](https://github.com/vixide/vix/discussions/categories/ideas).
+- **Things you've made** go to [Show and tell](https://github.com/vixide/vix/discussions/categories/show-and-tell).
+- **Bugs** go to [Issues](https://github.com/vixide/vix/issues).
+
+Thanks for being here. I'll reply to the first comments myself.
