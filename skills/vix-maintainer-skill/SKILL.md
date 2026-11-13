@@ -209,7 +209,7 @@ Once merged to `vix`'s `main` (and `vix` itself is pushed — subtree push
 reads from local history, not the forges), publish the subtree:
 
 ```
-make github-pages
+make publish-github-pages
 ```
 
 (equivalent to `git subtree push --prefix=vixide.github.io github-pages main`

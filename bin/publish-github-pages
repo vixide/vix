@@ -7,7 +7,7 @@
 # no other route to the live site from a monorepo commit.
 #
 # The remote is created on first use if a fresh clone doesn't have it yet.
-# Invoked via `make github-pages`.
+# Invoked via `make publish-github-pages`.
 set -e
 
 git remote get-url github-pages >/dev/null 2>&1 ||

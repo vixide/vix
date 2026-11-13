@@ -414,7 +414,7 @@ The Makefile provides convenient targets for cross-compilation:
 
 ```sh
 # Build for all platforms
-make release
+make build
 
 # Build for macOS only
 make build-macos
