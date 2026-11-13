@@ -136,12 +136,12 @@ fn update(
     let mut lines = Vec::new();
     for o in vix_script::plugins::update(paths, name)? {
         if o.old_commit == o.new_commit {
-            lines.push(t!("msg.plugin_up_to_date", name = o.name.clone()).to_string());
+            lines.push(t!("msg.plugin_up_to_date", name = o.name).to_string());
         } else {
             lines.push(
                 t!(
                     "msg.plugin_updated",
-                    name = o.name.clone(),
+                    name = o.name,
                     old = short(&o.old_commit),
                     new = short(&o.new_commit)
                 )
