@@ -85,8 +85,8 @@ impl App {
             self.messages.error(
                 t!(
                     "msg.script_load_error",
-                    stem = err.stem.clone(),
-                    message = err.message.clone()
+                    stem = err.stem,
+                    message = err.message
                 )
                 .to_string(),
             );

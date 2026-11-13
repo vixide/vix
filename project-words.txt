@@ -861,3 +861,19 @@ bytesize
 decryptable
 libiconv
 msgtype
+
+# Docs added 2026-11 (development, packaging, security, cookbook, contributing guides)
+archlinux
+Bienvenido
+Dwarnings
+Flathub
+INPROGRESS
+Konsole
+lldb
+messense
+paru
+pkgver
+snapcraft
+Softbuffer
+TOCTOU
+Unsanitized

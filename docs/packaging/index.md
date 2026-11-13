@@ -339,7 +339,7 @@ wingetcreate update vixide.vix-tui --version <version> --urls <zip-url> --submit
 **Files:**
 - [`docker/Dockerfile`](https://github.com/vixide/vix/blob/main/docker/Dockerfile)
 - [`.dockerignore`](https://github.com/vixide/vix/blob/main/.dockerignore)
-- [`workflows/container.yml`](https://github.com/vixide/vix/blob/main/.github/workflows/container.yml)
+- [`.github/workflows/container.yml`](https://github.com/vixide/vix/blob/main/.github/workflows/container.yml)
 
 **Features:**
 - Multi-arch (amd64, arm64)
@@ -482,7 +482,7 @@ These channels are planned but not yet implemented:
 **Status**: ⏳ Not yet implemented
 
 **To Implement:**
-- Create `flatpak/org.vixide.vix.json` manifest
+- Create the Flatpak manifest, `org.vixide.vix.json`
 - Build and test on Flatpak Builder
 - Submit to Flathub
 
@@ -493,7 +493,7 @@ These channels are planned but not yet implemented:
 **Status**: ⏳ Not yet implemented
 
 **To Implement:**
-- Create `snap/snapcraft.yaml`
+- Create the Snap manifest, `snapcraft.yaml`
 - Build and test locally
 - Submit to Snap Store
 
@@ -508,7 +508,7 @@ For each new channel, follow this checklist:
 - [ ] Template exists in `packaging/` directory
 - [ ] Template has been verified to work locally
 - [ ] Template uses correct version and URLs
-- [ ] All checksums/hashs are valid
+- [ ] All checksums and hashes are valid
 - [ ] Auto-update mechanism is configured (if applicable)
 - [ ] Documentation is updated
 

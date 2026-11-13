@@ -77,7 +77,7 @@ vix/
 │   ├── vix-http-client/           # REST client
 │   ├── vix-file-browser-panel/   # File explorer
 │   └── ... (130+ more)
-├── gui/                          # Desktop GUI frontends
+├── gui/                          # Desktop GUI front ends
 │   ├── Cargo.toml
 │   ├── vix-gpui/
 │   ├── vix-egui/
@@ -341,7 +341,7 @@ flowchart TD
 
 ## Desktop GUI Architecture
 
-Vix supports 8 desktop GUI frontends, each wrapping the same App shell:
+Vix supports 7 desktop GUI front ends, each wrapping the same App shell:
 
 ```mermaid
 graph TD
@@ -380,7 +380,7 @@ graph TD
 | `vix-bui` | BUI | GPL-3.0-only | Blender's UI toolkit |
 | `vix-zgui` | zgui | Apache-2.0 | Reactive, CSS, wgpu |
 
-All frontends:
+All front ends:
 - Share the same `App` shell from `tui/`
 - Use the same key handling, action dispatch, and state management
 - Render using the framework's capabilities
@@ -716,9 +716,9 @@ If you're new to Vix's codebase, here are some good next steps:
 
 ## Resources
 
-- [AGENTS.md](../AGENTS.md) - Contribution guidelines
-- [agents/workflow.md](../agents/workflow.md) - Development workflow
-- [plan.md](../plan.md) - Improvement roadmap
-- [tasks.md](../tasks.md) - Detailed tasks
+- [AGENTS.md](../../AGENTS.md) - Contribution guidelines
+- [agents/workflow.md](../../agents/workflow.md) - Development workflow
+- [plan.md](../../plan.md) - Improvement roadmap
+- [tasks.md](../../tasks.md) - Detailed tasks
 - [docs/](.) - User documentation
-- [spec/](../spec/) - Specifications
+- [spec/](../../spec/) - Specifications

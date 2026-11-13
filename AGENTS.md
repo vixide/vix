@@ -4,6 +4,14 @@ Guidance for AI agents and human contributors working in the Vix repository.
 This file is the entry point; see [`agents/`](agents/) for topic guides and
 [`index.md`](index.md) for the full documentation map.
 
+## Specification Driven Development
+
+**The `spec/` directory is the source of truth.**
+
+- Before doing anything, read every file in the `spec/` directory.
+- Treat all files inside `spec/` as strict requirements. Where any file disagrees with the spec, the spec wins: fix the file, or change the spec on purpose and bring the other files into line in the same commit.
+- Do not improvise structure, style, or citation practice.
+
 ## Governance
 
 Read [`AI_STATEMENT.md`](AI_STATEMENT.md) before doing anything outward-facing

@@ -117,7 +117,7 @@ impl rust_i18n::Backend for LazyBackend {
 /// The one and only backend instance. Building it is cheap (one [`OnceLock`]
 /// per locale, none of them populated yet) — the real work happens lazily in
 /// `LazyBackend::messages`, per locale, on first use.
-static _RUST_I18N_BACKEND: LazyLock<LazyBackend> = LazyLock::new(LazyBackend::new);
+static BACKEND: LazyLock<LazyBackend> = LazyLock::new(LazyBackend::new);
 
 /// The fallback locale chain a lookup walks when the requested locale (and
 /// any of its `rust_i18n`-style tag-truncation fallbacks — irrelevant here,
@@ -129,7 +129,7 @@ static _RUST_I18N_FALLBACK_LOCALE: &[&str] = &["en"];
 /// The `rust_i18n` backend entry point the `t!` macro expands to: a plain exact-locale lookup in the lazy backend, with no fallback (see [`_rust_i18n_try_translate`] for that).
 #[inline]
 fn _rust_i18n_backend_translate<'r>(locale: &str, key: &str) -> Option<Cow<'r, str>> {
-    _RUST_I18N_BACKEND.translate(locale, key)
+    BACKEND.translate(locale, key)
 }
 
 /// The RFC 4647-style tag-truncation fallback used to look up e.g.
@@ -196,7 +196,7 @@ pub fn _rust_i18n_try_translate<'r>(locale: &str, key: impl AsRef<str>) -> Optio
 /// parsing any locale's translation blob.
 #[must_use]
 pub fn _rust_i18n_available_locales() -> Vec<Cow<'static, str>> {
-    let mut locales = _RUST_I18N_BACKEND.available_locales();
+    let mut locales = BACKEND.available_locales();
     locales.sort();
     locales
 }
