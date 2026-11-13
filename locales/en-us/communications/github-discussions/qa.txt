@@ -1,0 +1,44 @@
+How to ask a question that gets a fast answer
+
+Q&A is the place for "how do I…?" questions about Vix. When a reply solves your problem, mark it as the answer so the next person with the same question can find it.
+
+Before you ask, check the [FAQ](https://github.com/vixide/vix/blob/main/docs/faq.md), the [cookbook](https://github.com/vixide/vix/blob/main/docs/cookbook.md), and the [getting started guide](https://github.com/vixide/vix/blob/main/docs/getting-started/index.md). Then search Q&A, since someone may have asked already.
+
+## Checklist for a good question
+
+Ask one question per discussion, and give it a title that names the problem, such as "How do I make Ctrl+D select the next match in the VS Code keymap?" rather than "Help".
+
+Then copy these headings into your post:
+
+```markdown
+## Goal
+What you're trying to do, in one sentence.
+
+## What I tried
+The steps, settings, or commands you tried, in order.
+
+## Expected
+What you expected to happen.
+
+## Actual
+What happened instead. Paste exact error text as text, not a screenshot.
+
+## Environment
+- Output of `vix --version`:
+- Operating system and version:
+- Terminal:
+- Keymap:
+
+## Minimal example
+The smallest file, setting, or set of steps that still shows the problem.
+```
+
+Running `vix --doctor` prints a pass/fail report of common setup problems (Git on your PATH, language servers, the spellcheck dictionary, terminal colors). It's worth pasting into your question too.
+
+Before you post logs or config, remove tokens, passwords, and other personal data.
+
+## Bug or question?
+
+If Vix crashes, or does something clearly wrong that you can reproduce, please open an [Issue](https://github.com/vixide/vix/issues) instead, so it can be tracked and fixed. If you've found a security problem, follow the [security policy](https://github.com/vixide/vix/blob/main/SECURITY.md) and don't post it publicly.
+
+**Got a question? Start a new discussion in Q&A, and remember to mark the answer that works.**

@@ -1,0 +1,38 @@
+Show us what you've made with Vix
+
+This is the place to share what you've built with or around Vix: a theme, a keymap tweak, a Rhai script or plugin, a workflow, a tutorial, or a demo. Small things are welcome. A one-line script that saves you time every day counts.
+
+## How to share
+
+Copy this into a new discussion and fill it in:
+
+```markdown
+## What it is
+One sentence.
+
+## Why I made it
+The problem or the curiosity behind it, in two or three sentences.
+
+## Show it
+A screenshot, a short snippet, or a link.
+
+## How to try it
+The steps someone needs, such as where to put the file.
+
+## What was hard or surprising
+One thing you learned along the way.
+
+## What I'd like
+Feedback, help, or other people's versions.
+```
+
+## Ideas for what to share
+
+- **A theme.** Vix themes are JSON files. Make one with the theme editor, or start from a built-in theme. See [themes](https://github.com/vixide/vix/blob/main/docs/themes/index.md).
+- **A script or plugin.** A small `.rhai` file can add a command palette entry, a key binding, or a buffer transform without rebuilding Vix. See [scripting](https://github.com/vixide/vix/blob/main/docs/scripting/index.md).
+- **Your key bindings.** Show how you've changed one of the built-in keymaps with `keybindings.toml`. See [keymaps](https://github.com/vixide/vix/blob/main/docs/keymaps/index.md).
+- **A workflow.** How you use Vix's Git, Org mode, database workbench, or debugger day to day. The [cookbook](https://github.com/vixide/vix/blob/main/docs/cookbook.md) has examples.
+
+If what you've made builds on someone else's work, such as a color palette or another editor's keymap, please credit them.
+
+**Made something, however small? Start a new discussion in Show and tell, and tell us what you'd like back.**

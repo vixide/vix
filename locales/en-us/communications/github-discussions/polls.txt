@@ -1,0 +1,25 @@
+Which install channel should Vix verify and publish next?
+
+## Description
+
+Today you can install Vix with Homebrew, npm, the shell and PowerShell installers, the release archives, Linux packages, and `cargo install`. More channels are prepared in the repository, but none of them are published yet, because each one has to be checked on a real machine first. The details are in [packaging](https://github.com/vixide/vix/blob/main/packaging/index.md).
+
+We'll verify and publish these one at a time. This poll helps us choose which to do first.
+
+- **How the result will be used:** it's advisory. Maintainers will use it, along with the comments, to choose the order. It isn't a binding vote.
+- **Closing date:** to fill in.
+
+Please add a comment saying which operating system you use and why the channel matters to you. The votes show what you want, and the comments show why.
+
+## Poll question
+
+Which install channel should Vix verify and publish next?
+
+## Options
+
+1. winget (Windows)
+2. Scoop (Windows)
+3. Nix flake (`nix run github:vixide/vix`)
+4. AUR (Arch Linux)
+5. mise
+6. Something else (explain in comments)

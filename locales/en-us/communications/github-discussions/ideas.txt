@@ -1,0 +1,40 @@
+How to suggest an idea for Vix
+
+The Ideas category is where we talk about changes and features before anyone writes code. The best ideas start with a problem, not a solution, so we can find the right fix together, even if it's a different one.
+
+Please post one idea per discussion, so feedback on each stays in one place. Before you post, search [Ideas](https://github.com/vixide/vix/discussions/categories/ideas) and [Issues](https://github.com/vixide/vix/issues) in case someone already suggested it, and add your case there instead.
+
+## How to suggest an idea
+
+Copy these headings into a new discussion and fill them in:
+
+```markdown
+## Problem
+What gets in your way, who it affects, and when it happens.
+
+## Proposal
+What you'd like Vix to do, in plain terms. A short list is fine.
+
+## Alternatives
+What you do today instead, other ways to solve it, and what happens
+if Vix does nothing.
+
+## Costs and trade-offs
+Anything you can think of: complexity, compatibility with existing
+keymaps or settings, or work to maintain.
+
+## Open questions
+What you'd like others to weigh in on.
+```
+
+Give it a title that names the problem or the outcome, such as "Hard to tell which split has focus", rather than "New feature".
+
+## Before you ask for a feature
+
+Vix may already do it. Press `F1` for every shortcut, or `Ctrl+P` for every command. Small, personal commands can often be a [Rhai script](https://github.com/vixide/vix/blob/main/docs/scripting/index.md) instead of a change to Vix.
+
+## What happens next
+
+Maintainers read new ideas and reply in the thread. An idea we agree to take on becomes an [Issue](https://github.com/vixide/vix/issues), and we'll link it from the discussion. A suggestion isn't a commitment to build it, and some ideas will be a "not for now". When that happens, we'll say why.
+
+**Would this template have helped with the idea you have in mind? Reply below if a heading is missing.**

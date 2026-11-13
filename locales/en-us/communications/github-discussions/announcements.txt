@@ -1,0 +1,28 @@
+Welcome to Vix Discussions
+
+Vix Discussions are open. This is the place to ask questions, suggest ideas, and share what you build with Vix, the terminal IDE that already knows your keys.
+
+If you're new: Vix is a keyboard-friendly terminal editor and IDE. Save is `Ctrl+S`, find is `Ctrl+F`, and everything else is in a menu bar or the `Ctrl+P` command palette. Language servers, a debugger, Git, Org mode, and a database workbench are built in. The current release is 2.0.2.
+
+## What this means for you
+
+- You can ask a question and get an answer that the next person can find.
+- You can suggest a feature and talk it through before anyone writes code.
+- You can vote on open choices in Polls.
+- You can show the themes, scripts, keymaps, and workflows you've made.
+
+## Where to go for what
+
+- **Questions** ("how do I…?") go to [Q&A](https://github.com/vixide/vix/discussions/categories/q-a).
+- **Feature ideas** go to [Ideas](https://github.com/vixide/vix/discussions/categories/ideas).
+- **Votes** on open choices go to [Polls](https://github.com/vixide/vix/discussions/categories/polls).
+- **Things you've made** go to [Show and tell](https://github.com/vixide/vix/discussions/categories/show-and-tell).
+- **Anything else** goes to [General](https://github.com/vixide/vix/discussions/categories/general).
+- **Bugs** go to [Issues](https://github.com/vixide/vix/issues), so they can be tracked and fixed.
+- **Security problems** go through the [security policy](https://github.com/vixide/vix/blob/main/SECURITY.md), never a public post.
+
+Please be kind and stay on topic. If you'd like to contribute code or docs, start with the [contributing guide](https://github.com/vixide/vix/blob/main/CONTRIBUTING.md).
+
+## Start here
+
+Head over to [General](https://github.com/vixide/vix/discussions/categories/general) and say hello: tell us what you use Vix for. Reply below or react to this post if you have questions about how Discussions will work.
