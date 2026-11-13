@@ -111,7 +111,7 @@ arboard = { version = "3.7", default-features = false }
 rhai = "1.27"
 ratatui-core = "0.1"
 ropey = "1.6"
-rust-embed = { version = "8.13", features = ["include-exclude"] }
+rust-embed = { version = "8.14", features = ["include-exclude"] }
 streaming-iterator = "0.1"
 tree-sitter = "0.27"
 unicode-segmentation = "1.13"
