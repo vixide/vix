@@ -7,22 +7,11 @@
 # Apple Silicon (arm64); the macOS target builds natively and the Windows and
 # Linux targets are cross-compiled.
 #
-# ----------------------------------------------------------------------------
-# Targets (run `make <name>`)
-# ----------------------------------------------------------------------------
-#   make            Default. Run the full test suite, then build all three
-#                   release binaries. Tests GATE the builds: make runs
-#                   prerequisites in order and stops at the first failure, so a
-#                   failing test aborts before anything is built.
-#   make test       Run the test suite only (no builds).
-#   make release    Build all three release binaries (skips tests).
-#   make build-macos / build-windows / build-linux
-#                   Build a single platform's release binary.
-#   make hooks      Install the pre-push hook (gate attestation, T761).
-#   make clean      Remove the target/ build directory.
-#   make github-pages
-#                   Publish vixide.github.io/ to the read-only GitHub Pages
-#                   export repo (spec/monorepo-github-pages/).
+# Run `make help` to list every target. Each target documents itself in a
+# block between two `##` lines just above it; `make help` prints those blocks.
+# `make` with no target runs `make all`: the test suite first, then all three
+# release builds. make runs prerequisites in order and stops at the first
+# failure, so a failing test aborts before anything is built.
 #
 # ----------------------------------------------------------------------------
 # Output binaries
@@ -73,66 +62,148 @@ LINUX_TARGET   ?= x86_64-unknown-linux-musl
 # Build `all` when make is invoked with no explicit target.
 .DEFAULT_GOAL := all
 
-# These targets are commands, not files, so declare them PHONY: make will run
-# their recipes unconditionally and never skip one because a same-named file
-# happens to exist or look "up to date".
-.PHONY: all test check hooks release build-macos build-windows build-linux clean github-pages
+##
+# make help: Display this help message.
+##
+.PHONY: help
+help:
+	@awk '/^##/{a=1-a}a' $(MAKEFILE_LIST) | cut -c3-
 
-# Tests first, then the release builds. make evaluates prerequisites left to
-# right and aborts on the first failure, so `test` failing means no build runs.
-all: test release
+##
+# make all: Test first, then build. make evaluates prerequisites left to
+# right and aborts on the first failure, so a failing test means no build runs.
+##
+.PHONY: all
+all: test build
 
-# Run the whole workspace's tests (unit + integration + doctests).
-test:
+##
+# make test: Test everything: GitHub Discussions, then the whole workspace's
+# unit, integration and doc tests.
+##
+.PHONY: test
+test: test-github-discussions
 	$(CARGO) test --workspace
 
-# Local CI-parity gate: build + clippy (pedantic, -D warnings) + tests.
-# Same as scripts/check; run before pushing.
-check:
-	./scripts/check
+##
+# make test-github-discussions: Test that GitHub Discussions is enabled on
+# vixide/vix (the README links to it). Skips when `gh` is missing or not
+# signed in.
+##
+.PHONY: test-github-discussions
+test-github-discussions:
+	bin/test-github-discussions
 
-# Install the repository hooks (T761, T760): sets core.hooksPath so the hooks
-# in scripts/hooks/ are used. Includes:
+##
+# make check: Run the local CI-parity gate, scripts/check: fmt, build,
+# clippy (pedantic, -D warnings), tests, docs and more. Run it before pushing.
+##
+.PHONY: check
+check:
+	scripts/check
+
+##
+# make check-env: Print some of this project's important tools, their
+# versions and paths, to help with installation, debugging and maintenance.
+##
+.PHONY: check-env
+check-env::
+	@echo "Print some of this project's important tools, their versions and paths."
+
+check-env:: check-uname check-pnpm
+
+##
+# make check-uname: Print the uname information of the system.
+##
+.PHONY: check-uname
+check-uname:
+	@printf '\n### uname ###\n'
+	uname -a
+
+##
+# make check-pnpm: Print the version and path of the command `pnpm`.
+##
+.PHONY: check-pnpm
+check-pnpm:
+	@printf '\n### pnpm ###\n'
+	pnpm --version || true
+	which -a pnpm || true
+
+##
+# make hooks: Install the repository hooks (T761, T760).
+# Sets core.hooksPath so the hooks in scripts/hooks/ are used. Includes:
 #   - pre-push: refuses to push main or a tag without a valid full-tier gate
 #     attestation (scripts/attest)
 #   - pre-commit: runs cargo fmt on staged Rust files for consistent formatting
 # It only sets git config; `git config --unset core.hooksPath` removes it.
 # Skip pre-commit formatting with VIX_SKIP_PRECOMMIT_FMT=1.
+##
+.PHONY: hooks
 hooks:
 	git config core.hooksPath scripts/hooks
 	@echo "hooks installed: core.hooksPath = scripts/hooks"
 
-# Build every platform. Each build-* recipe is independent and self-contained.
-release: build-macos build-windows build-linux
+##
+# make build: Build every platform (skips tests).
+# Each build-* recipe is independent and self-contained.
+##
+.PHONY: build
+build: build-macos build-windows build-linux
 
-# macOS: native build on an Apple Silicon host -- no special linker needed.
+##
+# make build-macos: Build for macOS, natively on an Apple Silicon host.
+# No special linker needed.
+##
+.PHONY: build-macos
 build-macos:
 	rustup target add $(MACOS_TARGET)
 	$(CARGO) build --release --target $(MACOS_TARGET)
 
-# Windows (GNU ABI): cross-compiled with the mingw-w64 toolchain. The linker and
-# the cc-rs CC/AR overrides come from .cargo/config.toml.
+##
+# make build-windows: Build for Windows (GNU ABI), cross-compiled with the
+# mingw-w64 toolchain. The linker and the cc-rs CC/AR overrides come
+# from .cargo/config.toml.
+##
+.PHONY: build-windows
 build-windows:
 	rustup target add $(WINDOWS_TARGET)
 	$(CARGO) build --release --target $(WINDOWS_TARGET)
 
-# Linux (MUSL): cross-compiled with the musl toolchain, producing a fully static
-# binary that runs on any x86-64 Linux without a libc dependency. The linker and
-# the cc-rs CC/AR overrides come from .cargo/config.toml.
+##
+# make build-linux: Build for Linux (musl), cross-compiled with the musl
+# toolchain, producing a fully static binary that runs on any x86-64 Linux
+# without a libc dependency. The linker and the cc-rs CC/AR overrides come
+# from .cargo/config.toml.
+##
+.PHONY: build-linux
 build-linux:
 	rustup target add $(LINUX_TARGET)
 	$(CARGO) build --release --target $(LINUX_TARGET)
 
-# Remove all build artifacts (the target/ directory).
+##
+# make clean: Remove all build artifacts (the target/ directory).
+##
+.PHONY: clean
 clean:
 	$(CARGO) clean
 
-# ----------------------------------------------------------------------------
-# GitHub Pages
-# ----------------------------------------------------------------------------
+##
+# make lint: Proofread everything.
+##
+.PHONY: lint
+lint: lint-markdown
 
-# Publish vixide.github.io/ (a monorepo subtree, spec/monorepo-github-pages/)
-# to the standalone, read-only GitHub Pages export repo. See
-# bin/make-github-pages for what this actually runs.
-github-pages:
-	bin/make-github-pages
+##
+# make lint-markdown: Proofread Markdown files: spelling and links
+# (scripts/check-docs), plus markdownlint-cli2 when it is installed.
+##
+.PHONY: lint-markdown
+lint-markdown:
+	@scripts/lint-markdown.sh check --quiet
+
+##
+# make publish-github-pages: Publish the website subproject, vixide.github.io/,
+# to its own read-only sibling repository (spec/monorepo-github-pages/).
+##
+.PHONY: publish-github-pages
+publish-github-pages:
+	bin/publish-github-pages

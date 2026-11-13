@@ -1,0 +1,49 @@
+#!/bin/sh
+# Test that GitHub Discussions is enabled on the repository and has at least
+# one category, since the README's Discussions badge links there.
+#
+#     bin/test-github-discussions
+#
+# Reads the repository with the GitHub CLI (`gh`). Override the repository
+# with VIX_GITHUB_REPO=owner/name. When `gh` is missing or not signed in, the
+# test is skipped (exit 0) so an offline `make test` still works. Invoked via
+# `make test-github-discussions` and `make test`.
+set -u
+
+repo=${VIX_GITHUB_REPO:-vixide/vix}
+
+if ! command -v gh >/dev/null 2>&1; then
+	echo "skip: GitHub Discussions test needs gh (https://cli.github.com)"
+	exit 0
+fi
+if ! gh auth status >/dev/null 2>&1; then
+	echo "skip: GitHub Discussions test needs a signed-in gh (gh auth login)"
+	exit 0
+fi
+
+enabled=$(gh api "repos/$repo" --jq .has_discussions) || {
+	echo "FAIL: could not read repos/$repo from the GitHub API" >&2
+	exit 1
+}
+if [ "$enabled" != true ]; then
+	echo "FAIL: GitHub Discussions is not enabled on $repo" >&2
+	exit 1
+fi
+
+owner=${repo%%/*}
+name=${repo#*/}
+# The $owner and $name in the query are GraphQL variables, not shell ones.
+# shellcheck disable=SC2016
+categories=$(gh api graphql \
+	-f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { discussionCategories(first: 1) { totalCount } } }' \
+	-f owner="$owner" -f name="$name" \
+	--jq .data.repository.discussionCategories.totalCount) || {
+	echo "FAIL: could not read the Discussions categories of $repo" >&2
+	exit 1
+}
+if [ "${categories:-0}" -lt 1 ]; then
+	echo "FAIL: GitHub Discussions on $repo has no categories" >&2
+	exit 1
+fi
+
+echo "ok: GitHub Discussions is enabled on $repo ($categories categories)"

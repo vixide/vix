@@ -8,7 +8,7 @@ description: Branch, verify, commit, merge, and push a finished change in vixide
 `vix` pushes to **three forges** from one `origin` remote (`git remote -v`
 shows three push URLs: GitHub, GitLab, Codeberg). The public site lives at
 `vix/vixide.github.io/` — a monorepo subproject (see
-`spec/monorepo-github-pages/index.md`), published with `make github-pages`
+`spec/monorepo-github-pages/index.md`), published with `make publish-github-pages`
 to a **separate**, GitHub-only, read-only sibling repo (`../vixide.github.io`
 next to `vix`) via `git subtree push`. Never edit `../vixide.github.io`
 directly — every site change lands in `vix/vixide.github.io/` and gets
@@ -88,7 +88,7 @@ reads from local history, not the forges), publish the subtree to the
 sibling repo:
 
 ```
-make github-pages
+make publish-github-pages
 ```
 
 (equivalent to `git subtree push --prefix=vixide.github.io github-pages main`
