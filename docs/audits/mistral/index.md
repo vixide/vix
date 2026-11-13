@@ -302,7 +302,7 @@ Vix offers **unmatched feature density** for a terminal editor:
 | P3 | Add **automatic updates** mechanism | High | Medium |
 
 **Note**: According to CHANGELOG.md, many of these channels exist as **templates** but are **not yet published**:
-> "More channels (winget, Scoop, the AUR, a Nix flake and mise) are prepared in [`packaging/`](packaging/index.md) but **not published yet**"
+> "More channels (winget, Scoop, the AUR, a Nix flake and mise) are prepared in [`packaging/`](../../../packaging/index.md) but **not published yet**"
 
 **Quick Wins**:
 - Publish the existing AUR template

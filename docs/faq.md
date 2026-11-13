@@ -323,7 +323,7 @@ complete list of all settings.
 
 ### How do I contribute to Vix?
 
-See the [CONTRIBUTING.md](CONTRIBUTING.md) guide.
+See the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.
 
 ### How do I report a bug?
 
@@ -346,7 +346,7 @@ Vix is licensed under your choice of:
 - GPL 2.0
 - GPL 3.0
 
-See the [LICENSE](LICENSE) file for details.
+See the [LICENSE](../LICENSE) file for details.
 
 ---
 
