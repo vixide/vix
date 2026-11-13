@@ -234,7 +234,7 @@ Benchmark results are saved in `target/criterion/`.
 
 - Check [GitHub Issues](https://github.com/vixide/vix/issues) for open tasks
 - Look for issues labeled `good first issue` or `help wanted`
-- Browse the [spec directory](spec/) for features that need implementation
+- Browse the [spec directory](../spec/) for features that need implementation
 
 ### 2. Create a Feature Branch
 
@@ -581,7 +581,7 @@ if any public item is missing documentation.
 
 - [GitHub Discussions](https://github.com/vixide/vix/discussions) - Ask questions
 - [GitHub Issues](https://github.com/vixide/vix/issues) - Report bugs
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
 
 ### Staying Updated
 

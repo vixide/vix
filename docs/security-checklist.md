@@ -211,7 +211,7 @@ Complex security mechanisms are more likely to have vulnerabilities.
 
 ## Security Resources
 
-- [Vix Security Policy](SECURITY.md) - Reporting vulnerabilities
+- [Vix Security Policy](../SECURITY.md) - Reporting vulnerabilities
 - [Rust Security Guidelines](https://rust-lang.org/security) - Rust language security
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/) - Web application security
 - [CWE Top 25](https://cwe.mitre.org/top25/) - Common Weakness Enumeration
