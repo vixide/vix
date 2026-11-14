@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest a change or a new feature, starting from the problem it solves.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. If you'd like to talk it through first, or aren't
+        sure it fits, start a discussion in
+        [Ideas](https://github.com/vixide/vix/discussions/categories/ideas)
+        instead. Vix may already do it: press `F1` for every shortcut, or
+        `Ctrl+P` for every command. Small, personal commands can often be a
+        [Rhai script](https://github.com/vixide/vix/blob/main/docs/scripting/index.md).
+
+        A request isn't a commitment to build it. Maintainers will reply, and
+        say why if the answer is "not for now".
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What gets in your way, who it affects, and when it happens.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you'd like Vix to do, in plain terms.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: What you do today instead, and other ways to solve it.
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Costs and trade-offs
+      description: Complexity, compatibility with existing keymaps or settings, or work to maintain.

@@ -9529,6 +9529,17 @@ editor by completion, diagnostics and never losing work first.
   requests, and a `good first issue` label with a handful of real
   starter tasks; linked from the README and site. The choice of channel
   is the user's. **Small.**
+  - **Progress 2026-11-14** (`feat/t747-community-home`): the channel is
+    GitHub Discussions (enabled, six default categories, first posts in
+    `locales/en-us/communications/github-discussions/`); no Matrix room for
+    now. Issue forms in `.github/ISSUE_TEMPLATE/` (bug report, feature
+    request, and `config.yml` linking Q&A, Ideas and `SECURITY.md`); the
+    `good first issue` label already existed. README Contributing and the
+    site footer link to Discussions. Spec
+    [`spec/community`](spec/community/index.md), which lists six real starter
+    tasks (Scoop, winget, AUR and `nix run` on real machines, WSL, the IM demo
+    GIF). **Left (maintainer):** approve filing those as `good first issue`
+    issues.
 - [x] **T748 — Localized landing page.** The site's language picker sets
   only `lang`/`dir`; translate the home page's text into the editor's 15
   languages, per the [Worldwide](spec/worldwide/index.md) spec, starting

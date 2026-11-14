@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ask a question
+    url: https://github.com/vixide/vix/discussions/categories/q-a
+    about: For "how do I…?" questions. An answer can be marked as accepted for the next person.
+  - name: Discuss an idea
+    url: https://github.com/vixide/vix/discussions/categories/ideas
+    about: Talk a feature through before anyone writes code.
+  - name: Report a security problem
+    url: https://github.com/vixide/vix/blob/main/SECURITY.md
+    about: Please follow the security policy. Don't open a public issue.
