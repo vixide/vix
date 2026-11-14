@@ -374,6 +374,12 @@ AI agents alike) and
 [`docs/contributing-workflow.md`](docs/contributing-workflow.md). The roadmap
 lives in [`plan.md`](plan.md) and [`tasks.md`](tasks.md).
 
+Questions, ideas and things you've made go to
+[Discussions](https://github.com/vixide/vix/discussions); bugs go to
+[Issues](https://github.com/vixide/vix/issues/new/choose), through the bug report
+form. New to the code? Look for
+[`good first issue`](https://github.com/vixide/vix/labels/good%20first%20issue).
+
 ```sh
 cargo test
 cargo clippy --workspace --all-targets -- -D warnings

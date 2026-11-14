@@ -1,0 +1,65 @@
+name: Bug report
+description: Vix crashes, or does something wrong that you can reproduce.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. For "how do I…?" questions, please use
+        [Q&A](https://github.com/vixide/vix/discussions/categories/q-a)
+        instead. For a security problem, follow the
+        [security policy](https://github.com/vixide/vix/blob/main/SECURITY.md)
+        and don't open a public issue.
+
+        Before you post logs or config, remove tokens, passwords, and other
+        personal data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong. Paste exact error text as text, not a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps, file, or setting that still shows the bug.
+      placeholder: |
+        1. Run `vix example.rs`
+        2. Press …
+        3. See …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Vix version
+      description: The output of `vix --version`.
+      placeholder: vix 2.0.2
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and terminal
+      placeholder: macOS 15.5, Ghostty 1.2
+    validations:
+      required: true
+  - type: input
+    id: keymap
+    attributes:
+      label: Keymap
+      description: From View → Keymap, if it matters for this bug.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `vix --doctor`
+      description: A pass/fail report of common setup problems. Optional, but it often helps.
+      render: text

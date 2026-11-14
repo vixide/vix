@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Community home: Discussions and issue forms.** New issues on GitHub start from a bug report form (what happened, steps, expected, `vix --version`, OS and terminal, optional keymap and `vix --doctor` output) or a feature request form (the problem first), and the new-issue page links Q&A for questions, Ideas for undecided features and `SECURITY.md` for security problems. The README and the site link to [Discussions](https://github.com/vixide/vix/discussions). See [`spec/community`](spec/community/index.md) (T747).
 - **Zed keymap: Alt keys.** `Alt+Up`/`Alt+Down` move the line and `Alt+.`/`Alt+,` go to the next and previous Git change, as in Zed.
 - **Fresh and ttt keymaps: Alt keys.** `Alt+Up`/`Alt+Down` move the line in both; ttt's `Alt+.`/`Alt+,` switch tabs; Fresh's `Alt+Left`/`Alt+Right` go back and forward, `Alt+.` opens code actions and `Alt+/` searches the project. `Alt`+letter keeps opening menus.
 - **Helix keymap: every selection at once.** With several selections (after `C` or `s`), the motions (`w`/`b`/`e`, `W`/`B`/`E`, `f`/`t`/`F`/`T`, `x`, `h`/`j`/`k`/`l`) move every one, and `d`, `c` (then typing at every cursor), `r`, `~`, `>`/`<`, `p`/`P`, `i`/`a` and `.` act on every one, as in Helix; `;` collapses them all. Each change is one undo step. `y` copies every selection into the one register, joined by newlines in buffer order, and a paste into the same number of selections puts one line back at each. See [`docs/keymaps`](docs/keymaps/index.md#helix).

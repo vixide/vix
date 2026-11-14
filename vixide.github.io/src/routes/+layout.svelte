@@ -212,6 +212,7 @@
     <p class="site-footer-trademark">Vix™ and Vix IDE™ are trademarks.</p>
     <nav class="site-footer-links" aria-label="Footer">
       <a href="https://github.com/vixide/vix">GitHub</a>
+      <a href="https://github.com/vixide/vix/discussions">Discussions</a>
       <a href={docsUrl}>Documentation</a>
       <a href="https://github.com/vixide/vix/blob/main/CHANGELOG.md">Changelog</a>
       <a href="/features/">Features</a>
