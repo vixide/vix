@@ -29,12 +29,12 @@
     "background": [215, 215, 215],
     "font-style": "normal",
     "font-weight": "normal",
-    "cursor": [82, 139, 255]
+    "cursor": [0, 80, 190]
   },
   "syntax": {
-    "keyword": [86, 156, 214],
-    "string": [206, 145, 120],
-    "comment": [106, 153, 85],
-    "number": [181, 206, 168]
+    "keyword": [0, 0, 255],
+    "string": [163, 21, 21],
+    "comment": [0, 100, 0],
+    "number": [128, 0, 128]
   }
 }

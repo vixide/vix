@@ -93,6 +93,94 @@ fn high_contrast_meets_wcag_aa_for_every_text_color() {
     );
 }
 
+/// WCAG 2.1 relative luminance of an sRGB color.
+fn relative_luminance(rgb: [u8; 3]) -> f64 {
+    let channel = |c: u8| {
+        let c = f64::from(c) / 255.0;
+        if c <= 0.039_28 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.0722f64.mul_add(
+        channel(rgb[2]),
+        0.2126f64.mul_add(channel(rgb[0]), 0.7152 * channel(rgb[1])),
+    )
+}
+
+/// WCAG 2.1 contrast ratio between two colors, from 1.0 to 21.0.
+fn contrast_ratio(a: [u8; 3], b: [u8; 3]) -> f64 {
+    let (la, lb) = (relative_luminance(a), relative_luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// Every slot of `t` that falls below WCAG AA: 4.5:1 for text (each region's
+/// foreground on its background, each syntax color on the editor
+/// background), 3:1 for the cursor.
+fn wcag_aa_failures(t: &vix::theme_model::CustomTheme) -> Vec<String> {
+    let mut failures = Vec::new();
+    let mut check = |slot: &str, fg: Option<[u8; 3]>, bg: Option<[u8; 3]>, min: f64| {
+        let (Some(fg), Some(bg)) = (fg, bg) else {
+            failures.push(format!("{slot}: color not set"));
+            return;
+        };
+        let ratio = contrast_ratio(fg, bg);
+        if ratio < min {
+            failures.push(format!(
+                "{slot}: {fg:?} on {bg:?} is {ratio:.2}:1, needs {min}:1"
+            ));
+        }
+    };
+    for (slot, region) in [
+        ("menu-bar", &t.menu_bar),
+        ("status-bar", &t.status_bar),
+        ("left-dock", &t.left_dock),
+        ("right-dock", &t.right_dock),
+    ] {
+        check(slot, region.foreground, region.background, 4.5);
+    }
+    let bg = t.editor.background;
+    check("editor", t.editor.foreground, bg, 4.5);
+    check("syntax.keyword", t.syntax.keyword, bg, 4.5);
+    check("syntax.string", t.syntax.string, bg, 4.5);
+    check("syntax.comment", t.syntax.comment, bg, 4.5);
+    check("syntax.number", t.syntax.number, bg, 4.5);
+    check("editor.cursor", t.editor.cursor, bg, 3.0);
+    failures
+}
+
+#[test]
+fn contrast_ratio_matches_the_wcag_reference_values() {
+    assert!((contrast_ratio([0, 0, 0], [255, 255, 255]) - 21.0).abs() < 1e-9);
+    assert!((contrast_ratio([128, 128, 128], [128, 128, 128]) - 1.0).abs() < 1e-9);
+    // #767676 on white is the well-known 4.54:1 AA threshold gray.
+    assert!((contrast_ratio([118, 118, 118], [255, 255, 255]) - 4.54).abs() < 0.01);
+}
+
+#[test]
+fn dark_and_light_meet_wcag_aa() {
+    for (file, json) in [
+        ("dark.json", include_str!("../../themes/dark.json")),
+        ("light.json", include_str!("../../themes/light.json")),
+    ] {
+        let failures = wcag_aa_failures(&theme(json));
+        assert_eq!(failures, Vec::<String>::new(), "{file} fails WCAG AA");
+    }
+}
+
+#[test]
+fn a_low_contrast_user_theme_still_loads() {
+    // Only Dark and Light are held to WCAG AA; a theme the user chooses is
+    // loaded as written, whatever its contrast (crates/vix-theme/spec).
+    let t = theme(
+        r#"{ "name": "Fog", "editor": { "foreground": [120, 120, 120], "background": [110, 110, 110] } }"#,
+    );
+    assert_eq!(t.name, "Fog");
+    assert_eq!(t.editor.foreground, Some([120, 120, 120]));
+    assert_ne!(wcag_aa_failures(&t), Vec::<String>::new());
+}
+
 #[test]
 fn bundled_theme_names_are_unique() {
     // Every `themes/*.json` file, parsed the same way the app embeds them

@@ -19,7 +19,7 @@ expression: "overlay_screen(\"ov-theme\", \"\", \"view.theme_edit\")"
                              ││ ██ #528BFF Editor Cursor             │
                              ││ ██ #569CD6 Syntax: Keyword           │
                              ││ ██ #CE9178 Syntax: String            │
-                             ││ ██ #6A9955 Syntax: Comment           │
+                             ││ ██ #76A860 Syntax: Comment           │
                              ││ ██ #B5CEA8 Syntax: Number            │──────────────────────────────
   Output ────────────────────│                                      │──────────────────────────────
 (no output yet)               │Enter pick color · Ctrl+S save as · Es│
