@@ -5,7 +5,6 @@
 //! forwards zgui's events to it and paints [`Model::buffer`] with
 //! `crate::paint`.
 
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ratatui::Terminal;
@@ -244,7 +243,7 @@ impl Model {
 
     /// Open `paths` in tabs, as if given on the command line.
     #[cfg(any(target_os = "macos", test))]
-    pub fn open_files(&mut self, paths: &[PathBuf]) {
+    pub fn open_files(&mut self, paths: &[std::path::PathBuf]) {
         for path in paths {
             self.app.open_initial(path);
         }
