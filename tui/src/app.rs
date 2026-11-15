@@ -103,6 +103,8 @@ mod pipe;
 mod prettier;
 mod project_env;
 mod project_settings;
+#[cfg(feature = "tasks")]
+mod remote_pick;
 mod remote_search;
 mod remote_session;
 mod roam;

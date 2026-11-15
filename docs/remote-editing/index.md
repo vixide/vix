@@ -52,6 +52,12 @@ vix wsl://Ubuntu/home/me/src          # a WSL distribution (from Windows)
 and press `w`, and the Open Remote prompt is filled in with its name; finish
 the path inside and press Enter.
 
+**File → Open Remote…** also lists the containers of running Kubernetes pods
+when `kubectl` is installed (**Kubernetes container…**: the pods of the current
+context's namespace) and the installed WSL distributions when `wsl.exe` is
+(**WSL distribution…**). Pick one and the prompt is filled in with its name
+and `~`; change the path if you like and press Enter.
+
 Everything in this page applies: the status bar shows `⇄ docker:web`,
 saves are atomic and checked for changes inside, a stopped container shows
 as a lost connection (**File → Reconnect Remote** once it runs again), a new
@@ -219,8 +225,8 @@ This is the first phase ([`spec/remote-editing`](../../spec/remote-editing/index
 - Stopping a task or closing the terminal ends the local `ssh`; a remote
   program that ignores the closed connection may keep running there.
 - Containers: a container without `/bin/sh` (a "distroless" image) can't
-  be opened. nerdctl has no name form yet. Kubernetes and WSL have been
-  tested only against a stand-in for `kubectl` and `wsl.exe`.
+  be opened. nerdctl has no name form yet. Kubernetes has run against one
+  local cluster; WSL has been tested only against a stand-in for `wsl.exe`.
 
 ## Safety
 

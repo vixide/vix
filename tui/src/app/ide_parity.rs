@@ -55,11 +55,20 @@ pub(crate) enum ChoicePurpose {
         /// The edits of each row (its `textEdit`, then `additionalTextEdits`).
         edits: Vec<Vec<(crate::lsp_core::Range, String)>>,
     },
-    /// **File → Open Remote…** (T713): row 0 types a new name, the rest are
-    /// the recent remote names.
+    /// **File → Open Remote…** (T713): row 0 types a new name, then one row
+    /// per picker (T718c), then the recent remote names.
     RecentRemote {
-        /// The recent names, for rows 1 and on.
+        /// The pickers offered (Kubernetes, WSL), for rows 1 and on.
+        pickers: Vec<vix_authority::container::ExecKind>,
+        /// The recent names, for the rows after the pickers.
         names: Vec<String>,
+    },
+    /// A picker's results (T718c): one container or distribution per row;
+    /// Enter fills in the Open Remote prompt with its name.
+    #[cfg(feature = "tasks")]
+    RemotePick {
+        /// The target per row.
+        targets: Vec<vix_authority::container::ContainerTarget>,
     },
     /// **Run → Exception Breakpoints…** (T617): one adapter exception filter
     /// per row; Enter toggles it and the list stays open.
@@ -209,9 +218,17 @@ impl App {
                     self.apply_color_presentation(&path, &edits, row);
                 }
             }
-            ChoicePurpose::RecentRemote { names } => {
+            ChoicePurpose::RecentRemote { pickers, names } => {
                 if matches!(action, ChoiceAction::Primary) {
-                    self.choose_recent_remote(&names, row);
+                    self.choose_recent_remote(&pickers, &names, row);
+                }
+            }
+            #[cfg(feature = "tasks")]
+            ChoicePurpose::RemotePick { targets } => {
+                if matches!(action, ChoiceAction::Primary)
+                    && let Some(target) = targets.get(row)
+                {
+                    self.remote_pick_chosen(target);
                 }
             }
             ChoicePurpose::ExceptionFilters { ids } => {

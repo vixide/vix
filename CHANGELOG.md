@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Open Remote lists Kubernetes containers and WSL distributions.** When `kubectl` is installed, **File → Open Remote…** offers **Kubernetes container…**, which lists the containers of the running pods in the current namespace. When `wsl.exe` is installed, it offers **WSL distribution…**, which lists the installed distributions. Picking one fills in the prompt, so the name doesn't have to be typed. See [Remote editing](docs/remote-editing/index.md) (T718c).
 - **Community home: Discussions and issue forms.** New issues on GitHub start from a bug report form (what happened, steps, expected, `vix --version`, OS and terminal, optional keymap and `vix --doctor` output) or a feature request form (the problem first), and the new-issue page links Q&A for questions, Ideas for undecided features and `SECURITY.md` for security problems. The README and the site link to [Discussions](https://github.com/vixide/vix/discussions). See [`spec/community`](spec/community/index.md) (T747).
 - **Zed keymap: Alt keys.** `Alt+Up`/`Alt+Down` move the line and `Alt+.`/`Alt+,` go to the next and previous Git change, as in Zed.
 - **Fresh and ttt keymaps: Alt keys.** `Alt+Up`/`Alt+Down` move the line in both; ttt's `Alt+.`/`Alt+,` switch tabs; Fresh's `Alt+Left`/`Alt+Right` go back and forward, `Alt+.` opens code actions and `Alt+/` searches the project. `Alt`+letter keeps opening menus.
