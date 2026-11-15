@@ -479,6 +479,9 @@ fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> 
         use std::os::unix::fs::OpenOptionsExt as _;
         opts.mode(0o600);
     }
+    // No mode bits to set elsewhere: the new file gets the directory's ACL.
+    #[cfg(not(unix))]
+    let _ = force_private_for_new;
     let mut f = opts.open(&tmp)?;
 
     // T663: a rename would split a hard link or change the owner/group; decline
