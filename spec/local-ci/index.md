@@ -91,7 +91,7 @@ only `full`.
 | 6 | **Local Linux and Windows coverage** (container or VM script) | the only reasons hosted OS jobs exist | medium | **Done (T765).** A Linux container script and a documented Windows VM recipe; hosted Windows and macOS stay on tags and the weekly schedule. |
 | 7 | **Local release path**: build the three targets, checksum, SSH-sign and upload from the maintainer's machine; `release.yml` remains the manual fallback | release minutes, and release depends on no hosted queue | medium: cutting a tag stays the user's decision | **Do** after 1 and 2. |
 | 8 | **One entrypoint** (`scripts/ci <job>`) that every forge file calls | drift | low | **Done (T767).** `spec/ci` revised. |
-| 9 | **Evaluate** `act` (run GitHub workflows locally), Dagger, the existing `flake.nix` (`nix flake check`) and a Woodpecker instance | unknown | n/a | **Spike only.** Not researched deeply: `act` cannot run macOS or Windows jobs; Woodpecker is a separate server to operate. |
+| 9 | **Evaluate** `act` (run GitHub workflows locally), Dagger, the existing `flake.nix` (`nix flake check`) and a Woodpecker instance | little beyond T765 | n/a | **Spiked (T768): adopt none.** See "Tool evaluation". |
 
 Woodpecker versus Forgejo Actions: a Forgejo runner reuses the existing
 `.forgejo/workflows/` files and is lighter to deploy than a Woodpecker server
@@ -420,6 +420,50 @@ a wrapper-laden environment and proves the stub in the wrapper directory is not
 used, `RUSTC_WRAPPER` is empty, `RUSTDOC` is plain, the wrapper runner is unset
 (and an unrelated runner is kept), and that `VIX_CLEAN_ROOM=0` opts out.
 Forge runners have no wrappers, so `scripts/ci` does not use the clean room.
+
+## Tool evaluation (option 9, T768, spike)
+
+Tried on the maintainer's Mac (Apple silicon, 2026-11-15), one real workflow
+each where the tool was available. None beats T760–T767:
+`scripts/check-linux` (T765) already runs `scripts/ci` jobs in a local Linux
+container, and since T767 a workflow file holds only forge glue, so running the
+workflow itself adds little.
+
+- **`act` 0.2.97** (Docker API served by a Podman machine, image
+  `catthehacker/ubuntu:act-latest`, Ubuntu 26.04):
+  - It lists all the workflows, and `plan` and `verify` from `ci.yml` pass
+    (`verify` gives its advisory "no trusted allowed-signers" warning, as on a
+    fork).
+  - Every job container exited at once. act keeps the container alive with
+    `tail -f /dev/null`, and Ubuntu 26.04's Rust coreutils `tail` fails that under
+    Podman (`Permission denied (os error 13)`). A local image that swaps only
+    that call for `sleep infinity` fixes it: two lines in a Containerfile,
+    passed with `-P ubuntu-latest=<image>`.
+  - On Apple silicon the amd64 image runs under qemu, and `rustc` segfaults
+    there (signal 11 in `dtolnay/rust-toolchain`). So no Rust job (`check`,
+    `docs-check`) runs this way. The image is also published for arm64, which
+    would avoid qemu; not tried, because it means pulling a second image of
+    about 1 GB.
+  - Job ids are global across workflow files: `-j plan` also ran
+    `release.yml`'s `plan`, which failed at its cache step. Name the file with
+    `-W`.
+  - act cannot run macOS or Windows jobs, which are the expensive ones.
+  - Verdict: useful for debugging a workflow's glue on a job without Rust; not
+    a gate or a CI replacement.
+- **`nix flake check`**: Nix is not installed locally. The `verify-nix` job in
+  `packaging.yml` already passes on x86_64-linux (run of 2026-11-11 for
+  `57126172`: `nix flake check` in 17 s, `nix build` in 7.5 min,
+  `nix run . -- --version` passes). So the flake builds, and only `flake.lock`
+  and a macOS check remain (the T742/T743 starter task in
+  [`spec/community`](../community/index.md)). Verdict: keep it as that job; it
+  is not a general gate.
+- **Dagger 0.21.11**: not tried. Its engine image is not present locally, and
+  using Dagger means rewriting jobs as a Dagger module (Go, Python or
+  TypeScript SDK). That is a second definition of every job, which T767 exists
+  to avoid. Verdict: no.
+- **Woodpecker**: not tried. It is a separate server to operate, and a Forgejo
+  runner (T763) reuses the existing `.forgejo/workflows/` files. Verdict: no;
+  T763 is the better self-hosted path.
 
 ## Non-goals
 

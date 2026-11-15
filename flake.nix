@@ -8,8 +8,9 @@
   #
   # It builds the `vix` command (package `vix-tui`) from source with the
   # default features -- the same feature set as the release archives.
-  # Not yet verified with a real `nix build` (see packaging/README.md), and
-  # there is no committed flake.lock yet: the first `nix build` writes one.
+  # CI's `verify-nix` job (packaging.yml) builds and runs it on x86_64-linux;
+  # not yet tried on macOS, and there is no committed flake.lock yet: the
+  # first `nix build` writes one.
   description = "Vix, a keyboard-friendly terminal text editor and IDE";
 
   inputs = {

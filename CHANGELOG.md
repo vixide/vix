@@ -40,6 +40,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Local CI tools evaluated.** `act` runs Vix's GitHub workflows locally only for jobs without Rust on an Apple silicon Mac: it needs an image fix under Podman, and `rustc` segfaults under qemu. Nix already passes in CI (`verify-nix`), and Dagger and Woodpecker would add a second definition of every job. None replaces `scripts/check-linux`. See [`spec/local-ci`](spec/local-ci/index.md) "Tool evaluation" (T768).
 - **Makefile targets.** `make help` lists every target, each documented in its own `##` block. `make release` is now `make build`, and `make github-pages` is now `make publish-github-pages` (the script is now `bin/publish-github-pages`). New: `make check-env` prints the tools, versions and paths in use, `make lint` (and `make lint-markdown`) proofreads the Markdown through the new `scripts/lint-markdown.sh`, and `make test` also runs the new `bin/test-github-discussions`, which checks that GitHub Discussions is on (skipped without a signed-in `gh`). `make check` is still the full `scripts/check` gate.
 - **Guides for users of other editors moved** from `docs/for-*-users/` to `docs/vix-for-*-users/` (for example [`docs/vix-for-vim-users`](docs/vix-for-vim-users/index.md)). The old docs addresses redirect to the new ones.
 - **"Sublime Text" is now "Sublime"** in the View → Keymap menu, the docs and the site.

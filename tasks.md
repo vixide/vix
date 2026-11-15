@@ -9962,10 +9962,18 @@ the maintainer's decisions.
   throwaway repo); jobs that are one pinned tool (security, release, packaging,
   GUI, semver, offline tests, coverage, MSRV, mdBook, binary size) stay in the
   workflow files; `verify` is not yet required.
-- [ ] **T768 — Tool evaluation spike.** Try `act`, Dagger, `nix flake check`
+- [x] **T768 — Tool evaluation spike.** Try `act`, Dagger, `nix flake check`
   against the existing `flake.nix`, and a Woodpecker instance on one real
   workflow each; record what each cannot do (`act` cannot run macOS or
   Windows jobs) and whether any beats T760–T767. **Small.**
+  - **Done 2026-11-15** (`spike/t768-tool-eval`): none beats T760–T767; results
+    in [`spec/local-ci`](spec/local-ci/index.md) "Tool evaluation". `act` runs
+    `ci.yml`'s `plan` and `verify` under Podman once a local image replaces
+    the Rust `tail -f /dev/null` that keeps the container alive, but `rustc` segfaults under
+    qemu on Apple silicon (the arm64 image was not pulled). `verify-nix`
+    already passes `nix flake check`, `nix build` and `nix run` on
+    x86_64-linux. Dagger (a second job definition) and Woodpecker (a server)
+    were not tried.
 Order: T750 and T751 in parallel, then T752; T753–T755 next; T756 and
 T759 wait for Cowork on `main`; T758 last, then T793.
 
