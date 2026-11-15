@@ -50,6 +50,31 @@ query editor (`crates/vix-db/spec`).
 }
 ```
 
+## Contrast
+
+The two default themes, **Dark** and **Light**, must pass WCAG 2.1 level AA
+contrast, using the WCAG relative-luminance formula:
+
+- **Text: 4.5:1 or more** ([1.4.3](https://www.w3.org/TR/WCAG21/#contrast-minimum)).
+  Each region's `foreground` (menu bar, status bar, both docks, editor)
+  against that region's `background`, and each `syntax` color against the
+  editor `background`.
+- **Cursor: 3:1 or more** ([1.4.11](https://www.w3.org/TR/WCAG21/#non-text-contrast)),
+  against the editor `background`, since the cursor is a non-text mark.
+
+`tui/tests/integration/themes.rs` computes these ratios for Dark and Light
+and fails if any slot drops below the minimum. **High Contrast** goes further,
+with 11:1 or more on every text color.
+
+**Other themes may fail, because the user chose them.** Contrast is checked
+only for Dark and Light, which are what a new user gets. Every other bundled
+theme (the single-color ones, Turbo, the base16 palettes, the ports of
+popular color schemes) keeps its own look, and its colors are not changed
+to pass. A user theme is never checked: Vix loads, lists and applies any
+theme the user picks or writes, whatever its contrast, and shows no warning.
+The theme editor (`crates/vix-theme-editor-panel/spec`) likewise saves any
+colors the user picks.
+
 ## Single-color themes
 
 Four bundled themes imitate single-color displays, and each uses one color

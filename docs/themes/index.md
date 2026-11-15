@@ -57,6 +57,13 @@ bundled base16 palette, prefixed `Base16 …` in the same **View → Theme…** 
 A theme you install in your own themes directory **overrides** a bundled one of
 the same name, so you can customize any of them by dropping an edited copy there.
 
+**Contrast.** The default `Dark` and `Light` themes meet WCAG AA: every text
+color is at least 4.5:1 against its background, and the cursor at least 3:1.
+Other themes, bundled or your own, are not held to that: some are chosen for
+their look (the single-color themes, `Turbo`, the base16 palettes), and Vix
+loads and applies any theme you pick without checking it. For the most
+contrast, pick `High Contrast`.
+
 ### Writing your own
 
 Each file defines per-region colors. Any region, channel, or section you omit
