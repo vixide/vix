@@ -3,7 +3,9 @@
 //!
 //! [`ContainerTarget`] parses `docker://[user@]container/path`,
 //! `podman://…`, `k8s://namespace/pod/container/path` and
-//! `wsl://[user@]distribution/path`; it is pure and always built.
+//! `wsl://[user@]distribution/path`; it is pure and always built, as is
+//! [`pick`], which lists Kubernetes containers and WSL distributions for the
+//! Open Remote dialog (T718c).
 //! `ContainerAuthority` (the `ssh` feature) is the SSH authority's
 //! `ShellAuthority` over an `ExecTransport`: the same scripts, quoting,
 //! error codes and remote agent, run through the engine's `exec` instead of
@@ -11,6 +13,7 @@
 
 #[cfg(feature = "ssh")]
 mod exec;
+pub mod pick;
 mod target;
 
 #[cfg(feature = "ssh")]

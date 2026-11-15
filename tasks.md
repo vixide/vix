@@ -9033,6 +9033,16 @@ so, and the first task of each plan re-checks the facts it depends on.
     Kubernetes pod/container picker (`kubectl get pods -o json`) and a WSL
     distribution picker (`wsl.exe -l -q`) in **File → Open Remote…**, so
     those names need not be typed. **Small.**
+    - **Progress 2026-11-15** (`feat/t718c-remote-pickers`): both pickers are
+      done. **File → Open Remote…** shows **Kubernetes container…** when
+      `kubectl` is found and **WSL distribution…** when `wsl.exe` is; the
+      chosen name fills in the prompt. `kubectl` uses a JSONPath template
+      rather than `-o json` (no JSON dependency in `vix-authority`), and
+      `wsl.exe`'s UTF-16LE output is decoded. Pure parsing in
+      `vix_authority::container::pick`; App side `tui/src/app/remote_pick.rs`.
+      Verified against fakes and the real `kubectl`'s template output, not a
+      live cluster or Windows. **Left:** nerdctl (not installed here, so
+      `exec -e NAME` is still unverified).
 - [x] **T719 — Optional opt-in CI job against a real local `sshd`.**
   **Small.**
   - **Done 2026-10-30** (`feat/t719-sshd-ci`): `scripts/test-ssh-local`

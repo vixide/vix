@@ -24,6 +24,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`tasks` feature (without it the scan stays in-process)",
     ),
     (
+        "tui/src/app/remote_pick.rs",
+        "`kubectl get pods` / `wsl.exe --list --quiet` for the Open Remote pickers (T718c; argv only, no shell, killed after a deadline)",
+        "`tasks` feature (without it the dialog offers no pickers)",
+    ),
+    (
         "crates/vix-authority/src/lib.rs",
         "the `Authority::command` signature (T710): builds no process itself",
         "`process` feature, enabled only by root `tasks` and each spawning crate's `process`",

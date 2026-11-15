@@ -24,6 +24,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Instant;
 
 use vix_authority::Authority;
+use vix_authority::container::ExecKind;
 use vix_authority::remote::RemoteTarget;
 use vix_input::{KeyCode, KeyEvent};
 
@@ -135,6 +136,10 @@ pub(crate) struct RemoteState {
     /// fake engine, T718). `None` is the defaults, as for `ssh_options`.
     #[cfg(feature = "tasks")]
     pub(crate) exec_options: Option<vix_authority::container::ExecOptions>,
+    /// The picker programs (T718c; tests point them at fakes, or at nothing).
+    /// `None` looks `kubectl` and `wsl.exe` up on `PATH`.
+    #[cfg(feature = "tasks")]
+    pub(crate) picker_programs: Option<super::remote_pick::PickerPrograms>,
     /// The `devcontainer` CLI to run (tests point it at a fake). `None`
     /// looks it up on `PATH` (T718).
     #[cfg(feature = "oc")]
@@ -164,6 +169,15 @@ impl App {
     #[must_use]
     pub fn with_exec_options(mut self, options: vix_authority::container::ExecOptions) -> Self {
         self.remote.exec_options = Some(options);
+        self
+    }
+
+    /// Run `kubectl` and `wsl.exe` for the Open Remote pickers as these
+    /// paths say (fakes, in tests); `None` leaves that picker out.
+    #[cfg(feature = "tasks")]
+    #[must_use]
+    pub fn with_remote_pickers(mut self, kubectl: Option<PathBuf>, wsl: Option<PathBuf>) -> Self {
+        self.remote.picker_programs = Some(super::remote_pick::PickerPrograms { kubectl, wsl });
         self
     }
 
@@ -343,20 +357,40 @@ impl App {
     /// **File → Open Remote…**: pick a recent remote, or type a name.
     fn open_remote_dialog(&mut self) {
         let recent = self.load_session().recent_remotes;
-        if recent.is_empty() {
+        // The pickers (T718c): Kubernetes when `kubectl` is found, WSL when
+        // `wsl.exe` is; none in a build without process spawning.
+        #[cfg(feature = "tasks")]
+        let pickers: Vec<ExecKind> = self
+            .remote_picker_programs()
+            .into_iter()
+            .map(|(kind, _)| kind)
+            .collect();
+        #[cfg(not(feature = "tasks"))]
+        let pickers: Vec<ExecKind> = Vec::new();
+        if recent.is_empty() && pickers.is_empty() {
             self.open_remote_prompt();
             return;
         }
         let mut rows = vec![t!("ui.remote_new_connection").to_string()];
+        rows.extend(pickers.iter().map(|kind| picker_row(*kind)));
         rows.extend(recent.iter().cloned());
+        // The newest recent name when there is one, as before the pickers.
+        let selected = if recent.is_empty() {
+            0
+        } else {
+            1 + pickers.len()
+        };
         self.choice_list = Some(ChoiceList {
             panel: vix_choice_list::Panel::new(
                 t!("ui.remote_open_title").to_string(),
                 t!("ui.remote_open_hint").to_string(),
                 rows,
             )
-            .with_selected(1),
-            purpose: ChoicePurpose::RecentRemote { names: recent },
+            .with_selected(selected),
+            purpose: ChoicePurpose::RecentRemote {
+                pickers,
+                names: recent,
+            },
         });
     }
 
@@ -729,11 +763,35 @@ impl App {
     }
 
     /// A row of the recent-remotes chooser: row 0 types a new name.
-    pub(super) fn choose_recent_remote(&mut self, names: &[String], row: usize) {
-        match row.checked_sub(1).and_then(|i| names.get(i)) {
+    pub(super) fn choose_recent_remote(
+        &mut self,
+        pickers: &[ExecKind],
+        names: &[String],
+        row: usize,
+    ) {
+        let Some(after_new) = row.checked_sub(1) else {
+            self.open_remote_prompt();
+            return;
+        };
+        if let Some(&kind) = pickers.get(after_new) {
+            #[cfg(feature = "tasks")]
+            self.run_remote_picker(kind);
+            #[cfg(not(feature = "tasks"))]
+            let _ = kind;
+            return;
+        }
+        match names.get(after_new - pickers.len()) {
             Some(name) => self.open_remote(&name.clone()),
             None => self.open_remote_prompt(),
         }
+    }
+}
+
+/// The Open Remote dialog's row for a picker.
+fn picker_row(kind: ExecKind) -> String {
+    match kind {
+        ExecKind::Kubernetes => t!("ui.remote_pick_kubernetes").to_string(),
+        _ => t!("ui.remote_pick_wsl").to_string(),
     }
 }
 

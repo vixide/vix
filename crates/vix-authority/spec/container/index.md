@@ -116,6 +116,40 @@ reads `devcontainer.json` (JSONC) and the CLI's result; the App runs
 reports as a `ContainerAuthority`. See
 [`spec/remote-editing`](../../../../spec/remote-editing/index.md#containers-t718).
 
+## Pickers (`container::pick`, T718c)
+
+**File → Open Remote…** adds a row per picker whose program is found
+(`kubectl` on `PATH`; `wsl.exe`, or `wsl` with `PATHEXT`, on `PATH`), between
+"New connection…" and the recent names. Choosing one runs its listing and
+shows one row per result (its `label()`); Enter fills in the Open Remote
+prompt with its `to_url()` (the home directory, `~`), so the user finishes
+the path. Nothing connects until that prompt is accepted.
+
+- **Kubernetes:** `kubectl get pods --request-timeout=5s -o
+  jsonpath=<template>`, with a template printing `namespace TAB pod TAB phase
+  TAB container container …` per pod. JSONPath rather than `-o json` keeps
+  this crate free of a JSON dependency, and Kubernetes names hold no tab,
+  space or newline. Only `Running` pods are listed, one row per container,
+  from the current context's namespace (`-A` would fail for users whose role
+  cannot list every namespace).
+- **WSL:** `wsl.exe --list --quiet`. It writes UTF-16LE to a pipe (with or
+  without a byte-order mark); that is decoded, and UTF-8 (`WSL_UTF8=1`) is
+  accepted. Blank lines and repeats are dropped.
+- Every name goes through `ContainerTarget::kubernetes` / `::new`; a row that
+  fails is dropped, so a hostile pod or distribution name cannot reach an
+  engine command line.
+- The App runs the listing with no stdin, both pipes drained on threads, and
+  an 8-second deadline after which the child is killed. A failure shows the
+  first line of its stderr in Messages; an empty result says so on the status
+  line. A build without process spawning (no `tasks` feature) shows no
+  pickers.
+
+Verified: the parsers' unit tests; the App flow against fake `kubectl` and
+`wsl.exe` scripts (`tui/src/app/remote_pick.rs`); the real `kubectl` 1.37
+prints the per-pod template as expected (`kubectl annotate --local -o
+jsonpath=…` on a pod). Not verified: the listing against a live cluster, and
+`wsl.exe` on a real Windows host (T718b).
+
 ## Testing
 
 `crates/vix-authority/tests/container.rs` (Unix): a fake engine script,
@@ -182,6 +216,9 @@ engines.
   with several containers.
 - nerdctl has no URL form (its `exec -e NAME` behavior is unverified); the
   OC panel's **Open Workspace** refuses it with a message.
+- The pickers list one Kubernetes namespace (the current context's) and
+  have no picker for Docker or Podman containers (the OC panel's
+  **Open Workspace in Container…** is that).
 - Kubernetes and WSL environment values travel on argv (no by-name
   option); `kubectl exec`'s argv also reaches the API server's audit log.
 - A container without `/bin/sh` (distroless images) can't be opened; there
