@@ -454,8 +454,7 @@ workflow itself adds little.
   `packaging.yml` already passes on x86_64-linux (run of 2026-11-11 for
   `57126172`: `nix flake check` in 17 s, `nix build` in 7.5 min,
   `nix run . -- --version` passes). So the flake builds, and only `flake.lock`
-  and a macOS check remain (the T742/T743 starter task in
-  [`spec/community`](../community/index.md)). Verdict: keep it as that job; it
+  and a macOS check remain (T742/T743). Verdict: keep it as that job; it
   is not a general gate.
 - **Dagger 0.21.11**: not tried. Its engine image is not present locally, and
   using Dagger means rewriting jobs as a Dagger module (Go, Python or

@@ -42,27 +42,3 @@ in for new contributors (T747).
 - **`make test-github-discussions`** (`bin/test-github-discussions`) checks
   that Discussions stays enabled with at least one category. `make test` runs
   it, and it's skipped without a signed-in `gh`.
-
-## Starter tasks
-
-The `good first issue` label exists on GitHub. These open tasks make good
-first issues because each needs a machine or tool the maintainer doesn't have,
-not deep knowledge of the code. Filing them as issues is outward-facing, so it
-waits for the maintainer's approval.
-
-1. **Commit `flake.lock`** (T742, T743): run `nix flake lock` in a clone,
-   check that `nix run .` opens Vix, and open a pull request with the lock
-   file. CI already passes `nix build`; only the lock file is missing.
-2. **Install with Scoop on Windows** (T742): `scoop install
-   packaging/scoop/vix-tui.json`, then run `vix --version`. Scoop has no CI
-   job, so this manifest hasn't been tried at all.
-3. **Install from the winget manifest on Windows** (T742): `winget install
-   --manifest packaging/winget/`. CI runs `winget validate` only, not an
-   install.
-4. **Install the AUR package on Arch Linux** (T742): `makepkg -si` in
-   `packaging/aur/vix-tui-bin/`, then run `vix`. CI builds the package but
-   doesn't install or run it.
-5. **Run the remote-editing suite through WSL** on a real Windows host
-   (T718b).
-6. **Render the IM demo GIF** with VHS from `docs/demos/im-share.tape`
-   (T757).
