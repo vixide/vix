@@ -1,4 +1,8 @@
+minimumReleaseAgeExclude:
+  - '@lilydesignsystem/svelte-theme-picker@0.4.0'
 overrides:
+  # PickerBar 0.6.0 still asks for ThemePicker ^0.3.0; 0.4.0 only adds props.
+  "@lilydesignsystem/svelte-theme-picker": ^0.4.0
   "cookie@<0.7.0": ^0.7.0
   devalue: ^5.9.3
   source-map-js: ^1.2.2
