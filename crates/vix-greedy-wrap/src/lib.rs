@@ -92,6 +92,17 @@ mod tests {
     }
 
     #[test]
+    fn a_word_that_exactly_fills_the_line_still_joins() {
+        // "ab cd" is 5 columns: it fits width 5, not width 4.
+        assert_eq!(wrap_line("ab cd", 5), vec!["ab cd"]);
+        assert_eq!(wrap_line("ab cd", 4), vec!["ab", "cd"]);
+        // The running length counts each joining space: "ab cd" is 5, so "ef"
+        // fits width 8 but not width 7.
+        assert_eq!(wrap_line("ab cd ef", 8), vec!["ab cd ef"]);
+        assert_eq!(wrap_line("ab cd ef", 7), vec!["ab cd", "ef"]);
+    }
+
+    #[test]
     fn blank_line_yields_one_empty_string() {
         assert_eq!(wrap_line("", 9), vec![""]);
     }
