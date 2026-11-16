@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@lilydesignsystem/svelte-theme-picker': ^0.4.0
   cookie@<0.7.0: ^0.7.0
   devalue: ^5.9.3
   source-map-js: ^1.2.2
@@ -14,14 +15,17 @@ importers:
   .:
     dependencies:
       '@lilydesignsystem/svelte-headless':
-        specifier: ^0.8.0
-        version: 0.8.0(svelte@5.57.3)
+        specifier: ^0.9.0
+        version: 0.9.0(svelte@5.57.3)
       '@lilydesignsystem/svelte-picker-bar':
-        specifier: ^0.5.3
-        version: 0.5.3(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
+        specifier: ^0.6.0
+        version: 0.6.0(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
       '@lilydesignsystem/svelte-share-picker':
         specifier: ^0.3.2
-        version: 0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
+        version: 0.3.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-theme-picker':
+        specifier: ^0.4.0
+        version: 0.4.0(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
       '@lilydesignsystem/themes':
         specifier: ^0.6.2
         version: 0.6.2
@@ -69,8 +73,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lilydesignsystem/svelte-headless@0.8.0':
-    resolution: {integrity: sha512-IJBDWHM/nlnpr20bytWl11JBY23nS56DY0bSTTcBIKUoymAyv5y8HIML69nljc9TdFeV2fPPOeKDS3YKnXh/zQ==}
+  '@lilydesignsystem/svelte-headless@0.9.0':
+    resolution: {integrity: sha512-ThbNRnAsWbWDCLilCnTmmm05jm7nBJEl6AJodLfYUxagaCyps20P6xznft7fZrQWJC01KvKHSs06Xe6y3r90ZA==}
     engines: {node: '>=26'}
     peerDependencies:
       svelte: ^5.0.0
@@ -89,8 +93,8 @@ packages:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
       svelte: ^5.0.0
 
-  '@lilydesignsystem/svelte-picker-bar@0.5.3':
-    resolution: {integrity: sha512-G0cmwHZ0i1+HEUSjeMxhEDHTO9fsVzS9kcKSmMO6RHcpCr6H7oNXi0k/fY2t+JGeau3MNC1FNHsdSq9QDk15tg==}
+  '@lilydesignsystem/svelte-picker-bar@0.6.0':
+    resolution: {integrity: sha512-09JWH+Db7UnrGJpfhDKSjZZ7dcx2heNBGjRKslDnaPM+d5zDIv4fQdjtYBQd0ITwt9nc5adboHXC6z7LJ50hjg==}
     engines: {node: '>=26'}
     peerDependencies:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
@@ -117,8 +121,8 @@ packages:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
       svelte: ^5.0.0
 
-  '@lilydesignsystem/svelte-theme-picker@0.3.2':
-    resolution: {integrity: sha512-bX/FESig8sTrLL31C6HjR6U0FVacFmUqIqQ+ZnngotW5Rmthn7ifncy1DCy09vWStpSMCFDnLJXVhZqTJhLQRg==}
+  '@lilydesignsystem/svelte-theme-picker@0.4.0':
+    resolution: {integrity: sha512-JEd/OjtE6Obw+6yp7sqb9FlPsp8paoOITfX0HWBFJKHg7W4bA1bNDHudtPY/WQ4c8KBLJABjwZGIKd7Vy5HFHQ==}
     engines: {node: '>=26'}
     peerDependencies:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
@@ -628,56 +632,56 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3)':
     dependencies:
       aria-query: 5.3.2
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-link-picker@0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-link-picker@0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-locale-picker@0.3.3(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-locale-picker@0.3.3(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-picker-bar@0.5.3(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-picker-bar@0.6.0(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
-      '@lilydesignsystem/svelte-link-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-locale-picker': 0.3.3(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-search-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-share-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-text-size-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-theme-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
-      '@lilydesignsystem/svelte-time-zone-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-link-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-locale-picker': 0.3.3(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-search-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-share-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-text-size-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-theme-picker': 0.4.0(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
+      '@lilydesignsystem/svelte-time-zone-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-search-picker@0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-search-picker@0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-share-picker@0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-share-picker@0.3.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-text-size-picker@0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-text-size-picker@0.3.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-theme-picker@0.3.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-theme-picker@0.4.0(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
-  '@lilydesignsystem/svelte-time-zone-picker@0.2.2(@lilydesignsystem/svelte-headless@0.8.0(svelte@5.57.3))(svelte@5.57.3)':
+  '@lilydesignsystem/svelte-time-zone-picker@0.2.2(@lilydesignsystem/svelte-headless@0.9.0(svelte@5.57.3))(svelte@5.57.3)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.8.0(svelte@5.57.3)
+      '@lilydesignsystem/svelte-headless': 0.9.0(svelte@5.57.3)
       svelte: 5.57.3
 
   '@lilydesignsystem/themes@0.6.2': {}

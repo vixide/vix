@@ -17,6 +17,8 @@ In Lily ThemePicker use:
 - all Lily default themes (not any application-specific custom themes)
 - sort themes alphabetically
 - sort UK & US themes at the end, after all the non-national themes
+- first, "Follow this device" (`systemLabel`), the default: it applies light or dark from the device's color scheme and changes when the device does
+- keep the choice in localStorage (`vix:theme`) and set no cookie
 
 In Lily SharePicker use:
   - Copy Link

@@ -159,7 +159,10 @@
         The full PickerBar: link (home icon, leftmost), search, theme, locale,
         time zone, text size and share. themes/sizes are deliberately not
         passed — PickerBar defaults to DEFAULT_THEMES (all Lily reference
-        themes) and DEFAULT_SIZES (the 7-step scale).
+        themes) and DEFAULT_SIZES (the 7-step scale). The theme list starts
+        with "Follow this device", the default: it applies light or dark from
+        prefers-color-scheme and switches when the device does. No cookie: a
+        static site has no server to read one; localStorage keeps the choice.
       -->
       <PickerBar
         labels={{
@@ -180,7 +183,12 @@
         themesUrl="/assets/themes/"
         locales={siteLocales}
         shareTargets={shareTargets}
-        themeProps={{ defaultValue: 'light', detectFromSystem: true, storageKey: 'vix:theme' }}
+        themeProps={{
+          systemLabel: 'Follow this device',
+          defaultValue: 'system',
+          storageKey: 'vix:theme',
+          cookieName: ''
+        }}
         localeProps={{
           defaultValue: 'en',
           detectFromNavigator: true,
