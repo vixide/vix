@@ -8,21 +8,19 @@ exclude_re = [
     # `c - b'A'` -> `+`: 'A' + 'A' is 130 = 5 * 26, so the letter is the same mod
     # 26, and 'Z' + 'A' + 13 = 168 still fits in a u8.
     "vix-textops/src/lib.rs:55:43: replace - with \\+ in rot13",
-    # `j = i + 1` -> `i * 1`: chars[i] is the `.`/`!`/`?` the loop skips anyway.
-    "vix-textops/src/lib.rs:189:27: replace \\+ with \\* in sentence_starts",
+    # Scanning from `i * 1` instead of `i + 1`: chars[i] is a `.`/`!`/`?`, which
+    # the scan skips anyway.
+    "vix-textops/src/lib.rs:188:36: replace \\+ with \\* in sentence_starts",
     # `s > cursor` -> `>=`: a unit with s == cursor already matched the first search.
-    "vix-textops/src/lib.rs:223:55: replace > with >= in transpose_units_at",
-    "vix-textops/src/lib.rs:426:55: replace > with >= in delete_unit_at",
-    "vix-textops/src/lib.rs:658:52: replace > with >= in wrap_paragraph_at",
-    # `end > start` -> `>=`: chars[start] is never whitespace, so the loop stops
-    # at start + 1 before the two can be equal.
-    "vix-textops/src/lib.rs:323:23: replace > with >= in sentence_units",
+    "vix-textops/src/lib.rs:216:55: replace > with >= in transpose_units_at",
+    "vix-textops/src/lib.rs:418:55: replace > with >= in delete_unit_at",
+    "vix-textops/src/lib.rs:644:52: replace > with >= in wrap_paragraph_at",
     # Dropping either neighbor test leaves only the last (or first) blank of a
     # run unmarked as a break; it then sits at a group's edge and is trimmed.
-    "vix-textops/src/lib.rs:346:29: replace > with < in section_units",
-    "vix-textops/src/lib.rs:346:64: replace < with > in section_units",
+    "vix-textops/src/lib.rs:336:29: replace > with < in section_units",
+    "vix-textops/src/lib.rs:336:64: replace < with > in section_units",
     # `s < e` -> `<=`: an empty word matches no toggle pair.
-    "vix-textops/src/lib.rs:714:10: replace < with <= in smart_toggle_at",
+    "vix-textops/src/lib.rs:694:10: replace < with <= in smart_toggle_at",
     # `lines.len() > 1` -> `>=`: for "" both paths return ("", clean report).
     "vix-textops/src/cleanup.rs:44:87: replace > with >= in cleanup",
 ]

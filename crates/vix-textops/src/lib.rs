@@ -58,6 +58,23 @@ pub fn rot13(text: &str) -> String {
         .collect()
 }
 
+/// The first index in `from..end` whose char fails `keep`, or `end` when every
+/// char passes. A bounded scan instead of a `while` loop with a counter, so no
+/// change to the counter can loop forever.
+fn scan_fwd(chars: &[char], from: usize, end: usize, keep: impl Fn(char) -> bool) -> usize {
+    from + chars[from..end].iter().take_while(|&&c| keep(c)).count()
+}
+
+/// Scanning back from `from` down to `start`, the lowest index `i` such that
+/// every char in `i..from` passes `keep`.
+fn scan_back(chars: &[char], from: usize, start: usize, keep: impl Fn(char) -> bool) -> usize {
+    from - chars[start..from]
+        .iter()
+        .rev()
+        .take_while(|&&c| keep(c))
+        .count()
+}
+
 /// Increment (or decrement, `delta = -1`) the integer at or immediately after the
 /// cursor char offset `cursor` in `text`. Returns the rewritten text and the new
 /// cursor offset (kept at the number's start), or `None` if no digit is found on
@@ -67,25 +84,18 @@ pub fn bump_number_at(text: &str, cursor: usize, delta: i64) -> Option<(String, 
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     // Search from the cursor to the end of the current line for a digit.
-    let mut i = cursor.min(n);
-    while i < n && chars[i] != '\n' && !chars[i].is_ascii_digit() {
-        i += 1;
-    }
+    let i = scan_fwd(&chars, cursor.min(n), n, |c| {
+        c != '\n' && !c.is_ascii_digit()
+    });
     if i >= n || chars[i] == '\n' {
         return None;
     }
     // Expand left over digits, then include a leading '-' if present.
-    let mut start = i;
-    while start > 0 && chars[start - 1].is_ascii_digit() {
-        start -= 1;
-    }
+    let mut start = scan_back(&chars, i, 0, |c| c.is_ascii_digit());
     if start > 0 && chars[start - 1] == '-' {
         start -= 1;
     }
-    let mut end = i;
-    while end < n && chars[end].is_ascii_digit() {
-        end += 1;
-    }
+    let end = scan_fwd(&chars, i, n, |c| c.is_ascii_digit());
     let token: String = chars[start..end].iter().collect();
     let value: i64 = token.parse().ok()?;
     let bumped = value.saturating_add(delta).to_string();
@@ -127,32 +137,19 @@ pub fn transpose_words_at(text: &str, cursor: usize) -> Option<(String, usize)> 
     let n = chars.len();
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     // Start of the second word: the word containing the cursor, else the next one.
-    let mut b = cursor.min(n);
-    if b < n && is_word(chars[b]) {
-        while b > 0 && is_word(chars[b - 1]) {
-            b -= 1;
-        }
+    let b = cursor.min(n);
+    let b = if b < n && is_word(chars[b]) {
+        scan_back(&chars, b, 0, is_word)
     } else {
-        while b < n && !is_word(chars[b]) {
-            b += 1;
-        }
-    }
+        scan_fwd(&chars, b, n, |c| !is_word(c))
+    };
     if b >= n {
         return None;
     }
-    let mut b_end = b;
-    while b_end < n && is_word(chars[b_end]) {
-        b_end += 1;
-    }
+    let b_end = scan_fwd(&chars, b, n, is_word);
     // The first word: the word ending before `b`.
-    let mut a_end = b;
-    while a_end > 0 && !is_word(chars[a_end - 1]) {
-        a_end -= 1;
-    }
-    let mut a = a_end;
-    while a > 0 && is_word(chars[a - 1]) {
-        a -= 1;
-    }
+    let a_end = scan_back(&chars, b, 0, |c| !is_word(c));
+    let a = scan_back(&chars, a_end, 0, is_word);
     if a == a_end {
         return None; // no preceding word
     }
@@ -177,31 +174,27 @@ pub fn sentence_starts(text: &str) -> Vec<usize> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     let mut starts = Vec::new();
-    let mut i = 0;
-    while i < n && chars[i].is_whitespace() {
-        i += 1;
+    let first = scan_fwd(&chars, 0, n, char::is_whitespace);
+    if first < n {
+        starts.push(first);
     }
-    if i < n {
-        starts.push(i);
-    }
-    while i < n {
-        if matches!(chars[i], '.' | '!' | '?') {
-            let mut j = i + 1;
-            while j < n && matches!(chars[j], '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}') {
-                j += 1;
-            }
-            if j < n && chars[j].is_whitespace() {
-                while j < n && chars[j].is_whitespace() {
-                    j += 1;
-                }
-                if j < n {
-                    starts.push(j);
-                }
-                i = j;
-                continue;
-            }
+    // The first index the loop still has to look at; a sentence end found at
+    // `i` moves it past the whitespace that follows.
+    let mut next = first;
+    for i in first..n {
+        if i < next || !matches!(chars[i], '.' | '!' | '?') {
+            continue;
         }
-        i += 1;
+        let j = scan_fwd(&chars, i + 1, n, |c| {
+            matches!(c, '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}')
+        });
+        if j < n && chars[j].is_whitespace() {
+            let j = scan_fwd(&chars, j, n, char::is_whitespace);
+            if j < n {
+                starts.push(j);
+            }
+            next = j;
+        }
     }
     starts.dedup();
     starts
@@ -319,11 +312,8 @@ pub fn sentence_units(text: &str, chars: &[char]) -> Vec<(usize, usize)> {
         .iter()
         .enumerate()
         .map(|(i, &start)| {
-            let mut end = starts.get(i + 1).copied().unwrap_or(chars.len());
-            while end > start && chars[end - 1].is_whitespace() {
-                end -= 1;
-            }
-            (start, end)
+            let end = starts.get(i + 1).copied().unwrap_or(chars.len());
+            (start, scan_back(chars, end, start, char::is_whitespace))
         })
         .collect()
 }
@@ -390,17 +380,19 @@ pub fn transpose_sections_at(text: &str, cursor: usize) -> Option<(String, usize
 pub fn word_units(chars: &[char]) -> Vec<(usize, usize)> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     let mut units = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if is_word(chars[i]) {
-            let start = i;
-            while i < chars.len() && is_word(chars[i]) {
-                i += 1;
+    let mut start = None;
+    for (i, &c) in chars.iter().enumerate() {
+        match (is_word(c), start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                units.push((s, i));
+                start = None;
             }
-            units.push((start, i));
-        } else {
-            i += 1;
+            _ => {}
         }
+    }
+    if let Some(s) = start {
+        units.push((s, chars.len()));
     }
     units
 }
@@ -431,21 +423,15 @@ fn delete_unit_at(
     let mut from = start;
     let mut to = end;
     if let Some(&(next, _)) = units.get(i + 1) {
-        while to < next && separator(chars[to]) {
-            to += 1;
-        }
+        to = scan_fwd(&chars, to, next, separator);
     }
     if to == end {
         let prev_end = if i == 0 { 0 } else { units[i - 1].1 };
-        while from > prev_end && separator(chars[from - 1]) {
-            from -= 1;
-        }
+        from = scan_back(&chars, from, prev_end, separator);
     }
     if from == start && to == end {
         // A lone unit: take whatever whitespace trails it.
-        while to < chars.len() && separator(chars[to]) {
-            to += 1;
-        }
+        to = scan_fwd(&chars, to, chars.len(), separator);
     }
     let mut out: String = chars[..from].iter().collect();
     out.extend(chars[to..].iter());
@@ -703,14 +689,8 @@ pub fn smart_toggle_at(text: &str, cursor: usize) -> Option<(String, usize)> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
 
     // Word pairs: find the identifier span covering the cursor (or just before it).
-    let mut s = cursor.min(n);
-    while s > 0 && is_word(chars[s - 1]) {
-        s -= 1;
-    }
-    let mut e = s;
-    while e < n && is_word(chars[e]) {
-        e += 1;
-    }
+    let s = scan_back(&chars, cursor.min(n), 0, is_word);
+    let e = scan_fwd(&chars, s, n, is_word);
     if s < e {
         let word: String = chars[s..e].iter().collect();
         let lower = word.to_ascii_lowercase();
@@ -1030,6 +1010,14 @@ mod tests {
     use proptest::prelude::*;
 
     proptest! {
+        // Cap shrinking: a failing `.*` input can take proptest over the 20s
+        // cargo-mutants test timeout to shrink, which turns a caught mutant
+        // into a timeout. Two seconds still shrinks a real failure well.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2000,
+            ..ProptestConfig::default()
+        })]
+
         // Arbitrary text (including multibyte) and an ARBITRARY cursor — the
         // cursor is a caller-supplied integer, so out-of-range values must be
         // clamped, never panic on indexing or a non-char-boundary slice.
@@ -1211,6 +1199,17 @@ mod tests {
             smart_toggle_at("ab && c", 3),
             Some(("ab || c".to_string(), 3))
         );
+        // A symbol further in than its own length.
+        assert_eq!(
+            smart_toggle_at("x = a && b", 6),
+            Some(("x = a || b".to_string(), 6))
+        );
+    }
+
+    #[test]
+    fn sentence_starts_count_a_lone_mark_as_a_sentence() {
+        assert_eq!(sentence_starts("a. . b"), vec![0, 3, 5]);
+        assert_eq!(sentence_starts(". b"), vec![0, 2]);
     }
 
     #[test]
