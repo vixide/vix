@@ -3,6 +3,9 @@
 exclude_re = [
     # `selected < scroll` -> `<=`: at selected == scroll both branches yield `scroll`.
     "vix-list-state/src/lib.rs.*replace < with <= in ensure_visible",
+    # `wlen > width` -> `>=`: a word exactly `width` long hard-breaks into one
+    # full chunk, the same line the plain path would start for it.
+    "vix-greedy-wrap/src/lib.rs:33:17: replace > with >= in wrap_line",
     # vix-textops (line:col pinned where the function has another mutant of
     # the same shape that a test does kill):
     # `c - b'A'` -> `+`: 'A' + 'A' is 130 = 5 * 26, so the letter is the same mod
