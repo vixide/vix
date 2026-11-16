@@ -9534,7 +9534,7 @@ editor by completion, diagnostics and never losing work first.
   showcase and awesome-ratatui, awesome-rust, Terminal Trove and
   AlternativeTo. Each listing is outward-facing, so the user approves
   each submission. **Small.**
-- [ ] **T747 — Community home.** GitHub Discussions (or a Matrix room,
+- [x] **T747 — Community home.** GitHub Discussions (or a Matrix room,
   which T751 could then join), issue templates for bugs and feature
   requests, and a `good first issue` label with a handful of real
   starter tasks; linked from the README and site. The choice of channel
@@ -9546,10 +9546,10 @@ editor by completion, diagnostics and never losing work first.
     request, and `config.yml` linking Q&A, Ideas and `SECURITY.md`); the
     `good first issue` label already existed. README Contributing and the
     site footer link to Discussions. Spec
-    [`spec/community`](spec/community/index.md), which lists six real starter
-    tasks (Scoop, winget, AUR and `nix run` on real machines, WSL, the IM demo
-    GIF). **Left (maintainer):** approve filing those as `good first issue`
-    issues.
+    [`spec/community`](spec/community/index.md).
+  - **Done 2026-11-16.** The maintainer dropped the idea of filing six
+    starter tasks as `good first issue` issues; the spec no longer lists
+    them. The label stays for issues the maintainer marks by hand.
 - [x] **T748 — Localized landing page.** The site's language picker sets
   only `lang`/`dir`; translate the home page's text into the editor's 15
   languages, per the [Worldwide](spec/worldwide/index.md) spec, starting
