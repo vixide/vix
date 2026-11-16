@@ -1087,4 +1087,136 @@ mod tests {
             }
         }
     }
+
+    // The tests below each kill a mutant `cargo mutants` found surviving
+    // (.github/workflows/mutants.yml); the comment names the condition.
+
+    #[test]
+    fn bump_number_from_the_middle_and_the_start_of_the_buffer() {
+        // The cursor mid-number: the token grows left, and the cursor moves to
+        // the number's start.
+        assert_eq!(
+            bump_number_at("x 123", 3, 1),
+            Some(("x 124".to_string(), 2))
+        );
+        // A number at offset 0: nothing to the left to look at.
+        assert_eq!(bump_number_at("5", 0, 1), Some(("6".to_string(), 0)));
+    }
+
+    #[test]
+    fn transpose_chars_at_line_ends_and_edges() {
+        // At the end of the buffer the last two chars swap.
+        assert_eq!(
+            transpose_chars_at("abcde", 5),
+            Some(("abced".to_string(), 5))
+        );
+        // A cursor past the end has no pair.
+        assert_eq!(transpose_chars_at("ab", 3), None);
+        // At a line start the pair would cross the newline before it.
+        assert_eq!(transpose_chars_at("ab\ncd", 3), None);
+        // On an empty line the pair would cross the newline after it.
+        assert_eq!(transpose_chars_at("ab\n\ncd", 3), None);
+    }
+
+    #[test]
+    fn transpose_words_from_the_space_between_them() {
+        assert_eq!(
+            transpose_words_at("foo bar baz", 3),
+            Some(("bar foo baz".to_string(), 7))
+        );
+    }
+
+    #[test]
+    fn sentence_starts_skip_lead_space_closing_quotes_and_a_trailing_space() {
+        assert_eq!(sentence_starts("  Hi. Yo."), [2, 6]);
+        assert_eq!(sentence_starts("He said \"Hi.\" Then."), [0, 14]);
+        assert_eq!(sentence_starts("Hi. "), [0]);
+    }
+
+    #[test]
+    fn line_ranges_keep_the_last_line_without_a_newline() {
+        let chars = |s: &str| s.chars().collect::<Vec<_>>();
+        assert_eq!(line_ranges(&chars("a\nb")), [(0, 1), (2, 3)]);
+        assert_eq!(line_ranges(&chars("a\n")), [(0, 1)]);
+        assert_eq!(line_ranges(&chars("")), [(0, 0)]);
+    }
+
+    #[test]
+    fn transpose_sentences_from_the_space_between_them() {
+        // Between the first and second sentence: those two swap, not the last two.
+        assert_eq!(
+            transpose_sentences_at("A.  B.  C.", 3),
+            Some(("B.  A.  C.".to_string(), 6))
+        );
+    }
+
+    #[test]
+    fn transpose_sections_with_blank_first_and_last_lines() {
+        assert_eq!(
+            transpose_sections_at("A\n\n\nB\n\n", 4),
+            Some(("B\n\n\nA\n\n".to_string(), 5))
+        );
+        assert_eq!(
+            transpose_sections_at("\nA\n\n\nB", 5),
+            Some(("\nB\n\n\nA".to_string(), 6))
+        );
+    }
+
+    #[test]
+    fn delete_from_between_units_and_a_lone_unit() {
+        // Between two sentences: the next one goes, with the space after it.
+        assert_eq!(
+            delete_sentence_at("A.  B.  C.", 3),
+            Some(("A.  C.".to_string(), 4))
+        );
+        // The only sentence takes its trailing space with it.
+        assert_eq!(delete_sentence_at("Hi.  ", 0), Some((String::new(), 0)));
+        // The blank lines go, but the next paragraph keeps its indentation.
+        assert_eq!(
+            delete_paragraph_at("A\n\n  B", 0),
+            Some(("  B".to_string(), 0))
+        );
+    }
+
+    #[test]
+    fn wrap_hangs_a_numbered_item_and_joins_a_digit_led_line() {
+        assert_eq!(wrap("1. aaa bbb ccc", 10), "1. aaa bbb\n   ccc");
+        // "12x" is not a list number, so the line joins the one above.
+        assert_eq!(wrap("aa\n12x bb", 80), "aa 12x bb");
+    }
+
+    #[test]
+    fn wrap_paragraph_at_picks_the_paragraph_at_or_after_the_cursor() {
+        let text = "aaa bbb\n\nccc ddd";
+        let wrapped = "aaa bbb\n\nccc\nddd";
+        // In the second paragraph.
+        assert_eq!(
+            wrap_paragraph_at(text, 10, 3).map(|r| r.0).as_deref(),
+            Some(wrapped)
+        );
+        // On the blank line between them: the next paragraph.
+        assert_eq!(
+            wrap_paragraph_at(text, 8, 3).map(|r| r.0).as_deref(),
+            Some(wrapped)
+        );
+    }
+
+    #[test]
+    fn smart_toggle_mid_word_and_a_symbol_past_offset_one() {
+        assert_eq!(
+            smart_toggle_at("x = true", 6),
+            Some(("x = false".to_string(), 4))
+        );
+        assert_eq!(
+            smart_toggle_at("ab && c", 3),
+            Some(("ab || c".to_string(), 3))
+        );
+    }
+
+    #[test]
+    fn tag_column_needs_word_bounds_on_both_sides() {
+        assert_eq!(tag_column("MY_TODO", "TODO"), None);
+        assert_eq!(tag_column("TODOS", "TODO"), None);
+        assert_eq!(tag_column("a TODO: x", "TODO"), Some(2));
+    }
 }
