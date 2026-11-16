@@ -104,4 +104,10 @@ mod tests {
     fn interior_blank_lines_are_kept() {
         assert_eq!(cleanup("a\n\n\nb\n").0, "a\n\n\nb\n");
     }
+
+    #[test]
+    fn is_clean_only_when_nothing_changed() {
+        assert!(cleanup("a\n").1.is_clean());
+        assert!(!cleanup("a \n").1.is_clean());
+    }
 }
