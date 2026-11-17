@@ -1,5 +1,7 @@
 //! Minimal [EditorConfig](https://editorconfig.org/) support: resolve the indent
-//! and on-save normalization properties that apply to a file.
+//! and on-save normalization properties that apply to a file. Vim modelines and
+//! Emacs file variables, the settings a file states in itself, are in
+//! [`modeline`].
 //!
 //! This is a focused, dependency-free reader (it reuses the crate's `regex`). It
 //! walks up from the file's directory collecting `.editorconfig` files, stopping
@@ -26,6 +28,8 @@
 //! ```
 
 use std::path::Path;
+
+pub mod modeline;
 
 /// The `EditorConfig` properties that apply to a file, each `None` when unset.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

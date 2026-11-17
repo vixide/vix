@@ -4694,6 +4694,10 @@ impl App {
                 opts.ensure_final_newline = v;
             }
         }
+        // And the file's own modelines win over its .editorconfig.
+        if let Some(v) = self.active_modeline().insert_final_newline {
+            opts.ensure_final_newline = v;
+        }
         opts
     }
 
@@ -5010,12 +5014,17 @@ impl App {
         self.rewrite_at_cursor(f, None);
     }
 
-    /// Hard-wrap (fill) text at the `wrap_column` setting: the selection when
+    /// Hard-wrap (fill) text at the `wrap_column` setting (or the file's
+    /// modeline): the selection when
     /// there is one, otherwise the paragraph around the cursor (the run of
     /// non-blank lines holding it). No-op (with a status note) when the text is
     /// already wrapped or the cursor is not in a paragraph.
     fn wrap_text(&mut self) {
-        let width = self.buffer_settings().wrap_column;
+        // A modeline's `tw`/`fill-column` wins over the setting.
+        let width = self
+            .active_modeline()
+            .wrap_column
+            .unwrap_or_else(|| self.buffer_settings().wrap_column);
         let selected = self
             .editor
             .active_tab_mut()
@@ -8884,14 +8893,43 @@ impl App {
                 tab.editor.set_soft_wrap(wrap);
             }
         }
-        if !self.settings.typing.editorconfig {
-            return;
-        }
-        if let Some(indent) = crate::editorconfig::resolve(path).indent_string()
+        if self.settings.typing.editorconfig
+            && let Some(indent) = crate::editorconfig::resolve(path).indent_string()
             && let Some(tab) = self.editor.active_tab_mut()
         {
             tab.editor.set_indent(Some(indent));
         }
+        // The file's own modelines win over its .editorconfig.
+        let modeline = self.active_modeline();
+        if let Some(tab) = self.editor.active_tab_mut() {
+            if let Some(indent) = modeline.indent_string() {
+                tab.editor.set_indent(Some(indent));
+            }
+            if let Some(wrap) = modeline.soft_wrap {
+                tab.editor.set_soft_wrap(wrap);
+            }
+        }
+    }
+
+    /// The active buffer's Vim modelines and Emacs file variables
+    /// (`modeline_lines`, `crates/vix-editorconfig/spec`), read from its first
+    /// and last lines only, so a large buffer costs no more than a small one.
+    fn active_modeline(&self) -> crate::editorconfig::modeline::Modeline {
+        use crate::editorconfig::modeline;
+        let lines = self.settings.typing.modeline_lines;
+        let Some(tab) = self.editor.active_tab().filter(|_| lines > 0) else {
+            return modeline::Modeline::default();
+        };
+        let code = tab.editor.code_ref();
+        let n = code.len_lines();
+        // Two head lines at least: an Emacs `-*-` line may follow a `#!` line.
+        let head: String = (0..n.min(lines.max(2)))
+            .map(|i| code.line(i).to_string())
+            .collect();
+        let tail: String = (n.saturating_sub(modeline::TAIL_LINES.max(lines))..n)
+            .map(|i| code.line(i).to_string())
+            .collect();
+        modeline::parse(&head, &tail, lines)
     }
 
     /// Ring the terminal bell (`\x07`) — the one signal a state change can
