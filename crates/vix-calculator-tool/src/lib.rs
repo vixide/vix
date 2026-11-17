@@ -235,6 +235,22 @@ mod tests {
     }
 
     #[test]
+    fn backspace_deletes_last_char_and_clears_outcome() {
+        let mut c = Calculator::new();
+        for ch in "12".chars() {
+            c.push(ch);
+        }
+        c.run();
+        assert!(c.outcome.is_some());
+        c.backspace();
+        assert_eq!(c.input, "1");
+        assert!(c.outcome.is_none(), "editing invalidates the old result");
+        c.backspace();
+        c.backspace(); // on an empty formula: a no-op
+        assert_eq!(c.input, "");
+    }
+
+    #[test]
     fn focus_cycles() {
         let mut c = Calculator::new();
         assert_eq!(c.focus, Focus::Input);

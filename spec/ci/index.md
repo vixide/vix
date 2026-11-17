@@ -292,7 +292,7 @@ run builds both architectures and pushes nothing. It has not run yet. See
 ### Mutation testing (T606)
 
 `.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly and on demand over
-the small pure crates (the workflow's `-p` list is the one record of which: 24 crates, from
+the small pure crates (the workflow's `-p` list is the one record of which: 34 crates, from
 `vix-textops` and `vix-tags` to parsers like `vix-vcard-parser` and `vix-convert-tabular`) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
 

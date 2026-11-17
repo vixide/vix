@@ -57,35 +57,28 @@ fn headline_level(line: &str) -> Option<usize> {
 pub fn parse(content: &str) -> Vec<Contact> {
     let lines: Vec<&str> = content.lines().collect();
     let mut out = Vec::new();
-    let mut i = 0;
-    while i < lines.len() {
-        let Some(level) = headline_level(lines[i]) else {
-            i += 1;
+    for (i, line) in lines.iter().enumerate() {
+        let Some(level) = headline_level(line) else {
             continue;
         };
-        let name = lines[i][level..].trim().to_string();
+        let name = line[level..].trim().to_string();
         // A drawer must start on the next non-blank line.
-        let mut j = i + 1;
-        while j < lines.len() && lines[j].trim().is_empty() {
-            j += 1;
-        }
-        if j < lines.len() && lines[j].trim().eq_ignore_ascii_case(":PROPERTIES:") {
-            let mut fields = Vec::new();
-            j += 1;
-            while j < lines.len() && !lines[j].trim().eq_ignore_ascii_case(":END:") {
-                let t = lines[j].trim();
-                if let Some(rest) = t.strip_prefix(':')
-                    && let Some((key, value)) = rest.split_once(':')
-                {
-                    fields.push((key.trim().to_ascii_uppercase(), value.trim().to_string()));
-                }
-                j += 1;
-            }
+        let mut after = lines[i + 1..].iter().skip_while(|l| l.trim().is_empty());
+        if after
+            .next()
+            .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
+        {
+            let fields: Vec<(String, String)> = after
+                .take_while(|l| !l.trim().eq_ignore_ascii_case(":END:"))
+                .filter_map(|l| {
+                    let (key, value) = l.trim().strip_prefix(':')?.split_once(':')?;
+                    Some((key.trim().to_ascii_uppercase(), value.trim().to_string()))
+                })
+                .collect();
             if fields.iter().any(|(k, _)| FIELDS.contains(&k.as_str())) {
                 out.push(Contact { name, fields });
             }
         }
-        i += 1;
     }
     out
 }
@@ -289,6 +282,75 @@ mod tests {
             .find(|l| l.contains("\\vert"))
             .expect("row present");
         assert_eq!(row.matches('|').count(), 4, "row: {row}");
+    }
+
+    #[test]
+    fn nested_headline_keeps_its_full_name() {
+        // A level-2 headline: the name is the text after both stars.
+        let cs = parse("** Grace Hopper\n  :PROPERTIES:\n  :EMAIL: g@x\n  :END:\n");
+        assert_eq!(cs.len(), 1);
+        assert_eq!(cs[0].name, "Grace Hopper");
+    }
+
+    #[test]
+    fn headline_needs_a_star_and_a_space() {
+        assert_eq!(headline_level("* A"), Some(1));
+        assert_eq!(headline_level("*** C"), Some(3));
+        assert_eq!(headline_level("*bold* text"), None);
+        assert_eq!(headline_level(" indented"), None);
+        assert_eq!(headline_level("a b"), None);
+        assert_eq!(headline_level("**"), None);
+        // Neither a star-without-space line nor an indented line starts a contact.
+        let org = "*NoSpace\n  :PROPERTIES:\n  :EMAIL: a@x\n  :END:\n \
+                   indented\n:PROPERTIES:\n:EMAIL: b@x\n:END:\n";
+        assert!(parse(org).is_empty(), "got: {:?}", parse(org));
+    }
+
+    #[test]
+    fn blank_lines_may_separate_headline_and_drawer() {
+        let cs = parse("* Ada\n\n   \n  :PROPERTIES:\n  :EMAIL: a@x\n  :END:\n");
+        assert_eq!(cs.len(), 1);
+        assert_eq!(cs[0].name, "Ada");
+    }
+
+    #[test]
+    fn headline_at_end_of_document_is_not_a_contact() {
+        assert_eq!(parse("* Last"), [] as [Contact; 0]);
+        assert_eq!(parse("* Last\n\n\n"), [] as [Contact; 0]);
+    }
+
+    #[test]
+    fn drawer_fields_are_exactly_the_property_lines() {
+        let cs = parse(
+            "* Ada\n  :PROPERTIES:\n  :email: a@x\n  junk\n  :PHONE:  1 \n  :END:\n  :NOTE: after\n",
+        );
+        assert_eq!(cs.len(), 1);
+        assert_eq!(
+            cs[0].fields,
+            vec![
+                ("EMAIL".to_string(), "a@x".to_string()),
+                ("PHONE".to_string(), "1".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unterminated_drawer_runs_to_end_of_document() {
+        let cs = parse("* Ada\n  :PROPERTIES:\n  :EMAIL: a@x");
+        assert_eq!(cs.len(), 1);
+        assert_eq!(cs[0].fields, vec![("EMAIL".to_string(), "a@x".to_string())]);
+    }
+
+    #[test]
+    fn consecutive_contacts_are_all_found() {
+        let org = "* A\n:PROPERTIES:\n:EMAIL: a\n:END:\n* B\n:PROPERTIES:\n:EMAIL: b\n:END:\n";
+        let names: Vec<String> = parse(org).into_iter().map(|c| c.name).collect();
+        assert_eq!(names, ["A", "B"]);
+    }
+
+    #[test]
+    fn vcard_escape_maps_newline_to_literal_backslash_n() {
+        assert_eq!(vcard_escape("a\nb\r\nc"), "a\\nb\\nc");
     }
 
     proptest::proptest! {

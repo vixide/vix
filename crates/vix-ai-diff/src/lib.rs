@@ -116,8 +116,7 @@ impl Review {
 
     /// Move the highlight to the next change (saturating).
     pub fn next(&mut self) {
-        let n = self.change_count();
-        if n > 0 && self.selected + 1 < n {
+        if self.selected.saturating_add(1) < self.change_count() {
             self.selected += 1;
         }
     }
@@ -226,5 +225,39 @@ mod tests {
         assert_eq!(r.result(), "a\nb\n");
         r.set_all(true);
         assert_eq!(r.result(), "A\nB\n");
+    }
+
+    #[test]
+    fn next_stops_at_the_last_change() {
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        r.next();
+        assert_eq!(r.selected, 1);
+        r.next(); // already on the last of two changes
+        assert_eq!(r.selected, 1);
+    }
+
+    #[test]
+    fn next_on_a_single_change_stays_put() {
+        let mut r = Review::from_texts("a\n", "A\n").unwrap();
+        r.next();
+        assert_eq!(r.selected, 0);
+    }
+
+    #[test]
+    fn prev_moves_back_and_stops_at_the_first() {
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        r.next();
+        r.prev();
+        assert_eq!(r.selected, 0);
+        r.prev();
+        assert_eq!(r.selected, 0);
+    }
+
+    #[test]
+    fn accepted_count_counts_accepted_changes() {
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        assert_eq!(r.accepted_count(), 2);
+        r.toggle();
+        assert_eq!(r.accepted_count(), 1);
     }
 }
