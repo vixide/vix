@@ -196,10 +196,12 @@ The corpus is not committed; the regression is.
 | Bench | Covers |
 | ----- | ------ |
 | `text_ops` | The pure transforms, at 100 and 2,000 lines — they rebuild their unit ranges from the whole buffer on every keystroke |
-| `editor_ops` | Opening a file (parsing it, up to a ~100 MB synthetic file — highlighting is a separate, always-lazy, per-viewport cost this doesn't measure), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
+| `editor_ops` | Opening a file (parsing it, up to a ~100 MB synthetic file — highlighting is a separate, always-lazy, per-viewport cost that `render_ops` measures), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
 | `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree), and palette fuzzy filtering |
 | `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately |
 | `frame_ops` | The two per-*frame* buffer scans found and fixed by T510/T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll/breadcrumb declaration scan (`vix_palette::symbols`) |
+| `gutter_diff` | The git gutter diff against `HEAD` (`vix_git::diff_marks`, T574) for lightly edited and heavily rewritten buffers, so the 40 ms deadline and the 50,000-line cap stay visible |
+| `render_ops` | Drawing: one viewport's syntax highlight with the cache cold (top, middle and end of 1,000 to 125,000-line files; it should stay flat as the file grows), and a whole `ui::draw` of the `App` into a 200×50 terminal, both an unchanged redraw and a redraw after a keystroke |
 
 ```sh
 cargo bench                                  # everything
