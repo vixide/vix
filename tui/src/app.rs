@@ -15014,6 +15014,9 @@ fn detach_from_tty(cmd: &mut std::process::Command) {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
+    // Elsewhere there is no process group to set.
+    #[cfg(not(unix))]
+    let _ = cmd;
 }
 
 /// Whether a command-output line is a VCS authentication failure that the

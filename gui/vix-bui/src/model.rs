@@ -5,6 +5,7 @@
 //! scripted screenshot run; `crate::view` only forwards BUI's events to it and
 //! replays [`Model::scene`] onto BUI's painter.
 
+#[cfg(any(target_os = "macos", test))]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
