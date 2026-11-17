@@ -545,4 +545,191 @@ mod tests {
         }]);
         assert!(!json.contains("description"));
     }
+
+    fn lib3() -> Vec<Snippet> {
+        // Index 0 matches "zz" by name, 1 by description, 2 by prefix.
+        parse_json(
+            r#"{
+                "Azz": {"body": "1"},
+                "B": {"body": "2", "description": "has zz"},
+                "C": {"prefix": "pzz", "body": "3"}
+            }"#,
+            &Scope::Global,
+        )
+    }
+
+    #[test]
+    fn scope_labels() {
+        assert_eq!(Scope::Bundled.label(), "bundled");
+        assert_eq!(Scope::Global.label(), "global");
+        assert_eq!(Scope::MediaType("text/rust".into()).label(), "text/rust");
+        assert_eq!(Scope::Project.label(), "project");
+    }
+
+    #[test]
+    fn to_json_writes_the_documented_shape() {
+        let json = to_json(&[Snippet {
+            name: "N".to_string(),
+            prefixes: vec!["n".to_string()],
+            body: "a\nb".to_string(),
+            description: "d".to_string(),
+            scope: Scope::Global,
+        }]);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"N": {"prefix": "n", "body": ["a", "b"], "description": "d"}})
+        );
+        assert_eq!(parse_json(&json, &Scope::Global).len(), 1);
+    }
+
+    #[test]
+    fn empty_string_prefix_is_dropped() {
+        let s = parse_json(r#"{"A": {"prefix": "", "body": "x"}}"#, &Scope::Global);
+        assert_eq!(s[0].prefixes, [] as [String; 0]);
+    }
+
+    #[test]
+    fn bundled_mirrors_the_compiled_in_catalogue() {
+        let b = bundled();
+        assert_eq!(b.len(), vix_snippet_tool::SNIPPETS.len());
+        assert!(!b.is_empty());
+        assert_eq!(b[0].name, vix_snippet_tool::SNIPPETS[0].name);
+        assert_eq!(b[0].body, vix_snippet_tool::SNIPPETS[0].body);
+        assert!(
+            b.iter()
+                .all(|s| s.scope == Scope::Bundled && s.prefixes.is_empty())
+        );
+    }
+
+    #[test]
+    fn config_and_global_dirs_derive_from_the_settings_path() {
+        let expected =
+            vix_settings::Settings::config_path().and_then(|p| p.parent().map(Path::to_path_buf));
+        assert_eq!(config_dir(), expected);
+        assert!(
+            config_dir().is_some(),
+            "a home directory is available in tests"
+        );
+        assert_ne!(config_dir(), Some(PathBuf::new()));
+        assert_eq!(
+            global_dir(),
+            expected.map(|d| d.join("global").join("snippets"))
+        );
+    }
+
+    #[test]
+    fn project_file_joins_root_and_relative_path() {
+        assert_eq!(
+            project_file(Path::new("/r"), ".vix/snippets.json"),
+            Path::new("/r/.vix/snippets.json")
+        );
+    }
+
+    #[test]
+    fn save_file_creates_parents_and_writes_loadable_json() {
+        let dir = std::env::temp_dir().join(format!("vix-snip-save-{}", std::process::id()));
+        let path = dir.join("nested").join("s.json");
+        let snips = parse_json(r#"{"A": {"prefix": "a", "body": "x"}}"#, &Scope::Global);
+        save_file(&path, &snips).unwrap();
+        let back = load_file(&path, &Scope::Project);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].name, "A");
+    }
+
+    #[test]
+    fn load_scoped_reads_project_media_type_dir_and_project_file() {
+        let root = std::env::temp_dir().join(format!("vix-snip-scoped-{}", std::process::id()));
+        let mt = root.join("config").join(media_type_rel("text/x-vixtest"));
+        std::fs::create_dir_all(&mt).unwrap();
+        std::fs::write(mt.join("m.json"), r#"{"VixTestMedia": {"body": "1"}}"#).unwrap();
+        std::fs::write(root.join("p.json"), r#"{"VixTestProject": {"body": "2"}}"#).unwrap();
+        let s = load_scoped(Some("text/x-vixtest"), &root, "p.json");
+        let _ = std::fs::remove_dir_all(&root);
+        let media = s
+            .iter()
+            .find(|s| s.name == "VixTestMedia")
+            .expect("media snippet");
+        assert_eq!(media.scope, Scope::MediaType("text/x-vixtest".into()));
+        let proj = s
+            .iter()
+            .find(|s| s.name == "VixTestProject")
+            .expect("project snippet");
+        assert_eq!(proj.scope, Scope::Project);
+    }
+
+    #[test]
+    fn picker_matches_name_description_or_prefix_alone() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        p.query = "ZZ".into();
+        assert_eq!(p.matches(&lib), [0, 1, 2]);
+        p.query = "azz".into();
+        assert_eq!(p.matches(&lib), [0]);
+        p.query = "has".into();
+        assert_eq!(p.matches(&lib), [1]);
+        p.query = "pz".into();
+        assert_eq!(p.matches(&lib), [2]);
+        p.query = "nope".into();
+        assert_eq!(p.matches(&lib), [] as [usize; 0]);
+    }
+
+    #[test]
+    fn backspace_shortens_the_query_and_resets_the_highlight() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        p.push('p');
+        p.push('q');
+        assert_eq!(p.len(&lib), 0);
+        p.selected = 2;
+        p.scroll = 1;
+        p.backspace();
+        assert_eq!(p.query, "p");
+        assert_eq!((p.selected, p.scroll), (0, 0));
+        assert_eq!(p.matches(&lib), [2]);
+    }
+
+    #[test]
+    fn up_and_down_move_and_clamp() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        p.down(1, &lib);
+        assert_eq!(p.selected, 1);
+        p.down(10, &lib);
+        assert_eq!(p.selected, 2);
+        p.up(1);
+        assert_eq!(p.selected, 1);
+        p.up(10);
+        assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn select_index_accepts_only_filtered_rows() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        assert!(p.select_index(2, &lib));
+        assert_eq!(p.selected, 2);
+        assert!(!p.select_index(3, &lib));
+        assert_eq!(p.selected, 2);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_to_the_highlight() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        p.selected = 2;
+        p.ensure_visible(1, &lib);
+        assert_eq!(p.scroll, 2);
+    }
+
+    #[test]
+    fn selected_library_index_maps_filtered_row_to_library() {
+        let lib = lib3();
+        let mut p = Picker::new();
+        p.query = "has".into();
+        assert_eq!(p.selected_library_index(&lib), Some(1));
+        p.query = "nope".into();
+        assert_eq!(p.selected_library_index(&lib), None);
+    }
 }

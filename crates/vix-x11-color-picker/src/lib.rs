@@ -238,4 +238,18 @@ mod tests {
             "an out-of-range click leaves the selection put"
         );
     }
+
+    #[test]
+    fn table_is_not_empty() {
+        let p = Panel::open();
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn selected_hex_is_the_highlighted_colors_hex() {
+        let mut p = Panel::open();
+        assert_eq!(p.selected_hex(), "#F0F8FF");
+        p.down();
+        assert_eq!(p.selected_hex(), colors()[1].hex);
+    }
 }

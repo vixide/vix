@@ -470,6 +470,30 @@ mod tests {
     }
 
     #[test]
+    fn has_bom_is_false_without_a_bom() {
+        assert!(!TextEncoding::UTF8.has_bom());
+        assert!(!enc("windows-1252").has_bom());
+        assert!(enc("UTF-8 BOM").has_bom());
+    }
+
+    #[test]
+    fn is_default_only_for_plain_utf8() {
+        assert!(TextEncoding::UTF8.is_default());
+        assert!(TextEncoding::default().is_default());
+        assert!(!enc("UTF-8 BOM").is_default());
+        assert!(!enc("windows-1252").is_default());
+    }
+
+    #[test]
+    fn unmappable_display_names_encoding_and_char() {
+        let err = encode("snow \u{2603}", enc("windows-1252")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "windows-1252 can't encode '\u{2603}' (U+2603)"
+        );
+    }
+
+    #[test]
     fn labels_and_display() {
         assert_eq!(enc("latin1").name(), "windows-1252");
         assert_eq!(enc("UTF-16LE").to_string(), "UTF-16LE BOM");

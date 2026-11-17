@@ -33,4 +33,8 @@ exclude_re = [
     # `strong_rtl` -> true only skips the all-LTR fast path; BidiInfo then
     # gives the identity order for all-LTR text anyway.
     "vix-locale-model/src/lib.rs:204:5: replace strong_rtl -> bool with true",
+    # Both pickers read a bundled TSV (1,000+ entities, 100+ colors) and no
+    # constructor takes another table, so the list is never empty.
+    "vix-html-character-picker/src/lib.rs:105:9: replace Panel::is_empty -> bool with false",
+    "vix-x11-color-picker/src/lib.rs:112:9: replace Panel::is_empty -> bool with false",
 ]

@@ -45,6 +45,9 @@ jobs:
             -p vix-choice-list -p vix-test-runner -p vix-pomodoro-tool \
             -p vix-vcard-parser -p vix-jwt-tool -p vix-checksum-tool \
             -p vix-locale-model -p vix-convert-tabular \
+            -p vix-ai-diff -p vix-base16 -p vix-org-contacts -p vix-calculator-tool \
+            -p vix-conflict-tool -p vix-encoding -p vix-editorconfig -p vix-snippets \
+            -p vix-html-character-picker -p vix-x11-color-picker \
             --no-shuffle
       - name: upload the report
         if: always()

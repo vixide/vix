@@ -201,4 +201,29 @@ mod tests {
         assert!(!p.select_index(p.len()));
         assert_eq!(p.selected, 9);
     }
+
+    #[test]
+    fn table_is_not_empty() {
+        let p = Panel::open();
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn up_moves_back_one_row() {
+        let mut p = Panel::open();
+        p.select_index(5);
+        p.up();
+        assert_eq!(p.selected, 4);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_the_selection_into_the_window() {
+        let mut p = Panel::open();
+        p.selected = 50;
+        p.ensure_visible(10);
+        assert_eq!(p.scroll, 41, "selection sits on the last visible row");
+        p.selected = 3;
+        p.ensure_visible(10);
+        assert_eq!(p.scroll, 3);
+    }
 }

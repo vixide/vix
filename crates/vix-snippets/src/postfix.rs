@@ -141,15 +141,19 @@ fn is_expr_char(c: char) -> bool {
 /// unbalanced closing bracket ends the scan.
 fn expression_before(s: &[char]) -> usize {
     let mut i = s.len();
-    while i > 0 {
+    // Every pass either stops or moves `i` strictly left, so `s.len()` passes
+    // always suffice.
+    for _ in 0..s.len() {
+        if i == 0 {
+            break;
+        }
         let c = s[i - 1];
         if matches!(c, ')' | ']') {
             let (open, close) = if c == ')' { ('(', ')') } else { ('[', ']') };
             let mut depth = 0usize;
-            let mut j = i;
-            let mut matched = false;
-            while j > 0 {
-                let cj = s[j - 1];
+            let mut start = None;
+            for j in (0..i).rev() {
+                let cj = s[j];
                 if cj == close {
                     depth += 1;
                 } else if cj == open {
@@ -157,17 +161,15 @@ fn expression_before(s: &[char]) -> usize {
                     // examined is always the `close` bracket checked above.
                     depth -= 1;
                     if depth == 0 {
-                        matched = true;
-                        j -= 1;
+                        start = Some(j);
                         break;
                     }
                 }
-                j -= 1;
             }
-            if !matched {
+            let Some(start) = start else {
                 break;
-            }
-            i = j;
+            };
+            i = start;
         } else if is_expr_char(c) && !(c == '-' && s.get(i) != Some(&'>')) {
             // A `-` only belongs to a `->` arrow, never a subtraction.
             if c == '>' && s.get(i.wrapping_sub(2)) != Some(&'-') {
@@ -312,5 +314,47 @@ mod tests {
         assert_eq!(Family::from_extension("tsx"), Some(Family::Script));
         assert_eq!(Family::from_extension("md"), None);
         assert!(keys(Family::Rust).contains(&"match"));
+    }
+
+    #[test]
+    fn family_from_extension_covers_every_family() {
+        assert_eq!(Family::from_extension("py"), Some(Family::Python));
+        assert_eq!(Family::from_extension("go"), Some(Family::Go));
+        for ext in ["c", "h", "cc", "cpp", "hpp", "java", "cs", "php"] {
+            assert_eq!(Family::from_extension(ext), Some(Family::CLike), "{ext}");
+        }
+    }
+
+    #[test]
+    fn unbalanced_closing_bracket_ends_the_expression() {
+        assert_eq!(expand("x).if", Family::Rust), None);
+        assert_eq!(expand("a]).not", Family::Rust), None);
+        // Nested groups are matched as one unit.
+        assert_eq!(
+            body("f(g(x)).not", Family::Rust),
+            Some((11, "!f(g(x))".to_string()))
+        );
+    }
+
+    #[test]
+    fn arrow_paths_are_one_expression() {
+        assert_eq!(
+            body("p->x.not", Family::CLike),
+            Some((8, "!p->x".to_string()))
+        );
+    }
+
+    #[test]
+    fn bare_minus_and_greater_than_end_the_expression() {
+        assert_eq!(body("a-b.not", Family::CLike), Some((5, "!b".to_string())));
+        assert_eq!(body("a>b.not", Family::CLike), Some((5, "!b".to_string())));
+        // A trailing `-` is subtraction, not the start of an arrow.
+        assert_eq!(expand("a-.not", Family::CLike), None);
+    }
+
+    #[test]
+    fn a_lone_s_is_not_singularized_to_nothing() {
+        let e = expand("s.for", Family::Rust).unwrap();
+        assert_eq!(e.body, "for ${1:item} in s {\n\t$0\n}");
     }
 }

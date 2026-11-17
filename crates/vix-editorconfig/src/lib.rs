@@ -194,54 +194,49 @@ fn glob_matches(pat: &str, rel: &str) -> bool {
 }
 
 /// Translate an `EditorConfig` glob into a regex body.
+///
+/// Scans with a `Chars` iterator and slices of its remaining text rather than
+/// index arithmetic, so every step provably consumes input.
 fn glob_to_regex(pat: &str) -> String {
     let mut out = String::new();
-    let chars: Vec<char> = pat.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    let mut rest = pat.chars();
+    while let Some(c) = rest.next() {
         match c {
             '*' => {
-                if chars.get(i + 1) == Some(&'*') {
+                if let Some(after) = rest.as_str().strip_prefix('*') {
                     out.push_str(".*");
-                    i += 1;
+                    rest = after.chars();
                 } else {
                     out.push_str("[^/]*");
                 }
             }
             '?' => out.push_str("[^/]"),
             '{' => {
-                // Brace alternation: {a,b,c} -> (a|b|c).
-                let mut j = i + 1;
-                let mut inner = String::new();
-                while j < chars.len() && chars[j] != '}' {
-                    inner.push(chars[j]);
-                    j += 1;
-                }
-                if j < chars.len() {
+                // Brace alternation: {a,b,c} -> (a|b|c). An unclosed brace is
+                // a literal `{` and scanning resumes right after it.
+                if let Some((inner, after)) = rest.as_str().split_once('}') {
                     let alts: Vec<String> = inner.split(',').map(regex_escape).collect();
                     out.push('(');
                     out.push_str(&alts.join("|"));
                     out.push(')');
-                    i = j;
+                    rest = after.chars();
                 } else {
                     out.push_str("\\{");
                 }
             }
             '[' => {
-                // Character class: pass through, mapping a leading ! to ^.
+                // Character class: pass through, mapping a leading ! to ^. An
+                // unclosed class runs to the end of the pattern.
                 out.push('[');
-                let mut j = i + 1;
-                if chars.get(j) == Some(&'!') {
+                let mut class = rest.as_str();
+                if let Some(negated) = class.strip_prefix('!') {
                     out.push('^');
-                    j += 1;
+                    class = negated;
                 }
-                while j < chars.len() && chars[j] != ']' {
-                    out.push(chars[j]);
-                    j += 1;
-                }
+                let (body, after) = class.split_once(']').unwrap_or((class, ""));
+                out.push_str(body);
                 out.push(']');
-                i = j;
+                rest = after.chars();
             }
             '.' | '+' | '(' | ')' | '|' | '^' | '$' | '\\' => {
                 out.push('\\');
@@ -249,7 +244,6 @@ fn glob_to_regex(pat: &str) -> String {
             }
             _ => out.push(c),
         }
-        i += 1;
     }
     out
 }
@@ -303,6 +297,117 @@ mod tests {
         };
         assert_eq!(spaces.indent_string(), Some("  ".to_string()));
         assert_eq!(Resolved::default().indent_string(), None);
+    }
+
+    #[test]
+    fn glob_to_regex_translates_each_form() {
+        assert_eq!(glob_to_regex(""), "");
+        assert_eq!(glob_to_regex("*.rs"), r"[^/]*\.rs");
+        assert_eq!(glob_to_regex("**/x"), ".*/x");
+        assert_eq!(glob_to_regex("a**"), "a.*");
+        assert_eq!(glob_to_regex("a?c"), "a[^/]c");
+        assert_eq!(glob_to_regex("{a,b.c}d"), r"(a|b\.c)d");
+        assert_eq!(glob_to_regex("x{ab"), r"x\{ab");
+        assert_eq!(glob_to_regex("[!ab]x"), "[^ab]x");
+        assert_eq!(glob_to_regex("[a]b"), "[a]b");
+        assert_eq!(glob_to_regex("[ab"), "[ab]");
+        assert_eq!(glob_to_regex("[!"), "[^]");
+        assert_eq!(glob_to_regex(r"a+b(c)|^$\"), r"a\+b\(c\)\|\^\$\\");
+    }
+
+    #[test]
+    fn glob_single_star_and_question_stay_in_one_segment() {
+        assert!(glob_matches("src/*.rs", "src/main.rs"));
+        assert!(!glob_matches("src/*.rs", "src/a/main.rs"));
+        assert!(glob_matches("src/**.rs", "src/a/main.rs"));
+        assert!(glob_matches("a?c", "abc"));
+        assert!(!glob_matches("a?c", "ac"));
+        assert!(!glob_matches("x/a?c", "x/a/c"));
+    }
+
+    #[test]
+    fn glob_character_classes() {
+        assert!(glob_matches("[ab].txt", "a.txt"));
+        assert!(!glob_matches("[ab].txt", "c.txt"));
+        assert!(glob_matches("[!ab].txt", "c.txt"));
+        assert!(!glob_matches("[!ab].txt", "a.txt"));
+    }
+
+    #[test]
+    fn glob_escapes_regex_metacharacters() {
+        assert!(glob_matches("a+b.(c)", "a+b.(c)"));
+        assert!(!glob_matches("a+b.(c)", "aab.c"));
+        assert!(!glob_matches("main.rs", "mainxrs"));
+        assert!(glob_matches("x{y", "x{y"));
+    }
+
+    #[test]
+    fn preamble_root_true_is_detected() {
+        assert!(preamble_is_root("root = true\n[*]\n"));
+        assert!(preamble_is_root("# c\nROOT = TRUE\n"));
+        assert!(!preamble_is_root("root = false\n"));
+        assert!(!preamble_is_root("[*]\nroot = true\n"));
+        assert!(!preamble_is_root(""));
+    }
+
+    #[test]
+    fn parse_bool_accepts_true_and_false_only() {
+        assert_eq!(parse_bool("true"), Some(true));
+        assert_eq!(parse_bool("TRUE"), Some(true));
+        assert_eq!(parse_bool("false"), Some(false));
+        assert_eq!(parse_bool("False"), Some(false));
+        assert_eq!(parse_bool("yes"), None);
+    }
+
+    #[test]
+    fn apply_kv_sets_each_property() {
+        let mut r = Resolved::default();
+        apply_kv(&mut r, "indent_style", "Tab");
+        assert_eq!(r.indent_is_tab, Some(true));
+        apply_kv(&mut r, "indent_style", "space");
+        assert_eq!(r.indent_is_tab, Some(false));
+        apply_kv(&mut r, "indent_style", "bogus");
+        assert_eq!(r.indent_is_tab, Some(false));
+        apply_kv(&mut r, "indent_size", "3");
+        assert_eq!(r.indent_size, Some(3));
+        apply_kv(&mut r, "indent_size", "tab");
+        assert_eq!(r.indent_size, Some(3));
+        apply_kv(&mut r, "tab_width", "8");
+        assert_eq!(r.tab_width, Some(8));
+        apply_kv(&mut r, "tab_width", "wide");
+        assert_eq!(r.tab_width, Some(8));
+        apply_kv(&mut r, "trim_trailing_whitespace", "true");
+        assert_eq!(r.trim_trailing_whitespace, Some(true));
+        apply_kv(&mut r, "insert_final_newline", "false");
+        assert_eq!(r.insert_final_newline, Some(false));
+        apply_kv(&mut r, "unknown_key", "1");
+        assert_eq!(
+            r,
+            Resolved {
+                indent_is_tab: Some(false),
+                indent_size: Some(3),
+                tab_width: Some(8),
+                trim_trailing_whitespace: Some(true),
+                insert_final_newline: Some(false),
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_stops_at_root_file() {
+        let dir = std::env::temp_dir().join(format!("vix-ec-root-{}", std::process::id()));
+        let sub = dir.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.join(".editorconfig"), "[*]\ntab_width = 8\n").unwrap();
+        std::fs::write(
+            sub.join(".editorconfig"),
+            "root = true\n[*]\nindent_style = tab\n",
+        )
+        .unwrap();
+        let r = resolve(&sub.join("main.rs"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(r.indent_is_tab, Some(true));
+        assert_eq!(r.tab_width, None);
     }
 
     #[test]
