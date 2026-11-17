@@ -17,10 +17,15 @@ editor — see [index.md](index.md) for scope.
 
 ## Specification Driven Development
 
-**The `spec/` directory is the source of truth.**
+**The spec files are the source of truth:** [`index.md`](index.md) (this
+site) and
+[`lily-design-system-svelte-with-picker-bar/index.md`](lily-design-system-svelte-with-picker-bar/index.md)
+(the header's PickerBar and the Lily packages). The Vix repo's
+[`spec/monorepo-github-pages/index.md`](../spec/monorepo-github-pages/index.md)
+covers how this subproject publishes.
 
-- Before doing anything, read every file in the `spec/` directory.
-- Treat all files inside `spec/` as strict requirements. Where any file disagrees with the spec, the spec wins: fix the file, or change the spec on purpose and bring the other files into line in the same commit.
+- Before doing anything, read every spec file.
+- Treat the spec files as strict requirements. Where any file disagrees with the spec, the spec wins: fix the file, or change the spec on purpose and bring the other files into line in the same commit.
 - Do not improvise structure, style, or citation practice.
 
 ## Working rules
