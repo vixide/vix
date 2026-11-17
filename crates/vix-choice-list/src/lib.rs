@@ -108,6 +108,17 @@ impl Panel {
 mod tests {
     use super::*;
 
+    #[test]
+    fn up_moves_back_and_emptiness_follows_rows() {
+        let mut p = panel(3);
+        p.down();
+        p.down();
+        p.up();
+        assert_eq!(p.selected, 1);
+        assert!(!p.is_empty());
+        assert!(panel(0).is_empty());
+    }
+
     fn panel(n: usize) -> Panel {
         Panel::new(
             "t".into(),

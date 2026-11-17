@@ -41,6 +41,10 @@ jobs:
             -p vix-list-state -p vix-civil-date -p vix-byte-size -p vix-textops \
             -p vix-capped-stack -p vix-greedy-wrap -p vix-hex-rgb \
             -p vix-align -p vix-affix -p vix-case -p vix-tags -p vix-base-tool \
+            -p vix-lorem -p vix-keymap-model -p vix-base64-tool -p vix-url-tool \
+            -p vix-choice-list -p vix-test-runner -p vix-pomodoro-tool \
+            -p vix-vcard-parser -p vix-jwt-tool -p vix-checksum-tool \
+            -p vix-locale-model -p vix-convert-tabular \
             --no-shuffle
       - name: upload the report
         if: always()

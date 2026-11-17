@@ -173,6 +173,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unknown_libtest_tails_and_pytest_skips() {
+        // A bench line is no test result.
+        assert_eq!(
+            parse("test bench_x ... bench:       12 ns/iter (+/- 1)"),
+            []
+        );
+        let r = parse("tests/a.py::t SKIPPED");
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].status, Status::Ignore);
+    }
+
+    #[test]
+    fn panic_location_rejects_prose_with_a_number() {
+        assert_eq!(panic_location("warning: 3: oops"), None);
+        assert_eq!(panic_location(":3:4"), None);
+        assert_eq!(
+            panic_location("src/a.rs:3:4"),
+            Some(("src/a.rs".to_string(), 3))
+        );
+    }
+
+    #[test]
     fn parses_cargo_test_output() {
         let out = "\
 running 3 tests
