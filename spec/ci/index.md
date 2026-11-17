@@ -152,7 +152,7 @@ cost money or, on GitLab, are exhausted. Two tiers:
 - **Weekly schedule, version tags and `workflow_dispatch`:** everything else.
   The macOS and Windows test matrix, `cargo hack --each-feature` and the other
   feature combinations, semver, offline tests, coverage, MSRV, binary size,
-  the GUI matrix (`gui.yml`), mutation testing (`mutants.yml`) and the chaos
+  the GUI matrix (`gui.yml`), mutation testing (`mutants.yml`), fuzzing (`fuzz.yml`) and the chaos
   monkey (`chaos.yml`, nightly) all run here. **No check was removed, only
   moved**: a regression they would catch surfaces on the next scheduled run or
   at the latest on the release tag.
@@ -295,6 +295,14 @@ run builds both architectures and pushes nothing. It has not run yet. See
 the small pure crates (the workflow's `-p` list is the one record of which: 34 crates, from
 `vix-textops` and `vix-tags` to parsers like `vix-vcard-parser` and `vix-convert-tabular`) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
+
+### Fuzzing
+
+`.github/workflows/fuzz.yml` (GitHub only) runs every target in `fuzz/fuzz_targets/` weekly
+and on demand, one matrix job each, for 120 seconds (a dispatch can set another length), on
+nightly with `cargo fuzz`. Unlike mutation testing it is not advisory: a target asserts
+invariants, so a failure is a real bug. The job fails and uploads the crashing input as
+`fuzz-<target>`, to be turned into a unit test in the owning crate (`fuzz/README.md`).
 
 ### Desktop GUIs (T641, T642, T647)
 

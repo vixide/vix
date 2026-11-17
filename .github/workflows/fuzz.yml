@@ -1,0 +1,79 @@
+# Fuzzing in CI (spec/test/index.md, "Fuzzing"): every target in
+# fuzz/fuzz_targets/ runs for a fixed time each week and on demand. A target
+# asserts invariants, so a failure here is a real bug, not noise: the job fails
+# and the crashing input is uploaded as an artifact (`fuzz-<target>`). Turn it
+# into a unit test in the crate that owns the code (fuzz/README.md).
+# Not per-push: each target needs a nightly, sanitizer-instrumented build.
+# GitHub only; see spec/ci/index.md.
+
+name: Fuzzing
+
+on:
+  schedule:
+    # Weekly, Sunday 05:15 UTC (an hour after mutation testing).
+    - cron: "15 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Seconds to fuzz each target"
+        required: false
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # rust-toolchain.toml pins stable; cargo-fuzz needs nightly.
+  RUSTUP_TOOLCHAIN: nightly
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - agent_frame
+          - conflict
+          - http_request
+          - im_message
+          - jupyter_wire
+          - lsp_frame
+          - macro_tokens
+          - org_table
+          - query_replace
+          - structured_convert
+          - tabular_convert
+          - textops
+          - vcard
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: cargo fuzz run
+        env:
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '120' }}
+        run: |
+          cargo fuzz run "${{ matrix.target }}" -- \
+            -max_total_time="$SECONDS_PER_TARGET" -rss_limit_mb=2048
+      - name: upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore

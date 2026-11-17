@@ -170,8 +170,10 @@ signal, not a formality — read *why* the screen changed before accepting it.
 root `cargo build` never touches it. Targets cover the code that parses input
 Vix did not write: `textops`, `org_table`, `lsp_frame`, `vcard`, `conflict`,
 `http_request`, `query_replace`, `tabular_convert`, `structured_convert`,
-`macro_tokens`, `im_message`, `agent_frame`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
-minimizing a crash, and adding a target.
+`macro_tokens`, `im_message`, `agent_frame`, `jupyter_wire`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
+minimizing a crash, and adding a target. `.github/workflows/fuzz.yml` runs every
+target for two minutes each week (see [`spec/ci`](../ci/index.md)); a new target
+is added to its matrix too.
 
 A fuzz target asserts **invariants**, not merely the absence of a panic — "a
 returned cursor is a valid offset into the returned text", "render then parse
