@@ -34,6 +34,13 @@ Then turn the minimized input into a **unit test in the crate that owns the
 code** — the fuzz target found it, but the regression belongs next to the
 function, where it runs on every `cargo test`.
 
+## In CI
+
+`.github/workflows/fuzz.yml` runs every target for two minutes each week (and on
+demand, with a chosen length). A failure uploads the crashing input as the
+`fuzz-<target>` artifact; reproduce it with `cargo +nightly fuzz run <target>
+<file>`. A new target goes in that workflow's matrix as well as the table below.
+
 ## Targets
 
 | Target | Fuzzes | The invariant |

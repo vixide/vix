@@ -30,8 +30,8 @@ contain and how it stays true.
   trusted, what is always untrusted, what Vix runs and when, what it sends on
   the network, and how it holds secrets.
 - **Accepted risks**, each with the reason it is accepted.
-- **Hardening**, including what is *not* done yet (release signing,
-  fuzzing in CI), so the policy never claims more than the project does.
+- **Hardening**, including what is *not* done yet (release signing), so
+  the policy never claims more than the project does.
 
 ## Keeping it true
 

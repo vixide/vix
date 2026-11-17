@@ -244,7 +244,10 @@ it.
   license allow-list, bans on wildcard and duplicate dependencies, and
   allowed registry sources. See [`spec/ci`](spec/ci/index.md).
 - **Fuzzing.** `fuzz/fuzz_targets/` fuzzes the parsers and text transforms
-  (`cargo +nightly fuzz run <target>`). It runs locally, not in CI.
+  that take input Vix did not write, asserting invariants rather than only
+  the absence of a panic. Every target runs for two minutes each week in CI
+  (`.github/workflows/fuzz.yml`), and for as long as you like locally
+  (`cargo +nightly fuzz run <target>`).
 - **Mutation testing.** A weekly `cargo mutants` run checks that the small
   pure crates' tests catch every behavior change.
 - **Release integrity.** Each release publishes a SHA-256 checksum for every
