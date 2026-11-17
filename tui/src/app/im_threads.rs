@@ -256,7 +256,7 @@ impl App {
             }
             return;
         };
-        let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+        let text = self.editor.active_tab().map_or_default(Tab::text);
         let lines = buffer_lines(&text);
         let store = &mut self.im.threads;
         let on_file: Vec<&mut Thread> =
@@ -439,7 +439,7 @@ impl App {
                 id
             }
             PendingComment::New { path, start, end } => {
-                let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+                let text = self.editor.active_tab().map_or_default(Tab::text);
                 let dir = self.im_threads_dir();
                 let store = &self.im.threads;
                 let auth = crate::authority::current();
@@ -548,8 +548,7 @@ impl App {
         let first = thread
             .messages
             .first()
-            .map(|m| format!("{}: {}", m.author, m.body))
-            .unwrap_or_default();
+            .map_or_default(|m| format!("{}: {}", m.author, m.body));
         let key = if thread.resolved {
             "status.im_thread_here_resolved"
         } else {

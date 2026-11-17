@@ -87,9 +87,7 @@ impl App {
         force: bool,
     ) {
         let line = u32::try_from(cursor).unwrap_or(u32::MAX);
-        let text = inline::diagnostic_on_line(diags, line)
-            .map(status_text)
-            .unwrap_or_default();
+        let text = inline::diagnostic_on_line(diags, line).map_or_default(status_text);
         let unchanged = self
             .diag_status
             .as_ref()

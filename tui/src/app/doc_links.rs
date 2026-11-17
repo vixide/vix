@@ -256,8 +256,7 @@ impl App {
             let mut colors: Vec<&DocColor> = self
                 .doc_extras
                 .get(path)
-                .map(|st| st.colors.iter().collect())
-                .unwrap_or_default();
+                .map_or_default(|st| st.colors.iter().collect());
             colors.sort_by_key(|c| (c.range.start.line, c.range.start.character));
             colors
                 .into_iter()

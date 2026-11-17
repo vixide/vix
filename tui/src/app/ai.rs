@@ -683,8 +683,7 @@ impl App {
             let text = self
                 .ai_panel
                 .as_mut()
-                .map(|p| std::mem::take(&mut p.input))
-                .unwrap_or_default();
+                .map_or_default(|p| std::mem::take(&mut p.input));
             self.acp_send_prompt(&text);
             return;
         }

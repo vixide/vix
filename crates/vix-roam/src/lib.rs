@@ -546,15 +546,14 @@ pub fn index(files: &[(String, String)]) -> String {
                     .to_ascii_lowercase()
                     .starts_with("#+filetags:")
             })
-            .map(|l| {
+            .map_or_default(|l| {
                 let value = l.split_once(':').map_or("", |(_, r)| r).trim();
                 value
                     .split(':')
                     .filter(|t| !t.trim().is_empty())
                     .collect::<Vec<_>>()
                     .join(", ")
-            })
-            .unwrap_or_default();
+            });
         rows.push((title, name.clone(), tags));
     }
     rows.sort();

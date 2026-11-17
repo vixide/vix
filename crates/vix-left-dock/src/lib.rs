@@ -90,8 +90,7 @@ impl Explorer {
     pub fn selected_paths(&self) -> Vec<PathBuf> {
         if self.marked.is_empty() {
             self.selected_node()
-                .map(|n| vec![n.path.clone()])
-                .unwrap_or_default()
+                .map_or_default(|n| vec![n.path.clone()])
         } else {
             self.nodes
                 .iter()

@@ -156,7 +156,7 @@ pub fn from_rows(kind: Kind, columns: &[Vec<String>], checks: &[Vec<String>]) ->
         .iter()
         .filter(|row| !row.is_empty())
         .map(|row| {
-            let field = |i: usize| row.get(i).map(String::as_str).unwrap_or_default();
+            let field = |i: usize| row.get(i).map_or_default(String::as_str);
             let (name, data_type) = (field(0).to_string(), field(1).to_string());
             let labels: Vec<String> = field(3)
                 .split('\n')

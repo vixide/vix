@@ -816,9 +816,8 @@ impl Editor {
             let e = code.char_to_byte(ls + code.line_len(line_idx));
             region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
         }
-        let treesitter_highlights = region
-            .map(|(s, e)| self.highlight_interval(s, e, &self.theme))
-            .unwrap_or_default();
+        let treesitter_highlights =
+            region.map_or_default(|(s, e)| self.highlight_interval(s, e, &self.theme));
         // T123a: LSP semantic tokens, a second highlight layer over
         // Tree-sitter's purely syntactic one -- collected *before*
         // `treesitter_highlights` below (not after) so the per-glyph scan's

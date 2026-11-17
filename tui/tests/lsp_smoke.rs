@@ -1115,8 +1115,7 @@ fn tab_text(app: &App, path: &std::path::Path) -> String {
         .tabs
         .iter()
         .find(|t| t.path.as_deref() == Some(path))
-        .map(vix::editor::Tab::text)
-        .unwrap_or_default()
+        .map_or_default(vix::editor::Tab::text)
 }
 
 /// Poll the app for a while so any in-flight reply is processed.
@@ -1855,16 +1854,13 @@ while True:
 /// The lines of the active tab's inline-diagnostic virtual text.
 fn inline_diagnostic_lines(app: &App) -> Vec<(usize, String)> {
     use vix::editor_core::virtual_text::VirtualTextLayer;
-    app.editor
-        .active_tab()
-        .map(|t| {
-            t.editor
-                .eol_texts(VirtualTextLayer::Diagnostics)
-                .iter()
-                .map(|e| (e.line, e.text.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
+    app.editor.active_tab().map_or_default(|t| {
+        t.editor
+            .eol_texts(VirtualTextLayer::Diagnostics)
+            .iter()
+            .map(|e| (e.line, e.text.clone()))
+            .collect()
+    })
 }
 
 /// T614: the three `inline_diagnostics` modes, the cursor's diagnostic in the
@@ -2415,8 +2411,7 @@ fn screen_text(app: &mut App) -> String {
 fn buffer_text(app: &App) -> String {
     app.editor
         .active_tab()
-        .map(|t| t.editor.get_content())
-        .unwrap_or_default()
+        .map_or_default(|t| t.editor.get_content())
 }
 
 /// T618: ghost text from a language server is drawn after the cursor, a reply

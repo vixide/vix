@@ -501,9 +501,7 @@ pub fn active() -> Option<ProjectEnv> {
 /// The active variable overrides (`None` value = remove), empty when none.
 #[must_use]
 pub fn active_vars() -> Vec<(String, Option<String>)> {
-    active()
-        .map(|e| e.vars.into_iter().collect())
-        .unwrap_or_default()
+    active().map_or_default(|e| e.vars.into_iter().collect())
 }
 
 /// Call `set(name, Some(value))` / `set(name, None)` (remove) for each

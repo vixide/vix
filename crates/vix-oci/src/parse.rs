@@ -299,7 +299,7 @@ pub fn images(out: &str) -> Result<Vec<Image>, OciError> {
                 }
             };
             let size = match field(r, &["Size"]) {
-                Some(Value::Number(n)) => n.as_u64().map(human_size).unwrap_or_default(),
+                Some(Value::Number(n)) => n.as_u64().map_or_default(human_size),
                 Some(Value::String(s)) => s.clone(),
                 _ => String::new(),
             };

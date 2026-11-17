@@ -1480,8 +1480,7 @@ fn edit_json_parse_failure_names_the_real_problem() {
         .messages
         .items
         .last()
-        .map(|m| m.text.as_str())
-        .unwrap_or_default();
+        .map_or_default(|m| m.text.as_str());
     assert!(
         text.to_lowercase().contains("line"),
         "the parser's own diagnostic names a location, not just a generic \

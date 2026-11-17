@@ -868,8 +868,7 @@ impl Lsp {
         let key = canonical(path);
         self.diagnostics
             .get(&key)
-            .map(|by_server| by_server.values().flatten().cloned().collect())
-            .unwrap_or_default()
+            .map_or_default(|by_server| by_server.values().flatten().cloned().collect())
     }
 
     /// Every file's diagnostics (path, merged list across every server
@@ -2837,11 +2836,10 @@ impl Lsp {
                     extensions: config.extensions.clone(),
                     root: root.clone(),
                     state,
-                    capabilities: server.map(|s| s.capabilities.clone()).unwrap_or_default(),
+                    capabilities: server.map_or_default(|s| s.capabilities.clone()),
                     open_documents: server.map_or(0, |s| s.docs.len()),
                     progress: server
-                        .map(|s| s.progress.iter().map(|(_, t)| t.line()).collect())
-                        .unwrap_or_default(),
+                        .map_or_default(|s| s.progress.iter().map(|(_, t)| t.line()).collect()),
                     last_error: self.last_errors.get(lang).cloned(),
                 }
             })

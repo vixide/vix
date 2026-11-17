@@ -194,7 +194,7 @@ pub fn parse_registrations(params: &Value) -> Vec<Registration> {
     params
         .get("registrations")
         .and_then(Value::as_array)
-        .map(|list| {
+        .map_or_default(|list| {
             list.iter()
                 .filter_map(|r| {
                     Some(Registration {
@@ -205,7 +205,6 @@ pub fn parse_registrations(params: &Value) -> Vec<Registration> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse the `unregisterations` (the protocol's own spelling) of a
@@ -215,12 +214,11 @@ pub fn parse_unregistrations(params: &Value) -> Vec<String> {
     params
         .get("unregisterations")
         .and_then(Value::as_array)
-        .map(|list| {
+        .map_or_default(|list| {
             list.iter()
                 .filter_map(|r| r.get("id")?.as_str().map(str::to_string))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The watchers in a `workspace/didChangeWatchedFiles` registration's options.
@@ -232,7 +230,7 @@ pub fn parse_watchers(options: &Value) -> Vec<Watcher> {
     options
         .get("watchers")
         .and_then(Value::as_array)
-        .map(|list| {
+        .map_or_default(|list| {
             list.iter()
                 .filter_map(|w| {
                     let g = w.get("globPattern")?;
@@ -249,7 +247,6 @@ pub fn parse_watchers(options: &Value) -> Vec<Watcher> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Params for `workspace/willRenameFiles` and `workspace/didRenameFiles`.

@@ -1283,11 +1283,8 @@ impl App {
         let file_name = path
             .as_ref()
             .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let file_path = path
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|n| n.to_string_lossy().into_owned());
+        let file_path = path.map_or_default(|p| p.to_string_lossy().into_owned());
         let clipboard = vix_clipboard::get().unwrap_or_default();
         vix_org_capture::Context {
             year: i32::from(now.year()),
@@ -1506,8 +1503,7 @@ impl App {
             .map(|it| {
                 let path = by_name
                     .get(it.file.as_str())
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_default();
+                    .map_or_default(|p| p.to_path_buf());
                 (path, it.line)
             })
             .collect();

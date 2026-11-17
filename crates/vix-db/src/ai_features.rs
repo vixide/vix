@@ -130,17 +130,15 @@ impl Browser {
         };
         let columns = self
             .run_catalog(catalog::columns_typed_sql(kind))
-            .map(|(_, rows)| object_triples(rows))
-            .unwrap_or_default();
+            .map_or_default(|(_, rows)| object_triples(rows));
         let relationships = self
             .run_catalog(catalog::relationships_sql(kind))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.into_iter()
                     .filter(|r| r.len() >= 4)
                     .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         (columns, relationships)
     }
 
@@ -248,13 +246,12 @@ impl Browser {
         // still gets the query and schema, just without plan hints.
         let plan = self
             .run_catalog(&catalog::explain_sql(kind, &stmt, false))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.iter()
                     .map(|r| r.join(" | "))
                     .collect::<Vec<_>>()
                     .join("\n")
-            })
-            .unwrap_or_default();
+            });
         let (columns, rels) = self.schema_facts();
         let context = ai::optimize_context(kind.label(), &columns, &rels, &stmt, &plan);
         self.queue_ai(ai::instruction(!self.write_enabled), context, AiReply::Sql);

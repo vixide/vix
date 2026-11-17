@@ -34,8 +34,7 @@ fn active_name(app: &App) -> String {
         .active_tab()
         .and_then(|t| t.path.as_deref())
         .and_then(Path::file_name)
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .map_or_default(|n| n.to_string_lossy().into_owned())
 }
 
 const OLD: &str = "a\nb\nc\nd\ne\n";

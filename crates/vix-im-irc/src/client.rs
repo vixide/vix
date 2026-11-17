@@ -754,7 +754,7 @@ impl Client {
     fn on_end_names(&mut self, line: &Line, step: &mut Step) {
         let channel = line.param(1);
         let at = self.names.iter().position(|(c, _)| c == channel);
-        let nicks = at.map(|i| self.names.swap_remove(i).1).unwrap_or_default();
+        let nicks = at.map_or_default(|i| self.names.swap_remove(i).1);
         step.event(Event::Names {
             channel: channel.to_string(),
             nicks,

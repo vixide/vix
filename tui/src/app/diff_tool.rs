@@ -37,8 +37,7 @@ impl App {
         );
         let there = other
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|n| n.to_string_lossy().into_owned());
         let lines = crate::diff_view::build(&other_text, &current);
         if lines.is_empty() {
             self.status = t!("status.diff_identical").to_string();

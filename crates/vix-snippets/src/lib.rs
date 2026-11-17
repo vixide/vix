@@ -88,7 +88,7 @@ pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
         let Some(body) = obj.get("body").and_then(json_string_or_lines) else {
             continue;
         };
-        let prefixes = obj.get("prefix").map(json_string_list).unwrap_or_default();
+        let prefixes = obj.get("prefix").map_or_default(json_string_list);
         let description = obj
             .get("description")
             .and_then(serde_json::Value::as_str)

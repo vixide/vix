@@ -148,10 +148,7 @@ impl Compare {
     /// The target's name (empty before one is chosen).
     #[must_use]
     pub fn target_name(&self) -> String {
-        self.target
-            .as_ref()
-            .map(|c| c.name.clone())
-            .unwrap_or_default()
+        self.target.as_ref().map_or_default(|c| c.name.clone())
     }
 
     /// The target's environment for the run confirmation, as its translated
@@ -427,11 +424,7 @@ impl Browser {
                 }
             }
         };
-        let source_name = self
-            .conn
-            .as_ref()
-            .map(|c| c.name.clone())
-            .unwrap_or_default();
+        let source_name = self.conn.as_ref().map_or_default(|c| c.name.clone());
         if source.missing {
             self.message = Some(
                 t!(

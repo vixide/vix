@@ -418,8 +418,7 @@ fn parse_diagnostic_report(v: &Value) -> Option<DiagnosticReport> {
             items: v
                 .get("items")
                 .and_then(Value::as_array)
-                .map(|arr| arr.iter().filter_map(parse_one_diagnostic).collect())
-                .unwrap_or_default(),
+                .map_or_default(|arr| arr.iter().filter_map(parse_one_diagnostic).collect()),
         }),
         "unchanged" => Some(DiagnosticReport::Unchanged {
             result_id: result_id?,
@@ -439,12 +438,11 @@ pub fn parse_document_diagnostic_report(
     let related = result
         .get("relatedDocuments")
         .and_then(Value::as_object)
-        .map(|docs| {
+        .map_or_default(|docs| {
             docs.iter()
                 .filter_map(|(uri, r)| Some((uri.clone(), parse_diagnostic_report(r)?)))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     Some((main, related))
 }
 
@@ -543,12 +541,11 @@ pub fn parse_semantic_tokens_legend(result: &Value) -> Vec<String> {
         .and_then(|p| p.get("legend"))
         .and_then(|l| l.get("tokenTypes"))
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(str::to_string))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Whether the server's `initialize` response asked to be told about
@@ -596,13 +593,12 @@ pub fn parse_execute_commands(result: &Value) -> Vec<String> {
         .and_then(|c| c.get("executeCommandProvider"))
         .and_then(|p| p.get("commands"))
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter_map(Value::as_str)
                 .map(String::from)
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse a `textDocument/publishDiagnostics` notification into `(uri, diagnostics)`.
@@ -612,8 +608,7 @@ pub fn parse_diagnostics(params: &Value) -> Option<(String, Vec<Diagnostic>)> {
     let diags = params
         .get("diagnostics")
         .and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(parse_one_diagnostic).collect())
-        .unwrap_or_default();
+        .map_or_default(|arr| arr.iter().filter_map(parse_one_diagnostic).collect());
     Some((uri, diags))
 }
 
@@ -643,7 +638,7 @@ fn parse_related_information(diagnostic: &Value) -> Vec<(Location, String)> {
     diagnostic
         .get("relatedInformation")
         .and_then(Value::as_array)
-        .map(|entries| {
+        .map_or_default(|entries| {
             entries
                 .iter()
                 .filter_map(|entry| {
@@ -653,7 +648,6 @@ fn parse_related_information(diagnostic: &Value) -> Vec<(Location, String)> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse a `workspace/diagnostic` result's `items` into `(uri, diagnostics)`
@@ -668,7 +662,7 @@ pub fn parse_workspace_diagnostics(result: &Value) -> Vec<(String, Vec<Diagnosti
     result
         .get("items")
         .and_then(Value::as_array)
-        .map(|items| {
+        .map_or_default(|items| {
             items
                 .iter()
                 .filter_map(|item| {
@@ -679,13 +673,13 @@ pub fn parse_workspace_diagnostics(result: &Value) -> Vec<(String, Vec<Diagnosti
                     let diags = item
                         .get("items")
                         .and_then(Value::as_array)
-                        .map(|arr| arr.iter().filter_map(parse_one_diagnostic).collect())
-                        .unwrap_or_default();
+                        .map_or_default(|arr| {
+                            arr.iter().filter_map(parse_one_diagnostic).collect()
+                        });
                     Some((uri, diags))
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Decode a `textDocument/semanticTokens/full` result's delta-encoded
@@ -711,13 +705,11 @@ pub fn parse_semantic_tokens(result: &Value, legend: &[String]) -> Vec<SemanticT
 
 /// A JSON array of unsigned integers; anything else is skipped.
 fn u32_array(data: &Value) -> Vec<u32> {
-    data.as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()))
-                .collect()
-        })
-        .unwrap_or_default()
+    data.as_array().map_or_default(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()))
+            .collect()
+    })
 }
 
 /// Which `semanticTokens` requests a server offers
@@ -812,7 +804,7 @@ pub fn parse_semantic_tokens_reply(result: &Value) -> Option<SemanticTokensReply
         .map(|e| SemanticTokensEdit {
             start: u32_field(e, "start"),
             delete_count: u32_field(e, "deleteCount"),
-            data: e.get("data").map(u32_array).unwrap_or_default(),
+            data: e.get("data").map_or_default(u32_array),
         })
         .collect();
     Some(SemanticTokensReply::Edits { result_id, edits })
@@ -1131,10 +1123,7 @@ pub fn parse_code_lens(lens: &Value) -> Option<CodeLens> {
 /// request's params (`{ edit: WorkspaceEdit, label? }`).
 #[must_use]
 pub fn parse_apply_edit(params: &Value) -> Vec<UriEdits> {
-    params
-        .get("edit")
-        .map(parse_workspace_edit)
-        .unwrap_or_default()
+    params.get("edit").map_or_default(parse_workspace_edit)
 }
 
 /// Parse a `textDocument/foldingRange` result (`FoldingRange[]`) into
@@ -1247,10 +1236,7 @@ pub fn parse_code_actions(result: &Value) -> Vec<CodeActionEdit> {
     arr.iter()
         .filter_map(|item| {
             let title = item.get("title")?.as_str()?.to_string();
-            let edit = item
-                .get("edit")
-                .map(parse_workspace_edit)
-                .unwrap_or_default();
+            let edit = item.get("edit").map_or_default(parse_workspace_edit);
             Some((title, edit))
         })
         .collect()
@@ -1445,14 +1431,11 @@ fn hierarchy_item_location(item: &Value) -> Option<Location> {
 /// list points at what is called instead.
 #[must_use]
 pub fn parse_outgoing_calls(result: &Value) -> Vec<Location> {
-    result
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|call| hierarchy_item_location(call.get("to")?))
-                .collect()
-        })
-        .unwrap_or_default()
+    result.as_array().map_or_default(|arr| {
+        arr.iter()
+            .filter_map(|call| hierarchy_item_location(call.get("to")?))
+            .collect()
+    })
 }
 
 /// Parse a `typeHierarchy/supertypes` or `typeHierarchy/subtypes` result
@@ -1461,8 +1444,7 @@ pub fn parse_outgoing_calls(result: &Value) -> Vec<Location> {
 pub fn parse_type_hierarchy_items(result: &Value) -> Vec<Location> {
     result
         .as_array()
-        .map(|arr| arr.iter().filter_map(hierarchy_item_location).collect())
-        .unwrap_or_default()
+        .map_or_default(|arr| arr.iter().filter_map(hierarchy_item_location).collect())
 }
 
 /// The `{ "item": item }` params of every call- and type-hierarchy follow-up
@@ -1546,18 +1528,16 @@ fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
     });
     let additional_edits = v
         .get("additionalTextEdits")
-        .map(parse_text_edits)
-        .unwrap_or_default();
+        .map_or_default(parse_text_edits);
     let string = |key: &str| v.get(key).and_then(Value::as_str).map(str::to_string);
     let commit_chars = v
         .get("commitCharacters")
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter_map(|c| c.as_str().map(str::to_string))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     Some(CompletionItem {
         detail: string("detail"),
         filter_text: string("filterText"),
@@ -1590,12 +1570,11 @@ pub fn parse_completion_trigger_characters(result: &Value) -> Vec<String> {
         .and_then(|c| c.get("completionProvider"))
         .and_then(|p| p.get("triggerCharacters"))
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(str::to_string))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// A `textDocument/completion` params body with a `CompletionContext`

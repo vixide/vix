@@ -219,8 +219,7 @@ impl Parser {
             let id = node
                 .id
                 .as_ref()
-                .map(|v| format!(" id=\"{}\"", number(v, i)))
-                .unwrap_or_default();
+                .map_or_default(|v| format!(" id=\"{}\"", number(v, i)));
             let class = if node.classes.is_empty() {
                 String::new()
             } else {
@@ -235,7 +234,7 @@ impl Parser {
             };
             let open = format!("<{}{id}{class}>", node.tag);
             if node.children.is_empty() {
-                let text = node.text.as_ref().map(|t| number(t, i)).unwrap_or_default();
+                let text = node.text.as_ref().map_or_default(|t| number(t, i));
                 let _ = writeln!(out, "{indent}{open}{text}</{}>", node.tag);
             } else {
                 let _ = writeln!(out, "{indent}{open}");

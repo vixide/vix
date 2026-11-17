@@ -268,8 +268,7 @@ impl App {
                 .path
                 .as_deref()
                 .and_then(Path::file_name)
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default()
+                .map_or_default(|n| n.to_string_lossy().into_owned())
         };
         let title = format!("{} ↔ {}", name(l), name(r));
         let lines = crate::diff_view::build(

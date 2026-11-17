@@ -122,8 +122,7 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
     let base = app
         .git_rebase
         .as_ref()
-        .map(|t| t.base_label.clone())
-        .unwrap_or_default();
+        .map_or_default(|t| t.base_label.clone());
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -814,13 +813,8 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         let name = e
             .path
             .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let dir = e
-            .path
-            .parent()
-            .map(|d| d.display().to_string())
-            .unwrap_or_default();
+            .map_or_default(|s| s.to_string_lossy().into_owned());
+        let dir = e.path.parent().map_or_default(|d| d.display().to_string());
         let text = row_text(
             &name,
             &dir,
@@ -859,8 +853,7 @@ pub(super) fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect
             let name = loc
                 .path
                 .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default();
+                .map_or_default(|s| s.to_string_lossy().into_owned());
             match loc.path.parent() {
                 Some(dir) if !dir.as_os_str().is_empty() => {
                     format!("{name}:{}  —  {}", loc.line, dir.display())

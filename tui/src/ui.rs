@@ -573,12 +573,11 @@ fn draw_overlay_3(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
 /// Unix seconds as a local `YYYY-MM-DD HH:MM` label; empty when unknown.
 fn unix_secs_label(secs: Option<i64>) -> String {
     secs.and_then(|s| jiff::Timestamp::from_second(s).ok())
-        .map(|ts| {
+        .map_or_default(|ts| {
             ts.to_zoned(jiff::tz::TimeZone::system())
                 .strftime("%Y-%m-%d %H:%M")
                 .to_string()
         })
-        .unwrap_or_default()
 }
 
 /// Left edge (in columns) of each top-level menu title in the menu bar.

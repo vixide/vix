@@ -500,8 +500,7 @@ fn enum_values(sql: &Sql, s: &EnumType, t: &EnumType, c: &mut Change) {
                 None => t
                     .values
                     .first()
-                    .map(|first| format!(" BEFORE {}", lit(first)))
-                    .unwrap_or_default(),
+                    .map_or_default(|first| format!(" BEFORE {}", lit(first))),
             };
             c.push(
                 Phase::AlterType,
@@ -856,8 +855,8 @@ fn constraint_changes(
             _ => continue,
         };
         let mut c = Change::new(object, action, table, name).defs(
-            s.map(|k| k.definition.clone()).unwrap_or_default(),
-            t.map(|k| k.definition.clone()).unwrap_or_default(),
+            s.map_or_default(|k| k.definition.clone()),
+            t.map_or_default(|k| k.definition.clone()),
         );
         // Any key or constraint added can fail on rows already there.
         c.risky = s.is_some();
@@ -907,8 +906,8 @@ fn index_changes(
             _ => continue,
         };
         let mut c = Change::new(Object::Index, action, table, name).defs(
-            s.map(|i| i.definition.clone()).unwrap_or_default(),
-            t.map(|i| i.definition.clone()).unwrap_or_default(),
+            s.map_or_default(|i| i.definition.clone()),
+            t.map_or_default(|i| i.definition.clone()),
         );
         if let Some(t) = t {
             c.push(
@@ -1059,10 +1058,8 @@ fn diff_triggers(sql: &Sql, source: &Snapshot, target: &Snapshot, out: &mut Vec<
             _ => continue,
         };
         let mut c = Change::new(Object::Trigger, action, &trig.table, &trig.name).defs(
-            s.map(|x| x.definition.trim().to_string())
-                .unwrap_or_default(),
-            t.map(|x| x.definition.trim().to_string())
-                .unwrap_or_default(),
+            s.map_or_default(|x| x.definition.trim().to_string()),
+            t.map_or_default(|x| x.definition.trim().to_string()),
         );
         if let Some(t) = t {
             c.push(Phase::DropTrigger, drop(t));

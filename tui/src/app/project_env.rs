@@ -13,8 +13,9 @@ impl App {
     pub(crate) fn project_env_segment(&self) -> String {
         self.project_env_source
             .zip(self.project_env_label.as_deref())
-            .map(|(_, label)| format!("{}   ", t!("ui.project_env_indicator", source = label)))
-            .unwrap_or_default()
+            .map_or_default(|(_, label)| {
+                format!("{}   ", t!("ui.project_env_indicator", source = label))
+            })
     }
 
     /// The user-level detector file (`env.toml` beside the settings file).
@@ -32,8 +33,7 @@ impl App {
         self.project_env_extra = resolved
             .env
             .as_ref()
-            .map(|e| e.command_env.keys().cloned().collect::<Vec<_>>().join(", "))
-            .unwrap_or_default();
+            .map_or_default(|e| e.command_env.keys().cloned().collect::<Vec<_>>().join(", "));
         self.project_env_label = resolved.env.as_ref().map(|e| e.label().to_string());
         vix_project_env::set_active(resolved.env);
         resolved.blocked

@@ -147,12 +147,11 @@ impl Browser {
         self.preview = Some((schema.to_string(), table.to_string()));
         let pk = self
             .run_catalog(&catalog::primary_key_sql(kind, schema, table))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.into_iter()
                     .filter_map(|r| r.into_iter().next())
                     .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+            });
         if pk.is_empty() {
             self.edit_table = None;
             self.pk_cols.clear();
@@ -164,12 +163,10 @@ impl Browser {
         // only means plain free-text cells.
         let cols = self
             .run_catalog(&columns::columns_sql(kind, schema, table))
-            .map(|(_, rows)| rows)
-            .unwrap_or_default();
+            .map_or_default(|(_, rows)| rows);
         let checks = self
             .run_catalog(&columns::checks_sql(kind, schema, table))
-            .map(|(_, rows)| rows)
-            .unwrap_or_default();
+            .map_or_default(|(_, rows)| rows);
         self.columns = columns::from_rows(kind, &cols, &checks);
     }
 
@@ -208,7 +205,7 @@ impl Browser {
             .unwrap_or(0);
         let mut out = String::new();
         for (i, header) in self.grid.headers.iter().enumerate() {
-            let value = row.get(i).map(String::as_str).unwrap_or_default();
+            let value = row.get(i).map_or_default(String::as_str);
             let _ = writeln!(out, "{header:<width$} : {value}");
         }
         self.cell_text = out;
@@ -661,8 +658,7 @@ impl Browser {
                 .views_fallback
                 .as_deref()
                 .and_then(|sql| self.run_catalog(sql).ok())
-                .map(|(_, rows)| rows)
-                .unwrap_or_default(),
+                .map_or_default(|(_, rows)| rows),
         };
         found.extend(relations::view_relations(
             &views,

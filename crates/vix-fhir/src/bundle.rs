@@ -98,8 +98,7 @@ fn name_of(resource: &Value) -> Option<String> {
     let given: Vec<&str> = first
         .get("given")
         .and_then(Value::as_array)
-        .map(|g| g.iter().filter_map(Value::as_str).collect())
-        .unwrap_or_default();
+        .map_or_default(|g| g.iter().filter_map(Value::as_str).collect());
     let given = given.join(" ");
     match (family.is_empty(), given.is_empty()) {
         (true, true) => None,
@@ -195,8 +194,7 @@ pub fn parse_bundle(text: &str) -> Result<Bundle, FhirError> {
         entries: value
             .get("entry")
             .and_then(Value::as_array)
-            .map(|a| a.iter().map(parse_entry).collect())
-            .unwrap_or_default(),
+            .map_or_default(|a| a.iter().map(parse_entry).collect()),
         next: link(links, "next"),
         previous: link(links, "previous"),
     })

@@ -190,15 +190,12 @@ fn shell_quote(arg: &str) -> String {
 pub(crate) fn runnable_command(runnable: &Value) -> Option<(String, Option<PathBuf>)> {
     let args = runnable.get("args")?;
     let strings = |key: &str| -> Vec<String> {
-        args.get(key)
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .map(shell_quote)
-                    .collect()
-            })
-            .unwrap_or_default()
+        args.get(key).and_then(Value::as_array).map_or_default(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(shell_quote)
+                .collect()
+        })
     };
     let dir = args
         .get("cwd")
@@ -238,7 +235,7 @@ pub(crate) fn reference_locations(arguments: &Value) -> Vec<(PathBuf, u32, u32)>
     arguments
         .get(2)
         .and_then(Value::as_array)
-        .map(|locs| {
+        .map_or_default(|locs| {
             locs.iter()
                 .filter_map(|l| {
                     let uri = l.get("uri")?.as_str()?;
@@ -249,7 +246,6 @@ pub(crate) fn reference_locations(arguments: &Value) -> Vec<(PathBuf, u32, u32)>
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 impl App {
@@ -396,8 +392,7 @@ impl App {
         let rows: Vec<(usize, String)> = self
             .code_lenses
             .get(path)
-            .map(|st| st.shown().into_iter().map(|l| (l.line, l.title)).collect())
-            .unwrap_or_default();
+            .map_or_default(|st| st.shown().into_iter().map(|l| (l.line, l.title)).collect());
         let on = self.settings.language_features.code_lens;
         if let Some(tab) = self
             .editor
@@ -453,8 +448,7 @@ impl App {
     fn active_lenses(&self) -> Vec<Lens> {
         self.active_path()
             .and_then(|p| self.code_lenses.get(&p))
-            .map(LensState::shown)
-            .unwrap_or_default()
+            .map_or_default(LensState::shown)
     }
 
     /// `lsp.code_lens` (`on_line` false): pick from every lens in the file,

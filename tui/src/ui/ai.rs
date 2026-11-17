@@ -176,11 +176,7 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.ai_panel = body;
 
     // Input line: a leading prompt glyph then the in-progress text plus a caret.
-    let input = app
-        .ai_panel
-        .as_ref()
-        .map(|p| p.input.clone())
-        .unwrap_or_default();
+    let input = app.ai_panel.as_ref().map_or_default(|p| p.input.clone());
     let input_line = Line::from(vec![
         Span::styled("› ", theme::title(true).add_modifier(Modifier::BOLD)),
         Span::raw(input),

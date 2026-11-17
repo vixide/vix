@@ -219,8 +219,7 @@ mod tests {
     fn rows(app: &App) -> Vec<String> {
         app.choice_list
             .as_ref()
-            .map(|c| c.panel.rows.clone())
-            .unwrap_or_default()
+            .map_or_default(|c| c.panel.rows.clone())
     }
 
     fn enter(app: &mut App) {

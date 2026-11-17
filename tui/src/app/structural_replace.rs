@@ -261,8 +261,7 @@ fn apply_one_structural_replace(
     let captures = pattern
         .find_from(&source, bs)
         .filter(|m| m.start == bs && m.end == be)
-        .map(|m| m.captures)
-        .unwrap_or_default();
+        .map_or_default(|m| m.captures);
     let m = vix_structural_replace::Match {
         start: bs,
         end: be,

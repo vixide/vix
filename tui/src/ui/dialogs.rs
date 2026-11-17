@@ -306,8 +306,7 @@ pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     };
     let name = src
         .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|s| s.to_string_lossy().into_owned());
     let lines = vec![
         Line::from(t!("ui.paste_exists", name = name).to_string()),
         Line::from(Span::styled(t!("ui.paste_choices"), theme::dim())),

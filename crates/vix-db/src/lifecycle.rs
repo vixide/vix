@@ -428,24 +428,22 @@ impl Browser {
     fn load_columns(&mut self, kind: connect::Kind) {
         let columns = self
             .run_catalog(catalog::columns_sql(kind))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.into_iter()
                     .filter(|r| r.len() >= 2)
                     .map(|r| (r[0].clone(), r[1].clone()))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         self.completer.set_schema(self.tree.table_names(), columns);
         // Foreign-key edges power `JOIN … ON` autocomplete.
         let rels = self
             .run_catalog(catalog::relationships_sql(kind))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.into_iter()
                     .filter(|r| r.len() >= 4)
                     .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         self.completer.set_relationships(rels);
     }
 

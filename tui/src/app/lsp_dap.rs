@@ -276,8 +276,7 @@ impl App {
             let bps: Vec<crate::dap::SourceBreakpoint> = self
                 .breakpoints
                 .get(path)
-                .map(|m| m.values().cloned().collect())
-                .unwrap_or_default();
+                .map_or_default(|m| m.values().cloned().collect());
             self.dap.set_breakpoints(&path.to_string_lossy(), &bps);
         }
     }
@@ -338,8 +337,7 @@ impl App {
         let lines: Vec<usize> = self
             .breakpoints
             .get(&path)
-            .map(|s| s.keys().map(|l| l.saturating_sub(1)).collect())
-            .unwrap_or_default();
+            .map_or_default(|s| s.keys().map(|l| l.saturating_sub(1)).collect());
         let debug_line = stopped
             .filter(|(p, _)| *p == path)
             .map(|(_, l)| l.saturating_sub(1));
@@ -368,8 +366,7 @@ impl App {
             .active_tab()
             .and_then(|t| t.path.as_ref())
             .and_then(|p| self.breakpoints.get(p))
-            .map(|s| s.keys().copied().collect())
-            .unwrap_or_default()
+            .map_or_default(|s| s.keys().copied().collect())
     }
 
     /// The active file's breakpoint on 1-based `line`, with its condition,
@@ -907,10 +904,7 @@ impl App {
                     (s.min(e), s.max(e))
                 })
                 .collect();
-            let seed = offsets
-                .first()
-                .map(|&(s, e)| code.slice(s, e))
-                .unwrap_or_default();
+            let seed = offsets.first().map_or_default(|&(s, e)| code.slice(s, e));
             (offsets, seed)
         };
         self.linked_ranges = Some(offsets);

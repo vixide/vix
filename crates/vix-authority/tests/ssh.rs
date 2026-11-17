@@ -525,13 +525,11 @@ fn cache_contents(dir: &Path) -> Vec<String> {
     let agent = dir
         .join("cache/vix/agent")
         .join(vix_authority::agent::VERSION);
-    std::fs::read_dir(agent)
-        .map(|rd| {
-            rd.flatten()
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default()
+    std::fs::read_dir(agent).map_or_default(|rd| {
+        rd.flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect()
+    })
 }
 
 #[test]

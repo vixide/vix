@@ -85,9 +85,8 @@ fn explorer_open_and_save_go_through_an_installed_fake_authority() {
     }
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let threads = backing.join("proj/.vix/im/threads");
-    let written: Vec<_> = std::fs::read_dir(&threads)
-        .map(|d| d.flatten().map(|e| e.path()).collect())
-        .unwrap_or_default();
+    let written: Vec<_> =
+        std::fs::read_dir(&threads).map_or_default(|d| d.flatten().map(|e| e.path()).collect());
     assert_eq!(written.len(), 1, "one thread file in the fake: {written:?}");
     assert!(!Path::new("/proj/.vix").exists());
     assert!(

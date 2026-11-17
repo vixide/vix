@@ -128,16 +128,12 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         body
     };
-    let visible: Vec<Line> = app
-        .welcome
-        .as_ref()
-        .map(|w| {
-            w.lines()[scroll..(scroll + view_h).min(total)]
-                .iter()
-                .map(|l| Line::from(Span::raw(l.clone())))
-                .collect()
-        })
-        .unwrap_or_default();
+    let visible: Vec<Line> = app.welcome.as_ref().map_or_default(|w| {
+        w.lines()[scroll..(scroll + view_h).min(total)]
+            .iter()
+            .map(|l| Line::from(Span::raw(l.clone())))
+            .collect()
+    });
     frame.render_widget(Paragraph::new(visible), text_area);
     if show_bar {
         let sb_area = Rect {

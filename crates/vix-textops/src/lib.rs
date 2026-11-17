@@ -742,8 +742,7 @@ fn match_case(sample: &str, replacement: &str) -> String {
     } else if sample.chars().next().is_some_and(char::is_uppercase) {
         let mut c = replacement.chars();
         c.next()
-            .map(|f| f.to_ascii_uppercase().to_string() + c.as_str())
-            .unwrap_or_default()
+            .map_or_default(|f| f.to_ascii_uppercase().to_string() + c.as_str())
     } else {
         replacement.to_string()
     }

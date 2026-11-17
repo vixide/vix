@@ -696,8 +696,7 @@ impl App {
             PreviewSource::ActiveBuffer => self
                 .editor
                 .active_tab()
-                .map(crate::editor::Tab::display_path)
-                .unwrap_or_default(),
+                .map_or_default(crate::editor::Tab::display_path),
         };
         if let Some((s, l, cached)) = self.picker_preview_cache.as_ref()
             && *s == source

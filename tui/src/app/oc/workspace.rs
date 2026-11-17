@@ -171,8 +171,7 @@ impl App {
         let basename = self
             .root
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|n| n.to_string_lossy().into_owned());
         let options = self.connect_options();
         let label = config
             .name
