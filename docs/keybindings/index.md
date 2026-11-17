@@ -258,8 +258,8 @@ Two overrides claiming the same key — from `keybindings.toml`, from a
 script, or one of each — are **both rejected**, reported in the message
 drawer so neither silently wins. An override that simply claims a key a
 built-in binding already used still wins outright, but is reported once so
-you're not surprised later when that built-in stops firing. There's no
-in-editor UI for this yet — hand-edit the file for now.
+you're not surprised later when that built-in stops firing. To edit
+overrides without hand-editing the file, use **Vix → Keybindings…**.
 
 ---
 

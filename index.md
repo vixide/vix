@@ -114,7 +114,8 @@ More recordings — Org-roam, edit surfaces and themes — are in
 | Database workbench | ✓ | - | ~ | - | - |
 
 `✓` built in, `-` not built in (a plugin or package may exist), `~` partial.
-The full matrix, with footnotes and the places where Vix is behind, is in
+[Why Vix?](docs/why-vix/index.md) compares it with VS Code, Neovim, JetBrains
+IDEs and Sublime Text, and says when each is the better choice. The full matrix, with footnotes and the places where Vix is behind, is in
 [the feature comparison](docs/compare/index.md). Coming from another
 editor? See the pages for
 [Vim](docs/vix-for-vim-users/index.md),

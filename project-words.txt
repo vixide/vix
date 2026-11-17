@@ -880,3 +880,8 @@ Unsanitized
 topdir
 trashinfo
 directorysizes
+shiftwidth
+relativenumber
+autocommand
+UltiSnips
+yasnippet
