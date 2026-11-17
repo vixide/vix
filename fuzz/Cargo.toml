@@ -129,3 +129,15 @@ path = "fuzz_targets/jupyter_wire.rs"
 test = false
 doc = false
 bench = false
+
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.mutants]
+inherits = "test"
+debug = "none"
+incremental = false

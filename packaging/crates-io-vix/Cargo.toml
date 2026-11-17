@@ -27,3 +27,10 @@ path = "src/main.rs"
 inherits = "test"
 debug = "none"
 incremental = false
+
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false
