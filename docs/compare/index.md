@@ -17,6 +17,9 @@ move fast, so check them for anything that matters to you. See also
 and [vix-for-helix-users](../vix-for-helix-users/index.md) for the prose version
 of some of these same comparisons.
 
+For VS Code, Neovim, JetBrains IDEs and Sublime Text, see
+[Why Vix?](../why-vix/index.md).
+
 `✓` built in, no plugin needed. `-` not built in (a plugin may exist).
 `~` partial — see the footnote.
 

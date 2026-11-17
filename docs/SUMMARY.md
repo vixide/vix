@@ -4,6 +4,7 @@
 
 # Getting Started
 
+- [Why Vix?](why-vix/index.md)
 - [Getting Started](getting-started/index.md)
 - [Command Line](cli/index.md)
 - [Configuration](configuration/index.md)
@@ -42,6 +43,7 @@
 - [Left Dock](left-dock/index.md)
 - [Right Dock](right-dock/index.md)
 - [Bottom Dock](bottom-dock/index.md)
+- [Migrating from Another Editor](migrating/index.md)
 - [Coming from Eclipse](vix-for-eclipse-users/index.md)
 - [Coming from Emacs](vix-for-emacs-users/index.md)
 - [Coming from Helix](vix-for-helix-users/index.md)

@@ -1,5 +1,10 @@
 # Modelines
 
+**Status: not implemented yet.** This page describes the planned behavior;
+Vix does not read modelines today, and the `modeline_lines` setting does not
+exist yet. Per-project indentation from [EditorConfig](../editorconfig/index.md)
+works now.
+
 Modelines are special comments at the beginning or end of a file that configure
 editor settings for that specific file. Vix™ supports both Vim and Emacs modeline
 formats, so you can specify settings such as tab size, indentation style, and file

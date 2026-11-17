@@ -53,7 +53,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `bidi`          | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
 | `mirror_layout` | string | `"auto"` | Mirror docks and the scroll bar for right-to-left languages: `auto`, `on` or `off`. |
 | `bidi` | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
-| `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vi"`.         |
+| `keymap`        | string | `"apple"`| Keyboard navigation style: one of the fourteen in [Keymaps](../keymaps/index.md) (`apple`, `vscode-macos`, `vscode-windows`, `emacs`, `vi`, `spacemacs`, `helix`, `intellij-macos`, `intellij-windows`, `eclipse`, `sublime`, `zed`, `fresh`, `ttt`). |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
@@ -241,7 +241,7 @@ any other value replaces yours whole.
 
 ## Custom themes directory
 
-Custom JSON themes live next to the config file, in a `tui/themes/` subdirectory
+Custom JSON themes live next to the config file, in a `themes/` subdirectory
 (e.g. `~/.config/vix/themes/*.json` on Linux). See [themes.md](../themes/index.md) for the
 file format. Set `theme` to a custom theme's `name` to load it on startup.
 
