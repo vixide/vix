@@ -110,6 +110,9 @@ mod tests {
     fn toggle_round_trips() {
         assert_eq!(toggle("alfa", "bravo", "charlie"), "bravoalfacharlie");
         assert_eq!(toggle("bravoalfacharlie", "bravo", "charlie"), "alfa");
+        // Wrapped needs both affixes: one alone is wrapped again, not dropped.
+        assert_eq!(toggle("x]", "[", "]"), "[x]]");
+        assert_eq!(toggle("[x", "[", "]"), "[[x]");
         // Toggling twice returns the original.
         let once = toggle("alfa", "bravo", "charlie");
         assert_eq!(toggle(&once, "bravo", "charlie"), "alfa");

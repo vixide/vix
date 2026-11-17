@@ -134,6 +134,8 @@ mod tests {
     #[test]
     fn renders_each_base_with_prefix() {
         assert_eq!(to_hex("255").unwrap(), "0xff");
+        // Zero is unsigned.
+        assert_eq!(to_hex("0").unwrap(), "0x0");
         assert_eq!(to_bin("10").unwrap(), "0b1010");
         assert_eq!(to_oct("15").unwrap(), "0o17");
     }

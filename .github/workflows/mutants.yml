@@ -40,6 +40,7 @@ jobs:
           cargo mutants \
             -p vix-list-state -p vix-civil-date -p vix-byte-size -p vix-textops \
             -p vix-capped-stack -p vix-greedy-wrap -p vix-hex-rgb \
+            -p vix-align -p vix-affix -p vix-case -p vix-tags -p vix-base-tool \
             --no-shuffle
       - name: upload the report
         if: always()

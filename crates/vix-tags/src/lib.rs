@@ -7,7 +7,7 @@
 //!
 //! The implementation is a lightweight scanner, not an HTML parser: it does not
 //! know void elements (`<br>` without `/`), raw-text elements, or attribute
-//! quoting, and it ignores only the opening `<!`/`<?` of comments and
+//! quoting, and it passes over only the opening `<!`/`<?` of comments and
 //! declarations. Spec: `crates/vix-tags/spec/index.md`.
 //!
 //! All offsets are **char** offsets (not bytes), matching the editor buffer.
@@ -16,6 +16,8 @@
 struct Tag {
     /// Char offset of the `<`.
     open: usize,
+    /// Char offset of the closing `>`, or the text's length when unterminated.
+    end: usize,
     /// Lowercased tag name.
     name: String,
     /// A closing tag (`</name>`).
@@ -24,57 +26,52 @@ struct Tag {
     self_closing: bool,
 }
 
-/// Scan `text` for tags (`<name …>`, `</name>`, `<name/>`), skipping comments and
-/// declarations (`<!-- … -->`, `<!doctype …>`, `<?…?>`).
+/// Whether `c` can be part of a tag name.
+fn is_name_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '-' | '_' | ':' | '.')
+}
+
+/// Scan `text` for tags (`<name …>`, `</name>`, `<name/>`).
 ///
-/// Only the leading `<` of a comment/declaration is skipped, not its whole body,
-/// so a tag-looking string inside a comment is still reported. Tag names are
-/// lowercased so matching is case-insensitive.
+/// A `<` not followed by a name (optionally after `/`) starts no tag, which is
+/// how comments, declarations and processing instructions (`<!-- … -->`,
+/// `<!doctype …>`, `<?…?>`) are passed over. Only that `<` is passed over, not
+/// the body, so a tag-looking string inside a comment is still reported. A `<`
+/// inside another tag's `<…>` span starts no tag. Tag names are lowercased so
+/// matching is case-insensitive.
 fn scan(text: &str) -> Vec<Tag> {
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
     let mut tags = Vec::new();
-    let mut i = 0;
-    while i < n {
-        if chars[i] != '<' {
-            i += 1;
+    // First offset past the last tag found; a `<` before it is inside that tag.
+    let mut resume = 0;
+    for (open, &c) in chars.iter().enumerate() {
+        if c != '<' || open < resume {
             continue;
         }
-        // Skip comments / declarations / processing instructions (only the `<`
-        // is stepped over; the body is rescanned, see the fn docs).
-        if chars.get(i + 1) == Some(&'!') || chars.get(i + 1) == Some(&'?') {
-            i += 1;
-            continue;
-        }
-        let open = i;
-        let closing = chars.get(i + 1) == Some(&'/');
-        let mut j = i + if closing { 2 } else { 1 };
-        let name_start = j;
-        while j < n && (chars[j].is_alphanumeric() || matches!(chars[j], '-' | '_' | ':' | '.')) {
-            j += 1;
-        }
-        let name: String = chars[name_start..j]
+        let closing = chars.get(open + 1) == Some(&'/');
+        let name_start = open + 1 + usize::from(closing);
+        let name_len = chars[name_start..]
             .iter()
-            .collect::<String>()
-            .to_ascii_lowercase();
-        if name.is_empty() {
-            i += 1;
+            .take_while(|&&c| is_name_char(c))
+            .count();
+        if name_len == 0 {
             continue;
         }
-        // Find the tag's `>` and whether it self-closes (`/` immediately before
-        // `>`). An unterminated tag runs to end of text.
-        let mut k = j;
-        while k < n && chars[k] != '>' {
-            k += 1;
-        }
-        let self_closing = k > 0 && chars.get(k - 1) == Some(&'/');
+        let name_end = name_start + name_len;
+        // The tag's `>`; an unterminated tag runs to the end of the text.
+        let end = name_end + chars[name_end..].iter().take_while(|&&c| c != '>').count();
         tags.push(Tag {
             open,
-            name,
+            end,
+            name: chars[name_start..name_end]
+                .iter()
+                .collect::<String>()
+                .to_ascii_lowercase(),
             closing,
-            self_closing,
+            // `/` immediately before the `>`.
+            self_closing: chars[..end].last() == Some(&'/'),
         });
-        i = k + 1;
+        resume = end;
     }
     tags
 }
@@ -95,54 +92,31 @@ fn scan(text: &str) -> Vec<Tag> {
 #[must_use]
 pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     let tags = scan(text);
-    // The tag whose `<…>` span contains the cursor. Recompute each tag's `>` by
-    // finding the next '>' from its open (cheap; documents are small enough).
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
-    let end_of = |open: usize| {
-        let mut k = open;
-        while k < n && chars[k] != '>' {
-            k += 1;
-        }
-        k
-    };
     let idx = tags
         .iter()
-        .position(|t| cursor >= t.open && cursor <= end_of(t.open))?;
+        .position(|t| cursor >= t.open && cursor <= t.end)?;
     let tag = &tags[idx];
     if tag.self_closing {
         return None;
     }
-    if tag.closing {
-        // Walk backward for the matching opener, tracking nesting depth.
-        let mut depth = 0i32;
-        for t in tags[..idx].iter().rev() {
-            if t.name != tag.name || t.self_closing {
-                continue;
-            }
-            if t.closing {
-                depth += 1;
-            } else if depth == 0 {
-                return Some(t.open);
-            } else {
-                depth -= 1;
-            }
-        }
-    } else {
-        // Walk forward for the matching closer.
-        let mut depth = 0i32;
-        for t in &tags[idx + 1..] {
-            if t.name != tag.name || t.self_closing {
-                continue;
-            }
-            if t.closing {
-                if depth == 0 {
-                    return Some(t.open);
-                }
-                depth -= 1;
-            } else {
-                depth += 1;
-            }
+    // Same-name, non-self-closing tags on the side of the partner, nearest
+    // first: before the cursor's tag for a closer, after it for an opener.
+    let partners = |t: &&Tag| t.name == tag.name && !t.self_closing;
+    let (mut before, mut after) = (
+        tags[..idx].iter().rev().filter(partners),
+        tags[idx + 1..].iter().filter(partners),
+    );
+    let side: &mut dyn Iterator<Item = &Tag> = if tag.closing { &mut before } else { &mut after };
+    // The partner is the first tag of the opposite kind not paired with a
+    // same-kind tag nested in between.
+    let mut depth = 0u32;
+    for t in side {
+        if t.closing == tag.closing {
+            depth += 1;
+        } else if depth == 0 {
+            return Some(t.open);
+        } else {
+            depth -= 1;
         }
     }
     None
@@ -180,5 +154,66 @@ mod tests {
         assert!(matching_tag("<br/> text", 1).is_none());
         assert!(matching_tag("plain text", 3).is_none());
         assert!(matching_tag("<div>", 1).is_none()); // no closer
+    }
+
+    #[test]
+    fn closer_skips_nested_pairs_walking_back() {
+        let html = "<a><a></a></a>";
+        // Outer </a> at 10 → outer <a> at 0; inner </a> at 6 → inner <a> at 3.
+        assert_eq!(matching_tag(html, 11), Some(0));
+        assert_eq!(matching_tag(html, 7), Some(3));
+    }
+
+    #[test]
+    fn only_same_name_tags_nest() {
+        // An unclosed <b> is not a partner for </a>, either way.
+        assert_eq!(matching_tag("<a><b></a>", 7), Some(0));
+        assert_eq!(matching_tag("<a></b></a>", 1), Some(7));
+    }
+
+    #[test]
+    fn self_closing_tags_are_not_partners() {
+        assert_eq!(matching_tag("<a><a/></a>", 1), Some(7));
+        assert_eq!(matching_tag("<a><a/></a>", 8), Some(0));
+        assert_eq!(matching_tag("<a><a /></a>", 1), Some(8));
+        assert_eq!(matching_tag("<a/", 1), None);
+    }
+
+    #[test]
+    fn cursor_spans_from_lt_through_gt() {
+        let html = "<ab></ab> x";
+        assert_eq!(matching_tag(html, 0), Some(4));
+        assert_eq!(matching_tag(html, 3), Some(4));
+        assert_eq!(matching_tag(html, 8), Some(0));
+        assert_eq!(matching_tag(html, 9), None);
+    }
+
+    #[test]
+    fn names_are_case_insensitive_and_may_hold_punctuation() {
+        assert_eq!(matching_tag("<DIV></div>", 1), Some(5));
+        assert_eq!(matching_tag("<my-el.x_y:z></my-el.x_y:z>", 1), Some(13));
+        assert_eq!(matching_tag("<a href=\"x\">t</a>", 1), Some(13));
+    }
+
+    #[test]
+    fn non_tag_lt_is_passed_over() {
+        assert_eq!(matching_tag("<!doctype html><a></a>", 16), Some(18));
+        assert_eq!(matching_tag("<?xml?><a></a>", 8), Some(10));
+        assert_eq!(matching_tag("1 < 2 <a></a>", 7), Some(9));
+        assert_eq!(matching_tag("1 < 2", 2), None);
+        // Only the `<` of a comment is passed over: its body is still scanned.
+        assert_eq!(matching_tag("<a><!-- </a> --></a>", 1), Some(8));
+    }
+
+    #[test]
+    fn lt_inside_a_tag_starts_no_tag() {
+        // The `<a` at 3 is inside the first tag's `<…>` span.
+        assert_eq!(matching_tag("<a <a></a>", 1), Some(6));
+    }
+
+    #[test]
+    fn offsets_are_chars_not_bytes() {
+        assert_eq!(matching_tag("é<a>ü</a>", 2), Some(5));
+        assert_eq!(matching_tag("é<a>ü</a>", 6), Some(1));
     }
 }

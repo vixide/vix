@@ -293,7 +293,7 @@ run builds both architectures and pushes nothing. It has not run yet. See
 
 `.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly and on demand over
 the small pure crates (list-state, civil-date, byte-size, textops, capped-stack, greedy-wrap,
-hex-rgb) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
+hex-rgb, align, affix, case, tags, base-tool) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
 points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
 
 ### Desktop GUIs (T641, T642, T647)
