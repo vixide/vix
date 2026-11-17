@@ -1,0 +1,10 @@
+# Pin the Rust toolchain for the whole repository (the workspace, `gui/`,
+# `matrix/` and `packaging/`), so `cargo build`, `cargo clippy` and `cargo fmt`
+# behave the same on every machine. The minimum supported Rust version is
+# `workspace.package.rust-version` in Cargo.toml (spec/rust-msrv-n-minus-2).
+# CI jobs that must build on the MSRV set `RUSTUP_TOOLCHAIN`, which takes
+# precedence over this file. The fuzz targets run on nightly with `cargo +nightly`.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

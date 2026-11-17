@@ -45,6 +45,8 @@ variables:
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
   CARGO_TERM_COLOR: "always"
   RUST_BACKTRACE: "1"
+  # rust-toolchain.toml pins 1.100.0; the image's rustup would fetch it. Stay on the floor.
+  RUSTUP_TOOLCHAIN: "1.97"
   # The Linux artifact is a fully static musl binary, matching the Makefile's
   # `build-linux` target and the `dist` release targets.
   LINUX_TARGET: "x86_64-unknown-linux-musl"

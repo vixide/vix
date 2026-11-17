@@ -438,6 +438,9 @@ jobs:
         with:
           key: msrv-${{ matrix.rust }}
       - name: cargo check --all-targets
+        # rust-toolchain.toml pins 1.100.0; RUSTUP_TOOLCHAIN overrides it, so this checks the floor.
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
         run: cargo check --workspace --all-targets
 
   # T008 (tasks.md): track the shipped binary's size so growth is visible

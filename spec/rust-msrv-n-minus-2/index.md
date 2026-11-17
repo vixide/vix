@@ -61,6 +61,16 @@ The `msrv` job is separate from the `test` job so a failure names the cause
 directly: `test` red means a behavior regression, `msrv` red means the code
 started requiring a newer toolchain than the policy allows.
 
+## The toolchain pin is not the MSRV
+
+`rust-toolchain.toml` at the repository root pins the toolchain this repository
+is built, formatted and linted with: the current stable release. It is a
+different number from the MSRV, with a different job. A CI job that must run on
+the MSRV (the GitHub `msrv` job, the GitLab image, the Forgejo jobs) sets
+`RUSTUP_TOOLCHAIN` to the MSRV, which takes precedence over the file; without
+it, rustup would fetch the pinned toolchain and the job would no longer test the
+floor.
+
 ## Current value
 
 As of the most recent update to this document, stable Rust is **1.99**, so the
