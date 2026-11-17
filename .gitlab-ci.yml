@@ -30,7 +30,7 @@ stages:
 # so GitLab CI fails the same way a user on the minimum toolchain would. The
 # floor is the current stable minus two — see spec/rust-msrv-n-minus-2.
 default:
-  image: rust:1.97
+  image: rust:1.98
   # Cache the registry and the build directory per branch. `target/` is large
   # but re-downloading and recompiling ~98 crates every pipeline costs more.
   cache:
@@ -46,7 +46,7 @@ variables:
   CARGO_TERM_COLOR: "always"
   RUST_BACKTRACE: "1"
   # rust-toolchain.toml pins 1.100.0; the image's rustup would fetch it. Stay on the floor.
-  RUSTUP_TOOLCHAIN: "1.97"
+  RUSTUP_TOOLCHAIN: "1.98"
   # The Linux artifact is a fully static musl binary, matching the Makefile's
   # `build-linux` target and the `dist` release targets.
   LINUX_TARGET: "x86_64-unknown-linux-musl"

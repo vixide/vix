@@ -115,7 +115,7 @@ Linux tools.
   `rustc --version`, plus clippy, rustfmt, python3, git, zip (the
   `scripts/test-release-local` step packs a real `.zip`) and a C++ compiler.
   The host toolchain, not the MSRV: the gate's clippy runs with `-D warnings`,
-  and clippy's lints move between releases, so at the MSRV (1.97) it failed on
+  and clippy's lints move between releases, so at the MSRV (1.98) it failed on
   a doc comment that the stable clippy of the local gate and hosted CI accepts.
   The MSRV is promised only to `cargo check` (ci.yml's `msrv` job), and is the
   fallback when there is no host `rustc`. `VIX_LINUX_RUST` or

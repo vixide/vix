@@ -141,7 +141,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/vixide/vix/releases/lat
 # Any platform with npm
 npm install -g @vixide/vix
 
-# Any platform with a Rust toolchain (1.97+)
+# Any platform with a Rust toolchain (1.98+)
 cargo install vix-tui
 ```
 
@@ -347,7 +347,7 @@ for a buffer, use the Large File Viewer. See the
 
 ## Build from source
 
-Needs a Rust toolchain, 1.97 or newer.
+Needs a Rust toolchain, 1.98 or newer.
 
 ```sh
 git clone https://github.com/vixide/vix.git
