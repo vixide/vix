@@ -94,6 +94,15 @@ test-github-discussions:
 	bin/test-github-discussions
 
 ##
+# make test-minimum-supported-rust-version: Check and test on the minimum
+# supported Rust version (N-2) and the version after it (N-1), for the terminal
+# app, matrix/ and packaging/crates-io-vix (spec/rust-msrv-n-minus-2/).
+##
+.PHONY: test-minimum-supported-rust-version
+test-minimum-supported-rust-version:
+	bin/make-test-minimum-supported-rust-version
+
+##
 # make check: Run the local CI-parity gate, scripts/check: fmt, build,
 # clippy (pedantic, -D warnings), tests, docs and more. Run it before pushing.
 ##

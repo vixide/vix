@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Check and test on the minimum supported Rust version (MSRV, N-2) and the
+# version after it (N-1): `cargo check --all-targets` then `cargo test`, for
+# each Rust workspace in this repository (the terminal app, `matrix/` and
+# `packaging/crates-io-vix`; not `gui/`, whose toolkits need native libraries and
+# are built by .github/workflows/gui.yml, nor `fuzz/`, which needs nightly). Run it with:
+#
+#     make test-minimum-supported-rust-version
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# The MSRV comes from `rust-version` in this manifest.
+msrv_manifest="Cargo.toml"
+# Each independent Rust workspace or standalone package.
+workspaces=(
+  "."
+  "matrix"
+  "packaging/crates-io-vix"
+)
+
+msrv=$(sed -nE 's/^rust-version[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+)(\.[0-9]+)?".*/\1/p' "$msrv_manifest" | head -n 1)
+if [ -z "$msrv" ]; then
+  echo "error: no rust-version found in $msrv_manifest" >&2
+  exit 1
+fi
+major=${msrv%%.*}
+minor=${msrv#*.}
+next="$major.$((minor + 1))"
+
+echo "Minimum supported Rust version (N-2): $msrv; next (N-1): $next"
+
+for toolchain in "$msrv" "$next"; do
+  if ! rustup toolchain list | grep -q "^$toolchain"; then
+    echo "error: Rust toolchain $toolchain is not installed; run: rustup toolchain install $toolchain" >&2
+    exit 1
+  fi
+done
+
+for toolchain in "$msrv" "$next"; do
+  for workspace in "${workspaces[@]}"; do
+    echo
+    echo "=== Rust $toolchain: $workspace ==="
+    (
+      cd "$workspace"
+      export RUSTUP_TOOLCHAIN="$toolchain"
+      cargo check --workspace --all-targets
+      cargo test --workspace
+    )
+  done
+done
