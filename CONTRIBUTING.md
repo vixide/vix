@@ -13,7 +13,7 @@ crates, 14 keymaps, LSP/DAP, Git, a database workbench, Org mode, and more.
 
 ### Prerequisites
 
-- **Rust**: 1.97 or newer (current stable minus two)
+- **Rust**: 1.98 or newer (current stable minus two)
 - **Git**: For version control
 - **A terminal**: Vix is a terminal application
 

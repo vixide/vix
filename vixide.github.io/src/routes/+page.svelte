@@ -300,7 +300,7 @@
     <p>
       Vix is one editor with eight front ends: the terminal app and seven
       native desktop windows, each on a different toolkit. Every one installs
-      with <code>cargo install</code> (Rust 1.97 or newer); most also install
+      with <code>cargo install</code> (Rust 1.98 or newer); most also install
       with Homebrew on macOS and Linux. The desktop front ends are
       experimental. <a href="/install/">More install options</a> cover the
       installer scripts, PowerShell, npm and Linux packages.

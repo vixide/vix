@@ -76,7 +76,7 @@ macOS SQLite build links the system `libsqlite3.dylib`, so
 (*unmeasured*).
 
 - **MSRV.** Every `matrix-sdk-*` crate declares `rust-version = 1.96`. No
-  crate in the tree needs more, so Vix's floor (1.97) is fine.
+  crate in the tree needs more, so Vix's floor (1.98) is fine.
 - **`cargo deny check licenses advisories bans`** with a copy of Vix's
   `deny.toml`: **licenses ok**, **bans ok**, **advisories failed** on one
   new finding. `anymap2` 0.13.0, a direct dependency of `matrix-sdk`, is

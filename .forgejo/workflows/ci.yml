@@ -61,9 +61,9 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
-  RUST_TOOLCHAIN: "1.97.1"
+  RUST_TOOLCHAIN: "1.98.0"
   # rust-toolchain.toml pins 1.100.0; this makes rustup use the floor above instead.
-  RUSTUP_TOOLCHAIN: "1.97.1"
+  RUSTUP_TOOLCHAIN: "1.98.0"
   # Keep in sync with the same two variables in .github/workflows/ci.yml and
   # .gitlab-ci.yml.
   LYCHEE_VERSION: "0.24.2"

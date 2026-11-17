@@ -16,7 +16,7 @@ members = ["vix-matrix"]
 [workspace.package]
 version = "2.0.2"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 # The helper binary's license (T648, spec/license): the subset of Vix's five
 # source licenses that every crate it links allows. `matrix-sdk` and its
 # `matrix-sdk-*` crates, `vodozemac`, `matrix-pickle`, `ring`, `prost`,

@@ -25,7 +25,7 @@ Vix is a terminal editor built on ratatui, organized as a Cargo workspace of
 Because it is a major version, the library crates made breaking changes: typed
 errors in place of `Result<_, String>`, `#[non_exhaustive]` on types that keep
 growing, and a much smaller public surface on `App`. The changelog's Breaking
-section lists each one. MSRV is Rust 1.97.
+section lists each one. MSRV is Rust 1.98.
 
 Notes: [LINK]. Source: [LINK]. Questions and criticism of the architecture are
 welcome.
