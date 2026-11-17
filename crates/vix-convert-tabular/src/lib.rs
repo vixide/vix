@@ -270,6 +270,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_csv_drops_crlf_and_keeps_a_trailing_empty_field() {
+        assert_eq!(
+            parse_csv("a,b\r\nc,d\r\n"),
+            vec![vec!["a", "b"], vec!["c", "d"]]
+        );
+        // A trailing comma ends in an empty field, not a lost row.
+        assert_eq!(parse_csv("a,"), vec![vec!["a", ""]]);
+    }
+
+    #[test]
     fn json_to_rows_reports_typed_errors() {
         assert!(matches!(
             json_to_rows("not json"),

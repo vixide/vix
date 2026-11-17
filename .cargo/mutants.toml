@@ -26,4 +26,7 @@ exclude_re = [
     "vix-textops/src/lib.rs:694:10: replace < with <= in smart_toggle_at",
     # `lines.len() > 1` -> `>=`: for "" both paths return ("", clean report).
     "vix-textops/src/cleanup.rs:44:87: replace > with >= in cleanup",
+    # `strong_rtl` -> true only skips the all-LTR fast path; BidiInfo then
+    # gives the identity order for all-LTR text anyway.
+    "vix-locale-model/src/lib.rs:204:5: replace strong_rtl -> bool with true",
 ]

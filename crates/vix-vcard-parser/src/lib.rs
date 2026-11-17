@@ -234,6 +234,21 @@ impl Vcard {
 mod tests {
     use super::*;
 
+    #[test]
+    fn bare_types_kept_and_empty_param_segments_skipped() {
+        let c = parse("BEGIN:VCARD\nTEL;WORK;;X=1:123\nTEL:456\nEND:VCARD\n");
+        let tel = c.get("tel").unwrap();
+        assert_eq!(
+            tel.params,
+            vec![
+                ("TYPE".to_string(), "WORK".to_string()),
+                ("X".to_string(), "1".to_string())
+            ]
+        );
+        let all: Vec<&str> = c.all("tel").iter().map(|p| p.value.as_str()).collect();
+        assert_eq!(all, ["123", "456"]);
+    }
+
     const SAMPLE: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada Lovelace\r\nN:Lovelace;Ada;;;\r\nEMAIL;TYPE=work:ada@example.com\r\nTEL;TYPE=work,voice:+1-555-0100\r\nORG:Analytical Engines\r\nNOTE:First\\nprogrammer\\, arguably.\r\nEND:VCARD\r\n";
 
     #[test]

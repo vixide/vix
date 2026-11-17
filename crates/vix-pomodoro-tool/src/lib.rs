@@ -188,6 +188,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn phases_report_running_and_break_and_the_break_counts_down() {
+        let mut t = Timer::new();
+        assert!(!t.is_running());
+        t.start();
+        assert!(t.is_running());
+        assert!(!t.is_break());
+        assert_eq!(t.tick(25 * 60), Tick::BreakStarted);
+        assert!(t.is_running());
+        assert_eq!(t.tick(10), Tick::None);
+        assert_eq!(t.display_seconds(), BREAK_MINUTES * 60 - 10);
+    }
+
+    #[test]
     fn defaults_to_25_minutes_idle() {
         let t = Timer::new();
         assert_eq!(t.phase, Phase::Idle);
