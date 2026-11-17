@@ -15,8 +15,9 @@ contain and how it stays true.
   Vix runs, anything needing a trusted workspace or an already-compromised
   account, and the accepted risks).
 - **Supported versions.** Only the latest release.
-- **Reporting.** One private channel that works from all three forges
-  (email), and what a report should include. No public issue.
+- **Reporting.** Two private channels: GitHub's private vulnerability
+  reporting, and email, which works from all three forges and needs no
+  account. What a report should include. No public issue.
 - **Response targets.** Acknowledge in 7 days, triage with a CVSS v3.1
   severity in 14 days, fix critical and high within 30 days of
   confirmation, fix medium and low within 90 days. They are targets for a
@@ -40,9 +41,10 @@ contain and how it stays true.
   project content, a new network peer, a new stored secret) updates
   `SECURITY.md` in the same change, the same way it updates its own spec.
 - A reporting channel is listed only once it works. GitHub's private
-  vulnerability reporting is not enabled on `vixide/vix`, so it is not
-  listed; enabling it is the maintainer's call, and the policy names it once
-  it is on.
+  vulnerability reporting is enabled on `vixide/vix` (2026-11-17); check
+  with `gh api repos/vixide/vix/private-vulnerability-reporting`. GitLab and
+  Codeberg have no equivalent, so email stays the channel that works
+  everywhere.
 - `docs/contributing-security.md` includes `SECURITY.md` into the book, and
   [`docs/security-checklist.md`](../../docs/security-checklist.md) is the
   contributor checklist the policy points to.
