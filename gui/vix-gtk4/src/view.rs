@@ -279,7 +279,7 @@ impl View {
                 return Propagation::Stop;
             }
         }
-        let name = keyval.name().map(|n| n.to_string()).unwrap_or_default();
+        let name = keyval.name().map_or_default(|n| n.to_string());
         let Some(key) = keys::key_press(&name, keyval.to_unicode(), state) else {
             return Propagation::Proceed;
         };

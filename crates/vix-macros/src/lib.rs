@@ -191,8 +191,7 @@ pub fn load(path: &Path) -> Vec<Macro> {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|text| toml::from_str::<MacrosFile>(&text).ok())
-        .map(|f| f.macros)
-        .unwrap_or_default()
+        .map_or_default(|f| f.macros)
 }
 
 /// Insert or replace `mac` (by name) in `path`, creating the file if needed.

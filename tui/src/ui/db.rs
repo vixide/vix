@@ -16,11 +16,7 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     frame.render_widget(Clear, area);
-    let name = b
-        .conn
-        .as_ref()
-        .map(|c| format!(" — {}", c.name))
-        .unwrap_or_default();
+    let name = b.conn.as_ref().map_or_default(|c| format!(" — {}", c.name));
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -906,8 +902,7 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
     };
     let server_note = b
         .server_filter()
-        .map(|clause| format!("WHERE {} ", trunc(clause, 40)))
-        .unwrap_or_default();
+        .map_or_default(|clause| format!("WHERE {} ", trunc(clause, 40)));
     let title = format!(
         " {} \u{2014} {} {server_note}{filter_note}",
         t!("ui.db_results"),

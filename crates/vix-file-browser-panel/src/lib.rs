@@ -384,8 +384,7 @@ fn entry_score(entry: &Entry, tokens: &[Token]) -> Option<i32> {
                 }
                 let ext = Path::new(&entry.name)
                     .extension()
-                    .map(|e| e.to_string_lossy().to_lowercase())
-                    .unwrap_or_default();
+                    .map_or_default(|e| e.to_string_lossy().to_lowercase());
                 if !exts.contains(&ext) {
                     return None;
                 }

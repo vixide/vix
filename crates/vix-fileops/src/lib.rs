@@ -591,8 +591,7 @@ pub fn write_private_temp(prefix: &str, data: &[u8]) -> io::Result<PathBuf> {
 pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
     let stem = original
         .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|s| s.to_string_lossy().into_owned());
     let ext = original
         .extension()
         .map(|e| e.to_string_lossy().into_owned());

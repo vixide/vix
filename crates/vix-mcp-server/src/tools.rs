@@ -389,8 +389,7 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
     let extension = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
+        .map_or_default(str::to_ascii_lowercase);
     match extension.as_str() {
         "md" | "markdown" => {
             let rendered = vix_markdown_preview::render_full(text);

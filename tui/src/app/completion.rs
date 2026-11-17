@@ -525,8 +525,7 @@ mod tests {
 
     fn shown(app: &App) -> Vec<String> {
         app.completion_popup()
-            .map(|p| p.visible_items().map(|i| i.label.clone()).collect())
-            .unwrap_or_default()
+            .map_or_default(|p| p.visible_items().map(|i| i.label.clone()).collect())
     }
 
     fn text(app: &App) -> String {

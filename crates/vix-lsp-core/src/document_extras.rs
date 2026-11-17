@@ -102,30 +102,27 @@ fn unit(v: &Value, key: &str) -> Option<f64> {
 /// Malformed entries are skipped.
 #[must_use]
 pub fn parse_colors(result: &Value) -> Vec<DocColor> {
-    result
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|c| {
-                    let color = c.get("color")?;
-                    Some(DocColor {
-                        range: range(c.get("range")?)?,
-                        rgb: (
-                            channel(color, "red")?,
-                            channel(color, "green")?,
-                            channel(color, "blue")?,
-                        ),
-                        rgba: [
-                            unit(color, "red")?,
-                            unit(color, "green")?,
-                            unit(color, "blue")?,
-                            unit(color, "alpha").unwrap_or(1.0),
-                        ],
-                    })
+    result.as_array().map_or_default(|a| {
+        a.iter()
+            .filter_map(|c| {
+                let color = c.get("color")?;
+                Some(DocColor {
+                    range: range(c.get("range")?)?,
+                    rgb: (
+                        channel(color, "red")?,
+                        channel(color, "green")?,
+                        channel(color, "blue")?,
+                    ),
+                    rgba: [
+                        unit(color, "red")?,
+                        unit(color, "green")?,
+                        unit(color, "blue")?,
+                        unit(color, "alpha").unwrap_or(1.0),
+                    ],
                 })
-                .collect()
-        })
-        .unwrap_or_default()
+            })
+            .collect()
+    })
 }
 
 /// The params of `textDocument/colorPresentation` for `color` in document `uri`.
@@ -154,49 +151,42 @@ fn text_edit(v: &Value) -> Option<(Range, String)> {
 /// Entries without a `label` are skipped; malformed edits are dropped.
 #[must_use]
 pub fn parse_color_presentations(result: &Value) -> Vec<ColorPresentation> {
-    result
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|p| {
-                    let label = p.get("label")?.as_str()?.to_string();
-                    let additional = p
-                        .get("additionalTextEdits")
-                        .and_then(Value::as_array)
-                        .map(|e| e.iter().filter_map(text_edit).collect())
-                        .unwrap_or_default();
-                    Some(ColorPresentation {
-                        label,
-                        edit: p.get("textEdit").and_then(text_edit),
-                        additional,
-                    })
+    result.as_array().map_or_default(|a| {
+        a.iter()
+            .filter_map(|p| {
+                let label = p.get("label")?.as_str()?.to_string();
+                let additional = p
+                    .get("additionalTextEdits")
+                    .and_then(Value::as_array)
+                    .map_or_default(|e| e.iter().filter_map(text_edit).collect());
+                Some(ColorPresentation {
+                    label,
+                    edit: p.get("textEdit").and_then(text_edit),
+                    additional,
                 })
-                .collect()
-        })
-        .unwrap_or_default()
+            })
+            .collect()
+    })
 }
 
 /// Parse a `textDocument/documentLink` result (`DocumentLink[]`), dropping
 /// links with no `target` (`documentLink/resolve` is not used).
 #[must_use]
 pub fn parse_links(result: &Value) -> Vec<DocLink> {
-    result
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|l| {
-                    let target = l.get("target")?.as_str()?;
-                    if target.is_empty() {
-                        return None;
-                    }
-                    Some(DocLink {
-                        range: range(l.get("range")?)?,
-                        target: target.to_string(),
-                    })
+    result.as_array().map_or_default(|a| {
+        a.iter()
+            .filter_map(|l| {
+                let target = l.get("target")?.as_str()?;
+                if target.is_empty() {
+                    return None;
+                }
+                Some(DocLink {
+                    range: range(l.get("range")?)?,
+                    target: target.to_string(),
                 })
-                .collect()
-        })
-        .unwrap_or_default()
+            })
+            .collect()
+    })
 }
 
 /// Classify a link `target`.

@@ -952,8 +952,7 @@ impl App {
         let first = board
             .peers()
             .find(|(id, _)| *id != me)
-            .map(|(id, _)| id.0.to_string())
-            .unwrap_or_default();
+            .map_or_default(|(id, _)| id.0.to_string());
         let input = if self.cowork.follow.target().is_some() {
             String::new()
         } else {
@@ -1371,8 +1370,7 @@ impl App {
             .cowork
             .host
             .as_mut()
-            .map(|h| h.session.unshare_terminal())
-            .unwrap_or_default();
+            .map_or_default(|h| h.session.unshare_terminal());
         self.cowork_send(&out);
         self.cowork.term_sent = None;
         self.cowork.term_id = None;
@@ -1932,8 +1930,7 @@ impl App {
                 .editor
                 .tabs
                 .get_mut(i)
-                .map(|t| t.editor.take_edit_log())
-                .unwrap_or_default();
+                .map_or_default(|t| t.editor.take_edit_log());
             for s in log {
                 let result = self
                     .cowork
@@ -1976,8 +1973,7 @@ impl App {
                 .editor
                 .tabs
                 .get_mut(i)
-                .map(|t| t.editor.take_edit_log())
-                .unwrap_or_default();
+                .map_or_default(|t| t.editor.take_edit_log());
             for s in log {
                 let Some(guest) = self.cowork.guest.as_mut() else {
                     break;

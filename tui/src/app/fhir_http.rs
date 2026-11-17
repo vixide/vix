@@ -158,9 +158,8 @@ impl App {
         }
         match classify(&reply.body) {
             Ok(Content::OperationOutcome) => {
-                let text = parse_operation_outcome(&reply.body)
-                    .map(|oo| outcome_text(&oo))
-                    .unwrap_or_default();
+                let text =
+                    parse_operation_outcome(&reply.body).map_or_default(|oo| outcome_text(&oo));
                 let json = pretty(&reply.body).unwrap_or_default();
                 self.editor
                     .new_tab_with_content_as(&format!("{text}\n{json}\n"), Some("outcome.json"));

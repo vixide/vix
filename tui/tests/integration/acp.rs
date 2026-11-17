@@ -97,16 +97,13 @@ fn send_prompt(app: &mut App, text: &str) {
 }
 
 fn transcript(app: &App) -> String {
-    app.ai_panel
-        .as_ref()
-        .map(|p| {
-            p.turns
-                .iter()
-                .map(|t| t.text.clone())
-                .collect::<Vec<_>>()
-                .join("\n")
-        })
-        .unwrap_or_default()
+    app.ai_panel.as_ref().map_or_default(|p| {
+        p.turns
+            .iter()
+            .map(|t| t.text.clone())
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
 }
 
 #[test]
@@ -612,8 +609,7 @@ fn plan_tab_text(app: &App) -> String {
         .tabs
         .iter()
         .find(|t| t.path.as_deref() == Some(Path::new("*agent plan*")))
-        .map(vix_editor::editor::Tab::text)
-        .unwrap_or_default()
+        .map_or_default(vix_editor::editor::Tab::text)
 }
 
 /// Start the fake agent with the plan tab open, and write the Python `script`

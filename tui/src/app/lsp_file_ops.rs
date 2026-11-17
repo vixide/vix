@@ -162,8 +162,7 @@ impl App {
             .watch_scan
             .snapshot
             .as_ref()
-            .map(|old| diff_snapshots(old, &new))
-            .unwrap_or_default();
+            .map_or_default(|old| diff_snapshots(old, &new));
         self.watch_scan.snapshot = Some(new);
         for change in found {
             if let Some(i) = self.watch_scan.announced.iter().position(|a| *a == change) {

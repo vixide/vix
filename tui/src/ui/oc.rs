@@ -48,8 +48,7 @@ fn footer(p: &Panel) -> String {
         .to_string(),
         Mode::Confirm(pending) => {
             let note = prune_kind(&pending.args)
-                .map(|k| format!("{} ", t!("ui.oc_prune_note", kind = kind_name(k))))
-                .unwrap_or_default();
+                .map_or_default(|k| format!("{} ", t!("ui.oc_prune_note", kind = kind_name(k))));
             t!(
                 "ui.oc_confirm",
                 note = note,

@@ -452,19 +452,15 @@ pub fn grid(plan: &Plan) -> (Vec<String>, Vec<Vec<String>>, Vec<crate::results::
                 .map(|(k, v)| format!("{k}: {v}"))
                 .collect::<Vec<_>>()
                 .join(" \u{b7} ");
-            let est = n.plan_rows.map(format_rows).unwrap_or_default();
+            let est = n.plan_rows.map_or_default(format_rows);
             if plan.analyzed {
                 vec![
                     title,
-                    n.share
-                        .map(|s| format!("{:.1}%", s * 100.0))
-                        .unwrap_or_default(),
-                    n.exclusive_ms
-                        .map(|t| format!("{t:.3}"))
-                        .unwrap_or_default(),
+                    n.share.map_or_default(|s| format!("{:.1}%", s * 100.0)),
+                    n.exclusive_ms.map_or_default(|t| format!("{t:.3}")),
                     est,
-                    n.actual_rows.map(format_rows).unwrap_or_default(),
-                    n.loops.map(format_rows).unwrap_or_default(),
+                    n.actual_rows.map_or_default(format_rows),
+                    n.loops.map_or_default(format_rows),
                     note(n),
                     details,
                 ]
@@ -472,7 +468,7 @@ pub fn grid(plan: &Plan) -> (Vec<String>, Vec<Vec<String>>, Vec<crate::results::
                 vec![
                     title,
                     est,
-                    n.cost.map(|c| format!("{c:.2}")).unwrap_or_default(),
+                    n.cost.map_or_default(|c| format!("{c:.2}")),
                     details,
                 ]
             }

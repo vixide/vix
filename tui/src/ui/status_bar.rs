@@ -15,8 +15,7 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let path = app
         .editor
         .active_tab()
-        .map(crate::editor::Tab::display_path)
-        .unwrap_or_default();
+        .map_or_default(crate::editor::Tab::display_path);
     let dirty = app.editor.active_tab().is_some_and(|t| t.dirty);
     let dirty_flag = if dirty {
         format!(" {}", icon::FILE_DIRTY)
@@ -24,10 +23,7 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         String::new()
     };
 
-    let mode = app
-        .mode_indicator()
-        .map(|m| format!("{m}   "))
-        .unwrap_or_default();
+    let mode = app.mode_indicator().map_or_default(|m| format!("{m}   "));
     let info = editor_info(app);
 
     let git = crate::status_bar_panel::git_segment(
@@ -122,7 +118,7 @@ fn editor_info(app: &App) -> String {
     app.editor
         .active_tab()
         .filter(|t| !t.is_image())
-        .map(|t| {
+        .map_or_default(|t| {
             let lang = match t.editor.language() {
                 "unknown" | "" => "text",
                 other => other,
@@ -138,5 +134,4 @@ fn editor_info(app: &App) -> String {
                 sel,
             )
         })
-        .unwrap_or_default()
 }

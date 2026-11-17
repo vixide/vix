@@ -465,8 +465,7 @@ impl App {
             .active_tab()
             .and_then(|t| t.path.as_ref())
             .and_then(|p| p.extension())
-            .map(|e| e.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|e| e.to_string_lossy().into_owned());
         self.info
             .open_media_type_panel(crate::media_type::Panel::open_for_extension(&ext));
     }

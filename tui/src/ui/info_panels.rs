@@ -111,8 +111,7 @@ pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let title = app
         .vcard
         .as_ref()
-        .map(crate::vcard_panel::Panel::title)
-        .unwrap_or_default();
+        .map_or_default(crate::vcard_panel::Panel::title);
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = u16::try_from(total.max(1))

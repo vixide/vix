@@ -3301,8 +3301,7 @@ impl App {
                     .editor
                     .active_tab()
                     .and_then(|t| t.path.clone())
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_default();
+                    .map_or_default(|p| p.display().to_string());
                 self.prompt = Some(
                     Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string())
                         .with_input(cur),
@@ -4550,11 +4549,7 @@ impl App {
         for i in targets {
             self.editor.active = i;
             if !self.write_active_to_disk() {
-                let path = self
-                    .editor
-                    .active_tab()
-                    .map(Tab::display_path)
-                    .unwrap_or_default();
+                let path = self.editor.active_tab().map_or_default(Tab::display_path);
                 self.status = t!("status.save_all_stopped", count = saved, path = path).to_string();
                 return;
             }
@@ -4626,7 +4621,7 @@ impl App {
             Ok(p) => {
                 self.status = t!("status.saved", path = p.display()).to_string();
                 if self.lsp.handles(&p) {
-                    let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+                    let text = self.editor.active_tab().map_or_default(Tab::text);
                     self.lsp.did_save(&p, &text);
                 }
                 self.code_lens_saved(&p);
@@ -6118,8 +6113,7 @@ impl App {
     /// Called at startup, and by `script.reload`/`keybindings.reload`.
     pub fn resolve_key_overrides(&mut self) {
         let mut requests: Vec<vix_keybindings::Override> = Settings::keybindings_path()
-            .map(|path| vix_keybindings::user_bindings::load(&path))
-            .unwrap_or_default()
+            .map_or_default(|path| vix_keybindings::user_bindings::load(&path))
             .into_iter()
             .map(|b| vix_keybindings::Override {
                 key_token: b.key_token,
@@ -6207,8 +6201,7 @@ impl App {
     fn build_keybinding_rows(&self) -> Vec<vix_keybinding_editor_panel::Row> {
         use vix_keybinding_editor_panel::{Row, Source};
         let user_overrides = Settings::keybindings_path()
-            .map(|path| vix_keybindings::user_bindings::load(&path))
-            .unwrap_or_default();
+            .map_or_default(|path| vix_keybindings::user_bindings::load(&path));
         let overridden_tokens: std::collections::HashSet<&str> = user_overrides
             .iter()
             .map(|b| b.key_token.as_str())
@@ -7342,9 +7335,7 @@ impl App {
 
     /// Open the saved-macro chooser; with no saved macros only a status message is shown.
     fn open_macro_chooser(&mut self) {
-        let macros = Settings::macros_path()
-            .map(|p| crate::macros::load(&p))
-            .unwrap_or_default();
+        let macros = Settings::macros_path().map_or_default(|p| crate::macros::load(&p));
         if macros.is_empty() {
             self.status = t!("status.no_macros").to_string();
             return;
@@ -7709,7 +7700,7 @@ impl App {
             return;
         }
         // Start a new cycle: collect distinct buffer words sharing the prefix.
-        let content = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+        let content = self.editor.active_tab().map_or_default(Tab::text);
         let chars: Vec<char> = content.chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cur.min(chars.len());
@@ -10535,9 +10526,8 @@ impl App {
     /// themes directory first (so they win on a name clash), then the themes
     /// bundled into the binary.
     fn available_custom_themes() -> Vec<crate::theme::CustomTheme> {
-        let mut themes = Settings::themes_dir()
-            .map(|d| crate::theme_model::load_custom_themes(&d))
-            .unwrap_or_default();
+        let mut themes =
+            Settings::themes_dir().map_or_default(|d| crate::theme_model::load_custom_themes(&d));
         themes.extend(bundled_themes());
         themes
     }
@@ -11682,8 +11672,7 @@ impl App {
                     .filter(|n| n != "(unnamed)")
                     .unwrap_or_else(|| {
                         path.file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_default()
+                            .map_or_default(|s| s.to_string_lossy().into_owned())
                     });
                 contacts.push(crate::contact_panel::Contact { name, path });
             }
@@ -11799,7 +11788,7 @@ impl App {
             .editor
             .active_tab()
             .filter(|t| !t.is_image())
-            .map(|t| {
+            .map_or_default(|t| {
                 crate::palette::symbols(&t.text())
                     .into_iter()
                     .map(|s| crate::outline_panel::Entry {
@@ -11808,8 +11797,7 @@ impl App {
                         line: s.line,
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         if entries.is_empty() {
             self.status = t!("status.outline_empty").into();
             return;
@@ -11923,10 +11911,8 @@ impl App {
         };
         if self.outline_dock_key != Some(key) {
             self.outline_dock_key = Some(key);
-            let entries: Vec<crate::outline_panel::Entry> = self
-                .editor
-                .active_tab()
-                .map(|t| {
+            let entries: Vec<crate::outline_panel::Entry> =
+                self.editor.active_tab().map_or_default(|t| {
                     crate::palette::symbols(&t.text())
                         .into_iter()
                         .map(|s| crate::outline_panel::Entry {
@@ -11935,8 +11921,7 @@ impl App {
                             line: s.line,
                         })
                         .collect()
-                })
-                .unwrap_or_default();
+                });
             self.outline_dock = if entries.is_empty() {
                 None
             } else {
@@ -14225,8 +14210,7 @@ impl App {
         };
         let name = cur
             .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|s| s.to_string_lossy().into_owned());
         self.prompt =
             Some(Prompt::new(PromptKind::Rename, t!("prompt.rename").to_string()).with_input(name));
     }
@@ -14486,8 +14470,7 @@ impl App {
                     let label = self
                         .running_command
                         .as_ref()
-                        .map(|rc| rc.label.clone())
-                        .unwrap_or_default();
+                        .map_or_default(|rc| rc.label.clone());
                     let note = t!("msg.command_finished", command = label, code = code).to_string();
                     if code == 0 {
                         self.messages.info(note);
@@ -16195,8 +16178,7 @@ mod tests {
             .messages
             .items
             .last()
-            .map(|m| m.text.as_str())
-            .unwrap_or_default();
+            .map_or_default(|m| m.text.as_str());
         assert!(
             text.contains("gone.txt"),
             "names the specific file, not just the error: {text:?}"
@@ -16221,8 +16203,7 @@ mod tests {
             .messages
             .items
             .last()
-            .map(|m| m.text.as_str())
-            .unwrap_or_default();
+            .map_or_default(|m| m.text.as_str());
         assert!(
             text.contains("gone.txt") && text.contains("renamed.txt"),
             "names both the old and new path: {text:?}"
@@ -16243,8 +16224,7 @@ mod tests {
             .messages
             .items
             .last()
-            .map(|m| m.text.as_str())
-            .unwrap_or_default();
+            .map_or_default(|m| m.text.as_str());
         assert!(
             text.contains("does-not-exist.txt"),
             "names the specific file, not just the error: {text:?}"
@@ -16278,8 +16258,7 @@ mod tests {
             .messages
             .items
             .last()
-            .map(|m| m.text.as_str())
-            .unwrap_or_default();
+            .map_or_default(|m| m.text.as_str());
         assert!(
             text.contains("locked.txt"),
             "names the specific file, not just the error: {text:?}"
@@ -16312,8 +16291,7 @@ mod tests {
             .messages
             .items
             .last()
-            .map(|m| m.text.as_str())
-            .unwrap_or_default();
+            .map_or_default(|m| m.text.as_str());
         assert!(
             text.contains("locked.txt"),
             "names the specific file, not just the error: {text:?}"

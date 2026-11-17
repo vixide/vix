@@ -47,8 +47,7 @@ pub fn load(path: &Path) -> Vec<UserBinding> {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|text| toml::from_str::<KeyBindingsFile>(&text).ok())
-        .map(|f| f.bindings)
-        .unwrap_or_default()
+        .map_or_default(|f| f.bindings)
 }
 
 /// Insert or replace `binding` (by `key_token`) in `path`, creating the

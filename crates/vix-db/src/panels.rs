@@ -354,21 +354,19 @@ impl Browser {
         };
         let columns: Vec<(String, String, String)> = self
             .run_catalog(catalog::columns_typed_sql(kind))
-            .map(|(_, rows)| object_triples(rows))
-            .unwrap_or_default();
+            .map_or_default(|(_, rows)| object_triples(rows));
         if columns.is_empty() {
             self.message = Some(t!("msg.db_erd_empty").to_string());
             return;
         }
         let relationships: Vec<(String, String, String, String)> = self
             .run_catalog(catalog::relationships_sql(kind))
-            .map(|(_, rows)| {
+            .map_or_default(|(_, rows)| {
                 rows.into_iter()
                     .filter(|r| r.len() >= 4)
                     .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         self.cell_text = erd::mermaid(&columns, &relationships);
         self.view_scroll = 0;
         self.message = Some(t!("msg.db_erd_built", count = columns.len()).to_string());

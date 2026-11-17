@@ -104,8 +104,7 @@ pub fn parse_worktree_list(text: &str) -> Vec<Worktree> {
 #[must_use]
 pub fn worktree_list(dir: &Path) -> Vec<Worktree> {
     crate::run(dir, &["worktree", "list", "--porcelain"])
-        .map(|s| parse_worktree_list(&s))
-        .unwrap_or_default()
+        .map_or_default(|s| parse_worktree_list(&s))
 }
 
 #[cfg(feature = "process")]

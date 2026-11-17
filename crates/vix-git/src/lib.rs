@@ -338,10 +338,7 @@ pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
 
     let flush = |run: &mut Option<(usize, usize, usize, usize)>, out: &mut Vec<Hunk>| {
         if let Some((nlo, nhi, olo, ohi)) = run.take() {
-            let head_text = head_lines
-                .get(olo..ohi)
-                .map(<[&str]>::concat)
-                .unwrap_or_default();
+            let head_text = head_lines.get(olo..ohi).map_or_default(<[&str]>::concat);
             out.push(Hunk {
                 current_start: nlo,
                 current_end: nhi,
@@ -839,9 +836,7 @@ pub fn is_dirty(dir: &Path) -> bool {
 /// The changed files reported by `git status --porcelain`.
 #[must_use]
 pub fn status(dir: &Path) -> Vec<FileStatus> {
-    let mut rows = git_stdout(dir, &["status", "--porcelain"])
-        .map(|s| parse_status(&s))
-        .unwrap_or_default();
+    let mut rows = git_stdout(dir, &["status", "--porcelain"]).map_or_default(|s| parse_status(&s));
     // Porcelain paths are always repository-root-relative; callers work
     // relative to `dir` (T650).
     if let Some(loc) = locate(dir).filter(|l| !l.prefix.is_empty()) {
@@ -1335,9 +1330,7 @@ fn log_format_arg() -> String {
 pub fn log(dir: &Path, max: usize) -> Vec<LogEntry> {
     let n = max.to_string();
     let fmt = log_format_arg();
-    git_stdout(dir, &["log", &fmt, "--date=short", "-n", &n])
-        .map(|s| parse_log(&s))
-        .unwrap_or_default()
+    git_stdout(dir, &["log", &fmt, "--date=short", "-n", &n]).map_or_default(|s| parse_log(&s))
 }
 
 #[cfg(feature = "process")]
@@ -1361,8 +1354,7 @@ pub fn file_log(dir: &Path, rel_path: &str, max: usize) -> Vec<LogEntry> {
             &path,
         ],
     )
-    .map(|s| parse_log(&s))
-    .unwrap_or_default()
+    .map_or_default(|s| parse_log(&s))
 }
 
 #[cfg(feature = "process")]

@@ -234,13 +234,12 @@ impl App {
             .into_iter()
             .flat_map(|t| t.contexts)
             .find(|c| c.name == context)
-            .map(|c| {
+            .map_or_default(|c| {
                 c.bindings
                     .iter()
                     .map(|b| (super::display_key(b.key_token), b.action_id.to_string()))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         let title = if context == "Space" { "SPC" } else { context };
         Some((title.to_string(), rows))
     }

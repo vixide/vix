@@ -274,8 +274,7 @@ impl Session {
         confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME))
             .ok()
             .filter(|path| path.is_file())
-            .map(|path| Self::load_existing_from(&path))
-            .unwrap_or_default()
+            .map_or_default(|path| Self::load_existing_from(&path))
     }
 
     /// [`Session::load_existing`] for an explicit file: parsed directly, never

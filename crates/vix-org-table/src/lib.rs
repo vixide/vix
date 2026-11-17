@@ -850,8 +850,8 @@ fn sort_rows_by_key(rows: &mut [Vec<String>], column: usize, kind: SortKind, cas
             na.partial_cmp(&nb).unwrap_or(std::cmp::Ordering::Equal)
         }),
         SortKind::Time => rows.sort_by(|a, b| {
-            let ka = a.get(column).map(String::as_str).unwrap_or_default();
-            let kb = b.get(column).map(String::as_str).unwrap_or_default();
+            let ka = a.get(column).map_or_default(String::as_str);
+            let kb = b.get(column).map_or_default(String::as_str);
             match (parse_time_key(ka), parse_time_key(kb)) {
                 (Some(x), Some(y)) => x.cmp(&y),
                 _ => text_key(a.get(column), case_sensitive)
@@ -863,7 +863,7 @@ fn sort_rows_by_key(rows: &mut [Vec<String>], column: usize, kind: SortKind, cas
 
 /// A comparison key for `Alphabetic`/fallback text sorting.
 fn text_key(cell: Option<&String>, case_sensitive: bool) -> String {
-    let raw = cell.map(String::as_str).unwrap_or_default();
+    let raw = cell.map_or_default(String::as_str);
     if case_sensitive {
         raw.to_string()
     } else {

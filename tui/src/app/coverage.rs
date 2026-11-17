@@ -111,13 +111,12 @@ impl App {
             .filter(|t| !t.is_image())
             .and_then(|t| t.path.as_deref())
             .and_then(|p| report.lines_for(p))
-            .map(|lines| {
+            .map_or_default(|lines| {
                 lines
                     .iter()
                     .filter_map(|(&line, &hit)| line.checked_sub(1).map(|i| (i, coverage_hex(hit))))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_gutter_marks(marks);
         }

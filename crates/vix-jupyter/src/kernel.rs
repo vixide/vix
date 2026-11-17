@@ -117,8 +117,7 @@ impl StderrTail {
     pub(crate) fn text(&self) -> String {
         self.0
             .lock()
-            .map(|buf| strip_ansi(&String::from_utf8_lossy(&buf)))
-            .unwrap_or_default()
+            .map_or_default(|buf| strip_ansi(&String::from_utf8_lossy(&buf)))
     }
 }
 

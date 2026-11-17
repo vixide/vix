@@ -41,8 +41,7 @@ fn project(tag: &str, trusted: bool) -> std::io::Result<(App, PathBuf)> {
 fn text(app: &App) -> String {
     app.editor
         .active_tab()
-        .map(vix::editor::Tab::text)
-        .unwrap_or_default()
+        .map_or_default(vix::editor::Tab::text)
 }
 
 #[test]

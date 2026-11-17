@@ -182,7 +182,7 @@ impl ContainerTarget {
             let ns = parts.next().unwrap_or_default();
             let pod = parts.next().unwrap_or_default();
             let ctr = parts.next().unwrap_or_default();
-            let path = parts.next().map(|p| format!("/{p}")).unwrap_or_default();
+            let path = parts.next().map_or_default(|p| format!("/{p}"));
             (Self::kubernetes(ns, pod, ctr)?, path)
         } else {
             let (login, path) = match rest.find('/') {

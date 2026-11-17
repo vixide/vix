@@ -176,14 +176,12 @@ pub fn load(root: &Path) -> Vec<Task> {
 /// directly in tests.
 #[must_use]
 pub fn parse(text: &str) -> Vec<Task> {
-    toml::from_str::<TaskFile>(text)
-        .map(|f| {
-            f.task
-                .into_iter()
-                .filter(|t| !t.name.trim().is_empty() && !t.command.trim().is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
+    toml::from_str::<TaskFile>(text).map_or_default(|f| {
+        f.task
+            .into_iter()
+            .filter(|t| !t.name.trim().is_empty() && !t.command.trim().is_empty())
+            .collect()
+    })
 }
 
 #[cfg(test)]

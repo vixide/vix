@@ -962,8 +962,7 @@ impl App {
             let last = cell.body.end.saturating_sub(1).max(cell.body.start);
             let code = lines
                 .get(cell.body)
-                .map(|l| l.join("\n").trim_end().to_owned())
-                .unwrap_or_default();
+                .map_or_default(|l| l.join("\n").trim_end().to_owned());
             return target(code, language, last, None);
         }
         target(
@@ -1045,8 +1044,7 @@ fn output_lines(output: &Output) -> Vec<String> {
                 Payload::Base64(_) => {
                     return data
                         .text("text/plain")
-                        .map(|plain| text_lines(&plain))
-                        .unwrap_or_default();
+                        .map_or_default(|plain| text_lines(&plain));
                 }
                 Payload::Text(text) => {
                     let mut lines = text_lines(&text);

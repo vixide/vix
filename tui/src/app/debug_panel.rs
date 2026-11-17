@@ -489,8 +489,7 @@ impl App {
         let filters = self
             .dap
             .capabilities()
-            .map(|c| c.exception_filters.clone())
-            .unwrap_or_default();
+            .map_or_default(|c| c.exception_filters.clone());
         if filters.is_empty() {
             self.status = t!("status.debug_no_exception_filters").to_string();
             return;

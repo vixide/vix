@@ -216,8 +216,7 @@ impl Message {
         let delimiters = all
             .iter()
             .find(|(_, l)| !l.trim().is_empty())
-            .map(|(_, l)| Delimiters::from_msh_line(l.trim_start()))
-            .unwrap_or_default();
+            .map_or_default(|(_, l)| Delimiters::from_msh_line(l.trim_start()));
         let segments = all
             .iter()
             .filter(|(_, l)| !l.trim().is_empty())

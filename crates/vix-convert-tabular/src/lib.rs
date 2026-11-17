@@ -248,7 +248,7 @@ pub fn json_to_rows(json: &str) -> Result<Vec<Vec<String>>, ConvertError> {
     for obj in objects {
         let row = headers
             .iter()
-            .map(|key| obj.get(key).map(value_to_field).unwrap_or_default())
+            .map(|key| obj.get(key).map_or_default(value_to_field))
             .collect();
         rows.push(row);
     }

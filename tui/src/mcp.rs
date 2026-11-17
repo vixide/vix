@@ -135,8 +135,7 @@ impl Host for McpHost {
         };
         session
             .workspace(&root.to_string_lossy())
-            .map(|ws| ws.files.iter().map(PathBuf::from).collect())
-            .unwrap_or_default()
+            .map_or_default(|ws| ws.files.iter().map(PathBuf::from).collect())
     }
 
     /// The schema of the `SQLite` file at `path`, or `None` when this build
@@ -297,8 +296,7 @@ mod shared {
             let database = if conn.kind == crate::db::connect::Kind::Sqlite {
                 std::path::Path::new(&conn.file)
                     .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                    .map_or_default(|n| n.to_string_lossy().into_owned())
             } else {
                 conn.database.clone()
             };

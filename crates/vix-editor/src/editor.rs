@@ -199,7 +199,7 @@ fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> C
 )]
 fn make_editor_from_rope(path: &Path, text: ropey::Rope, flags: Flags, indent: &str) -> CodeEditor {
     // Only the first line matters to language detection (a shebang).
-    let first_line = text.lines().next().map(String::from).unwrap_or_default();
+    let first_line = text.lines().next().map_or_default(String::from);
     let lang = lang_for_path(Some(path), &first_line);
     let ed = CodeEditor::from_rope(&lang, text, Vec::new())
         .expect("code editor init for plain text never fails");
@@ -210,8 +210,7 @@ fn make_editor_from_rope(path: &Path, text: ropey::Rope, flags: Flags, indent: &
 fn lang_for_path(path: Option<&Path>, text: &str) -> String {
     let name = path
         .and_then(|p| p.file_name())
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|s| s.to_string_lossy().into_owned());
     if name.is_empty() {
         "text".to_string()
     } else {
@@ -612,10 +611,7 @@ impl Editor {
     /// Empty when unsplit.
     pub fn split_layout(&mut self, area: Rect) -> Vec<crate::pane_tree::LeafBox> {
         self.sync_split();
-        self.split_root
-            .as_ref()
-            .map(|r| r.layout(area))
-            .unwrap_or_default()
+        self.split_root.as_ref().map_or_default(|r| r.layout(area))
     }
 
     /// The split divider rectangles for drawing, given the editor `area`.
@@ -623,8 +619,7 @@ impl Editor {
     pub fn split_dividers(&self, area: Rect) -> Vec<(SplitDir, Rect)> {
         self.split_root
             .as_ref()
-            .map(|r| r.dividers(area))
-            .unwrap_or_default()
+            .map_or_default(|r| r.dividers(area))
     }
 
     /// Focus the pane under `(col, row)` within `area`; returns whether a pane was

@@ -32,14 +32,12 @@ pub struct OperationOutcome {
 /// Collect the string elements of a JSON array, ignoring non-strings; empty when
 /// `v` is absent or not an array.
 fn string_list(v: Option<&Value>) -> Vec<String> {
-    v.and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(String::from)
-                .collect()
-        })
-        .unwrap_or_default()
+    v.and_then(Value::as_array).map_or_default(|a| {
+        a.iter()
+            .filter_map(Value::as_str)
+            .map(String::from)
+            .collect()
+    })
 }
 
 /// The most human-readable detail of an issue, in priority order:
@@ -88,7 +86,7 @@ pub fn parse_operation_outcome(text: &str) -> Result<OperationOutcome, FhirError
     let issues = value
         .get("issue")
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .map(|i| {
                     let mut expression = string_list(i.get("expression"));
@@ -111,8 +109,7 @@ pub fn parse_operation_outcome(text: &str) -> Result<OperationOutcome, FhirError
                     }
                 })
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     Ok(OperationOutcome { issues })
 }
 

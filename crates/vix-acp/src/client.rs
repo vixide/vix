@@ -563,7 +563,7 @@ impl Client {
                 let entries = update
                     .get("entries")
                     .and_then(Value::as_array)
-                    .map(|a| {
+                    .map_or_default(|a| {
                         a.iter()
                             .map(|e| PlanEntry {
                                 content: e
@@ -578,8 +578,7 @@ impl Client {
                                     .to_string(),
                             })
                             .collect()
-                    })
-                    .unwrap_or_default();
+                    });
                 step.events.push(Event::Plan(entries));
             }
             _ => {}
@@ -691,21 +690,17 @@ fn terminal_create(id: &Value, params: &Value) -> Option<Event> {
         .filter(|c| !c.trim().is_empty())?
         .to_string();
     let strings = |k: &str| -> Vec<String> {
-        params
-            .get(k)
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default()
+        params.get(k).and_then(Value::as_array).map_or_default(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
     };
     let env = params
         .get("env")
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter_map(|e| {
                     Some((
@@ -714,8 +709,7 @@ fn terminal_create(id: &Value, params: &Value) -> Option<Event> {
                     ))
                 })
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     Some(Event::TerminalCreate {
         req_id: id.clone(),
         command,
@@ -736,7 +730,7 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
     params
         .get("options")
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter_map(|o| {
                     let kind = match o.get("kind").and_then(Value::as_str)? {
@@ -758,7 +752,6 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Apply ACP's `line`/`limit` (1-based first line, max line count) to `text`.

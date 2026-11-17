@@ -87,8 +87,7 @@ impl Catalog {
         for path in files {
             let name = path
                 .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
+                .map_or_default(|n| n.to_string_lossy().into_owned());
             let code = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             if !valid_locale_code(code) {
                 errors.push(format!("{name}: not a locale code"));

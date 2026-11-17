@@ -1361,8 +1361,7 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
             ":exclude-tags" => {
                 exclude_tags = val
                     .as_deref()
-                    .map(|s| s.split_whitespace().map(str::to_string).collect())
-                    .unwrap_or_default();
+                    .map_or_default(|s| s.split_whitespace().map(str::to_string).collect());
             }
             ":indent" => flags.set(DblockFlags::INDENT, val.as_deref() == Some("t")),
             ":link" => flags.set(DblockFlags::LINK, val.as_deref() == Some("t")),

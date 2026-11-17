@@ -56,8 +56,7 @@ impl App {
         let text = self
             .editor
             .active_tab()
-            .map(crate::editor::Tab::text)
-            .unwrap_or_default();
+            .map_or_default(crate::editor::Tab::text);
         let result: Result<String, PrettierError> = self.prettier_binary(&path).and_then(|bin| {
             #[cfg(feature = "tasks")]
             {

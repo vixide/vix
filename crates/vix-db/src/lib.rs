@@ -731,8 +731,7 @@ impl Browser {
     pub fn active_environment(&self) -> connect::Environment {
         self.conn
             .as_ref()
-            .map(|c| self.environment_of(&c.name))
-            .unwrap_or_default()
+            .map_or_default(|c| self.environment_of(&c.name))
     }
 
     /// The connection environments if they changed since the last call (for

@@ -342,8 +342,7 @@ fn is_sqlite_candidate(root: &Path, path: &Path) -> bool {
     let extension = path
         .extension()
         .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
+        .map_or_default(str::to_ascii_lowercase);
     if !DB_EXTENSIONS.contains(&extension.as_str()) {
         return false;
     }

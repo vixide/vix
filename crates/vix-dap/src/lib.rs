@@ -396,7 +396,7 @@ impl Capabilities {
         let exception_filters = body
             .get("exceptionBreakpointFilters")
             .and_then(Value::as_array)
-            .map(|arr| {
+            .map_or_default(|arr| {
                 arr.iter()
                     .filter_map(|f| {
                         let filter = f.get("filter").and_then(Value::as_str)?;
@@ -405,8 +405,7 @@ impl Capabilities {
                         Some(ExceptionFilter::new(filter, label, default))
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         let mut supports = Supports::empty();
         for (key, flag) in [
             ("supportsSetVariable", Supports::SET_VARIABLE),
@@ -1188,12 +1187,11 @@ impl Dap {
                 let access_types = body
                     .get("accessTypes")
                     .and_then(Value::as_array)
-                    .map(|a| {
+                    .map_or_default(|a| {
                         a.iter()
                             .filter_map(|t| t.as_str().map(str::to_string))
                             .collect()
-                    })
-                    .unwrap_or_default();
+                    });
                 events.push(DapEvent::DataBreakpointInfo {
                     name,
                     data_id,
@@ -1418,7 +1416,7 @@ fn typed_value(text: &str) -> Value {
 fn parse_threads(body: &Value) -> Vec<Thread> {
     body.get("threads")
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .map(|t| {
                     Thread::new(
@@ -1428,14 +1426,13 @@ fn parse_threads(body: &Value) -> Vec<Thread> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse a `scopes` body into [`Scope`]s.
 fn parse_scopes(body: &Value) -> Vec<Scope> {
     body.get("scopes")
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .map(|s| Scope {
                     name: s
@@ -1451,14 +1448,13 @@ fn parse_scopes(body: &Value) -> Vec<Scope> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse a `stackTrace` body into [`Frame`]s.
 fn parse_frames(body: &Value) -> Vec<Frame> {
     body.get("stackFrames")
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .map(|f| Frame {
                     id: f.get("id").and_then(Value::as_i64).unwrap_or(0),
@@ -1477,14 +1473,13 @@ fn parse_frames(body: &Value) -> Vec<Frame> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Parse a `variables` body into [`Variable`]s.
 fn parse_variables(body: &Value) -> Vec<Variable> {
     body.get("variables")
         .and_then(Value::as_array)
-        .map(|arr| {
+        .map_or_default(|arr| {
             arr.iter()
                 .map(|v| Variable {
                     name: v
@@ -1504,7 +1499,6 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The text for a failed request's [`DapEvent::RequestFailed`]: the command

@@ -177,7 +177,7 @@ impl App {
             return;
         }
         self.git_gutter_cache_key = Some(key);
-        let current = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+        let current = self.editor.active_tab().map_or_default(Tab::text);
         let base_text = self.gutter_base_text(&path, &base);
         let marks = crate::git::diff_marks(&base_text, &current);
         let styled: Vec<(usize, &str)> = marks
@@ -540,7 +540,7 @@ impl App {
         };
         let (rebuilt, caret) = rebuild_with_resolution(&content, &conflict, how);
         self.apply_rebuilt_buffer(&rebuilt, caret, "status.conflict_resolved");
-        let refreshed = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+        let refreshed = self.editor.active_tab().map_or_default(Tab::text);
         if let Some(list) = self.conflict_list.as_mut() {
             list.refresh(&refreshed);
             if list.is_empty() {
@@ -642,8 +642,7 @@ impl App {
         let cur_lines: Vec<&str> = current.split_inclusive('\n').collect();
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
-            .map(<[&str]>::concat)
-            .unwrap_or_default();
+            .map_or_default(<[&str]>::concat);
         let mut new_index = base_lines[..hunk.head_start].concat();
         new_index.push_str(&added);
         new_index.push_str(&base_lines[hunk.head_start + head_count..].concat());
@@ -675,8 +674,7 @@ impl App {
         let cur_lines: Vec<&str> = current.split_inclusive('\n').collect();
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
-            .map(<[&str]>::concat)
-            .unwrap_or_default();
+            .map_or_default(<[&str]>::concat);
         let added_count = hunk.current_end - hunk.current_start;
         let region = base_lines.get(hunk.head_start..hunk.head_start + added_count);
         if region.map(<[&str]>::concat).as_deref() != Some(added.as_str()) {
@@ -994,7 +992,7 @@ impl App {
             return;
         }
         self.git_panel = None;
-        let filter = since.map(|s| format!(" --since={s}")).unwrap_or_default();
+        let filter = since.map_or_default(|s| format!(" --since={s}"));
         self.run_command(&format!("git --no-pager log{filter}"));
     }
 

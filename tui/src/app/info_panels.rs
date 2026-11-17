@@ -191,8 +191,7 @@ impl App {
         if let Some(path) = &t.path {
             info.name = path
                 .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
+                .map_or_default(|n| n.to_string_lossy().into_owned());
             info.path = path.display().to_string();
             if let Ok(meta) = crate::authority::current().metadata(path) {
                 info.bytes = Some(meta.len);
@@ -295,8 +294,7 @@ impl App {
             _ => self
                 .editor
                 .active_tab()
-                .map(|t| t.editor.get_content())
-                .unwrap_or_default(),
+                .map_or_default(|t| t.editor.get_content()),
         }
     }
 

@@ -543,13 +543,12 @@ impl App {
             .into_iter()
             .flat_map(|t| t.contexts)
             .find(|c| c.name == context)
-            .map(|c| {
+            .map_or_default(|c| {
                 c.bindings
                     .iter()
                     .map(|b| (b.key_token.to_string(), b.action_id.to_string()))
                     .collect()
             })
-            .unwrap_or_default()
     }
 
     /// Every binding in Spacemacs's leader context (`vix-keybindings`,

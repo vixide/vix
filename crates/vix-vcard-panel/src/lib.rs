@@ -199,8 +199,7 @@ impl Panel {
     pub fn selected_value(&self) -> String {
         self.rows
             .get(self.selected)
-            .map(|r| r.value.clone())
-            .unwrap_or_default()
+            .map_or_default(|r| r.value.clone())
     }
 }
 

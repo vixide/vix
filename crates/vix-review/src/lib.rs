@@ -858,8 +858,7 @@ fn word_marks(old: &str, new: &str) -> (Marks, Marks) {
         let marks = lines
             .iter()
             .find(|l| l.kind == kind)
-            .map(|l| l.emphasis.clone())
-            .unwrap_or_default();
+            .map_or_default(|l| l.emphasis.clone());
         if marks.iter().any(|&(a, b)| a == 0 && b >= len) {
             Vec::new()
         } else {

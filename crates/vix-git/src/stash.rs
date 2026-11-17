@@ -58,9 +58,7 @@ pub fn parse_stash_list(text: &str) -> Vec<StashEntry> {
 /// are none or `dir` isn't a repository.
 #[must_use]
 pub fn stash_list(dir: &Path) -> Vec<StashEntry> {
-    crate::run(dir, &["stash", "list"])
-        .map(|s| parse_stash_list(&s))
-        .unwrap_or_default()
+    crate::run(dir, &["stash", "list"]).map_or_default(|s| parse_stash_list(&s))
 }
 
 #[cfg(feature = "process")]

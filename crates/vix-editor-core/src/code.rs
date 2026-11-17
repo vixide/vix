@@ -1176,10 +1176,7 @@ impl Code {
     /// Take the changes recorded since the last call (empty when logging is
     /// off).
     pub fn take_edit_log(&mut self) -> Vec<Splice> {
-        self.edit_log
-            .as_mut()
-            .map(std::mem::take)
-            .unwrap_or_default()
+        self.edit_log.as_mut().map_or_default(std::mem::take)
     }
 
     /// Apply edits that came from another participant: in order, clamped to
