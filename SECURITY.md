@@ -52,11 +52,17 @@ branches and no backports. Check a report against the latest release (or
 
 ## Reporting a vulnerability
 
-**Do not open a public issue, discussion or pull request.** Report privately
-by email to the maintainer at
-[joel@joelparkerhenderson.com](mailto:joel@joelparkerhenderson.com). Email
-works for a report against any of the three forges (GitHub, GitLab,
-Codeberg).
+**Do not open a public issue, discussion or pull request.** Report privately,
+either way:
+
+- **On GitHub:** open a private report from the
+  [Security tab](https://github.com/vixide/vix/security/advisories/new). Only
+  the maintainer sees it, and the fix and the advisory are worked on in the
+  same private thread.
+- **By email** to the maintainer at
+  [joel@joelparkerhenderson.com](mailto:joel@joelparkerhenderson.com). Email
+  works from any of the three forges (GitHub, GitLab, Codeberg), and needs no
+  GitHub account.
 
 Include:
 
