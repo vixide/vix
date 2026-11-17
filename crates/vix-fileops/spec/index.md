@@ -28,8 +28,12 @@ directory rename is covered; drag-and-drop remains a nice-to-have.
 prompts for confirmation, then acts per the `explorer_delete` setting:
 
 - `"trash"` (the default) moves each path to the OS trash / Recycle Bin
-  (`vix_fileops::trash_path`, the [`trash`](https://docs.rs/trash) crate) —
-  undoable from the platform's own trash/recycle view.
+  (`vix_fileops::trash_path`) — undoable from the platform's own
+  trash/recycle view. macOS and Windows use the
+  [`trash`](https://docs.rs/trash) crate (macOS through `NSFileManager`, no
+  `osascript` child). Linux and the BSDs use Vix's own
+  [freedesktop.org Trash](https://specifications.freedesktop.org/trash-spec/latest/)
+  implementation (see below).
 - `"hard"` removes each path outright (`vix_fileops::remove_path`:
   `fs::remove_file`/`remove_dir_all`) — not undoable.
 
@@ -38,6 +42,30 @@ falls back to `"trash"`, the safer default, rather than silently hard-deleting
 on a typo. The confirmation prompt's wording differs by mode (`confirm.delete`
 vs. `confirm.delete_hard`) so it always says which will happen. Open buffers
 under a deleted path are closed either way (`App::close_buffers_under`).
+
+### The freedesktop.org trash
+
+On Linux and the BSDs (`crates/vix-fileops/src/freedesktop_trash.rs`), Vix writes the trash
+itself instead of using the `trash` crate's backend, which needs `chrono`
+for the spec's `DeletionDate`; Vix uses `jiff`, so no `chrono` is built.
+
+- **Which trash.** The home trash (`$XDG_DATA_HOME/Trash`, else
+  `$HOME/.local/share/Trash`; a relative `XDG_DATA_HOME` is ignored) when
+  the path is on the same device. Otherwise the trash at the top of the
+  path's own mount: `$topdir/.Trash/$uid` when `$topdir/.Trash` is a real
+  directory (not a symlink) with the sticky bit, else `$topdir/.Trash-$uid`,
+  which must be a directory owned by the user and not a symlink. Trash
+  directories are created `0700`. An item is always renamed, never copied
+  across devices.
+- **The entry.** `info/<name>.trashinfo` is created exclusively *before* the
+  move, so two moves never claim one name (`a`, then `a.2`, `a.3`, …; a
+  leftover in `files/` with no info file also holds its name). It holds
+  `Path=` (percent-encoded; absolute for the home trash, relative to the
+  topdir for a topdir trash) and `DeletionDate=` (local time,
+  `YYYY-MM-DDThh:mm:ss`). The item is then renamed to `files/<name>`; if that
+  fails, the info file is removed.
+- A symlink is trashed itself, not its target.
+- `directorysizes` is not written; the spec makes that cache optional.
 
 ## Edit Directory (T636)
 

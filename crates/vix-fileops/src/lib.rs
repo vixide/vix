@@ -2,6 +2,18 @@
 //! crash-safe atomic writer used across the app for saving files.
 
 pub mod dir_edit;
+/// The freedesktop.org trash, written here so it needs no `chrono`. Built where
+/// it is used (Linux and the BSDs) and, for its tests, on every Unix.
+#[cfg(any(
+    all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ),
+    all(test, unix)
+))]
+mod freedesktop_trash;
 
 use std::fs;
 use std::io;
@@ -136,7 +148,8 @@ pub fn which_on_path(name: &str) -> Option<PathBuf> {
 }
 
 /// Move a file or directory tree to the OS trash (Recycle Bin / Trash / etc.)
-/// instead of deleting it outright (T209). Unlike [`remove_path`], this can
+/// instead of deleting it outright (T209). macOS and Windows go through the
+/// `trash` crate; Linux and the BSDs use Vix's own freedesktop.org trash. Unlike [`remove_path`], this can
 /// be undone by the user through their file manager's trash/recycle view.
 ///
 /// # Errors
@@ -153,7 +166,25 @@ pub fn trash_path(path: &Path) -> io::Result<()> {
         ctx.set_delete_method(DeleteMethod::NsFileManager);
         ctx.delete(path).map_err(io::Error::other)
     }
-    #[cfg(not(target_os = "macos"))]
+    // Linux and the BSDs: the freedesktop.org trash, written by Vix.
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
+    {
+        freedesktop_trash::trash(path)
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        )
+    )))]
     {
         trash::delete(path).map_err(io::Error::other)
     }

@@ -877,3 +877,6 @@ snapcraft
 Softbuffer
 TOCTOU
 Unsanitized
+topdir
+trashinfo
+directorysizes
