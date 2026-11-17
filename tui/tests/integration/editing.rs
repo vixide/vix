@@ -4608,3 +4608,67 @@ fn bracketed_paste_distributes_lines_across_carets() {
     app.on_paste("1\n2\n3");
     assert_eq!(app.editor.active_tab().unwrap().text(), "a1\nb2\nc3");
 }
+
+#[test]
+fn a_vim_modeline_sets_the_indent_on_open() {
+    let dir = unique_dir("modeline-indent");
+    let file = dir.join("m.py");
+    fs::write(&file, "# vim: set et sw=2:\nx\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(
+        app.editor.active_tab().unwrap().lines()[0].starts_with("  #"),
+        "sw=2 et indents with two spaces: {:?}",
+        app.editor.active_tab().unwrap().lines()[0]
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_emacs_modeline_wins_over_the_indent_setting() {
+    let dir = unique_dir("modeline-tabs");
+    let file = dir.join("m.c");
+    fs::write(&file, "/* -*- indent-tabs-mode: t -*- */\nint x;\n").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.indent_style = "spaces".to_string();
+    app.open_initial(&file);
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(
+        app.editor.active_tab().unwrap().lines()[0].starts_with("\t/*"),
+        "indent-tabs-mode: t indents with a tab"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_noeol_modeline_keeps_the_file_without_a_final_newline() {
+    let dir = unique_dir("modeline-noeol");
+    let file = dir.join("n.txt");
+    fs::write(&file, "x\n# vim: set noeol:").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.save.ensure_final_newline = true;
+    app.open_initial(&file);
+    app.on_key(key('y'));
+    app.run_action("file.save");
+    assert_eq!(fs::read_to_string(&file).unwrap(), "yx\n# vim: set noeol:");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn modeline_lines_zero_ignores_modelines() {
+    let dir = unique_dir("modeline-off");
+    let file = dir.join("o.txt");
+    fs::write(&file, "x\n# vim: set noeol:").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.save.ensure_final_newline = true;
+    app.settings.typing.modeline_lines = 0;
+    app.open_initial(&file);
+    app.on_key(key('y'));
+    app.run_action("file.save");
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "yx\n# vim: set noeol:\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}

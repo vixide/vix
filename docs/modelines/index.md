@@ -1,81 +1,63 @@
 # Modelines
 
-**Status: not implemented yet.** This page describes the planned behavior;
-Vix does not read modelines today, and the `modeline_lines` setting does not
-exist yet. Per-project indentation from [EditorConfig](../editorconfig/index.md)
-works now.
+A modeline is a comment in a file that sets how that file is edited: its
+indentation, its wrap column, whether it ends with a newline. Vix™ reads Vim
+modelines and Emacs file variables, so files that already carry them for
+Vim or Emacs users work the same way in Vix.
 
-Modelines are special comments at the beginning or end of a file that configure
-editor settings for that specific file. Vix™ supports both Vim and Emacs modeline
-formats, so you can specify settings such as tab size, indentation style, and file
-type directly within your files.
-
-## Configuration
-
-Use the `modeline_lines` setting to control how many lines Vix searches for
-modelines:
-
-```json
-{
-  "modeline_lines": 5
-}
+```python
+# vim: set et sw=4 tw=79:
 ```
 
-Set it to `0` to disable modeline parsing entirely.
-
-## Emacs File Variables
-
-Vix has some compatibility support for Emacs file variables.
-
-Example:
-
-```txt
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; -*-
+```c
+/* -*- indent-tabs-mode: t; tab-width: 8; c-basic-offset: 8 -*- */
 ```
 
-Supported Emacs variables:
+A modeline wins over the file's [`.editorconfig`](../editorconfig/index.md),
+which wins over your [settings](../configuration/index.md).
 
-| Variable                  | Description                | Vix setting                    |
-| ------------------------- | -------------------------- | ------------------------------ |
-| `mode`                    | Major mode / language      | Language detection             |
-| `tab-width`               | Tab display width          | `tab_size`                     |
-| `fill-column`             | Line wrap column           | `preferred_line_length`        |
-| `indent-tabs-mode`        | `nil` for spaces, `t` for tabs | `hard_tabs`                |
-| `electric-indent-mode`    | Auto-indentation           | `auto_indent`                  |
-| `require-final-newline`   | Ensure final newline       | `ensure_final_newline_on_save` |
-| `show-trailing-whitespace`| Show trailing whitespace   | `show_whitespaces`             |
+## What Vix reads
 
-## Vim Modelines
+| Setting | Vim | Emacs |
+| --- | --- | --- |
+| Indent with a tab, or with spaces | `noet` / `noexpandtab`, `et` / `expandtab` | `indent-tabs-mode: t` / `nil` |
+| Indent size | `sw=N` / `shiftwidth=N` | `c-basic-offset: N`, `python-indent-offset: N`, `js-indent-level: N`, … |
+| Tab width | `ts=N` / `tabstop=N` | `tab-width: N` |
+| Wrap column for **Wrap Text** | `tw=N` / `textwidth=N` | `fill-column: N` |
+| Soft wrap | `wrap`, `nowrap` | `truncate-lines: nil` / `t` |
+| End the file with a newline on save | `eol`, `fixeol`, and `noeol`, `nofixeol` | `require-final-newline: t` / `nil` |
 
-Vix has some compatibility support for Vim modelines.
+Everything else in a modeline is ignored. That is deliberate: a file can set
+its own layout, but it cannot make Vix run anything or change any other
+setting. A file type (`ft=`, `mode:`) is ignored too; Vix picks the language
+from the file name.
 
-Example:
+## Where Vix looks
 
-```txt
-# vim: set ft=python ts=4 sw=4 et:
+- **Vim** modelines in the first and last five lines of the file: `vim:`,
+  `vi:` or `ex:` at the start of a line or after a space. Both forms work:
+  `vim: set ts=4 sw=4:` and `vim: ts=4 sw=4`.
+- An **Emacs** `-*- … -*-` line, as the first line of the file, or the second
+  after a `#!` line.
+- An **Emacs** `Local Variables:` block near the end of the file:
+
+  ```text
+  # Local Variables:
+  # fill-column: 72
+  # End:
+  ```
+
+When a file has both, the Emacs settings win. Among Vim modelines, as in
+Vim, a later one wins.
+
+## Turning it off
+
+The `modeline_lines` setting is how many lines at each end of a file Vix
+searches. `0` turns modelines off:
+
+```toml
+modeline_lines = 0
 ```
-
-Supported Vim options:
-
-| Option         | Aliases | Description                          | Vix setting                    |
-| -------------- | ------- | ----------------------------------- | ------------------------------ |
-| `filetype`     | `ft`    | File type / language                | Language detection             |
-| `tabstop`      | `ts`    | Number of spaces a tab counts for   | `tab_size`                     |
-| `textwidth`    | `tw`    | Maximum line width                  | `preferred_line_length`        |
-| `expandtab`    | `et`    | Use spaces instead of tabs          | `hard_tabs`                    |
-| `noexpandtab`  | `noet`  | Use tabs instead of spaces          | `hard_tabs`                    |
-| `autoindent`   | `ai`    | Enable auto-indentation             | `auto_indent`                  |
-| `noautoindent` | `noai`  | Disable auto-indentation            | `auto_indent`                  |
-| `endofline`    | `eol`   | Ensure final newline                | `ensure_final_newline_on_save` |
-| `noendofline`  | `noeol` | Disable final newline               | `ensure_final_newline_on_save` |
-
-## Notes
-
-- Vix searches the **first kilobyte** of a file for modelines.
-- **Emacs** modelines take precedence over **Vim** modelines when both are
-  present.
-- Modelines in the first few lines take precedence over those at the end of the
-  file.
 
 ---
 

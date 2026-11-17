@@ -24,8 +24,10 @@ editor is still better, see the "Vix for … users" pages listed at the end.
 Settings apply in layers: defaults, then your `config.toml`, then the
 project's `.vix/settings.toml`, then its `[languages.<id>]` tables. Vix
 also reads `.editorconfig` files (indent style and size, tab width, trailing
-whitespace, final newline), so a project that already has one needs nothing
-more. **Vix → Reload Settings** applies an edited file without a restart.
+whitespace, final newline), and a file's own Vim modelines and Emacs file
+variables (`vim: set sw=2 et:`, `-*- indent-tabs-mode: nil -*-`; see
+[Modelines](../modelines/index.md)), so files that already carry them need
+nothing more. **Vix → Reload Settings** applies an edited file without a restart.
 Every setting is listed in [Configuration](../configuration/index.md).
 
 ## 1. Choose your keys
@@ -180,8 +182,6 @@ the workspace. See [Scripting](../scripting/index.md).
   `launch.json`. Copy the settings by hand (step 2).
 - Color schemes from other editors (step 6).
 - Snippet variables and other editors' snippet formats (step 5).
-- Vim and Emacs modelines: [not implemented yet](../modelines/index.md).
-  `.editorconfig` covers most of what modelines were used for.
 
 ## Editor by editor
 

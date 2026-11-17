@@ -798,6 +798,11 @@ pub struct TypingSettings {
     /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
     /// for opened files, overriding the global settings per file. On by default.
     pub editorconfig: bool,
+    /// How many lines at the start and at the end of a file to search for
+    /// Vim modelines (`vim: set ts=4 sw=4 et:`); an Emacs `-*- … -*-` line and
+    /// `Local Variables:` block are read too. A modeline overrides the file's
+    /// `.editorconfig` and the settings. `0` turns modelines off.
+    pub modeline_lines: usize,
     /// Auto-insert the matching closer when an opening bracket/quote is typed (and
     /// delete both with Backspace inside an empty pair). On by default.
     pub auto_pair: bool,
@@ -809,6 +814,7 @@ impl Default for TypingSettings {
     fn default() -> Self {
         TypingSettings {
             editorconfig: true,
+            modeline_lines: 5,
             auto_pair: true,
             spellcheck: false,
         }
