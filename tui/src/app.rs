@@ -10886,13 +10886,13 @@ impl App {
         }
     }
 
-    /// Open the file browser (File → Open…) in the active file's folder, or
-    /// the workspace root when there is no file open.
+    /// Open the file browser (File → Open…) in the active file's folder when
+    /// that file is in the workspace, else at the workspace root.
     fn open_file_browser(&mut self) {
         let dir = self
             .active_path()
             .and_then(|p| p.parent().map(Path::to_path_buf))
-            .filter(|d| crate::authority::current().is_dir(d))
+            .filter(|d| d.starts_with(&self.root) && crate::authority::current().is_dir(d))
             .unwrap_or_else(|| self.root.clone());
         self.file_browser = Some(crate::file_browser_panel::Panel::open(&dir));
     }
@@ -10997,7 +10997,12 @@ impl App {
         let target = fb.target();
         // A typed path (`docs/x.org`, `~/notes/a.org`, `/etc/hosts`) opens
         // that file, even a new one, or moves into that folder.
-        let typed = fb.path_target();
+        // Nothing matches a plain name: open it in the folder shown, as a new
+        // file if need be (nothing is written until it is saved).
+        let typed = fb.path_target().or_else(|| {
+            let name = fb.query.trim();
+            (!name.is_empty() && fb.is_empty()).then(|| fb.resolve(name))
+        });
         if let Some(path) = &typed
             && crate::authority::current().is_dir(path)
         {

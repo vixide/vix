@@ -62,6 +62,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Org highlighting now shows on screen.** The renderer drew syntax colors only for buffers with a Tree-sitter grammar, so the Org highlighter added the same day never ran. A render test now checks a bold headline and an underlined link.
+- **The mouse wheel scrolls three lines a notch** instead of one, as in other editors.
+- **File → Open starts in your project** even when the open file is outside it, and Enter on a name that matches nothing opens it as a new file instead of doing nothing.
 - **File → Open is an ordinary open dialog.** It listed every file under the workspace, recursively, so in a large checkout (a Rust project's `target/`) it filled its 10,000-entry limit before reaching your files, and there was no visible way to type a path. It now opens in the current file's folder and lists one folder at a time. Type to filter it, or type a path: `docs/`, `../`, `~/` or `/` moves there as you type, and Enter on `notes/today.org` opens that file (a new one if it does not exist). Backspace on an empty filter goes up a folder, and **Ctrl+P** jumps to the command palette's file finder for the whole project. The hint line says all this.
 - **Org headlines fold with Tab.** Folding needed fold ranges from a language server, which Org files never have, so Tab and **Cycle Visibility** did nothing on a headline. Tab now folds a headline's section, Shift+Tab folds or unfolds them all, and the menu's fold commands work too.
 - **Org files are highlighted.** With no Tree-sitter grammar for Org, `.org` files showed as plain text. Headlines, TODO/DONE keywords and `#+` lines are now styled, and links show their description underlined with the brackets and target dimmed.
