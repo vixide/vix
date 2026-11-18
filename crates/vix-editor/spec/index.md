@@ -289,6 +289,17 @@ channels (`marks`, `spell_marks`, `diagnostic_marks`, `gutter_marks`). Cut, copy
 paste, undo, redo, comment toggle, select-all, and duplicate are applied as
 `editor_core` actions from `App::run_action`.
 
+## The starting untitled tab
+
+Vix starts with one empty, untitled tab. The first file opened takes it over
+instead of opening beside it, as in other editors: `Editor::open` replaces the
+active tab when it is the only tab and `Tab::is_pristine_scratch` (no path, not
+dirty, no text, and no edit ever made). An untitled tab someone typed in, even
+one emptied again, is kept, and so is any untitled tab once more than one tab
+is open. The App counts a file as newly opened by whether its path was already
+open (not by the tab count), so crash-backup offers and persistent undo still
+apply to it.
+
 ## Save-conflict check (T713)
 
 `Flags::CHECK_CONFLICTS` (off by default; the App turns it on for a remote

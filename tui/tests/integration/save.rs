@@ -82,8 +82,9 @@ fn save_all_stops_at_the_first_failure() {
     app.run_action("file.save_all");
 
     assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "b\n");
-    assert_eq!(app.editor.active, 1, "the failing tab is left active");
-    assert!(app.editor.tabs[1].dirty && app.editor.tabs[2].dirty);
+    // a.txt took over the empty starting tab, so it is tab 0 and b.txt tab 1.
+    assert_eq!(app.editor.active, 0, "the failing tab is left active");
+    assert!(app.editor.tabs[0].dirty && app.editor.tabs[1].dirty);
     fs::remove_dir_all(&dir).ok();
 }
 

@@ -192,7 +192,8 @@ fn explorer_delete_closes_buffer() {
     // available, which a plain fs::remove_file never needed.
     app.settings.explorer_delete = "hard".to_string();
     app.open_initial(&dir.join("a.txt"));
-    assert_eq!(app.editor.tabs.len(), 2); // initial empty buffer + a.txt
+    // a.txt takes over the empty starting buffer.
+    assert_eq!(app.editor.tabs.len(), 1);
     app.focus = Focus::Explorer;
     app.explorer.selected = node_index(&app, "a.txt");
     app.on_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE)); // request
