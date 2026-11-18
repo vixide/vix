@@ -351,21 +351,47 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // faster while something is streaming or in flight.
         let timeout = app.poll_interval();
         if event::poll(timeout)? {
-            match event::read()? {
-                // The one place crossterm events become backend-neutral
-                // `vix-input` events (the GUI front end converts its own).
-                Event::Key(key) => app.on_key(key.into()),
-                Event::Mouse(mouse) => app.on_mouse(mouse.into()),
-                Event::Paste(text) => app.on_paste(&text),
-                Event::FocusGained => app.on_focus_gained(),
-                Event::FocusLost => app.on_focus_lost(),
-                Event::Resize(..) => {}
+            handle_event(app, event::read()?);
+            // Handle every event already waiting before drawing again: a
+            // flick of the mouse wheel (or mouse movement, which the
+            // terminal reports too) sends dozens of events at once, and
+            // drawing a whole frame after each one made scrolling lag behind
+            // the wheel. Bounded, so a flood of input still lets frames out.
+            let burst = std::time::Instant::now();
+            let mut handled = 1;
+            while handled < MAX_EVENTS_PER_FRAME
+                && burst.elapsed() < MAX_EVENT_BURST
+                && !app.flags.contains(AppFlags::SHOULD_QUIT)
+                && event::poll(Duration::ZERO)?
+            {
+                handle_event(app, event::read()?);
+                handled += 1;
             }
         }
         if app.flags.contains(AppFlags::SUSPEND_REQUESTED) {
             app.flags.remove(AppFlags::SUSPEND_REQUESTED);
             suspend(terminal);
         }
+    }
+}
+
+/// Most input events [`run`] handles before drawing a frame.
+const MAX_EVENTS_PER_FRAME: usize = 512;
+
+/// Longest [`run`] keeps handling waiting input before drawing a frame.
+const MAX_EVENT_BURST: Duration = Duration::from_millis(8);
+
+/// Forward one terminal event to the app: the one place crossterm events
+/// become backend-neutral `vix-input` events (the GUI front end converts its
+/// own).
+fn handle_event(app: &mut App, event: Event) {
+    match event {
+        Event::Key(key) => app.on_key(key.into()),
+        Event::Mouse(mouse) => app.on_mouse(mouse.into()),
+        Event::Paste(text) => app.on_paste(&text),
+        Event::FocusGained => app.on_focus_gained(),
+        Event::FocusLost => app.on_focus_lost(),
+        Event::Resize(..) => {}
     }
 }
 

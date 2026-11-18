@@ -1,22 +1,43 @@
 # File Browser
 
-File browser panel (File → Open): recursive listing with fuzzy search,
-sorting, and filtering. This comprehensive overlay behind **File → Open…**
-(`file.open`, `Ctrl O`) offers live search (including fuzzy search) plus
-directory navigation over the current root directory. Walking goes through
-the authority slot (`vix-authority`, T710).
+File browser panel (File → Open): one folder at a time, with typed paths,
+fuzzy filtering and sorting. This overlay behind **File → Open…**
+(`file.open`, `Ctrl O`) works like any open dialog: it lists one folder,
+you type to filter it or type a path to go somewhere else, and Enter opens.
+Finding a file anywhere in the project is the command palette's file finder
+(**Ctrl+P** in the default keymap), which honors `.gitignore`. Listing goes
+through the authority slot (`vix-authority`, T710).
 
 ## Listing
 
-Opening the browser walks the workspace root recursively (depth first, links not followed, walk
-order sorted by file name) and records, per entry: absolute path,
-root-relative path, name, directory flag, size in bytes, and the created /
-modified times as Unix seconds (`None` where the filesystem lacks them).
+The browser opens in the **active file's folder** (the workspace root when no
+file is open) and lists that folder's own entries, not what the folders
+inside it hold: name-sorted, links not followed, per entry the absolute path, name
+(as `rel`), directory flag, size in bytes, and created / modified times as
+Unix seconds (`None` where the filesystem lacks them). Folders sort first.
 
-- **Hidden entries** (dot-prefixed) are excluded by default; **Alt H** toggles
-  them (hidden directories are pruned, not just hidden files).
-- The walk stops at **10,000 entries** (`DEFAULT_MAX_ENTRIES`); the panel then
-  shows a truncation marker. This keeps enormous trees responsive.
+Before 2026-11-18 it walked the whole tree recursively, which in a large
+checkout (a Rust project's `target/`, say) filled its 10,000-entry cap before
+reaching the user's files, and gave no visible way to type a path.
+
+- **Hidden entries** (dot-prefixed) are excluded by default; **Alt H**
+  toggles them.
+- A folder with more than **10,000 entries** (`DEFAULT_MAX_ENTRIES`) is cut
+  off there and the panel shows a truncation marker.
+
+## Typing a path
+
+The filter line doubles as a path line:
+
+- Typing a path separator after a folder's path moves into that folder and
+  clears the filter: `docs/`, `../`, `~/` (the home folder) and `/` (the
+  root). A separator after a name that is not a folder just stays in the
+  filter.
+- When the filter is a path (it contains a separator, or starts with `~`),
+  **Enter** opens the file it names, relative to the folder shown, or a new
+  file there if it does not exist yet, honoring a `:line[:col]` suffix; a
+  path to a folder moves into it. `Panel::path_target` gives that path.
+- **Backspace** on an empty filter goes up to the parent folder.
 
 ## Search and filter
 
@@ -54,6 +75,8 @@ first. Choosing any explicit sort (or direction) overrides relevance.
 
 - **↑/↓**, **PgUp/PgDn**, **Home/End** move the highlight; the list scrolls to
   keep it visible.
+- **Ctrl P** closes the browser and opens the command palette's file finder,
+  which searches the whole project.
 - **Enter** (or a click) on a **file** opens it in the editor and closes the
   panel; on a **directory** it re-roots the browser there (clearing the query).
 - **←** re-roots at the parent directory; **→** enters a highlighted directory.

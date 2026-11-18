@@ -15,7 +15,7 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.file_browser.is_none() {
         return;
     }
-    let width = 76u16.min(area.width);
+    let width = 100u16.min(area.width);
     let height = (area.height.saturating_sub(4)).max(8).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,

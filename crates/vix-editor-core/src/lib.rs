@@ -15,6 +15,7 @@ pub mod editor_input;
 pub mod history;
 pub mod multicursor;
 pub mod named;
+pub mod org_highlight;
 pub mod remote;
 pub mod render;
 pub mod selection;

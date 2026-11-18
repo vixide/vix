@@ -18,6 +18,27 @@ headline structure, TODO/checkbox toggling, folding, and lightweight export.
   a matching `:END:` line. The lines between hold the drawer's contents (property
   lines such as `:foo: 123`).
 
+## Headline folding and highlighting
+
+**Tab** on a headline folds its subtree: every line up to the next headline
+of the same or a higher level stays hidden behind the headline, and Tab
+again shows it. A headline with no body has nothing to fold (the status line
+says so) and Tab does not indent it. **S-Tab** (Shift+Tab) folds every
+headline and drawer, an overview, or unfolds everything when something is
+folded; with a selection it still removes indentation. The ranges come from the text
+(`org::fold_ranges`), so folding needs no language server, and **Cycle
+Visibility**, **Overview** and the editor's fold commands use the same
+ranges in an `.org` buffer.
+
+Org files have no Tree-sitter grammar in Vix, so `vix-editor-core`'s
+`org_highlight` styles them line by line: a bold headline, a bold TODO
+keyword (`TODO`, `NEXT`, `WAIT`, `WAITING`, `HOLD`) and a dim DONE keyword
+(`DONE`, `CANCELED`, `CANCELLED`); for each `[[target][text]]` link the text
+underlined in the theme's string color, with the brackets and the target dim
+(a bare `[[target]]` underlines its target); and dim `#+keyword` and `#`
+comment lines. Links are styled, not hidden: the full `[[…]]` text stays
+editable in place.
+
 ## Drawer folding
 
 With the cursor on a drawer header line — one that starts and ends with a colon,
@@ -47,8 +68,8 @@ The **Org** menu (`Alt+O`):
 | Capture → Note… | `org.capture.note` | Run the built-in `"n"` template: prompt for note text, insert `* <note>` plus a `%U` creation timestamp at the cursor. |
 | Capture → Task… | `org.capture.task` | Run the built-in `"t"` template: open a multiline review buffer pre-filled with `* TODO ` (Alt+Enter = newline), insert its (possibly edited) text verbatim at the cursor. |
 | Capture → Choose Template… | `org.capture.select` | Open a chooser listing every configured template; Enter runs the highlighted one (see below). |
-| Show/Hide → Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
-| Show/Hide → Overview (Fold All) | `editor.fold_all` | Fold every foldable range (the editor's fold-all). |
+| Show/Hide → Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold the headline subtree or drawer at the cursor, as **Tab** does. |
+| Show/Hide → Overview (Fold All) | `editor.fold_all` | Fold every headline subtree and drawer (`org::fold_ranges`; no language server needed). |
 | Show/Hide → Show All | `editor.unfold_all` | Unfold everything (also clears a sparse tree). |
 | Show/Hide → Sparse TODO Tree | `org.sparse.todo` | Fold every subtree containing no `TODO` headline down to its headline (Org `C-c / t`). Single-line subtrees keep their headline visible — the fold engine hides bodies, not headers. |
 | Show/Hide → Sparse Tree Match… | `org.sparse.match` | Prompt for text; fold every subtree not containing it, case-insensitive (Org's occur view). |
