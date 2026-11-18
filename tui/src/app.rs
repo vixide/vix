@@ -8895,6 +8895,7 @@ impl App {
                 settings.editor_visual.soft_wrap,
             )
         });
+        let prose_wrap = settings.prose.prose_soft_wrap;
         drop(settings);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
@@ -8905,6 +8906,9 @@ impl App {
                 tab.editor.show_line_numbers(numbers);
                 tab.editor.show_whitespace(whitespace);
                 tab.editor.set_soft_wrap(wrap);
+            } else if prose_wrap && matches!(tab.editor.code_ref().lang(), "markdown" | "org") {
+                // Prose reads better wrapped than scrolled sideways.
+                tab.editor.set_soft_wrap(true);
             }
         }
         if self.settings.typing.editorconfig

@@ -3,24 +3,24 @@ source: tui/tests/snapshots.rs
 expression: "render_screen(&mut app, 100, 30)"
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help              
-  Explorer ─────────────────╮  untitled                          ╭  Messages ───────────────────
- src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
- Cargo.toml                 │    1  a                             ││ Ctrl B toggles the file explo
- README.md                  │    2  <<<<<<< HEAD                  ││
-                             │    3  ours                          ││
+  Explorer ───────────╮  untitled                                      ╭  Messages ─────────────
+ src                  │──────────────────────────────────────────────────│ Welcome to Vix. Press C
+ Cargo.toml           │    1  a                                         ││ Ctrl B toggles the file
+ README.md            │    2  <<<<<<< HEAD                              ││
+                       │    3  ours                                      ││
                   ╭  Conflicts ─────────────────────────────────────────────────╮
                   │  1: ours → theirs                                            │
                   │↑↓ select   Enter go to   o/t/b resolve   Esc close           │
                   ╰──────────────────────────────────────────────────────────────╯
-                             │    8                                ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ●│●──────────────────────────────
+                       │    8                                            ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ●│●────────────────────────
   Output ──────────────────────────────────────────────────────────────────────────────────────────
 (no output yet)
 

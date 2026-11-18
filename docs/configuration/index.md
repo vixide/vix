@@ -20,6 +20,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `line_numbers`  | bool   | `true`   | Show the line-number gutter.                                         |
 | `show_whitespace`| bool  | `false`  | Show visible glyphs for space (`·`), tab (`→`), and line ending (`¶`). |
 | `soft_wrap`     | bool   | `false`  | Wrap long lines across screen rows instead of scrolling horizontally. |
+| `prose_soft_wrap` | bool | `true` | Soft-wrap Markdown and Org files even when `soft_wrap` is off. A `[languages.<id>]` table or a modeline can still turn wrapping off for a file. |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
 | `review_view` | string | `"inline"` | The view a branch review opens in: `"inline"` or `"side_by_side"` (old text left, new text right; inline is used on a narrow terminal). `v` in the review switches it. Any other value behaves as `"inline"`. See [Branch review](../branch-review/index.md). |
@@ -54,8 +55,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `mirror_layout` | string | `"auto"` | Mirror docks and the scroll bar for right-to-left languages: `auto`, `on` or `off`. |
 | `bidi` | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
 | `keymap`        | string | `"apple"`| Keyboard navigation style: one of the fourteen in [Keymaps](../keymaps/index.md) (`apple`, `vscode-macos`, `vscode-windows`, `emacs`, `vi`, `spacemacs`, `helix`, `intellij-macos`, `intellij-windows`, `eclipse`, `sublime`, `zed`, `fresh`, `ttt`). |
-| `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
-| `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
+| `explorer_width`| int    | `24`     | Width (columns) of the left dock; drag its right edge to resize.    |
+| `messages_width`| int    | `26`     | Width (columns) of the right dock; drag its left edge to resize.    |
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
 | `spellcheck`    | bool   | `false`  | Underline misspelled words in comments/strings (**View → Editor → Toggle Spellcheck**). |
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations (`/usr/share/hunspell`, `/Library/Spelling`, `~/.local/share/hunspell`, `hunspell -D`, …). Empty = autodetect only. Both `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work. The spellcheck language follows the UI `locale`. |
@@ -150,7 +151,7 @@ theme = "dark"
 locale = "en"
 bidi = "auto"
 keymap = "apple"
-explorer_width = 30
+explorer_width = 24
 messages_width = 32
 lsp_enabled = true
 

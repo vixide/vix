@@ -131,18 +131,18 @@ impl Action for MoveUp {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
         let goal = editor.goal_col;
-        let code = editor.code_mut();
-        let (row, col) = code.point(cursor);
-
-        if row == 0 {
+        let (row, col) = editor.code_ref().point(cursor);
+        // The nearest line above that a fold does not hide.
+        let Some(prev) = (0..row).rev().find(|&l| !editor.is_line_hidden(l)) else {
             return;
-        }
+        };
+        let code = editor.code_mut();
 
         // Aim for the remembered goal column, falling back to the current column
         // when starting a fresh vertical run.
         let target_col = goal.unwrap_or(col);
-        let prev_start = code.line_to_char(row - 1);
-        let prev_len = code.line_len(row - 1);
+        let prev_start = code.line_to_char(prev);
+        let prev_len = code.line_len(prev);
         let new_cursor = prev_start + target_col.min(prev_len);
 
         // Update selection or clear it
@@ -164,8 +164,9 @@ impl Action for MoveUp {
 /// If `shift` is true, the selection is extended to the new cursor position.
 /// If `shift` is false, the selection is cleared.
 ///
-/// Uses the goal column like `MoveUp`. On the last line it does nothing (it
-/// does not move to the line end).
+/// Uses the goal column like `MoveUp`, and steps over lines a fold hides (as
+/// `MoveUp` does). On the last visible line it does nothing (it does not move
+/// to the line end).
 pub struct MoveDown {
     /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
@@ -175,18 +176,19 @@ impl Action for MoveDown {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
         let goal = editor.goal_col;
-        let code = editor.code_mut();
-        let (row, col) = code.point(cursor);
-        let is_last_line = row + 1 >= code.len_lines();
-        if is_last_line {
+        let (row, col) = editor.code_ref().point(cursor);
+        let len_lines = editor.code_ref().len_lines();
+        // The nearest line below that a fold does not hide.
+        let Some(next) = (row + 1..len_lines).find(|&l| !editor.is_line_hidden(l)) else {
             return;
-        }
+        };
+        let code = editor.code_mut();
 
         // Aim for the remembered goal column, falling back to the current column
         // when starting a fresh vertical run.
         let target_col = goal.unwrap_or(col);
-        let next_start = code.line_to_char(row + 1);
-        let next_len = code.line_len(row + 1);
+        let next_start = code.line_to_char(next);
+        let next_len = code.line_len(next);
         let new_cursor = next_start + target_col.min(next_len);
 
         // Update selection or clear it
