@@ -195,6 +195,10 @@ Vix sends nothing anywhere on its own. It has no telemetry, does not check
 for updates, and does not connect to anything until you use a feature that
 does:
 
+- **Crash reports** stay on your machine. Vix writes one when it crashes,
+  scrubbed of your home folder, user name and quoted text, and only opens a
+  prefilled GitHub issue if you choose **Help → Report a Crash…** and then
+  submit it yourself. See [crash reports](docs/crash-reports/index.md).
 - **AI providers** use HTTPS by default. A local model endpoint defaults to
   plain HTTP on `localhost`. The endpoint is yours to set.
 - **`vix --mcp`** speaks MCP over stdio only, with no listening socket. It is

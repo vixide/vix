@@ -15,6 +15,7 @@ mod coverage;
 mod cowork;
 #[cfg(not(feature = "cowork"))]
 mod cowork_off;
+mod crash_report;
 #[cfg(feature = "sql")]
 mod db;
 #[cfg(not(feature = "sql"))]
@@ -910,6 +911,9 @@ pub enum ConfirmKind {
     /// Undo only the selected changed lines of a review hunk in the working
     /// tree (T665); [`Confirm::paths`] holds the file.
     GitReviewDiscardLines,
+    /// Open a prefilled GitHub issue for the crash report in
+    /// [`Confirm::paths`] in the browser (`spec/crash-reports`).
+    ReportCrash,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -3604,6 +3608,7 @@ impl App {
             "help.report_issue" => {
                 self.welcome = Some(WelcomePanel::open(Self::report_issue_lines()));
             }
+            "help.report_crash" => self.report_crash(),
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "help.doctor" => {
                 let checks = crate::capability::doctor_checks(&self.settings);
@@ -8419,6 +8424,7 @@ impl App {
         if self.remote_confirm_key(key)
             || self.jupyter_confirm_key(key)
             || self.hot_exit_confirm_key(key)
+            || self.crash_confirm_key(key)
         {
             return;
         }

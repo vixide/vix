@@ -2582,6 +2582,7 @@ const HELP: &[Item] = &[
     SEP,
     Item::leaf("menu.item.help.license", "help.license", ""),
     Item::leaf("menu.item.help.report_issue", "help.report_issue", ""),
+    Item::leaf("menu.item.help.report_crash", "help.report_crash", ""),
     Item::leaf("menu.item.help.privacy", "help.privacy", ""),
     SEP,
     Item::leaf("menu.item.help.doctor", "help.doctor", ""),

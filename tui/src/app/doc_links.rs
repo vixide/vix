@@ -58,9 +58,10 @@ impl DocExtras {
 pub(crate) type DocExtrasMap = HashMap<PathBuf, DocExtras>;
 
 /// Hand `url` to the platform's opener, detached. Only called for
-/// `http(s):` and `mailto:` targets.
+/// `http(s):` and `mailto:` targets (an LSP document link, or a crash
+/// report's prefilled GitHub issue).
 #[cfg(feature = "tasks")]
-fn open_external(url: &str) -> bool {
+pub(crate) fn open_external(url: &str) -> bool {
     use std::process::{Command, Stdio};
     let mut cmd = if cfg!(target_os = "macos") {
         let mut c = Command::new("open");
@@ -85,7 +86,7 @@ fn open_external(url: &str) -> bool {
 /// Without the `tasks` capability the build starts no child processes
 /// (T595), so an external link cannot be handed to the system opener.
 #[cfg(not(feature = "tasks"))]
-fn open_external(_url: &str) -> bool {
+pub(crate) fn open_external(_url: &str) -> bool {
     false
 }
 
