@@ -176,7 +176,7 @@ impl Editor {
 
         // Single grapheme pass for styling + caret position.
         let start_byte = code.char_to_byte(vr.start);
-        let highlights = if code.is_highlight() {
+        let highlights = if code.has_highlighter() {
             let end_byte = code.char_to_byte(vr.end);
             self.highlight_interval(start_byte, end_byte, &self.theme)
         } else {

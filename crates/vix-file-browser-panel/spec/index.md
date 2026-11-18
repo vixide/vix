@@ -10,8 +10,8 @@ through the authority slot (`vix-authority`, T710).
 
 ## Listing
 
-The browser opens in the **active file's folder** (the workspace root when no
-file is open) and lists that folder's own entries, not what the folders
+The browser opens in the **active file's folder** when that file is inside
+the workspace (else at the workspace root) and lists that folder's own entries, not what the folders
 inside it hold: name-sorted, links not followed, per entry the absolute path, name
 (as `rel`), directory flag, size in bytes, and created / modified times as
 Unix seconds (`None` where the filesystem lacks them). Folders sort first.
@@ -38,6 +38,9 @@ The filter line doubles as a path line:
   file there if it does not exist yet, honoring a `:line[:col]` suffix; a
   path to a folder moves into it. `Panel::path_target` gives that path.
 - **Backspace** on an empty filter goes up to the parent folder.
+- **Enter** on a plain name that matches nothing opens that name in the
+  folder shown, as a new file if it does not exist (nothing is written until
+  it is saved), instead of doing nothing.
 
 ## Search and filter
 

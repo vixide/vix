@@ -996,6 +996,14 @@ impl Code {
         self.query.is_some()
     }
 
+    /// Whether [`Code::highlight_interval`] can style this buffer: a
+    /// Tree-sitter query is loaded, or it is an Org buffer, which has its own
+    /// line-based highlighter ([`crate::org_highlight`]).
+    #[must_use]
+    pub fn has_highlighter(&self) -> bool {
+        self.query.is_some() || self.lang == "org"
+    }
+
     /// Highlights the interval between `start` and `end` char indices.
     /// Returns a list of (start byte, end byte, `token_name`) for highlighting.
     ///

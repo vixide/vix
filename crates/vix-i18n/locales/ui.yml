@@ -1065,9 +1065,9 @@ ui.file_browser_truncated:
   zh: "列表已截断"
   ja: "一覧は上限で打ち切り"
 ui.file_browser_hint:
-  en: "↑↓ move   Enter open   ← up a folder   Ctrl P find any file   Ctrl S sort   Alt H hidden   Esc close"
+  en: "↑↓ move   Enter open   ← up   Ctrl P find any file   Ctrl S sort   Alt H hidden   Esc close"
   es: "↑↓ mover   Enter abrir   ← subir   Ctrl P buscar archivo   Ctrl S ordenar   Alt H ocultos   Esc cerrar"
-  fr: "↑↓ déplacer   Entrée ouvrir   ← dossier parent   Ctrl P chercher un fichier   Ctrl S trier   Alt H cachés   Échap fermer"
+  fr: "↑↓ déplacer   Entrée ouvrir   ← remonter   Ctrl P chercher un fichier   Ctrl S trier   Alt H cachés   Échap fermer"
   de: "↑↓ bewegen   Enter öffnen   ← Ordner hoch   Ctrl P Datei suchen   Ctrl S sortieren   Alt H versteckt   Esc schließen"
   cy: "↑↓ symud   Enter agor   ← ffolder i fyny   Ctrl P canfod ffeil   Ctrl S trefnu   Alt H cudd   Esc cau"
   ga: "↑↓ bog   Enter oscail   ← fillteán suas   Ctrl P aimsigh comhad   Ctrl S sórtáil   Alt H folaithe   Esc dún"

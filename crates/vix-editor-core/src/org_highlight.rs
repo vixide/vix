@@ -133,6 +133,38 @@ mod tests {
         assert_eq!(line_spans("plain text"), []);
     }
 
+    /// The highlighter reaches the screen: an Org buffer (no Tree-sitter
+    /// grammar) still gets a bold headline and an underlined link when drawn,
+    /// with no color theme at all.
+    #[test]
+    fn an_org_buffer_renders_styled() {
+        use crate::editor::Editor;
+        use ratatui_core::buffer::Buffer;
+        use ratatui_core::layout::Rect;
+        use ratatui_core::style::Modifier;
+        use ratatui_core::widgets::Widget;
+        let mut ed = Editor::new("org", "* Head\nsee [[x][link]] here\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_syntax_theme(&[]);
+        let area = Rect::new(0, 0, 30, 3);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let row = |y: u16| (0..30).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        let col = |y: u16, text: &str| u16::try_from(row(y).find(text).unwrap()).unwrap();
+        let head = col(0, "Head");
+        assert!(
+            buf[(head, 0)].modifier.contains(Modifier::BOLD),
+            "headline bold"
+        );
+        let link = col(1, "link");
+        assert!(
+            buf[(link, 1)].modifier.contains(Modifier::UNDERLINED),
+            "link underlined"
+        );
+        let here = col(1, "here");
+        assert!(!buf[(here, 1)].modifier.contains(Modifier::UNDERLINED));
+    }
+
     #[test]
     fn multibyte_text_keeps_byte_ranges_on_char_boundaries() {
         let line = "* Café [[x][né]]";
