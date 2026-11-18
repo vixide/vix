@@ -941,6 +941,9 @@ pub struct ScriptTrustPrompt {
     /// waiting too: `direnv`/`mise`/the detector's command stay unrun until
     /// this prompt is answered (T667).
     pub env: bool,
+    /// A built-in language server (its program name) that opening a file
+    /// would start, waiting until this prompt is answered.
+    pub language_server: Option<String>,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):
@@ -2158,6 +2161,11 @@ pub struct App {
     /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
     /// change.)
     pub(crate) script_trust_opened_at: Option<std::time::Instant>,
+    /// Finds a program on `PATH`, for the built-in language servers. `None`
+    /// (an `App` that was never [`App::start`]ed, such as a test's) turns
+    /// the built-ins off; `start` sets the real lookup, and tests can set a
+    /// stand-in.
+    pub(crate) lsp_probe: Option<fn(&str) -> bool>,
     /// The project settings layer in effect (T627), when this workspace's
     /// `.vix/settings.toml` was merged into [`App::settings`]; `None` when
     /// [`App::settings`] is the user settings alone.
@@ -2905,6 +2913,7 @@ impl App {
             project_env_extra: String::new(),
             script_trust: None,
             script_trust_opened_at: None,
+            lsp_probe: None,
             project_settings: None,
             replace_confirm: None,
             wgrep_baseline: None,
@@ -8723,6 +8732,11 @@ impl App {
                 }
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
+                // A built-in language server would start for it: ask first
+                // (not for a preview, such as arrowing through the explorer).
+                if !preview {
+                    self.maybe_prompt_lsp_trust(path);
+                }
             }
             Err(e) => self.report_open_failure(path, preview, &e),
         }

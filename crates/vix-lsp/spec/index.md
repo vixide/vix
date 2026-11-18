@@ -17,7 +17,32 @@ the `initialize`/`initialized` handshake, and keeps each open document in sync w
 the whole text otherwise (T615, § Document sync). `App::poll_lsp` drains server messages once per event-loop
 iteration.
 
-There is **no built-in server** — Vix launches only what you configure.
+Vix launches the servers you configure in `lsp_servers`, and, in a trusted
+local workspace, the **built-in servers** below for languages your
+`lsp_servers` does not cover.
+
+## Built-in servers
+
+`vix_lsp::defaults::BUILTINS` lists well-known servers: `rust-analyzer`
+(`rs`), `gopls` (`go`), the first of `pyright-langserver --stdio`,
+`basedpyright-langserver --stdio` and `pylsp` (`py`, `pyi`),
+`typescript-language-server --stdio` (`ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`),
+`clangd` (C and C++), `zls` (`zig`), `lua-language-server` (`lua`),
+`bash-language-server start` (`sh`, `bash`), `taplo lsp stdio` (`toml`) and
+`yaml-language-server --stdio` (`yaml`, `yml`). `defaults::available` adds
+one per language whose extensions no `lsp_servers` entry handles, using its
+first candidate on `PATH`, so your own entries always win.
+
+A server like rust-analyzer runs the project's build scripts and macros, so
+built-ins wait for **workspace trust**: they start only in a local workspace
+whose trust decision is yes (`App::add_builtin_lsp_servers`, at start-up and
+when the prompt is accepted; `Lsp::add_configs` adds them without restarting
+running servers). Opening a file a built-in would serve in a workspace with
+no decision yet shows the trust prompt, naming the server
+(`ui.workspace_trust_lsp_message`); a no is remembered. Never in a remote
+workspace, and only in an `App` that was started (`App::start` sets the
+`PATH` probe), so tests and the desktop GUIs, which do not call `start`, get
+none.
 
 ## Configuration
 

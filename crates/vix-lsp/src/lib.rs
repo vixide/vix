@@ -13,6 +13,7 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
+pub mod defaults;
 pub mod ghost;
 mod hierarchy;
 pub mod inline;
@@ -822,6 +823,21 @@ impl Lsp {
     /// server can be configured for the same extension (T123b: e.g. a
     /// type-checker LSP and a separate linter LSP, both watching `.rs`),
     /// and every one of them should see the document and be askable.
+    /// Add server configs (built-in servers, once a workspace is trusted)
+    /// without touching the servers already running. A config for a
+    /// language id already configured is skipped.
+    pub fn add_configs(&mut self, more: Vec<ServerConfig>) {
+        for config in more {
+            if !self
+                .configs
+                .iter()
+                .any(|c| c.language_id == config.language_id)
+            {
+                self.configs.push(config);
+            }
+        }
+    }
+
     fn configs_for(&self, path: &Path) -> Vec<ServerConfig> {
         let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
             return Vec::new();

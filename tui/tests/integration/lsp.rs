@@ -455,3 +455,63 @@ fn hierarchy_actions_list_results_and_alt_d_flips_the_direction() {
     app.lsp.shutdown();
     let _ = fs::remove_dir_all(&root);
 }
+
+/// A built-in language server waits for workspace trust: opening a file it
+/// would serve asks first, naming it, and only yes makes it handle the file.
+#[test]
+fn a_builtin_language_server_starts_only_in_a_trusted_workspace() {
+    let ago = || {
+        std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(1))
+            .unwrap()
+    };
+    let dir = unique_dir("lsp-builtin-trust");
+    let file = dir.join("main.rs");
+    fs::write(&file, "fn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.lsp_probe = Some(|p| p == "rust-analyzer");
+    app.open_initial(&file);
+    let prompt = app.script_trust.as_ref().expect("asks before starting it");
+    assert_eq!(prompt.language_server.as_deref(), Some("rust-analyzer"));
+    assert!(!app.lsp.handles(&file), "nothing starts before the answer");
+    app.script_trust_opened_at = Some(ago());
+    app.on_key(key('y'));
+    assert!(app.script_trust.is_none());
+    assert!(
+        app.lsp.handles(&file),
+        "trusted: the built-in server handles .rs"
+    );
+
+    // Declined: nothing starts, and reopening does not ask again.
+    let dir = unique_dir("lsp-builtin-decline");
+    let file = dir.join("main.rs");
+    fs::write(&file, "fn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.lsp_probe = Some(|p| p == "rust-analyzer");
+    app.open_initial(&file);
+    app.script_trust_opened_at = Some(ago());
+    app.on_key(key('n'));
+    assert!(!app.lsp.handles(&file));
+    app.run_action("file.close");
+    app.open_initial(&file);
+    assert!(app.script_trust.is_none(), "a no is remembered");
+
+    // No built-in for the file, or none installed: no question.
+    let dir = unique_dir("lsp-builtin-none");
+    fs::write(dir.join("notes.txt"), "x\n").unwrap();
+    fs::write(dir.join("main.rs"), "fn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.lsp_probe = Some(|_| false);
+    app.open_initial(&dir.join("main.rs"));
+    assert!(app.script_trust.is_none(), "rust-analyzer is not installed");
+    app.lsp_probe = Some(|_| true);
+    app.open_initial(&dir.join("notes.txt"));
+    assert!(app.script_trust.is_none(), "no built-in serves .txt");
+    for d in [
+        "lsp-builtin-trust",
+        "lsp-builtin-decline",
+        "lsp-builtin-none",
+    ] {
+        fs::remove_dir_all(unique_dir(d)).ok();
+    }
+}

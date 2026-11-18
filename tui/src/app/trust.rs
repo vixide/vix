@@ -68,9 +68,69 @@ impl App {
                 count,
                 settings,
                 env,
+                language_server: None,
             });
             self.script_trust_opened_at = Some(std::time::Instant::now());
         }
+    }
+
+    /// Whether `name` is a program on `PATH`, by [`App::lsp_probe`] (never,
+    /// when it is unset).
+    fn program_on_path(&self, name: &str) -> bool {
+        self.lsp_probe.is_some_and(|probe| probe(name))
+    }
+
+    /// The built-in language servers ([`crate::lsp::defaults`]) to add for
+    /// this workspace: none unless it is a trusted local workspace with
+    /// language servers on, since a server like rust-analyzer runs the
+    /// project's build scripts.
+    pub(super) fn builtin_lsp_servers(&self) -> Vec<vix_settings::LspServer> {
+        if !self.lsp_allowed() || self.remote_host().is_some() || !self.project_scripts_trusted() {
+            return Vec::new();
+        }
+        crate::lsp::defaults::available(&self.settings.lsp_servers, |p| self.program_on_path(p))
+    }
+
+    /// Start the built-in language servers once the workspace is trusted
+    /// (at startup, or when the trust prompt is accepted).
+    pub(super) fn add_builtin_lsp_servers(&mut self) {
+        let builtins = self.builtin_lsp_servers();
+        if !builtins.is_empty() {
+            self.lsp.add_configs(builtins);
+        }
+    }
+
+    /// After a file opens: if a built-in language server would handle it but
+    /// this workspace has no trust decision yet, ask (the prompt names the
+    /// server). Nothing starts until the answer is yes.
+    pub(super) fn maybe_prompt_lsp_trust(&mut self, path: &std::path::Path) {
+        if self.script_trust.is_some()
+            || !self.lsp_allowed()
+            || self.remote_host().is_some()
+            || self
+                .load_session()
+                .workspace(&self.session_key())
+                .is_some_and(|w| w.scripts_trusted.is_some())
+        {
+            return;
+        }
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            return;
+        };
+        let Some(server) =
+            crate::lsp::defaults::program_for(&self.settings.lsp_servers, ext, |p| {
+                self.program_on_path(p)
+            })
+        else {
+            return;
+        };
+        self.script_trust = Some(ScriptTrustPrompt {
+            count: self.project_script_count(),
+            settings: vix_settings::project_settings_path(&self.root).is_file(),
+            env: vix_project_env::needs_trust(&self.root, Self::user_env_file().as_deref()),
+            language_server: Some(server),
+        });
+        self.script_trust_opened_at = Some(std::time::Instant::now());
     }
 
     /// Trust this workspace: persist the decision, then load its project
@@ -85,6 +145,7 @@ impl App {
         self.load_scripts();
         self.resolve_key_overrides();
         self.load_project_settings();
+        self.add_builtin_lsp_servers();
         self.status = t!("status.scripts_trusted").to_string();
     }
 
@@ -128,4 +189,9 @@ impl App {
             _ => {}
         }
     }
+}
+
+/// The real [`App::lsp_probe`]: a program on the authority's `PATH`.
+pub(super) fn on_path(name: &str) -> bool {
+    crate::authority::current().which(name).is_some()
 }
