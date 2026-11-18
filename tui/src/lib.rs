@@ -48,6 +48,7 @@ vix_i18n::surface!();
 pub mod app;
 pub mod capability;
 pub mod cli;
+pub mod crash;
 pub mod mcp;
 pub mod remote;
 pub mod term_caps;

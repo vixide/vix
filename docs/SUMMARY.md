@@ -64,6 +64,7 @@
 
 - [Accessibility](accessibility/index.md)
 - [Agent Panel (AI Chat)](agent-panel/index.md)
+- [Crash Reports](crash-reports/index.md)
 - [Align](align/index.md)
 - [ASCII Code Picker](ascii-code-picker/index.md)
 - [Branch Review](branch-review/index.md)

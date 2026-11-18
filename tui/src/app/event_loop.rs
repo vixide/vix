@@ -71,6 +71,8 @@ impl App {
         self.refresh_debug_markers();
         // Untitled buffers a crash or forced quit left behind (T629).
         self.offer_untitled_recovery();
+        // A crash report the last run saved (`spec/crash-reports`).
+        self.notice_crash_report();
         Ok(())
     }
 

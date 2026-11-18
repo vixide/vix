@@ -286,6 +286,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `help.doctor` | Run Diagnostics | Menu |
 | `help.license` | License | Menu |
 | `help.privacy` | Privacy Statement | Menu |
+| `help.report_crash` | Report a Crash… | Menu |
 | `help.report_issue` | Report an Issue… | Menu |
 | `help.shortcuts` | Keyboard Shortcuts | Menu |
 | `help.tutorial` | Tutorial… | Menu |
@@ -847,4 +848,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**840 actions.**
+**841 actions.**
