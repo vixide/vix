@@ -228,8 +228,10 @@ pub struct Settings {
     pub dictionary_path: String,
     /// Configured language servers, matched to files by extension. Each entry is
     /// a language id (sent to the server), the file extensions it handles, and
-    /// the command (program + args) to launch. Empty by default — Vix ships no
-    /// built-in server, so add the ones you have installed, e.g.
+    /// the command (program + args) to launch. Empty by default: in a trusted
+    /// workspace Vix starts well-known servers it finds on `PATH`
+    /// (rust-analyzer, gopls, pyright, clangd, …) anyway, and an entry for an
+    /// extension replaces the built-in for it, e.g.
     /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
     pub lsp_servers: Vec<LspServer>,
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →

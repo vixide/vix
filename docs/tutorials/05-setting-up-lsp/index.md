@@ -2,9 +2,9 @@
 
 Vix speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 (LSP) — the same protocol VS Code, Neovim, Zed, and every other modern editor
-use for compiler-grade help. Vix ships **no built-in server**: you install a
-language server yourself, point Vix at it in `config.toml`, and Vix launches
-and speaks to it. This tutorial wires up three real servers — `rust-analyzer`,
+use for compiler-grade help. You install a language server yourself; once you
+trust the workspace, Vix starts the usual server for a language if it is on
+your `PATH`, and `config.toml` points Vix at any other. This tutorial wires up three real servers — `rust-analyzer`,
 `pyright`, and `typescript-language-server` — against the repo's demo
 workspace, then tours the features you get once a server is running.
 

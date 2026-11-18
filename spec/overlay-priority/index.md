@@ -44,6 +44,11 @@ Adding an overlay is: add its row at the height it should stack, add its
 `OverlayId` variant (the enum order is the table order), and add its arm to
 `ui::draw_overlay`. A layer with no key policy does not compile.
 
+
+The workspace-trust question (`ScriptTrust`) is the topmost row, above even
+the first-run welcome: it guards project scripts, settings, environments and
+built-in language servers, so it must never sit hidden under another layer.
+
 ## Order decisions
 
 The table follows the former *drawing* order, because that is what the user

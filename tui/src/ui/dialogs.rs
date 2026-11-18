@@ -72,8 +72,12 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = (area.width * 3 / 5).clamp(40, 64).min(area.width);
-    // Two more rows when the message also mentions the settings file.
-    let height = if p.count > 0 && p.settings { 8u16 } else { 6 }.min(area.height);
+    // More rows when the message names several things to trust.
+    let parts = usize::from(p.count > 0)
+        + usize::from(p.settings)
+        + usize::from(p.env)
+        + usize::from(p.language_server.is_some());
+    let height = if parts > 1 { 9u16 } else { 7 }.min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -117,6 +121,17 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         format!("{message} {}", t!("ui.workspace_trust_env_also"))
     } else {
         message
+    };
+    // A built-in language server waiting on the answer.
+    let message = match &p.language_server {
+        Some(server) if p.count == 0 && !p.settings && !p.env => {
+            t!("ui.workspace_trust_lsp_message", server = server).to_string()
+        }
+        Some(server) => format!(
+            "{message} {}",
+            t!("ui.workspace_trust_lsp_also", server = server)
+        ),
+        None => message,
     };
     frame.render_widget(Paragraph::new(message).wrap(Wrap { trim: true }), chunks[0]);
     let hint = Line::from(Span::styled(

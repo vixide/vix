@@ -130,9 +130,12 @@ it, in addition to the built-in `"dark"` and `"light"` themes.
 
 ## LSP server configuration
 
-Vix ships no built-in language server. To get diagnostics, hover,
-go-to-definition, and completion, keep `lsp_enabled = true` and add the servers
-you have installed to `lsp_servers`. Each entry is a TOML table with three keys:
+In a trusted workspace Vix starts well-known servers it finds on `PATH`
+(rust-analyzer, gopls, pyright or pylsp, typescript-language-server, clangd and
+others; see `crates/vix-lsp/spec`) without any entry. To use another server, or
+to replace a built-in one, keep `lsp_enabled = true` and add it to
+`lsp_servers`; an entry for an extension takes over from the built-in for it.
+Each entry is a TOML table with three keys:
 
 | Field | Type | Meaning |
 | --- | --- | --- |

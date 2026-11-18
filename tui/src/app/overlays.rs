@@ -46,8 +46,6 @@ pub(crate) enum OverlayId {
     QueryReplace,
     /// The `Confirm` layer.
     Confirm,
-    /// The `ScriptTrust` layer.
-    ScriptTrust,
     /// The `ReplaceConfirm` layer.
     ReplaceConfirm,
     /// The `Unsaved` layer.
@@ -204,6 +202,9 @@ pub(crate) enum OverlayId {
     Pomodoro,
     /// The `Welcome` layer.
     Welcome,
+    /// The workspace-trust question, on top of everything (even the first-run
+    /// welcome): what it guards must not start unseen.
+    ScriptTrust,
 }
 
 /// How a layer takes keys.
@@ -352,7 +353,6 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     unit!(Prompt, prompt, prompt_key),
     unit!(QueryReplace, query_replace, qr_key),
     unit!(Confirm, confirm, confirm_key),
-    unit!(ScriptTrust, script_trust, script_trust_key),
     unit!(ReplaceConfirm, replace_confirm, replace_confirm_key),
     unit!(Unsaved, unsaved, unsaved_key),
     unit!(SpellSuggest, spell_suggest, spell_suggest_key),
@@ -491,6 +491,7 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
         }),
     },
     unit!(Welcome, welcome, welcome_key),
+    unit!(ScriptTrust, script_trust, script_trust_key),
 ];
 
 impl App {
@@ -543,8 +544,8 @@ mod tests {
         }
         assert_eq!(
             OVERLAYS.last().map(|o| o.id),
-            Some(OverlayId::Welcome),
-            "the topmost layer is the welcome panel"
+            Some(OverlayId::ScriptTrust),
+            "the topmost layer is the workspace-trust question"
         );
     }
 

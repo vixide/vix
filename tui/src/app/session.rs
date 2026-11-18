@@ -511,6 +511,7 @@ impl App {
             self.settings.lsp_servers.clone(),
             &self.workspace_folders,
         );
+        self.add_builtin_lsp_servers();
         self.editor.close_all();
         self.refresh_git();
         let key = self.session_key();

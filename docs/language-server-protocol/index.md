@@ -3,9 +3,12 @@
 Vix™ speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 (LSP), so you get real, compiler-grade help — diagnostics, completion, hover,
 go-to-definition, rename, and more — from the same language servers other editors
-use. Vix ships **no built-in server**: you point it at a server you have
-installed (e.g. `rust-analyzer`, `pyright`, `gopls`, `typescript-language-server`),
-and Vix manages the process and protocol.
+use. Install a server (e.g. `rust-analyzer`, `pyright`, `gopls`,
+`typescript-language-server`) and, once you trust the workspace, Vix finds it
+on your `PATH` and starts it the first time you open a matching file; the
+trust prompt names the server first, because a server can run the project's
+build code. Add an `lsp_servers` entry to use a different server, or one Vix
+does not know.
 
 The protocol core lives in the `vix-lsp-core` crate (JSON-RPC framing, request
 builders, response parsers, and char↔UTF-16/UTF-8 position maths); the process IO

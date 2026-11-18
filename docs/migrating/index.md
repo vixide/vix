@@ -89,9 +89,12 @@ Font, font size and ligatures belong to your terminal, not to Vix.
 
 ## 3. Language servers
 
-Vix runs the language servers you configure; it ships none. Where VS Code
-installs one per extension and Neovim reads it from `vim.lsp.config` or
-lspconfig, Vix lists each server in `config.toml`:
+If the usual server for your language is installed (`rust-analyzer`,
+`gopls`, `pyright` or `pylsp`, `typescript-language-server`, `clangd`, …),
+Vix starts it once you trust the workspace: the first time you open a
+matching file, the trust prompt names the server, and **y** starts it. To use
+another server, list it in `config.toml`; your entry replaces the built-in
+for its extensions:
 
 ```toml
 [[lsp_servers]]

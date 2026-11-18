@@ -896,3 +896,5 @@ inotify
 distros
 frontends
 seccomp
+taplo
+basedpyright
