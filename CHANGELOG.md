@@ -47,6 +47,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **More room for the editor, and prose wraps.** The file explorer and message drawer default to 24 and 26 columns (from 30 and 32), and Markdown and Org files soft-wrap by default (`prose_soft_wrap`, on), so paragraphs stay readable beside the docks. Code is unchanged. An existing `config.toml` keeps its own widths.
 - **Minimum Rust is now 1.98** (current stable 1.100 minus two) for the terminal app, `gui/` and `matrix/`; `packaging/crates-io-vix` keeps its own floor. The repository's toolchain is pinned to 1.100.0 in `rust-toolchain.toml`, and the CI jobs that build on the floor set `RUSTUP_TOOLCHAIN` so the pin does not replace it. `[profile.dev]` keeps line tables only and no debug information for dependencies, and `make test-minimum-supported-rust-version` checks and tests on 1.98 and 1.99.
 - **Move to trash on Linux and the BSDs is now Vix's own freedesktop.org Trash implementation, and `chrono` is gone from the build.** Vix already used `jiff` for dates; the only `chrono` left came from the `trash` crate's Linux backend, which needs it to write the spec's `DeletionDate`. Vix now writes the trash itself there: the home trash, or the trash at the top of the file's own mount, with each entry's `.trashinfo` claimed before the move. macOS and Windows still use the `trash` crate, with its default features off. The desktop GUIs' `chrono` comes from gpui and Slint and is unchanged. See [`crates/vix-fileops/spec`](crates/vix-fileops/spec/index.md).
 - **Dark and Light meet WCAG AA contrast.** The two default themes now pass: every text color is at least 4.5:1 against its background and the cursor at least 3:1, and a test checks it. Light's syntax colors (copied from Dark, numbers were 1.2:1 on its gray) are now blue keywords, dark red strings, dark green comments and purple numbers, with a darker blue cursor; Dark's comments are a lighter green (4.4:1 → 5.3:1). Other themes, bundled or your own, are not checked and keep their colors: Vix applies any theme you choose. See [`docs/themes`](docs/themes/index.md).
@@ -62,6 +63,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Folding with soft wrap.** With soft wrap on, folded lines still showed and the fold had no `...` marker: the wrapped renderer ignored folds. It now hides them like the unwrapped view.
+- **Up and Down no longer move into a fold.** The caret could land on a hidden line inside a folded section, out of sight; it now steps over the fold.
 - **Org highlighting now shows on screen.** The renderer drew syntax colors only for buffers with a Tree-sitter grammar, so the Org highlighter added the same day never ran. A render test now checks a bold headline and an underlined link.
 - **The mouse wheel scrolls three lines a notch** instead of one, as in other editors.
 - **File → Open starts in your project** even when the open file is outside it, and Enter on a name that matches nothing opens it as a new file instead of doing nothing.

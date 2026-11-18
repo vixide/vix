@@ -62,6 +62,9 @@ pub struct Settings {
     /// Soft-wrap, rainbow brackets, and word-highlight visual aids (T149).
     #[serde(flatten)]
     pub editor_visual: EditorVisualSettings,
+    /// Soft-wrapping prose files (Markdown and Org).
+    #[serde(flatten)]
+    pub prose: ProseSettings,
     /// Explorer, message drawer, and bottom dock visibility (T149).
     #[serde(flatten)]
     pub panels: PanelSettings,
@@ -482,6 +485,25 @@ pub struct EditorVisualSettings {
     pub rainbow_brackets: bool,
     /// Passively highlight every occurrence of the word under the cursor.
     pub highlight_word: bool,
+}
+
+/// How prose files display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct ProseSettings {
+    /// Soft-wrap prose (Markdown and Org files) even when `soft_wrap` is off,
+    /// so paragraphs stay readable beside the docks. A file's language table
+    /// or modeline can still turn wrapping off. On by default.
+    pub prose_soft_wrap: bool,
+}
+
+impl Default for ProseSettings {
+    fn default() -> Self {
+        ProseSettings {
+            prose_soft_wrap: true,
+        }
+    }
 }
 
 /// Primary panel visibility on startup: the file explorer, message drawer,
@@ -932,6 +954,7 @@ impl Default for Settings {
         Settings {
             gutter: GutterSettings::default(),
             editor_visual: EditorVisualSettings::default(),
+            prose: ProseSettings::default(),
             panels: PanelSettings::default(),
             secondary_panels: SecondaryPanelSettings::default(),
             viewport: ViewportSettings::default(),
@@ -968,8 +991,8 @@ impl Default for Settings {
             bidi: "auto".to_string(),
             mirror_layout: "auto".to_string(),
             keymap: "apple".to_string(),
-            explorer_width: 30,
-            messages_width: 32,
+            explorer_width: 24,
+            messages_width: 26,
             outline_width: 28,
             debug_width: 36,
             recent_files: Vec::new(),

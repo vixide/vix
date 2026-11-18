@@ -4672,3 +4672,28 @@ fn modeline_lines_zero_ignores_modelines() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn prose_files_open_soft_wrapped_and_code_does_not() {
+    let dir = unique_dir("prose-wrap");
+    for name in ["a.md", "b.org", "c.rs"] {
+        fs::write(dir.join(name), "x\n").unwrap();
+    }
+    let wrapped = |app: &App| app.editor.active_tab().unwrap().editor.soft_wrap_enabled();
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("a.md"));
+    assert!(wrapped(&app), "Markdown wraps");
+    app.open_initial(&dir.join("b.org"));
+    assert!(wrapped(&app), "Org wraps");
+    app.open_initial(&dir.join("c.rs"));
+    assert!(!wrapped(&app), "code keeps the soft_wrap setting (off)");
+
+    let mut app = app_at(&dir);
+    app.settings.prose.prose_soft_wrap = false;
+    app.open_initial(&dir.join("a.md"));
+    assert!(
+        !wrapped(&app),
+        "prose_soft_wrap = false leaves prose unwrapped"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
