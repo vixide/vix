@@ -114,7 +114,7 @@ pub struct Settings {
     /// Any other value means `"inline"`. **Git → Review Two-Pane View** (or
     /// `v` in the review) switches the open review without changing this.
     pub review_view: String,
-    /// Whether a remote (SSH) workspace uses the Vix remote agent (T717),
+    /// Whether a remote (SSH or container) workspace uses the Vix remote agent (T717),
     /// which answers file operations over one connection instead of one
     /// shell command each: `"installed"` (default — use a `vix` of exactly
     /// this version already on the remote machine, on its `PATH` or in
@@ -281,7 +281,8 @@ pub struct Settings {
     pub ai_provider: String,
     /// HTTP provider endpoint override (T124); empty uses the provider's own
     /// default (e.g. Anthropic's public Messages API, or
-    /// `http://localhost:11434` for Ollama). Ignored when `ai_provider` is
+    /// `http://localhost:11434/api/generate` for Ollama; an override must be
+    /// the full URL). Ignored when `ai_provider` is
     /// `"cli"`.
     pub ai_endpoint: String,
     /// HTTP provider model id override (T124); empty uses the provider's own

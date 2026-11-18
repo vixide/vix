@@ -1,4 +1,4 @@
-# Setting Up LSP
+# Tutorial 5: Setting Up LSP
 
 Vix speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 (LSP) — the same protocol VS Code, Neovim, Zed, and every other modern editor

@@ -887,3 +887,5 @@ UltiSnips
 yasnippet
 fixeol
 nofixeol
+mkfifo
+backquotes

@@ -1,4 +1,4 @@
-# Org Mode & Roam
+# Tutorial 6: Org Mode & Roam
 
 Vix speaks a pragmatic subset of [Org mode](https://orgmode.org/) — headline
 outlines, TODO states, checkboxes, tags, tables, and a column-view

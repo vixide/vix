@@ -18,9 +18,9 @@ invocation are reported, never a panic. T104 (script keybindings — wiring
 epic complete as of T104j) — a script's `bind_key` request actually fires
 through `App::on_key` now, resolved against `keybindings.toml` and every
 other script's requests together, with the conflict-handling contract
-below finally enforced for real. T105 (sample scripts + docs) is the one
-remaining piece, now fully unblocked. It should update this file if
-reality and design turn out to disagree, same as anywhere else.
+below finally enforced for real. T105 (sample scripts + docs) is done too:
+sample scripts in `tui/examples/scripts/` and the guide in
+`docs/scripting/index.md`.
 
 ## Why Rhai
 

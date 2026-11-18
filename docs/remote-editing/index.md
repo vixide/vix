@@ -49,7 +49,8 @@ vix wsl://Ubuntu/home/me/src          # a WSL distribution (from Windows)
 
 **File → Open Remote…** takes these names too. From the **OC** menu,
 **Open Workspace in Container…** lists the containers: select a running one
-and press `w`, and the Open Remote prompt is filled in with its name; finish
+and press `w`, and the Open Remote prompt is filled in with its name (for a
+Docker or Podman container); finish
 the path inside and press Enter.
 
 **File → Open Remote…** also lists the containers of running Kubernetes pods
@@ -155,7 +156,7 @@ versions all work, and so does a `fish` or `csh` login shell.
 - **Tasks, project commands, test lenses and run configurations** run on the
   remote machine in the workspace folder, with its `sh` (also from a Windows
   machine).
-- **Tools → Terminal** opens a shell on the remote machine, in the workspace
+- **Tools → Terminal → Show/Hide Terminal** opens a shell on the remote machine, in the workspace
   folder: Vix runs `ssh -t` over the same shared connection, and the remote
   side starts your login shell (`$SHELL`). It shows inside Vix like the
   local terminal; `Ctrl+]` closes it.

@@ -13,6 +13,12 @@ in a git repository can be installed as a **plugin** (§ Plugins below).
 | Global | `<config dir>/scripts/*.rhai` | Applies to every workspace you open. |
 | Project | `<workspace root>/.vix/scripts/*.rhai` | Just this project. |
 
+A project's scripts load only after you trust the workspace: the first time
+a workspace with `.vix/scripts/` (or `.vix/settings.toml`, or a project
+environment) opens, Vix asks "Trust this workspace and run them?", and only
+**y** trusts it. The answer is remembered for that workspace. Global scripts
+always load.
+
 Both are optional and **not** searched recursively. A project script shadows
 a global script with the same file stem entirely — the global one simply
 doesn't load, the same way a project's `.editorconfig` or `.vix/project.toml`

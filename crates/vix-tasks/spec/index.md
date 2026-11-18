@@ -5,8 +5,9 @@ discovered tasks, subprojects, and test-at-point. It has three parts:
 
 - **Named tasks** (`tasks.toml`): user-configured commands, merged with
   project-type defaults and tasks discovered from the project's own build
-  tooling. **Tools → Tasks…** (action `tools.tasks`, also in the command
-  palette) lists the merged set and runs the chosen one.
+  tooling. **Project → Run Task…** (`project.run_task`) lists the merged set
+  and runs the chosen one; **Tools → Tasks…** (action `tools.tasks`, also in
+  the command palette) lists only the `tasks.toml` tasks.
 - **Project lifecycle** (the **Project** menu, `project.*`): six fixed
   command slots — configure/compile/test/install/package/run — resolved from
   the detected project type(s), a per-project override file, and a per-user
@@ -39,7 +40,7 @@ command = "cargo test"
 Tasks with an empty `name` or `command` are dropped. If neither file exists or
 parsing fails, the chooser reports `status.no_tasks`.
 
-**Tools → Tasks…** merges three tiers into one list (`vix_tasks::task`):
+**Project → Run Task…** merges three tiers into one list (`vix_tasks::task`):
 user-configured (`tasks.toml`) tasks, one default task per detected project
 type per lifecycle slot, and tasks discovered from the project's own build
 manifests (below). On a name collision the user-configured entry wins, then
@@ -101,8 +102,9 @@ If a slot has no command at any tier, the prompt is skipped and
 
 Two more top-level actions round out the menu:
 
-- **Run Task…** (`project.run_task`) — the same three-tier merged task list
-  as **Tools → Tasks…**, scoped to the workspace root.
+- **Run Task…** (`project.run_task`) — the three-tier merged task list
+  above, scoped to the workspace root. **Tools → Tasks…** (`tools.tasks`)
+  lists only the `tasks.toml` tier.
 - **Repeat Last Task** (`project.repeat_last_task`, `C-c p c X`) — re-runs
   whichever project command (a lifecycle slot or a named task) ran most
   recently, or reports `status.project_no_last_command` if nothing has run
@@ -190,7 +192,7 @@ they would find nothing — a 100 MB log, say (T749).
 ## Problem matchers and next-error (T632)
 
 Every command that runs through `App::run_command_in` — a task, a lifecycle
-slot, Repeat Last Task, test-at-point, a run configuration, **Tools → Test**
+slot, Repeat Last Task, test-at-point, a run configuration, **Tools → Run Tests**
 and a manual **Run Command** — has its output scanned for *problems* (compiler
 errors, lint findings, failing tests) as it streams into the bottom dock, the
 way VS Code's `problemMatcher`, Emacs's `compilation-mode` and Vim's quickfix
