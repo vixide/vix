@@ -979,7 +979,6 @@ fn an_org_image_is_saved_for_a_file_link() {
     let root = scratch("orgimage");
     let (info, _log, kernel) = fake_kernel();
     let mut app = app_with(&root, info, no_prompts());
-    let tabs_before = app.editor.tabs.len();
     open(
         &mut app,
         &root,
@@ -987,12 +986,13 @@ fn an_org_image_is_saved_for_a_file_link() {
         "#+begin_src python :file out/plot.png\nimg\n#+end_src\n",
         1,
     );
+    let tabs_before = app.editor.tabs.len();
     run_and_wait(&mut app, "jupyter.run");
     assert!(text(&app).ends_with("#+RESULTS:\n[[file:out/plot.png]]\n"));
     let saved = std::fs::read(root.join("out").join("plot.png")).unwrap();
     assert!(saved.starts_with(b"\x89PNG"));
     // Saved for the link, not opened in a tab.
-    assert_eq!(app.editor.tabs.len(), tabs_before + 1);
+    assert_eq!(app.editor.tabs.len(), tabs_before);
 
     // Without `:file`: `<org-file-stem>-images/<hash>.png`.
     set_text(&mut app, "#+begin_src python\nimg\n#+end_src\n", 1);
