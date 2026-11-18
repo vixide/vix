@@ -203,7 +203,7 @@ The corpus is not committed; the regression is.
 | `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately |
 | `frame_ops` | The two per-*frame* buffer scans found and fixed by T510/T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll/breadcrumb declaration scan (`vix_palette::symbols`) |
 | `gutter_diff` | The git gutter diff against `HEAD` (`vix_git::diff_marks`, T574) for lightly edited and heavily rewritten buffers, so the 40 ms deadline and the 50,000-line cap stay visible |
-| `render_ops` | Drawing: one viewport's syntax highlight with the cache cold (top, middle and end of 1,000 to 125,000-line files; it should stay flat as the file grows), and a whole `ui::draw` of the `App` into a 200×50 terminal, both an unchanged redraw and a redraw after a keystroke |
+| `render_ops` | Drawing: one viewport's syntax highlight with the cache cold (top, middle and end of 1,000 to 125,000-line files; it should stay flat as the file grows), and a whole `ui::draw` of the `App` into a 200×50 terminal, both an unchanged redraw and a redraw after a keystroke, up to a 500,000-line file |
 
 ```sh
 cargo bench                                  # everything
@@ -221,6 +221,12 @@ the previous one, so the workflow is: measure, change, measure again, and read
 the percentage. That is how the query-compilation cost was found — opening a
 *200-line* file cost 26 ms, and the fixed cost stood out against the 5,000-line
 case. Caching the compiled Tree-sitter query took it to 0.6 ms.
+
+For a real session rather than one operation, `VIX_PROFILE=<file> vix …`
+(`tui/src/profile.rs`) times every tick, frame and input in the terminal
+event loop and writes percentiles, the count of inputs slower than 16 ms to
+reach the screen, and the slowest inputs to that file on exit. It is off,
+and times nothing, unless the variable is set.
 
 Benchmark what the user waits for: a keystroke, a frame, a file open. Do not
 benchmark what runs once at startup or what is dominated by I/O. See

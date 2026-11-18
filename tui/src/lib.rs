@@ -50,6 +50,7 @@ pub mod capability;
 pub mod cli;
 pub mod mcp;
 pub mod remote;
+pub mod profile;
 pub mod term_caps;
 pub use vix_authority as authority;
 pub mod plugin_cli;

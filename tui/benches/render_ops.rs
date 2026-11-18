@@ -145,7 +145,7 @@ fn app_with_file(lines: usize) -> App {
 fn bench_frame(c: &mut Criterion) {
     let mut group = c.benchmark_group("render/frame");
     let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
-    for lines in [1_000_usize, 20_000] {
+    for lines in [1_000_usize, 20_000, 500_000] {
         let mut app = app_with_file(lines);
         let mut term = Terminal::new(TestBackend::new(200, 50)).unwrap();
         // One untimed frame, so `steady` starts from a drawn screen.
