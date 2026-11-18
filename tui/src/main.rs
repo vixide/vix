@@ -256,6 +256,9 @@ fn main() -> io::Result<()> {
     app.start(&cli)?;
 
     let mut terminal = ratatui::init();
+    // After ratatui's own hook, so a crash report is saved before the
+    // terminal is restored (`spec/crash-reports`).
+    vix::crash::install_hook();
     let _ = execute!(io::stdout(), EnableMouseCapture);
     // Ask the terminal to bracket pastes, so pasted text arrives as one
     // `Event::Paste` instead of as one key event per character: that is what
