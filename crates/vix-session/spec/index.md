@@ -14,7 +14,8 @@ the focused tab, and each tab's cursor position.
   rebase todo lists never reopen at a stale cursor.
 - **Restore** — on startup, when no file argument is passed, `App::restore_session`
   loads the session for the current workspace root and reopens it. The fresh
-  app's blank untitled buffer is dropped once at least one real file reopens. A
+  app's blank untitled buffer gives way to the first real file reopened (as
+  any first file opened does, `vix-editor`'s spec). A
   status line reports how many files were restored. Files that no longer exist on
   disk are silently skipped.
 - Passing a file on the command line (`vix path…`) opens those files instead and

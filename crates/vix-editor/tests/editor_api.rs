@@ -1027,24 +1027,25 @@ fn open_focuses_an_open_file_and_reuses_the_preview_tab() {
     fs::write(&a, "A\n").unwrap();
     fs::write(&b, "B\n").unwrap();
     let mut e = Editor::default();
+    // The first file takes over the empty starting tab.
     e.open(&a, true).unwrap();
-    assert_eq!((e.tabs.len(), e.active), (2, 1));
+    assert_eq!((e.tabs.len(), e.active), (1, 0));
     assert!(e.active_tab().unwrap().preview);
     // The next preview replaces the preview tab instead of adding one.
     e.open(&b, true).unwrap();
-    assert_eq!((e.tabs.len(), text(&e)), (2, "B\n".to_string()));
+    assert_eq!((e.tabs.len(), text(&e)), (1, "B\n".to_string()));
     // Opening it for real (through a non-canonical path) promotes, no new tab.
     e.open(&dir.join(".").join("b.txt"), false).unwrap();
-    assert_eq!(e.tabs.len(), 2);
+    assert_eq!(e.tabs.len(), 1);
     assert!(!e.active_tab().unwrap().preview);
     e.open(&a, false).unwrap();
-    assert_eq!(e.tabs.len(), 3);
+    assert_eq!(e.tabs.len(), 2);
     e.open(&b, true).unwrap();
-    assert_eq!((e.tabs.len(), e.active), (3, 1), "an open file is focused");
+    assert_eq!((e.tabs.len(), e.active), (2, 0), "an open file is focused");
     // A missing file is an error and opens nothing.
     let err = e.open(&dir.join("missing.txt"), false).unwrap_err();
     assert_eq!(err.kind(), io::ErrorKind::NotFound);
-    assert_eq!(e.tabs.len(), 3);
+    assert_eq!(e.tabs.len(), 2);
     // A file over the limit is refused until the user confirms.
     e.max_text_bytes = 2;
     let big = dir.join("big.txt");
@@ -1142,12 +1143,13 @@ fn reload_skips_dirty_buffers_and_clamps_the_cursor() {
     fs::write(&a, "short\n").unwrap();
     fs::write(&b, "theirs\n").unwrap();
     assert_eq!(e.reload_clean_from_disk(), 1);
-    assert_eq!(e.tabs[1].text(), "short\n");
+    // a.txt took over the empty starting tab: tab 0 is a, tab 1 is b.
+    assert_eq!(e.tabs[0].text(), "short\n");
     assert!(
-        e.tabs[1].editor.get_cursor() <= 6,
+        e.tabs[0].editor.get_cursor() <= 6,
         "cursor clamped into the new text"
     );
-    assert_eq!(e.tabs[2].text(), "edited b\n", "unsaved edits are kept");
+    assert_eq!(e.tabs[1].text(), "edited b\n", "unsaved edits are kept");
     // Nothing changed since: nothing reloads.
     assert_eq!(e.reload_clean_from_disk(), 0);
     fs::remove_dir_all(&dir).ok();
@@ -1246,4 +1248,37 @@ proptest! {
         e.delete_forward();
         prop_assert!(self::text(&e).chars().count() <= before);
     }
+}
+
+#[test]
+fn the_empty_starting_tab_gives_way_to_the_first_file_only() {
+    let dir = scratch("pristine");
+    let (a, b) = (dir.join("a.txt"), dir.join("b.txt"));
+    fs::write(&a, "A\n").unwrap();
+    fs::write(&b, "B\n").unwrap();
+    // A fresh editor's untitled tab is replaced by the first file opened.
+    let mut e = Editor::default();
+    assert_eq!(e.tabs.len(), 1);
+    e.open(&a, false).unwrap();
+    assert_eq!(e.tabs.len(), 1);
+    assert_eq!(text(&e), "A\n");
+    // An untitled tab with text in it stays.
+    let mut e = Editor::default();
+    e.insert_str("note", AREA);
+    e.open(&a, false).unwrap();
+    assert_eq!(e.tabs.len(), 2, "an edited untitled tab is kept");
+    // One typed into and emptied again was edited, so it stays too.
+    let mut e = Editor::default();
+    e.insert_str("x", AREA);
+    e.active_tab_mut().unwrap().editor.set_content("");
+    e.active_tab_mut().unwrap().dirty = false;
+    e.open(&a, false).unwrap();
+    assert_eq!(e.tabs.len(), 2, "an untitled tab with history is kept");
+    // With more than one tab open, an empty untitled one is left alone.
+    let mut e = Editor::default();
+    e.open(&a, false).unwrap();
+    e.new_tab_with_content("");
+    e.open(&b, false).unwrap();
+    assert_eq!(e.tabs.len(), 3);
+    fs::remove_dir_all(&dir).ok();
 }

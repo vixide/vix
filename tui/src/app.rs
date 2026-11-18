@@ -8691,7 +8691,14 @@ impl App {
             }
             return;
         }
-        let before = self.editor.tabs.len();
+        // Which files were open before, so a file counts as newly opened even
+        // when it takes over the empty starting tab (tab count unchanged).
+        let open_before: Vec<PathBuf> = self
+            .editor
+            .tabs
+            .iter()
+            .filter_map(|t| t.path.clone())
+            .collect();
         let opened = if past_size_limit {
             self.editor.open_unbounded(path, preview)
         } else {
@@ -8699,7 +8706,9 @@ impl App {
         };
         match opened {
             Ok(()) => {
-                let opened_new = self.editor.tabs.len() > before;
+                let opened_new = self
+                    .active_path()
+                    .is_some_and(|p| !open_before.contains(&p));
                 if !preview {
                     self.editor.promote_active();
                     self.record_recent(path);

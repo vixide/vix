@@ -3,7 +3,7 @@ source: tui/tests/snapshots.rs
 expression: screen
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help                                                                                                                                      
-  Explorer ───────────╮  untitled │  main.rs                                                                                                                                                   ╭  Messages ─────────────
+  Explorer ───────────╮  main.rs                                                                                                                                                                ╭  Messages ─────────────
  src                  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│ Welcome to Vix. Press C
  Cargo.toml           │    1  struct Point {                                                                                                                                                    ●│ Ctrl B toggles the file
  README.md            │    2  │   x: i32,                                                                                                                                                       ││
