@@ -21,7 +21,11 @@ Org outlines are built from headlines: lines starting with one or more `*`.
   whole subtree, so a branch and its children shift together.
 - **Move Subtree Up / Down** reorder a headline and everything under it among its
   siblings. The cursor follows the moved subtree.
-- **Cycle Visibility (Fold)** collapses or expands the section at the cursor.
+- **Tab** on a headline folds or unfolds its section; **Shift+Tab** folds
+  every headline (an overview) or unfolds everything. **Cycle Visibility
+  (Fold)** in the menu does what Tab does. No language server is needed.
+- Headlines, TODO and DONE keywords and links are highlighted: a link's
+  description is underlined, with its `[[target]` brackets dimmed.
 
 ## Tasks
 

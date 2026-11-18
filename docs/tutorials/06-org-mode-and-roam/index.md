@@ -58,9 +58,10 @@ Put the cursor on `* Action items` and open the **Org** menu (`Alt+O`):
 - **Navigate Headings → Previous/Next Heading** (`org.nav.previous` /
   `org.nav.next`) steps between headlines at any level; **Previous/Next Same
   Level** (`org.nav.backward` / `org.nav.forward`) stays within siblings.
-- **Show/Hide → Cycle Visibility (Fold)** folds or unfolds the section under
-  the cursor; **Overview (Fold All)** collapses the whole buffer to just its
-  headlines.
+- **Tab** on a headline folds or unfolds its section, and **Shift+Tab**
+  collapses the whole buffer to its headlines or opens it all again. The
+  menu's **Show/Hide → Cycle Visibility (Fold)** and **Overview (Fold All)**
+  do the same.
 
 Undo (`Ctrl+Z`, or whatever your keymap binds) puts anything you just tried
 back the way it was — these examples are meant to be typed and undone as you

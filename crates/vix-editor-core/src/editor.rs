@@ -29,6 +29,39 @@ use std::time::Duration;
 
 /// Syntax theme: tree-sitter capture name (keyword) to ratatui style.
 type Theme = HashMap<String, Style>;
+
+/// `theme` with the Org entries [`crate::org_highlight`] names, derived from
+/// the four syntax colors a theme has (each kept if the theme sets it
+/// already): a bold `keyword` headline, a bold `number` TODO keyword, a
+/// `comment` DONE keyword, an underlined `string` link and dim `comment`
+/// markup. With no colors (the monochrome default) the bold, underline and
+/// dim still apply.
+fn with_org_styles(mut theme: Theme) -> Theme {
+    let base = |theme: &Theme, key: &str| theme.get(key).copied().unwrap_or_default();
+    let derived = [
+        (
+            "org.heading",
+            base(&theme, "keyword").add_modifier(Modifier::BOLD),
+        ),
+        (
+            "org.todo",
+            base(&theme, "number").add_modifier(Modifier::BOLD),
+        ),
+        ("org.done", base(&theme, "comment")),
+        (
+            "org.link",
+            base(&theme, "string").add_modifier(Modifier::UNDERLINED),
+        ),
+        (
+            "org.markup",
+            base(&theme, "comment").add_modifier(Modifier::DIM),
+        ),
+    ];
+    for (name, style) in derived {
+        theme.entry(name.to_string()).or_insert(style);
+    }
+    theme
+}
 /// One highlighted span: start byte, end byte, style. (The identifier's
 /// spelling is historical.)
 type Hightlight = (usize, usize, Style);
@@ -351,16 +384,18 @@ impl Editor {
     /// Replace the syntax-highlight theme (token name -> `#rrggbb`) and drop the
     /// cached highlights so the new colors take effect on the next render.
     pub fn set_syntax_theme(&mut self, theme: &[(&str, &str)]) {
-        self.theme = theme
-            .iter()
-            .map(|(name, hex)| {
-                let (r, g, b) = utils::rgb(hex);
-                (
-                    (*name).to_string(),
-                    Style::default().fg(Color::Rgb(r, g, b)),
-                )
-            })
-            .collect();
+        self.theme = with_org_styles(
+            theme
+                .iter()
+                .map(|(name, hex)| {
+                    let (r, g, b) = utils::rgb(hex);
+                    (
+                        (*name).to_string(),
+                        Style::default().fg(Color::Rgb(r, g, b)),
+                    )
+                })
+                .collect(),
+        );
         self.highlights_cache.borrow_mut().clear();
     }
 
@@ -726,13 +761,15 @@ impl Editor {
     /// Convert the host's `(capture name, "#RRGGBB")` pairs into foreground-only
     /// ratatui styles; malformed hex degrades to black via [`utils::rgb`].
     fn build_theme(theme: Vec<(&str, &str)>) -> Theme {
-        theme
-            .into_iter()
-            .map(|(name, hex)| {
-                let (r, g, b) = utils::rgb(hex);
-                (name.to_string(), Style::default().fg(Color::Rgb(r, g, b)))
-            })
-            .collect()
+        with_org_styles(
+            theme
+                .into_iter()
+                .map(|(name, hex)| {
+                    let (r, g, b) = utils::rgb(hex);
+                    (name.to_string(), Style::default().fg(Color::Rgb(r, g, b)))
+                })
+                .collect(),
+        )
     }
 
     /// Return the entire buffer contents as an owned string.

@@ -4023,10 +4023,18 @@ impl App {
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
-            "editor.fold_toggle" => self.toggle_fold_at_cursor(),
-            "editor.fold" => self.fold_at_cursor(true),
+            "editor.fold_toggle" => {
+                self.org_install_fold_ranges();
+                self.toggle_fold_at_cursor();
+            }
+            "editor.fold" => {
+                self.org_install_fold_ranges();
+                self.fold_at_cursor(true);
+            }
             "editor.unfold" => self.fold_at_cursor(false),
             "editor.fold_all" => {
+                // An Org buffer folds by headline without a language server.
+                self.org_install_fold_ranges();
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.fold_all();
                 }
@@ -10878,9 +10886,15 @@ impl App {
         }
     }
 
-    /// Open the file browser (File → Open…) rooted at the workspace root.
+    /// Open the file browser (File → Open…) in the active file's folder, or
+    /// the workspace root when there is no file open.
     fn open_file_browser(&mut self) {
-        self.file_browser = Some(crate::file_browser_panel::Panel::open(&self.root));
+        let dir = self
+            .active_path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .filter(|d| crate::authority::current().is_dir(d))
+            .unwrap_or_else(|| self.root.clone());
+        self.file_browser = Some(crate::file_browser_panel::Panel::open(&dir));
     }
 
     /// Keys for the file-browser overlay. Plain typing edits the filter;
@@ -10957,6 +10971,11 @@ impl App {
                 self.file_browser = None;
                 self.run_action("file.open_path");
             }
+            // Find any file in the project instead (the palette's file finder).
+            KeyCode::Char('p') if Self::ctrl(&key) => {
+                self.file_browser = None;
+                self.run_action("tools.palette");
+            }
             KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
                 if let Some(fb) = self.file_browser.as_mut() {
                     fb.push(c);
@@ -10976,7 +10995,16 @@ impl App {
         };
         // A ":line[:col]" query suffix jumps after opening, like the Open prompt.
         let target = fb.target();
-        if let Some(path) = fb.activate() {
+        // A typed path (`docs/x.org`, `~/notes/a.org`, `/etc/hosts`) opens
+        // that file, even a new one, or moves into that folder.
+        let typed = fb.path_target();
+        if let Some(path) = &typed
+            && crate::authority::current().is_dir(path)
+        {
+            fb.set_root(path.clone());
+            return;
+        }
+        if let Some(path) = typed.or_else(|| fb.activate()) {
             self.file_browser = None;
             self.with_jump(|s| {
                 s.open_path(&path, false);

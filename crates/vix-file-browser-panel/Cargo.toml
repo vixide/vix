@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "File browser panel (File → Open): recursive listing with fuzzy search, sorting, and filtering."
+description = "File browser panel (File → Open): one folder at a time, with typed paths, fuzzy filtering and sorting."
 
 [dependencies]
 vix-authority = { workspace = true }
