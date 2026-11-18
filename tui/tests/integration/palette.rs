@@ -498,3 +498,39 @@ fn palette_up_down_recall_query_history() {
     assert_eq!(app.palette.as_ref().unwrap().selected, 0);
     fs::remove_dir_all(&dir).ok();
 }
+
+// The terminal is a capability the minimal build leaves out (T586).
+#[cfg(feature = "terminal")]
+#[test]
+fn palette_lists_menu_commands_by_their_menu_path() {
+    // Tools › Terminal › Show/Hide Terminal has a menu item but no curated
+    // palette entry; the palette still finds it, by its path.
+    let mut app = app_at(Path::new("."));
+    app.on_key(ctrl('p'));
+    for c in ">show/hide terminal".chars() {
+        app.on_key(key(c));
+    }
+    let p = app.palette.as_ref().unwrap();
+    let found = p.entries.iter().find(
+        |e| matches!(&e.action, vix::palette::Action::RunCommand(a) if a == "tools.terminal"),
+    );
+    let entry = found.expect("the menu's terminal command is in the palette");
+    assert!(
+        entry.label.contains("›"),
+        "labelled by menu path: {}",
+        entry.label
+    );
+    // Each action is listed once, even if several menus hold it.
+    let mut ids: Vec<&str> = p
+        .entries
+        .iter()
+        .filter_map(|e| match &e.action {
+            vix::palette::Action::RunCommand(a) => Some(a.as_str()),
+            _ => None,
+        })
+        .collect();
+    let total = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), total, "no action listed twice");
+}

@@ -18,14 +18,14 @@ expression: screen
                │> Go to Section Start                                               │
                │> Go to Section End                                                 │
                │> Go to Definition                                                  │
-               │> Go to Paragraph Start                                             │
-               │> Go to Symbol in File                                              │
-               │> Go to Symbol in Workspace                                         │───────────────
-  Output ─────│> LSP: Go to Implementation                                         │───────────────
-(no output yet)│> LSP: Go to Type Definition                                        │
-               │> Go: Next Error                                                    │
-               │> Go: Next Function                                                 │
-               │> Go: Previous Function                                             │
+               │> Go › Go to Percent…                                               │
+               │> Go › Go to Byte…                                                  │
+               │> Go to Paragraph Start                                             │───────────────
+  Output ─────│> Go to Symbol in File                                              │───────────────
+(no output yet)│> Go › Go to Declaration                                            │
+               │> Go to Symbol in Workspace                                         │
+               │> Go › Jump to Line (labels)                                        │
+               │> LSP: Go to Implementation                                         │
                │prefixes:  (none) files   > commands   # buffers   : line   @ symbol│
                ╰────────────────────────────────────────────────────────────────────╯
 

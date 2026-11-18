@@ -216,6 +216,45 @@ impl App {
         scored.into_iter().take(200).map(|(_, _, e)| e).collect()
     }
 
+    /// Score every menu-bar command not already a [`palette::COMMANDS`] entry
+    /// against `query`, labelled with its menu path ("Tools › Terminal ›
+    /// Show/Hide Terminal"), so the palette really lists every command the
+    /// menus do. Numbering continues from `start_idx`, as for the catalog.
+    fn menu_palette_entries(&self, query: &str, start_idx: usize) -> Vec<(i32, usize, Entry)> {
+        let recent_rank = |action: &str| self.command_recents.iter().position(|a| a == action);
+        let mut leaves: Vec<(String, &'static str)> = Vec::new();
+        for menu in crate::menu::menus() {
+            collect_menu_leaves(menu.items, &t!(menu.name), &mut leaves);
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        let mut scored = Vec::new();
+        for (path, action) in leaves {
+            if seen.contains(&action)
+                || palette::COMMANDS.iter().any(|(_, a)| *a == action)
+                || !self.action_listed(action)
+            {
+                continue;
+            }
+            seen.push(action);
+            let idx = start_idx + seen.len();
+            let entry = Entry {
+                label: format!("> {path}"),
+                action: PAction::RunCommand(action.to_string()),
+            };
+            if query.is_empty() {
+                let key = recent_rank(action).map_or(1000 + i32::try_from(idx).unwrap_or(0), |r| {
+                    i32::try_from(r).unwrap_or(0)
+                });
+                scored.push((-key, idx, entry));
+            } else if let Some(score) = palette::fuzzy_score(&path, query) {
+                let boost =
+                    recent_rank(action).map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
+                scored.push((score + boost, idx, entry));
+            }
+        }
+        scored
+    }
+
     /// Score every `vix_action_catalog::CATALOG` entry against `query`,
     /// continuing the numbering from `start_idx` so catalog, static, and
     /// script commands never collide as a stable-sort tiebreak (mirrors
@@ -315,6 +354,10 @@ impl App {
                 scored.extend(self.script_palette_entries(query));
                 let catalog_start = palette::COMMANDS.len() + self.script_command_count();
                 scored.extend(self.catalog_palette_entries(query, catalog_start));
+                scored.extend(self.menu_palette_entries(
+                    query,
+                    catalog_start + vix_action_catalog::CATALOG.len(),
+                ));
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
                 entries = scored.into_iter().map(|(_, _, e)| e).collect();
             }
@@ -755,5 +798,25 @@ impl App {
             let canon = crate::authority::current().canonicalize(path).ok()?;
             find(&canon)
         })
+    }
+}
+
+/// Every command leaf under `items`, as `(menu path, action id)`, the path
+/// starting with `prefix` and joined with " › ".
+fn collect_menu_leaves(
+    items: &'static [crate::menu::Item],
+    prefix: &str,
+    out: &mut Vec<(String, &'static str)>,
+) {
+    for item in items {
+        if item.label.is_empty() {
+            continue;
+        }
+        let path = format!("{prefix} › {}", t!(item.label));
+        if let Some(sub) = item.submenu {
+            collect_menu_leaves(sub, &path, out);
+        } else if !item.action.is_empty() {
+            out.push((path, item.action));
+        }
     }
 }
