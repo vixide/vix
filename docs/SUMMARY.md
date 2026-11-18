@@ -19,6 +19,7 @@
 
 # Tutorials
 
+- [All Tutorials](tutorials/index.md)
 - [1. Your First Session](tutorials/01-your-first-session/index.md)
 - [2. Editing Power Techniques](tutorials/02-editing-power-techniques/index.md)
 - [3. Find & Replace and Multi-Cursor](tutorials/03-find-replace-and-multi-cursor/index.md)
@@ -29,6 +30,11 @@
 - [8. HTTP Client & Tools Suite](tutorials/08-http-client-and-tools-suite/index.md)
 - [9. Make Vix Yours](tutorials/09-make-vix-yours/index.md)
 - [10. Debugging with DAP](tutorials/10-debugging-with-dap/index.md)
+- [11. Tasks, Tests and the Terminal](tutorials/11-tasks-tests-and-the-terminal/index.md)
+- [12. Remote Editing](tutorials/12-remote-editing/index.md)
+- [13. Scripting with Rhai](tutorials/13-scripting-with-rhai/index.md)
+- [14. AI and Agents](tutorials/14-ai-and-agents/index.md)
+- [15. Large Files and Logs](tutorials/15-large-files-and-logs/index.md)
 
 # Guides
 

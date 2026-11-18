@@ -3,7 +3,7 @@
 An Agent Client Protocol (ACP) client for Vix (T635). ACP is the JSON-RPC
 protocol Zed defined so an editor can drive a coding agent (Claude Code,
 Gemini CLI, Codex, ...) that runs as a child process. Actions:
-`ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Agent Prompt…),
+`ai.agent_start` (AI → Start Agent), `ai.agent_prompt` (AI → Prompt Agent…),
 `ai.agent_stop` (AI → Stop Agent), `ai.agent_resume` (AI → Resume Agent),
 `ai.agent_plan` (AI → Agent Plan), `ai.agent_plan_dock` (AI → Toggle Agent
 Plan Pane). The agents come from the `ai_agents`

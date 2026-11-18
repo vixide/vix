@@ -14,7 +14,8 @@ memory (see [Performance](../performance/index.md#large-file-viewer-t733)).
   command palette, asks for a path (seeded with the active file).
 - Opening a file larger than your `large_file_mb` setting asks first; press
   **v** there to view it in the Large File Viewer instead of loading it.
-- A file over 1 GiB is too large for any buffer; Vix offers the viewer instead.
+- A file over 1 GiB is too large for any buffer; Vix offers the viewer
+  instead: press **y** there to open it in the viewer.
 
 The viewer reads files on this machine only, not on a remote (SSH) workspace.
 

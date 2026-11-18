@@ -9,7 +9,7 @@ point the menu at any assistant CLI (Claude Code, Codex, Mistral, a local
 ## Configuration
 
 The `ai_command` setting (see `crates/vix-i18n/spec`/configuration) is a command
-template, default `claude -p "{prompt}"`:
+template, default `claude -p {prompt}`:
 
 - `{prompt}` is replaced with the action's instruction (e.g.
   `Summarize this text.`).
@@ -17,15 +17,20 @@ template, default `claude -p "{prompt}"`:
   `{file}`, that placeholder is replaced with the path of a temp file holding the
   input text; otherwise the temp file is redirected to stdin.
 - An empty template falls back to the default `claude` invocation.
+- **Do not quote the placeholders.** Vix quotes `{prompt}` and `{file}`
+  itself (single quotes on Unix, double quotes on Windows), so the text can
+  never be read as shell syntax. Wrapping one in quotes of your own, such as
+  `"{prompt}"`, puts Vix's quoting inside yours, and inside double quotes a
+  shell still expands `$(…)` and backquotes in the text.
 
 Examples:
 
 | Assistant | `ai_command`                    |
 | --------- | ------------------------------- |
-| Claude    | `claude -p "{prompt}"` (default)|
-| Codex     | `codex exec "{prompt}"`         |
-| Mistral   | `mistral chat -m "{prompt}"`    |
-| Ollama    | `ollama run llama3 "{prompt}"`  |
+| Claude    | `claude -p {prompt}` (default)|
+| Codex     | `codex exec {prompt}`         |
+| Mistral   | `mistral chat -m {prompt}`    |
+| Ollama    | `ollama run llama3 {prompt}`  |
 
 ## Turning AI off
 

@@ -1,4 +1,4 @@
-# Debugging with DAP
+# Tutorial 10: Debugging with DAP
 
 Vix drives real debuggers over the **Debug Adapter Protocol** (DAP) — the
 same protocol VS Code uses — the same way it drives language servers over
@@ -267,7 +267,8 @@ install/config basics.
 
 ---
 
-**Previous:** [Tutorial 9 — Make Vix Yours](../09-make-vix-yours/index.md)
+**Previous:** [Tutorial 9 — Make Vix Yours](../09-make-vix-yours/index.md)  
+**Next:** [Tutorial 11 — Tasks, Tests and the Terminal](../11-tasks-tests-and-the-terminal/index.md)
 
 ---
 

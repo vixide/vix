@@ -1,4 +1,4 @@
-# The DB Workbench
+# Tutorial 7: The DB Workbench
 
 The **DB** menu (mnemonic `Alt+D`, right after **AI**) opens a full-screen
 database workbench: saved connections, a schema tree, a SQL editor with
@@ -261,7 +261,7 @@ and the query returns Alice (92) then Carol (88).
 ## The AI SQL assistant
 
 The workbench can turn a question into SQL, using whatever CLI the
-`ai_command` setting names (default `claude -p "{prompt}"` — see
+`ai_command` setting names (default `claude -p {prompt}` — see
 [`docs/configuration/index.md`](../../configuration/index.md#settings) and
 [`docs/agent-panel/index.md`](../../agent-panel/index.md); any assistant CLI
 works), or a provider's HTTP API directly when `ai_provider` is set — same

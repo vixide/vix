@@ -11,7 +11,7 @@ gigabytes.
 
 - **File → Open in Large File Viewer…** (`file.open_large`, also in the
   command palette) asks for a path, seeded with the active buffer's file.
-- Opening a file above `editor_behavior.large_file_mb` asks first (T571); that
+- Opening a file above the `large_file_mb` setting (`editor_behavior.large_file_mb` in code) asks first (T571); that
   confirmation now also offers **v** — view it read-only in the Large File
   Viewer — beside **y** (load it into a buffer anyway) and **n**.
 - A file above the 1 GiB hard ceiling, which no buffer may hold, used to be

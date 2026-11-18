@@ -184,7 +184,7 @@ every AI request is refused (see [configuration](../configuration/index.md)).
 
 Each item runs a configurable assistant on the selection, or the whole file
 when nothing is selected: a CLI by default (`ai_command`, default `claude -p
-"{prompt}"` — point it at Claude, Codex, Mistral, a local `ollama` model, or
+{prompt}` — point it at Claude, Codex, Mistral, a local `ollama` model, or
 any other CLI), or a provider's HTTP API called directly when `ai_provider`
 is set to `"anthropic"`/`"openai"`/`"ollama"` (see
 [`../../crates/vix-ai-core/spec/index.md`](../../crates/vix-ai-core/spec/index.md)).

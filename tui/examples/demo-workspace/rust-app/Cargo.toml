@@ -4,4 +4,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+# Its own workspace: this demo lives inside the Vix repository, whose root
+# Cargo.toml would otherwise claim it (the `tui` member path is a prefix of
+# this one, which `exclude` does not override).
+[workspace]
+
 [dependencies]
