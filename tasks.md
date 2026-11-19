@@ -13,7 +13,7 @@ merged `--no-ff`, branch deleted.
 - New user-facing feature → one action id + one `run_action` arm, a menu
   item, a palette command, a keybinding if a free combo exists.
 - All user-facing text via `t!` with keys added to the right `locales/*.yml`
-  namespace file (T148) for all 15 languages: en es fr de cy ga gd pl pt ru ar
+  namespace file (T148) for all 15 core languages: en es fr de cy ga gd pl pt ru ar
   hi bn zh ja.
 - Tests for the new behavior; `cargo build`, `cargo test`, and
   `cargo clippy --workspace --all-targets -- -D warnings` all clean.
@@ -10349,6 +10349,44 @@ principle, so it waits for a deliberate decision.
   skipped: no sibling keeps it and BUI cannot read or set a position. Left:
   shaping and color emoji (BUI draws one outline face per run).
 
+## Run X — worldwide editing
+
+- [x] **T794 — Jump to the matching character in workspace search.** Both
+  `App::run_workspace_search` and `App::search_workspace_to_dock` use the
+  find engine's character offsets. A dock click parses the location before
+  the preview text. The workspace integration tests open a
+  panel result with Enter and click a dock result after a multilingual prefix.
+  Both assert the final line and column.
+- [ ] **T795 — Preserve the server's position encoding in result lists.**
+  Follow a document symbol, workspace symbol, reference, diagnostic and
+  related-information row through the static results panel. The row builders in
+  `tui/src/app.rs` and `tui/src/app/lsp_dap.rs` add one to the raw protocol
+  column. Carry the originating encoding to the jump and convert against the
+  target buffer, including an unsaved buffer or a previously unopened file.
+  Reuse the conversion used by direct jumps. For the target `x` in `界💡x`,
+  a mock server reporting UTF-8, UTF-16 or UTF-32 supplies 7, 3 or 2
+  respectively. Selecting the row must land at editor column 3 in all cases.
+  Include a related location in a second file and an ordinary ASCII control.
+  [Position encoding](crates/vix-lsp/spec/index.md#position-encoding)
+- [ ] **T796 — Translate save decisions in every chooser language.** Start
+  with `confirm.save_as_overwrite`, `confirm.save_conflict` and
+  `msg.save_unmappable` and trace the labels for the choices each offers.
+  Compare the direct YAML values against `vix_locale_model::LOCALES` in the
+  existing i18n catalog tests. Report each missing (key, locale) pair even
+  if the locale clears its aggregate coverage floor. Supply and review the
+  missing wording in batches. Test interpolation with a non-Latin path and
+  verify in the App that cancelling an overwrite preserves the existing file.
+  Keep the English fallback available for other messages.
+  [Localization](crates/vix-i18n/spec/index.md)
+- [ ] **T797 — Make the calendar's first weekday configurable.** Add a
+  persisted setting with all seven weekdays. Opening older settings preserves
+  the current Monday start. In the calendar panel, generate headings and day
+  positions from the same first weekday and use that grid for mouse selection.
+  Test all seven offsets in the pure grid. In the App, use the same UI language
+  with Saturday and Sunday starts, reload the setting, and compare the date
+  inserted by a click and by Enter on the same day. Include an empty leading
+  cell and a month with a sixth row. [Calendar layout](crates/vix-calendar-panel/spec/index.md#layout)
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -10485,7 +10523,7 @@ complete. What is open, by run:
 - **Run S:** T750-T756, T758 (the Matrix spike) and T759 are done; T757
   (docs, site and demo) and T793 (the Matrix bridge itself) are open.
 
-The recommended next order is in items 13–23 below.
+The recommended next order is in items 13–24 below.
 
 **Earlier status (2026-09-14)**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
@@ -10608,6 +10646,9 @@ CI-discovered rounds to get genuinely right on Windows).
     and T778, T779 and T780, T781, then T782, T784 and T786; T785 last, in
     slices; T783 (accepted by the maintainer) last. **All of Run W (T774–T786)
     is done; T787 (found while building Run W) is done too.**
+
+24. **Run X (worldwide editing).** T794 covers workspace search. Prioritize
+    T795 for other result lists. T796 and T797 can proceed independently.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

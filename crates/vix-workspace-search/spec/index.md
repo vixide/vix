@@ -7,7 +7,8 @@ In Workspace…**.
 ## Contents
 
 - `Hit` — one matching line: absolute `path`, `rel` (path relative to the
-  workspace root, exactly as shown), 1-based `line`/`col`, the matching
+  workspace root, exactly as shown), 1-based `line`/`col` (for text searches, the column counts Unicode
+  scalar values in the full source line), the matching
   line's own (clipped) `text`, and `display`, the `rel:line: text` string
   shown in the results list (and, for a real text search, the shape a T211
   editable-results buffer's lines take).
