@@ -22,6 +22,9 @@ use anyhow::Result;
 use ratatui_core::layout::Rect;
 use vix_input::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
+/// Lines one mouse-wheel notch scrolls the editor.
+pub const WHEEL_LINES: usize = 3;
+
 impl Editor {
     /// Handle a key event, then scroll to keep the cursor visible.
     ///
@@ -210,8 +213,18 @@ impl Editor {
     /// Returns an error when an applied action fails.
     pub fn mouse(&mut self, mouse: MouseEvent, area: &Rect) -> Result<()> {
         match mouse.kind {
-            MouseEventKind::ScrollUp => self.scroll_up(),
-            MouseEventKind::ScrollDown => self.scroll_down(area.height as usize),
+            // A wheel notch moves several lines, as in other editors: one line
+            // a notch made the wheel feel slow on a long file.
+            MouseEventKind::ScrollUp => {
+                for _ in 0..WHEEL_LINES {
+                    self.scroll_up();
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                for _ in 0..WHEEL_LINES {
+                    self.scroll_down(area.height as usize);
+                }
+            }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.drag_pointer = None;
                 let pos = self.cursor_from_mouse(mouse.column, mouse.row, area);

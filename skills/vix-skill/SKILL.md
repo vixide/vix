@@ -100,7 +100,7 @@ settings people ask about often: `keymap` (navigation style), `theme`
 (`"dark"`/`"light"`/a custom theme name), `locale` (UI language), `soft_wrap`,
 `line_numbers`, `indent_style`/`tab_width`, `format_on_save`, `auto_save`,
 `persistent_undo`, `lsp_servers` (per-extension language servers, empty by
-default — Vix ships none built in), `ai_command` (the shell command the **AI**
+default; well-known servers on `PATH` start in a trusted workspace anyway), `ai_command` (the shell command the **AI**
 menu runs). The full table with every key, type, default, and meaning is in
 `docs/configuration/index.md` when a checkout is available.
 

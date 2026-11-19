@@ -269,7 +269,7 @@ viewer. The reply destination is tracked as an `AiReply` on the request so one
 `AiDest::Db` path serves both.
 
 The assistant itself is whatever CLI the [`ai_command`](../../vix-ai-panel/spec/index.md) setting
-names (default `claude -p "{prompt}"`) — the same command the **AI** menu and
+names (default `claude -p {prompt}`) — the same command the **AI** menu and
 chat panel use, so the surface is provider-agnostic and needs no API-key
 handling of its own. Requests run in the background on the shared
 `spawn_ai` machinery: the reply is polled each event-loop tick, the SQL is

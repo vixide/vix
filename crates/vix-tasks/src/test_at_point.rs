@@ -71,6 +71,14 @@ static RUST_FN_NAME: LazyLock<Regex> = LazyLock::new(|| {
     clippy::unwrap_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
+/// An inline module opening on this line: `mod tests {`, `pub(crate) mod a {`.
+static RUST_MOD_OPEN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{").unwrap()
+});
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixed regex literal, compiled once and covered by tests"
+)]
 /// A `def test_...(` definition (pytest/unittest naming convention).
 static PYTHON_TEST_DEF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*def\s+(test_[A-Za-z0-9_]*)\s*\(").unwrap());
@@ -152,8 +160,10 @@ fn dir_of(path: &str) -> &str {
 }
 
 /// Rust: find the nearest `#[test]` at or above the cursor, then the first `fn`
-/// after it; run exactly that test with `cargo test -- --exact`.
-fn rust_test_at_point(lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
+/// after it; run exactly that test with `cargo test -- --exact PATH`, `PATH`
+/// being the test's full path within its crate (libtest's `--exact` matches
+/// that, never the bare function name).
+fn rust_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (attr_line, _) = scan_upward(lines, cursor_line, &RUST_TEST_ATTR)?;
     let name = lines[attr_line..]
         .iter()
@@ -161,10 +171,55 @@ fn rust_test_at_point(lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
         .get(1)?
         .as_str()
         .to_string();
+    let mut segments = rust_file_module(path);
+    segments.extend(rust_inline_modules(&lines[..attr_line]));
+    segments.push(name.clone());
     Some(TestMatch {
-        command: format!("cargo test -- --exact {name}"),
+        command: format!("cargo test -- --exact {}", segments.join("::")),
         name,
     })
+}
+
+/// The module path a Rust source file stands for, from its location:
+/// `src/net/http.rs` and `src/net/http/mod.rs` are `net::http`; `lib.rs`,
+/// `main.rs` and anything outside a `src/` directory (an integration test in
+/// `tests/` is its own crate) add nothing.
+fn rust_file_module(path: &str) -> Vec<String> {
+    let Some(in_src) = path
+        .strip_prefix("src/")
+        .or_else(|| path.rsplit_once("/src/").map(|(_, rest)| rest))
+    else {
+        return Vec::new();
+    };
+    let mut parts: Vec<&str> = in_src.trim_end_matches(".rs").split('/').collect();
+    if matches!(parts.last(), Some(&("mod" | "lib" | "main"))) {
+        parts.pop();
+    }
+    // `src/bin/tool.rs` is a binary crate of its own.
+    if parts.first() == Some(&"bin") {
+        return Vec::new();
+    }
+    parts.into_iter().map(str::to_string).collect()
+}
+
+/// The inline `mod NAME {` blocks still open at the end of `lines`, outermost
+/// first. Braces are counted per line, ignoring that a brace may sit in a
+/// string or a comment: a heuristic, like the rest of this module.
+fn rust_inline_modules(lines: &[&str]) -> Vec<String> {
+    let mut open: Vec<(String, i64)> = Vec::new();
+    let mut depth: i64 = 0;
+    for line in lines {
+        let before = depth;
+        if let Some(caps) = RUST_MOD_OPEN.captures(line) {
+            open.push((caps[1].to_string(), before));
+        }
+        depth += i64::try_from(line.matches('{').count()).unwrap_or(0);
+        depth -= i64::try_from(line.matches('}').count()).unwrap_or(0);
+        while open.last().is_some_and(|(_, at)| *at >= depth) {
+            open.pop();
+        }
+    }
+    open.into_iter().map(|(name, _)| name).collect()
 }
 
 /// Python: nearest `def test_...` at or above the cursor.
@@ -249,7 +304,9 @@ fn elixir_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Optio
 /// - **Rust** (`rs`): nearest preceding `#[test]` attribute line (matched
 ///   only when it is the *entire* trimmed line — `#[test] fn foo() {}` on
 ///   one line is not recognized), then the next `fn NAME` line at or after
-///   it. `cargo test -- --exact NAME`.
+///   it. `cargo test -- --exact PATH`, `PATH` the test's full path in its
+///   crate: the file's module (from `src/…`) and any enclosing inline
+///   `mod NAME {` blocks, then `NAME`.
 /// - **Python** (`py`): nearest enclosing/preceding `def test_NAME(`.
 ///   `python -m pytest FILE::NAME` (`NAME` includes the `test_` prefix, as
 ///   pytest node ids require).
@@ -285,7 +342,7 @@ pub fn test_at_point(
     hint: TestFrameworkHint,
 ) -> Option<TestMatch> {
     match file_extension {
-        "rs" => rust_test_at_point(lines, cursor_line),
+        "rs" => rust_test_at_point(project_relative_path, lines, cursor_line),
         "py" => python_test_at_point(project_relative_path, lines, cursor_line),
         "go" => go_test_at_point(project_relative_path, lines, cursor_line),
         "js" | "jsx" | "ts" | "tsx" => js_test_at_point(project_relative_path, lines, cursor_line),
@@ -361,6 +418,7 @@ mod tests {
         let names: Vec<(usize, &str)> = found.iter().map(|(l, m)| (*l, m.name.as_str())).collect();
         assert_eq!(names, vec![(3, "one"), (7, "two")]);
         assert_eq!(found[1].1.command, "cargo test -- --exact two");
+        // lib.rs is the crate root: no module prefix.
 
         let py =
             split("def test_a():\n    pass\ndef helper():\n    pass\ndef test_b():\n    pass\n");
@@ -384,6 +442,50 @@ mod tests {
         let m = test_at_point("rs", "src/lib.rs", &lines, 4, TestFrameworkHint::Unknown).unwrap();
         assert_eq!(m.name, "it_works");
         assert_eq!(m.command, "cargo test -- --exact it_works");
+    }
+
+    #[test]
+    fn rust_command_uses_the_full_test_path() {
+        let text = "fn count() {}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn counts() {\n        assert!(true);\n    }\n}\n";
+        let lines = split(text);
+        let m = test_at_point("rs", "src/main.rs", &lines, 8, TestFrameworkHint::Unknown).unwrap();
+        assert_eq!(m.name, "counts");
+        assert_eq!(m.command, "cargo test -- --exact tests::counts");
+        let m = test_at_point(
+            "rs",
+            "src/net/http.rs",
+            &lines,
+            8,
+            TestFrameworkHint::Unknown,
+        )
+        .unwrap();
+        assert_eq!(m.command, "cargo test -- --exact net::http::tests::counts");
+        let m = test_at_point(
+            "rs",
+            "crates/x/src/a/mod.rs",
+            &lines,
+            8,
+            TestFrameworkHint::Unknown,
+        )
+        .unwrap();
+        assert_eq!(m.command, "cargo test -- --exact a::tests::counts");
+    }
+
+    #[test]
+    fn rust_closed_and_nested_modules() {
+        let text = "mod done {\n    fn x() {}\n}\npub(crate) mod outer {\n    mod inner {\n        #[test]\n        fn deep() {}\n    }\n}\n";
+        let lines = split(text);
+        let m = test_at_point("rs", "src/lib.rs", &lines, 6, TestFrameworkHint::Unknown).unwrap();
+        assert_eq!(m.command, "cargo test -- --exact outer::inner::deep");
+    }
+
+    #[test]
+    fn rust_file_module_cases() {
+        assert_eq!(rust_file_module("src/lib.rs"), Vec::<String>::new());
+        assert_eq!(rust_file_module("src/a/b.rs"), vec!["a", "b"]);
+        assert_eq!(rust_file_module("tests/it.rs"), Vec::<String>::new());
+        assert_eq!(rust_file_module("src/bin/tool.rs"), Vec::<String>::new());
+        assert_eq!(rust_file_module("tui/src/app/git.rs"), vec!["app", "git"]);
     }
 
     #[test]

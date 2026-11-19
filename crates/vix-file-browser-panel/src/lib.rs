@@ -155,9 +155,9 @@ impl Panel {
         self.walk(auth.as_ref(), &root);
     }
 
-    /// Depth-first, name-sorted, links not followed: the order `walkdir`'s
-    /// `sort_by_file_name` gave before T710 routed this through the authority.
-    /// Returns `false` once [`Panel::max_entries`] is reached.
+    /// The entries of `dir` itself (one level, like any open dialog; Quick
+    /// Open finds files across the whole project), name-sorted, links not
+    /// followed. Returns `false` once [`Panel::max_entries`] is reached.
     fn walk(&mut self, auth: &dyn vix_authority::Authority, dir: &Path) -> bool {
         let Ok(mut children) = auth.read_dir(dir) else {
             return true;
@@ -194,9 +194,6 @@ impl Panel {
                 created: meta.as_ref().and_then(|m| unix_secs(m.created)),
                 modified: meta.as_ref().and_then(|m| unix_secs(m.modified)),
             });
-            if is_dir && !self.walk(auth, &entry.path) {
-                return false;
-            }
         }
         true
     }
@@ -243,17 +240,70 @@ impl Panel {
     }
 
     /// Append a character to the filter and reset the highlight to the top.
+    /// Typing a path separator after a folder's path (`docs/`, `../`, `~/`,
+    /// `/`) moves into that folder, so a path can be typed the way it reads.
     pub fn push(&mut self, c: char) {
         self.query.push(c);
         self.selected = 0;
         self.scroll = 0;
+        if is_separator(c) {
+            let dir = self.resolve(&self.query);
+            if vix_authority::current().is_dir(&dir) {
+                self.set_root(dir);
+            }
+        }
     }
 
-    /// Remove the last character of the filter and reset the highlight.
+    /// Remove the last character of the filter and reset the highlight. With
+    /// the filter already empty, go up to the parent folder instead.
     pub fn backspace(&mut self) {
-        self.query.pop();
+        if self.query.pop().is_none() {
+            self.parent();
+            return;
+        }
         self.selected = 0;
         self.scroll = 0;
+    }
+
+    /// `text` as a path: `~` and `~/…` from the home directory, an absolute
+    /// path as itself, anything else under [`Panel::root`].
+    #[must_use]
+    pub fn resolve(&self, text: &str) -> PathBuf {
+        let home = || {
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
+        };
+        if text == "~" {
+            if let Some(h) = home() {
+                return h;
+            }
+        } else if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\"))
+            && let Some(h) = home()
+        {
+            return h.join(rest);
+        }
+        let path = Path::new(text);
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.root.join(path)
+        }
+    }
+
+    /// When the filter is a path (it has a separator, or starts with `~`),
+    /// the file or folder it names, ignoring a `:line[:col]` suffix: the
+    /// host opens it on Enter, even if it does not exist yet.
+    #[must_use]
+    pub fn path_target(&self) -> Option<PathBuf> {
+        let text = strip_line_suffix(self.query.trim());
+        let is_path = text.starts_with('~') || text.chars().any(is_separator);
+        (is_path && !text.is_empty()).then(|| self.resolve(text))
+    }
+
+    /// Re-root the panel at `dir`, clearing the filter.
+    pub fn set_root(&mut self, dir: PathBuf) {
+        self.root = dir;
+        self.query.clear();
+        self.refresh();
     }
 
     /// Move the highlight up one row, stopping at the top.
@@ -339,11 +389,28 @@ impl Panel {
     /// Re-root the panel at the parent directory, if there is one.
     pub fn parent(&mut self) {
         if let Some(parent) = self.root.parent().map(Path::to_path_buf) {
-            self.root = parent;
-            self.query.clear();
-            self.refresh();
+            self.set_root(parent);
         }
     }
+}
+
+/// Whether `c` separates path components here (`/`, and `\` on Windows).
+fn is_separator(c: char) -> bool {
+    c == '/' || (cfg!(windows) && c == '\\')
+}
+
+/// `text` without a trailing `:line` or `:line:col` jump target.
+fn strip_line_suffix(text: &str) -> &str {
+    let mut end = text;
+    for _ in 0..2 {
+        match end.rsplit_once(':') {
+            Some((head, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => {
+                end = head;
+            }
+            _ => break,
+        }
+    }
+    end
 }
 
 /// Compare two entries under one sort key (ascending). Times missing from the
@@ -654,10 +721,11 @@ mod tests {
         std::fs::write(root.join(".hidden"), "h").unwrap();
 
         let mut p = Panel::open(&root);
-        assert_eq!(rels(&p), ["sub", "a.txt", "sub/b.rs"]);
+        // One folder at a time: `sub/b.rs` is listed only inside `sub`.
+        assert_eq!(rels(&p), ["sub", "a.txt"]);
         assert!(!p.truncated);
         p.toggle_hidden();
-        assert_eq!(rels(&p), ["sub", ".hidden", "a.txt", "sub/b.rs"]);
+        assert_eq!(rels(&p), ["sub", ".hidden", "a.txt"]);
 
         p.max_entries = 2;
         p.refresh();
@@ -681,8 +749,61 @@ mod tests {
         let opened = p.activate().expect("a file returns its path");
         assert!(opened.ends_with("sub/inner.txt"));
         p.parent();
-        assert_eq!(rels(&p), ["sub", "sub/inner.txt"]);
+        assert_eq!(rels(&p), ["sub"]);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn typed_paths_move_into_folders_and_name_files() {
+        let root = std::env::temp_dir().join(format!("vix-fb-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("docs/deep")).unwrap();
+        std::fs::write(root.join("docs/x.org"), "* a").unwrap();
+        let root = std::fs::canonicalize(&root).unwrap();
+
+        let mut p = Panel::open(&root);
+        for c in "docs/".chars() {
+            p.push(c);
+        }
+        assert_eq!(p.root, root.join("docs"), "typing docs/ moves into docs");
+        assert_eq!(p.query, "");
+        assert_eq!(rels(&p), ["deep", "x.org"]);
+        // A plain name filters; it is not a path.
+        for c in "x.o".chars() {
+            p.push(c);
+        }
+        assert_eq!(p.path_target(), None);
+        assert_eq!(rels(&p), ["x.org"]);
+        // A path with a separator names its target, existing or not.
+        p.query = "deep/new.org:3".to_string();
+        assert_eq!(p.path_target(), Some(root.join("docs/deep/new.org")));
+        p.query = format!("{}/docs/x.org", root.display());
+        assert_eq!(p.path_target(), Some(root.join("docs/x.org")));
+        // Backspace on an empty filter goes up a folder.
+        p.query.clear();
+        p.backspace();
+        assert_eq!(p.root, root);
+        // A separator after a name that is not a folder does not move.
+        for c in "nope/".chars() {
+            p.push(c);
+        }
+        assert_eq!(p.root, root);
+        assert_eq!(p.query, "nope/");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn home_and_line_suffix() {
+        assert_eq!(strip_line_suffix("a/b.rs:12:3"), "a/b.rs");
+        assert_eq!(strip_line_suffix("a/b.rs:12"), "a/b.rs");
+        assert_eq!(strip_line_suffix("a/b.rs"), "a/b.rs");
+        assert_eq!(strip_line_suffix("c:x"), "c:x");
+        let p = panel(Vec::new());
+        if let Some(home) = std::env::var_os("HOME") {
+            assert_eq!(p.resolve("~/n.org"), PathBuf::from(&home).join("n.org"));
+            assert_eq!(p.resolve("~"), PathBuf::from(home));
+        }
+        assert_eq!(p.resolve("rel"), p.root.join("rel"));
     }
 
     #[test]

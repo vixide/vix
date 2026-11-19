@@ -80,7 +80,7 @@ impl Editor {
         // draw syntax highlighting -- or the LSP semantic-token overlay
         // (T123a) alone, for a file whose language has a server but no
         // bundled Tree-sitter grammar (`is_highlight()` false: no query).
-        if code.is_highlight() || !self.semantic_tokens.is_empty() {
+        if code.has_highlighter() || !self.semantic_tokens.is_empty() {
             self.draw_syntax_layer(
                 area,
                 buf,

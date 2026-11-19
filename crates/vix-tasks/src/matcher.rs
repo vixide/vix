@@ -254,12 +254,13 @@ static RUST_HEADER: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(error|warning|note|help)(?:\[[A-Za-z0-9_]+\])?: (.+)$"));
 /// `rustc` location line: `  --> src/main.rs:3:5`.
 static RUST_ARROW: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*--> (.+?):(\d+):(\d+)\s*$"));
-/// Modern (1.73+) panic location: `thread 'x' panicked at src/lib.rs:9:5:`.
+/// Modern (1.73+) panic location: `thread 'x' panicked at src/lib.rs:9:5:`;
+/// newer Rust adds the thread id: `thread 'x' (2583) panicked at …`.
 static RUST_PANIC: LazyLock<Regex> =
-    LazyLock::new(|| re(r"^thread '.*' panicked at (.+?):(\d+):(\d+):?\s*$"));
+    LazyLock::new(|| re(r"^thread '.*'(?: \(\d+\))? panicked at (.+?):(\d+):(\d+):?\s*$"));
 /// Pre-1.73 panic format, where the message is quoted on the same line.
 static RUST_PANIC_OLD: LazyLock<Regex> =
-    LazyLock::new(|| re(r"^thread '.*' panicked at '(.*)', (.+?):(\d+):(\d+)\s*$"));
+    LazyLock::new(|| re(r"^thread '.*'(?: \(\d+\))? panicked at '(.*)', (.+?):(\d+):(\d+)\s*$"));
 
 /// GCC/Clang: `file:line[:col]: error|warning: message` (column optional).
 static GCC: LazyLock<Regex> =
@@ -1025,6 +1026,18 @@ mod tests {
         assert_eq!(p.message, "attempt to divide by zero");
         let old = "thread 'main' panicked at 'boom', src/main.rs:2:5";
         assert_eq!(one(MatcherSpec::Auto, old).message, "boom");
+    }
+
+    #[test]
+    fn rustc_panic_with_a_thread_id() {
+        let text =
+            "thread 'tests::x' (258303201) panicked at src/main.rs:37:9:\nassertion failed\n";
+        let p = one(MatcherSpec::Auto, text);
+        assert_eq!(
+            (p.file.as_str(), p.line, p.column),
+            ("src/main.rs", 37, Some(9))
+        );
+        assert_eq!(p.message, "assertion failed");
     }
 
     #[test]

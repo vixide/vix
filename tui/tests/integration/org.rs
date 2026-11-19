@@ -688,3 +688,44 @@ fn org_agenda_views_list_todos_matches_searches_and_stuck_projects() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn tab_folds_an_org_headline_without_a_language_server() {
+    let dir = unique_dir("org-fold");
+    let file = dir.join("notes.org");
+    fs::write(
+        &file,
+        "* One\nbody 1\n** Sub\nbody 2\n* Two\n* Three\nbody 3\n",
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    let hidden =
+        |app: &App, line: usize| app.editor.active_tab().unwrap().editor.is_line_hidden(line);
+    // Tab on "* One" folds its whole subtree, Sub included.
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(hidden(&app, 1) && hidden(&app, 3), "One's body is hidden");
+    assert!(!hidden(&app, 4), "Two stays visible");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "* One",
+        "Tab did not indent"
+    );
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(!hidden(&app, 1), "a second Tab unfolds it");
+    // A headline with no body neither folds its parent nor indents.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(4);
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(!hidden(&app, 5) && !hidden(&app, 1));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[4], "* Two");
+    // S-Tab folds every headline, and again unfolds everything.
+    app.on_key(keycode(KeyCode::BackTab));
+    assert!(hidden(&app, 1) && hidden(&app, 6));
+    app.on_key(keycode(KeyCode::BackTab));
+    assert!(!hidden(&app, 1) && !hidden(&app, 6));
+    fs::remove_dir_all(&dir).ok();
+}

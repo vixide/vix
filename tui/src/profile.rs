@@ -153,7 +153,8 @@ impl Profiler {
         if phase == Phase::InputToFrame {
             let at = self.started.elapsed().as_secs_f64();
             self.slowest.push((micros, at));
-            self.slowest.sort_unstable_by_key(|s| std::cmp::Reverse(s.0));
+            self.slowest
+                .sort_unstable_by_key(|s| std::cmp::Reverse(s.0));
             self.slowest.truncate(SLOWEST);
         }
     }
@@ -218,7 +219,12 @@ impl Profiler {
                 let _ = writeln!(out, "  {:>9.2}  at {at:.1} s", f64::from(*micros) / 1000.0);
             }
         }
-        if self.counts.iter().zip(&self.samples).any(|(c, s)| *c > s.len() as u64) {
+        if self
+            .counts
+            .iter()
+            .zip(&self.samples)
+            .any(|(c, s)| *c > s.len() as u64)
+        {
             let _ = writeln!(
                 out,
                 "\n(only the first {MAX_SAMPLES} samples per phase are in the percentiles)"
@@ -252,11 +258,14 @@ mod tests {
         assert_eq!(s.p99, Duration::from_micros(99));
         assert_eq!(s.max, Duration::from_micros(100));
         let one = stats(&[7], 1);
-        assert_eq!((one.p50, one.p99, one.max), (
-            Duration::from_micros(7),
-            Duration::from_micros(7),
-            Duration::from_micros(7)
-        ));
+        assert_eq!(
+            (one.p50, one.p99, one.max),
+            (
+                Duration::from_micros(7),
+                Duration::from_micros(7),
+                Duration::from_micros(7)
+            )
+        );
         assert_eq!(stats(&[], 0), Stats::default());
         assert_eq!(stats(&[3, 1, 2], 5).count, 5);
         assert_eq!(stats(&[3, 1, 2], 3).p50, Duration::from_micros(2));
@@ -282,7 +291,10 @@ mod tests {
         }
         p.record(Phase::Draw, Duration::from_millis(3));
         let r = p.report();
-        assert!(r.contains("inputs slower than 16 ms to reach the screen: 2 of 5"), "{r}");
+        assert!(
+            r.contains("inputs slower than 16 ms to reach the screen: 2 of 5"),
+            "{r}"
+        );
         assert!(r.contains("draw"), "{r}");
         let slowest = r.split("slowest inputs").nth(1).unwrap();
         let first = slowest.lines().nth(1).unwrap();

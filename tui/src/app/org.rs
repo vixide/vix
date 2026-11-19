@@ -36,7 +36,11 @@ impl App {
     /// `action` was an Org command.
     pub(super) fn org_action(&mut self, action: &str) -> bool {
         match action {
-            "org.cycle_visibility" => self.run_action("editor.fold_toggle"),
+            "org.cycle_visibility" => {
+                if !self.org_toggle_drawer_fold() {
+                    self.run_action("editor.fold_toggle");
+                }
+            }
             "org.promote" => self.org_rewrite_line(crate::org::promote),
             "org.demote" => self.org_rewrite_line(crate::org::demote),
             "org.cycle_todo" => {
@@ -1563,13 +1567,17 @@ impl App {
     }
 
     /// Org view-only keys handled before the read-only guard in the editor: a
-    /// plain Tab folds/unfolds the drawer under the cursor, and a plain `t` in an
+    /// plain Tab folds/unfolds the headline subtree or drawer under the cursor,
+    /// `S-Tab` folds or unfolds them all, and a plain `t` in an
     /// agenda buffer cycles the task there. Returns `true` if the key was
     /// consumed (so it neither indents nor types).
     pub(super) fn org_view_key(&mut self, key: KeyEvent) -> bool {
         let plain = !Self::ctrl(&key) && !Self::alt(&key);
         if plain && !Self::shift(&key) && key.code == KeyCode::Tab && self.org_toggle_drawer_fold()
         {
+            return true;
+        }
+        if plain && key.code == KeyCode::BackTab && self.org_cycle_global() {
             return true;
         }
         if plain && key.code == KeyCode::Char('t') && self.agenda_todo_at_cursor() {
@@ -1691,22 +1699,76 @@ impl App {
         let Some(t) = self.editor.active_tab_mut() else {
             return false;
         };
-        // With a selection, Tab means "indent"; leave drawer folding for a plain
-        // caret on the header line.
+        // With a selection, Tab means "indent"; leave folding for a plain
+        // caret on a headline or drawer line.
         if t.editor.get_selection().is_some_and(|s| !s.is_empty()) {
             return false;
         }
-        let range = {
+        let (is_headline, drawer, subtree) = {
             let code = t.editor.code_ref();
             let line = code.char_to_line(t.editor.get_cursor());
             let text = code.get_content();
             let lines: Vec<&str> = text.split('\n').collect();
-            crate::org::drawer_range(&lines, line)
+            let ranges = crate::org::fold_ranges(&lines);
+            t.editor.set_fold_ranges(ranges);
+            let is_headline = lines
+                .get(line)
+                .is_some_and(|l| crate::org::headline_level(l).is_some());
+            let subtree = crate::org::subtree_range(&lines, line).map(|(s, e)| (s, e - 1));
+            (is_headline, crate::org::drawer_range(&lines, line), subtree)
         };
-        let Some((start, end)) = range else {
+        if let Some((start, end)) = drawer {
+            return t.editor.toggle_manual_fold(start, end);
+        }
+        if !is_headline {
             return false;
-        };
-        t.editor.toggle_manual_fold(start, end)
+        }
+        // A headline: fold or unfold its own subtree (never its parent's).
+        // One with no body has nothing to fold, and Tab still does not indent it.
+        match subtree {
+            Some((start, end)) if end > start => {
+                t.editor.toggle_manual_fold(start, end);
+            }
+            _ => self.status = t!("status.no_fold").to_string(),
+        }
+        true
+    }
+
+    /// Org `S-Tab`: fold every headline and drawer (an overview), or unfold
+    /// everything when something is folded. Returns `true` in an `.org` buffer.
+    fn org_cycle_global(&mut self) -> bool {
+        if !self.active_is_org()
+            || self
+                .editor
+                .active_tab_mut()
+                .and_then(|t| t.editor.get_selection())
+                .is_some_and(|s| !s.is_empty())
+        {
+            // With a selection, S-Tab still outdents.
+            return false;
+        }
+        self.org_install_fold_ranges();
+        if let Some(t) = self.editor.active_tab_mut() {
+            if t.editor.has_folds() {
+                t.editor.unfold_all();
+            } else {
+                t.editor.fold_all();
+            }
+        }
+        true
+    }
+
+    /// Give the active `.org` buffer its headline and drawer fold ranges
+    /// (`vix_org::fold_ranges`), so folding works without a language server.
+    pub(super) fn org_install_fold_ranges(&mut self) {
+        if !self.active_is_org() {
+            return;
+        }
+        if let Some(t) = self.editor.active_tab_mut() {
+            let text = t.editor.code_ref().get_content();
+            let lines: Vec<&str> = text.split('\n').collect();
+            t.editor.set_fold_ranges(crate::org::fold_ranges(&lines));
+        }
     }
 
     /// When the cursor sits right after a freshly typed `[[mailto:` or

@@ -35,6 +35,10 @@ impl App {
         // T627: a trusted workspace's `.vix/settings.toml`, before any buffer
         // opens so the first ones already see it.
         self.load_project_settings();
+        // Built-in language servers, for a workspace already trusted: only
+        // an app actually started looks for them on PATH.
+        self.lsp_probe.get_or_insert(super::trust::on_path);
+        self.add_builtin_lsp_servers();
         self.resolve_key_overrides();
         // First-run welcome screen (no-op after it has been seen once).
         self.maybe_show_welcome();
@@ -71,6 +75,8 @@ impl App {
         self.refresh_debug_markers();
         // Untitled buffers a crash or forced quit left behind (T629).
         self.offer_untitled_recovery();
+        // A crash report the last run saved (`spec/crash-reports`).
+        self.notice_crash_report();
         Ok(())
     }
 

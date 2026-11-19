@@ -996,6 +996,14 @@ impl Code {
         self.query.is_some()
     }
 
+    /// Whether [`Code::highlight_interval`] can style this buffer: a
+    /// Tree-sitter query is loaded, or it is an Org buffer, which has its own
+    /// line-based highlighter ([`crate::org_highlight`]).
+    #[must_use]
+    pub fn has_highlighter(&self) -> bool {
+        self.query.is_some() || self.lang == "org"
+    }
+
     /// Highlights the interval between `start` and `end` char indices.
     /// Returns a list of (start byte, end byte, `token_name`) for highlighting.
     ///
@@ -1011,6 +1019,10 @@ impl Code {
     ) -> Vec<(usize, usize, T)> {
         assert!(start <= end, "Invalid range");
 
+        // Org has no Tree-sitter grammar here: a line-based highlighter.
+        if self.query.is_none() && self.lang == "org" {
+            return self.org_highlight_interval(start, end, theme);
+        }
         let Some(query) = &self.query else {
             return vec![];
         };
@@ -1044,6 +1056,36 @@ impl Code {
             .into_iter()
             .map(|(start, end, _, value)| (start, end, value))
             .collect()
+    }
+
+    /// [`Code::highlight_interval`] for an Org buffer: the spans
+    /// [`crate::org_highlight::line_spans`] gives each line touching the byte
+    /// range `[start, end)`, named entries looked up in `theme`.
+    fn org_highlight_interval<T: Copy>(
+        &self,
+        start: usize,
+        end: usize,
+        theme: &HashMap<String, T>,
+    ) -> Vec<(usize, usize, T)> {
+        let total = self.content.len_bytes();
+        let (start, end) = (start.min(total), end.min(total));
+        if start >= end {
+            return vec![];
+        }
+        let first = self.content.byte_to_line(start);
+        let last = self.content.byte_to_line(end - 1);
+        let mut out = Vec::new();
+        for i in first..=last {
+            let line_start = self.content.line_to_byte(i);
+            let line = self.content.line(i).to_string();
+            let text = line.trim_end_matches(['\n', '\r']);
+            for (s, e, name) in crate::org_highlight::line_spans(text) {
+                if let Some(&value) = theme.get(name) {
+                    out.push((line_start + s, line_start + e, value));
+                }
+            }
+        }
+        out
     }
 
     /// Char ranges of `comment` and `string` tokens across the whole buffer,

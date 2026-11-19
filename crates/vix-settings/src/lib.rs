@@ -62,6 +62,9 @@ pub struct Settings {
     /// Soft-wrap, rainbow brackets, and word-highlight visual aids (T149).
     #[serde(flatten)]
     pub editor_visual: EditorVisualSettings,
+    /// Soft-wrapping prose files (Markdown and Org).
+    #[serde(flatten)]
+    pub prose: ProseSettings,
     /// Explorer, message drawer, and bottom dock visibility (T149).
     #[serde(flatten)]
     pub panels: PanelSettings,
@@ -114,7 +117,7 @@ pub struct Settings {
     /// Any other value means `"inline"`. **Git → Review Two-Pane View** (or
     /// `v` in the review) switches the open review without changing this.
     pub review_view: String,
-    /// Whether a remote (SSH) workspace uses the Vix remote agent (T717),
+    /// Whether a remote (SSH or container) workspace uses the Vix remote agent (T717),
     /// which answers file operations over one connection instead of one
     /// shell command each: `"installed"` (default — use a `vix` of exactly
     /// this version already on the remote machine, on its `PATH` or in
@@ -225,8 +228,10 @@ pub struct Settings {
     pub dictionary_path: String,
     /// Configured language servers, matched to files by extension. Each entry is
     /// a language id (sent to the server), the file extensions it handles, and
-    /// the command (program + args) to launch. Empty by default — Vix ships no
-    /// built-in server, so add the ones you have installed, e.g.
+    /// the command (program + args) to launch. Empty by default: in a trusted
+    /// workspace Vix starts well-known servers it finds on `PATH`
+    /// (rust-analyzer, gopls, pyright, clangd, …) anyway, and an entry for an
+    /// extension replaces the built-in for it, e.g.
     /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
     pub lsp_servers: Vec<LspServer>,
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
@@ -281,7 +286,8 @@ pub struct Settings {
     pub ai_provider: String,
     /// HTTP provider endpoint override (T124); empty uses the provider's own
     /// default (e.g. Anthropic's public Messages API, or
-    /// `http://localhost:11434` for Ollama). Ignored when `ai_provider` is
+    /// `http://localhost:11434/api/generate` for Ollama; an override must be
+    /// the full URL). Ignored when `ai_provider` is
     /// `"cli"`.
     pub ai_endpoint: String,
     /// HTTP provider model id override (T124); empty uses the provider's own
@@ -481,6 +487,25 @@ pub struct EditorVisualSettings {
     pub rainbow_brackets: bool,
     /// Passively highlight every occurrence of the word under the cursor.
     pub highlight_word: bool,
+}
+
+/// How prose files display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct ProseSettings {
+    /// Soft-wrap prose (Markdown and Org files) even when `soft_wrap` is off,
+    /// so paragraphs stay readable beside the docks. A file's language table
+    /// or modeline can still turn wrapping off. On by default.
+    pub prose_soft_wrap: bool,
+}
+
+impl Default for ProseSettings {
+    fn default() -> Self {
+        ProseSettings {
+            prose_soft_wrap: true,
+        }
+    }
 }
 
 /// Primary panel visibility on startup: the file explorer, message drawer,
@@ -931,6 +956,7 @@ impl Default for Settings {
         Settings {
             gutter: GutterSettings::default(),
             editor_visual: EditorVisualSettings::default(),
+            prose: ProseSettings::default(),
             panels: PanelSettings::default(),
             secondary_panels: SecondaryPanelSettings::default(),
             viewport: ViewportSettings::default(),
@@ -967,8 +993,8 @@ impl Default for Settings {
             bidi: "auto".to_string(),
             mirror_layout: "auto".to_string(),
             keymap: "apple".to_string(),
-            explorer_width: 30,
-            messages_width: 32,
+            explorer_width: 24,
+            messages_width: 26,
             outline_width: 28,
             debug_width: 36,
             recent_files: Vec::new(),

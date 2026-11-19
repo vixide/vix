@@ -355,6 +355,16 @@ impl Tab {
         self.path.as_deref().is_some_and(is_remote_path)
     }
 
+    /// Whether this is an untitled buffer that was never edited: no path,
+    /// no unsaved changes, no text, and no edit ever made to it.
+    #[must_use]
+    pub fn is_pristine_scratch(&self) -> bool {
+        self.path.is_none()
+            && !self.dirty
+            && self.editor.code_ref().len_chars() == 0
+            && self.editor.code_ref().revision() == 0
+    }
+
     /// Whole buffer text.
     pub fn text(&self) -> String {
         self.editor.get_content()
@@ -849,6 +859,14 @@ impl Editor {
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
             self.tabs[i] = tab;
             self.active = i;
+            return Ok(());
+        }
+        // The empty "untitled" tab Vix starts with gives way to the first file
+        // opened, as in other editors, rather than lingering beside it: only
+        // when it is the one tab, never edited, and empty.
+        if self.tabs.len() == 1 && self.tabs[0].is_pristine_scratch() {
+            self.tabs[0] = tab;
+            self.active = 0;
             return Ok(());
         }
         self.tabs.push(tab);

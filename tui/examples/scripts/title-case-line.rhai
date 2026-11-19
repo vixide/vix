@@ -14,6 +14,9 @@
 // Rhai string/char manipulation (no special "line" API needed).
 
 register_command("title_case_line", "Title Case Current Line", "on_title_case_line");
+// C-S-t is Reopen Closed Tab in the default (Apple) keymap: this binding
+// takes it over, and Vix says so once in the message drawer. Pick another
+// key if you use Reopen Closed Tab.
 bind_key("C-S-t", "title_case_line");
 
 fn on_title_case_line() {

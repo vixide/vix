@@ -192,7 +192,8 @@ fn explorer_delete_closes_buffer() {
     // available, which a plain fs::remove_file never needed.
     app.settings.explorer_delete = "hard".to_string();
     app.open_initial(&dir.join("a.txt"));
-    assert_eq!(app.editor.tabs.len(), 2); // initial empty buffer + a.txt
+    // a.txt takes over the empty starting buffer.
+    assert_eq!(app.editor.tabs.len(), 1);
     app.focus = Focus::Explorer;
     app.explorer.selected = node_index(&app, "a.txt");
     app.on_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE)); // request
@@ -416,4 +417,25 @@ fn minimap_renders_a_bar_per_line_band_without_panicking() {
         .flat_map(|x| (mm.top()..mm.bottom()).map(move |y| (x, y)))
         .any(|(x, y)| buf[(x, y)].symbol() == "\u{2593}" || buf[(x, y)].symbol() == "\u{2592}");
     assert!(has_bar, "at least one band drew a bar for its longest line");
+}
+
+#[test]
+fn report_a_crash_shows_the_report_read_only_and_asks_first() {
+    use crate::app::ConfirmKind;
+    let dir = unique_dir("crash-report");
+    let report = dir.join("crash-20260101T000000Z.txt");
+    std::fs::write(&report, "Vix crash report\nversion: 2.0.2\npanic: boom\n").unwrap();
+    let mut app = app_at(&dir);
+    app.show_crash_report(&report);
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.read_only, "the report opens read-only");
+    assert!(tab.text().contains("panic: boom"));
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(ConfirmKind::ReportCrash),
+        "nothing is opened or sent before the user says yes"
+    );
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none(), "n closes the question");
+    std::fs::remove_dir_all(&dir).ok();
 }

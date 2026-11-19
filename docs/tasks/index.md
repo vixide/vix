@@ -34,7 +34,7 @@ non-zero exit). If no `tasks.toml` is found, Vix says so in the status bar.
 
 ## Problems in task output
 
-While a command runs — a task, a **Project** menu command, **Tools → Test**, or
+While a command runs — a task, a **Project** menu command, **Tools → Run Tests**, or
 a plain **Run Command** — Vix reads its output for compiler errors, lint
 findings and failing tests, like VS Code's problem matchers or Emacs's
 `next-error`. When it finishes, the status bar says how many problems it found.

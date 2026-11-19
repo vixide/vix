@@ -56,6 +56,10 @@ Type `>` to search and run editor commands. Palette commands share the same
 action identifiers as the menu items, so a command behaves identically however
 it is invoked.
 
+Every command in the menu bar is listed, named by its menu path, so typing
+any part of the path finds it: `>terminal` lists **Tools › Terminal ›
+Show/Hide Terminal** and the other terminal commands.
+
 ## Preview, history, and resume
 
 On a screen at least 100 columns wide, the file finder, `@`, `@@`, and

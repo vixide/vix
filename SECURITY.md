@@ -154,7 +154,9 @@ Until then Vix does not:
 - run project environment detectors (direnv, mise, `.vix/env.toml`);
 - use a project's own Prettier from `node_modules/.bin`, or its Jupyter
   kernelspecs;
-- start ACP agents.
+- start ACP agents;
+- start the well-known language servers it finds on your `PATH` (it asks,
+  naming the server, the first time you open a file one would serve).
 
 A remote workspace (SSH, container, Kubernetes, WSL) starts untrusted too.
 It is remembered per host and path, and until you trust it, its language
@@ -178,7 +180,10 @@ never read, trusted or not. See
 - **Tasks** (`.vix/project.toml`, discovered tasks) run only when you choose
   one, through a prompt that shows the resolved command.
 - **Language servers** start when you first open a matching file, from the
-  `lsp_servers` in your settings (or a trusted workspace's).
+  `lsp_servers` in your settings (or a trusted workspace's). The well-known
+  servers Vix starts on its own when they are on your `PATH` (rust-analyzer,
+  gopls, pyright, clangd, …) wait for workspace trust, since they can run the
+  project's build scripts and macros: the trust prompt names the server first.
 - **Debug adapters** start only on **Run → Start Debugging**.
 - **Org source blocks** sent to a Jupyter kernel ask first, once per block,
   in an untrusted workspace or for a file outside the workspace.
@@ -195,6 +200,10 @@ Vix sends nothing anywhere on its own. It has no telemetry, does not check
 for updates, and does not connect to anything until you use a feature that
 does:
 
+- **Crash reports** stay on your machine. Vix writes one when it crashes,
+  scrubbed of your home folder, user name and quoted text, and only opens a
+  prefilled GitHub issue if you choose **Help → Report a Crash…** and then
+  submit it yourself. See [crash reports](docs/crash-reports/index.md).
 - **AI providers** use HTTPS by default. A local model endpoint defaults to
   plain HTTP on `localhost`. The endpoint is yours to set.
 - **`vix --mcp`** speaks MCP over stdio only, with no listening socket. It is

@@ -3,24 +3,24 @@ source: tui/tests/snapshots.rs
 expression: screen
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help              
-  Ex╭────────────────────────────────╮╭──────────────────────────────────────────╮─────────────────
- src│ New                     Ctrl N ●│Open file, project, and workspace         │ix. Press Ctrl P
- Car│ New Scratch Buffer             ││commands.                                 │es the file explo
+  Ex╭────────────────────────────────╮╭──────────────────────────────────────────╮ges ─────────────
+ src│ New                     Ctrl N ●│Open file, project, and workspace         │e to Vix. Press C
+ Car│ New Scratch Buffer             ││commands.                                 │ toggles the file
  REA│────────────────────────────────│╰──────────────────────────────────────────╯
-     │ Open…                   Ctrl O │                            ││
-     │ Open Recent…      Ctrl Shift O │                            ││
-     │ Open in Large File Viewer…     │                            ││
-     │ Switch Project…                │                            ││
-     │ Open Remote…                   │                            ││
-     │ Reconnect Remote               │                            ││
-     │ Trust Remote Workspace…        │                            ││
-     │ Insert File…                   │                            ││
-     │────────────────────────────────│                            ││
-     │ Open Workspace from File…      │                            ││
-     │ Save Workspace into File…      │                            ││
-     │ Add Folder to Workspace…       │                            ││
-     │────────────────────────────────│                            ││
-     │ Save                    Ctrl S │                            ││●──────────────────────────────
+     │ Open…                   Ctrl O │                                  ││
+     │ Open Recent…      Ctrl Shift O │                                  ││
+     │ Open in Large File Viewer…     │                                  ││
+     │ Switch Project…                │                                  ││
+     │ Open Remote…                   │                                  ││
+     │ Reconnect Remote               │                                  ││
+     │ Trust Remote Workspace…        │                                  ││
+     │ Insert File…                   │                                  ││
+     │────────────────────────────────│                                  ││
+     │ Open Workspace from File…      │                                  ││
+     │ Save Workspace into File…      │                                  ││
+     │ Add Folder to Workspace…       │                                  ││
+     │────────────────────────────────│                                  ││
+     │ Save                    Ctrl S │                                  ││●────────────────────────
   Ou│ Save As…          Ctrl Shift S │─────────────────────────────────────────────────────────────
 (no o│ Save All                       │
      │ Rename…                        │

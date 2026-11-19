@@ -40,6 +40,7 @@ pub fn get_lang(filename: &str) -> String {
         "yaml" | "yml" => "yaml",
         "sh" | "bash" => "shell",
         "md" => "markdown",
+        "org" => "org",
         _ => "unknown",
     }
     .to_string()
@@ -126,7 +127,7 @@ pub fn indent(lang: &str) -> String {
 #[must_use]
 pub fn comment(lang: &str) -> &'static str {
     match lang {
-        "python" | "shell" | "toml" | "yaml" => "#",
+        "python" | "shell" | "toml" | "yaml" | "org" => "#",
         "lua" | "sql" => "--",
         _ => "//",
     }

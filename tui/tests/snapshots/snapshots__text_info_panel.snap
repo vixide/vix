@@ -3,24 +3,24 @@ source: tui/tests/snapshots.rs
 expression: "overlay_screen(\"ov-text-info\", \"one two three\\nfour five\\n\",\n\"tools.text_info\",)"
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  IM  Org  Project  OC  Tools  Help              
-  Explorer ─────────────────╮  untitled                          ╭  Messages ───────────────────
- src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
- Cargo.toml                 │    1  one two three                 ││ Ctrl B toggles the file explo
- README.md                  │    2  four five                     ││
-                             │╭  Text Information ──────────────────╮
-                             ││  Characters   24                     │
-                             ││  Words        5                      │
-                             ││  Lines        2                      │
-                             ││  Sentences    1                      │
-                             ││  Paragraphs   1                      │
-                             ││↑↓ move   Enter insert value   Esc clo│
-                             │╰──────────────────────────────────────╯
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ││
-                             │                                     ●│●──────────────────────────────
+  Explorer ───────────╮  untitled                                      ╭  Messages ─────────────
+ src                  │──────────────────────────────────────────────────│ Welcome to Vix. Press C
+ Cargo.toml           │    1  one two three                             ││ Ctrl B toggles the file
+ README.md            │    2  four five                                 ││
+                       │    3 ╭  Text Information ──────────────────╮   ││
+                       │      │  Characters   24                     │   ││
+                       │      │  Words        5                      │   ││
+                       │      │  Lines        2                      │   ││
+                       │      │  Sentences    1                      │   ││
+                       │      │  Paragraphs   1                      │   ││
+                       │      │↑↓ move   Enter insert value   Esc clo│   ││
+                       │      ╰──────────────────────────────────────╯   ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ││
+                       │                                                 ●│●────────────────────────
   Output ──────────────────────────────────────────────────────────────────────────────────────────
 (no output yet)
 

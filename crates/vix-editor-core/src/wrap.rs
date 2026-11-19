@@ -176,7 +176,7 @@ impl Editor {
 
         // Single grapheme pass for styling + caret position.
         let start_byte = code.char_to_byte(vr.start);
-        let highlights = if code.is_highlight() {
+        let highlights = if code.has_highlighter() {
             let end_byte = code.char_to_byte(vr.end);
             self.highlight_interval(start_byte, end_byte, &self.theme)
         } else {
@@ -194,15 +194,19 @@ impl Editor {
         if caret.is_none() && vr.start == vr.end && self.cursor == vr.start {
             caret = Some(0);
         }
-        // End-of-line virtual text (T614) after the line's last visual row.
+        // End-of-line virtual text (T614) after the line's last visual row,
+        // and a folded line's `...` before it.
         if vr.end == line_start + line_len {
-            self.draw_eol_texts(
-                buf,
-                vr.line,
-                usize::from(text_x0) + usize::from(vx),
-                right,
-                draw_y,
-            );
+            let mut end = usize::from(text_x0) + usize::from(vx);
+            if self.fold_marker(vr.line) == Some(true) {
+                let x = u16::try_from(end).unwrap_or(u16::MAX);
+                if x < right {
+                    let shown: String = "...".chars().take(usize::from(right - x)).collect();
+                    buf.set_string(x, draw_y, &shown, default_text_style);
+                }
+                end += 3;
+            }
+            self.draw_eol_texts(buf, vr.line, end, right, draw_y);
         }
         if let (Some(cvx), Some(cursor_style)) = (caret, self.cursor_style) {
             let cx = text_x0 + cvx;
@@ -324,6 +328,11 @@ impl Editor {
         let mut rows = Vec::new();
         let mut line = self.offset_y;
         while line < total_lines && rows.len() < max_rows {
+            // A folded range's body takes no rows, as in the unwrapped view.
+            if self.is_line_hidden(line) {
+                line += 1;
+                continue;
+            }
             let line_start = code.line_to_char(line);
             let line_len = code.line_len(line);
             if self.lens_row_above(line) {
@@ -394,5 +403,47 @@ fn paint(buf: &mut Buffer, x: u16, width: u16, right: u16, y: u16, style: Style)
         if cx < right {
             buf[(cx, y)].set_style(style);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::widgets::Widget;
+
+    /// Up and Down step over a folded range's hidden lines instead of
+    /// putting the caret inside it.
+    #[test]
+    fn vertical_moves_skip_folded_lines() {
+        use crate::actions::{MoveDown, MoveUp};
+        let mut ed = Editor::new("text", "head\nbody 1\nbody 2\nafter\n", Vec::new()).unwrap();
+        ed.set_fold_ranges(vec![(0, 2)]);
+        assert!(ed.fold(0));
+        ed.set_cursor(0);
+        ed.apply(MoveDown { shift: false });
+        assert_eq!(ed.cursor_line(), 3, "Down lands on the line after the fold");
+        ed.apply(MoveUp { shift: false });
+        assert_eq!(ed.cursor_line(), 0, "Up lands on the fold's header");
+    }
+
+    /// With soft wrap on, a folded range's body takes no rows and its header
+    /// shows `...`, as in the unwrapped view.
+    #[test]
+    fn soft_wrap_hides_folded_lines_and_marks_the_fold() {
+        let mut ed = Editor::new("text", "head\nbody 1\nbody 2\nafter\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_soft_wrap(true);
+        ed.set_fold_ranges(vec![(0, 2)]);
+        assert!(ed.fold(0));
+        let lines: Vec<usize> = ed.visual_rows(20, 10).iter().map(|r| r.line).collect();
+        assert_eq!(lines, vec![0, 3, 4], "lines 1 and 2 are folded away");
+        let area = Rect::new(0, 0, 20, 4);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let row = |y: u16| (0..20).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        assert!(row(0).trim_start().starts_with("head..."), "{:?}", row(0));
+        assert!(row(1).trim_start().starts_with("after"), "{:?}", row(1));
     }
 }

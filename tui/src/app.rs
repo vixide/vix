@@ -15,6 +15,7 @@ mod coverage;
 mod cowork;
 #[cfg(not(feature = "cowork"))]
 mod cowork_off;
+mod crash_report;
 #[cfg(feature = "sql")]
 mod db;
 #[cfg(not(feature = "sql"))]
@@ -910,6 +911,9 @@ pub enum ConfirmKind {
     /// Undo only the selected changed lines of a review hunk in the working
     /// tree (T665); [`Confirm::paths`] holds the file.
     GitReviewDiscardLines,
+    /// Open a prefilled GitHub issue for the crash report in
+    /// [`Confirm::paths`] in the browser (`spec/crash-reports`).
+    ReportCrash,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -937,6 +941,9 @@ pub struct ScriptTrustPrompt {
     /// waiting too: `direnv`/`mise`/the detector's command stay unrun until
     /// this prompt is answered (T667).
     pub env: bool,
+    /// A built-in language server (its program name) that opening a file
+    /// would start, waiting until this prompt is answered.
+    pub language_server: Option<String>,
 }
 
 /// How long after the script-trust prompt opens its keys are ignored (T655):
@@ -2154,6 +2161,11 @@ pub struct App {
     /// [`ScriptTrustPrompt`], whose public fields make adding one a breaking
     /// change.)
     pub(crate) script_trust_opened_at: Option<std::time::Instant>,
+    /// Finds a program on `PATH`, for the built-in language servers. `None`
+    /// (an `App` that was never [`App::start`]ed, such as a test's) turns
+    /// the built-ins off; `start` sets the real lookup, and tests can set a
+    /// stand-in.
+    pub(crate) lsp_probe: Option<fn(&str) -> bool>,
     /// The project settings layer in effect (T627), when this workspace's
     /// `.vix/settings.toml` was merged into [`App::settings`]; `None` when
     /// [`App::settings`] is the user settings alone.
@@ -2901,6 +2913,7 @@ impl App {
             project_env_extra: String::new(),
             script_trust: None,
             script_trust_opened_at: None,
+            lsp_probe: None,
             project_settings: None,
             replace_confirm: None,
             wgrep_baseline: None,
@@ -3604,6 +3617,7 @@ impl App {
             "help.report_issue" => {
                 self.welcome = Some(WelcomePanel::open(Self::report_issue_lines()));
             }
+            "help.report_crash" => self.report_crash(),
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "help.doctor" => {
                 let checks = crate::capability::doctor_checks(&self.settings);
@@ -4018,10 +4032,18 @@ impl App {
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
-            "editor.fold_toggle" => self.toggle_fold_at_cursor(),
-            "editor.fold" => self.fold_at_cursor(true),
+            "editor.fold_toggle" => {
+                self.org_install_fold_ranges();
+                self.toggle_fold_at_cursor();
+            }
+            "editor.fold" => {
+                self.org_install_fold_ranges();
+                self.fold_at_cursor(true);
+            }
             "editor.unfold" => self.fold_at_cursor(false),
             "editor.fold_all" => {
+                // An Org buffer folds by headline without a language server.
+                self.org_install_fold_ranges();
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.fold_all();
                 }
@@ -8411,6 +8433,7 @@ impl App {
         if self.remote_confirm_key(key)
             || self.jupyter_confirm_key(key)
             || self.hot_exit_confirm_key(key)
+            || self.crash_confirm_key(key)
         {
             return;
         }
@@ -8677,7 +8700,14 @@ impl App {
             }
             return;
         }
-        let before = self.editor.tabs.len();
+        // Which files were open before, so a file counts as newly opened even
+        // when it takes over the empty starting tab (tab count unchanged).
+        let open_before: Vec<PathBuf> = self
+            .editor
+            .tabs
+            .iter()
+            .filter_map(|t| t.path.clone())
+            .collect();
         let opened = if past_size_limit {
             self.editor.open_unbounded(path, preview)
         } else {
@@ -8685,7 +8715,9 @@ impl App {
         };
         match opened {
             Ok(()) => {
-                let opened_new = self.editor.tabs.len() > before;
+                let opened_new = self
+                    .active_path()
+                    .is_some_and(|p| !open_before.contains(&p));
                 if !preview {
                     self.editor.promote_active();
                     self.record_recent(path);
@@ -8700,6 +8732,11 @@ impl App {
                 }
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
+                // A built-in language server would start for it: ask first
+                // (not for a preview, such as arrowing through the explorer).
+                if !preview {
+                    self.maybe_prompt_lsp_trust(path);
+                }
             }
             Err(e) => self.report_open_failure(path, preview, &e),
         }
@@ -8881,6 +8918,7 @@ impl App {
                 settings.editor_visual.soft_wrap,
             )
         });
+        let prose_wrap = settings.prose.prose_soft_wrap;
         drop(settings);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
@@ -8891,6 +8929,9 @@ impl App {
                 tab.editor.show_line_numbers(numbers);
                 tab.editor.show_whitespace(whitespace);
                 tab.editor.set_soft_wrap(wrap);
+            } else if prose_wrap && matches!(tab.editor.code_ref().lang(), "markdown" | "org") {
+                // Prose reads better wrapped than scrolled sideways.
+                tab.editor.set_soft_wrap(true);
             }
         }
         if self.settings.typing.editorconfig
@@ -10872,9 +10913,15 @@ impl App {
         }
     }
 
-    /// Open the file browser (File → Open…) rooted at the workspace root.
+    /// Open the file browser (File → Open…) in the active file's folder when
+    /// that file is in the workspace, else at the workspace root.
     fn open_file_browser(&mut self) {
-        self.file_browser = Some(crate::file_browser_panel::Panel::open(&self.root));
+        let dir = self
+            .active_path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .filter(|d| d.starts_with(&self.root) && crate::authority::current().is_dir(d))
+            .unwrap_or_else(|| self.root.clone());
+        self.file_browser = Some(crate::file_browser_panel::Panel::open(&dir));
     }
 
     /// Keys for the file-browser overlay. Plain typing edits the filter;
@@ -10951,6 +10998,11 @@ impl App {
                 self.file_browser = None;
                 self.run_action("file.open_path");
             }
+            // Find any file in the project instead (the palette's file finder).
+            KeyCode::Char('p') if Self::ctrl(&key) => {
+                self.file_browser = None;
+                self.run_action("tools.palette");
+            }
             KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
                 if let Some(fb) = self.file_browser.as_mut() {
                     fb.push(c);
@@ -10970,7 +11022,21 @@ impl App {
         };
         // A ":line[:col]" query suffix jumps after opening, like the Open prompt.
         let target = fb.target();
-        if let Some(path) = fb.activate() {
+        // A typed path (`docs/x.org`, `~/notes/a.org`, `/etc/hosts`) opens
+        // that file, even a new one, or moves into that folder.
+        // Nothing matches a plain name: open it in the folder shown, as a new
+        // file if need be (nothing is written until it is saved).
+        let typed = fb.path_target().or_else(|| {
+            let name = fb.query.trim();
+            (!name.is_empty() && fb.is_empty()).then(|| fb.resolve(name))
+        });
+        if let Some(path) = &typed
+            && crate::authority::current().is_dir(path)
+        {
+            fb.set_root(path.clone());
+            return;
+        }
+        if let Some(path) = typed.or_else(|| fb.activate()) {
             self.file_browser = None;
             self.with_jump(|s| {
                 s.open_path(&path, false);

@@ -13,8 +13,9 @@ right inside the editor.
   emulator (`vt100`).
 - **Hide** the terminal with `Ctrl+]` (or **Tools → Terminal → Show/Hide
   Terminal**). Hidden terminals keep running; show them again the same way.
-- **Close** a terminal with **Tools → Terminal → Close Terminal**. It also closes
-  automatically when its shell exits.
+- **Close** a terminal with **Tools → Terminal → Close Terminal**. When its
+  shell exits, the tab stays, marked as exited: press Enter to restart the
+  shell, or any other key to close the tab.
 
 While the terminal is shown it receives every keystroke (so Vix's own shortcuts
 are paused), apart from a few chords of its own:

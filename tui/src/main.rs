@@ -257,6 +257,9 @@ fn main() -> io::Result<()> {
     app.start(&cli)?;
 
     let mut terminal = ratatui::init();
+    // After ratatui's own hook, so a crash report is saved before the
+    // terminal is restored (`spec/crash-reports`).
+    vix::crash::install_hook();
     let _ = execute!(io::stdout(), EnableMouseCapture);
     // Ask the terminal to bracket pastes, so pasted text arrives as one
     // `Event::Paste` instead of as one key event per character: that is what
@@ -376,23 +379,30 @@ fn run(
         // faster while something is streaming or in flight.
         let timeout = app.poll_interval();
         if event::poll(timeout)? {
-            let event = event::read()?;
             let start = Instant::now();
-            // A resize only redraws; it is not something a user waits on.
-            if !matches!(event, Event::Resize(..))
-                && let Some(p) = profiler.as_deref_mut()
-            {
-                p.input_read(start);
-            }
-            match event {
-                // The one place crossterm events become backend-neutral
-                // `vix-input` events (the GUI front end converts its own).
-                Event::Key(key) => app.on_key(key.into()),
-                Event::Mouse(mouse) => app.on_mouse(mouse.into()),
-                Event::Paste(text) => app.on_paste(&text),
-                Event::FocusGained => app.on_focus_gained(),
-                Event::FocusLost => app.on_focus_lost(),
-                Event::Resize(..) => {}
+            let mut next = Some(event::read()?);
+            // Handle every event already waiting before drawing again: a
+            // flick of the mouse wheel (or mouse movement, which the
+            // terminal reports too) sends dozens of events at once, and
+            // drawing a whole frame after each one made scrolling lag behind
+            // the wheel. Bounded, so a flood of input still lets frames out.
+            let mut handled = 0;
+            while let Some(event) = next.take() {
+                // A resize only redraws; it is not something a user waits on.
+                if !matches!(event, Event::Resize(..))
+                    && let Some(p) = profiler.as_deref_mut()
+                {
+                    p.input_read(Instant::now());
+                }
+                handle_event(app, event);
+                handled += 1;
+                if handled < MAX_EVENTS_PER_FRAME
+                    && start.elapsed() < MAX_EVENT_BURST
+                    && !app.flags.contains(AppFlags::SHOULD_QUIT)
+                    && event::poll(Duration::ZERO)?
+                {
+                    next = Some(event::read()?);
+                }
             }
             timed(&mut profiler, Phase::Input, start);
         }
@@ -400,6 +410,26 @@ fn run(
             app.flags.remove(AppFlags::SUSPEND_REQUESTED);
             suspend(terminal);
         }
+    }
+}
+
+/// Most input events [`run`] handles before drawing a frame.
+const MAX_EVENTS_PER_FRAME: usize = 512;
+
+/// Longest [`run`] keeps handling waiting input before drawing a frame.
+const MAX_EVENT_BURST: Duration = Duration::from_millis(8);
+
+/// Forward one terminal event to the app: the one place crossterm events
+/// become backend-neutral `vix-input` events (the GUI front end converts its
+/// own).
+fn handle_event(app: &mut App, event: Event) {
+    match event {
+        Event::Key(key) => app.on_key(key.into()),
+        Event::Mouse(mouse) => app.on_mouse(mouse.into()),
+        Event::Paste(text) => app.on_paste(&text),
+        Event::FocusGained => app.on_focus_gained(),
+        Event::FocusLost => app.on_focus_lost(),
+        Event::Resize(..) => {}
     }
 }
 

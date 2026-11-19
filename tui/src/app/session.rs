@@ -229,7 +229,9 @@ impl App {
         }
 
         if opened > 0 {
-            if had_blank {
+            // The first reopened file normally takes over the blank tab
+            // already (`Editor::open`); drop it only if it is still there.
+            if had_blank && self.editor.tabs.first().is_some_and(|t| t.path.is_none()) {
                 self.editor.tabs.remove(0);
             }
             self.editor.active = ws.active.min(self.editor.tabs.len().saturating_sub(1));
@@ -509,6 +511,7 @@ impl App {
             self.settings.lsp_servers.clone(),
             &self.workspace_folders,
         );
+        self.add_builtin_lsp_servers();
         self.editor.close_all();
         self.refresh_git();
         let key = self.session_key();

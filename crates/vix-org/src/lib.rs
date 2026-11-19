@@ -87,6 +87,28 @@ pub fn subtree_range(lines: &[&str], line: usize) -> Option<(usize, usize)> {
     Some((line, end))
 }
 
+/// Every foldable range in an Org buffer, as inclusive `(first, last)` line
+/// pairs whose first line stays visible when folded: each headline with a body
+/// (through the line before the next headline of the same or a higher level),
+/// and each drawer that an `:END:` closes. Headlines come in file order, each
+/// before the drawers inside it; nested headlines give nested ranges.
+#[must_use]
+pub fn fold_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if headline_level(line).is_some() {
+            if let Some((start, end)) = subtree_range(lines, i)
+                && end > start + 1
+            {
+                out.push((start, end - 1));
+            }
+        } else if let Some(range) = drawer_range(lines, i) {
+            out.push(range);
+        }
+    }
+    out
+}
+
 /// The name of a `:NAME:` line — a colon, a run of non-colon, non-whitespace
 /// characters, a closing colon, and nothing else after trimming — or `None`.
 /// Matches a drawer header (`:PROPERTIES:`, `:LOGBOOK:`) or the `:END:`
@@ -220,6 +242,19 @@ fn set_headline_keyword(headline: &str, keyword: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fold_ranges_cover_headline_bodies_and_drawers() {
+        let text = "* A\nbody\n** A1\n:PROPERTIES:\n:ID: x\n:END:\ntext\n** A2\n* B\n* C\nc\n";
+        let lines: Vec<&str> = text.split('\n').collect();
+        assert_eq!(
+            fold_ranges(&lines),
+            vec![(0, 7), (2, 6), (3, 5), (9, 11)],
+            "A to before B, A1 to before A2, the drawer, C to the end; A2 and B have no body"
+        );
+        assert_eq!(fold_ranges(&["no headlines"]), vec![]);
+        assert_eq!(fold_ranges(&[":PROPERTIES:", "* H"]), vec![]);
+    }
 
     /// Shared fixture document for the structural-edit tests below.
     const DOC: &str = "#+title: T\n* One :old:\nbody\n** Child B\n** Child A\n* Two\nSCHEDULED: <2026-08-05 Wed>\n";
