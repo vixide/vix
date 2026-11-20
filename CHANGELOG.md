@@ -48,6 +48,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Coverage is measured with cargo-tarpaulin.** The advisory CI coverage job now runs `cargo tarpaulin` with the new `tarpaulin.toml` (LLVM engine) instead of cargo-llvm-cov, and also uploads LCOV and HTML reports beside the Cobertura file. `make coverage` runs the same locally. See [Coverage](docs/coverage/index.md).
 - **The empty starting tab gives way to the first file you open,** instead of sitting beside it as "untitled". A tab you have typed in is kept, and so is any untitled tab once more than one is open.
 - **More room for the editor, and prose wraps.** The file explorer and message drawer default to 24 and 26 columns (from 30 and 32), and Markdown and Org files soft-wrap by default (`prose_soft_wrap`, on), so paragraphs stay readable beside the docks. Code is unchanged. An existing `config.toml` keeps its own widths.
 - **Minimum Rust is now 1.98** (current stable 1.100 minus two) for the terminal app, `gui/` and `matrix/`; `packaging/crates-io-vix` keeps its own floor. The repository's toolchain is pinned to 1.100.0 in `rust-toolchain.toml`, and the CI jobs that build on the floor set `RUSTUP_TOOLCHAIN` so the pin does not replace it. `[profile.dev]` keeps line tables only and no debug information for dependencies, and `make test-minimum-supported-rust-version` checks and tests on 1.98 and 1.99.

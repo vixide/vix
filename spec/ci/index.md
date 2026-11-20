@@ -196,6 +196,11 @@ dispatch; `rust`: not a docs-only change).
   `workspace.package.rust-version` in `Cargo.toml`; bump the matrix entry when
   that floor moves. **binary-size** records its baseline from the scheduled run
   on `main`; its pull-request comment step no longer fires.
+  **coverage** runs `cargo tarpaulin --config tarpaulin.toml` (LLVM engine,
+  whole workspace, GUIs and fuzz targets excluded) and uploads
+  `target/tarpaulin/cobertura.xml`, `lcov.info` and the HTML report as the
+  `cobertura` artifact; it is advisory (`continue-on-error`). `make coverage`
+  runs the same command locally.
 
 Caching is `Swatinem/rust-cache`.
 
