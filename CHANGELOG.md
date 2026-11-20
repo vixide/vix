@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Result lists say what they are.** **LSP → Diagnostics**, **Document Symbols**, **Workspace Symbols**, **Find References** and the TODO finder all opened under the title "Go to Definition". Each now has its own title.
+- **Language-server results show short paths.** When the workspace was opened through a symbolic link (on macOS, anything under `/var` or `/tmp`), diagnostics, references and symbol lists showed each file's full absolute path, which pushed the message or symbol out of view. They now show the path relative to the workspace, as other lists do.
+
 ## [2.1.0] - 2026-11-20
 
 ### Added
@@ -69,8 +74,6 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Result lists say what they are.** **LSP → Diagnostics**, **Document Symbols**, **Workspace Symbols**, **Find References** and the TODO finder all opened under the title "Go to Definition". Each now has its own title.
-- **Language-server results show short paths.** When the workspace was opened through a symbolic link (on macOS, anything under `/var` or `/tmp`), diagnostics, references and symbol lists showed each file's full absolute path, which pushed the message or symbol out of view. They now show the path relative to the workspace, as other lists do.
 - **Switch Project shows which project is which.** The chooser listed full paths in a narrow box, so they were cut off before the project's folder name. Each row now starts with the folder name, then its location with your home folder as `~`, in a wider box.
 - **Typing in a large file no longer rescans it on every keystroke.** Each edit made the next frame measure the whole buffer's widest line, for the horizontal scrollbar: a keystroke and its frame took 4.9 ms in a 500,000-line file, rising with size. A buffer of 4 MB or more now reuses the width while you type and remeasures when you pause; the same keystroke takes 1.7 ms.
 - **"File is too large to open as text" no longer says "over 50 MB"** whatever the `large_file_mb` setting was.
