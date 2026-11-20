@@ -472,7 +472,7 @@ static table, refreshed on demand — Org's dynamic-block mechanism.
 | `:vlines t` | No additional effect in this crate's plain pipe-table renderer — accepted and stored, but every cell is already bar-delimited. |
 | `:maxlevel N` | Only capture rows within `N` levels of the scope's root. |
 | `:skip-empty-rows t` | Drop rows whose non-`ITEM` cells are all blank. |
-| `:exclude-tags "tag1 tag2"` | Drop rows carrying any of the listed tags. |
+| `:exclude-tags ("tag1" "tag2")` | Drop rows carrying any of the listed tags. Org's list form; the older quoted string `"tag1 tag2"` still reads. An updated block writes the list form back. |
 | `:indent t` | Indent the `ITEM` cell by level. |
 | `:link t` | Wrap the `ITEM` cell as an internal `[[*Headline]]` link. |
 | `:format "..."` | A `COLUMNS` spec string overriding whatever [scope resolution](#column-view) would otherwise find. |

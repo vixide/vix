@@ -534,7 +534,8 @@ fn entry_end(lines: &[&str], h: usize) -> usize {
 
 /// `TIMESTAMP`/`TIMESTAMP_IA`: the first active (`<...>`) or inactive
 /// (`[...]`) plain timestamp anywhere in the entry's own body text, skipping
-/// its property drawer and any `CLOCK:` lines.
+/// its property drawer, `CLOCK:` lines and planning lines (`SCHEDULED:`,
+/// `DEADLINE:`, `CLOSED:`): Org's "first keyword-less timestamp".
 fn entry_timestamp(lines: &[&str], h: usize, active: bool) -> String {
     let end = entry_end(lines, h);
     let drawer = own_property_drawer(lines, h);
@@ -546,7 +547,14 @@ fn entry_timestamp(lines: &[&str], h: usize, active: bool) -> String {
         {
             continue;
         }
-        if line.trim_start().starts_with("CLOCK:") {
+        // `CLOCK:` lines and planning lines hold keyword timestamps, which
+        // Org's TIMESTAMP/TIMESTAMP_IA ("the first keyword-less timestamp")
+        // skip.
+        let t = line.trim_start();
+        if ["CLOCK:", "SCHEDULED:", "DEADLINE:", "CLOSED:"]
+            .iter()
+            .any(|k| t.starts_with(k))
+        {
             continue;
         }
         let Some(pos) = line.find(open) else {
@@ -1359,9 +1367,23 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
                 flags.set(DblockFlags::SKIP_EMPTY_ROWS, val.as_deref() == Some("t"));
             }
             ":exclude-tags" => {
-                exclude_tags = val
-                    .as_deref()
-                    .map_or_default(|s| s.split_whitespace().map(str::to_string).collect());
+                // Org's list form, `("a" "b")`, which the tokenizer splits at
+                // its spaces, or the older quoted string `"a b"`.
+                let mut raw = val.unwrap_or_default();
+                if raw.starts_with('(') {
+                    while !raw.ends_with(')') && i + 2 < tokens.len() {
+                        i += 1;
+                        raw.push(' ');
+                        raw.push_str(&tokens[i + 1]);
+                    }
+                }
+                exclude_tags = raw
+                    .trim_start_matches('(')
+                    .trim_end_matches(')')
+                    .split_whitespace()
+                    .map(|t| t.trim_matches('"').to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect();
             }
             ":indent" => flags.set(DblockFlags::INDENT, val.as_deref() == Some("t")),
             ":link" => flags.set(DblockFlags::LINK, val.as_deref() == Some("t")),
@@ -1402,7 +1424,12 @@ fn render_begin_line(params: &DblockParams) -> String {
         out.push_str(" :skip-empty-rows t");
     }
     if !params.exclude_tags.is_empty() {
-        let _ = write!(out, " :exclude-tags \"{}\"", params.exclude_tags.join(" "));
+        let quoted: Vec<String> = params
+            .exclude_tags
+            .iter()
+            .map(|t| format!("\"{t}\""))
+            .collect();
+        let _ = write!(out, " :exclude-tags ({})", quoted.join(" "));
     }
     if params.flags.contains(DblockFlags::INDENT) {
         out.push_str(" :indent t");
@@ -2069,5 +2096,135 @@ CLOCK: [2026-08-12 Wed 09:00]--[2026-08-12 Wed 09:15] =>  0:15
         // starting at byte 10 -- offset 11 lands inside it.
         let lines = ["1234567890é rest of line, not a real keyword"];
         assert_eq!(category_value(&lines, 0, None), "");
+    }
+
+    #[test]
+    fn timestamp_and_planning_columns_read_the_entry_body_only() {
+        let doc = "\
+* TODO Plan :team:
+CLOSED: [2026-08-21 Fri 10:00] SCHEDULED: <2026-08-20 Thu> DEADLINE: <2026-08-25 Tue>
+:PROPERTIES:
+:STAMP: <1999-01-01 Fri>
+:END:
+CLOCK: [2026-08-19 Wed 09:00]--[2026-08-19 Wed 10:00] =>  1:00
+Notes mention <2026-09-01 Tue> and [2026-07-04 Sat].
+** Child
+Child text <2030-01-01 Tue>.
+";
+        let spec = spec_of(&[
+            ("TIMESTAMP", None),
+            ("TIMESTAMP_IA", None),
+            ("SCHEDULED", None),
+            ("DEADLINE", None),
+            ("CLOSED", None),
+        ]);
+        let (rows, _) = build_column_table(doc, 0, &spec, (2026, 8, 12), None);
+        let top = &rows[0].values;
+        assert_eq!(
+            top[0], "<2026-09-01 Tue>",
+            "the drawer and planning lines are skipped"
+        );
+        assert_eq!(top[1], "[2026-07-04 Sat]", "CLOCK lines are skipped");
+        assert_eq!(top[2], "<2026-08-20 Thu>");
+        assert_eq!(top[3], "<2026-08-25 Tue>");
+        assert_eq!(top[4], "[2026-08-21 Fri 10:00]");
+        let child = &rows[1].values;
+        assert_eq!(
+            child[0], "<2030-01-01 Tue>",
+            "each entry reads only its own text"
+        );
+        assert_eq!(child[2], "", "no planning line");
+    }
+
+    #[test]
+    fn item_and_priority_cells_edit_the_headline_in_place() {
+        let spec = spec_of(&[("ITEM", None), ("PRIORITY", None)]);
+        let doc = "* TODO [#B] Old title :work:\n";
+        let edited = apply_column_edit(doc, 0, &spec, 0, "New title").expect("item edit");
+        assert_eq!(edited.trim_end(), "* TODO [#B] New title :work:");
+        let edited = apply_column_edit(&edited, 0, &spec, 1, "A").expect("priority edit");
+        assert!(edited.contains("[#A]"), "{edited}");
+        let edited = apply_column_edit(&edited, 0, &spec, 1, "").expect("priority clear");
+        assert!(!edited.contains("[#"), "{edited}");
+        // Not a headline, and out of range.
+        assert_eq!(apply_column_edit("text\n", 0, &spec, 0, "x"), None);
+        assert_eq!(apply_column_edit(doc, 9, &spec, 0, "x"), None);
+        assert_eq!(
+            apply_column_edit(doc, 0, &spec, 7, "x"),
+            None,
+            "no such column"
+        );
+    }
+
+    #[test]
+    fn computed_columns_are_read_only() {
+        let spec = spec_of(&[
+            ("ALLTAGS", None),
+            ("FILE", None),
+            ("TIMESTAMP", None),
+            ("TIMESTAMP_IA", None),
+            ("CLOCKSUM", None),
+            ("CLOCKSUM_T", None),
+            ("BLOCKED", None),
+        ]);
+        for col in 0..spec.columns.len() {
+            assert_eq!(
+                apply_column_edit("* Item\n", 0, &spec, col, "x"),
+                None,
+                "column {col}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_columnview_block_honours_its_parameters() {
+        let doc = "\
+#+COLUMNS: %ITEM %TODO %EFFORT{:}
+* Project :proj:
+:PROPERTIES:
+:ID: p1
+:END:
+** TODO Task One
+:PROPERTIES:
+:EFFORT: 1:30
+:END:
+*** Deep detail
+** DONE Task Two :skip:
+** Empty one
+";
+        let full = parse_dblock_params(
+            r#"#+BEGIN: columnview :id p1 :hlines 1 :maxlevel 2 :indent t :skip-empty-rows t :exclude-tags ("skip") :format "%ITEM %TODO %EFFORT""#,
+        )
+        .expect("parses");
+        let out = render_columnview_dblock(doc, 1, &full, (2026, 8, 12), Some("p.org"));
+        assert!(out.contains("Task One"), "{out}");
+        assert!(
+            !out.contains("Deep detail"),
+            ":maxlevel 2 drops level 3\n{out}"
+        );
+        assert!(
+            !out.contains("Task Two"),
+            ":exclude-tags drops :skip:\n{out}"
+        );
+        assert!(out.contains("|-"), ":hlines draws a rule\n{out}");
+
+        for id in ["global", "file", "local", "nosuch-id"] {
+            let params = parse_dblock_params(&format!("#+BEGIN: columnview :id {id}")).unwrap();
+            let out = render_columnview_dblock(doc, 1, &params, (2026, 8, 12), Some("p.org"));
+            assert!(out.contains('|') || id == "nosuch-id", "{id}: {out}");
+        }
+        assert_eq!(parse_dblock_params("not a dblock"), None);
+
+        let two = parse_dblock_params(r#"#+BEGIN: columnview :exclude-tags ("a" "b") :maxlevel 3"#)
+            .unwrap();
+        assert_eq!(two.exclude_tags, ["a", "b"]);
+        assert_eq!(two.maxlevel, Some(3), "parsing resumes after the list");
+        let old = parse_dblock_params(r#"#+BEGIN: columnview :exclude-tags "a b""#).unwrap();
+        assert_eq!(
+            old.exclude_tags,
+            ["a", "b"],
+            "the older quoted form still reads"
+        );
+        assert!(render_begin_line(&two).contains(r#":exclude-tags ("a" "b")"#));
     }
 }
