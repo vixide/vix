@@ -111,6 +111,8 @@ fn the_panel_never_opens_on_its_own_and_toggles_focus() {
     app.run_action("im.panel");
     assert!(app.im.open);
     assert_eq!(app.focus, Focus::Im);
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     app.on_key(esc());
     assert_eq!(app.focus, Focus::Editor, "Esc gives the editor back");
     assert!(app.im.open, "the panel stays shown");
@@ -129,6 +131,8 @@ fn typing_in_notes_stores_a_message_without_a_connection() {
     // `/me` stores an action.
     type_line(&mut app, "/me waves");
     assert_eq!(last_note(&app).unwrap().kind, MessageKind::Action);
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
 }
 
 #[test]
@@ -155,6 +159,8 @@ fn slash_commands_report_errors_and_never_send_them_as_text() {
     // `/status busy` sets presence; `//x` sends the text `/x`.
     type_line(&mut app, "/status busy");
     assert_eq!(app.im.presence, Presence::Busy);
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     type_line(&mut app, "//etc/hosts");
     assert_eq!(last_note(&app).unwrap().body, "/etc/hosts");
 }
@@ -451,6 +457,8 @@ mod irc {
         app.run_action("im.panel");
         assert_eq!(app.im.selected_id(), Some(room()));
         type_line(&mut app, "hello from vix");
+        draw_frame(&mut app, 120, 40);
+        draw_frame(&mut app, 50, 16);
         let mine = app
             .im
             .inbox
@@ -858,6 +866,8 @@ fn threads_list_jumps_resolves_and_reopens() {
         "r resolves, and it is saved"
     );
     assert!(app.im_dialog.is_some(), "the list stays open");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert_eq!(
         marks(&mut app),
         [(1, CommentMark::Open), (3, CommentMark::Resolved)]
