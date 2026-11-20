@@ -4697,3 +4697,30 @@ fn prose_files_open_soft_wrapped_and_code_does_not() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+/// A narrow terminal keeps the status message on screen: the path shortens
+/// (or goes) before the message is cut.
+#[test]
+fn a_narrow_status_bar_still_shows_the_message() {
+    let dir = unique_dir("narrow-status");
+    let deep = dir.join("some/deeply/nested/folder");
+    fs::create_dir_all(&deep).unwrap();
+    let file = deep.join("long_file_name.rs");
+    fs::write(&file, "fn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    app.status = "Saved".into();
+    for width in [120, 60, 44] {
+        let screen = draw_frame(&mut app, width, 20);
+        let status_row = screen
+            .lines()
+            .rev()
+            .find(|l| l.contains("Ln "))
+            .unwrap_or_default();
+        assert!(
+            status_row.contains("Saved"),
+            "width {width}: {status_row:?}"
+        );
+    }
+    fs::remove_dir_all(&dir).ok();
+}

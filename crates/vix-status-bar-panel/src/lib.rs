@@ -13,6 +13,38 @@ pub fn left_segment(mode: &str, path: &str, dirty: &str, status: &str) -> String
     format!(" {mode}{path}{dirty}  \u{2014}  {status}")
 }
 
+/// [`left_segment`] fitted into `width` columns (counted in chars, as the
+/// host lays the bar out) so the status message stays readable: the full
+/// segment if it fits; else with `path` cut to its file name; else without
+/// the path; and if even that is too long, cut with `…`. An empty `status`
+/// never drops the path, only cuts it.
+#[must_use]
+pub fn fit_left_segment(mode: &str, path: &str, dirty: &str, status: &str, width: usize) -> String {
+    let fits = |s: &String| s.chars().count() <= width;
+    let full = left_segment(mode, path, dirty, status);
+    if fits(&full) {
+        return full;
+    }
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let short = left_segment(mode, name, dirty, status);
+    if fits(&short) || status.is_empty() {
+        return cut(&short, width);
+    }
+    cut(&format!(" {mode}{status}"), width)
+}
+
+/// `s` cut to `width` chars, ending in `…` when anything was cut.
+fn cut(s: &str, width: usize) -> String {
+    if s.chars().count() <= width {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(width.saturating_sub(1)).collect();
+    if width > 0 {
+        out.push('\u{2026}');
+    }
+    out
+}
+
 /// The editor-info prefix for the right segment:
 /// `"{language}  {line_ending}  {encoding}   {selection}"`, where `encoding`
 /// is the tab's file encoding, such as `UTF-8` or `Shift_JIS` (T661).
@@ -61,6 +93,35 @@ pub fn git_segment(branch: Option<&str>, glyph: &str, dirty: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_narrow_bar_keeps_the_status_message_readable() {
+        let full = left_segment("", "src/app/main.rs", "", "Saved");
+        assert_eq!(
+            fit_left_segment("", "src/app/main.rs", "", "Saved", 80),
+            full
+        );
+        // The path shrinks to its file name first…
+        assert_eq!(
+            fit_left_segment("", "src/app/main.rs", "", "Saved", 20),
+            " main.rs  \u{2014}  Saved"
+        );
+        // …then goes, and the message is cut only when nothing else is left.
+        assert_eq!(
+            fit_left_segment("NORMAL ", "src/main.rs", "", "Saved", 16),
+            " NORMAL Saved"
+        );
+        assert_eq!(
+            fit_left_segment("", "a.rs", "", "a long status message", 10),
+            " a long s\u{2026}"
+        );
+        // No message: the path is only ever cut.
+        assert_eq!(
+            fit_left_segment("", "src/app/main.rs", "", "", 9),
+            " main.rs\u{2026}"
+        );
+        assert_eq!(fit_left_segment("", "x", "", "y", 0), "");
+    }
 
     #[test]
     fn git_segment_shows_branch_and_dirty_dot() {

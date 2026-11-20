@@ -31,7 +31,6 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         icon::BRANCH,
         app.git_dirty(),
     );
-    let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
     // Language-server progress (T732) and Cowork participants, then git,
     // then IM's unread count and mention marker (T754).
     let before_git = format!(
@@ -46,7 +45,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.project_env_segment(),
         app.im_status_segment()
     );
-    let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
+    let (left, right) = fit_segments(
+        app,
+        (&mode, &path, &dirty_flag),
+        (&segments, &format!("{before_git}{git}")),
+        (line, col),
+        usize::from(area.width),
+    );
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.
@@ -111,6 +116,30 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         Rect::default()
     };
+}
+
+/// The left and right status segments fitted into `width` columns. When both
+/// do not fit, the right one loses the segments after git (`short_segments`
+/// instead of `segments`: project environment, IM, editor info), which keeps
+/// the git segment's click rectangle where it was; the left one then gets
+/// what is left through `fit_left_segment`, so the status message stays
+/// readable.
+fn fit_segments(
+    app: &App,
+    (mode, path, dirty_flag): (&str, &str, &str),
+    (segments, short_segments): (&str, &str),
+    (line, col): (usize, usize),
+    width: usize,
+) -> (String, String) {
+    use crate::status_bar_panel::{fit_left_segment, left_segment, right_segment};
+    let mut right = right_segment(segments, line, col, icon::CALENDAR);
+    let wanted = left_segment(mode, path, dirty_flag, &app.status);
+    if wanted.chars().count() + right.chars().count() + 1 > width {
+        right = right_segment(short_segments, line, col, icon::CALENDAR);
+    }
+    let left_room = width.saturating_sub(right.chars().count() + 1);
+    let left = fit_left_segment(mode, path, dirty_flag, &app.status, left_room);
+    (left, right)
 }
 
 /// Editor info (language, line ending, encoding, selection) for a text tab.
