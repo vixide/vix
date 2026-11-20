@@ -35,7 +35,8 @@ pub struct Cli {
     /// folder over SSH (experimental); `docker://[user@]container/path`,
     /// `podman://…`, `k8s://namespace/pod/container/path` and
     /// `wsl://distro/path` work inside a running container, pod or WSL
-    /// distribution.
+    /// distribution. A single folder (`vix .`, `vix ~/src/app`) is opened as
+    /// the workspace instead ([`Cli::take_workspace_dir`]).
     pub files: Vec<std::path::PathBuf>,
 
     /// UI language as a locale code (e.g. en, es, fr, de, cy). Overrides the
@@ -116,4 +117,63 @@ pub struct Cli {
     /// `crates/vix-script/spec/index.md`, "Plugins".
     #[arg(long, num_args = 1..=2, value_names = ["COMMAND", "ARG"])]
     pub plugin: Option<Vec<String>>,
+}
+
+impl Cli {
+    /// When the only path given is an existing folder, take it out of
+    /// [`Cli::files`] and return it, canonicalized, to be the workspace root:
+    /// `vix ~/src/app` opens that project, as other editors do, rather than
+    /// failing to open a folder as a file. `None`, and [`Cli::files`]
+    /// untouched, otherwise (no path, several, a file, or a missing path).
+    pub fn take_workspace_dir(&mut self) -> Option<std::path::PathBuf> {
+        let [only] = self.files.as_slice() else {
+            return None;
+        };
+        let dir = only.canonicalize().ok().filter(|p| p.is_dir())?;
+        self.files.clear();
+        Some(dir)
+    }
+}
+
+#[cfg(test)]
+mod workspace_dir_tests {
+    use super::Cli;
+    use clap::Parser as _;
+
+    #[test]
+    fn a_single_folder_becomes_the_workspace() {
+        let dir = std::env::temp_dir().join(format!("vix-cli-ws-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "a").unwrap();
+        let parse = |args: &[&std::path::Path]| {
+            Cli::parse_from(
+                std::iter::once("vix".as_ref()).chain(args.iter().map(|p| p.as_os_str())),
+            )
+        };
+
+        let mut cli = parse(&[&dir.join("sub")]);
+        assert_eq!(
+            cli.take_workspace_dir(),
+            Some(dir.join("sub").canonicalize().unwrap())
+        );
+        assert!(
+            cli.files.is_empty(),
+            "the folder is not also opened as a file"
+        );
+
+        for args in [
+            vec![dir.join("a.txt")],
+            vec![dir.join("missing")],
+            vec![dir.join("sub"), dir.join("a.txt")],
+            vec![],
+        ] {
+            let refs: Vec<&std::path::Path> =
+                args.iter().map(std::path::PathBuf::as_path).collect();
+            let mut cli = parse(&refs);
+            let before = cli.files.clone();
+            assert_eq!(cli.take_workspace_dir(), None, "{args:?}");
+            assert_eq!(cli.files, before);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
