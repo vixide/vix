@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The desktop apps open a folder given on the command line too.** `vix-egui ~/src/app` (or any of the GUIs) now works on that folder, as `vix ~/src/app` does, instead of the current directory.
 - **`vix some-folder` opens that folder.** A folder on the command line used to fail with "Open failed" and leave you in the current directory. It now opens as the workspace, as in other editors: `vix .` or `vix ~/src/app`.
 - **Org column view's `TIMESTAMP` skips planning lines.** `TIMESTAMP` and `TIMESTAMP_IA` showed an entry's `SCHEDULED:`, `DEADLINE:` or `CLOSED:` date; like Org, they now show the first timestamp without a keyword.
 - **Org column-view blocks read `:exclude-tags ("tag")`.** Org's own list form was read as one odd tag, so nothing was excluded, and an updated block wrote it back as `"("tag")"`. The list form now works (several tags too) and is what Vix writes; the older `"tag1 tag2"` form still reads.

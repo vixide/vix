@@ -32,7 +32,6 @@ mod view;
 mod window;
 
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Duration;
@@ -56,7 +55,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     // Settings and the locale first: the menu bar is translated as it is built.
     let loaded = startup::load(&cli);
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = cli.root_dir();
 
     // The winit backend: Option-as-Meta needs its raw key events.
     let _ = slint::BackendSelector::new()

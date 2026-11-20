@@ -97,6 +97,10 @@ A new front end, or a toolkit upgrade, follows the same rule. See
 
 ## Behavior every front end implements
 
+- **Workspace folder.** A lone folder argument (`vix-egui ~/src/app`) is the
+  workspace root, as for the terminal binary (`Cli::root_dir`; the folder is
+  left out of the files `App::start` opens, `Cli::without_workspace_dir`).
+  Otherwise the root is the current directory.
 - **Login-shell `PATH`.** `main` first calls
   `vix::reexec_with_login_shell_path`: a GUI started outside a terminal (the
   macOS Dock or Finder, a Linux desktop launcher) inherits the session's
