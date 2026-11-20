@@ -111,6 +111,16 @@ check:
 	scripts/check
 
 ##
+# make coverage: Measure test coverage with cargo-tarpaulin, configured by
+# tarpaulin.toml. Reports go to target/tarpaulin/ (cobertura.xml for Vix's
+# own coverage gutter, lcov.info, tarpaulin-report.html). Needs
+# `cargo install cargo-tarpaulin` and the llvm-tools-preview component.
+##
+.PHONY: coverage
+coverage:
+	cargo tarpaulin --config tarpaulin.toml
+
+##
 # make check-env: Print some of this project's important tools, their
 # versions and paths, to help with installation, debugging and maintenance.
 ##

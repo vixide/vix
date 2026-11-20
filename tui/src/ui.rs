@@ -835,6 +835,51 @@ fn hslice_spans(spans: &[Span], offset: usize, width: usize) -> Vec<Span<'static
 /// and the hit-test must agree on it.
 pub const NERD_CELL_W: u16 = 4;
 
+/// A key hint (`"↑↓ select   Enter open   Esc close"`) wrapped to `width`
+/// columns, breaking only between its groups (runs of two or more spaces),
+/// so no key is split from what it does. A single group wider than `width`
+/// gets a row of its own and is cut with `…`. Always at least one row.
+fn hint_lines(hint: &str, width: u16) -> Vec<String> {
+    use unicode_width::UnicodeWidthStr as _;
+    let width = usize::from(width.max(1));
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = String::new();
+    for group in hint.split("  ").map(str::trim).filter(|g| !g.is_empty()) {
+        let needed = if row.is_empty() {
+            group.width()
+        } else {
+            row.width() + 3 + group.width()
+        };
+        if !row.is_empty() && needed > width {
+            rows.push(std::mem::take(&mut row));
+        }
+        if !row.is_empty() {
+            row.push_str("   ");
+        }
+        row.push_str(group);
+    }
+    rows.push(row);
+    rows.into_iter()
+        .map(|r| {
+            if r.width() > width {
+                trunc(&r, width)
+            } else {
+                r
+            }
+        })
+        .collect()
+}
+
+/// [`hint_lines`] as dimmed lines, and how many rows they take.
+fn hint_paragraph(hint: &str, width: u16) -> (Paragraph<'static>, u16) {
+    let lines: Vec<Line<'static>> = hint_lines(hint, width)
+        .into_iter()
+        .map(|l| Line::from(Span::styled(l, theme::dim())))
+        .collect();
+    let rows = u16::try_from(lines.len()).unwrap_or(u16::MAX);
+    (Paragraph::new(lines), rows)
+}
+
 /// Truncate `s` to `max` columns, adding an ellipsis when clipped.
 fn trunc(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
@@ -866,4 +911,42 @@ fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
             Constraint::Percentage((100 - pct_x) / 2),
         ])
         .split(v[1])[1]
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::hint_lines;
+
+    #[test]
+    fn a_hint_wraps_between_its_groups() {
+        let hint = "↑↓ select   Space stage/unstage   Enter diff   Esc close";
+        assert_eq!(hint_lines(hint, 80), vec![hint.to_string()]);
+        assert_eq!(
+            hint_lines(hint, 32),
+            vec!["↑↓ select   Space stage/unstage", "Enter diff   Esc close",]
+        );
+    }
+
+    #[test]
+    fn a_group_wider_than_the_row_is_cut() {
+        assert_eq!(
+            hint_lines("Enter open   Esc close", 6),
+            vec!["Enter…", "Esc c…"]
+        );
+        assert_eq!(hint_lines("", 10), vec![String::new()]);
+    }
+
+    /// The English Git Changes hint used to be cut off at "c commit" in its
+    /// 64-column overlay; every row now fits and no group is lost.
+    #[test]
+    fn the_git_changes_hint_fits_its_overlay() {
+        let hint = t!("ui.git_changes_hint", locale = "en").to_string();
+        let rows = hint_lines(&hint, 62);
+        assert!(rows.len() > 1, "{rows:?}");
+        assert!(
+            rows.iter()
+                .all(|r| unicode_width::UnicodeWidthStr::width(r.as_str()) <= 62)
+        );
+        assert!(rows.last().unwrap().ends_with("Esc close"), "{rows:?}");
+    }
 }

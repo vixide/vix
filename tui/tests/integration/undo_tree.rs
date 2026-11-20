@@ -44,6 +44,9 @@ fn moving_the_selection_previews_and_enter_keeps_the_state() {
     assert_eq!(panel.selected_seq(), Some(3), "opens on the current state");
     let graphs: Vec<&str> = panel.rows.iter().map(|r| r.graph.as_str()).collect();
     assert_eq!(graphs, ["o", "o", "|\\", "o |", "  @"]);
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains('@'), "{screen}");
+    draw_frame(&mut app, 50, 16);
 
     app.on_key(keycode(KeyCode::Up));
     assert_eq!(text(&app), "ab", "the other branch, live");

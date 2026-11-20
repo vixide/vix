@@ -15,7 +15,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use crossterm::event::{
@@ -31,6 +31,7 @@ use crossterm::{execute, queue};
 
 use vix::app::{App, AppFlags};
 use vix::cli::Cli;
+use vix::profile::{Phase, Profiler};
 use vix::settings::Settings;
 use vix::ui;
 
@@ -293,7 +294,8 @@ fn main() -> io::Result<()> {
     // however long that refresh takes (T122). Git state is refreshed when
     // the Git panel is first opened, saving ~12.2 ms on startup.
     let _ = draw(&mut terminal, &mut app);
-    let result = run(&mut terminal, &mut app);
+    let mut profiler = Profiler::from_env();
+    let result = run(&mut terminal, &mut app, profiler.as_mut());
     let _ = write!(io::stdout(), "\x1b[?1003l");
     #[cfg(target_os = "macos")]
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
@@ -305,6 +307,12 @@ fn main() -> io::Result<()> {
     );
     let _ = io::stdout().flush();
     ratatui::restore();
+    if let Some(p) = &profiler {
+        match p.finish() {
+            Ok(path) => eprintln!("vix: frame profile written to {}", path.display()),
+            Err(e) => eprintln!("vix: could not write the frame profile: {e}"),
+        }
+    }
     app.on_exit();
     result
 }
@@ -342,11 +350,28 @@ fn draw(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()
 /// # Errors
 ///
 /// Propagates terminal I/O failures from drawing, polling or reading events.
-fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
+fn run(
+    terminal: &mut ratatui::DefaultTerminal,
+    app: &mut App,
+    mut profiler: Option<&mut Profiler>,
+) -> io::Result<()> {
+    // Time one step into the profiler when profiling is on (`VIX_PROFILE`).
+    let timed = |profiler: &mut Option<&mut Profiler>, phase: Phase, start: Instant| {
+        if let Some(p) = profiler.as_deref_mut() {
+            p.record(phase, start.elapsed());
+        }
+    };
     loop {
         // Background work shared with the GUI front end (`App::tick`).
+        let start = Instant::now();
         app.tick();
+        timed(&mut profiler, Phase::Tick, start);
+        let start = Instant::now();
         draw(terminal, app)?;
+        timed(&mut profiler, Phase::Draw, start);
+        if let Some(p) = profiler.as_deref_mut() {
+            p.frame_drawn(Instant::now());
+        }
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());
         }
@@ -354,22 +379,32 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // faster while something is streaming or in flight.
         let timeout = app.poll_interval();
         if event::poll(timeout)? {
-            handle_event(app, event::read()?);
+            let start = Instant::now();
+            let mut next = Some(event::read()?);
             // Handle every event already waiting before drawing again: a
             // flick of the mouse wheel (or mouse movement, which the
             // terminal reports too) sends dozens of events at once, and
             // drawing a whole frame after each one made scrolling lag behind
             // the wheel. Bounded, so a flood of input still lets frames out.
-            let burst = std::time::Instant::now();
-            let mut handled = 1;
-            while handled < MAX_EVENTS_PER_FRAME
-                && burst.elapsed() < MAX_EVENT_BURST
-                && !app.flags.contains(AppFlags::SHOULD_QUIT)
-                && event::poll(Duration::ZERO)?
-            {
-                handle_event(app, event::read()?);
+            let mut handled = 0;
+            while let Some(event) = next.take() {
+                // A resize only redraws; it is not something a user waits on.
+                if !matches!(event, Event::Resize(..))
+                    && let Some(p) = profiler.as_deref_mut()
+                {
+                    p.input_read(Instant::now());
+                }
+                handle_event(app, event);
                 handled += 1;
+                if handled < MAX_EVENTS_PER_FRAME
+                    && start.elapsed() < MAX_EVENT_BURST
+                    && !app.flags.contains(AppFlags::SHOULD_QUIT)
+                    && event::poll(Duration::ZERO)?
+                {
+                    next = Some(event::read()?);
+                }
             }
+            timed(&mut profiler, Phase::Input, start);
         }
         if app.flags.contains(AppFlags::SUSPEND_REQUESTED) {
             app.flags.remove(AppFlags::SUSPEND_REQUESTED);

@@ -898,3 +898,6 @@ frontends
 seccomp
 taplo
 basedpyright
+flamegraph
+samply
+reexec

@@ -36,6 +36,8 @@ use crate::view::VixView;
 /// `startup::load`, then run the gpui application, which opens the window
 /// holding the `App`.
 fn main() {
+    // Started from the Dock or a launcher: take the login shell's PATH.
+    vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
 

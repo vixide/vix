@@ -297,6 +297,8 @@ while True:
 
         // The exception checklist: the adapter's default is on.
         app.run_action("run.exception_filters");
+        draw_frame(&mut app, 120, 40);
+        draw_frame(&mut app, 50, 16);
         let rows = app.choice_list.as_ref().unwrap().panel.rows.clone();
         assert_eq!(
             rows,

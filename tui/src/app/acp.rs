@@ -883,6 +883,10 @@ impl App {
             self.status = t!("status.acp_refused", path = path).to_string();
             return Err("path is outside the workspace".into());
         };
+        if acp_path_is_secret(&self.root, &p) {
+            self.status = t!("status.acp_refused", path = path).to_string();
+            return Err("the file may hold secrets".into());
+        }
         let text = if let Some(tab) = self.acp_tab_index(&p).and_then(|i| self.editor.tabs.get(i)) {
             tab.text()
         } else {
@@ -979,9 +983,23 @@ fn displayable(event: Event) -> Event {
     }
 }
 
+/// Whether `path` (inside `root`) is a file an agent may not read because it
+/// may hold secrets, by the MCP server's own rule
+/// ([`vix_mcp_server::workspace::is_secret`]): judged both as named and with
+/// symlinks resolved, so `notes.txt -> .env` is refused too.
+fn acp_path_is_secret(root: &std::path::Path, path: &std::path::Path) -> bool {
+    use vix_mcp_server::workspace::is_secret;
+    let named = path.strip_prefix(root).is_ok_and(is_secret);
+    let real = match (root.canonicalize(), path.canonicalize()) {
+        (Ok(root), Ok(path)) => path.strip_prefix(&root).is_ok_and(is_secret),
+        _ => false,
+    };
+    named || real
+}
+
 #[cfg(test)]
 mod tests {
-    use super::displayable;
+    use super::{acp_path_is_secret, displayable};
     use vix_acp::{Event, OptionKind, PermOption, PlanEntry};
 
     const EVIL: &str = "ok\u{1b}[2J\u{1b}]0;pwned\u{7}\u{1b}[31mred";
@@ -1033,5 +1051,24 @@ mod tests {
         };
         assert!(clean(&title));
         assert!(options.iter().all(|o| clean(&o.name) && o.id == "allow"));
+    }
+
+    #[test]
+    fn an_agent_may_not_read_secret_files_even_through_a_symlink() {
+        let root = std::env::temp_dir().join(format!("vix-acp-secret-{}", std::process::id()));
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(root.join(".env"), "TOKEN=x").unwrap();
+        std::fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+        std::fs::write(root.join(".git/config"), "[core]").unwrap();
+        assert!(acp_path_is_secret(&root, &root.join(".env")));
+        assert!(acp_path_is_secret(&root, &root.join(".git/config")));
+        assert!(acp_path_is_secret(&root, &root.join("id_ed25519")));
+        assert!(!acp_path_is_secret(&root, &root.join("main.rs")));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join(".env"), root.join("notes.txt")).unwrap();
+            assert!(acp_path_is_secret(&root, &root.join("notes.txt")));
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

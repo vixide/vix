@@ -25,10 +25,18 @@ use ratatui_core::style::{Color, Modifier, Style};
 use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Syntax theme: tree-sitter capture name (keyword) to ratatui style.
 type Theme = HashMap<String, Style>;
+
+/// Buffers at least this large (in bytes) let [`Editor::max_line_width`]
+/// reuse a slightly stale width while typing.
+pub const MAX_WIDTH_LAZY_BYTES: usize = 4 * 1024 * 1024;
+
+/// How long [`Editor::max_line_width`] may reuse a width after an edit in a
+/// large buffer before it rescans.
+pub const MAX_WIDTH_STALE: Duration = Duration::from_millis(250);
 
 /// `theme` with the Org entries [`crate::org_highlight`] names, derived from
 /// the four syntax colors a theme has (each kept if the theme sets it
@@ -205,9 +213,9 @@ pub struct Editor {
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
-    /// [`Editor::max_line_width`]'s last answer and the buffer revision it
-    /// was computed for.
-    pub(crate) max_width_cache: Cell<Option<(u64, usize)>>,
+    /// [`Editor::max_line_width`]'s last answer, the buffer revision it was
+    /// computed for, and when.
+    pub(crate) max_width_cache: Cell<Option<(u64, usize, Instant)>>,
 
     /// Independent display/editing toggles (line numbers, whitespace, soft
     /// wrap, auto-pair, rainbow brackets) — see [`Flags`] for what each bit
@@ -1323,15 +1331,23 @@ impl Editor {
     /// frame (to decide whether a horizontal scrollbar is needed), and the
     /// scan is O(n) — on a 100 MB file, recomputing it per frame was the
     /// whole of Vix's idle CPU use (T749).
+    ///
+    /// In a buffer of [`MAX_WIDTH_LAZY_BYTES`] or more, an edit within
+    /// [`MAX_WIDTH_STALE`] of the last scan keeps the previous width: typing
+    /// would otherwise rescan the whole buffer on every keystroke, and a
+    /// scrollbar thumb one keystroke out of date is harmless. The first frame
+    /// after a pause in typing rescans.
     pub fn max_line_width(&self) -> usize {
         let rev = self.code.revision();
-        if let Some((cached_rev, width)) = self.max_width_cache.get()
-            && cached_rev == rev
+        if let Some((cached_rev, width, at)) = self.max_width_cache.get()
+            && (cached_rev == rev
+                || (self.code.len_bytes() >= MAX_WIDTH_LAZY_BYTES
+                    && at.elapsed() < MAX_WIDTH_STALE))
         {
             return width;
         }
         let width = self.code.max_line_chars();
-        self.max_width_cache.set(Some((rev, width)));
+        self.max_width_cache.set(Some((rev, width, Instant::now())));
         width
     }
 
@@ -1598,6 +1614,47 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::Editor;
+
+    /// A large buffer reuses its width while typing, and rescans once the
+    /// width is older than `MAX_WIDTH_STALE`; a small buffer rescans on
+    /// every edit.
+    #[test]
+    fn max_line_width_is_lazy_only_in_large_buffers() {
+        use crate::actions::InsertText;
+        use crate::code::full_text_scans;
+        let line = "x".repeat(99) + "\n";
+        let big = line.repeat(super::MAX_WIDTH_LAZY_BYTES / line.len() + 1);
+        let mut e = Editor::new("text", &big, Vec::new()).unwrap();
+        while e.parse_pending() {
+            e.poll_parse();
+        }
+        assert_eq!(e.max_line_width(), 99);
+        let before = full_text_scans();
+        e.set_cursor(0);
+        e.apply(InsertText {
+            text: "y".to_string(),
+        });
+        assert_eq!(
+            e.max_line_width(),
+            99,
+            "a fresh width is reused while typing"
+        );
+        assert_eq!(full_text_scans(), before, "no rescan right after an edit");
+        // Age the cached width past the limit: the next call rescans.
+        let (rev, width, at) = e.max_width_cache.get().unwrap();
+        let old = at.checked_sub(super::MAX_WIDTH_STALE * 2).unwrap();
+        e.max_width_cache.set(Some((rev, width, old)));
+        assert_eq!(e.max_line_width(), 100);
+        assert_eq!(full_text_scans(), before + 1);
+
+        let mut small = Editor::new("text", "abc\n", Vec::new()).unwrap();
+        assert_eq!(small.max_line_width(), 3);
+        small.set_cursor(0);
+        small.apply(InsertText {
+            text: "z".to_string(),
+        });
+        assert_eq!(small.max_line_width(), 4, "a small buffer rescans at once");
+    }
 
     /// T658: `fold` folds the innermost open range around a line and never
     /// unfolds; `unfold` removes the innermost fold around it and never folds.

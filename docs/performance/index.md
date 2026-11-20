@@ -367,6 +367,63 @@ asking why — if it crosses **35 MB** (roughly 40% headroom) on any platform
 CI measures. Update this number (and re-set the budget) the next time it's
 deliberately grown for a good reason, so the budget keeps meaning something.
 
+## Profiling a session (`VIX_PROFILE`)
+
+Benchmarks measure one operation in isolation. To see how responsive Vix is
+in real use, on your own files, run it with `VIX_PROFILE` set to a file:
+
+```sh
+VIX_PROFILE=profile.txt vix big.log
+```
+
+Use Vix as usual, then quit. Vix writes a summary to that file (and says
+where on exit):
+
+```text
+Vix frame profile (VIX_PROFILE)
+session: 42.3 s
+
+phase                count     p50 ms     p95 ms     p99 ms     max ms
+input to frame         310       1.71       3.02       6.88      14.10
+input handling         318       0.09       0.41       1.20       5.33
+draw                   402       1.42       2.31       4.97      11.62
+tick                   402       0.02       0.05       0.11       0.80
+
+inputs slower than 16 ms to reach the screen: 0 of 310
+
+slowest inputs (ms, at s into the session):
+      14.10  at 12.8 s
+```
+
+- **input to frame** is what you feel: from Vix reading a key, click or paste
+  to the end of drawing the frame that shows its result. Anything over 16 ms
+  (one frame at 60 Hz) is counted as slow, and the slowest ten are listed
+  with when they happened, so you can match them to what you were doing.
+- **input handling**, **draw** and **tick** (the background work polled
+  before each frame) split that time up.
+
+Nothing is timed when `VIX_PROFILE` is unset. Only the terminal front end
+records a profile.
+
+To find *where* the time goes, use a sampling profiler on a release build:
+[`cargo flamegraph`](https://github.com/flamegraph-rs/flamegraph)
+(`cargo flamegraph -p vix-tui --bin vix -- big.log`) or
+[samply](https://github.com/mstange/samply) (`samply record target/release/vix
+big.log`).
+
+### Typing in a large file (measured 2026-11-17)
+
+`render/frame/after_keystroke` (`tui/benches/render_ops.rs`) types and
+deletes a character and draws a frame. Before this measurement it grew with
+the file, because every edit made the next frame rescan the whole buffer for
+its widest line (for the horizontal scrollbar): 1.2 ms at 1,000 lines,
+2.2 ms at 20,000, and 4.9 ms at 500,000 lines (about 15 MB), on course for
+the 16 ms frame budget at 100 MB. Now a buffer of 4 MB or more reuses the
+widest-line width while you type and remeasures once you pause for 250 ms
+(`Editor::max_line_width`); the 500,000-line case takes 1.7 ms, level with
+the small ones. Same machine as the baseline above, under load, so read the
+ratio rather than the absolute numbers.
+
 ## Reading the numbers
 
 Benchmark what the user waits for — a keystroke, a frame, a file open — not

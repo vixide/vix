@@ -46,6 +46,8 @@ use crate::view::VixIced;
 /// Parse the command line, load settings and the initial files through
 /// `startup::load`, then run the iced application.
 fn main() -> iced::Result {
+    // Started from the Dock or a launcher: take the login shell's PATH.
+    vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

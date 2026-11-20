@@ -14,10 +14,11 @@ no sleeps, no screen scraping.
 | **Integration** | `tui/tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
 | **Snapshot** | `tui/tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
 | **Repo invariants** | `tui/tests/i18n_keys.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
+| **Action sweep** | `tui/tests/action_sweep.rs` | Every action id the dispatch scan finds (`vix_action_catalog::dispatch_scan`) runs once on a fresh `App`, its frame drawn wide and narrow, then Esc twice — no panic, no hang. Runs in a sandbox like the chaos monkey (empty `PATH`, throwaway `HOME`, no `SHELL`), re-executing its own test binary, killed after 10 minutes with the action it was on named. It is the cheapest way to draw every overlay under test and coverage | `cargo test` |
 | **Smoke** | `tui/tests/db_smoke.rs`, `tui/tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
 | **Fuzz** | `fuzz/fuzz_targets/` | Parsers and text transforms against input nobody thought of | `cargo +nightly fuzz run <target>` |
 | **Benchmark** | `tui/benches/` | The per-keystroke and per-frame paths, so latency regressions are visible | `cargo bench` |
-| **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match, CSpell finds no unknown word in the markdown | `scripts/check` |
+| **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match, no tracked file keeps a merge-conflict marker (outside markdown code fences), CSpell finds no unknown word in the markdown | `scripts/check` |
 
 `scripts/check` runs the gate the way CI does: fmt, build, clippy at pedantic
 with `-D warnings`, the test suite, `cargo doc` with `-D warnings`, and the
@@ -203,7 +204,7 @@ The corpus is not committed; the regression is.
 | `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately |
 | `frame_ops` | The two per-*frame* buffer scans found and fixed by T510/T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll/breadcrumb declaration scan (`vix_palette::symbols`) |
 | `gutter_diff` | The git gutter diff against `HEAD` (`vix_git::diff_marks`, T574) for lightly edited and heavily rewritten buffers, so the 40 ms deadline and the 50,000-line cap stay visible |
-| `render_ops` | Drawing: one viewport's syntax highlight with the cache cold (top, middle and end of 1,000 to 125,000-line files; it should stay flat as the file grows), and a whole `ui::draw` of the `App` into a 200×50 terminal, both an unchanged redraw and a redraw after a keystroke |
+| `render_ops` | Drawing: one viewport's syntax highlight with the cache cold (top, middle and end of 1,000 to 125,000-line files; it should stay flat as the file grows), and a whole `ui::draw` of the `App` into a 200×50 terminal, both an unchanged redraw and a redraw after a keystroke, up to a 500,000-line file |
 
 ```sh
 cargo bench                                  # everything
@@ -221,6 +222,12 @@ the previous one, so the workflow is: measure, change, measure again, and read
 the percentage. That is how the query-compilation cost was found — opening a
 *200-line* file cost 26 ms, and the fixed cost stood out against the 5,000-line
 case. Caching the compiled Tree-sitter query took it to 0.6 ms.
+
+For a real session rather than one operation, `VIX_PROFILE=<file> vix …`
+(`tui/src/profile.rs`) times every tick, frame and input in the terminal
+event loop and writes percentiles, the count of inputs slower than 16 ms to
+reach the screen, and the slowest inputs to that file on exit. It is off,
+and times nothing, unless the variable is set.
 
 Benchmark what the user waits for: a keystroke, a frame, a file open. Do not
 benchmark what runs once at startup or what is dominated by I/O. See

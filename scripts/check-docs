@@ -346,6 +346,36 @@ def check_spelling():
     return "ok", []
 
 
+def check_conflict_markers():
+    """Every tracked text file free of merge-conflict markers.
+
+    A line that starts with `<<<<<<< `, `||||||| `, `>>>>>>> ` or is exactly
+    `=======` is a marker a merge left behind, unless it is inside a fenced
+    code block of a markdown file (docs show conflict blocks as examples).
+    Returns a list of "path:line: text" findings.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True
+    ).stdout.decode("utf-8", "replace").split("\0")
+    marker = re.compile(r"^(<<<<<<< |\|\|\|\|\|\|\| |>>>>>>> |=======$)")
+    bad = []
+    for rel in filter(None, listed):
+        path = os.path.join(ROOT, rel)
+        try:
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        fenced = False
+        for n, line in enumerate(text.splitlines(), 1):
+            if rel.endswith(".md") and line.lstrip().startswith(("```", "~~~")):
+                fenced = not fenced
+                continue
+            if not fenced and marker.match(line):
+                bad.append(f"{rel}:{n}: {line}")
+    return bad
+
+
 def main():
     failures = 0
 
@@ -405,6 +435,15 @@ def main():
             print(f"  {msg}")
     else:
         print("OK: llms.txt and llms.json agree and are within budget")
+
+    markers = check_conflict_markers()
+    if markers:
+        failures += 1
+        print("FAIL: merge-conflict markers left in tracked files")
+        for msg in markers:
+            print(f"  {msg}")
+    else:
+        print("OK: no merge-conflict markers")
 
     status, lines = check_spelling()
     if status == "skip":

@@ -354,6 +354,11 @@ Unfold** opens inward. The cursor needn't be on a range's first line. The App
 exposes them as `editor.fold` / `editor.unfold`; with nothing to change the
 status bar says there is no fold.
 
+A foldable line's first visual row shows its marker — `▸` folded, `▾` open —
+in the gutter column just before the text, and a folded line ends with `...`;
+both look the same with soft wrap on or off (continuation rows of a wrapped
+line carry no marker).
+
 ## Collapsed folds and Move Line (T580)
 
 Move Line Up/Down treats a collapsed fold as one block: the moved block is the cursor line plus its hidden body, and it swaps with the adjacent visible line plus *its* hidden body. A fold is never split or moved into, and other collapsed folds inside the swapped region keep their shape.

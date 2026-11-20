@@ -155,6 +155,8 @@ impl Editor {
                 area.left()
             };
             self.draw_gutter_sign(buf, sign_x, draw_y, vr.line, right);
+            // The fold chevron (▸/▾), in the same column as unwrapped.
+            self.draw_fold_marker(buf, vr.line, area.left(), text_x0, right, draw_y);
         }
 
         // Base text for the segment (with whitespace glyphs if enabled). Tabs
@@ -443,7 +445,28 @@ mod tests {
         let mut buf = Buffer::empty(area);
         (&ed).render(area, &mut buf);
         let row = |y: u16| (0..20).map(|x| buf[(x, y)].symbol()).collect::<String>();
-        assert!(row(0).trim_start().starts_with("head..."), "{:?}", row(0));
+        assert!(
+            row(0).trim_start().starts_with("\u{25b8}head..."),
+            "{:?}",
+            row(0)
+        );
         assert!(row(1).trim_start().starts_with("after"), "{:?}", row(1));
+
+        // Unfolded, the header shows ▾, on its first visual row only, with
+        // line numbers on too.
+        let mut ed_narrow = Editor::new(
+            "text",
+            "head line that wraps\nbody 1\nbody 2\nafter\n",
+            Vec::new(),
+        )
+        .unwrap();
+        ed_narrow.set_soft_wrap(true);
+        ed_narrow.set_fold_ranges(vec![(0, 2)]);
+        let area = Rect::new(0, 0, 14, 4);
+        let mut buf = Buffer::empty(area);
+        (&ed_narrow).render(area, &mut buf);
+        let row = |y: u16| (0..14).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        assert!(row(0).contains("\u{25be}head"), "{:?}", row(0));
+        assert!(!row(1).contains('\u{25be}'), "{:?}", row(1));
     }
 }

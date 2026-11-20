@@ -807,6 +807,8 @@ fn git_graph_lists_lanes_searches_filters_and_opens_the_diff_tab() {
     let dir = graph_repo("gitgraph");
     let mut app = app_at(&dir);
     app.run_action("git.graph");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let g = app.git_graph.as_ref().expect("graph panel opens");
     assert_eq!(g.commits.len(), 4);
     assert_eq!(g.commits[0].subject, "merge topic");

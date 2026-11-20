@@ -50,6 +50,7 @@ pub mod capability;
 pub mod cli;
 pub mod crash;
 pub mod mcp;
+pub mod profile;
 pub mod remote;
 pub mod term_caps;
 pub use vix_authority as authority;
@@ -183,6 +184,15 @@ pub mod db {
         /// No-op; see `vix_db::secret::use_system_keyring` (T639).
         pub fn use_system_keyring() {}
     }
+}
+
+/// For a desktop GUI's `main`, before anything else: when it was started
+/// outside a terminal (the macOS Dock or Finder, a Linux desktop launcher),
+/// re-exec it with the user's login-shell `PATH` so language servers,
+/// formatters, `git` and the rest are found as they are in a terminal. See
+/// [`vix_project_env::login_path::reexec_with_login_shell_path`].
+pub fn reexec_with_login_shell_path() {
+    vix_project_env::login_path::reexec_with_login_shell_path();
 }
 
 /// Opt this process into the OS keyring (T639, T790): install the platform's

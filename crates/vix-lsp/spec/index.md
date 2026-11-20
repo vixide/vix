@@ -682,6 +682,19 @@ and over a fake `ssh`.
 
 Each server's stderr is captured on a reader thread into a per-language ring buffer of the last 2,000 lines, which survives restarts. `Lsp::server_log(path)` returns it under a `== language (command) ==` heading; **LSP → Show Server Log** opens it in a read-only tab. `Lsp::restart(path)` shuts the server(s) for `path` down, drops the diagnostics they published, resets the crash-respawn budget, spawns fresh ones and returns the files that were open on them; the host forgets their sync state so `didOpen` is replayed with current content on the next tick. **LSP → Restart Server** drives it.
 
+A server whose command is a rustup proxy for a component the toolchain lacks
+(`~/.cargo/bin/rust-analyzer` without `rustup component add rust-analyzer`)
+exits at once and says so on stderr — `error: Unknown binary 'rust-analyzer'
+in official toolchain …` (older rustup) or `error: 'rust-analyzer' is not
+installed for the toolchain …` (newer). When a crash's captured stderr names
+the server's own program that way, it is not respawned: it is marked failed
+with `ServerError::NotInstalled(install)` and the host gets
+`LspEvent::ServerNotInstalled { language_id, install }`, where `install` is
+`rustup component add <name>`; the App shows that command in Messages
+(`msg.lsp_server_not_installed`) instead of the generic "crashed repeatedly"
+error. The stderr reader can lag the exit by a moment, so the check runs on
+every crash and the first one may still be respawned once.
+
 ## Server status (T732)
 
 `Lsp::statuses()` returns one `ServerStatus` per configured language id, in
@@ -693,7 +706,7 @@ budget ran out), the capabilities advertised in the `initialize` result
 (`vix_lsp_core::message::parse_capability_names`: every non-`false`, non-null
 key of `capabilities`, a trailing `Provider` dropped, sorted), the number of
 open documents, the in-flight progress lines, and the last `ServerError`
-since the last restart (`SpawnFailed`, `Crashed`, or `Request(message)` for a
+since the last restart (`SpawnFailed`, `Crashed`, `NotInstalled(install)`, or `Request(message)` for a
 JSON-RPC error reply that was surfaced to the user). `Lsp::restart_language`
 restarts one server by language id, exactly like `Lsp::restart` does for one
 file's servers, and clears its error and failed state.

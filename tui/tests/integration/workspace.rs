@@ -596,6 +596,8 @@ fn wgrep_editing_a_line_and_saving_rewrites_only_that_line() {
     }
 
     app.run_action("file.save");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let wc = app.wgrep_confirm.as_ref().expect("apply-confirm opened");
     assert_eq!(wc.replaced, 1);
     assert_eq!(wc.plan.len(), 1);
