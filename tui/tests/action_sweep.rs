@@ -3,8 +3,9 @@
 //! at a wide and a narrow size, Esc is pressed twice and the frame drawn
 //! again. In between, a prompt the action opened is answered (`sweep`, Enter;
 //! [`answer_prompt`]), and [`poke`] hovers, clicks and scrolls across the
-//! screen and presses the navigation keys (never Enter), so the work behind
-//! prompts and the mouse and key handlers run too. Nothing is asserted beyond "no panic, no hang": the point is that
+//! screen and presses the navigation keys, and then Enter accepts whatever
+//! is highlighted, so the work behind prompts and lists and the mouse and
+//! key handlers run too. Nothing is asserted beyond "no panic, no hang": the point is that
 //! every overlay, panel and prompt an action opens is drawn and handled at
 //! least once under test, so a panic in a rarely used one is caught here and
 //! its code is measured by coverage (`tarpaulin.toml`).
@@ -276,6 +277,15 @@ fn sweep(progress: &Path) {
             continue;
         }
         poke(&mut terminal, &mut app);
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
+            continue;
+        }
+        // Accept whatever is highlighted (a branch, a log entry, a conflict,
+        // a task) the way Enter would, and answer any prompt that follows.
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.poll_command();
+        draw(&mut terminal, &mut app);
+        answer_prompt(&mut terminal, &mut app);
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             continue;
         }
