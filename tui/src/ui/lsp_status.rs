@@ -29,6 +29,9 @@ fn error_text(error: Option<&ServerError>) -> String {
         None => t!("ui.lsp_status_none").to_string(),
         Some(ServerError::SpawnFailed) => t!("ui.lsp_error_spawn_failed").to_string(),
         Some(ServerError::Crashed) => t!("ui.lsp_error_crashed").to_string(),
+        Some(ServerError::NotInstalled(install)) => {
+            t!("ui.lsp_error_not_installed", install = install).to_string()
+        }
         Some(ServerError::Request(message)) => message.clone(),
         // Any error kind added later.
         Some(_) => t!("ui.lsp_state_failed").to_string(),

@@ -65,6 +65,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A missing rust-analyzer says how to install it.** When `rust-analyzer` on your `PATH` is only rustup's proxy and the toolchain lacks the component, Vix used to restart it again and again and then report that it had crashed. It now stops at once and says to run `rustup component add rust-analyzer`; **View → LSP Status…** shows the same.
 - **The command palette lists every menu command.** It searched a hand-picked list, so commands with only a menu item, such as **Tools › Terminal › Show/Hide Terminal**, were missing and Enter on an empty result did nothing. Every menu command is now in the palette, named by its menu path (`>terminal` finds all the terminal commands).
 - **Folding with soft wrap.** With soft wrap on, folded lines still showed and the fold had no `...` marker: the wrapped renderer ignored folds. It now hides them like the unwrapped view.
 - **Up and Down no longer move into a fold.** The caret could land on a hidden line inside a folded section, out of sight; it now steps over the fold.

@@ -329,6 +329,17 @@ pub enum LspEvent {
     /// is dead until the next explicit `did_open` (e.g. closing and
     /// reopening a file).
     ServerCrashed(String),
+    /// A server's command exists but is not really installed: today, a
+    /// rustup proxy (`~/.cargo/bin/rust-analyzer`) for a component the
+    /// toolchain lacks, which exits at once saying so. It is not respawned;
+    /// `install` is the command that installs it.
+    ServerNotInstalled {
+        /// The configured language id.
+        language_id: String,
+        /// The shell command that installs the server, e.g.
+        /// `rustup component add rust-analyzer`.
+        install: String,
+    },
     /// A `$/progress` update worth showing (T123d) — e.g. a server's
     /// initial index build. Only `"begin"`/`"report"` kinds reach the host;
     /// an `"end"` report has nothing left to say, so it produces no event
@@ -412,6 +423,9 @@ pub enum ServerError {
     SpawnFailed,
     /// The process exited unexpectedly.
     Crashed,
+    /// The command is a rustup proxy for a component the toolchain lacks;
+    /// the string is the command that installs it.
+    NotInstalled(String),
     /// A request returned a JSON-RPC error with this message.
     Request(String),
 }
@@ -490,6 +504,24 @@ fn log_push(log: &LogBuf, line: String) {
         q.pop_front();
     }
     q.push_back(line);
+}
+
+/// The rustup component `program` names, if `stderr` shows `program` is a
+/// rustup proxy whose toolchain lacks it. rustup says either
+/// `error: Unknown binary 'rust-analyzer' in official toolchain '…'` or
+/// `error: 'rust-analyzer' is not installed for the toolchain '…'`; both
+/// quote the binary's name.
+fn missing_rustup_component<'a>(
+    stderr: impl IntoIterator<Item = &'a str>,
+    program: &str,
+) -> Option<String> {
+    let name = Path::new(program).file_stem()?.to_str()?;
+    let unknown = format!("Unknown binary '{name}'");
+    let missing = format!("'{name}' is not installed for the toolchain");
+    stderr
+        .into_iter()
+        .any(|line| line.contains(&unknown) || line.contains(&missing))
+        .then(|| name.to_string())
 }
 
 /// How far a server supports code lenses (T726).
@@ -2123,6 +2155,14 @@ impl Lsp {
         if survived_a_while {
             self.restart_attempts.remove(lang);
         }
+        if let Some(install) = self.install_hint(lang) {
+            self.mark_failed(lang, ServerError::NotInstalled(install.clone()));
+            events.push(LspEvent::ServerNotInstalled {
+                language_id: lang.to_string(),
+                install,
+            });
+            return;
+        }
         self.last_errors
             .insert(lang.to_string(), ServerError::Crashed);
         let attempts = self.restart_attempts.entry(lang.to_string()).or_insert(0);
@@ -2738,6 +2778,25 @@ impl Lsp {
         server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     }
 
+    /// The install command for `lang`'s server if its stderr says its
+    /// command is a rustup proxy for a missing component
+    /// ([`missing_rustup_component`]).
+    fn install_hint(&self, lang: &str) -> Option<String> {
+        let program = self
+            .configs
+            .iter()
+            .find(|c| c.language_id == lang)?
+            .command
+            .first()?
+            .clone();
+        let log = self.logs.get(lang)?;
+        let lines = log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        missing_rustup_component(lines.iter().map(String::as_str), &program)
+            .map(|component| format!("rustup component add {component}"))
+    }
+
     /// Record `error` for `lang` and mark it failed (it stays down until a
     /// restart or a later successful spawn).
     fn mark_failed(&mut self, lang: &str, error: ServerError) {
@@ -3260,6 +3319,37 @@ mod tests {
         );
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    #[test]
+    fn a_rustup_proxy_without_its_component_is_recognised() {
+        // rustup before 1.28 and after, verbatim.
+        let old = [
+            "error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.",
+        ];
+        let new = [
+            "error: 'rust-analyzer' is not installed for the toolchain 'stable-x86_64-unknown-linux-gnu'.",
+            "To install, run `rustup component add rust-analyzer`",
+        ];
+        for log in [&old[..], &new[..]] {
+            assert_eq!(
+                missing_rustup_component(log.iter().copied(), "rust-analyzer"),
+                Some("rust-analyzer".into())
+            );
+            assert_eq!(
+                missing_rustup_component(log.iter().copied(), "/home/me/.cargo/bin/rust-analyzer"),
+                Some("rust-analyzer".into())
+            );
+        }
+        // Another program, or an ordinary crash, is not this.
+        assert_eq!(missing_rustup_component(old.iter().copied(), "gopls"), None);
+        assert_eq!(
+            missing_rustup_component(
+                ["thread 'main' panicked at src/main.rs:1:1"],
+                "rust-analyzer"
+            ),
+            None
+        );
     }
 
     #[test]
