@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Run the criterion benchmarks: make test-benchmarks
+set -euo pipefail
+cd "$(dirname "$0")/.."
+cargo bench

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Measure test coverage with cargo-tarpaulin: make test-coverage
+set -euo pipefail
+cd "$(dirname "$0")/.."
+cargo tarpaulin --config tarpaulin.toml

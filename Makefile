@@ -94,13 +94,13 @@ test-github-discussions:
 	bin/test-github-discussions
 
 ##
-# make test-minimum-supported-rust-version: Check and test on the minimum
+# make ci-minimum-supported-rust-version: Check and test on the minimum
 # supported Rust version (N-2) and the version after it (N-1), for the terminal
 # app, matrix/ and packaging/crates-io-vix (spec/rust-msrv-n-minus-2/).
 ##
-.PHONY: test-minimum-supported-rust-version
-test-minimum-supported-rust-version:
-	bin/make-test-minimum-supported-rust-version
+.PHONY: ci-minimum-supported-rust-version
+ci-minimum-supported-rust-version:
+	bin/make-ci-minimum-supported-rust-version
 
 ##
 # make check: Run the local CI-parity gate, scripts/check: fmt, build,
@@ -109,6 +109,20 @@ test-minimum-supported-rust-version:
 .PHONY: check
 check:
 	scripts/check
+
+##
+# make test-benchmarks: Run the criterion benchmarks via bin/test-benchmarks.
+##
+.PHONY: test-benchmarks
+test-benchmarks:
+	bin/test-benchmarks
+
+##
+# make test-coverage: Measure test coverage via bin/test-coverage (tarpaulin).
+##
+.PHONY: test-coverage
+test-coverage:
+	bin/test-coverage
 
 ##
 # make coverage: Measure test coverage with cargo-tarpaulin, configured by

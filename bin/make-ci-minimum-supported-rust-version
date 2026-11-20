@@ -5,7 +5,7 @@
 # `packaging/crates-io-vix`; not `gui/`, whose toolkits need native libraries and
 # are built by .github/workflows/gui.yml, nor `fuzz/`, which needs nightly). Run it with:
 #
-#     make test-minimum-supported-rust-version
+#     make ci-minimum-supported-rust-version
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
