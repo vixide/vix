@@ -410,3 +410,57 @@ fn lens_refresh_after_an_edit_waits_for_the_debounce() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Local History's other choices: `s` restores only the selected lines from
+/// a snapshot, `o` opens a snapshot as its own read-only tab, the list pages
+/// and takes a mouse click, and it draws while open.
+#[test]
+fn local_history_restores_a_range_opens_a_snapshot_and_takes_the_mouse() {
+    let (mut app, dir) = app_with_store("lh-range");
+    let f = dir.join("a.txt");
+    fs::write(&f, "one\ntwo\nthree\n").unwrap();
+    open_and_set(&mut app, &f, "one\ntwo\nthree\n");
+    app.run_action("file.save");
+    std::thread::sleep(Duration::from_millis(5));
+    open_and_set(&mut app, &f, "ONE\nTWO\nTHREE\n");
+    app.run_action("file.save");
+
+    // Select the second line only, then restore just that range from the
+    // older snapshot.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(4, 7);
+    app.run_action("file.local_history");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
+    for code in [KeyCode::PageDown, KeyCode::PageUp, KeyCode::Down] {
+        app.on_key(keycode(code));
+    }
+    app.on_key(key('s'));
+    assert_eq!(
+        active_text(&app),
+        "ONE\ntwo\nTHREE\n",
+        "only the selected line came back"
+    );
+
+    // `o` opens the snapshot itself, read-only.
+    app.run_action("file.local_history");
+    app.on_key(keycode(KeyCode::Down));
+    let tabs = app.editor.tabs.len();
+    app.on_key(key('o'));
+    assert_eq!(app.editor.tabs.len(), tabs + 1);
+    assert!(app.editor.active_tab().unwrap().read_only);
+    assert_eq!(active_text(&app), "one\ntwo\nthree\n");
+
+    // A click inside the list, then one outside, which closes it.
+    app.open_initial(&f);
+    app.run_action("file.local_history");
+    draw_frame(&mut app, 120, 40);
+    let r = app.layout.choice_list;
+    app.on_mouse(click(r.x + 2, r.y + 1));
+    draw_frame(&mut app, 120, 40);
+    app.on_mouse(click(0, 39));
+    let _ = fs::remove_dir_all(&dir);
+}

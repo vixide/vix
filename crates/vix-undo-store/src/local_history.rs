@@ -283,8 +283,10 @@ pub fn unified_diff(old: &str, new: &str) -> String {
 }
 
 /// Replace the 0-based lines `start..end` of `current` with what `snapshot`
-/// has there: every difference that touches the range is reverted, the rest of
-/// `current` is left alone.
+/// has there; the rest of `current` is left alone. A block changed line for
+/// line reverts only its lines inside the range; an insertion, a deletion or
+/// a block that grew or shrank and touches the range is reverted whole (it
+/// has no line-for-line correspondence).
 ///
 /// `start..end` are 0-based line indexes into `current` (an `end` at or before
 /// `start` is widened to one line). Diffing runs snapshot -> current, so an
@@ -314,8 +316,22 @@ pub fn revert_range(current: &str, snapshot: &str, start: usize, end: usize) -> 
             DiffOp::Delete { new_index, .. } => *new_index >= start && *new_index < end,
             _ => nr.start < end && nr.end > start,
         };
+        let or = op.old_range();
+        // A block that changed line for line (as many lines before as
+        // after) reverts only its lines inside the range: line `i` of the
+        // new text corresponds to line `i` of the old. Anything else
+        // (insertions, deletions, a block that grew or shrank) has no such
+        // correspondence and is reverted whole.
+        if touches && matches!(op, DiffOp::Replace { .. }) && or.len() == nr.len() {
+            for (o, n) in or.zip(nr) {
+                let inside = n >= start && n < end;
+                let line = if inside { old.get(o) } else { new.get(n) };
+                out.push_str(line.copied().unwrap_or_default());
+            }
+            continue;
+        }
         let src = if touches {
-            old.get(op.old_range()).unwrap_or(&[])
+            old.get(or).unwrap_or(&[])
         } else {
             new.get(nr).unwrap_or(&[])
         };
@@ -329,6 +345,24 @@ pub fn revert_range(current: &str, snapshot: &str, start: usize, end: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_block_changed_line_for_line_reverts_only_the_selected_lines() {
+        // All three lines changed, as one block: selecting the middle one
+        // brings back only that line.
+        assert_eq!(
+            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 1, 2),
+            "ONE\ntwo\nTHREE\n"
+        );
+        assert_eq!(
+            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 0, 3),
+            "one\ntwo\nthree\n"
+        );
+        // A block that grew has no line correspondence: reverted whole.
+        assert_eq!(revert_range("a\nX\nY\nc\n", "a\nb\nc\n", 1, 2), "a\nb\nc\n");
+        // Outside the range, nothing changes.
+        assert_eq!(revert_range("ONE\nTWO\n", "one\ntwo\n", 5, 6), "ONE\nTWO\n");
+    }
 
     fn store(tag: &str) -> (LocalHistory, PathBuf) {
         let dir = std::env::temp_dir().join(format!("vix-lh-{tag}-{}", std::process::id()));

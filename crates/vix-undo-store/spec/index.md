@@ -31,7 +31,9 @@ carries a label), refuses files over 5 MiB, and prunes past `with_keep(n)`
 (the `local_history_keep` setting, default 50), dropping unlabelled snapshots
 before labelled ones. `list`, `read` and `set_label` round it out. Two pure
 helpers serve the host: `unified_diff(old, new)` (`@@`-grouped, 3 lines of
-context) and `revert_range(current, snapshot, start, end)`, which replaces only
-the differences touching 0-based lines `start..end` with the snapshot's text.
+context) and `revert_range(current, snapshot, start, end)`, which replaces 0-based lines
+`start..end` with the snapshot's text: a block changed line for line reverts
+only its lines inside the range; an insertion, a deletion, or a block that
+grew or shrank is reverted whole when it touches the range.
 Errors are the typed `HistoryError` (`NotFound`, `Io`). The host is
 `tui/src/app/ide_parity.rs`; user docs are `docs/ide-parity/index.md`.
