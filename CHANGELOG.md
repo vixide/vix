@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-20
+
 ### Added
 
 - **A frame profiler for real sessions.** Run `VIX_PROFILE=profile.txt vix …`, use Vix, and quit: Vix writes how long each input took to reach the screen (median, 95th and 99th percentile, maximum), how many took longer than one frame (16 ms), when the slowest happened, and how the time split between handling input, drawing and background work. Nothing is timed unless the variable is set. See [Performance](docs/performance/index.md).
