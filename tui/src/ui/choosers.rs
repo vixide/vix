@@ -393,9 +393,11 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let rows = app.git_status.len().max(1);
     let width = 64u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let (hint, hint_rows) =
+        super::hint_paragraph(&t!("ui.git_changes_hint"), width.saturating_sub(2));
+    let max_rows = area.height.saturating_sub(3 + hint_rows).max(1);
     let visible = u16::try_from(rows).unwrap_or(u16::MAX).min(max_rows);
-    let height = (visible + 4).min(area.height);
+    let height = (visible + 3 + hint_rows).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
@@ -418,7 +420,7 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([Constraint::Min(1), Constraint::Length(hint_rows)])
         .split(inner);
 
     if app.git_status.is_empty() {
@@ -447,11 +449,7 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(list, chunks[0], &mut state);
     }
 
-    let hint = Line::from(Span::styled(
-        t!("ui.git_changes_hint").to_string(),
-        theme::dim(),
-    ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(hint, chunks[1]);
 
     app.layout.git_panel = Rect {
         x: chunks[0].x,
@@ -709,7 +707,8 @@ fn draw_list_chooser_sized(
     width: u16,
 ) -> Rect {
     let width = width.min(area.width);
-    let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX) + 4).min(area.height);
+    let (hint, hint_rows) = super::hint_paragraph(hint, width.saturating_sub(2));
+    let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX) + 3 + hint_rows).min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -728,7 +727,7 @@ fn draw_list_chooser_sized(
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([Constraint::Min(1), Constraint::Length(hint_rows)])
         .split(inner);
 
     let items: Vec<ListItem> = labels
@@ -740,8 +739,7 @@ fn draw_list_chooser_sized(
     state.select(Some(selected));
     frame.render_stateful_widget(list, rows[0], &mut state);
 
-    let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), rows[1]);
+    frame.render_widget(hint, rows[1]);
     rows[0]
 }
 

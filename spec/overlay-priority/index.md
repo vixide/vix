@@ -146,6 +146,15 @@ With this slice step 2 is complete. The stacking confirmations (`confirm`,
 another layer (a reword prompt over the rebase overlay, a confirmation over
 workspace search).
 
+## Key hints
+
+A chooser's bottom key hint (`↑↓ select   Enter open   Esc close`) is never
+cut off by its box: `ui::hint_lines` wraps it between its groups (runs of two
+or more spaces, so a key is never split from what it does) and the box grows
+by the extra rows. The list choosers (`draw_list_chooser`, 34 columns, and
+`draw_list_chooser_sized`) and the Git Changes panel (64 columns) use it; a
+lone group wider than the box is cut with `…`.
+
 ## Tests
 
 `tui/src/app/overlays.rs` (`tests`): row index equals id; drawing order and key
