@@ -118,8 +118,13 @@ fn make_git_history(root: &Path) {
 }
 
 fn new_app(root: &Path, session: &Path) -> App {
-    let mut app =
-        App::new(root.to_path_buf(), Settings::default()).with_session_path(session.to_path_buf());
+    // AI on, through the CLI provider only: its `sh -c` cannot start with
+    // `git` alone on PATH, so every AI action builds its request and then
+    // reports the failed command, and no HTTP provider is ever chosen.
+    let mut settings = Settings::default();
+    settings.ai = "on".into();
+    settings.ai_provider = "cli".into();
+    let mut app = App::new(root.to_path_buf(), settings).with_session_path(session.to_path_buf());
     app.layout.editor = Rect::new(0, 0, 100, 30);
     app.open_initial(&root.join("notes.txt"));
     app.open_initial(&root.join("main.rs"));
