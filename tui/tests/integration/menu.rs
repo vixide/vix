@@ -564,6 +564,8 @@ fn context_menu_runs_the_selected_action() {
         x: 0,
         y: 0,
     });
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     app.on_key(keycode(KeyCode::Enter));
     assert!(app.context_menu.is_none(), "Enter closes the context menu");
     assert!(

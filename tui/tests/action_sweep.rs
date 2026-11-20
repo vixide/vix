@@ -1,10 +1,12 @@
 //! Every action, once (the coverage sweep): each id `App::run_action` can
 //! dispatch runs on a fresh App over a small workspace, then a frame is drawn
 //! at a wide and a narrow size, Esc is pressed twice and the frame drawn
-//! again. Nothing is asserted beyond "no panic, no hang": the point is that
-//! every overlay, panel and prompt an action opens is drawn at least once
-//! under test, so a panic in a rarely used one is caught here and its drawing
-//! code is measured by coverage (`tarpaulin.toml`).
+//! again. In between, [`poke`] hovers, clicks and scrolls across the screen
+//! and presses the navigation keys (never Enter), so mouse and key handlers
+//! run too. Nothing is asserted beyond "no panic, no hang": the point is that
+//! every overlay, panel and prompt an action opens is drawn and handled at
+//! least once under test, so a panic in a rarely used one is caught here and
+//! its code is measured by coverage (`tarpaulin.toml`).
 //!
 //! Like the chaos monkey (`tui/examples/chaos_monkey.rs`) the sweep runs in a
 //! sandbox: the test re-executes its own binary with an empty `PATH` (no
@@ -25,7 +27,7 @@ use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use vix::app::{App, AppFlags};
 use vix::settings::Settings;
 use vix_action_catalog::dispatch_scan::every_dispatchable_action_id;
-use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 /// Marks the sandboxed child.
 const SANDBOX_VAR: &str = "VIX_ACTION_SWEEP_SANDBOX";
@@ -95,6 +97,50 @@ fn resize(terminal: &mut Terminal<TestBackend>, w: u16, h: u16) {
     terminal.resize(Rect::new(0, 0, w, h)).expect("resize");
 }
 
+/// Poke whatever an action opened, the way a person exploring it would:
+/// hover, click and scroll across a grid of points (the menu bar row, the
+/// body, the docks, the status bar), then the navigation keys, drawing after
+/// each. Never Enter, so nothing is confirmed blindly.
+fn poke(terminal: &mut Terminal<TestBackend>, app: &mut App) {
+    let mouse = |kind, column, row| MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    };
+    for &row in &[0u16, 1, 6, 20, 34, 39] {
+        for &column in &[3u16, 40, 80, 117] {
+            app.on_mouse(mouse(MouseEventKind::Moved, column, row));
+            app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), column, row));
+            app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), column, row));
+            if app.flags.contains(AppFlags::SHOULD_QUIT) {
+                return;
+            }
+        }
+        app.on_mouse(mouse(MouseEventKind::ScrollDown, 60, row));
+        app.on_mouse(mouse(MouseEventKind::ScrollUp, 60, row));
+        draw(terminal, app);
+    }
+    for code in [
+        KeyCode::Down,
+        KeyCode::Down,
+        KeyCode::Up,
+        KeyCode::Tab,
+        KeyCode::Right,
+        KeyCode::Left,
+        KeyCode::PageDown,
+        KeyCode::End,
+        KeyCode::Home,
+    ] {
+        app.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+        app.poll_command();
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
+            return;
+        }
+    }
+    draw(terminal, app);
+}
+
 /// The sweep itself, run in the sandboxed child.
 fn sweep(progress: &Path) {
     let base = std::env::temp_dir().join(format!("vix-action-sweep-{}", std::process::id()));
@@ -121,6 +167,10 @@ fn sweep(progress: &Path) {
             continue;
         }
         draw(&mut terminal, &mut app);
+        poke(&mut terminal, &mut app);
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
+            continue;
+        }
         resize(&mut terminal, 50, 16);
         draw(&mut terminal, &mut app);
         app.on_key(esc);
