@@ -36,7 +36,6 @@ mod startup;
 mod view;
 
 use std::cell::Cell;
-use std::path::PathBuf;
 
 use clap::Parser;
 use vix::cli::Cli;
@@ -50,7 +49,7 @@ fn main() -> iced::Result {
     vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = cli.root_dir();
     let title = startup::window_title(&root);
     // iced's boot function is `Fn`, but the command line and settings are
     // used once: hand them over through a cell the first call empties (a

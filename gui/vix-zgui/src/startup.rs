@@ -5,7 +5,6 @@
 //! `App::new` and `App::start`.
 
 use std::io;
-use std::path::PathBuf;
 
 use vix::app::App;
 use vix::cli::Cli;
@@ -55,7 +54,9 @@ pub fn start(cli: &Cli, loaded: Loaded, dark: bool) -> io::Result<(App, String)>
             Background::Light
         }));
     }
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // `vix-gui some/folder` works on that folder, as the terminal binary does.
+    let root = cli.root_dir();
+    let cli = &cli.without_workspace_dir();
     let title = window_title(&root);
     let mut app = App::new(root, loaded.settings);
     if let Some(e) = &loaded.error {

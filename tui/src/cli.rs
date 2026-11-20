@@ -17,7 +17,7 @@
     clippy::struct_excessive_bools,
     reason = "each bool is an independent clap `#[arg(long)]` flag; the derive needs one named field per flag"
 )]
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 #[command(
     name = "vix",
     about = "Vix: Simple Terminal Rust IDE",
@@ -126,12 +126,37 @@ impl Cli {
     /// failing to open a folder as a file. `None`, and [`Cli::files`]
     /// untouched, otherwise (no path, several, a file, or a missing path).
     pub fn take_workspace_dir(&mut self) -> Option<std::path::PathBuf> {
+        let dir = self.workspace_dir()?;
+        self.files.clear();
+        Some(dir)
+    }
+
+    /// The folder [`Cli::take_workspace_dir`] would take, without taking it.
+    #[must_use]
+    pub fn workspace_dir(&self) -> Option<std::path::PathBuf> {
         let [only] = self.files.as_slice() else {
             return None;
         };
-        let dir = only.canonicalize().ok().filter(|p| p.is_dir())?;
-        self.files.clear();
-        Some(dir)
+        only.canonicalize().ok().filter(|p| p.is_dir())
+    }
+
+    /// The workspace root for a local run: [`Cli::workspace_dir`], else the
+    /// current directory (else `.`). The desktop GUIs use this; the terminal
+    /// binary also handles remote targets first.
+    #[must_use]
+    pub fn root_dir(&self) -> std::path::PathBuf {
+        self.workspace_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        })
+    }
+
+    /// These arguments with a lone workspace folder taken out of
+    /// [`Cli::files`], for `App::start` once the folder is the root.
+    #[must_use]
+    pub fn without_workspace_dir(&self) -> Cli {
+        let mut cli = self.clone();
+        cli.take_workspace_dir();
+        cli
     }
 }
 
@@ -152,10 +177,19 @@ mod workspace_dir_tests {
         };
 
         let mut cli = parse(&[&dir.join("sub")]);
+        let sub = dir.join("sub").canonicalize().unwrap();
         assert_eq!(
-            cli.take_workspace_dir(),
-            Some(dir.join("sub").canonicalize().unwrap())
+            cli.workspace_dir(),
+            Some(sub.clone()),
+            "asking takes nothing"
         );
+        assert_eq!(cli.root_dir(), sub);
+        assert_eq!(
+            cli.without_workspace_dir().files,
+            Vec::<std::path::PathBuf>::new()
+        );
+        assert_eq!(cli.files.len(), 1, "the original keeps its argument");
+        assert_eq!(cli.take_workspace_dir(), Some(sub));
         assert!(
             cli.files.is_empty(),
             "the folder is not also opened as a file"
@@ -171,6 +205,7 @@ mod workspace_dir_tests {
                 args.iter().map(std::path::PathBuf::as_path).collect();
             let mut cli = parse(&refs);
             let before = cli.files.clone();
+            assert_eq!(cli.root_dir(), std::env::current_dir().unwrap(), "{args:?}");
             assert_eq!(cli.take_workspace_dir(), None, "{args:?}");
             assert_eq!(cli.files, before);
         }

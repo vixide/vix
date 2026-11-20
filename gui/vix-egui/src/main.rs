@@ -33,7 +33,6 @@ mod screenshot;
 mod startup;
 mod view;
 
-use std::path::PathBuf;
 
 use clap::Parser;
 use eframe::egui::{Theme, ViewportBuilder};
@@ -50,7 +49,7 @@ fn main() -> eframe::Result {
     vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = cli.root_dir();
 
     let options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
