@@ -46,6 +46,8 @@ use crate::view::VixEgui;
 ///
 /// The working directory becomes the workspace root (falling back to `.`).
 fn main() -> eframe::Result {
+    // Started from the Dock or a launcher: take the login shell's PATH.
+    vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

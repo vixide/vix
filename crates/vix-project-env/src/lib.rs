@@ -43,6 +43,8 @@
 #[cfg(feature = "process")]
 mod run;
 
+pub mod login_path;
+
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

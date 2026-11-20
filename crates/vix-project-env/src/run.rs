@@ -56,3 +56,20 @@ pub(crate) fn run_tool(
         }
     }
 }
+
+/// Replace this process with itself (same executable and arguments), with
+/// `PATH` set to `path` and `done_var` set to `1` (see
+/// `login_path::reexec_with_login_shell_path`). Returns only if the exec
+/// failed, and then changes nothing.
+#[cfg(unix)]
+pub(crate) fn reexec_with_path(path: &str, done_var: &str) {
+    use std::os::unix::process::CommandExt as _;
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let _ = Command::new(exe)
+        .args(std::env::args_os().skip(1))
+        .env("PATH", path)
+        .env(done_var, "1")
+        .exec();
+}

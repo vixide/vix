@@ -185,6 +185,15 @@ pub mod db {
     }
 }
 
+/// For a desktop GUI's `main`, before anything else: when it was started
+/// outside a terminal (the macOS Dock or Finder, a Linux desktop launcher),
+/// re-exec it with the user's login-shell `PATH` so language servers,
+/// formatters, `git` and the rest are found as they are in a terminal. See
+/// [`vix_project_env::login_path::reexec_with_login_shell_path`].
+pub fn reexec_with_login_shell_path() {
+    vix_project_env::login_path::reexec_with_login_shell_path();
+}
+
 /// Opt this process into the OS keyring (T639, T790): install the platform's
 /// credential store as `keyring-core`'s process default, then turn on the DB
 /// workbench's saved-password lookups ([`db::secret::use_system_keyring`]).

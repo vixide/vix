@@ -106,6 +106,31 @@ environment (local paths mean nothing there).
 processes are unaffected; `project.reload_env` re-resolves for later spawns
 (restart a language server to pick it up).
 
+## Login shell PATH
+
+A desktop GUI started from the macOS Dock or Finder, or from a Linux desktop
+launcher, inherits the session's minimal `PATH` (on macOS
+`/usr/bin:/bin:/usr/sbin:/sbin`), not the one the user's shell profile builds,
+so language servers, formatters and version-manager shims are not found
+there although they are in a terminal. `login_path::reexec_with_login_shell_path`,
+the first thing every GUI's `main` does, fixes that for the whole process:
+
+- only on Unix with the `process` feature (Windows GUI apps already get the
+  user's `PATH` from the registry), only when standard input is not a
+  terminal, and only once: `VIX_LOGIN_SHELL_PATH=1` marks a process that has
+  already re-executed;
+- it runs `$SHELL -l -i -c "printf '%s%s%s' __VIX_LOGIN_PATH__ \"$PATH\" __VIX_LOGIN_PATH__"`
+  in `$HOME` with stdin closed and stderr discarded, killed after 3 seconds;
+  the markers let a profile print what it likes around the value;
+- if that `PATH` has an entry this process's lacks, the process `exec`s itself
+  (same executable, same arguments, same process id) with the login entries
+  first and the rest of its own after them, no entry twice. Any failure —
+  no `$SHELL`, a shell that fails or hangs, a failed exec — leaves the
+  process running as it was.
+
+The terminal binary never does this: a terminal already has the shell's
+`PATH`.
+
 ## Code
 
 `crates/vix-project-env/src/lib.rs`: `resolve`, `resolve_with` (injectable
