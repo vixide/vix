@@ -21,9 +21,16 @@ In Workspace…**.
   fixed input — e.g. go-to-definition candidates — rather than something
   typing re-runs; also gates T211's editable-results buffer off, since a
   symbol/reference list's `display` isn't in the `rel:line: text` shape),
-  and an optional `title`: a fixed list that names itself (a call or type
-  hierarchy, T620 — `crates/vix-lsp/spec`) sets it, and the panel is drawn
-  under that title instead of the default one.
+  and an optional `title`: a fixed list that names itself sets it, and the
+  panel is drawn under that title instead of the default one. Every static
+  list the App opens names itself: Diagnostics, Document Symbols, Workspace
+  Symbols, References, TODO Comments (`ui.results_*`) and the call or type
+  hierarchy (T620 — `crates/vix-lsp/spec`); only go-to-definition's
+  candidates use the "Go to Definition" fallback. A row's `rel` is relative
+  to the workspace root, matched by its real path too
+  (`App::root_relative`), since language servers report canonical paths and
+  a root opened through a symlink would otherwise show every row as an
+  absolute path.
 - `WorkspaceSearch::pattern()` compiles `query` into an effective regex
   (case-insensitive prefix unless `case_sensitive`; the literal query
   regex-escaped unless `regex`); `path_filter()` compiles `include_path`/

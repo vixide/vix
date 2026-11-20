@@ -571,3 +571,210 @@ fn lsp_popups_draw_their_contents() {
         "Esc closes the code-action menu"
     );
 }
+
+/// A mock language server answering the everyday IDE requests with small,
+/// fixed replies (one file, `a.rs`, holding `fn main() {\n    let 界x = 1;\n}`).
+#[cfg(feature = "lsp")]
+const MOCK_IDE_SERVER: &str = r"
+import json, sys
+
+def read_msg():
+    length = None
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.strip()
+        if not line:
+            break
+        if line.lower().startswith(b'content-length:'):
+            length = int(line.split(b':')[1])
+    return json.loads(sys.stdin.buffer.read(length))
+
+def send(obj):
+    data = json.dumps(obj).encode()
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data) + data)
+    sys.stdout.buffer.flush()
+
+def rng(l1, c1, l2, c2):
+    return {'start': {'line': l1, 'character': c1}, 'end': {'line': l2, 'character': c2}}
+
+uri = None
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    p = msg.get('params') or {}
+    def reply(result):
+        send({'jsonrpc': '2.0', 'id': mid, 'result': result})
+    if method == 'initialize':
+        reply({'capabilities': {
+            'positionEncoding': 'utf-16', 'textDocumentSync': 1,
+            'hoverProvider': True, 'definitionProvider': True, 'referencesProvider': True,
+            'documentSymbolProvider': True, 'workspaceSymbolProvider': True,
+            'completionProvider': {'triggerCharacters': ['.']},
+            'codeActionProvider': True, 'renameProvider': {'prepareProvider': True},
+            'signatureHelpProvider': {'triggerCharacters': ['(']},
+            'documentFormattingProvider': True, 'documentHighlightProvider': True,
+            'selectionRangeProvider': True, 'linkedEditingRangeProvider': True}})
+    elif method == 'textDocument/didOpen':
+        uri = p['textDocument']['uri']
+        send({'jsonrpc': '2.0', 'method': 'textDocument/publishDiagnostics', 'params': {
+            'uri': uri, 'diagnostics': [
+                {'range': rng(1, 8, 1, 10), 'severity': 2, 'message': 'unused variable', 'source': 'mock',
+                 'relatedInformation': [{'location': {'uri': uri, 'range': rng(0, 3, 0, 7)},
+                                         'message': 'in this function'}]},
+                {'range': rng(0, 0, 0, 2), 'severity': 1, 'message': 'an error', 'code': 'E1'}]}})
+    elif method == 'textDocument/hover':
+        reply({'contents': {'kind': 'markdown', 'value': '```rust\nlet x: i32\n```\nA **mock** hover.'}})
+    elif method == 'textDocument/definition':
+        reply({'uri': uri, 'range': rng(0, 3, 0, 7)})
+    elif method == 'textDocument/references':
+        reply([{'uri': uri, 'range': rng(0, 3, 0, 7)}, {'uri': uri, 'range': rng(1, 8, 1, 10)}])
+    elif method == 'textDocument/documentSymbol':
+        reply([{'name': 'main', 'kind': 12, 'range': rng(0, 0, 2, 1), 'selectionRange': rng(0, 3, 0, 7),
+                'children': [{'name': 'x', 'kind': 13, 'range': rng(1, 4, 1, 15),
+                              'selectionRange': rng(1, 8, 1, 10)}]}])
+    elif method == 'workspace/symbol':
+        reply([{'name': 'main', 'kind': 12, 'location': {'uri': uri, 'range': rng(0, 3, 0, 7)}}])
+    elif method == 'textDocument/completion':
+        reply({'isIncomplete': False, 'items': [
+            {'label': 'println!', 'kind': 3, 'detail': 'macro'}, {'label': 'print!', 'kind': 3}]})
+    elif method == 'textDocument/codeAction':
+        reply([{'title': 'Prefix with underscore', 'kind': 'quickfix',
+                'edit': {'changes': {uri: [{'range': rng(1, 8, 1, 8), 'newText': '_'}]}}},
+               {'title': 'Extract function', 'kind': 'refactor.extract'}])
+    elif method == 'textDocument/prepareRename':
+        reply({'range': rng(1, 8, 1, 10), 'placeholder': '界x'})
+    elif method == 'textDocument/rename':
+        reply({'changes': {uri: [{'range': rng(1, 8, 1, 10), 'newText': p.get('newName', 'y')}]}})
+    elif method == 'textDocument/signatureHelp':
+        reply({'signatures': [{'label': 'fn main()', 'parameters': []}], 'activeSignature': 0})
+    elif method == 'textDocument/formatting':
+        reply([{'range': rng(1, 0, 1, 4), 'newText': '    '}])
+    elif method == 'textDocument/documentHighlight':
+        reply([{'range': rng(1, 8, 1, 10), 'kind': 3}])
+    elif method == 'textDocument/selectionRange':
+        reply([{'range': rng(1, 8, 1, 10), 'parent': {'range': rng(1, 4, 1, 15)}}])
+    elif method == 'textDocument/linkedEditingRange':
+        reply({'ranges': [rng(1, 8, 1, 10)]})
+    elif method == 'shutdown':
+        reply(None)
+    elif method == 'exit':
+        break
+    elif mid is not None:
+        reply(None)
+";
+
+/// Every `lsp.*` action against a live mock server in a real `App`: each
+/// reply is applied and drawn (lists, popups, edits), then dismissed.
+#[test]
+#[cfg(feature = "lsp")]
+fn every_lsp_action_applies_a_mock_servers_reply() {
+    let has_python = std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_python {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = unique_dir("lsp-ide");
+    let mock = root.join("mock_ide.py");
+    fs::write(&mock, MOCK_IDE_SERVER).unwrap();
+    let file = root.join("a.rs");
+    fs::write(&file, "fn main() {\n    let 界x = 1;\n}\n").unwrap();
+    let mut settings = Settings::default();
+    settings.lsp_servers.push(vix::settings::LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    });
+    let mut app = app_at_with(&root, settings);
+    app.open_initial(&file);
+    let timeout = Duration::from_secs(15);
+    wait_until(
+        &mut app,
+        App::poll_lsp,
+        |a| !a.lsp.diagnostics_for(&file).is_empty(),
+        timeout,
+    );
+    draw_frame(&mut app, 120, 40);
+
+    // Back on `a.rs` (Show Server Log opens a tab of its own), the cursor on
+    // `界x`.
+    let at_x = |app: &mut App| {
+        app.open_initial(&file);
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(20);
+    };
+    let settle = |app: &mut App| {
+        let until = Instant::now() + Duration::from_millis(400);
+        while Instant::now() < until {
+            app.poll_lsp();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    for (action, shows) in [
+        ("lsp.hover", Some("mock")),
+        ("lsp.document_symbols", Some("Document Symbols")),
+        ("lsp.references", Some("References")),
+        ("lsp.workspace_symbols", None),
+        ("lsp.code_action", Some("Prefix with underscore")),
+        ("lsp.complete", None),
+        ("lsp.signature_help", None),
+        ("lsp.highlight", None),
+        ("lsp.expand_selection", None),
+        ("lsp.shrink_selection", None),
+        ("lsp.linked_edit", None),
+        ("lsp.diagnostics", Some("unused variable")),
+        ("lsp.status", Some("rust")),
+        ("lsp.show_log", None),
+        ("lsp.format", None),
+        ("nav.goto_definition", None),
+    ] {
+        at_x(&mut app);
+        app.run_action(action);
+        settle(&mut app);
+        let screen = draw_frame(&mut app, 120, 40);
+        if let Some(text) = shows {
+            assert!(screen.contains(text), "{action}: {screen}");
+        }
+        draw_frame(&mut app, 50, 16);
+        app.on_key(keycode(KeyCode::Down));
+        draw_frame(&mut app, 120, 40);
+        app.on_key(esc());
+        app.on_key(esc());
+    }
+
+    // A code action's edit applies.
+    at_x(&mut app);
+    app.run_action("lsp.code_action");
+    let until = Instant::now() + timeout;
+    while app.code_actions.is_none() && Instant::now() < until {
+        app.poll_lsp();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        app.code_actions.is_some(),
+        "no code actions; status {:?}; log {}",
+        app.status,
+        app.lsp.server_log(&file)
+    );
+    app.on_key(keycode(KeyCode::Enter));
+    settle(&mut app);
+    assert!(
+        app.editor.active_tab().unwrap().text().contains("_界x"),
+        "{}",
+        app.editor.active_tab().unwrap().text()
+    );
+
+    // Rename through the prompt.
+    at_x(&mut app);
+    app.run_action("lsp.rename");
+    settle(&mut app);
+    draw_frame(&mut app, 120, 40);
+    app.lsp.shutdown();
+    fs::remove_dir_all(&root).ok();
+}

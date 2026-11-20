@@ -1032,11 +1032,7 @@ impl App {
         // without scattering a diagnostic's notes away from it.
         let mut groups: Vec<(Hit, Vec<Hit>)> = Vec::new();
         for (path, diags) in self.lsp.all_diagnostics() {
-            let rel = path
-                .strip_prefix(&self.root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .into_owned();
+            let rel = self.root_relative(path);
             for d in diags {
                 let sev = match d.severity {
                     Severity::Error => "error",
@@ -1066,11 +1062,7 @@ impl App {
                     .iter()
                     .map(|(related_loc, related_msg)| {
                         let related_path = crate::lsp::uri_to_path(&related_loc.uri);
-                        let related_rel = related_path
-                            .strip_prefix(&self.root)
-                            .unwrap_or(&related_path)
-                            .to_string_lossy()
-                            .into_owned();
+                        let related_rel = self.root_relative(&related_path);
                         let related_line = related_loc.range.start.line as usize + 1;
                         let text: String = related_msg.chars().take(100).collect();
                         Hit {
@@ -1102,6 +1094,7 @@ impl App {
             .collect();
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_diagnostics").to_string());
         ps.status = t!("status.diagnostics_n", n = count).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
