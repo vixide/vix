@@ -207,6 +207,8 @@ fn structural_replace_workspace_computes_a_plan_and_confirm_writes_files() {
     }
     app.on_key(keycode(KeyCode::Enter));
 
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let rc = app.replace_confirm.as_ref().expect("plan computed");
     assert_eq!(rc.replaced, 3, "one hit in a.txt, two in b.txt");
     assert_eq!(rc.plan.len(), 2, "both files have a hit");

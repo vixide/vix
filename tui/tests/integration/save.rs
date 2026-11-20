@@ -96,6 +96,8 @@ fn save_as_onto_an_existing_file_asks_before_overwriting() {
     app.editor.new_tab_with_content("new text\n");
 
     save_as(&mut app, &dir.join("target.txt"));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert!(app.confirm.is_some(), "an overwrite confirmation is shown");
     assert_eq!(
         fs::read_to_string(dir.join("target.txt")).unwrap(),

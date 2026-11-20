@@ -30,6 +30,9 @@ fn bundle_viewer_lists_entries_and_opens_one_in_a_tab() {
         .expect("viewer opens on the buffer");
     assert_eq!(panel.len(), 2);
     assert_eq!(panel.bundle.total, Some(2));
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("Patient"), "{screen}");
+    draw_frame(&mut app, 50, 16);
 
     app.on_key(keycode(KeyCode::Down));
     assert_eq!(app.fhir_bundle.as_ref().unwrap().selected, 1);
