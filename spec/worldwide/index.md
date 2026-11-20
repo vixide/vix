@@ -43,3 +43,13 @@ document and move on.
   equitably; if none does, support more than one.
 - Tests cover non-English, non-Latin, right-to-left, and non-US/UK inputs for
   anything that parses, formats, sorts, or displays locale-sensitive data.
+
+## Acceptance criteria for worldwide editing
+
+| Workflow | Required behavior | Evidence |
+| --- | --- | --- |
+| Navigate to a result | A workspace match, symbol, reference or diagnostic opens at the first scalar value of its target in the logical source line. Convert a protocol position using the encoding of the server that supplied it. | Select a result after a wide glyph, an emoji and a combining mark. Assert the cursor in the target buffer. |
+| Resolve a save warning | Every language offered in the locale chooser has its own wording for an overwrite, an external-change conflict and an unrepresentable edit, including the choices the user can make. File names and error details survive interpolation. | Check direct catalog entries for each chooser language and exercise a warning with a non-Latin path. |
+| Pick a calendar day | A user can set the first weekday independently of the UI language. Headers, dates and mouse targets use the same weekday order. Changing the first weekday preserves the selected date. | Select the same date by keyboard and by mouse under Monday, Sunday and Saturday starts, including a grid that spans six weeks. |
+
+Implementation status and remaining work are tracked in [Run X](../../tasks.md#run-x--worldwide-editing).

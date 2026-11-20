@@ -167,6 +167,11 @@ Each result line in the dock is **click-to-jump**: clicking it opens the file an
 moves the cursor to that line and column. See `crates/vix-bottom-dock/spec/index.md` for
 the dock itself.
 
+The dock and the workspace search panel both locate a match by its 1-based
+Unicode scalar column in the full source line. Leading whitespace and combining
+marks count toward the column. Clipping the preview or rendering a wide glyph
+leaves the destination unchanged.
+
 ## Workspace-wide search & replace
 
 A panel-based variant (`Ctrl+Shift+F`, or palette **Search in Workspace** /

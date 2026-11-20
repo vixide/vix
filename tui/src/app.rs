@@ -9892,7 +9892,9 @@ impl App {
             });
             return;
         }
-        let (path, target) = palette::parse_path_target(line.trim());
+        // Search rows append ": preview text" after the path:line:col target.
+        let location = line.split_once(": ").map_or(line.as_str(), |(loc, _)| loc);
+        let (path, target) = palette::parse_path_target(location.trim());
         let (Some((line_no, col)), false) = (target, path.is_empty()) else {
             return;
         };
@@ -13242,7 +13244,7 @@ impl App {
             &|rel| filter.allows(&rel.replace('\\', "/")),
             |line| {
                 files.enter(line.path);
-                let Some(m) = re.find(line.text) else {
+                let Some((start, _)) = crate::find_panel::next_match(line.text, &re, 0) else {
                     return ControlFlow::Continue(());
                 };
                 files.hit();
@@ -13251,7 +13253,7 @@ impl App {
                     path: line.path.to_path_buf(),
                     rel: line.rel.to_string(),
                     line: line.number,
-                    col: m.start() + 1,
+                    col: start + 1,
                     display: format!("{}:{}: {clipped}", line.rel, line.number),
                     text: clipped,
                 });
@@ -14301,7 +14303,7 @@ impl App {
         let mut out = Vec::new();
         self.scan_index(&query, remote_search::Source::Buffers, &|_| true, |line| {
             files.enter(line.path);
-            let Some(m) = re.find(line.text) else {
+            let Some((start, _)) = crate::find_panel::next_match(line.text, &re, 0) else {
                 return ControlFlow::Continue(());
             };
             files.hit();
@@ -14311,7 +14313,7 @@ impl App {
                 "{}:{}:{}: {clipped}",
                 line.rel,
                 line.number,
-                m.start() + 1
+                start + 1
             ));
             if count >= 5000 {
                 ControlFlow::Break(())

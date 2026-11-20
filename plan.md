@@ -58,7 +58,8 @@ These come from `AGENTS.md` / `CLAUDE.md` and are non-negotiable:
   `cargo clippy --workspace --all-targets -- -D warnings`. No blanket
   `allow`s.
 - Every user-facing string goes through `t!` with keys in `locales/`
-  for all 15 languages (en es fr de cy ga gd pl pt ru ar hi bn zh ja).
+  for the 15 core languages (en es fr de cy ga gd pl pt ru ar hi bn zh ja).
+  Run X also covers save decisions in every language offered by the chooser.
 - One action id, one `run_action` arm; new features get a menu item, a
   palette command, and a keybinding when a free combo exists.
 - Update the relevant `spec/` when intent changes; specs are the source of
@@ -664,6 +665,25 @@ are in [`spec/mcp-server`](spec/mcp-server/index.md). Not taken:
 dbjoy's database copy (bundled `pg_dump`/`psql`, drops every schema in the
 target), an assistant that reads query results (Vix's assistant sees the
 schema only), and GUI-only conveniences.
+
+## Run X — worldwide editing (assessed 2026-11-19)
+
+A developer selecting a search result needs the cursor on the match. A writer
+resolving a save conflict needs to understand which copy will survive. Address
+these two workflows first. Calendar layout can proceed independently.
+
+| Priority | Evidence at `98c988cc` | Improvement |
+| --- | --- | --- |
+| 1. Result navigation | Workspace search passed a regex byte offset to the editor as a character column. LSP direct jumps convert protocol columns, but the static symbol, reference and diagnostic lists copy the raw protocol column into their rows. | Use the existing character conversion in both workspace search surfaces (T794). Carry the originating server's encoding through LSP result lists (T795). Verify at the cursor after selecting a row. |
+| 2. Save warnings | The locale chooser lists 27 languages. Of 3,974 catalog keys, 15 languages have an entry for every key. Ten others have five entries each, and the two constructed languages (Klingon and Sindarin) have eleven and nine. Twelve languages fall back to English for all three save warnings examined. | Start with overwrite, conflict and encoding failures. Cover the decision and its available choices in each chooser language, and test those keys individually (T796). |
+| 3. Calendar layout | The month grid counts from Monday, the weekday heading is one translated string and a mouse click selects a date by its grid column. Translating the heading alone cannot change which date a column selects. | Persist an independent first-weekday preference. Drive the header, date placement and hit testing from the same grid (T797). |
+
+To reproduce the catalog counts, run
+`cargo test -p vix-tui --test i18n_keys i18n_coverage_report_and_floor -- --nocapture`.
+That report measures the presence of entries. Review of wording belongs
+in the save-warning task. The [worldwide spec](spec/worldwide/index.md#acceptance-criteria-for-worldwide-editing)
+defines the outcomes and [Run X in the checklist](tasks.md#run-x--worldwide-editing)
+gives each change a reproducible acceptance case.
 
 ## Sequencing & dependencies
 

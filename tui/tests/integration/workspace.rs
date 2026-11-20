@@ -397,7 +397,7 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     let dir = unique_dir("searchdock");
-    fs::write(dir.join("a.txt"), "one\nNEEDLE here\nthree\n").unwrap();
+    fs::write(dir.join("a.txt"), "one\n 界💡e\u{301} NEEDLE here\nthree\n").unwrap();
     fs::write(dir.join("b.txt"), "nothing\n").unwrap();
     let mut app = app_at(&dir);
 
@@ -414,7 +414,7 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
     );
     let out = app.bottom_dock.lines.join("\n");
     assert!(
-        out.contains("a.txt:2:1:"),
+        out.contains("a.txt:2:7:"),
         "lists the hit as path:line:col: {out:?}"
     );
     assert!(
@@ -432,9 +432,9 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
     let r = app.layout.bottom_dock;
     app.on_mouse(click(r.x + 1, r.y + 2));
     assert_eq!(
-        app.editor.active_tab().unwrap().cursor_1based().0,
-        2,
-        "jumps to line 2"
+        app.editor.active_tab().unwrap().cursor_1based(),
+        (2, 7),
+        "jumps to the first character of the match"
     );
 
     fs::remove_dir_all(&dir).ok();
@@ -443,8 +443,8 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
 #[test]
 fn workspace_search_finds_matches_across_files() {
     let dir = unique_dir("psearch");
-    fs::write(dir.join("a.txt"), "alpha beta\nbeta gamma\n").unwrap();
-    fs::write(dir.join("b.txt"), "delta beta\n").unwrap();
+    fs::write(dir.join("a.txt"), "界💡 beta\n界💡 beta gamma\n").unwrap();
+    fs::write(dir.join("b.txt"), "界💡 beta\n").unwrap();
     let mut app = app_at(&dir);
 
     app.run_action("search.workspace");
@@ -462,7 +462,7 @@ fn workspace_search_finds_matches_across_files() {
     assert!(app.workspace_search.is_none());
     let tab = app.editor.active_tab().unwrap();
     assert!(tab.path.as_ref().unwrap().ends_with(&expected_name));
-    assert_eq!(app.editor.cursor_1based().0, expected_line);
+    assert_eq!(app.editor.cursor_1based(), (expected_line, 4));
 
     fs::remove_dir_all(&dir).ok();
 }

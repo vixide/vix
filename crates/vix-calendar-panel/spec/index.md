@@ -15,9 +15,17 @@ month area.
   name is translated per `settings.locale` (`calendar.month_01`..
   `calendar.month_12` in `crates/vix-i18n/locales/calendar.yml`), not `jiff`'s
   locale-invariant `%B`.
-- A Monday-first day grid: a weekday header row, then up to six week rows. The
-  **selected day** (the keyboard cursor) is reverse-highlighted; **today** is
-  marked only when the displayed month is the current month.
+- A day grid that starts on Monday: a weekday header row, then up to six
+  week rows. The **selected day** (the keyboard cursor) is
+  reverse-highlighted; **today** is marked only when the displayed month is
+  the current month.
+
+**Planned (T797):** a first-weekday setting, any of the seven days and
+independent of the UI language. Settings saved without it keep the Monday
+start. The weekday header, where each date sits and what a mouse click
+selects must all come from the same grid, so the keyboard and the mouse pick
+the same date whatever the first weekday is. See the
+[worldwide acceptance criteria](../../../spec/worldwide/index.md#acceptance-criteria-for-worldwide-editing).
 
 ## Navigation
 
