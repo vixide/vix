@@ -407,13 +407,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: coverage
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@cargo-tarpaulin
       - name: measure coverage
-        run: cargo llvm-cov --workspace --cobertura --output-path cobertura.xml
+        # Settings live in tarpaulin.toml (also used by `make coverage`).
+        run: cargo tarpaulin --config tarpaulin.toml
       - uses: actions/upload-artifact@v7
         with:
           name: cobertura
-          path: cobertura.xml
+          path: |
+            target/tarpaulin/cobertura.xml
+            target/tarpaulin/lcov.info
+            target/tarpaulin/tarpaulin-report.html
 
   # The toolchain floor promised by `rust-version` in Cargo.toml. A `check` is
   # enough: if the crate graph compiles on the floor, the claim holds.

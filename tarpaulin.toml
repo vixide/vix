@@ -1,0 +1,27 @@
+# cargo-tarpaulin configuration: `cargo tarpaulin` (or `make coverage`) reads
+# this file. The CI `coverage` job runs the same thing (advisory; see
+# spec/ci and docs/coverage). Reports land in target/tarpaulin/:
+# cobertura.xml (which Vix's own coverage gutter reads, Tools -> Load
+# Coverage File...), lcov.info, tarpaulin-report.html and a JSON summary.
+
+[coverage]
+workspace = true
+# The LLVM engine works on Linux, macOS and Windows alike and is faster
+# than ptrace; it needs `rustup component add llvm-tools-preview`.
+engine = "Llvm"
+out = ["Xml", "Lcov", "Html", "Json"]
+output-dir = "target/tarpaulin"
+# Reuse the build; a clean every run would rebuild the whole workspace.
+skip-clean = true
+# Some integration tests (LSP and DAP mock servers, the chaos smoke) take
+# longer than tarpaulin's one-minute default.
+timeout = "600s"
+# Not part of the measured workspace: the GUIs and the fuzz targets are their
+# own workspaces, and examples/benches are not tests.
+exclude-files = [
+    "gui/*",
+    "fuzz/*",
+    "*/examples/*",
+    "*/benches/*",
+    "target/*",
+]

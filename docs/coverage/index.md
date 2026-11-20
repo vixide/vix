@@ -10,7 +10,7 @@ Run whatever coverage tool your project uses, and have it write an **LCOV**
 (`.info`) or **Cobertura XML** report:
 
 ```sh
-cargo llvm-cov --lcov --output-path coverage.info
+cargo tarpaulin --out Lcov           # lcov.info (or: cargo llvm-cov --lcov --output-path coverage.info)
 pytest --cov --cov-report=xml           # coverage.xml, Cobertura format
 go test -coverprofile=coverage.out && gocov convert coverage.out | gocov-xml > coverage.xml
 ```
@@ -18,10 +18,12 @@ go test -coverprofile=coverage.out && gocov convert coverage.out | gocov-xml > c
 ## Vix on itself
 
 The GitHub CI `coverage` job (advisory — it never blocks a merge) runs
-`cargo llvm-cov --workspace --cobertura` and uploads `cobertura.xml` as the
-`cobertura` workflow artifact. Download it into the repo root and use
-**Tools → Load Coverage File…** to see Vix's own coverage in Vix's gutter.
-Locally: `cargo llvm-cov --workspace --cobertura --output-path cobertura.xml`.
+`cargo tarpaulin --config tarpaulin.toml` and uploads `cobertura.xml`,
+`lcov.info` and the HTML report as the `cobertura` workflow artifact.
+Download `cobertura.xml` into the repo root and use **Tools → Load Coverage
+File…** to see Vix's own coverage in Vix's gutter. Locally: `make coverage`
+(the same command; reports land in `target/tarpaulin/`). It needs
+`cargo install cargo-tarpaulin` and `rustup component add llvm-tools-preview`.
 
 ## Using it
 
