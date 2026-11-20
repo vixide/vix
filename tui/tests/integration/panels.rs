@@ -549,3 +549,91 @@ fn files_that_cannot_open_say_why() {
     assert_eq!(app.editor.tabs.len(), tabs, "none of them opened as text");
     fs::remove_dir_all(&dir).ok();
 }
+
+/// **Tools → Contacts** lists the workspace's `.vcf` files; Enter opens one
+/// in the vCard view, which scrolls, draws, and on Enter inserts the
+/// highlighted value into the buffer.
+#[test]
+fn contacts_open_a_vcard_and_insert_a_value() {
+    let dir = unique_dir("contacts-vcard");
+    fs::write(
+        dir.join("ada.vcf"),
+        "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada Lovelace\r\nN:Lovelace;Ada;;;\r\nEMAIL;TYPE=work:ada@example.org\r\nTEL;TYPE=cell:+44 20 7946 0000\r\nORG:Analytical Engines\r\nNOTE:First programmer\r\nEND:VCARD\r\n",
+    )
+    .unwrap();
+    fs::write(dir.join("notes.txt"), "").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("notes.txt"));
+    app.run_action("tools.contacts");
+    assert!(
+        app.contacts.is_some(),
+        "the contacts panel opens: {}",
+        app.status
+    );
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("Ada Lovelace"), "{screen}");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.vcard.is_some(), "Enter opens the vCard view");
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("ada@example.org"), "{screen}");
+    draw_frame(&mut app, 50, 16);
+    for code in [
+        KeyCode::End,
+        KeyCode::Home,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::Down,
+        KeyCode::Up,
+    ] {
+        app.on_key(keycode(code));
+    }
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(!text.is_empty(), "a value was inserted");
+    app.run_action("tools.contacts");
+    app.on_key(keycode(KeyCode::Enter));
+    app.on_key(esc());
+    assert!(app.vcard.is_none(), "Esc closes the vCard view");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// The Markdown preview's `t` opens a table of contents of its headings,
+/// which draws, moves and jumps.
+#[test]
+fn markdown_preview_table_of_contents_lists_and_jumps() {
+    let dir = unique_dir("md-toc");
+    let doc = "# Title\n\nIntro.\n\n## First\n\nText.\n\n## Second\n\n### Deeper\n\nMore.\n";
+    fs::write(dir.join("README.md"), doc).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("README.md"));
+    app.run_action("tools.markdown_preview");
+    assert!(app.markdown_preview.is_some(), "{}", app.status);
+    draw_frame(&mut app, 120, 40);
+    app.on_key(key('t'));
+    assert!(app.markdown_toc.is_some(), "t opens the table of contents");
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(
+        screen.contains("Second") && screen.contains("Deeper"),
+        "{screen}"
+    );
+    draw_frame(&mut app, 50, 16);
+    for code in [
+        KeyCode::Down,
+        KeyCode::Down,
+        KeyCode::Up,
+        KeyCode::End,
+        KeyCode::Home,
+        KeyCode::Down,
+    ] {
+        app.on_key(keycode(code));
+        draw_frame(&mut app, 120, 40);
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(
+        app.markdown_toc.is_none(),
+        "Enter jumps and closes the list"
+    );
+    draw_frame(&mut app, 120, 40);
+    fs::remove_dir_all(&dir).ok();
+}
