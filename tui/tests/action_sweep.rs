@@ -9,8 +9,9 @@
 //! its code is measured by coverage (`tarpaulin.toml`).
 //!
 //! Like the chaos monkey (`tui/examples/chaos_monkey.rs`) the sweep runs in a
-//! sandbox: the test re-executes its own binary with an empty `PATH` (no
-//! action can start `git`, a browser or a language server), a throwaway
+//! sandbox: the test re-executes its own binary with a `PATH` holding only a
+//! link to `git` (no action can start a shell, a browser or a language
+//! server; the workspace is a throwaway repository with no remote), a throwaway
 //! `HOME` and config directory, and no `SHELL`. The parent kills a child that
 //! takes longer than [`TIMEOUT`] and names the action it was on.
 #![allow(
@@ -81,6 +82,39 @@ fn make_workspace(root: &Path) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, body).unwrap();
     }
+}
+
+/// The program `name` on this process's `PATH`, if any.
+fn find_on_path(name: &str) -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(name))
+        .find(|p| p.is_file())
+}
+
+/// Make the workspace a repository the Git actions have something to show:
+/// two commits, a second branch, a stash, and an uncommitted change. Skipped
+/// (the Git actions then report "not a repository") when `git` is missing.
+fn make_git_history(root: &Path) {
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    if !git(&["init", "-q"]) {
+        return;
+    }
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "first"]);
+    std::fs::write(root.join("notes.txt"), "hello world\nsecond line\nthird\n").unwrap();
+    git(&["commit", "-qam", "second"]);
+    git(&["branch", "feature"]);
+    std::fs::write(root.join("notes.txt"), "stashed\n").unwrap();
+    git(&["stash", "-q"]);
+    std::fs::write(root.join("main.rs"), "fn main() {\n    let y = 2;\n}\n").unwrap();
 }
 
 fn new_app(root: &Path, session: &Path) -> App {
@@ -171,6 +205,7 @@ fn sweep(progress: &Path) {
     let _ = std::fs::remove_dir_all(&base);
     let root = base.join("ws");
     make_workspace(&root);
+    make_git_history(&root);
     let session = base.join("session.toml");
     let ids = every_dispatchable_action_id(&workspace_root());
     assert!(
@@ -229,6 +264,18 @@ fn every_action_opens_and_draws_without_panicking() {
     for dir in [&empty_path, &home, &config] {
         std::fs::create_dir_all(dir).unwrap();
     }
+    // `git` is the one program the sandbox may run (a symlink, so nothing
+    // else beside it is reachable), so the Git actions work on a real
+    // repository; with no remote, nothing can leave the machine.
+    #[cfg(unix)]
+    if let Some(git) = find_on_path("git") {
+        std::os::unix::fs::symlink(git, empty_path.join("git")).unwrap();
+    }
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[user]\n\tname = Sweep\n\temail = sweep@example.invalid\n[init]\n\tdefaultBranch = main\n",
+    )
+    .unwrap();
     let progress = base.join("progress");
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([
@@ -244,6 +291,10 @@ fn every_action_opens_and_draws_without_panicking() {
         .env("XDG_CONFIG_HOME", &config)
         .env("XDG_DATA_HOME", home.join("data"))
         .env_remove("SHELL")
+        .env("GIT_CONFIG_GLOBAL", home.join(".gitconfig"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_EDITOR", "true")
+        .env("GIT_TERMINAL_PROMPT", "0")
         // Some actions write terminal escapes (font zoom) to stdout.
         .stdout(std::process::Stdio::null())
         .spawn()
