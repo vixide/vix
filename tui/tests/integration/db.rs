@@ -319,3 +319,151 @@ fn every_db_workbench_view_draws_with_data() {
     app.db = None;
     fs::remove_dir_all(&dir).ok();
 }
+
+/// Settle the browser's background work (queries, connects, compares).
+fn settle_db(b: &mut crate::db::Browser) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while b.query_running() || b.connect_running() || b.compare_running() {
+        b.poll_query();
+        b.poll_connect();
+        b.poll_compare();
+        assert!(Instant::now() < deadline, "DB work did not finish");
+        std::thread::yield_now();
+    }
+}
+
+/// A key to the browser, then its work settled.
+fn press_db(b: &mut crate::db::Browser, code: KeyCode, mods: KeyModifiers) {
+    b.handle_key(KeyEvent::new(code, mods), crate::db::Pages::default());
+    settle_db(b);
+}
+
+/// Two `SQLite` files in `dir` (a source with `users`, `orders`, an index
+/// and a view; an older, read-only target), connected to the source, with
+/// the schema compare opened on its target picker (Ctrl+D).
+fn compare_browser(dir: &Path) -> crate::db::Browser {
+    use crate::db::{Browser, connect, session::Session};
+    let seed = |path: &Path, sql: &[&str]| {
+        let mut s = Session::connect(&format!("sqlite:{}?mode=rwc", path.display()), &[]).unwrap();
+        for q in sql {
+            s.run(q).unwrap();
+        }
+    };
+    let conn = |name: &str, file: &Path, writable: bool| connect::Connection {
+        name: name.into(),
+        kind: connect::Kind::Sqlite,
+        file: file.display().to_string(),
+        writable,
+        ..connect::Connection::default()
+    };
+    let (source, target) = (dir.join("source.db"), dir.join("target.db"));
+    seed(
+        &source,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), total REAL DEFAULT 0)",
+            "CREATE INDEX orders_user_idx ON orders(user_id)",
+            "CREATE VIEW big_orders AS SELECT id, total FROM orders WHERE total > 100",
+        ],
+    );
+    seed(
+        &target,
+        &[
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, legacy TEXT)",
+            "CREATE VIEW v_legacy AS SELECT legacy FROM users",
+        ],
+    );
+    let mut b = Browser::new(vec![
+        conn("source", &source, true),
+        conn("target", &target, false),
+    ]);
+    press_db(&mut b, KeyCode::Enter, KeyModifiers::NONE);
+    press_db(&mut b, KeyCode::Char('d'), KeyModifiers::CONTROL);
+    b
+}
+
+/// The schema compare, drawn screen by screen over two real `SQLite` files:
+/// picking the target, the review list (moving, toggling, a change's
+/// detail), the migration script, and the run confirmation.
+#[test]
+fn schema_compare_screens_draw_with_real_changes() {
+    use crate::db::compare::review::Screen;
+    let dir = unique_dir("db-compare-draw");
+    let b = compare_browser(&dir);
+    let mut app = app_at(&dir);
+    let screen_of = |app: &App| app.db.as_ref().and_then(|b| b.compare()).map(|c| c.screen);
+    app.db = Some(b);
+    assert_eq!(screen_of(&app), Some(Screen::Pick));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
+
+    let step = |app: &mut App, code: KeyCode| {
+        let b = app.db.as_mut().unwrap();
+        press_db(b, code, KeyModifiers::NONE);
+        let screen = draw_frame(app, 120, 40);
+        draw_frame(app, 50, 16);
+        screen
+    };
+    let screen = step(&mut app, KeyCode::Enter);
+    assert_eq!(screen_of(&app), Some(Screen::Review));
+    assert!(screen.contains("orders"), "{screen}");
+    for code in [
+        KeyCode::Down,
+        KeyCode::Char(' '),
+        KeyCode::Char(' '),
+        KeyCode::End,
+        KeyCode::Home,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::Char('y'), // copy the script
+    ] {
+        step(&mut app, code);
+    }
+    step(&mut app, KeyCode::Enter); // the script
+    assert_eq!(screen_of(&app), Some(Screen::Script));
+    for code in [
+        KeyCode::Down,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::Up,
+        KeyCode::Home,
+    ] {
+        step(&mut app, code);
+    }
+    step(&mut app, KeyCode::Esc);
+    assert_eq!(
+        screen_of(&app),
+        Some(Screen::Review),
+        "Esc goes back to the review"
+    );
+    step(&mut app, KeyCode::Char('s')); // save the script: asks for a path
+    assert_eq!(screen_of(&app), Some(Screen::SavePath));
+    step(&mut app, KeyCode::Esc);
+    // Run against the read-only target: refused with a message, still here.
+    step(&mut app, KeyCode::Char('r'));
+    assert_eq!(
+        screen_of(&app),
+        Some(Screen::Review),
+        "a read-only target is not run"
+    );
+    assert!(app.db.as_ref().unwrap().message.is_some());
+    // F8 allows writing to the target; then Run asks to confirm, and Esc
+    // backs out without running anything.
+    step(&mut app, KeyCode::F(8));
+    step(&mut app, KeyCode::Char('r'));
+    if screen_of(&app) == Some(Screen::Confirm) {
+        step(&mut app, KeyCode::Esc);
+    }
+    assert_eq!(screen_of(&app), Some(Screen::Review));
+    // `o` hands the script to the workbench editor and closes the compare.
+    step(&mut app, KeyCode::Char('o'));
+    let b = app.db.as_ref().unwrap();
+    assert!(b.compare().is_none());
+    assert!(
+        b.query.text().contains("CREATE TABLE"),
+        "{}",
+        b.query.text()
+    );
+    app.db = None;
+    fs::remove_dir_all(&dir).ok();
+}
