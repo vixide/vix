@@ -129,6 +129,17 @@ fn run_early_modes(cli: &Cli) -> bool {
     false
 }
 
+/// The workspace root: the remote target's folder; else a single folder
+/// given on the command line (`vix some/folder`, taken out of `cli.files`
+/// so it is not also opened as a file); else the current directory.
+fn workspace_root(cli: &mut vix::cli::Cli, remote_path: Option<&str>) -> PathBuf {
+    if let Some(path) = remote_path {
+        return PathBuf::from(path);
+    }
+    cli.take_workspace_dir()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
 /// Binary entry point: parse the command line, run the headless modes
 /// ([`run_early_modes`], the plugin and settings-bundle commands) and, if none
 /// consumed the invocation, set up the terminal, build the [`App`] and hand
@@ -223,10 +234,7 @@ fn main() -> io::Result<()> {
             std::process::exit(2);
         }
     };
-    let root = remote.as_ref().map_or_else(
-        || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        |(t, _)| PathBuf::from(t.path()),
-    );
+    let root = workspace_root(&mut cli, remote.as_ref().map(|(t, _)| t.path()));
     let mut app = App::new(root, settings);
     // T663: opt-in (never in `App::new`) so tests do not read the real home.
     app.notice_interrupted_saves();

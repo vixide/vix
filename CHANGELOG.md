@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`vix some-folder` opens that folder.** A folder on the command line used to fail with "Open failed" and leave you in the current directory. It now opens as the workspace, as in other editors: `vix .` or `vix ~/src/app`.
 - **Result lists say what they are.** **LSP → Diagnostics**, **Document Symbols**, **Workspace Symbols**, **Find References** and the TODO finder all opened under the title "Go to Definition". Each now has its own title.
 - **Language-server results show short paths.** When the workspace was opened through a symbolic link (on macOS, anything under `/var` or `/tmp`), diagnostics, references and symbol lists showed each file's full absolute path, which pushed the message or symbol out of view. They now show the path relative to the workspace, as other lists do.
 

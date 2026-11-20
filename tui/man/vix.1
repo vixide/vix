@@ -46,4 +46,4 @@ Manage Rhai plugins, then exit without starting the editor: `install <git\-url>[
 Print help
 .TP
 [\fIFILES\fR]
-File(s) to open on startup; the last one is focused. A single `\-` reads standard input into an unsaved scratch buffer instead of opening a file (e.g. `git show HEAD:path | vix \-`). A single `ssh://[user@]host[:port]/path` (or `/ssh:host:/path`) works on that folder over SSH (experimental); `docker://[user@]container/path`, `podman://…`, `k8s://namespace/pod/container/path` and `wsl://distro/path` work inside a running container, pod or WSL distribution
+File(s) to open on startup; the last one is focused. A single `\-` reads standard input into an unsaved scratch buffer instead of opening a file (e.g. `git show HEAD:path | vix \-`). A single `ssh://[user@]host[:port]/path` (or `/ssh:host:/path`) works on that folder over SSH (experimental); `docker://[user@]container/path`, `podman://…`, `k8s://namespace/pod/container/path` and `wsl://distro/path` work inside a running container, pod or WSL distribution. A single folder (`vix .`, `vix ~/src/app`) is opened as the workspace instead ([`Cli::take_workspace_dir`])

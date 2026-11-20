@@ -8,6 +8,7 @@ list; this page adds usage detail and the `git` integration snippets.
 | Form | Effect |
 | ---- | ------ |
 | `vix` | Open the editor rooted at the current directory, restoring the previous session for this workspace (if `restore_session` is on). |
+| `vix FOLDER` | Open that folder as the workspace (`vix .`, `vix ~/src/app`), as if Vix had been started inside it. |
 | `vix FILE...` | Open one or more files; the last one is focused. |
 | `vix FILE:LINE:COL` | Open `FILE` and jump straight to `LINE`, column `COL` (both 1-based). |
 | `vix -` | Read standard input into an unsaved scratch buffer instead of opening a file — e.g. `git show HEAD:path/to/file \| vix -`. |
