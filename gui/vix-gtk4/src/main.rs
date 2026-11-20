@@ -48,6 +48,8 @@ const APP_ID: &str = "io.github.vixide.Vix";
 fn main() -> glib::ExitCode {
     // Vix's own command line, parsed before GTK sees anything; GTK is then
     // given only argv[0], so it never tries to open the file arguments.
+    // Started from the Dock or a launcher: take the login shell's PATH.
+    vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     let loaded = startup::load(&cli);
 

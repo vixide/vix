@@ -97,6 +97,13 @@ A new front end, or a toolkit upgrade, follows the same rule. See
 
 ## Behavior every front end implements
 
+- **Login-shell `PATH`.** `main` first calls
+  `vix::reexec_with_login_shell_path`: a GUI started outside a terminal (the
+  macOS Dock or Finder, a Linux desktop launcher) inherits the session's
+  minimal `PATH`, so it would not find `~/.cargo/bin/rust-analyzer`,
+  Homebrew's tools or `mise`'s; it re-execs itself once with the login
+  shell's `PATH` put first (see `crates/vix-project-env/spec`, "Login shell
+  PATH").
 - **Rendering.** Text is drawn in *spans* — maximal same-style stretches of
   a row — each placed at its exact cell column; any non-ASCII cell (box
   drawing, Nerd Font icons, CJK, emoji) is its own span, so a fallback glyph

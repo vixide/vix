@@ -51,6 +51,8 @@ type Started = Rc<RefCell<Option<(Rc<RefCell<State>>, Rc<slint::Timer>)>>>;
 /// `startup::load`, then create and run the Slint window; returns the process
 /// exit code.
 fn main() -> ExitCode {
+    // Started from the Dock or a launcher: take the login shell's PATH.
+    vix::reexec_with_login_shell_path();
     let cli = Cli::parse();
     // Settings and the locale first: the menu bar is translated as it is built.
     let loaded = startup::load(&cli);
