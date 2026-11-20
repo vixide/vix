@@ -1,9 +1,11 @@
 //! Every action, once (the coverage sweep): each id `App::run_action` can
 //! dispatch runs on a fresh App over a small workspace, then a frame is drawn
 //! at a wide and a narrow size, Esc is pressed twice and the frame drawn
-//! again. In between, [`poke`] hovers, clicks and scrolls across the screen
-//! and presses the navigation keys (never Enter), so mouse and key handlers
-//! run too. Nothing is asserted beyond "no panic, no hang": the point is that
+//! again. In between, a prompt the action opened is answered (`sweep`, Enter;
+//! [`answer_prompt`]), and [`poke`] hovers, clicks and scrolls across the
+//! screen and presses the navigation keys, and then Enter accepts whatever
+//! is highlighted, so the work behind prompts and lists and the mouse and
+//! key handlers run too. Nothing is asserted beyond "no panic, no hang": the point is that
 //! every overlay, panel and prompt an action opens is drawn and handled at
 //! least once under test, so a panic in a rarely used one is caught here and
 //! its code is measured by coverage (`tarpaulin.toml`).
@@ -146,6 +148,23 @@ fn resize(terminal: &mut Terminal<TestBackend>, w: u16, h: u16) {
     terminal.resize(Rect::new(0, 0, w, h)).expect("resize");
 }
 
+/// If the action asked a question in the prompt line (a branch name, a
+/// clone URL, a grep pattern, a capture title…), answer it the way a person
+/// would, `sweep` and Enter, and draw the result: the work behind most
+/// prompts runs only then. Safe in the sandbox: no shell can start, `git`
+/// only touches the throwaway repository, and a bogus URL just fails.
+fn answer_prompt(terminal: &mut Terminal<TestBackend>, app: &mut App) {
+    if app.prompt.is_none() {
+        return;
+    }
+    for c in "sweep".chars() {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.poll_command();
+    draw(terminal, app);
+}
+
 /// Poke whatever an action opened, the way a person exploring it would:
 /// hover, click and scroll across a grid of points (the menu bar row, the
 /// body, the docks, the status bar), then the navigation keys, drawing after
@@ -253,7 +272,20 @@ fn sweep(progress: &Path) {
             continue;
         }
         draw(&mut terminal, &mut app);
+        answer_prompt(&mut terminal, &mut app);
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
+            continue;
+        }
         poke(&mut terminal, &mut app);
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
+            continue;
+        }
+        // Accept whatever is highlighted (a branch, a log entry, a conflict,
+        // a task) the way Enter would, and answer any prompt that follows.
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.poll_command();
+        draw(&mut terminal, &mut app);
+        answer_prompt(&mut terminal, &mut app);
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             continue;
         }
