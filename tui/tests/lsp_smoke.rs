@@ -695,6 +695,77 @@ fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
     );
 }
 
+/// A `rust-analyzer` that is only rustup's proxy for a missing component
+/// exits at once saying so on stderr. That is reported as
+/// `ServerNotInstalled` with the install command, and it is not respawned
+/// all the way through the crash budget.
+#[cfg(unix)]
+#[test]
+fn rustup_proxy_without_its_component_is_reported_not_installed() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = std::env::temp_dir().join(format!("vix-lsp-rustup-proxy-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let proxy = root.join("rust-analyzer");
+    std::fs::write(
+        &proxy,
+        "#!/bin/sh\necho \"error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.\" >&2\nexit 1\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&proxy, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "fn main() {}\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![proxy.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
+    lsp.did_open(&file, "fn main() {}\n");
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut restarts = 0;
+    let mut outcome = None;
+    while Instant::now() < deadline && outcome.is_none() {
+        for ev in lsp.poll() {
+            match ev {
+                LspEvent::ServerRestarted(_) => {
+                    restarts += 1;
+                    lsp.did_open(&file, "fn main() {}\n");
+                }
+                LspEvent::ServerNotInstalled {
+                    language_id,
+                    install,
+                } => outcome = Some((language_id, install)),
+                LspEvent::ServerCrashed(language) => {
+                    panic!("{language} reported as crashed, not as not installed");
+                }
+                _ => {}
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let status = lsp.statuses().into_iter().find(|s| s.language_id == "rust");
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        outcome,
+        Some((
+            "rust".to_string(),
+            "rustup component add rust-analyzer".to_string()
+        ))
+    );
+    // The stderr reader may lag the first exit, so at most one respawn.
+    assert!(restarts <= 1, "respawned {restarts} times");
+    assert_eq!(
+        status.and_then(|s| s.last_error),
+        Some(vix::lsp::ServerError::NotInstalled(
+            "rustup component add rust-analyzer".into()
+        ))
+    );
+}
+
 /// T123b: two servers configured for the same extension (a type-checker and
 /// a separate linter, the motivating example in the task's own text) both
 /// see `didOpen` for the same file, and both publish their own diagnostics

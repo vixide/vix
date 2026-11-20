@@ -7848,6 +7848,28 @@ impl App {
         }
     }
 
+    /// Tell the user a language server is down for good: it crashed past
+    /// its respawn budget, or its command is not really installed (a rustup
+    /// proxy without its component), in which case the message says how to
+    /// install it.
+    fn report_lsp_server_down(&mut self, event: &crate::lsp::LspEvent) {
+        let text = match event {
+            crate::lsp::LspEvent::ServerNotInstalled {
+                language_id,
+                install,
+            } => t!(
+                "msg.lsp_server_not_installed",
+                language = language_id,
+                install = install
+            ),
+            crate::lsp::LspEvent::ServerCrashed(language_id) => {
+                t!("msg.lsp_server_crashed", language = language_id)
+            }
+            _ => return,
+        };
+        self.messages.error(text.to_string());
+    }
+
     /// Drain language-server messages and act on them (diagnostics, hover,
     /// definition jumps, completion). Called once per event-loop iteration.
     pub fn poll_lsp(&mut self) {
@@ -7940,9 +7962,9 @@ impl App {
                         self.lsp_synced.remove(&path);
                     }
                 }
-                crate::lsp::LspEvent::ServerCrashed(language_id) => {
-                    self.messages
-                        .error(t!("msg.lsp_server_crashed", language = language_id).to_string());
+                event @ (crate::lsp::LspEvent::ServerCrashed(_)
+                | crate::lsp::LspEvent::ServerNotInstalled { .. }) => {
+                    self.report_lsp_server_down(&event);
                 }
                 crate::lsp::LspEvent::SemanticTokens(tokens) => {
                     self.apply_semantic_tokens(&tokens);
