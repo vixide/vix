@@ -439,3 +439,113 @@ fn report_a_crash_shows_the_report_read_only_and_asks_first() {
     assert!(app.confirm.is_none(), "n closes the question");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Pasting a copy over existing names asks per file: `s` skips one, `o`
+/// overwrites one, `S` skips the rest, and `c` cancels; the prompt draws.
+#[test]
+fn explorer_paste_conflicts_ask_and_each_choice_is_kept() {
+    let dir = unique_dir("paste-conflict");
+    fs::create_dir(dir.join("sub")).unwrap();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(dir.join(name), format!("new {name}")).unwrap();
+        fs::write(dir.join("sub").join(name), format!("old {name}")).unwrap();
+    }
+    let mut app = app_at(&dir);
+    app.focus = Focus::Explorer;
+    let copy = |app: &mut App| {
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            app.explorer.selected = node_index(app, name);
+            app.on_key(ctrl('c'));
+        }
+    };
+    copy(&mut app);
+    app.explorer.selected = node_index(&app, "sub");
+    app.on_key(ctrl('v'));
+    assert!(app.paste.is_some(), "a conflict asks: {}", app.status);
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
+    app.on_key(key('o')); // overwrite the first conflict
+    app.on_key(key('s')); // skip the second
+    app.on_key(key('S')); // skip the rest
+    assert!(app.paste.is_none(), "every conflict decided");
+    let read = |n: &str| fs::read_to_string(dir.join("sub").join(n)).unwrap();
+    let kept: Vec<String> = ["a.txt", "b.txt", "c.txt"]
+        .iter()
+        .map(|n| read(n))
+        .collect();
+    assert_eq!(
+        kept.iter().filter(|t| t.starts_with("new")).count(),
+        1,
+        "exactly one overwritten: {kept:?}"
+    );
+
+    // Cancel leaves everything as it is.
+    copy(&mut app);
+    app.explorer.selected = node_index(&app, "sub");
+    app.on_key(ctrl('v'));
+    app.on_key(key('c'));
+    assert!(app.paste.is_none());
+    let after: Vec<String> = ["a.txt", "b.txt", "c.txt"]
+        .iter()
+        .map(|n| read(n))
+        .collect();
+    assert_eq!(after, kept, "cancel changes nothing");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// **File → Open…**'s browser: typing filters, Ctrl S / Ctrl R / Alt H
+/// change sort, direction and hidden files, arrows move, and it draws.
+#[test]
+fn file_browser_filters_sorts_and_opens() {
+    let dir = unique_dir("file-browser-keys");
+    fs::write(dir.join("alpha.rs"), "a\n").unwrap();
+    fs::write(dir.join("beta.rs"), "b\n").unwrap();
+    fs::write(dir.join(".hidden"), "h\n").unwrap();
+    fs::create_dir(dir.join("zeta")).unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("file.open");
+    assert!(app.file_browser.is_some());
+    draw_frame(&mut app, 120, 40);
+    for k in [ctrl('s'), ctrl('r'), ctrl('s')] {
+        app.on_key(k);
+        draw_frame(&mut app, 120, 40);
+    }
+    app.on_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT));
+    draw_frame(&mut app, 50, 16);
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Up));
+    for c in "beta".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Backspace));
+    app.on_key(key('a'));
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("beta.rs"), "{screen}");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.file_browser.is_none(), "Enter opens the match");
+    assert!(
+        app.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some_and(|p| p.ends_with("beta.rs"))
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// A path that cannot open says why, in Messages, without a panic: missing,
+/// a directory, and a binary file (which asks before opening).
+#[test]
+fn files_that_cannot_open_say_why() {
+    let dir = unique_dir("open-failures");
+    fs::write(dir.join("blob.bin"), [0u8, 159, 146, 150, 0, 1, 2, 255]).unwrap();
+    fs::create_dir(dir.join("folder")).unwrap();
+    let mut app = app_at(&dir);
+    let tabs = app.editor.tabs.len();
+    for name in ["missing.txt", "folder", "blob.bin"] {
+        app.open_initial(&dir.join(name));
+        draw_frame(&mut app, 120, 40);
+        app.on_key(esc());
+    }
+    assert_eq!(app.editor.tabs.len(), tabs, "none of them opened as text");
+    fs::remove_dir_all(&dir).ok();
+}

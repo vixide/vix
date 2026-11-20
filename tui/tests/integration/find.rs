@@ -423,3 +423,41 @@ fn find_dialog_scope_option_widens_the_search() {
         "the panel hands over in turn"
     );
 }
+
+/// The find bar's buttons: the case, whole-word and regex toggles, and
+/// **Replace One**, which replaces the next match only and keeps the bar open.
+#[test]
+fn find_bar_buttons_toggle_and_replace_one_match() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "cat cat cat\n", 0);
+    app.run_action("edit.replace");
+    for c in "cat".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Tab));
+    for c in "dog".chars() {
+        app.on_key(key(c));
+    }
+    draw_frame(&mut app, 120, 40);
+    let centre = |r: Rect| (r.x + r.width / 2, r.y + r.height / 2);
+    for rect in [
+        app.layout.search_case,
+        app.layout.search_word,
+        app.layout.search_regex,
+    ] {
+        for _ in 0..2 {
+            let (x, y) = centre(rect);
+            app.on_mouse(click(x, y));
+            draw_frame(&mut app, 120, 40);
+        }
+    }
+    let (x, y) = centre(app.layout.search_once);
+    app.on_mouse(click(x, y));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "dog cat cat\n",
+        "one match replaced"
+    );
+    assert!(app.search.is_some(), "the find bar stays open");
+    draw_frame(&mut app, 50, 16);
+}

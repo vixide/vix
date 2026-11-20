@@ -832,3 +832,28 @@ fn delete_submenu_actions_remove_the_unit_at_the_cursor() {
     app.run_action("edit.delete.character");
     assert_eq!(app.editor.active_tab().unwrap().text(), "abc");
 }
+
+/// Clicking a menu title opens it; hovering down its dropdown highlights
+/// item after item and hovering another title switches menus; Esc closes.
+#[test]
+fn menu_bar_click_and_hover_across_menus() {
+    let mut app = app_at(Path::new("."));
+    let screen = draw_frame(&mut app, 120, 40);
+    let top = screen.lines().next().unwrap().to_string();
+    let col = |name: &str| {
+        let byte = top.find(&format!(" {name} ")).expect(name) + 1;
+        u16::try_from(top[..byte].chars().count()).unwrap()
+    };
+    app.on_mouse(click(col("File"), 0));
+    assert!(app.menu.is_open(), "a click on a title opens its menu");
+    for row in 1..12 {
+        app.on_mouse(mouse(MouseEventKind::Moved, col("File") + 2, row));
+        draw_frame(&mut app, 120, 40);
+    }
+    for name in ["Edit", "View", "Help"] {
+        app.on_mouse(mouse(MouseEventKind::Moved, col(name), 0));
+        draw_frame(&mut app, 120, 40);
+    }
+    app.on_key(esc());
+    assert!(!app.menu.is_open(), "Esc closes the menu");
+}
