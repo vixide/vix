@@ -231,3 +231,91 @@ fn pasted_connection_string_fills_the_db_form_and_saves_without_its_password() {
     assert_eq!(app.db.as_ref().unwrap().form.fields[0], "plain");
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Every DB workbench view draws, with real data behind it: a seeded
+/// `SQLite` file, connected and queried, then each `View` drawn wide and
+/// narrow (the smoke tests drive `Browser` directly and never draw).
+#[test]
+fn every_db_workbench_view_draws_with_data() {
+    use crate::db::{Browser, Pages, View, connect, session::Session};
+
+    fn settle(b: &mut Browser) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while b.query_running() || b.connect_running() || b.reconnect_running() {
+            b.poll_query();
+            b.poll_connect();
+            b.poll_reconnect();
+            assert!(Instant::now() < deadline, "DB work did not finish");
+            std::thread::yield_now();
+        }
+    }
+    fn press(b: &mut Browser, code: KeyCode) {
+        b.handle_key(KeyEvent::new(code, KeyModifiers::NONE), Pages::default());
+        settle(b);
+    }
+
+    let dir = unique_dir("db-draw");
+    let file = dir.join("shop.db");
+    {
+        let mut s = Session::connect(&format!("sqlite:{}?mode=rwc", file.display()), &[]).unwrap();
+        for sql in [
+            "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)",
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total REAL)",
+            "INSERT INTO customers VALUES (1, 'Ada'), (2, '李雷')",
+            "INSERT INTO orders VALUES (1, 1, 9.5), (2, 2, 12.25)",
+        ] {
+            s.run(sql).unwrap();
+        }
+    }
+    let conn = connect::Connection {
+        name: "shop".into(),
+        kind: connect::Kind::Sqlite,
+        file: file.display().to_string(),
+        writable: true,
+        ..connect::Connection::default()
+    };
+    let mut app = app_at(&dir);
+    let mut b = Browser::new(vec![conn]);
+    app.db = Some(Browser::new(Vec::new()));
+    // The connection list, before connecting.
+    std::mem::swap(app.db.as_mut().unwrap(), &mut b);
+    draw_frame(&mut app, 120, 40);
+    std::mem::swap(app.db.as_mut().unwrap(), &mut b);
+
+    press(&mut b, KeyCode::Enter);
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    for c in "SELECT * FROM customers".chars() {
+        press(&mut b, KeyCode::Char(c));
+    }
+    press(&mut b, KeyCode::Esc);
+    press(&mut b, KeyCode::F(5));
+    assert_eq!(b.grid.rows.len(), 2, "{:?}", b.message);
+    app.db = Some(b);
+
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("Ada"), "{screen}");
+    for view in [
+        View::Connections,
+        View::Form,
+        View::Password,
+        View::Workbench,
+        View::History,
+        View::Saved,
+        View::SaveName,
+        View::Confirm,
+        View::Cell,
+        View::Export,
+        View::Log,
+        View::Erd,
+        View::Ask,
+        View::Params,
+        View::Import,
+        View::CellEdit,
+    ] {
+        app.db.as_mut().unwrap().view = view;
+        draw_frame(&mut app, 120, 40);
+        draw_frame(&mut app, 50, 16);
+    }
+    app.db = None;
+    fs::remove_dir_all(&dir).ok();
+}
