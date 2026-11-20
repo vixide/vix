@@ -76,6 +76,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Fold arrows show with soft wrap on.** With soft wrap turned on, the ▸/▾ fold markers were missing from the gutter (only a folded line's `...` showed). They now appear on a foldable line's first row, as they do without wrap.
 ||||||| 98c988cc
 - **Key hints are no longer cut off.** The Git Changes panel's hint stopped at "c commit" (its refresh and close keys never showed), and the narrow list choosers (branches, stashes, worktrees, plugins and more) cut theirs too. Hints now wrap onto another row, breaking only between keys.
+||||||| 98c988cc
+- **Coding agents can no longer read your secrets through Vix.** An ACP agent (Claude Code, Gemini CLI and others in the Agent panel) could ask Vix to read `.env`, private keys, `.netrc`, or files under `.git/` and `.ssh/`, which Vix's own MCP server already refused. ACP reads now refuse the same files, also when reached through a symlink.
 - **The command palette lists every menu command.** It searched a hand-picked list, so commands with only a menu item, such as **Tools › Terminal › Show/Hide Terminal**, were missing and Enter on an empty result did nothing. Every menu command is now in the palette, named by its menu path (`>terminal` finds all the terminal commands).
 - **Folding with soft wrap.** With soft wrap on, folded lines still showed and the fold had no `...` marker: the wrapped renderer ignored folds. It now hides them like the unwrapped view.
 - **Up and Down no longer move into a fold.** The caret could land on a hidden line inside a folded section, out of sight; it now steps over the fold.

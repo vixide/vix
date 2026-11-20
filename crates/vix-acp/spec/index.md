@@ -80,6 +80,13 @@ Agents can write files and run commands, so:
   - Paths must be absolute and lexically inside the workspace root (no `..`),
     and on disk must also canonicalize inside it, so a symlink cannot lead out.
     Reads prefer the open buffer's unsaved text.
+  - `fs/read_text_file` refuses a file that may hold secrets, by the MCP
+    server's rule (`vix_mcp_server::workspace::is_secret`: `.env` and
+    `.env.*`, private keys and certificates, `.netrc`, `.pgpass`,
+    `credentials*`, anything under `.git/` or `.ssh/`), judged both as named
+    and with symlinks resolved, so `notes.txt -> .env` is refused too. The
+    status bar names the refused path (`status.acp_refused`); an open tab of
+    such a file is refused the same way.
 - **Terminals run only on a yes.** `terminal/create` asks to run a command.
   The host checks the working directory (absolute, inside the workspace, an
   existing directory; none given means the root) and refuses an escaping one
