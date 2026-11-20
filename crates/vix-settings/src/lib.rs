@@ -1113,7 +1113,10 @@ impl Settings {
     /// `cmd.exe` has no quoting mechanism as airtight as POSIX single quotes, so
     /// the Windows form is a best effort, not a proof). Because the placeholders
     /// arrive pre-quoted, templates must **not** wrap them in quotes of their own
-    /// (the built-in default does not). If the template contains `{file}` it is
+    /// (the built-in default does not); quotes a template puts directly around
+    /// one anyway (`"{prompt}"`, `'{file}'`) are dropped first
+    /// ([`unquote_placeholders`]), since inside the template's own `"…"` a
+    /// shell would still expand the prompt's `$(…)`. If the template contains `{file}` it is
     /// substituted; otherwise the text is fed on stdin via an appended redirect
     /// (`<` on Unix; `cmd.exe`'s own `<` redirection works identically for this
     /// simple case). An empty template falls back to the default `claude`
@@ -1130,6 +1133,7 @@ impl Settings {
         } else {
             sh_single_quote
         };
+        let template = unquote_placeholders(template);
         let with_prompt = template.replace("{prompt}", &quote(prompt));
         if with_prompt.contains("{file}") {
             with_prompt.replace("{file}", &quote(file))
@@ -1250,6 +1254,22 @@ impl Settings {
     }
 }
 
+/// `template` with any `"…"` or `'…'` written directly around a `{prompt}`
+/// or `{file}` placeholder removed: [`Settings::ai_command_line`] quotes the
+/// substituted value itself, and a value already single-quoted inside the
+/// template's own double quotes is not protected (`sh` still expands `$(…)`
+/// there, and `cmd.exe` sees `""…""`).
+#[must_use]
+pub fn unquote_placeholders(template: &str) -> String {
+    let mut out = template.to_string();
+    for placeholder in ["{prompt}", "{file}"] {
+        for q in ['"', '\''] {
+            out = out.replace(&format!("{q}{placeholder}{q}"), placeholder);
+        }
+    }
+    out
+}
+
 /// Quote `s` as a single POSIX shell token using single quotes, escaping any
 /// embedded single quote as `'\''`. The result is inert under `sh -c`: nothing
 /// inside is expanded, so it is safe to interpolate untrusted text into a
@@ -1332,7 +1352,7 @@ mod tests {
     use super::{
         AutoSave, CompletionSettings, EditorBehaviorSettings, GutterSettings, PanelSettings,
         SaveSettings, SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings,
-        ViewportSettings, cmd_double_quote, sh_single_quote,
+        ViewportSettings, cmd_double_quote, sh_single_quote, unquote_placeholders,
     };
     use crate::EntryType;
 
@@ -1465,6 +1485,33 @@ clock_in = true
         } else {
             sh_single_quote(s)
         }
+    }
+
+    /// A template that quotes a placeholder itself must not undo the
+    /// quoting: `claude -p "{prompt}"` would put the single-quoted prompt
+    /// inside double quotes, where `$(…)` still runs.
+    #[test]
+    fn a_template_quoting_its_own_placeholders_is_still_safe() {
+        let evil = "$(touch /tmp/pwned) `id` \" ' ;";
+        for template in [
+            "claude -p \"{prompt}\" \"{file}\"",
+            "claude -p '{prompt}' '{file}'",
+            "claude -p {prompt} {file}",
+        ] {
+            let s = Settings {
+                ai_command: template.to_string(),
+                ..Settings::default()
+            };
+            assert_eq!(
+                s.ai_command_line(evil, "/tmp/in.txt"),
+                format!("claude -p {} {}", quote(evil), quote("/tmp/in.txt")),
+                "{template}"
+            );
+        }
+        assert_eq!(
+            unquote_placeholders("a \"x{prompt}\" b"),
+            "a \"x{prompt}\" b"
+        );
     }
 
     #[test]
