@@ -63,9 +63,15 @@ fn make_workspace(root: &Path) {
         ),
         (
             "todo.org",
-            "* TODO Write tests\n** DONE Sub\n:PROPERTIES:\n:ID: a\n:END:\n| a | b |\n|---+---|\n| 1 | 2 |\n",
+            "#+TITLE: Todo\n* TODO Write tests :work:\nSCHEDULED: <2026-11-20 Thu>\n** DONE Sub\n:PROPERTIES:\n:ID: a\n:END:\n- [ ] one\n- [X] two\n| a | b |\n|---+---|\n| 1 | 2 |\n* Projects\n** Vix [/]\n* Archive\n",
         ),
         ("data.csv", "name,qty\napple,3\npear,5\n"),
+        // A task for the task chooser (never run: the sweep presses no Enter,
+        // and PATH is empty).
+        (
+            "tasks.toml",
+            "[[task]]\nname = \"build\"\ncommand = \"make\"\n",
+        ),
         ("data.json", "{\"a\": [1, 2], \"b\": {\"c\": true}}\n"),
         ("query.sql", "select 1;\n"),
         ("sub/nested.txt", "nested file\n"),
@@ -141,6 +147,24 @@ fn poke(terminal: &mut Terminal<TestBackend>, app: &mut App) {
     draw(terminal, app);
 }
 
+/// A saved macro for **Play Saved Macro…**, written to the macros file only
+/// when that file is inside the sandbox's throwaway `HOME` (never a real
+/// config directory).
+fn seed_saved_macro() {
+    let (Some(path), Some(home)) = (Settings::macros_path(), std::env::var_os("HOME")) else {
+        return;
+    };
+    if !path.starts_with(&home) || std::env::var_os(SANDBOX_VAR).is_none() {
+        return;
+    }
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        "[[macro]]\nname = \"greet\"\nkeys = [\"h\", \"i\"]\n",
+    )
+    .unwrap();
+}
+
 /// The sweep itself, run in the sandboxed child.
 fn sweep(progress: &Path) {
     let base = std::env::temp_dir().join(format!("vix-action-sweep-{}", std::process::id()));
@@ -154,11 +178,20 @@ fn sweep(progress: &Path) {
         "the dispatch scan found only {} ids",
         ids.len()
     );
+    seed_saved_macro();
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
     for id in ids.iter().filter(|id| !SKIP.contains(&id.as_str())) {
         std::fs::write(progress, id).unwrap();
         let mut app = new_app(&root, &session);
+        // Org actions act on an Org buffer, with the cursor inside a subtree
+        // (refile, archive, promote and the rest need one).
+        if id.starts_with("org.") {
+            app.open_initial(&root.join("todo.org"));
+            if let Some(tab) = app.editor.active_tab_mut() {
+                tab.editor.set_cursor_line(2);
+            }
+        }
         resize(&mut terminal, 120, 40);
         draw(&mut terminal, &mut app);
         app.run_action(id);

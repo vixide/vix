@@ -256,9 +256,40 @@ pub(super) fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rec
     let Some(c) = app.chooser.workspace() else {
         return;
     };
+    let home = std::env::var("HOME").ok().filter(|h| !h.is_empty());
+    let labels: Vec<String> = c
+        .roots
+        .iter()
+        .map(|root| project_label(root, home.as_deref()))
+        .collect();
     let hint = t!("ui.projects_hint");
-    app.layout.chooser =
-        draw_list_chooser(frame, area, &t!("ui.projects"), &hint, &c.roots, c.selected);
+    app.layout.chooser = draw_list_chooser_sized(
+        frame,
+        area,
+        (&t!("ui.projects"), &hint),
+        &labels,
+        c.selected,
+        72,
+    );
+}
+
+/// A Switch Project row: the folder's own name first (what tells projects
+/// apart, and what a narrow box would otherwise cut off), then where it is,
+/// with `home` shown as `~`.
+fn project_label(root: &str, home: Option<&str>) -> String {
+    let trimmed = root.trim_end_matches(['/', '\\']);
+    let name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    let place = match home {
+        Some(h) if root == h || root.starts_with(&format!("{h}/")) => {
+            format!("~{}", &root[h.len()..])
+        }
+        _ => root.to_string(),
+    };
+    if name.is_empty() || name == place {
+        place
+    } else {
+        format!("{name}   {place}")
+    }
 }
 
 /// Draw the recorded-macro chooser; each row shows the macro name and its key count.
@@ -907,4 +938,23 @@ pub(super) fn draw_refile_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         &labels,
         selected,
     );
+}
+
+#[cfg(test)]
+mod project_label_tests {
+    use super::project_label;
+
+    #[test]
+    fn the_folder_name_comes_first_and_home_is_a_tilde() {
+        assert_eq!(
+            project_label("/home/me/git/vix", Some("/home/me")),
+            "vix   ~/git/vix"
+        );
+        assert_eq!(project_label("/srv/app/", None), "app   /srv/app/");
+        assert_eq!(
+            project_label("/home/mel/x", Some("/home/me")),
+            "x   /home/mel/x"
+        );
+        assert_eq!(project_label("/", None), "/");
+    }
 }
