@@ -78,9 +78,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ||||||| 98c988cc
 - **Key hints are no longer cut off.** The Git Changes panel's hint stopped at "c commit" (its refresh and close keys never showed), and the narrow list choosers (branches, stashes, worktrees, plugins and more) cut theirs too. Hints now wrap onto another row, breaking only between keys.
 ||||||| 98c988cc
-- **Coding agents can no longer read your secrets through Vix.** An ACP agent (Claude Code, Gemini CLI and others in the Agent panel) could ask Vix to read `.env`, private keys, `.netrc`, or files under `.git/` and `.ssh/`, which Vix's own MCP server already refused. ACP reads now refuse the same files, also when reached through a symlink.
 ||||||| 98c988cc
-- **A quoted `{prompt}` in `ai_command` is safe.** Vix quotes the prompt it substitutes, but a template that also quoted it (`claude -p "{prompt}"`, as the configuration guide's own example did) put Vix's quoting inside the template's double quotes, where the shell would still run a `$(…)` from the chat text. Quotes written right around `{prompt}` or `{file}` are now dropped first, and the example is fixed.
 - **The command palette lists every menu command.** It searched a hand-picked list, so commands with only a menu item, such as **Tools › Terminal › Show/Hide Terminal**, were missing and Enter on an empty result did nothing. Every menu command is now in the palette, named by its menu path (`>terminal` finds all the terminal commands).
 - **Folding with soft wrap.** With soft wrap on, folded lines still showed and the fold had no `...` marker: the wrapped renderer ignored folds. It now hides them like the unwrapped view.
 - **Up and Down no longer move into a fold.** The caret could land on a hidden line inside a folded section, out of sight; it now steps over the fold.
@@ -119,6 +117,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **Coding agents can no longer read your secrets through Vix.** An ACP agent (Claude Code, Gemini CLI and others in the Agent panel) could ask Vix to read `.env`, private keys, `.netrc`, or files under `.git/` and `.ssh/`, which Vix's own MCP server already refused. ACP reads now refuse the same files, also when reached through a symlink.
+- **A quoted `{prompt}` in `ai_command` is safe.** Vix quotes the prompt it substitutes, but a template that also quoted it (`claude -p "{prompt}"`, as the configuration guide's own example did) put Vix's quoting inside the template's double quotes, where the shell would still run a `$(…)` from the chat text. Quotes written right around `{prompt}` or `{file}` are now dropped first, and the example is fixed.
 - **RUSTSEC-2026-0459 (bundled SQLite before 3.54.0) is ignored for now.** It lets a crafted SQLite database opened together with a crafted `-wal` file expose stale memory. Vix bundles the affected SQLite through the DB workbench's driver (`sqlx` 0.9.0 → `libsqlite3-sys` 0.37.0), and no `sqlx` release accepts the fixed `libsqlite3-sys` 0.39.0 yet, so `deny.toml` ignores the advisory with a dated note until one does. Until then, don't open SQLite files you don't trust in the workbench. The stale ignore for `paste` (RUSTSEC-2024-0436), which is no longer a dependency, is removed.
 
 ## [2.0.2] - 2026-11-07
