@@ -232,8 +232,17 @@ fn sweep(progress: &Path) {
         // (refile, archive, promote and the rest need one).
         if id.starts_with("org.") {
             app.open_initial(&root.join("todo.org"));
+            // Table actions in the table, list and checkbox actions on an
+            // item, everything else on a heading's body.
+            let line = if id.starts_with("org.table") {
+                11
+            } else if id.contains("checkbox") || id.contains("list") || id.contains("item") {
+                7
+            } else {
+                2
+            };
             if let Some(tab) = app.editor.active_tab_mut() {
-                tab.editor.set_cursor_line(2);
+                tab.editor.set_cursor_line(line);
             }
         }
         resize(&mut terminal, 120, 40);
