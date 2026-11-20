@@ -8,7 +8,11 @@
 //! least once under test, so a panic in a rarely used one is caught here and
 //! its code is measured by coverage (`tarpaulin.toml`).
 //!
-//! Like the chaos monkey (`tui/examples/chaos_monkey.rs`) the sweep runs in a
+//! A second sweep, [`keymap_sweep`], feeds every keymap its chords (`C-x`
+//! and `C-c` with each letter, the Space leader, plain letters in normal
+//! mode, a few Vim `:` commands), drawing as it goes.
+//!
+//! Like the chaos monkey (`tui/examples/chaos_monkey.rs`) both sweeps run in a
 //! sandbox: the test re-executes its own binary with a `PATH` holding only a
 //! link to `git` (no action can start a shell, a browser or a language
 //! server; the workspace is a throwaway repository with no remote), a throwaway
@@ -118,8 +122,13 @@ fn make_git_history(root: &Path) {
 }
 
 fn new_app(root: &Path, session: &Path) -> App {
-    let mut app =
-        App::new(root.to_path_buf(), Settings::default()).with_session_path(session.to_path_buf());
+    // AI on, through the CLI provider only: its `sh -c` cannot start with
+    // `git` alone on PATH, so every AI action builds its request and then
+    // reports the failed command, and no HTTP provider is ever chosen.
+    let mut settings = Settings::default();
+    settings.ai = "on".into();
+    settings.ai_provider = "cli".into();
+    let mut app = App::new(root.to_path_buf(), settings).with_session_path(session.to_path_buf());
     app.layout.editor = Rect::new(0, 0, 100, 30);
     app.open_initial(&root.join("notes.txt"));
     app.open_initial(&root.join("main.rs"));
@@ -249,15 +258,88 @@ fn sweep(progress: &Path) {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// Every keymap, fed its chords: each `C-x` and `C-c` chord with a plain
+/// and a Ctrl second key, the Space leader followed by each letter, the
+/// plain letters in a modal keymap's normal mode, and a few Vim `:`
+/// commands, drawing as it goes. A new App replaces one that quits.
+fn keymap_sweep(progress: &Path) {
+    let base = std::env::temp_dir().join(format!("vix-keymap-sweep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = base.join("ws");
+    make_workspace(&root);
+    make_git_history(&root);
+    let session = base.join("session.toml");
+    let key = |code, mods| KeyEvent::new(code, mods);
+    let plain = |c| key(KeyCode::Char(c), KeyModifiers::NONE);
+    let ctrl = |c| key(KeyCode::Char(c), KeyModifiers::CONTROL);
+    let esc = key(KeyCode::Esc, KeyModifiers::NONE);
+    let letters: Vec<char> = ('a'..='z').collect();
+    let mut sequences: Vec<(String, Vec<KeyEvent>)> = Vec::new();
+    for prefix in ['x', 'c'] {
+        for &c in &letters {
+            sequences.push((format!("C-{prefix} {c}"), vec![ctrl(prefix), plain(c)]));
+            sequences.push((format!("C-{prefix} C-{c}"), vec![ctrl(prefix), ctrl(c)]));
+        }
+    }
+    for &c in &letters {
+        sequences.push((format!("SPC {c}"), vec![esc, plain(' '), plain(c)]));
+        sequences.push((format!("normal {c}"), vec![esc, plain(c), plain(c)]));
+    }
+    for cmd in ["w", "3", "Ex", "e notes.txt", "s/hello/bye/", "nosuch"] {
+        let mut keys = vec![esc, plain(':')];
+        keys.extend(cmd.chars().map(plain));
+        keys.push(key(KeyCode::Enter, KeyModifiers::NONE));
+        sequences.push((format!(":{cmd}"), keys));
+    }
+    let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
+    for keymap in vix_keymap_model::KEYMAPS {
+        let fresh = || {
+            let mut app = new_app(&root, &session);
+            app.settings.keymap = keymap.id.to_string();
+            app
+        };
+        let mut app = fresh();
+        for (name, keys) in &sequences {
+            std::fs::write(progress, format!("{} {name}", keymap.id)).unwrap();
+            for k in keys {
+                app.on_key(*k);
+                app.poll_command();
+            }
+            draw(&mut terminal, &mut app);
+            app.on_key(esc);
+            app.on_key(esc);
+            if app.flags.contains(AppFlags::SHOULD_QUIT) {
+                app = fresh();
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 #[test]
 fn every_action_opens_and_draws_without_panicking() {
+    in_sandbox("every_action_opens_and_draws_without_panicking", sweep);
+}
+
+#[test]
+fn every_keymap_takes_its_chords_without_panicking() {
+    in_sandbox(
+        "every_keymap_takes_its_chords_without_panicking",
+        keymap_sweep,
+    );
+}
+
+/// Run `body` in the sandbox described in the module docs: in the
+/// re-executed child (which runs only the test named `test`), call it with
+/// the progress file; in the parent, start that child and wait for it.
+fn in_sandbox(test: &str, body: fn(&Path)) {
     if std::env::var_os(SANDBOX_VAR).is_some() {
         let progress = PathBuf::from(std::env::var_os(PROGRESS_VAR).unwrap());
-        sweep(&progress);
+        body(&progress);
         return;
     }
     let base =
-        std::env::temp_dir().join(format!("vix-action-sweep-sandbox-{}", std::process::id()));
+        std::env::temp_dir().join(format!("vix-sweep-sandbox-{test}-{}", std::process::id()));
     let empty_path = base.join("empty-path");
     let home = base.join("home");
     let config = base.join("config");
@@ -278,11 +360,7 @@ fn every_action_opens_and_draws_without_panicking() {
     .unwrap();
     let progress = base.join("progress");
     let mut child = Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "every_action_opens_and_draws_without_panicking",
-            "--nocapture",
-        ])
+        .args(["--exact", test, "--nocapture"])
         .current_dir(&home)
         .env(SANDBOX_VAR, "1")
         .env(PROGRESS_VAR, &progress)
@@ -314,7 +392,7 @@ fn every_action_opens_and_draws_without_panicking() {
     let last = std::fs::read_to_string(&progress).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&base);
     match status {
-        Some(status) => assert!(status.success(), "the sweep failed at action {last:?}"),
-        None => panic!("the sweep hung at action {last:?}"),
+        Some(status) => assert!(status.success(), "{test} failed at {last:?}"),
+        None => panic!("{test} hung at {last:?}"),
     }
 }

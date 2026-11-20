@@ -12895,6 +12895,24 @@ impl App {
         }
     }
 
+    /// `path` relative to the workspace root, as a result list shows it, or
+    /// `path` itself outside the root. A language server reports canonical
+    /// paths, so a root opened through a symlink (macOS's `/var` is
+    /// `/private/var`) is matched by its real path too; otherwise every row
+    /// showed the whole absolute path, crowding out the line it names.
+    pub(crate) fn root_relative(&self, path: &Path) -> String {
+        if let Ok(rel) = path.strip_prefix(&self.root) {
+            return rel.to_string_lossy().into_owned();
+        }
+        self.root
+            .canonicalize()
+            .ok()
+            .and_then(|real| path.strip_prefix(real).ok().map(Path::to_path_buf))
+            .unwrap_or_else(|| path.to_path_buf())
+            .to_string_lossy()
+            .into_owned()
+    }
+
     /// Show document symbols (all in the active file) in the static-results panel.
     fn show_document_symbols(&mut self, syms: &[(u32, u32, String)]) {
         let Some(path) = self.active_path() else {
@@ -12903,11 +12921,7 @@ impl App {
         let mut hits: Vec<Hit> = syms
             .iter()
             .map(|(line, character, name)| {
-                let rel = path
-                    .strip_prefix(&self.root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .into_owned();
+                let rel = self.root_relative(&path);
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
@@ -12926,6 +12940,7 @@ impl App {
         hits.sort_by_key(|h| h.line);
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_document_symbols").to_string());
         ps.status = t!("status.symbols_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -12936,11 +12951,7 @@ impl App {
         let mut hits: Vec<Hit> = syms
             .iter()
             .map(|(path, line, character, name)| {
-                let rel = path
-                    .strip_prefix(&self.root)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .into_owned();
+                let rel = self.root_relative(path);
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
@@ -12959,6 +12970,7 @@ impl App {
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_workspace_symbols").to_string());
         ps.status = t!("status.symbols_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -12969,11 +12981,7 @@ impl App {
         let mut hits: Vec<Hit> = locs
             .iter()
             .map(|(path, line, character)| {
-                let rel = path
-                    .strip_prefix(&self.root)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .into_owned();
+                let rel = self.root_relative(path);
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
@@ -12992,6 +13000,7 @@ impl App {
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_references").to_string());
         ps.status = t!("status.references_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -13093,6 +13102,7 @@ impl App {
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_todos").to_string());
         ps.status = t!("status.todos_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
