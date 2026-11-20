@@ -311,3 +311,18 @@ pub(crate) fn buffer_with(app: &mut App, text: &str, cursor: usize) {
     tab.editor.set_content(text);
     tab.editor.set_cursor(cursor);
 }
+
+/// Draw one frame of `app` at `width`×`height` on a test backend and return
+/// the screen as text, one line per row, so a test can check an overlay is
+/// really drawn (and its drawing code runs under test and coverage).
+pub(crate) fn draw_frame(app: &mut App, width: u16, height: u16) -> String {
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height))
+        .expect("test backend");
+    terminal
+        .draw(|frame| crate::ui::draw(app, frame))
+        .expect("draw a frame");
+    let buf = terminal.backend().buffer();
+    (0..height)
+        .map(|y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>() + "\n")
+        .collect()
+}

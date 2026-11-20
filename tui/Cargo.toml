@@ -540,6 +540,10 @@ name = "action_catalog"
 path = "tests/action_catalog.rs"
 
 [[test]]
+name = "action_sweep"
+path = "tests/action_sweep.rs"
+
+[[test]]
 name = "jupyter"
 path = "tests/jupyter.rs"
 required-features = ["jupyter"]

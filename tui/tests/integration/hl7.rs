@@ -21,6 +21,9 @@ fn hl7_view_opens_filters_and_jumps_to_the_field() {
         app.hl7_panel.is_some(),
         "Tools → HL7 View opens the overlay"
     );
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("PID"), "{screen}");
+    draw_frame(&mut app, 50, 16);
 
     for c in "doe".chars() {
         app.on_key(key(c));

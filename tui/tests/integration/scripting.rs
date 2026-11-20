@@ -367,6 +367,8 @@ fn script_trust_prompt_ignores_enter() {
     app.maybe_prompt_script_trust();
     arm_script_trust(&mut app);
     app.on_key(keycode(KeyCode::Enter));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert!(
         app.script_trust.is_some(),
         "Enter must not answer the prompt"
