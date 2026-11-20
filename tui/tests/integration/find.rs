@@ -326,6 +326,8 @@ fn spell_suggest_popup_replaces_a_misspelling() {
     // Put the cursor inside "helllo" (chars 3..9) and open the popup.
     app.editor.active_tab_mut().unwrap().editor.set_cursor(5);
     app.run_action("spell.suggest");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let sug = app
         .spell_suggest
         .as_ref()

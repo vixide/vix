@@ -205,6 +205,8 @@ fn recent_locations_chooser_lists_and_jumps() {
 
     // Alt+J opens the recent-locations chooser, most-recent first.
     app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let lc = app.chooser.location().expect("location chooser opens");
     assert!(
         lc.entries.len() >= 2,

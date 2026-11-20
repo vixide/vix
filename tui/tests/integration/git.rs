@@ -370,6 +370,8 @@ fn git_browse_log_lists_commits_and_enter_opens_the_diff_tab() {
     let mut app = app_at(&dir);
     let tabs_before = app.editor.tabs.len();
     app.run_action("git.browse_log");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let log = app.git_log.as_ref().expect("log panel opens");
     assert_eq!(log.entries.len(), 2, "both commits are listed");
     assert_eq!(log.entries[0].subject, "second commit", "most recent first");
@@ -718,6 +720,8 @@ fn git_panel_opens_and_discards_changes() {
     let mut app = app_at(&dir);
     app.run_action("git.changes");
     app.on_key(keycode(KeyCode::Enter));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let view = app.diff_view.take().expect("Enter opens the diff");
     assert!(view.title.contains("HEAD") && view.title.contains("a.txt"));
 
@@ -922,6 +926,8 @@ fn git_stash_list_chooser_shows_pops_and_drops_after_confirming() {
     app.run_action("git.stash");
 
     app.run_action("git.stash_list");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert_eq!(app.chooser.stash().unwrap().entries.len(), 2);
 
     // `d` asks; `n` keeps the stash and brings the chooser back.
@@ -985,6 +991,8 @@ fn git_worktree_add_list_switch_and_remove() {
     assert!(wt.join("a.txt").is_file(), "{}", app.status);
 
     app.run_action("git.worktree_list");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let c = app.chooser.worktree().unwrap();
     assert_eq!(c.worktrees.len(), 2);
     assert_eq!(c.selected, 0, "the current worktree is highlighted");
@@ -1081,6 +1089,8 @@ fn gutter_base_changes_what_the_gutter_marks() {
     // The chooser lists head, index, disk and the branches, preselecting the
     // current base; choosing a row applies it.
     app.run_action("git.gutter_base");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let c = app.chooser.branch().expect("chooser opens");
     assert!(c.gutter);
     assert_eq!(&c.branches[..3], ["head", "index", "disk"]);
@@ -1256,6 +1266,8 @@ fn git_interactive_rebase_squashes_reorders_and_rewords() {
     app.run_action("git.rebase_interactive");
     type_str(&mut app, "HEAD~3");
     app.on_key(keycode(KeyCode::Enter));
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let todo = app.git_rebase.as_ref().expect("the todo overlay opens");
     let subjects: Vec<&str> = todo.commits.iter().map(|c| c.subject.as_str()).collect();
     assert_eq!(subjects, ["one", "two", "three"]);

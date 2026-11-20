@@ -182,6 +182,8 @@ fn closing_a_compared_tab_ends_the_comparison() {
 fn unified_view_stays_available() {
     let (mut app, dir) = comparing("cmp-unified", OLD, NEW);
     app.run_action("diff.unified");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let view = app.diff_view.as_ref().expect("unified overlay opened");
     assert!(view.title.contains("old.txt") && view.title.contains("new.txt"));
     fs::remove_dir_all(&dir).ok();

@@ -352,6 +352,8 @@ fn clipboard_history_records_copies_and_pastes_from_it() {
     app.on_key(keycode(KeyCode::Right));
     app.on_key(keycode(KeyCode::End));
     app.run_action("edit.paste_from_history");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert!(app.chooser.clipboard().is_some(), "history picker opens");
     app.on_key(keycode(KeyCode::Enter));
     assert!(
@@ -422,6 +424,8 @@ fn http_environment_chooser_picks_and_remembers_the_active_environment() {
     assert!(!app.status.contains("curl"), "status: {}", app.status);
     // Choose `dev` (row 0 is "no environment").
     app.run_action("tools.http_environment");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     assert!(app.chooser.http_env().is_some());
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

@@ -54,6 +54,8 @@ fn plugin_chooser_enables_and_disables_a_plugin() {
     );
 
     app.run_action("script.plugins");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let chooser = app.chooser.plugin().expect("plugin chooser opens");
     assert_eq!(chooser.rows.len(), 1);
     assert_eq!(chooser.rows[0].name, "caseplug");
@@ -134,6 +136,8 @@ fn plugin_translations_reach_the_label_and_the_handler() {
     let mut app = app_at(&dir).with_plugin_paths(&scripts, &lock_path);
     app.load_scripts();
     app.run_action("script.run");
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
     let chooser = app.chooser.script().expect("plugin command loaded");
     assert_eq!(chooser.commands[0].0, "trplug/up");
     assert_eq!(chooser.commands[0].1.label, "Translated Up");
