@@ -31,7 +31,6 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         icon::BRANCH,
         app.git_dirty(),
     );
-    let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
     // Language-server progress (T732) and Cowork participants, then git,
     // then IM's unread count and mention marker (T754).
     let before_git = format!(
@@ -46,7 +45,28 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         app.project_env_segment(),
         app.im_status_segment()
     );
-    let right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
+    let width = usize::from(area.width);
+    let mut right = crate::status_bar_panel::right_segment(&segments, line, col, icon::CALENDAR);
+    let wanted = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
+    // Too narrow for both: the segments after git (project environment, IM,
+    // editor info) go first, so the status message keeps its room. Dropping
+    // only those leaves the git segment's click rectangle where it was.
+    if wanted.chars().count() + right.chars().count() + 1 > width {
+        right = crate::status_bar_panel::right_segment(
+            &format!("{before_git}{git}"),
+            line,
+            col,
+            icon::CALENDAR,
+        );
+    }
+    let left_room = width.saturating_sub(right.chars().count() + 1);
+    let left = crate::status_bar_panel::fit_left_segment(
+        &mode,
+        &path,
+        &dirty_flag,
+        &app.status,
+        left_room,
+    );
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.
