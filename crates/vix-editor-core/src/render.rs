@@ -390,7 +390,7 @@ impl Editor {
 
     /// Draw the fold marker (▸ folded, ▾ open) in the gutter padding column just
     /// before a foldable line's text.
-    fn draw_fold_marker(
+    pub(crate) fn draw_fold_marker(
         &self,
         buf: &mut Buffer,
         line_idx: usize,
