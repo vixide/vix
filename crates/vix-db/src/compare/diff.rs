@@ -1419,4 +1419,154 @@ pub(crate) mod tests {
         let c = diff(&pg(), &target).into_iter().next().unwrap();
         assert_eq!(c.statements[0].phase, Phase::DropSequence);
     }
+
+    /// `source` and `target` holding one `users` table whose `name` column
+    /// is `s` and `t`.
+    fn column_pair(s: Column, t: Column) -> (Snapshot, Snapshot) {
+        let mut source = pg();
+        source
+            .tables
+            .push(table("users", vec![col("id", "integer", false), s]));
+        let mut target = pg();
+        target
+            .tables
+            .push(table("users", vec![col("id", "integer", false), t]));
+        (source, target)
+    }
+
+    #[test]
+    fn a_column_default_is_set_changed_and_dropped() {
+        let plain = col("name", "text", true);
+        let with = |d: &str| Column {
+            default: d.into(),
+            ..col("name", "text", true)
+        };
+        let (s, t) = column_pair(with("'x'"), plain.clone());
+        let c = find(&diff(&s, &t), Object::Column, "name").clone();
+        assert!(
+            sqls(&c).iter().any(|q| q.ends_with("SET DEFAULT 'x'")),
+            "{c:#?}"
+        );
+        let (s, t) = column_pair(plain, with("'x'"));
+        let c = find(&diff(&s, &t), Object::Column, "name").clone();
+        assert!(
+            sqls(&c).iter().any(|q| q.ends_with("DROP DEFAULT")),
+            "{c:#?}"
+        );
+        assert!(!c.destructive);
+    }
+
+    #[test]
+    fn a_column_allowing_null_again_drops_not_null() {
+        let (s, t) = column_pair(col("name", "text", true), col("name", "text", false));
+        let c = find(&diff(&s, &t), Object::Column, "name").clone();
+        assert!(
+            sqls(&c).iter().any(|q| q.ends_with("DROP NOT NULL")),
+            "{c:#?}"
+        );
+        assert!(!c.risky, "relaxing a constraint is safe");
+    }
+
+    #[test]
+    fn a_changed_generated_column_is_dropped_and_added_back() {
+        let gen_col = |expr: &str| Column {
+            generated: true,
+            default: expr.into(),
+            comment: "computed".into(),
+            ..col("name", "text", true)
+        };
+        let (s, t) = column_pair(gen_col("upper(x)"), gen_col("lower(x)"));
+        let c = find(&diff(&s, &t), Object::Column, "name").clone();
+        assert!(c.destructive, "the stored values are recomputed");
+        let q = sqls(&c);
+        assert!(q.iter().any(|q| q.contains("DROP COLUMN")), "{q:#?}");
+        assert!(q.iter().any(|q| q.contains("ADD COLUMN")), "{q:#?}");
+        assert!(
+            c.touches
+                .contains(&("users".to_string(), "name".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_column_comment_change_is_a_comment_statement() {
+        let commented = |text: &str| Column {
+            comment: text.into(),
+            ..col("name", "text", true)
+        };
+        let (s, t) = column_pair(commented("new note"), commented("old note"));
+        let c = find(&diff(&s, &t), Object::Column, "name").clone();
+        assert!(
+            c.statements.iter().any(|st| st.phase == Phase::Comment),
+            "{c:#?}"
+        );
+    }
+
+    #[test]
+    fn unique_and_check_constraints_are_added_changed_and_dropped() {
+        let kc = |name: &str, def: &str| Constraint {
+            name: name.into(),
+            definition: def.into(),
+            references: String::new(),
+        };
+        let mut source = pg();
+        let mut st = table(
+            "users",
+            vec![col("id", "integer", false), col("email", "text", true)],
+        );
+        st.uniques.push(kc("users_email_key", "UNIQUE (email)"));
+        st.checks.push(kc("users_id_check", "CHECK (id > 0)"));
+        source.tables.push(st);
+        let mut target = pg();
+        let mut tt = table(
+            "users",
+            vec![col("id", "integer", false), col("email", "text", true)],
+        );
+        tt.checks.push(kc("users_id_check", "CHECK (id >= 0)"));
+        tt.checks.push(kc("users_old_check", "CHECK (true)"));
+        target.tables.push(tt);
+        let changes = diff(&source, &target);
+        assert_eq!(
+            find(&changes, Object::Unique, "users_email_key").action,
+            Action::Added
+        );
+        let check = find(&changes, Object::Check, "users_id_check");
+        assert_eq!(check.action, Action::Changed);
+        let phases: Vec<Phase> = check.statements.iter().map(|s| s.phase).collect();
+        assert_eq!(
+            phases,
+            [Phase::DropConstraint, Phase::AddConstraint],
+            "{check:#?}"
+        );
+        assert_eq!(
+            find(&changes, Object::Check, "users_old_check").action,
+            Action::Removed
+        );
+    }
+
+    #[test]
+    fn every_object_and_action_has_its_own_label_and_marker() {
+        let objects = [
+            Object::Schema,
+            Object::Table,
+            Object::Column,
+            Object::PrimaryKey,
+            Object::Unique,
+            Object::Check,
+            Object::Index,
+            Object::ForeignKey,
+            Object::View,
+            Object::Routine,
+            Object::Trigger,
+            Object::Enum,
+            Object::Sequence,
+        ];
+        let keys: std::collections::HashSet<&str> = objects.iter().map(|o| o.label_key()).collect();
+        assert_eq!(keys.len(), objects.len(), "no two kinds share a label");
+        assert!(keys.iter().all(|k| k.starts_with("ui.db_compare_obj_")));
+        let markers: Vec<char> = [Action::Added, Action::Removed, Action::Changed]
+            .iter()
+            .map(|a| a.marker())
+            .collect();
+        assert_eq!(markers, ['+', '-', '~']);
+    }
 }
