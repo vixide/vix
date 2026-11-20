@@ -279,3 +279,114 @@ fn ai_off_refuses_every_ai_action_without_running_anything() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+/// The chat panel: a message goes out, the canned reply lands and draws,
+/// scrolling works, Alt+T opens the reply in a tab, Esc closes the panel.
+#[test]
+fn chat_panel_sends_shows_the_reply_and_moves_it_to_a_tab() {
+    let dir = unique_dir("ai-chat");
+    let mut app = app_with_canned_ai_reply(&dir, "Hello from the mock assistant.", false);
+    app.run_action("ai.chat");
+    assert!(app.ai_panel.is_some(), "the chat panel opens");
+    for ch in "hi there".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Backspace));
+    app.on_key(key('e'));
+    app.on_key(keycode(KeyCode::Enter));
+    wait_for_ai_replace(&mut app, |app| {
+        app.ai_panel.as_ref().is_some_and(|p| !p.busy)
+    });
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("mock assistant"), "{screen}");
+    draw_frame(&mut app, 50, 16);
+    for code in [
+        KeyCode::Up,
+        KeyCode::Down,
+        KeyCode::PageUp,
+        KeyCode::PageDown,
+    ] {
+        app.on_key(keycode(code));
+    }
+    let tabs = app.editor.tabs.len();
+    app.on_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::ALT));
+    assert_eq!(
+        app.editor.tabs.len(),
+        tabs + 1,
+        "Alt+T opens the reply in a tab"
+    );
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("mock assistant")
+    );
+    app.run_action("ai.chat");
+    app.on_key(esc());
+    assert!(app.ai_panel.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// A command that fails says so, naming the action, and changes nothing.
+#[test]
+fn a_failing_ai_command_is_reported_and_leaves_the_text() {
+    let dir = unique_dir("ai-fail");
+    let mut settings = Settings::default();
+    settings.ai_command = if cfg!(windows) {
+        "exit /b 3".into()
+    } else {
+        "echo boom >&2; exit 3".into()
+    };
+    let mut app = app_at_with(&dir, settings);
+    buffer_with(&mut app, "hello world\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 5);
+    app.run_action("ai.edit_with_instruction");
+    for ch in "shout".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    wait_for_ai_replace(&mut app, |app| app.status.contains("failed"));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "hello world\n",
+        "nothing changed"
+    );
+    draw_frame(&mut app, 120, 40);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// The AI diff review: Up/Down move between hunks, Space toggles one, and
+/// Enter applies; the review draws wide and narrow.
+#[test]
+fn ai_diff_review_navigates_toggles_and_applies() {
+    let dir = unique_dir("ai-diff-keys");
+    let mut app = app_with_canned_ai_reply(&dir, "HELLO", false);
+    buffer_with(&mut app, "hello world\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 5);
+    app.run_action("ai.edit_with_instruction");
+    for ch in "caps".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    wait_for_ai_replace(&mut app, |app| app.ai_diff_review().is_some());
+    draw_frame(&mut app, 120, 40);
+    draw_frame(&mut app, 50, 16);
+    for code in [KeyCode::Down, KeyCode::Up] {
+        app.on_key(keycode(code));
+    }
+    app.on_key(key(' '));
+    app.on_key(key(' '));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.ai_diff_review().is_none(), "Enter applies and closes");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "HELLO world\n");
+    fs::remove_dir_all(&dir).ok();
+}
