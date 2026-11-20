@@ -515,3 +515,53 @@ fn a_builtin_language_server_starts_only_in_a_trusted_workspace() {
         fs::remove_dir_all(unique_dir(d)).ok();
     }
 }
+
+/// The completion, hover and code-action popups draw wide and narrow, with
+/// what they hold on screen; keys move the selection and Esc closes them.
+#[test]
+fn lsp_popups_draw_their_contents() {
+    use crate::app::{CodeActionMenu, CompletionPopup, HoverPopup};
+    use vix_lsp_core::CompletionItem;
+
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "fn main() {\n    pri\n}\n", 0);
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(19);
+
+    let items = vec![
+        CompletionItem::new("println!", "println!"),
+        CompletionItem::new("print!", "print!"),
+        CompletionItem::new("private_fn", "private_fn"),
+    ];
+    app.completion = Some(CompletionPopup::new(items, false, 16, "pri"));
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("println!") && screen.contains("private_fn"), "{screen}");
+    draw_frame(&mut app, 40, 12);
+    app.on_key(keycode(KeyCode::Down));
+    draw_frame(&mut app, 120, 40);
+    app.on_key(esc());
+    assert!(app.completion.is_none(), "Esc closes the completion popup");
+
+    app.hover = Some(HoverPopup {
+        text: "fn main()\n\nThe program's **entry point**.".into(),
+    });
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("entry point"), "{screen}");
+    draw_frame(&mut app, 30, 8);
+    app.hover = None;
+
+    for refactor in [false, true] {
+        app.code_actions = Some(CodeActionMenu {
+            actions: vec![
+                ("Add missing import".into(), Vec::new()),
+                ("Extract function".into(), Vec::new()),
+            ],
+            selected: 1,
+            refactor,
+        });
+        let screen = draw_frame(&mut app, 120, 40);
+        assert!(screen.contains("Extract function"), "{screen}");
+        draw_frame(&mut app, 30, 8);
+    }
+    app.on_key(esc());
+    assert!(app.code_actions.is_none(), "Esc closes the code-action menu");
+}
