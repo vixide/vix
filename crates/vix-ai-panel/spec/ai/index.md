@@ -20,8 +20,11 @@ template, default `claude -p {prompt}`:
 - **Do not quote the placeholders.** Vix quotes `{prompt}` and `{file}`
   itself (single quotes on Unix, double quotes on Windows), so the text can
   never be read as shell syntax. Wrapping one in quotes of your own, such as
-  `"{prompt}"`, puts Vix's quoting inside yours, and inside double quotes a
-  shell still expands `$(…)` and backquotes in the text.
+  `"{prompt}"`, would put Vix's quoting inside yours, and inside double
+  quotes a shell still expands `$(…)` and backquotes in the text, so quotes
+  written directly around a placeholder (`"{prompt}"`, `'{file}'`) are
+  dropped before substitution (`vix_settings::unquote_placeholders`). Quotes
+  that also hold other text (`"x{prompt}"`) are left alone and are unsafe.
 
 Examples:
 

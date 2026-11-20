@@ -65,6 +65,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A quoted `{prompt}` in `ai_command` is safe.** Vix quotes the prompt it substitutes, but a template that also quoted it (`claude -p "{prompt}"`, as the configuration guide's own example did) put Vix's quoting inside the template's double quotes, where the shell would still run a `$(…)` from the chat text. Quotes written right around `{prompt}` or `{file}` are now dropped first, and the example is fixed.
 - **The command palette lists every menu command.** It searched a hand-picked list, so commands with only a menu item, such as **Tools › Terminal › Show/Hide Terminal**, were missing and Enter on an empty result did nothing. Every menu command is now in the palette, named by its menu path (`>terminal` finds all the terminal commands).
 - **Folding with soft wrap.** With soft wrap on, folded lines still showed and the fold had no `...` marker: the wrapped renderer ignored folds. It now hides them like the unwrapped view.
 - **Up and Down no longer move into a fold.** The caret could land on a hidden line inside a folded section, out of sight; it now steps over the fold.

@@ -66,7 +66,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default: in a trusted workspace Vix starts well-known servers it finds on `PATH` (rust-analyzer, gopls, pyright or pylsp, typescript-language-server, clangd, …). An entry for an extension replaces the built-in for it. |
 | `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
 | `ai`            | string | `"on"`   | The AI optional switch. `"off"` hides the AI menu and every AI palette entry and refuses every AI request (the AI menu, the chat panel, the generated commit message, the DB assistant) without a rebuild; nothing is sent anywhere. Any value other than `"on"` counts as `"off"`. |
-| `ai_command`    | string | `claude -p {prompt}` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction, quoted by Vix (so don't add quotes of your own); the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. Ignored unless `ai_provider` is `"cli"` (the default). |
+| `ai_command`    | string | `claude -p {prompt}` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction, quoted by Vix (so don't add quotes of your own; quotes written right around it are dropped); the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. Ignored unless `ai_provider` is `"cli"` (the default). |
 | `ai_provider`   | string | `"cli"`  | Which backend the AI menu, chat panel, and DB assistant use: `"cli"` (shells out to `ai_command`, no API key needed) or `"anthropic"`/`"openai"`/`"ollama"` (calls that provider's HTTP API directly — see `crates/vix-ai-core/spec/index.md`). An unrecognized value falls back to `"cli"`. |
 | `ai_endpoint`   | string | `""`     | HTTP provider endpoint override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
 | `ai_model`      | string | `""`     | HTTP provider model id override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
@@ -159,8 +159,9 @@ lsp_enabled = true
 ai = "on"
 
 # The AI menu shells out to this command (text is piped on stdin). Swap in any
-# assistant CLI, e.g. ai_command = "codex exec \"{prompt}\""
-ai_command = "claude -p \"{prompt}\""
+# assistant CLI, e.g. ai_command = "codex exec {prompt}". Vix quotes {prompt}
+# itself, so leave it bare.
+ai_command = "claude -p {prompt}"
 
 # Or skip the CLI and call a provider's HTTP API directly (see
 # crates/vix-ai-core/spec/index.md). The key comes from ai_api_key_command's
