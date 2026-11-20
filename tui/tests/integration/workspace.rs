@@ -1064,3 +1064,36 @@ fn replace_in_files_keeps_crlf_line_endings() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+/// **File → Switch Project…** lists the other workspaces this session file
+/// remembers (here, one quit a moment ago) and draws them.
+#[test]
+fn switch_project_lists_a_workspace_quit_earlier() {
+    let session = isolated_session_path();
+    let first = unique_dir("switch-first");
+    let second = unique_dir("switch-second");
+    fs::write(first.join("a.txt"), "a\n").unwrap();
+    let mut app = App::new(first.clone(), Settings::default()).with_session_path(session.clone());
+    app.open_initial(&first.join("a.txt"));
+    app.run_action("file.quit");
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+    // What the binary does once the loop ends: save the session.
+    app.on_exit();
+
+    let mut app = App::new(second.clone(), Settings::default()).with_session_path(session.clone());
+    app.run_action("file.switch_project");
+    assert!(
+        app.chooser.workspace().is_some(),
+        "the chooser opens: {}",
+        app.status
+    );
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("switch-first"), "{screen}");
+    draw_frame(&mut app, 50, 16);
+    app.on_key(esc());
+    assert!(app.chooser.workspace().is_none());
+
+    fs::remove_file(&session).ok();
+    fs::remove_dir_all(&first).ok();
+    fs::remove_dir_all(&second).ok();
+}
