@@ -16,8 +16,9 @@
 //!
 //! Like the chaos monkey (`tui/examples/chaos_monkey.rs`) both sweeps run in a
 //! sandbox: the test re-executes its own binary with a `PATH` holding only a
-//! link to `git` (no action can start a shell, a browser or a language
-//! server; the workspace is a throwaway repository with no remote), a throwaway
+//! link to `git` and a fake `docker` (shell built-ins and canned JSON, see
+//! [`FAKE_DOCKER`]), so no action can start a shell, a browser or a language
+//! server; the workspace is a throwaway repository with no remote; a throwaway
 //! `HOME` and config directory, and no `SHELL`. The parent kills a child that
 //! takes longer than [`TIMEOUT`] and names the action it was on.
 #![allow(
@@ -35,6 +36,20 @@ use vix::app::{App, AppFlags};
 use vix::settings::Settings;
 use vix_action_catalog::dispatch_scan::every_dispatchable_action_id;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
+/// The fake `docker` in the sandbox's `PATH` (see [`in_sandbox`]).
+const FAKE_DOCKER: &str = r#"#!/bin/sh
+case "$1 $2" in
+  "ps "*) echo '{"ID":"abc123def456","Names":"web","Image":"nginx:latest","State":"running","Status":"Up 2 hours","Ports":"0.0.0.0:8080->80/tcp"}'
+          echo '{"ID":"0011223344","Names":"db","Image":"postgres:16","State":"exited","Status":"Exited (0) 1 hour ago"}' ;;
+  "images "*) echo '{"ID":"sha256:1111","Repository":"nginx","Tag":"latest","Size":"10MB","CreatedSince":"2 weeks ago"}' ;;
+  "volume ls") echo '{"Name":"data","Driver":"local","Mountpoint":"/var/lib/docker/volumes/data"}' ;;
+  "network ls") echo '{"ID":"n1","Name":"bridge","Driver":"bridge","Scope":"local"}' ;;
+  "pod ps") echo '[]' ;;
+  "version "*|"info "*) echo '{"Client":{"Version":"99.0"}}' ;;
+  *) echo "fake docker: $*" ;;
+esac
+"#;
 
 /// Marks the sandboxed child.
 const SANDBOX_VAR: &str = "VIX_ACTION_SWEEP_SANDBOX";
@@ -393,6 +408,16 @@ fn in_sandbox(test: &str, body: fn(&Path)) {
     #[cfg(unix)]
     if let Some(git) = find_on_path("git") {
         std::os::unix::fs::symlink(git, empty_path.join("git")).unwrap();
+    }
+    // A fake container engine, so the OC actions have containers, images,
+    // volumes and networks to list: shell built-ins only, canned JSON for
+    // each listing, an echo for anything else. It runs nothing.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let docker = empty_path.join("docker");
+        std::fs::write(&docker, FAKE_DOCKER).unwrap();
+        std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
     std::fs::write(
         home.join(".gitconfig"),
