@@ -534,7 +534,10 @@ fn lsp_popups_draw_their_contents() {
     ];
     app.completion = Some(CompletionPopup::new(items, false, 16, "pri"));
     let screen = draw_frame(&mut app, 120, 40);
-    assert!(screen.contains("println!") && screen.contains("private_fn"), "{screen}");
+    assert!(
+        screen.contains("println!") && screen.contains("private_fn"),
+        "{screen}"
+    );
     draw_frame(&mut app, 40, 12);
     app.on_key(keycode(KeyCode::Down));
     draw_frame(&mut app, 120, 40);
@@ -563,5 +566,8 @@ fn lsp_popups_draw_their_contents() {
         draw_frame(&mut app, 30, 8);
     }
     app.on_key(esc());
-    assert!(app.code_actions.is_none(), "Esc closes the code-action menu");
+    assert!(
+        app.code_actions.is_none(),
+        "Esc closes the code-action menu"
+    );
 }
