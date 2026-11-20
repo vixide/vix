@@ -10355,7 +10355,8 @@ principle, so it waits for a deliberate decision.
   `App::run_workspace_search` and `App::search_workspace_to_dock` use the
   find engine's character offsets. A dock click parses the location before
   the preview text. The workspace integration tests open a
-  panel result with Enter and click a dock result after a multilingual prefix.
+  panel result with Enter and click a dock result after a prefix of CJK, emoji
+  and a combining mark.
   Both assert the final line and column.
 - [ ] **T795 — Preserve the server's position encoding in result lists.**
   Follow a document symbol, workspace symbol, reference, diagnostic and
@@ -10364,8 +10365,8 @@ principle, so it waits for a deliberate decision.
   column. Carry the originating encoding to the jump and convert against the
   target buffer, including an unsaved buffer or a previously unopened file.
   Reuse the conversion used by direct jumps. For the target `x` in `界💡x`,
-  a mock server reporting UTF-8, UTF-16 or UTF-32 supplies 7, 3 or 2
-  respectively. Selecting the row must land at editor column 3 in all cases.
+  a mock server reporting UTF-8, UTF-16 or UTF-32 supplies the 0-based
+  `character` 7, 3 or 2 respectively. Selecting the row must land at editor column 3 in all cases.
   Include a related location in a second file and an ordinary ASCII control.
   [Position encoding](crates/vix-lsp/spec/index.md#position-encoding)
 - [ ] **T796 — Translate save decisions in every chooser language.** Start
