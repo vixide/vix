@@ -898,3 +898,4 @@ frontends
 seccomp
 taplo
 basedpyright
+reexec
