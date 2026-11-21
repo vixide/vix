@@ -1697,4 +1697,113 @@ mod tests {
         );
         assert_eq!(b.query.text(), "SELECT a\nFROM t\nWHERE x = 1");
     }
+
+    fn press(b: &mut Browser, code: KeyCode) {
+        b.handle_key(key(code), Pages::default());
+    }
+
+    #[test]
+    fn history_and_saved_lists_navigate_load_and_delete() {
+        let mut b = browser();
+        b.history.push("select 1");
+        b.history.push("select 2");
+        b.open_history();
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.list_sel, 1);
+        press(&mut b, KeyCode::Home);
+        press(&mut b, KeyCode::End);
+        press(&mut b, KeyCode::Up);
+        assert_eq!(b.list_sel, 0);
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.history.entries, ["select 1"]);
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.history.entries.len(), 0);
+        press(&mut b, KeyCode::Char('d')); // nothing left to delete
+        press(&mut b, KeyCode::Char('?')); // ignored
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+
+        b.saved.upsert("one", "select 1");
+        b.open_saved();
+        press(&mut b, KeyCode::Delete);
+        assert_eq!(b.saved.queries.len(), 0);
+        press(&mut b, KeyCode::Char('q'));
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn save_name_prompt_edits_requires_a_name_and_saves() {
+        let mut b = browser();
+        b.query = editor::Query::from_text("select 1");
+        b.open_save_name();
+        assert_eq!(b.view, View::SaveName);
+        press(&mut b, KeyCode::Char('x'));
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(
+            b.message.as_deref(),
+            Some(t!("msg.db_name_required").as_ref())
+        );
+        press(&mut b, KeyCode::Char('q'));
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.saved.queries[0].name, "q");
+        assert_eq!(b.view, View::Workbench);
+        b.open_save_name();
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn log_and_erd_viewers_scroll_and_close() {
+        let mut b = browser();
+        b.open_log();
+        for code in [
+            KeyCode::Down,
+            KeyCode::Up,
+            KeyCode::Home,
+            KeyCode::End,
+            KeyCode::Enter,
+        ] {
+            press(&mut b, code);
+        }
+        b.open_log();
+        press(&mut b, KeyCode::Char('q'));
+        assert_eq!(b.view, View::Workbench);
+
+        b.cell_text = "line\n".repeat(30);
+        b.view = View::Erd;
+        for code in [
+            KeyCode::Down,
+            KeyCode::Up,
+            KeyCode::PageDown,
+            KeyCode::PageUp,
+            KeyCode::End,
+            KeyCode::Home,
+            KeyCode::Char('y'),
+            KeyCode::Char('?'),
+        ] {
+            press(&mut b, code);
+        }
+        assert_eq!(b.view_scroll, 0);
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn import_prompt_needs_a_connection_and_edits_its_path() {
+        let mut b = browser();
+        b.open_import();
+        assert_eq!(
+            b.message.as_deref(),
+            Some(t!("msg.db_not_connected").as_ref())
+        );
+        b.open_run_file();
+        b.generate_erd();
+        b.view = View::Import;
+        press(&mut b, KeyCode::Char('a'));
+        press(&mut b, KeyCode::Backspace);
+        assert_eq!(b.import_path.len(), 0);
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+    }
 }
