@@ -731,3 +731,46 @@ fn explorer_and_messages_survive_mouse_input_everywhere() {
     }
     fs::remove_dir_all(&dir).ok();
 }
+
+/// The shortcut help panel filters as you type and scrolls; the clock panel
+/// moves, inserts the chosen time into the buffer, and closes.
+#[test]
+fn help_and_clock_panels_take_their_keys() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("help.shortcuts");
+    assert!(app.help.is_some());
+    draw_frame(&mut app, 100, 30);
+    for code in [
+        KeyCode::Char('s'),
+        KeyCode::Char('a'),
+        KeyCode::Backspace,
+        KeyCode::Down,
+        KeyCode::Up,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::Tab,
+    ] {
+        app.on_key(keycode(code));
+        draw_frame(&mut app, 100, 30);
+    }
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.help.is_none());
+
+    app.run_action("tools.clock");
+    assert!(app.visible.contains(vix::app::Visible::CLOCK));
+    draw_frame(&mut app, 100, 30);
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(
+        !app.visible.contains(vix::app::Visible::CLOCK),
+        "Enter closes"
+    );
+    assert!(
+        !app.editor.active_tab().unwrap().text().is_empty(),
+        "the time was inserted"
+    );
+    app.run_action("tools.clock");
+    app.on_key(keycode(KeyCode::Char('q')));
+    assert!(!app.visible.contains(vix::app::Visible::CLOCK));
+}
