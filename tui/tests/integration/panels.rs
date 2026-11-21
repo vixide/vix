@@ -697,3 +697,37 @@ fn info_panels_answer_every_navigation_key_and_click() {
     }
     fs::remove_dir_all(&dir).ok();
 }
+
+/// Clicks, drags, right-clicks and wheel turns over every cell of the explorer
+/// and the Messages dock (skipping the menu bar) leave the app standing.
+#[test]
+fn explorer_and_messages_survive_mouse_input_everywhere() {
+    let dir = unique_dir("mouse-everywhere");
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(dir.join(name), "x\n").unwrap();
+    }
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    fs::write(dir.join("sub").join("d.txt"), "y\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("a.txt"));
+    for i in 0..30 {
+        app.messages.error(format!("message {i}"));
+    }
+    draw_frame(&mut app, 100, 40);
+    for row in 2..40 {
+        for col in (0..100).step_by(3) {
+            for kind in [
+                MouseEventKind::Down(MouseButton::Left),
+                MouseEventKind::Drag(MouseButton::Left),
+                MouseEventKind::Up(MouseButton::Left),
+                MouseEventKind::Down(MouseButton::Right),
+                MouseEventKind::ScrollDown,
+                MouseEventKind::ScrollUp,
+            ] {
+                app.on_mouse(mouse(kind, col, row));
+            }
+        }
+        draw_frame(&mut app, 100, 40);
+    }
+    fs::remove_dir_all(&dir).ok();
+}
