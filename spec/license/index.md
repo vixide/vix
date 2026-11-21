@@ -6,6 +6,8 @@ Vix™ and Vix IDE™ are licensed under any of:
 - MIT
 - GPL 2.0-only
 - GPL 3.0-only
+- UK Open Government Licence v3.0 (OGL-UK-3.0)
+- Creative Commons Attribution Non Commercial Share Alike 4.0 International (CC-BY-NC-SA-4.0)
 
 Vix™ and Vix IDE™ are trademarks.
 
@@ -13,15 +15,19 @@ The license texts are in [`docs/licenses/`](../../docs/licenses/).
 
 ## Binary licenses (T648)
 
-The five licenses above apply to Vix's **source code**: every crate under
+The seven licenses above apply to Vix's **source code and documentation**: every crate under
 `crates/`, the App shell in `tui/`, and each GUI front end's own code. A
 **distributed binary** also contains every third-party crate it links, so it
-can be offered only under those of the five that all of its linked code
-allows. Each binary therefore respects the licenses of its framework (the
+can be offered only under those of the first five (Apache-2.0, BSD-3-Clause,
+MIT, GPL-2.0-only, GPL-3.0-only) that all of its linked code allows. The two
+newest licenses, OGL-UK-3.0 and CC-BY-NC-SA-4.0, are information and
+documentation licenses: they are offered for Vix's own source and documentation
+only, and never for a distributed binary, so `scripts/check-binary-licenses`
+does not compute them. Each binary therefore respects the licenses of its framework (the
 toolkit it is built on) and of the rest of its dependency graph:
 
 - **Each binary package declares its own `license`**: exactly the subset of
-  the five that its linked dependencies permit — not more (that would offer
+  the first five that its linked dependencies permit — not more (that would offer
   terms the binary cannot honor), not fewer (that would withhold a choice
   for no reason). The packages are `vix-tui` (the `vix` command) and each
   desktop front end in `gui/`.
@@ -63,4 +69,4 @@ The table is derived, not authoritative: `scripts/check-binary-licenses`
 recomputes it from the lockfiles, and a dependency change that alters a
 binary's set fails the gate until the package's `license` and `LICENSE`
 are updated to match. The library crates under `crates/` are source-only
-packages and keep all five licenses.
+packages and keep all seven licenses.

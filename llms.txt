@@ -115,5 +115,5 @@ human and AI contributors — read it first. The workspace version is 2.0.2
 - [tasks.md](tasks.md) / [plan.md](plan.md): the improvement backlog and plan
 - [packaging/index.md](packaging/index.md): install-channel templates (winget,
   Scoop, AUR, Nix, container image) — not yet published or verified
-- [LICENSE](LICENSE): Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only or
-  GPL-3.0-only, at your option
+- [LICENSE](LICENSE.md): Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only,
+  GPL-3.0-only, OGL-UK-3.0 or CC-BY-NC-SA-4.0, at your option

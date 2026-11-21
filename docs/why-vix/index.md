@@ -27,7 +27,7 @@ For Vim, Emacs, Helix, Zed, Fresh and ttt, see the
   scripts run only after you trust the workspace. See
   [`SECURITY.md`](../../SECURITY.md).
 - **Free and open source,** under your choice of Apache-2.0, BSD-3-Clause,
-  MIT, GPL-2.0 or GPL-3.0.
+  MIT, GPL-2.0, GPL-3.0, OGL-UK-3.0 or CC-BY-NC-SA-4.0.
 
 ## Compared with VS Code, Neovim, JetBrains and Sublime
 

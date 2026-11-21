@@ -514,7 +514,7 @@ Three details worth knowing before editing those files:
 
 The license allow-list is permissive-only, plus MPL-2.0 (per-file copyleft,
 which does not reach the linking crate). Vix offers itself under
-"Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only", so a
+"Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0", so a
 dependency with stronger terms would quietly take that choice away from anyone
 who ships a build — this check is what makes that visible. Two consequences
 are already recorded in the tree: `evalexpr` is pinned to 11.x because 12.0.0
@@ -570,7 +570,7 @@ forges (GitHub and Codeberg in the lint job beside `check-docs`, GitLab as
 the `binary-licenses` job). It reads `cargo metadata --locked` for the root
 workspace and for `gui/` (no build), walks each binary package's linked
 dependency graph, and fails when a package's declared `license` is not
-exactly the subset of Vix's five licenses that graph permits. The rule and
+exactly the subset of Vix's five software licenses that graph permits. The rule and
 the current results are in `spec/license/index.md` ("Binary licenses").
 
 ## Docs links

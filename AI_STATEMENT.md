@@ -111,7 +111,7 @@ were granted 2026-09-02.
 ## Licensing
 
 Vix is offered under your choice of Apache-2.0, BSD-3-Clause, MIT,
-GPL-2.0-only, or GPL-3.0-only (see [`LICENSE`](LICENSE) and
+GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0, or CC-BY-NC-SA-4.0 (see [`LICENSE.md`](LICENSE.md) and
 [`deny.toml`](deny.toml)). Anthropic does not claim ownership over Claude's
 outputs. Whether AI-assisted contributions carry copyright, and under what
 terms, is an unsettled question that varies by jurisdiction — if that matters

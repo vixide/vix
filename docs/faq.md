@@ -345,6 +345,8 @@ Vix is licensed under your choice of:
 - MIT
 - GPL 2.0
 - GPL 3.0
+- UK Open Government Licence v3.0 (OGL-UK-3.0)
+- Creative Commons Attribution Non Commercial Share Alike 4.0 International (CC-BY-NC-SA-4.0)
 
 See the [LICENSE](../LICENSE) file for details.
 

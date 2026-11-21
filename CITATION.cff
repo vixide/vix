@@ -24,5 +24,7 @@ license:
   - MIT
   - GPL-2.0-only
   - GPL-3.0-only
+  - OGL-UK-3.0
+  - CC-BY-NC-SA-4.0
 abstract: >-
   Vix IDE is a modern text editor for the terminal written in Rust.

@@ -79,5 +79,6 @@ brew install vixide/homebrew-tap/vix-tui
 Then run `vix`, press Ctrl+P for the palette and F1 for every shortcut.
 
 Source, docs and the full changelog: [LINK]. Vix is available under your choice
-of Apache-2.0, BSD-3-Clause, MIT, GPL-2.0 or GPL-3.0. Bug reports and feature
+of Apache-2.0, BSD-3-Clause, MIT, GPL-2.0, GPL-3.0, OGL-UK-3.0 or
+CC-BY-NC-SA-4.0. Bug reports and feature
 requests are welcome.
