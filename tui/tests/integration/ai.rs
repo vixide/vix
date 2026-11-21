@@ -390,3 +390,56 @@ fn ai_diff_review_navigates_toggles_and_applies() {
     assert_eq!(app.editor.active_tab().unwrap().text(), "HELLO world\n");
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn ai_actions_report_missing_input_and_a_busy_assistant() {
+    let dir = unique_dir("ai-guards");
+    let mut app = app_with_canned_ai_reply(&dir, "REPLACED", true);
+
+    // Nothing to send: an empty buffer and a blank one.
+    buffer_with(&mut app, "", 0);
+    for action in ["ai.summarize", "ai.explain", "ai.define", "ai.improve"] {
+        app.status.clear();
+        app.run_action(action);
+        assert_eq!(app.status, t!("status.ai_no_input"), "{action}");
+        assert!(!app.ai_replace_running());
+    }
+    buffer_with(&mut app, "   \n", 0);
+    app.run_action("ai.generate_doc_comment");
+    assert_eq!(app.status, t!("status.ai_no_input"));
+
+    // A blank instruction is refused.
+    buffer_with(&mut app, "hello world\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 5);
+    app.run_action("ai.edit_with_instruction");
+    app.on_key(key(' '));
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.status, t!("status.ai_no_input"));
+
+    // `define` finds the next word when the cursor sits in the gap before it.
+    buffer_with(&mut app, "   word\n", 0);
+    app.run_action("ai.define");
+    assert!(
+        app.status != t!("status.ai_no_input"),
+        "found the word ahead: {}",
+        app.status
+    );
+
+    // While one request runs, the others say the assistant is busy.
+    buffer_with(&mut app, "hello world\n", 0);
+    app.run_action("ai.improve");
+    assert!(app.ai_replace_running(), "improve started a request");
+    for action in [
+        "ai.improve",
+        "ai.generate_doc_comment",
+        "ai.edit_with_instruction",
+    ] {
+        app.run_action(action);
+        assert_eq!(app.status, t!("status.ai_busy"), "{action}");
+    }
+    fs::remove_dir_all(&dir).ok();
+}
