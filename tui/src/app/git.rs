@@ -9,13 +9,12 @@
 use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
-use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 #[cfg(feature = "ai")]
 use super::{AiDest, AiReplace};
 use super::{
     App, AppFlags, BranchChooser, Confirm, ConfirmKind, GitPanel, Prompt, PromptKind, gutter_hex,
-    rect_contains,
 };
 use crate::editor::Tab;
 
@@ -484,14 +483,10 @@ impl App {
     /// Handle a mouse event in the conflict list: a left click on a row selects it and jumps to
     /// the conflict; clicks outside the list are ignored.
     pub(super) fn conflict_list_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.conflict_list;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if let Some(l) = self.conflict_list.as_mut() {
             let idx = l.scroll + row;
             if l.select_index(idx) {
@@ -771,14 +766,10 @@ impl App {
     /// Handle a mouse event in the Git status panel: a left click on a file row selects it and
     /// toggles its staged state.
     pub(super) fn git_panel_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if row < self.git_status.len() {
             if let Some(p) = self.git_panel.as_mut() {
                 p.selected = row;
@@ -1180,14 +1171,10 @@ impl App {
     /// the cursor, select it, and open its diff -- matches `outline_mouse`'s
     /// own click-selects-and-jumps convention.
     pub(super) fn git_log_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_log;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let hit = self.git_log.as_mut().is_some_and(|p| {
             let idx = p.scroll + row;
             let ok = idx < p.entries.len();

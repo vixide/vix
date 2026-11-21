@@ -10,9 +10,9 @@
 //! searches.
 
 use vix_git_graph::{Action, GraphError, Mode, PAGE_SIZE, Panel};
-use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
-use super::{App, rect_contains};
+use super::App;
 
 /// The user-facing text of a graph error, with the install hint for a missing
 /// `git`.
@@ -324,14 +324,10 @@ impl App {
     /// A click selects a row; a click on the already-highlighted row opens
     /// its diff.
     pub(super) fn git_graph_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_graph;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let Some(p) = self.git_graph.as_mut() else {
             return;
         };

@@ -16,13 +16,13 @@
 //! into the bottom dock through the same no-shell runner Git and Jujutsu use;
 //! short ones run to completion and report in the status line.
 
-use vix_input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyEvent, MouseEvent};
 
 use crate::oci::argv::{self, ComposeOp, Kind};
 use crate::oci::{Engine, OciError, parse};
 use crate::oci_panel::{BUILD_FILES, COMPOSE_FILES, Mode, Panel, Pending, Purpose, Request, Rows};
 
-use super::{App, rect_contains};
+use super::App;
 
 mod workspace;
 
@@ -355,14 +355,10 @@ impl App {
 
     /// A click selects a row; a click on the highlighted row inspects it.
     pub(super) fn oc_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.oc;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let Some(p) = self.oc.as_mut() else {
             return;
         };
