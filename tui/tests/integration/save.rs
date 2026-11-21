@@ -266,3 +266,35 @@ fn interrupted_save_notice_reads_only_the_directory_it_is_given() {
     assert_ne!(app.status, baseline);
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn workspace_chooser_wraps_and_reports_a_missing_project() {
+    let mut app = app_at(Path::new("."));
+    app.chooser.open_workspace(vix::app::WorkspaceChooser {
+        roots: vec!["/vix-no-such-a".into(), "/vix-no-such-b".into()],
+        selected: 0,
+    });
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(app.chooser.workspace_mut().unwrap().selected, 1, "wraps up");
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(
+        app.chooser.workspace_mut().unwrap().selected,
+        0,
+        "wraps down"
+    );
+    app.on_key(keycode(KeyCode::Char('x'))); // ignored
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(
+        app.status,
+        t!("status.project_missing", path = "/vix-no-such-a")
+    );
+    assert!(app.chooser.workspace_mut().is_none(), "the chooser closed");
+}
+
+#[test]
+fn a_failed_settings_load_is_reported_as_a_warning() {
+    let mut app = app_at(Path::new("."));
+    let before = app.messages.items.len();
+    app.warn_settings_load_failed("bad toml");
+    assert_eq!(app.messages.items.len(), before + 1);
+}
