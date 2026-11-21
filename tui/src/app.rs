@@ -76,6 +76,7 @@ mod jupyter;
 #[cfg(not(feature = "jupyter"))]
 mod jupyter_off;
 mod menu_pointer;
+mod workspace_search_input;
 #[cfg(feature = "jupyter")]
 use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
@@ -13365,117 +13366,6 @@ impl App {
             KeyCode::Down => {
                 if let Some(wc) = self.wgrep_confirm.as_mut() {
                     wc.scroll = (wc.scroll + 1).min(wc.lines.len().saturating_sub(1));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// Handle a key in the project-search panel: Esc closes (remembering the query); Up/Down
-    /// move; Tab switches fields; Enter opens the hit, or in replace mode plans the replace;
-    /// other keys edit the active field and re-run the search.
-    fn ps_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => {
-                self.remember_workspace_search();
-                self.workspace_search = None;
-            }
-            KeyCode::Up => {
-                if let Some(p) = self.workspace_search.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.workspace_search.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::Tab => {
-                if let Some(p) = self.workspace_search.as_mut() {
-                    p.toggle_field();
-                }
-            }
-            KeyCode::Enter => {
-                let replacing = self
-                    .workspace_search
-                    .as_ref()
-                    .is_some_and(|p| p.flags.contains(WorkspaceFlags::REPLACING));
-                let on_replace =
-                    self.workspace_search.as_ref().map(|p| p.field) == Some(Field::Replace);
-                if replacing && (Self::alt(&key) || on_replace) {
-                    self.workspace_replace_all();
-                } else {
-                    self.open_selected_hit();
-                }
-            }
-            // The scope option continues here: the panel is the "Files" stage,
-            // so `Alt+I` moves on to the workspace listing in the dock.
-            KeyCode::Char('i' | 'I') if Self::alt(&key) => {
-                let Some(p) = self.workspace_search.as_ref() else {
-                    return;
-                };
-                let (query, case, regex) = (
-                    p.query.clone(),
-                    p.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
-                    p.flags.contains(WorkspaceFlags::REGEX),
-                );
-                self.workspace_search = None;
-                if query.is_empty() {
-                    self.prompt = Some(Prompt::new(
-                        PromptKind::SearchToDock,
-                        t!("prompt.search_dock").to_string(),
-                    ));
-                } else {
-                    self.search_workspace_to_dock(&query, case, regex);
-                }
-            }
-            KeyCode::Char(c) if Self::alt(&key) => {
-                if let Some(p) = self.workspace_search.as_mut() {
-                    match c.to_ascii_lowercase() {
-                        'c' => p.flags.toggle(WorkspaceFlags::CASE_SENSITIVE),
-                        'r' => p.flags.toggle(WorkspaceFlags::REGEX),
-                        // Replace is a mode of this panel, so a search started
-                        // as a find can become a replace without reopening.
-                        'h' => {
-                            p.flags.toggle(WorkspaceFlags::REPLACING);
-                            p.field = if p.flags.contains(WorkspaceFlags::REPLACING) {
-                                Field::Replace
-                            } else {
-                                Field::Query
-                            };
-                        }
-                        _ => {}
-                    }
-                }
-                // T211: Alt+E opens the results as a real editable buffer, closing
-                // this panel -- `open_wgrep_results` handles that itself, so the
-                // `run_workspace_search` below (harmless either way) becomes a
-                // no-op once it does.
-                if c.eq_ignore_ascii_case(&'e') {
-                    self.open_wgrep_results();
-                }
-                self.run_workspace_search();
-            }
-            KeyCode::Backspace => {
-                // Editing any field except Replace (query or the path filters)
-                // changes the result set, so re-run the search.
-                let affects =
-                    self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
-                if let Some(p) = self.workspace_search.as_mut() {
-                    p.active_field_mut().pop();
-                }
-                if affects {
-                    self.run_workspace_search();
-                }
-            }
-            KeyCode::Char(c) => {
-                let affects =
-                    self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
-                if let Some(p) = self.workspace_search.as_mut() {
-                    p.active_field_mut().push(c);
-                }
-                if affects {
-                    self.run_workspace_search();
                 }
             }
             _ => {}
