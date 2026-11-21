@@ -781,3 +781,81 @@ fn agenda_file_list_add_remove_clear_and_lock_report_their_state() {
     assert_eq!(app.status, t!("status.org_archive_unsaved"));
     fs::remove_dir_all(&dir).ok();
 }
+
+const TABLE: &str = "| a | b |\n|---+---|\n| 1 | 2 |\n| 3 | 4 |\n";
+
+fn org_table_app(tag: &str, text: &str) -> (App, PathBuf) {
+    let dir = unique_dir(tag);
+    let file = dir.join("t.org");
+    fs::write(&file, text).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    (app, dir)
+}
+
+/// Every Meta/Shift/Tab chord Emacs gives an Org table edits or moves within
+/// it, and leaves a table that still parses.
+#[test]
+fn org_table_modifier_chords_edit_and_move_within_the_table() {
+    let shift = KeyModifiers::SHIFT;
+    let meta = KeyModifiers::ALT;
+    let both = KeyModifiers::ALT | KeyModifiers::SHIFT;
+    let chords = [
+        (KeyCode::Tab, KeyModifiers::NONE),
+        (KeyCode::Tab, shift),
+        (KeyCode::BackTab, KeyModifiers::NONE),
+        (KeyCode::Enter, shift),
+        (KeyCode::Right, shift),
+        (KeyCode::Down, shift),
+        (KeyCode::Left, shift),
+        (KeyCode::Up, shift),
+        (KeyCode::Right, meta),
+        (KeyCode::Left, meta),
+        (KeyCode::Down, meta),
+        (KeyCode::Up, meta),
+        (KeyCode::Right, both),
+        (KeyCode::Down, both),
+        (KeyCode::Left, both),
+        (KeyCode::Up, both),
+    ];
+    for (code, mods) in chords {
+        let (mut app, dir) = org_table_app("org-table-chord", TABLE);
+        buffer_with(&mut app, TABLE, 2);
+        // Cursor on the first body row, inside a cell.
+        app.on_key(KeyEvent::new(code, mods));
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains('|'), "{code:?}+{mods:?} kept a table: {text}");
+        fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// Table actions outside any table say so instead of editing.
+#[test]
+fn org_table_actions_outside_a_table_report_no_table() {
+    let (mut app, dir) = org_table_app("org-table-none", "just text\n");
+    for action in [
+        "org.table.align",
+        "org.table.copy_down",
+        "org.table.delete_column",
+        "org.table.insert_column",
+        "org.table.insert_hline",
+        "org.table.insert_row_above",
+        "org.table.insert_row_below",
+        "org.table.kill_row",
+        "org.table.move_column_left",
+        "org.table.move_column_right",
+        "org.table.move_row_down",
+        "org.table.move_row_up",
+        "org.table.recalc",
+        "org.table.sum_column",
+        "org.table.transpose",
+        "org.table.export_tsv",
+        "org.table.copy_rectangle",
+        "org.table.cut_rectangle",
+    ] {
+        app.status.clear();
+        app.run_action(action);
+        assert_eq!(app.status, t!("status.org_table_no_table"), "{action}");
+    }
+    fs::remove_dir_all(&dir).ok();
+}
