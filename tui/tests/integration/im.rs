@@ -990,3 +990,20 @@ fn comment_needs_a_file_inside_the_workspace() {
     assert!(app.im_dialog.is_none(), "no threads, no list");
     assert!(!root.join(".vix").exists(), "nothing was written");
 }
+
+#[test]
+fn offline_slash_commands_change_the_local_nick_clear_and_report_no_connection() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("im.panel");
+    type_line(&mut app, "/nick bob");
+    assert_eq!(app.im.inbox.nick(), "bob");
+    type_line(&mut app, "/me waves");
+    assert_eq!(last_note(&app).unwrap().body, "waves");
+    type_line(&mut app, "/clear");
+    assert_eq!(app.im.inbox.get(&notes()).unwrap().messages.len(), 0);
+    for line in ["/join #rust", "/msg alice hi", "/part", "/topic news"] {
+        app.status.clear();
+        type_line(&mut app, line);
+        assert!(!app.status.is_empty(), "{line} reported something");
+    }
+}
