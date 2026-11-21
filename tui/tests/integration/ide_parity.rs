@@ -464,3 +464,36 @@ fn local_history_restores_a_range_opens_a_snapshot_and_takes_the_mouse() {
     app.on_mouse(click(0, 39));
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn local_history_reports_no_file_no_snapshots_nothing_to_restore_and_read_only() {
+    let (mut app, dir) = app_with_store("lh-edges");
+
+    // A scratch buffer has no file to keep a history of.
+    app.run_action("file.local_history");
+    assert_eq!(app.status, t!("status.local_history_no_file"));
+    app.run_action("file.local_history_label");
+
+    // A file never saved has no snapshots yet.
+    let f = dir.join("a.txt");
+    fs::write(&f, "same\n").unwrap();
+    app.editor.open(&f, false).unwrap();
+    app.run_action("file.local_history");
+    assert_eq!(app.status, t!("status.local_history_none"));
+
+    // Restoring a snapshot identical to the buffer changes nothing.
+    open_and_set(&mut app, &f, "same\n");
+    app.run_action("file.save");
+    app.run_action("file.local_history");
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(key('r'));
+    assert_eq!(app.status, t!("status.local_history_same"));
+
+    // A read-only buffer refuses a restore.
+    app.run_action("file.local_history");
+    app.editor.active_tab_mut().unwrap().read_only = true;
+    app.on_key(key('r'));
+    assert_eq!(app.status, t!("status.read_only_blocked"));
+    let _ = fs::remove_dir_all(&dir);
+}
