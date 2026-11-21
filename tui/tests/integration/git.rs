@@ -1632,3 +1632,76 @@ fn review_two_pane_view_aligns_old_left_new_right_and_falls_back_when_narrow() {
     assert!(set.review.as_ref().unwrap().side_by_side);
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+#[cfg(feature = "git")]
+fn conflict_list_navigation_keys_move_the_selection() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    app.on_key(keycode(KeyCode::End));
+    assert_eq!(app.conflict_list.as_ref().unwrap().selected, 1);
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(app.conflict_list.as_ref().unwrap().selected, 0);
+    app.on_key(keycode(KeyCode::PageDown));
+    assert_eq!(app.conflict_list.as_ref().unwrap().selected, 1);
+    app.on_key(keycode(KeyCode::PageUp));
+    assert_eq!(app.conflict_list.as_ref().unwrap().selected, 0);
+    app.on_key(keycode(KeyCode::End));
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.conflict_list.as_ref().unwrap().selected, 0);
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.conflict_list.is_none());
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn conflict_list_theirs_and_both_keys_resolve() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    app.on_key(key('t'));
+    app.on_key(key('b'));
+    let content = app.editor.active_tab().unwrap().editor.get_content();
+    assert!(content.contains("theirs1") && !content.contains("ours1"));
+    assert!(content.contains("ours2") && content.contains("theirs2"));
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn conflict_list_click_selects_a_row_and_jumps() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    draw_frame(&mut app, 100, 30);
+    let r = app.layout.conflict_list;
+    // A click outside the list is ignored; a non-click event too.
+    app.on_mouse(click(0, 0));
+    app.on_mouse(mouse(MouseEventKind::Moved, r.x, r.y));
+    assert!(app.conflict_list.is_some());
+    app.on_mouse(click(r.x, r.y + 1));
+    assert_eq!(app.editor.cursor_1based().0, 8, "second conflict's marker");
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn diff_goto_walks_hunks_and_wraps() {
+    let (dir, mut app) = app_with_a_committed_file("diff-goto");
+    app.run_action("git.diff_next");
+    assert!(app.status == t!("status.no_changes"), "{}", app.status);
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor.set_content("ONE\ntwo\nTHREE\n");
+    app.refresh_git_gutter();
+    app.run_action("git.diff_next");
+    let first = app.editor.cursor_1based().0;
+    app.run_action("git.diff_next");
+    let second = app.editor.cursor_1based().0;
+    assert_ne!(first, second);
+    app.run_action("git.diff_next"); // wraps to the first hunk
+    assert_eq!(app.editor.cursor_1based().0, first);
+    app.run_action("git.diff_prev"); // wraps back to the last
+    assert_eq!(app.editor.cursor_1based().0, second);
+    app.run_action("git.diff_prev");
+    assert_eq!(app.editor.cursor_1based().0, first);
+    fs::remove_dir_all(&dir).ok();
+}
