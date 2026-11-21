@@ -729,3 +729,55 @@ fn tab_folds_an_org_headline_without_a_language_server() {
     assert!(!hidden(&app, 1) && !hidden(&app, 6));
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn agenda_file_list_add_remove_clear_and_lock_report_their_state() {
+    let dir = unique_dir("agenda-files").canonicalize().unwrap();
+    let file = dir.join("plan.org");
+    fs::write(&file, "* Task\n").unwrap();
+    let config = dir.join("config.toml");
+    Settings::default().save_to(&config).unwrap();
+    let mut app = app_at(&dir).with_settings_path(&config);
+    app.editor.open(&file, false).unwrap();
+
+    app.run_action("org.agenda.file_list");
+    assert_eq!(app.status, t!("status.org_agenda_files_all"));
+    app.run_action("org.agenda.file_remove");
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_absent", path = "plan.org")
+    );
+    app.run_action("org.agenda.file_add");
+    assert_eq!(app.settings.org_agenda_files, vec!["plan.org".to_string()]);
+    app.run_action("org.agenda.file_add");
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_present", path = "plan.org")
+    );
+    app.run_action("org.agenda.file_list");
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_files_list", files = "plan.org")
+    );
+    app.run_action("org.agenda.lock");
+    app.run_action("org.agenda.file_list");
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_locked", path = "plan.org")
+    );
+    app.run_action("org.agenda.unlock");
+    app.run_action("org.agenda.file_remove");
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_removed", path = "plan.org")
+    );
+    app.run_action("org.agenda.file_add");
+    app.run_action("org.agenda.file_clear");
+    assert_eq!(app.settings.org_agenda_files.len(), 0);
+
+    // An unsaved buffer has no path to add.
+    let mut app = app_at(&dir).with_settings_path(&config);
+    app.run_action("org.agenda.file_add");
+    assert_eq!(app.status, t!("status.org_archive_unsaved"));
+    fs::remove_dir_all(&dir).ok();
+}
