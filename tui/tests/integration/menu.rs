@@ -857,3 +857,40 @@ fn menu_bar_click_and_hover_across_menus() {
     app.on_key(esc());
     assert!(!app.menu.is_open(), "Esc closes the menu");
 }
+
+/// Hovering the menu bar switches menus, a click on a dropdown item runs it
+/// and closes the menu, and a click outside everything dismisses it.
+#[test]
+fn menu_pointer_hover_click_and_dismiss() {
+    let mut app = app_at(Path::new("."));
+    app.menu.open_index(0);
+    draw_frame(&mut app, 120, 40);
+    let bar = app.layout.menu;
+    let dd = app.layout.menu_dropdown;
+    assert!(dd.height > 2, "the File dropdown is drawn");
+
+    // Hovering a dropdown row highlights it without closing.
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
+    assert_eq!(app.menu.open, Some(0));
+    assert!(app.menu.item.is_some(), "the row under the pointer is lit");
+
+    // Hovering another title on the bar switches to that menu.
+    let second = (bar.x..bar.x + bar.width)
+        .find(|&c| {
+            app.on_mouse(mouse(MouseEventKind::Moved, c, bar.y));
+            app.menu.open != Some(0)
+        })
+        .expect("a second menu title exists on the bar");
+    assert!(second > bar.x);
+    assert_ne!(app.menu.open, Some(0));
+
+    // A click far below every dropdown dismisses the menu.
+    app.on_mouse(click(0, 39));
+    assert_eq!(app.menu.open, None);
+
+    // Clicking a title opens it; clicking the same title again closes it.
+    app.on_mouse(click(bar.x + 1, bar.y));
+    assert!(app.menu.open.is_some());
+    app.on_mouse(click(bar.x + 1, bar.y));
+    assert_eq!(app.menu.open, None);
+}

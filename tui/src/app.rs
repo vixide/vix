@@ -74,6 +74,7 @@ mod jj;
 mod jupyter;
 #[cfg(not(feature = "jupyter"))]
 mod jupyter_off;
+mod menu_pointer;
 #[cfg(feature = "jupyter")]
 use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
@@ -10312,89 +10313,6 @@ impl App {
         }
     }
 
-    /// Handle a left click while a menu dropdown is open: run the item under the
-    /// pointer, switch menus when the bar is clicked, or close on a click away.
-    fn menu_mouse(&mut self, col: u16, row: u16) {
-        if rect_contains(self.layout.menu, col, row) {
-            self.menu_click(col);
-            return;
-        }
-        // The third-level submenu (drawn rightmost) takes top priority.
-        if self.menu.subsubmenu_open() {
-            let sd = self.layout.subsubmenu_dropdown;
-            if rect_contains(sd, col, row) {
-                let top = sd.y + 1;
-                if let Some(items) = self.menu.subsubmenu_items() {
-                    let offset = crate::ui::dropdown_scroll(
-                        self.menu.subsub,
-                        sd.height.saturating_sub(2) as usize,
-                        items.len(),
-                    );
-                    let idx = offset + row.saturating_sub(top) as usize;
-                    if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        let action = items[idx].action;
-                        self.run_action(action);
-                        self.close_menu();
-                    }
-                }
-                return;
-            }
-        }
-        // The open submenu (drawn to the right of its parent) takes priority.
-        if self.menu.submenu_open() {
-            let sd = self.layout.submenu_dropdown;
-            if rect_contains(sd, col, row) {
-                let top = sd.y + 1;
-                if let Some(items) = self.menu.submenu_items() {
-                    let offset = crate::ui::dropdown_scroll(
-                        self.menu.sub,
-                        sd.height.saturating_sub(2) as usize,
-                        items.len(),
-                    );
-                    let idx = offset + row.saturating_sub(top) as usize;
-                    if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        if items[idx].has_submenu() {
-                            self.menu.highlight_sub(idx);
-                            self.menu.right(); // opens the third level (nothing highlighted)
-                        } else {
-                            let action = items[idx].action;
-                            self.run_action(action);
-                            self.close_menu();
-                        }
-                    }
-                }
-                return;
-            }
-        }
-        let dd = self.layout.menu_dropdown;
-        if rect_contains(dd, col, row) {
-            // Items start one row below the dropdown's top border.
-            let top = dd.y + 1;
-            if let Some(mi) = self.menu.open {
-                let items = self.menu.defs()[mi].items;
-                let offset = crate::ui::dropdown_scroll(
-                    self.menu.item,
-                    dd.height.saturating_sub(2) as usize,
-                    items.len(),
-                );
-                let idx = offset + row.saturating_sub(top) as usize;
-                if row >= top && idx < items.len() && !items[idx].is_separator() {
-                    if items[idx].has_submenu() {
-                        self.menu.highlight_item(idx);
-                        self.menu.right(); // opens the submenu (nothing highlighted)
-                    } else {
-                        let action = items[idx].action;
-                        self.run_action(action);
-                        self.close_menu();
-                    }
-                }
-            }
-            return;
-        }
-        // Clicked outside the bar and every dropdown: dismiss the menu.
-        self.close_menu();
-    }
-
     /// Handle a left click at column `col` of the menu bar: the right-aligned dock toggles
     /// first, otherwise open or switch to the menu title under the pointer.
     fn menu_click(&mut self, col: u16) {
@@ -10433,95 +10351,6 @@ impl App {
             let x = crate::ui::menu_title_x(defs, self.layout.menu, i, mirrored);
             col >= x && col < x + crate::ui::menu_title_width(defs, i)
         })
-    }
-
-    /// Move the open-menu highlight to follow the pointer: hovering a different
-    /// top-level name switches to that menu; hovering a dropdown row highlights
-    /// that item. Never commits an action or closes the menu.
-    fn menu_hover(&mut self, col: u16, row: u16) {
-        if rect_contains(self.layout.menu, col, row) {
-            if let Some(i) = self.top_menu_index_at(col)
-                && self.menu.open != Some(i)
-            {
-                self.menu.open_index(i);
-            }
-            // Left any open submenu: drop a live theme preview.
-            self.revert_theme_preview();
-            return;
-        }
-        // Third-level submenu (drawn rightmost) takes priority while open.
-        if self.menu.subsubmenu_open() {
-            let sd = self.layout.subsubmenu_dropdown;
-            if rect_contains(sd, col, row) {
-                let top = sd.y + 1;
-                if let Some(items) = self.menu.subsubmenu_items() {
-                    let offset = crate::ui::dropdown_scroll(
-                        self.menu.subsub,
-                        sd.height.saturating_sub(2) as usize,
-                        items.len(),
-                    );
-                    let idx = offset + row.saturating_sub(top) as usize;
-                    if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        self.menu.subsub = Some(idx);
-                    }
-                }
-                self.revert_theme_preview();
-                return;
-            }
-        }
-        if self.menu.submenu_open() {
-            let sd = self.layout.submenu_dropdown;
-            if rect_contains(sd, col, row) {
-                let top = sd.y + 1;
-                let mut previewed = false;
-                if let Some(items) = self.menu.submenu_items() {
-                    let offset = crate::ui::dropdown_scroll(
-                        self.menu.sub,
-                        sd.height.saturating_sub(2) as usize,
-                        items.len(),
-                    );
-                    let idx = offset + row.saturating_sub(top) as usize;
-                    if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        self.menu.highlight_sub(idx);
-                        if items[idx].has_submenu() {
-                            self.menu.right(); // reveal the third level on hover
-                        }
-                        self.preview_menu_theme(items[idx].action);
-                        previewed = true;
-                    }
-                }
-                // Hovering a gap/separator in the submenu is not a choice.
-                if !previewed {
-                    self.revert_theme_preview();
-                }
-                return;
-            }
-        }
-        let dd = self.layout.menu_dropdown;
-        if rect_contains(dd, col, row) {
-            // Items start one row below the dropdown's top border.
-            let top = dd.y + 1;
-            if let Some(mi) = self.menu.open {
-                let items = self.menu.defs()[mi].items;
-                let offset = crate::ui::dropdown_scroll(
-                    self.menu.item,
-                    dd.height.saturating_sub(2) as usize,
-                    items.len(),
-                );
-                let idx = offset + row.saturating_sub(top) as usize;
-                if row >= top && idx < items.len() && !items[idx].is_separator() {
-                    self.menu.highlight_item(idx);
-                    if items[idx].has_submenu() {
-                        self.menu.right(); // reveal the submenu on hover (nothing highlighted)
-                    }
-                }
-            }
-            // Pointer is over the parent dropdown, not a theme item.
-            self.revert_theme_preview();
-            return;
-        }
-        // Pointer is off every dropdown: drop a live theme preview.
-        self.revert_theme_preview();
     }
 
     /// If `action` is a `view.theme:<name>` item, apply that theme live as a
