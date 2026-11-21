@@ -585,3 +585,20 @@ while True:
         fs::remove_dir_all(&dir).ok();
     }
 }
+
+#[test]
+fn debugger_actions_need_a_file_and_lsp_actions_run_without_a_server() {
+    let mut app = app_at(Path::new("."));
+    // A scratch buffer has no file to set a breakpoint in or to debug.
+    app.run_action("run.toggle_breakpoint");
+    assert_eq!(app.status, t!("status.blame_no_file"));
+    app.run_action("run.start");
+    assert_eq!(app.status, t!("status.debug_no_file"));
+    app.run_action("run.attach");
+    assert_eq!(app.status, t!("status.debug_no_file"));
+    // Inlay hints toggle on and off even with no server to ask.
+    app.run_action("view.inlay_hints");
+    app.run_action("view.inlay_hints");
+    assert_eq!(app.status, t!("status.inlay_on"));
+    app.run_action("lsp.restart");
+}
