@@ -97,15 +97,8 @@ pub(super) fn list_panel_click_index<P: ListPanel>(
     rect: Rect,
     mouse: MouseEvent,
 ) -> Option<usize> {
-    if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-        return None;
-    }
-    if !rect_contains(rect, mouse.column, mouse.row) {
-        return None;
-    }
-    let p = panel?;
-    let row_in_view = (mouse.row - rect.y) as usize;
-    Some(p.scroll() + row_in_view)
+    let row = crate::app::hit::left_click_row(rect, mouse)?;
+    Some(panel?.scroll() + row)
 }
 
 impl App {

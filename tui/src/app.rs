@@ -49,6 +49,7 @@ mod git_review;
 mod git_stash_worktree;
 mod helix;
 mod hierarchy;
+mod hit;
 mod hl7;
 mod hot_exit;
 #[cfg(feature = "http")]
@@ -5724,14 +5725,10 @@ impl App {
 
     /// Handle a mouse event in the spelling popup: a left click on a suggestion applies it.
     fn spell_suggest_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.spell_suggest;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.spell_suggest.as_mut()
             && row < p.suggestions.len()
         {
@@ -11260,10 +11257,7 @@ impl App {
     /// The row index a mouse event lands on within the open chooser's list
     /// rectangle, or `None` if it is outside the list.
     fn chooser_row(&self, mouse: MouseEvent) -> Option<usize> {
-        let r = self.layout.chooser;
-        (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
-            && rect_contains(r, mouse.column, mouse.row))
-        .then(|| (mouse.row - r.y) as usize)
+        crate::app::hit::left_click_row(self.layout.chooser, mouse)
     }
 
     // ----- Nerd Font palette ----------------------------------------------
@@ -11623,14 +11617,10 @@ impl App {
     /// Handle a mouse event in the HTML palette: a click inserts the text of the cell under the
     /// pointer (the glyph, the name, or the numeric code).
     fn html_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.html_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         let rel_col = mouse.column.saturating_sub(r.x) as usize;
         // A click picks the individual cell under the pointer — glyph, name, or
         // code — and inserts just that cell's text.
@@ -11982,14 +11972,10 @@ impl App {
 
     /// Handle a mouse event in the outline: a click selects a row and jumps to it.
     fn outline_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.outline;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if let Some(o) = self.outline.as_mut() {
             let idx = o.scroll + row;
             if o.select_index(idx) {

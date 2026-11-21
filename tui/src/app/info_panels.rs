@@ -9,11 +9,11 @@
 //! was, no cherry-picking needed).
 
 use crate::app::info_panel::InfoSlot;
-use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
     App, ContactPanel, FileInfoPanel, MarkdownPreview, Outline, Prompt, PromptKind, SnippetSession,
-    SystemInfoPanel, TextInfoPanel, VcardPanel, rect_contains,
+    SystemInfoPanel, TextInfoPanel, VcardPanel,
 };
 use crate::editor::Tab;
 
@@ -75,14 +75,10 @@ impl App {
     /// Handle a mouse event in the contacts browser: a left click on a row opens that contact's
     /// vCard.
     pub(super) fn contacts_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.contacts;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         let hit = self
             .contacts
             .as_mut()
@@ -137,14 +133,10 @@ impl App {
     /// Handle a mouse event in the vCard panel: a left click on a row inserts that value into
     /// the editor.
     pub(super) fn vcard_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.vcard;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         let hit = self
             .vcard
             .as_mut()
@@ -252,14 +244,10 @@ impl App {
     /// Handle a mouse event in the file-information panel: a left click on a row inserts its
     /// value.
     pub(super) fn file_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.file_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.file_info_mut() {
             let idx = p.scroll + row_in_view;
             if p.select_index(idx) {
@@ -329,14 +317,10 @@ impl App {
     /// Handle a mouse event in the text-statistics panel: a left click on a row inserts its
     /// value. The panel is short, so rows are not scrolled.
     pub(super) fn text_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.text_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.text_info_mut()
             && p.select_index(row_in_view)
         {
@@ -612,14 +596,10 @@ impl App {
 
     /// Handle a mouse event in the snippet picker: a left click on a row inserts that snippet.
     pub(super) fn snippets_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.snippets;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let idx = self.snippets.as_ref().map_or(0, |p| p.scroll) + row;
         let hit = self
             .snippets
@@ -859,14 +839,10 @@ impl App {
     /// Handle a mouse event in the system-information panel: a left click on a row inserts its
     /// value.
     pub(super) fn system_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.system_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.system_info_mut() {
             let idx = p.scroll + row_in_view;
             if p.select_index(idx) {
