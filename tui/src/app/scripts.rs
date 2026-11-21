@@ -165,12 +165,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.plugin_mut() {
                     let n = c.rows.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.plugin_mut() {
-                    c.selected = (c.selected + 1) % c.rows.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.rows.len());
                 }
             }
             KeyCode::Enter => self.toggle_selected_plugin(),
@@ -290,12 +290,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.script_mut() {
                     let n = c.commands.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.script_mut() {
-                    c.selected = (c.selected + 1) % c.commands.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.commands.len());
                 }
             }
             KeyCode::Enter => self.run_selected_script_command(),

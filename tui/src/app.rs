@@ -5813,7 +5813,11 @@ impl App {
         let n = CONTEXT_ITEMS.len();
         let mut i = cm.selected;
         for _ in 0..n {
-            i = if down { (i + 1) % n } else { (i + n - 1) % n };
+            i = if down {
+                vix_list_state::wrap_down(i, n)
+            } else {
+                vix_list_state::wrap_up(i, n)
+            };
             if CONTEXT_ITEMS[i].1 != SEP_ACTION {
                 break;
             }
@@ -6057,12 +6061,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.task_mut() {
                     let n = c.tasks.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.task_mut() {
-                    c.selected = (c.selected + 1) % c.tasks.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.tasks.len());
                 }
             }
             KeyCode::Enter => self.run_selected_task(),
@@ -7322,12 +7326,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.clipboard_mut() {
                     let n = c.entries.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.clipboard_mut() {
-                    c.selected = (c.selected + 1) % c.entries.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.entries.len());
                 }
             }
             KeyCode::Enter => self.paste_selected_clipboard(),
@@ -7384,12 +7388,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.macros_mut() {
                     let n = c.macros.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.macros_mut() {
-                    c.selected = (c.selected + 1) % c.macros.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.macros.len());
                 }
             }
             KeyCode::Enter => self.run_selected_macro(),
@@ -7450,12 +7454,12 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.encoding_mut() {
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.encoding_mut() {
-                    c.selected = (c.selected + 1) % n;
+                    c.selected = vix_list_state::wrap_down(c.selected, n);
                 }
             }
             KeyCode::Enter => self.apply_selected_encoding(),
@@ -7719,9 +7723,9 @@ impl App {
             };
             let n = s.candidates.len();
             s.index = if forward {
-                (s.index + 1) % n
+                vix_list_state::wrap_down(s.index, n)
             } else {
-                (s.index + n - 1) % n
+                vix_list_state::wrap_up(s.index, n)
             };
             let (anchor, end, word) = (s.anchor, s.end, s.candidates[s.index].clone());
             self.replace_range_chars(anchor, end, &word);
@@ -11148,12 +11152,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(rc) = self.chooser.recent_mut() {
                     let n = rc.entries.len();
-                    rc.selected = (rc.selected + n - 1) % n;
+                    rc.selected = vix_list_state::wrap_up(rc.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(rc) = self.chooser.recent_mut() {
-                    rc.selected = (rc.selected + 1) % rc.entries.len();
+                    rc.selected = vix_list_state::wrap_down(rc.selected, rc.entries.len());
                 }
             }
             KeyCode::Enter => self.open_selected_recent(),
@@ -11215,12 +11219,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(lc) = self.chooser.location_mut() {
                     let n = lc.entries.len();
-                    lc.selected = (lc.selected + n - 1) % n;
+                    lc.selected = vix_list_state::wrap_up(lc.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(lc) = self.chooser.location_mut() {
-                    lc.selected = (lc.selected + 1) % lc.entries.len();
+                    lc.selected = vix_list_state::wrap_down(lc.selected, lc.entries.len());
                 }
             }
             KeyCode::Enter => self.open_selected_location(),
