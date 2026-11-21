@@ -11316,37 +11316,14 @@ impl App {
     /// highlighted entity's glyph (palette stays open), Esc closes.
     fn html_key(&mut self, key: KeyEvent) {
         let page = (self.layout.html_panel.height as usize).max(1);
+        if crate::app::picker_panels::list_panel_full_nav_key(
+            self.html_panel.as_mut(),
+            key.code,
+            page,
+        ) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.html_panel.as_mut() {
-                    p.page_down(p.len());
-                }
-            }
             // Enter inserts and keeps the panel open so several entities can be
             // picked in a row; Esc closes it.
             KeyCode::Enter => self.insert_selected_html(),
@@ -11674,37 +11651,11 @@ impl App {
     /// heading/symbol in the buffer, Esc closes.
     fn outline_key(&mut self, key: KeyEvent) {
         let page = (self.layout.outline.height as usize).max(1);
+        if crate::app::picker_panels::list_panel_full_nav_key(self.outline.as_mut(), key.code, page)
+        {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.page_up(o.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(o) = self.outline.as_mut() {
-                    o.page_down(o.len());
-                }
-            }
             KeyCode::Enter => self.jump_to_outline(),
             KeyCode::Esc => self.outline = None,
             _ => {}

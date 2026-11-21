@@ -825,3 +825,42 @@ fn file_browser_jumps_pages_and_walks_the_directory_tree() {
     assert!(app.file_browser.is_none());
     fs::remove_dir_all(&dir).ok();
 }
+
+/// The document outline and the HTML entity palette answer every navigation
+/// key (up, down, paging, Home, End), keep their highlight in range, and
+/// close on Esc.
+#[test]
+fn outline_and_html_palette_take_the_navigation_keys() {
+    let dir = unique_dir("outline-html-nav");
+    let src: String = (0..30).map(|i| format!("fn f{i}() {{}}\n")).collect();
+    fs::write(dir.join("a.rs"), src).unwrap();
+    for (action, which) in [("nav.outline", 0), ("tools.html_chars", 1)] {
+        let mut app = app_at(&dir);
+        app.open_initial(&dir.join("a.rs"));
+        app.run_action(action);
+        draw_frame(&mut app, 100, 30);
+        for code in [
+            KeyCode::Down,
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::End,
+            KeyCode::Up,
+            KeyCode::PageUp,
+            KeyCode::Home,
+        ] {
+            app.on_key(keycode(code));
+            draw_frame(&mut app, 100, 30);
+        }
+        let open = |app: &App| {
+            if which == 0 {
+                app.outline.is_some()
+            } else {
+                app.html_panel.is_some()
+            }
+        };
+        assert!(open(&app), "{action} stays open through navigation");
+        app.on_key(keycode(KeyCode::Esc));
+        assert!(!open(&app), "{action} closes on Esc");
+    }
+    fs::remove_dir_all(&dir).ok();
+}

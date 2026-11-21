@@ -72,6 +72,8 @@ impl_list_panel!(crate::contact_panel::Panel);
 impl_list_panel!(crate::vcard_panel::Panel);
 impl_list_panel!(crate::file_information_panel::Panel);
 impl_list_panel!(crate::conflict_tool::List);
+impl_list_panel!(crate::app::HtmlPanel);
+impl_list_panel!(crate::outline_panel::Outline);
 
 /// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
 /// returning whether one handled `code`. Each caller still handles its own
