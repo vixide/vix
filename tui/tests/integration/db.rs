@@ -467,3 +467,28 @@ fn schema_compare_screens_draw_with_real_changes() {
     app.db = None;
     fs::remove_dir_all(&dir).ok();
 }
+
+/// The row-search form and the file-path prompt draw, wide and narrow, with
+/// their live previews and cursors.
+#[test]
+fn row_filter_and_path_prompt_screens_draw() {
+    use crate::db::{Browser, View};
+    let mut app = app_at(Path::new("."));
+    let mut b = Browser::new(Vec::new());
+    b.row_filter.open = true;
+    b.row_filter.value = "abc".into();
+    for field in 0..3 {
+        b.row_filter.field = field;
+        app.db = Some(std::mem::replace(&mut b, Browser::new(Vec::new())));
+        draw_frame(&mut app, 120, 40);
+        draw_frame(&mut app, 50, 16);
+        b = app.db.take().unwrap();
+    }
+    b.row_filter.open = false;
+    b.view = View::Import;
+    b.import_path = "data.csv".into();
+    app.db = Some(b);
+    let screen = draw_frame(&mut app, 120, 40);
+    assert!(screen.contains("data.csv"), "{screen}");
+    draw_frame(&mut app, 50, 16);
+}
