@@ -774,3 +774,54 @@ fn help_and_clock_panels_take_their_keys() {
     app.on_key(keycode(KeyCode::Char('q')));
     assert!(!app.visible.contains(vix::app::Visible::CLOCK));
 }
+
+/// Home and End jump to the ends, paging moves, Right enters a highlighted
+/// directory, Left walks back up to its parent.
+#[test]
+fn file_browser_jumps_pages_and_walks_the_directory_tree() {
+    let dir = unique_dir("file-browser-walk").canonicalize().unwrap();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(dir.join(name), "x\n").unwrap();
+    }
+    fs::create_dir(dir.join("sub")).unwrap();
+    fs::write(dir.join("sub").join("inner.txt"), "y\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("file.open");
+    draw_frame(&mut app, 100, 30);
+    let len = app.file_browser.as_ref().unwrap().len();
+    assert!(len >= 4, "the folder and its files are listed");
+
+    app.on_key(keycode(KeyCode::End));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, len - 1);
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, 0);
+    app.on_key(keycode(KeyCode::PageDown));
+    app.on_key(keycode(KeyCode::PageUp));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, 0);
+
+    // Directories sort first, so the first row is `sub`: Right enters it.
+    assert!(
+        app.file_browser
+            .as_ref()
+            .unwrap()
+            .selected_entry()
+            .unwrap()
+            .is_dir
+    );
+    app.on_key(keycode(KeyCode::Right));
+    assert!(
+        app.file_browser.is_some(),
+        "entering a folder keeps the browser"
+    );
+    draw_frame(&mut app, 100, 30);
+    let inside = draw_frame(&mut app, 100, 30);
+    assert!(inside.contains("inner.txt"), "{inside}");
+    // Right on a file does nothing; Left goes back up.
+    app.on_key(keycode(KeyCode::Right));
+    app.on_key(keycode(KeyCode::Left));
+    let back = draw_frame(&mut app, 100, 30);
+    assert!(back.contains("a.txt"), "{back}");
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.file_browser.is_none());
+    fs::remove_dir_all(&dir).ok();
+}

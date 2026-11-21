@@ -35,6 +35,7 @@ mod ghost;
 use cowork as cowork_state;
 #[cfg(not(feature = "cowork"))]
 use cowork_off as cowork_state;
+mod file_browser_input;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(feature = "git")]
@@ -10776,96 +10777,6 @@ impl App {
             .filter(|d| d.starts_with(&self.root) && crate::authority::current().is_dir(d))
             .unwrap_or_else(|| self.root.clone());
         self.file_browser = Some(crate::file_browser_panel::Panel::open(&dir));
-    }
-
-    /// Keys for the file-browser overlay. Plain typing edits the filter;
-    /// Ctrl S / Ctrl R / Alt H drive sort, direction, and hidden files;
-    /// Ctrl O falls back to the classic path prompt (`file.open_path`).
-    fn file_browser_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.file_browser.height as usize).max(1);
-        match key.code {
-            KeyCode::Up => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.selected = 0;
-                    fb.scroll = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.selected = fb.len().saturating_sub(1);
-                }
-            }
-            // Left walks up to the parent; Right enters a highlighted directory.
-            KeyCode::Left => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.parent();
-                }
-            }
-            KeyCode::Right => {
-                if let Some(fb) = self.file_browser.as_mut()
-                    && fb.selected_entry().is_some_and(|e| e.is_dir)
-                {
-                    fb.activate();
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.backspace();
-                }
-            }
-            KeyCode::Char('s') if Self::ctrl(&key) => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.cycle_sort();
-                }
-            }
-            KeyCode::Char('r') if Self::ctrl(&key) => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.toggle_order();
-                }
-            }
-            KeyCode::Char('h') if Self::alt(&key) => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.toggle_hidden();
-                }
-            }
-            KeyCode::Char('o') if Self::ctrl(&key) => {
-                self.file_browser = None;
-                self.run_action("file.open_path");
-            }
-            // Find any file in the project instead (the palette's file finder).
-            KeyCode::Char('p') if Self::ctrl(&key) => {
-                self.file_browser = None;
-                self.run_action("tools.palette");
-            }
-            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
-                if let Some(fb) = self.file_browser.as_mut() {
-                    fb.push(c);
-                }
-            }
-            KeyCode::Enter => self.file_browser_open_selected(),
-            KeyCode::Esc => self.file_browser = None,
-            _ => {}
-        }
     }
 
     /// Act on the file browser's highlighted row: open a file in the editor
