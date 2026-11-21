@@ -9,6 +9,7 @@
 //! was, no cherry-picking needed).
 
 use crate::app::info_panel::InfoSlot;
+use crate::app::picker_panels::list_panel_full_nav_key;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
@@ -35,37 +36,10 @@ impl App {
     /// the selected contact's vCard, Esc closes.
     pub(super) fn contacts_key(&mut self, key: KeyEvent) {
         let page = (self.layout.contacts.height as usize).max(1);
+        if list_panel_full_nav_key(self.contacts.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.open_selected_vcard(),
             KeyCode::Esc => self.contacts = None,
             _ => {}
@@ -92,37 +66,10 @@ impl App {
     /// inserts the highlighted value into the editor, Esc closes the panel.
     pub(super) fn vcard_key(&mut self, key: KeyEvent) {
         let page = (self.layout.vcard.height as usize).max(1);
+        if list_panel_full_nav_key(self.vcard.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.insert_selected_vcard_value(),
             // Esc returns to the contact browser (or closes if opened directly).
             KeyCode::Esc => self.vcard = None,
@@ -204,37 +151,10 @@ impl App {
     /// highlighted value into the editor (panel stays open), Esc closes.
     pub(super) fn file_info_key(&mut self, key: KeyEvent) {
         let page = (self.layout.file_info.height as usize).max(1);
+        if list_panel_full_nav_key(self.info.file_info_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.insert_selected_file_info(),
             KeyCode::Esc => self.info.close_file_info(),
             _ => {}

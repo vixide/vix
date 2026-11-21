@@ -33,6 +33,8 @@ pub(super) trait ListPanel {
     fn page_down(&mut self, page: usize);
     /// Index of the first visible row (used to map a mouse click to a row).
     fn scroll(&self) -> usize;
+    /// Number of rows, so Home/End can jump to either end.
+    fn len(&self) -> usize;
 }
 
 macro_rules! impl_list_panel {
@@ -53,6 +55,9 @@ macro_rules! impl_list_panel {
             fn scroll(&self) -> usize {
                 self.scroll
             }
+            fn len(&self) -> usize {
+                Self::len(self)
+            }
         }
     };
 }
@@ -63,6 +68,9 @@ impl_list_panel!(crate::media_type::Panel);
 impl_list_panel!(crate::todo_tree::Panel);
 impl_list_panel!(vix_theme_editor_panel::Panel);
 impl_list_panel!(crate::fhir::BundlePanel);
+impl_list_panel!(crate::contact_panel::Panel);
+impl_list_panel!(crate::vcard_panel::Panel);
+impl_list_panel!(crate::file_information_panel::Panel);
 
 /// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
 /// returning whether one handled `code`. Each caller still handles its own
@@ -80,6 +88,28 @@ pub(super) fn list_panel_nav_key<P: ListPanel>(
         KeyCode::Down => p.down(),
         KeyCode::PageUp => p.page_up(page),
         KeyCode::PageDown => p.page_down(page),
+        _ => return false,
+    }
+    true
+}
+
+/// [`list_panel_nav_key`] plus Home and End (jump to the first or last row),
+/// for the panels whose only other keys are Enter and Esc.
+pub(super) fn list_panel_full_nav_key<P: ListPanel>(
+    panel: Option<&mut P>,
+    code: KeyCode,
+    page: usize,
+) -> bool {
+    let Some(p) = panel else {
+        return false;
+    };
+    match code {
+        KeyCode::Up => p.up(),
+        KeyCode::Down => p.down(),
+        KeyCode::PageUp => p.page_up(page),
+        KeyCode::PageDown => p.page_down(page),
+        KeyCode::Home => p.page_up(p.len()),
+        KeyCode::End => p.page_down(p.len()),
         _ => return false,
     }
     true
@@ -588,5 +618,66 @@ impl App {
             s.editor.goto(line, Some(col), area);
             s.focus = super::Focus::Editor;
         });
+    }
+}
+
+#[cfg(test)]
+mod nav_tests {
+    use super::*;
+
+    /// A ten-row panel that records the last move, standing in for any real
+    /// list panel.
+    #[derive(Default)]
+    struct Fake {
+        selected: usize,
+    }
+
+    impl ListPanel for Fake {
+        fn up(&mut self) {
+            self.selected = vix_list_state::up(self.selected);
+        }
+        fn down(&mut self) {
+            self.selected = vix_list_state::down(self.selected, 10);
+        }
+        fn page_up(&mut self, page: usize) {
+            self.selected = vix_list_state::page_up(self.selected, page);
+        }
+        fn page_down(&mut self, page: usize) {
+            self.selected = vix_list_state::page_down(self.selected, page, 10);
+        }
+        fn scroll(&self) -> usize {
+            0
+        }
+        fn len(&self) -> usize {
+            10
+        }
+    }
+
+    #[test]
+    fn the_full_nav_keys_move_page_and_jump_to_either_end() {
+        let mut p = Fake::default();
+        let mut press = |code| list_panel_full_nav_key(Some(&mut p), code, 4);
+        assert!(press(KeyCode::Down));
+        assert!(press(KeyCode::PageDown));
+        assert!(press(KeyCode::Up));
+        assert!(press(KeyCode::PageUp));
+        assert!(press(KeyCode::End));
+        assert_eq!(p.selected, 9);
+        let mut press = |code| list_panel_full_nav_key(Some(&mut p), code, 4);
+        assert!(press(KeyCode::Home));
+        assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn other_keys_and_a_closed_panel_are_not_handled() {
+        let mut p = Fake::default();
+        for code in [KeyCode::Enter, KeyCode::Esc, KeyCode::Char('x')] {
+            assert!(!list_panel_full_nav_key(Some(&mut p), code, 4), "{code:?}");
+        }
+        assert!(!list_panel_full_nav_key::<Fake>(None, KeyCode::Down, 4));
+        // The four-key variant leaves Home and End to its caller.
+        assert!(!list_panel_nav_key(Some(&mut p), KeyCode::Home, 4));
+        assert!(!list_panel_nav_key(Some(&mut p), KeyCode::End, 4));
+        assert!(list_panel_nav_key(Some(&mut p), KeyCode::Down, 4));
     }
 }
