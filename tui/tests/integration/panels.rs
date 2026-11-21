@@ -637,3 +637,63 @@ fn markdown_preview_table_of_contents_lists_and_jumps() {
     draw_frame(&mut app, 120, 40);
     fs::remove_dir_all(&dir).ok();
 }
+
+/// Every info panel answers each navigation key and a left click on any row
+/// without panicking, and Esc closes it.
+#[test]
+fn info_panels_answer_every_navigation_key_and_click() {
+    let dir = unique_dir("info-nav");
+    fs::write(
+        dir.join("ada.vcf"),
+        "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada\r\nEMAIL:ada@example.org\r\nTEL:1\r\nNOTE:n\r\nEND:VCARD\r\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("doc.md"),
+        "# T\n\ntext words here\n\n## S\n\nmore\n",
+    )
+    .unwrap();
+    let keys = [
+        KeyCode::Down,
+        KeyCode::Up,
+        KeyCode::PageDown,
+        KeyCode::PageUp,
+        KeyCode::End,
+        KeyCode::Home,
+        KeyCode::Char('?'),
+    ];
+    for (action, open_vcard, toc) in [
+        ("tools.contacts", false, false),
+        ("tools.contacts", true, false),
+        ("tools.file_info", false, false),
+        ("tools.text_info", false, false),
+        ("tools.markdown_preview", false, false),
+        ("tools.markdown_preview", false, true),
+    ] {
+        let mut app = app_at(&dir);
+        app.open_initial(&dir.join("doc.md"));
+        app.run_action(action);
+        if open_vcard {
+            draw_frame(&mut app, 100, 30);
+            app.on_key(keycode(KeyCode::Enter));
+        }
+        if toc {
+            draw_frame(&mut app, 100, 30);
+            app.on_key(key('t'));
+        }
+        draw_frame(&mut app, 100, 30);
+        for code in keys {
+            app.on_key(keycode(code));
+            draw_frame(&mut app, 100, 30);
+        }
+        for row in 0..30 {
+            for col in (0..100).step_by(9) {
+                app.on_mouse(click(col, row));
+                app.on_mouse(mouse(MouseEventKind::Moved, col, row));
+                draw_frame(&mut app, 100, 30);
+            }
+        }
+        app.on_key(esc());
+    }
+    fs::remove_dir_all(&dir).ok();
+}
