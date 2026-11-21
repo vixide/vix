@@ -56,6 +56,29 @@ pub fn down(selected: usize, len: usize) -> usize {
     }
 }
 
+/// The highlighted row one step up, wrapping from row 0 to the last of `len`
+/// rows. `len == 0` yields row 0 (there is nothing to wrap onto) instead of
+/// the divide-by-zero the hand-rolled `(selected + len - 1) % len` hit.
+#[must_use]
+pub fn wrap_up(selected: usize, len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        (selected % len + len - 1) % len
+    }
+}
+
+/// The highlighted row one step down, wrapping from the last of `len` rows
+/// to row 0. `len == 0` yields row 0.
+#[must_use]
+pub fn wrap_down(selected: usize, len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        (selected % len + 1) % len
+    }
+}
+
 /// The highlighted row `page` steps up (minimum 1), stopping at the top.
 #[must_use]
 pub fn page_up(selected: usize, page: usize) -> usize {
@@ -195,5 +218,25 @@ mod tests {
         assert_eq!(ensure_visible(8, 3, 5, 100), 4, "first row past the window");
         assert_eq!(ensure_visible(7, 3, 5, 100), 3, "last visible row: stays");
         assert_eq!(ensure_visible(9, 3, 5, 100), 5);
+    }
+
+    #[test]
+    fn wrapping_steps_cycle_through_every_row() {
+        assert_eq!(wrap_down(0, 3), 1);
+        assert_eq!(wrap_down(2, 3), 0, "past the last row wraps to the first");
+        assert_eq!(wrap_up(1, 3), 0);
+        assert_eq!(wrap_up(0, 3), 2, "before the first row wraps to the last");
+        assert_eq!(wrap_up(0, 1), 0);
+        assert_eq!(wrap_down(0, 1), 0);
+    }
+
+    #[test]
+    fn wrapping_steps_never_divide_by_zero_and_tolerate_a_stale_selection() {
+        assert_eq!(wrap_up(0, 0), 0);
+        assert_eq!(wrap_down(0, 0), 0);
+        assert_eq!(wrap_up(5, 0), 0);
+        // A selection left past the end of a list that shrank is folded in.
+        assert_eq!(wrap_down(7, 3), 2);
+        assert_eq!(wrap_up(7, 3), 0);
     }
 }

@@ -1471,12 +1471,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.branch_mut() {
                     let n = c.branches.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.branch_mut() {
-                    c.selected = (c.selected + 1) % c.branches.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.branches.len());
                 }
             }
             KeyCode::Enter => self.checkout_selected_branch(),

@@ -4,8 +4,10 @@ Shared arithmetic for a scrollable, single-selection list — up/down (one row
 or one page), select-by-index, and keeping a scroll offset following the
 highlight within a fixed-height viewport.
 
-**Status:** Shipped (T144). Six pure functions, no state of their own: `up`,
-`down`, `page_up`, `page_down`, `select_index`, `ensure_visible`. Every
+**Status:** Shipped (T144). Eight pure functions, no state of their own: `up`,
+`down`, `page_up`, `page_down`, `select_index`, `ensure_visible`, and the
+wrapping pair `wrap_up`/`wrap_down` (the choosers that cycle past either end;
+`len == 0` yields row 0 instead of dividing by zero). Every
 panel with a highlighted row in a scrolling list — the file browser, the
 Nerd/ASCII/HTML/X11 character pickers, the outline panel, the contact/vcard
 panels, the file/system information panels, the media-type picker, the

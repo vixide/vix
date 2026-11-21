@@ -439,12 +439,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.workspace_mut() {
                     let n = c.roots.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.workspace_mut() {
-                    c.selected = (c.selected + 1) % c.roots.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.roots.len());
                 }
             }
             KeyCode::Enter => self.switch_to_selected_workspace(),

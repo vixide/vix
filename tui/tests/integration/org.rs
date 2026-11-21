@@ -859,3 +859,18 @@ fn org_table_actions_outside_a_table_report_no_table() {
     }
     fs::remove_dir_all(&dir).ok();
 }
+
+/// Cycling a chooser whose list is empty (here: every capture template
+/// removed from the settings) stays on row 0 instead of dividing by zero.
+#[test]
+fn the_capture_chooser_cycles_without_panicking_when_no_templates_exist() {
+    use vix::app::CaptureChooser;
+    let dir = unique_dir("capture-empty");
+    let mut app = app_at(&dir);
+    app.settings.org_capture_templates.clear();
+    app.chooser.open_capture(CaptureChooser { selected: 0 });
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(app.chooser.capture_mut().unwrap().selected, 0);
+    fs::remove_dir_all(&dir).ok();
+}

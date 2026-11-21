@@ -452,12 +452,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.refile_mut() {
                     let n = c.targets.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.refile_mut() {
-                    c.selected = (c.selected + 1) % c.targets.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.targets.len());
                 }
             }
             KeyCode::Enter => self.accept_refile_chooser(),
@@ -1811,13 +1811,13 @@ impl App {
             KeyCode::Up => {
                 let n = self.settings.org_capture_templates.len();
                 if let Some(cc) = self.chooser.capture_mut() {
-                    cc.selected = (cc.selected + n - 1) % n;
+                    cc.selected = vix_list_state::wrap_up(cc.selected, n);
                 }
             }
             KeyCode::Down => {
                 let n = self.settings.org_capture_templates.len();
                 if let Some(cc) = self.chooser.capture_mut() {
-                    cc.selected = (cc.selected + 1) % n;
+                    cc.selected = vix_list_state::wrap_down(cc.selected, n);
                 }
             }
             KeyCode::Enter => self.accept_capture_chooser(),
