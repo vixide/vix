@@ -185,6 +185,11 @@ mod tests {
 
     /// A menu's items together with the index of one separator in them.
     fn items_with_a_separator() -> (&'static [Item], usize) {
+        // `menus()` caches its first answer for the whole test binary, so the
+        // build's capability filter must be installed before it is first
+        // asked, exactly as `App::new` does; otherwise a test run without
+        // default features would see menu entries this build cannot run.
+        crate::menu::set_action_filter(crate::capability::is_available);
         crate::menu::menus()
             .iter()
             .find_map(|m| {
