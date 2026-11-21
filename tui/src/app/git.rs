@@ -9,6 +9,7 @@
 use crate::app::chooser::ChooserSlot;
 use std::path::{Path, PathBuf};
 
+use crate::app::picker_panels::list_panel_full_nav_key;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 #[cfg(feature = "ai")]
@@ -434,37 +435,10 @@ impl App {
     /// Esc closes.
     pub(super) fn conflict_list_key(&mut self, key: KeyEvent) {
         let page = (self.layout.conflict_list.height as usize).max(1);
+        if list_panel_full_nav_key(self.conflict_list.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_up(l.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_down(l.len());
-                }
-            }
             KeyCode::Enter => self.jump_to_conflict_list_selection(),
             KeyCode::Char('o') => {
                 self.resolve_conflict_list_selection(crate::conflict_tool::Resolution::Ours);
