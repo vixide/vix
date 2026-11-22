@@ -61,3 +61,13 @@ a real dispatchable action a table entry could stand for.
   it triggers (reverse lookup).
 - Vi/modal per-mode motion tables (currently code-driven, so not listed).
 - Including plugin-registered command names once a plugin system exists.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Sorting uses `get`, and scrolling uses `checked_*`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `KSP-F1` | A row index is outside the table while sorting | keep the source order | The index cannot name a row, so it has no place to move. |
+| `KSP-F2` | A scroll subtraction goes below zero | `0` | A list shorter than the view does not scroll. |
+| `KSP-F3` | A scroll addition does not fit | the largest offset | The host clamps the offset to the list at render time. |

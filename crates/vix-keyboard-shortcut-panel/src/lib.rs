@@ -25,6 +25,18 @@
 //! assert_eq!(p.matches(), vec![1, 0]); // Open, Save
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One help row (a static, untranslated key combo plus an i18n key).
 #[derive(Clone, Copy)]
 pub struct Row {
@@ -80,6 +92,20 @@ pub enum Column {
     Keys,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Filter + sort + scroll state for the shortcut overlay. Sorting starts in
 /// natural (source) order; the first click on a header sorts ascending and each
 /// further click on the same header alternates descending/ascending (see
@@ -128,7 +154,10 @@ impl Panel {
             .collect();
         if let Some((col, ascending)) = self.sort {
             out.sort_by(|&a, &b| {
-                let (ra, rb) = (&self.rows[a], &self.rows[b]);
+                // KSP-F1: a row index outside the table keeps the source order.
+                let (Some(ra), Some(rb)) = (self.rows.get(a), self.rows.get(b)) else {
+                    return std::cmp::Ordering::Equal;
+                };
                 let key = |r: &Shortcut| match col {
                     Column::Action => (r.action.to_lowercase(), r.keys.to_lowercase()),
                     Column::Keys => (r.keys.to_lowercase(), r.action.to_lowercase()),
@@ -176,7 +205,7 @@ impl Panel {
 
     /// Scroll up by `n` rows, stopping at the top.
     pub fn scroll_up(&mut self, n: usize) {
-        self.scroll = self.scroll.saturating_sub(n);
+        self.scroll = sub_or(self.scroll, n, 0); // KSP-F2: stop at the top
     }
 
     /// Scroll down by `n` rows; the host clamps to the view in
@@ -184,13 +213,15 @@ impl Panel {
     pub fn scroll_down(&mut self, n: usize) {
         // Unclamped on purpose: the row count and viewport height are only
         // known at render time, where `clamp_scroll` is called.
-        self.scroll += n;
+        // KSP-F3: a scroll that does not fit is the largest offset; the host
+        // clamps it at render time.
+        self.scroll = add_or(self.scroll, n, usize::MAX);
     }
 
     /// Keep the scroll within the filtered list for a `view_h`-row viewport.
     pub fn clamp_scroll(&mut self, view_h: usize) {
         // `view_h.max(1)` keeps a zero-height viewport from hiding every row.
-        self.scroll = self.scroll.min(self.len().saturating_sub(view_h.max(1)));
+        self.scroll = self.scroll.min(sub_or(self.len(), view_h.max(1), 0)); // KSP-F2: short list, no scroll
     }
 }
 
