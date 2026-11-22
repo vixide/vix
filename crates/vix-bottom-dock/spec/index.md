@@ -204,3 +204,13 @@ editor.
 - **Defaults** (from `crates/vix-settings/src/lib.rs`): left and right docks and the status bar
   start shown; the bottom dock starts hidden; `explorer_width = 30`,
   `messages_width = 32`, `bottom_dock_height = 9`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Scrolling and the visible window use `checked_*` and `get`; the old `saturating_sub` calls are gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `DOCK-F1` | A scroll or length subtraction goes below zero | `0` | A short buffer does not scroll, and the offset stops at the top. |
+| `DOCK-F2` | A scroll or window addition does not fit | the end of the buffer | Moving down stops at the bottom. |
+| `DOCK-F3` | The visible range is outside the lines | no lines | The range cannot name any real line. |
