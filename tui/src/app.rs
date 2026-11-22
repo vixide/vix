@@ -5472,14 +5472,19 @@ impl App {
     fn pomodoro_key(&mut self, key: KeyEvent) {
         use crate::pomodoro_tool::Phase;
         match key.code {
-            KeyCode::Up | KeyCode::Right => {
-                if let Some(t) = self.pomodoro.as_mut() {
-                    t.adjust_minutes(1);
-                }
-            }
-            KeyCode::Down | KeyCode::Left => {
-                if let Some(t) = self.pomodoro.as_mut() {
-                    t.adjust_minutes(-1);
+            KeyCode::Up | KeyCode::Right | KeyCode::Down | KeyCode::Left => {
+                let step = if matches!(key.code, KeyCode::Up | KeyCode::Right) {
+                    1
+                } else {
+                    -1
+                };
+                let refused = self
+                    .pomodoro
+                    .as_mut()
+                    .and_then(|t| t.adjust_minutes(step).err());
+                if let Some(e) = refused {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => self.pomodoro_primary(),
@@ -12272,10 +12277,16 @@ impl App {
         // is the month header carrying the `◀`/`▶` nav arrows (`◀` at column 0,
         // `▶` at column 20).
         if rel_y == 0 {
-            if rel_x == 0 {
-                self.calendar.prev_month();
+            let moved = if rel_x == 0 {
+                self.calendar.prev_month()
             } else if rel_x == 20 {
-                self.calendar.next_month();
+                self.calendar.next_month()
+            } else {
+                Ok(())
+            };
+            if let Err(e) = moved {
+                self.messages
+                    .error(t!("msg.command_failed", error = e.to_string()).to_string());
             }
             return;
         }

@@ -17,11 +17,4 @@ When the time reaches zero, then Vix displays an alert that says "Pomodoro break
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Minutes to seconds, the countdown and the label use `checked_*`; `adjust_minutes` no longer uses `saturating_add` and `clamp`, and states its declared bounds (1 to 180 minutes) in a `match`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `TIMER-F1` | Minutes times 60 does not fit | the maximum work length, 180 minutes | The work length is bounded by 180 minutes. |
-| `TIMER-F2` | The adjusted length is outside 1 to 180, or the sum overflows | the nearer bound | The declared bounds are 1 and 180 minutes. |
-| `TIMER-F3` | A tick would take the countdown below zero | `0` | The countdown stops at zero; the phase change is handled by the caller. |
-| `TIMER-F4` | A division or remainder by 60 fails | `0` | The divisor is a constant above zero, so this cannot happen. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The work length is private, so it is always within 1 to 180 minutes (`work_minutes()` reads it); the minutes-to-seconds product and the countdown subtraction are bounded by that and carry `RCA-EXC-2` expectations. `adjust_minutes` no longer clamps: a new length outside 1 to 180 is refused with `TimerError::OutOfRange { figure, range }`, a step that overflows `i64` with `TimerError::Overflow`, and the length is left unchanged either way. A running countdown still ignores the call.

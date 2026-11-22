@@ -107,6 +107,27 @@ pub fn month_grid(month: Date) -> MonthGrid {
     MonthGrid { weeks, today }
 }
 
+/// Why a calendar move was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MoveError {
+    /// The amount is not a span the date library accepts.
+    InvalidSpan {
+        /// The unit that was out of range (`days`, `months` or `years`).
+        figure: &'static str,
+    },
+}
+
+impl std::fmt::Display for MoveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidSpan { figure } => write!(f, "{figure}: not a valid span"),
+        }
+    }
+}
+
+impl std::error::Error for MoveError {}
+
 /// The calendar box's month view and its navigation state. The displayed month
 /// is independent of the live clock, so the user can page back and forth with
 /// [`Calendar::prev_month`] / [`Calendar::next_month`] while the date/time area
@@ -137,17 +158,21 @@ impl Calendar {
         }
     }
 
-    /// Move the selection by `span`; the view follows. CAL-F1: a span jiff
-    /// rejects, or a date past the calendar's limits, leaves the selection
-    /// where it is.
-    fn shift(&mut self, span: Result<Span, jiff::Error>) {
-        if let Some(next) = span
-            .ok()
-            .and_then(|span| self.selected.checked_add(span).ok())
-        {
+    /// Move the selection by `span`; the view follows. A span jiff refuses is
+    /// an invalid input: it is an error and the selection stays. A move that
+    /// would leave the calendar's limits stops at the selection (`CAL-F1`: the
+    /// limits are a boundary of valid navigation, not a value for an input).
+    fn shift(
+        &mut self,
+        span: Result<Span, jiff::Error>,
+        figure: &'static str,
+    ) -> Result<(), MoveError> {
+        let span = span.map_err(|_| MoveError::InvalidSpan { figure })?;
+        if let Ok(next) = self.selected.checked_add(span) {
             self.selected = next;
         }
         self.sync_shown();
+        Ok(())
     }
 
     /// Keep the displayed month in sync with the selected day.
@@ -156,18 +181,27 @@ impl Calendar {
     }
 
     /// Move the selection by `days` (negative = earlier); the view follows.
-    pub fn move_days(&mut self, days: i64) {
-        self.shift(Span::new().try_days(days));
+    ///
+    /// # Errors
+    /// [`MoveError::InvalidSpan`] if `days` is not a span jiff accepts.
+    pub fn move_days(&mut self, days: i64) -> Result<(), MoveError> {
+        self.shift(Span::new().try_days(days), "days")
     }
 
     /// Move the selection by `months` (negative = earlier); the view follows.
-    pub fn move_months(&mut self, months: i64) {
-        self.shift(Span::new().try_months(months));
+    ///
+    /// # Errors
+    /// [`MoveError::InvalidSpan`] if `months` is not a span jiff accepts.
+    pub fn move_months(&mut self, months: i64) -> Result<(), MoveError> {
+        self.shift(Span::new().try_months(months), "months")
     }
 
     /// Move the selection by `years` (negative = earlier); the view follows.
-    pub fn move_years(&mut self, years: i64) {
-        self.shift(Span::new().try_years(years));
+    ///
+    /// # Errors
+    /// [`MoveError::InvalidSpan`] if `years` is not a span jiff accepts.
+    pub fn move_years(&mut self, years: i64) -> Result<(), MoveError> {
+        self.shift(Span::new().try_years(years), "years")
     }
 
     /// The selected date.
@@ -191,13 +225,19 @@ impl Calendar {
     }
 
     /// Move the view (and selection) to the next month.
-    pub fn next_month(&mut self) {
-        self.move_months(1);
+    ///
+    /// # Errors
+    /// As [`Calendar::move_months`].
+    pub fn next_month(&mut self) -> Result<(), MoveError> {
+        self.move_months(1)
     }
 
     /// Move the view (and selection) to the previous month.
-    pub fn prev_month(&mut self) {
-        self.move_months(-1);
+    ///
+    /// # Errors
+    /// As [`Calendar::move_months`].
+    pub fn prev_month(&mut self) -> Result<(), MoveError> {
+        self.move_months(-1)
     }
 
     /// Snap the view and selection back to today.
@@ -264,9 +304,9 @@ mod tests {
     fn current_month_highlights_today_others_do_not() {
         let mut cal = Calendar::new();
         assert!(cal.grid().today.is_some(), "current month highlights today");
-        cal.next_month();
+        cal.next_month().unwrap();
         assert!(cal.grid().today.is_none(), "a future month has no today");
-        cal.prev_month();
+        cal.prev_month().unwrap();
         assert!(cal.grid().today.is_some(), "back to the current month");
     }
 
@@ -285,7 +325,7 @@ mod tests {
         let mut cal = Calendar::new();
         let start = cal.shown_month();
         for _ in 0..12 {
-            cal.next_month();
+            cal.next_month().unwrap();
         }
         let after = cal.shown_month();
         assert_eq!(after.year(), start.year() + 1);
@@ -306,7 +346,7 @@ mod tests {
         // from racing anything else in the same test binary.
         let mut cal = Calendar::new();
         while cal.shown_month().month() != 1 {
-            cal.next_month();
+            cal.next_month().unwrap();
         }
         let year = cal.shown_month().year();
 
@@ -317,5 +357,42 @@ mod tests {
         rust_i18n::set_locale("ja");
         assert_eq!(cal.title(), format!("1月 {year}"));
         rust_i18n::set_locale("en");
+    }
+
+    #[test]
+    fn an_invalid_span_is_an_error_and_leaves_the_selection() {
+        let mut cal = Calendar::new();
+        let before = cal.selected();
+        assert_eq!(
+            cal.move_days(i64::MAX),
+            Err(MoveError::InvalidSpan { figure: "days" })
+        );
+        assert_eq!(
+            cal.move_months(i64::MIN),
+            Err(MoveError::InvalidSpan { figure: "months" })
+        );
+        assert_eq!(
+            cal.move_years(i64::MAX),
+            Err(MoveError::InvalidSpan { figure: "years" })
+        );
+        assert_eq!(cal.selected(), before);
+        assert_eq!(
+            MoveError::InvalidSpan { figure: "days" }.to_string(),
+            "days: not a valid span"
+        );
+    }
+
+    #[test]
+    fn a_move_past_the_calendar_limits_stops_there() {
+        let mut cal = Calendar::new();
+        // Far past the last date jiff supports: a valid span, an impossible date.
+        cal.move_years(9_000).unwrap();
+        let before = cal.selected();
+        cal.move_years(9_000).unwrap();
+        assert_eq!(
+            cal.selected(),
+            before,
+            "CAL-F1: the selection stays at the limit"
+        );
     }
 }

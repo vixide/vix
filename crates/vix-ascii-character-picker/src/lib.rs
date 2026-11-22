@@ -72,11 +72,14 @@ pub fn hex(code: u8) -> String {
 #[must_use]
 pub fn label(code: u8) -> String {
     match code {
-        // ASCII-F1: the arm bounds `code` to the table's 32 entries, so a
-        // miss (never) shows the character itself.
-        0..=31 => CONTROL
-            .get(usize::from(code))
-            .map_or_else(|| char::from(code).to_string(), |name| (*name).to_string()),
+        0..=31 => {
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: the arm bounds code to 0..=31 and CONTROL has 32 entries"
+            )]
+            let name = CONTROL[usize::from(code)];
+            name.to_string()
+        }
         32 => "space".to_string(),
         127 => "DEL".to_string(),
         _ => char::from(code).to_string(),

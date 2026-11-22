@@ -139,10 +139,10 @@ impl App {
                 } else {
                     -1
                 };
-                if ctrl && shift {
-                    self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
+                let moved = if ctrl && shift {
+                    self.calendar.move_years(sign) // Ctrl+Shift+arrows: year
                 } else if ctrl {
-                    self.calendar.move_months(sign); // Ctrl+arrows: month
+                    self.calendar.move_months(sign) // Ctrl+arrows: month
                 } else {
                     // Plain arrows move the selected day: Left/Right by a day,
                     // Up/Down by a week.
@@ -151,7 +151,11 @@ impl App {
                     } else {
                         1
                     };
-                    self.calendar.move_days(sign * step);
+                    self.calendar.move_days(sign * step)
+                };
+                if let Err(e) = moved {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
                 }
             }
             KeyCode::Enter => self.calendar_accept(),

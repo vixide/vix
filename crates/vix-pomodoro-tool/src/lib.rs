@@ -32,23 +32,58 @@ pub const DEFAULT_WORK_MINUTES: u64 = 25;
 /// Break length, in minutes.
 pub const BREAK_MINUTES: u64 = 5;
 
-/// Declared bounds of the work length, in minutes (`TIMER-F2`).
+/// The allowed work length, in minutes: the length is refused outside it.
 const MIN_WORK_MINUTES: i64 = 1;
 const MAX_WORK_MINUTES: i64 = 180;
 
-/// Minutes as seconds. TIMER-F1: a length that does not fit is the declared
-/// maximum, 180 minutes.
+/// Minutes as seconds.
 fn minutes_to_secs(minutes: u64) -> u64 {
-    minutes.checked_mul(60).unwrap_or(180 * 60)
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: the work length is kept within 1..=180 minutes and the break is 5, so the product is tiny"
+    )]
+    let secs = minutes * 60;
+    secs
 }
 
-/// `a - b`, or the declared `fallback` when it would go below zero. The
-/// fallback is a parameter so each call names the declaration it comes from;
-/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
-/// `saturating_sub`, which the checked-arithmetic spec forbids.
-fn sub_or(a: u64, b: u64, fallback: u64) -> u64 {
-    a.checked_sub(b).unwrap_or(fallback)
+/// The countdown after `secs` more seconds; only called with `secs < remaining`.
+fn remaining_after(remaining: u64, secs: u64) -> u64 {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: the caller checked secs < remaining, so the difference is positive"
+    )]
+    let left = remaining - secs;
+    left
 }
+
+/// Why a work-length adjustment was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TimerError {
+    /// The step added to the current length does not fit `i64`.
+    Overflow {
+        /// The figure that overflowed.
+        figure: &'static str,
+    },
+    /// The new length is outside the allowed range.
+    OutOfRange {
+        /// The figure that is out of range.
+        figure: &'static str,
+        /// The valid range.
+        range: &'static str,
+    },
+}
+
+impl std::fmt::Display for TimerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Overflow { figure } => write!(f, "{figure}: the step does not fit"),
+            Self::OutOfRange { figure, range } => write!(f, "{figure}: must be in {range}"),
+        }
+    }
+}
+
+impl std::error::Error for TimerError {}
 
 /// The timer's current phase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +112,7 @@ pub enum Tick {
 pub struct Timer {
     /// Configured work length, in minutes (1–180). Kept in range by
     /// [`Timer::adjust_minutes`]; writing the field directly bypasses the clamp.
-    pub work_minutes: u64,
+    work_minutes: u64,
     /// The current phase.
     pub phase: Phase,
     /// Seconds remaining in the current Work/Break countdown (0 while Idle shows
@@ -102,32 +137,52 @@ impl Timer {
         }
     }
 
-    /// Change the work length by `delta` minutes, clamped to 1–180. Only allowed
-    /// while idle (a running countdown ignores it).
+    /// The configured work length, in minutes (always within 1 to 180).
+    #[must_use]
+    pub fn work_minutes(&self) -> u64 {
+        self.work_minutes
+    }
+
+    /// Change the work length by `delta` minutes. Only allowed while idle (a
+    /// running countdown ignores it). A new length outside 1 to 180 minutes is
+    /// refused, never moved to the nearest end.
+    ///
+    /// # Errors
+    /// [`TimerError::Overflow`] if adding `delta` to the current length does not
+    /// fit `i64`, and [`TimerError::OutOfRange`] if the new length is outside 1 to
+    /// 180; the length is left unchanged either way.
     ///
     /// # Examples
     /// ```
     /// let mut t = vix_pomodoro_tool::Timer::new();
-    /// t.adjust_minutes(5);
-    /// assert_eq!(t.work_minutes, 30);
-    /// t.adjust_minutes(-1000); // clamped to the 1-minute floor
-    /// assert_eq!(t.work_minutes, 1);
+    /// t.adjust_minutes(5).unwrap();
+    /// assert_eq!(t.work_minutes(), 30);
+    /// assert!(t.adjust_minutes(-1000).is_err()); // below the 1-minute floor
+    /// assert_eq!(t.work_minutes(), 30); // unchanged
+    /// assert!(t.adjust_minutes(1000).is_err()); // above the 180-minute ceiling
+    /// assert!(t.adjust_minutes(i64::MAX).is_err()); // 30 + i64::MAX does not fit
     /// ```
-    pub fn adjust_minutes(&mut self, delta: i64) {
-        if self.phase == Phase::Idle {
-            // Widen to i64 so a negative `delta` can't underflow the u64 field.
-            // TIMER-F2: the declared bounds are MIN_WORK..=MAX_WORK minutes; a sum
-            // that overflows `i64` is past the bound in the direction of `delta`.
-            let current = i64::try_from(self.work_minutes).unwrap_or(MAX_WORK_MINUTES);
-            let adjusted = match current.checked_add(delta) {
-                Some(n) if n < MIN_WORK_MINUTES => MIN_WORK_MINUTES,
-                Some(n) if n > MAX_WORK_MINUTES => MAX_WORK_MINUTES,
-                Some(n) => n,
-                None if delta > 0 => MAX_WORK_MINUTES,
-                None => MIN_WORK_MINUTES,
-            };
-            self.work_minutes = u64::try_from(adjusted).unwrap_or(1);
+    pub fn adjust_minutes(&mut self, delta: i64) -> Result<(), TimerError> {
+        if self.phase != Phase::Idle {
+            return Ok(());
         }
+        // The stored length is within 1..=180, so it always fits `i64`.
+        let current = i64::try_from(self.work_minutes).map_err(|_| TimerError::Overflow {
+            figure: "work_minutes",
+        })?;
+        let sum = current.checked_add(delta).ok_or(TimerError::Overflow {
+            figure: "work_minutes",
+        })?;
+        if !(MIN_WORK_MINUTES..=MAX_WORK_MINUTES).contains(&sum) {
+            return Err(TimerError::OutOfRange {
+                figure: "work_minutes",
+                range: "1 ..= 180",
+            });
+        }
+        self.work_minutes = u64::try_from(sum).map_err(|_| TimerError::Overflow {
+            figure: "work_minutes",
+        })?;
+        Ok(())
     }
 
     /// Start the work countdown from the configured length. Restarts from the
@@ -184,7 +239,7 @@ impl Timer {
                     self.remaining = minutes_to_secs(BREAK_MINUTES);
                     Tick::BreakStarted
                 } else {
-                    self.remaining = sub_or(self.remaining, secs, 0); // TIMER-F3
+                    self.remaining = remaining_after(self.remaining, secs);
                     Tick::None
                 }
             }
@@ -194,7 +249,7 @@ impl Timer {
                     self.stop();
                     Tick::Finished
                 } else {
-                    self.remaining = sub_or(self.remaining, secs, 0); // TIMER-F3
+                    self.remaining = remaining_after(self.remaining, secs);
                     Tick::None
                 }
             }
@@ -216,9 +271,11 @@ impl Timer {
     #[must_use]
     pub fn label(&self) -> String {
         let s = self.display_seconds();
-        // TIMER-F4: the divisor is a constant above zero, so these never fail.
-        let minutes = s.checked_div(60).unwrap_or(0);
-        let seconds = s.checked_rem(60).unwrap_or(0);
+        #[expect(
+            clippy::integer_division,
+            reason = "RCA-EXC-2: the divisor is the constant 60"
+        )]
+        let (minutes, seconds) = (s / 60, s % 60);
         format!("{minutes:02}:{seconds:02}")
     }
 }
@@ -251,19 +308,69 @@ mod tests {
     #[test]
     fn adjust_only_while_idle() {
         let mut t = Timer::new();
-        t.adjust_minutes(5);
-        assert_eq!(t.work_minutes, 30);
-        t.adjust_minutes(-100); // clamps to 1
-        assert_eq!(t.work_minutes, 1);
+        t.adjust_minutes(5).unwrap();
+        assert_eq!(t.work_minutes(), 30);
+        t.adjust_minutes(-29).unwrap();
+        assert_eq!(t.work_minutes(), 1);
         t.start();
-        t.adjust_minutes(10); // ignored while running
-        assert_eq!(t.work_minutes, 1);
+        t.adjust_minutes(10).unwrap(); // ignored while running
+        assert_eq!(t.work_minutes(), 1);
+    }
+
+    #[test]
+    fn a_length_outside_one_to_180_is_refused_not_clamped() {
+        let mut t = Timer::new();
+        let out = |figure| TimerError::OutOfRange {
+            figure,
+            range: "1 ..= 180",
+        };
+        // One past each end is refused and leaves the length alone.
+        assert_eq!(
+            t.adjust_minutes(-25),
+            Err(out("work_minutes")),
+            "25 - 25 = 0"
+        );
+        assert_eq!(t.work_minutes(), 25);
+        assert_eq!(
+            t.adjust_minutes(156),
+            Err(out("work_minutes")),
+            "25 + 156 = 181"
+        );
+        assert_eq!(t.work_minutes(), 25);
+        // The ends themselves are accepted.
+        t.adjust_minutes(-24).unwrap();
+        assert_eq!(t.work_minutes(), 1);
+        t.adjust_minutes(179).unwrap();
+        assert_eq!(t.work_minutes(), 180);
+        // A step that overflows `i64` is its own error.
+        assert_eq!(
+            t.adjust_minutes(i64::MAX),
+            Err(TimerError::Overflow {
+                figure: "work_minutes"
+            })
+        );
+        assert_eq!(t.work_minutes(), 180);
+        assert_eq!(
+            TimerError::OutOfRange {
+                figure: "work_minutes",
+                range: "1 ..= 180"
+            }
+            .to_string(),
+            "work_minutes: must be in 1 ..= 180"
+        );
+        assert_eq!(
+            TimerError::Overflow {
+                figure: "work_minutes"
+            }
+            .to_string(),
+            "work_minutes: the step does not fit"
+        );
     }
 
     #[test]
     fn start_then_tick_counts_down() {
         let mut t = Timer::new();
-        t.adjust_minutes(-24); // 1 minute
+        t.adjust_minutes(-24).unwrap(); // 1 minute
         t.start();
         assert_eq!(t.label(), "01:00");
         assert_eq!(t.tick(20), Tick::None);
@@ -273,7 +380,7 @@ mod tests {
     #[test]
     fn work_zero_starts_break() {
         let mut t = Timer::new();
-        t.adjust_minutes(-24); // 1 minute work
+        t.adjust_minutes(-24).unwrap(); // 1 minute work
         t.start();
         assert_eq!(t.tick(60), Tick::BreakStarted);
         assert!(t.is_break());
@@ -283,7 +390,7 @@ mod tests {
     #[test]
     fn break_zero_finishes_and_resets() {
         let mut t = Timer::new();
-        t.adjust_minutes(-24); // 1 minute work
+        t.adjust_minutes(-24).unwrap(); // 1 minute work
         t.start();
         t.tick(60); // into break (5:00)
         assert_eq!(t.tick(5 * 60), Tick::Finished);
