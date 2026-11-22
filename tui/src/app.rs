@@ -8190,7 +8190,15 @@ impl App {
             // Copying into the same directory can't overwrite the source, so it
             // gets an auto-incremented "name copy" instead of a conflict prompt.
             if !cut && same_dir {
-                dest = crate::fileops::unique_copy_name(&target, &src);
+                let Some(free) = crate::fileops::unique_copy_name(&target, &src) else {
+                    self.messages
+                        .error(t!("msg.command_failed", error = "no free copy name").to_string());
+                    if let Some(op) = self.paste.as_mut() {
+                        op.queue.pop_front();
+                    }
+                    continue;
+                };
+                dest = free;
             } else if auth.exists(&dest) {
                 if overwrite_all {
                     // fall through and overwrite

@@ -77,7 +77,12 @@ pub(super) fn reorder_buffer(buf: &mut Buffer) {
                 continue;
             }
             let chars: Vec<char> = units.iter().map(|&(s, _)| unit_char(&cells[s..])).collect();
-            let order = visual_order(&chars);
+            // The renderer cannot report an error; a row whose order cannot be
+            // computed is left in logical order, and the library error is the
+            // only reason it can happen.
+            let Ok(order) = visual_order(&chars) else {
+                continue;
+            };
             if order.iter().enumerate().all(|(i, &o)| i == o) {
                 continue;
             }

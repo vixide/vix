@@ -768,14 +768,17 @@ impl App {
             AiTarget::Range(start, end) => tab.editor.get_content_slice(start, end),
         };
         match crate::ai_diff::Review::from_texts(&old, new_text) {
-            Some(review) => {
+            Ok(Some(review)) => {
                 self.ai_diff = Some(AiDiffState {
                     review,
                     tab: tab_idx,
                     target,
                 });
             }
-            None => self.status = t!("status.ai_no_change").to_string(),
+            Ok(None) => self.status = t!("status.ai_no_change").to_string(),
+            Err(e) => self
+                .messages
+                .error(t!("msg.command_failed", error = e.to_string()).to_string()),
         }
     }
 

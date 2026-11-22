@@ -11,9 +11,8 @@ is an exact reconstruction (no line-ending guessing) and unit-testable.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Diff line ranges and the change highlight use `checked_*`; the old `saturating_*` calls and an `unwrap_or_default` are gone.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Diff line ranges use `checked_add` and `get`; the old `saturating_*` calls and an `unwrap_or_default` are gone. `Review::from_texts` returns `Result<Option<Review>, ReviewError>`: `Ok(None)` still means the texts are identical, and a range the diff library names outside the text is `ReviewError::RangeOutsideText { figure }` instead of "no lines".
 
 | ID | Failure | Declared fallback | Why it is correct |
 | -- | ------- | ----------------- | ----------------- |
-| `AID-F1` | A line range does not fit or lies outside the source | no lines | The range cannot name any real line. |
 | `AID-F2` | The highlight moves above the first change | the first change | Moving up stops at the first change. |
