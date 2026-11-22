@@ -19,3 +19,11 @@ linked, so a message cannot inject an escape sequence.
 ## See also
 
 - [bottom-dock spec](../../vix-bottom-dock/spec/) — shared dock behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Message selection uses `checked_*`; the old `saturating_sub` calls are gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `DOCK-F1` | `len - 1` on an empty list, or a move above the first message | row `0` | An empty list has no row to select, and moving up stops at the first message. |
