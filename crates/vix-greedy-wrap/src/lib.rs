@@ -16,6 +16,18 @@
 //! already-known paragraph (no embedded newlines) and a width; splitting a
 //! multi-line source into paragraphs is the caller's job.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Greedily word-wrap one paragraph (no embedded newlines) to `width`
 /// columns. A blank line yields a single empty string; `width` `0` returns
 /// the line unchanged. A word longer than `width` is hard-broken
@@ -43,7 +55,8 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
                     chunk_len = 0;
                 }
                 cur.push(ch);
-                chunk_len += 1;
+                // WRAP-F1: a count that does not fit stays at its last value.
+                chunk_len = add_or(chunk_len, 1, chunk_len);
             }
             cur_len = chunk_len;
             continue;
@@ -51,10 +64,14 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
         if cur_len == 0 {
             cur.push_str(word);
             cur_len = wlen;
-        } else if cur_len + 1 + wlen <= width {
+        } else if let Some(joined) = cur_len
+            .checked_add(1)
+            .and_then(|len| len.checked_add(wlen))
+            .filter(|joined| *joined <= width)
+        {
             cur.push(' ');
             cur.push_str(word);
-            cur_len += 1 + wlen;
+            cur_len = joined;
         } else {
             out.push(std::mem::take(&mut cur));
             cur.push_str(word);
@@ -65,6 +82,12 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
         out.push(cur);
     }
     out
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
 }
 
 #[cfg(test)]
