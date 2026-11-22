@@ -42,3 +42,11 @@ A click selects a row; a click on an item jumps, on a header folds.
 
 Custom tags and regexes from settings, a workspace-versus-open-files toggle,
 refresh on save, and a docked (non-overlay) placement.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Positions use `checked_add`, the group filter iterates instead of indexing, and the fold lookup uses `get`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `TODO-F1` | A line or column plus one does not fit | the item is dropped | A position that cannot be represented cannot be shown. |
