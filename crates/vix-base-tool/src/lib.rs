@@ -11,6 +11,18 @@
 //! (`-0xff`), never two's complement. Owning spec:
 //! `crates/vix-base-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Why a number could not be converted.
 ///
 /// `Display` text matches the earlier `String` errors, so the translated
@@ -22,6 +34,9 @@ pub enum BaseError {
     NoNumber,
     /// The digits are not valid in the detected base, or overflow `i128`.
     Invalid(std::num::ParseIntError),
+    /// The sign cannot be applied: the digits themselves held a second sign
+    /// and parsed to `i128::MIN`, whose negation does not fit.
+    OutOfRange,
 }
 
 impl std::fmt::Display for BaseError {
@@ -29,6 +44,7 @@ impl std::fmt::Display for BaseError {
         match self {
             Self::NoNumber => f.write_str("no number"),
             Self::Invalid(e) => e.fmt(f),
+            Self::OutOfRange => f.write_str("number out of range"),
         }
     }
 }
@@ -36,7 +52,7 @@ impl std::fmt::Display for BaseError {
 impl std::error::Error for BaseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoNumber => None,
+            Self::NoNumber | Self::OutOfRange => None,
             Self::Invalid(e) => Some(e),
         }
     }
@@ -65,10 +81,14 @@ fn parse(s: &str) -> Result<i128, BaseError> {
     if digits.is_empty() {
         return Err(BaseError::NoNumber);
     }
-    // Parsing the magnitude then negating means `i128::MIN` itself overflows
-    // here (reported as invalid): an accepted edge case.
     let n = i128::from_str_radix(digits, radix).map_err(BaseError::Invalid)?;
-    Ok(if neg { -n } else { n })
+    if neg {
+        // `digits` can still carry a sign (`--170...728` parses to `i128::MIN`),
+        // and `i128::MIN` has no negation: an error, not a wrap or a panic.
+        n.checked_neg().ok_or(BaseError::OutOfRange)
+    } else {
+        Ok(n)
+    }
 }
 
 /// Render with sign and `prefix`, applying `f` to the magnitude.
@@ -122,6 +142,21 @@ pub fn to_oct(input: &str) -> Result<String, BaseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_second_sign_that_parses_to_i128_min_is_out_of_range_not_a_panic() {
+        // The outer `-` is stripped, then `-170...728` parses to `i128::MIN`,
+        // which has no negation.
+        let input = "--170141183460469231731687303715884105728";
+        assert!(matches!(to_dec(input), Err(BaseError::OutOfRange)));
+        assert_eq!(BaseError::OutOfRange.to_string(), "number out of range");
+        assert!(std::error::Error::source(&BaseError::OutOfRange).is_none());
+        // `+` instead of `-` leaves the value alone.
+        assert_eq!(
+            to_dec("+-170141183460469231731687303715884105728").unwrap(),
+            "-170141183460469231731687303715884105728"
+        );
+    }
 
     #[test]
     fn auto_detects_radix() {

@@ -18,3 +18,7 @@ Convert → Number via `App::transform_selection_or_buffer_try`.
 | `Invalid(ParseIntError)` | digits invalid in the detected base, or overflowing `i128` |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Negating a parsed number uses `checked_neg`. A second sign inside the digits (`--170141183460469231731687303715884105728`) parsed to `i128::MIN`, whose negation does not fit; it is now `BaseError::OutOfRange` instead of a panic in debug builds and a wrapped value in release builds.
