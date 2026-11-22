@@ -8,6 +8,18 @@
 //! time, the UTC instant, the ISO 8601 commercial (week) date, and the wall
 //! clock in the application-wide active time zone.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use jiff::Zoned;
 use jiff::tz::{Offset, TimeZone};
 
@@ -67,13 +79,24 @@ pub fn iso_week_date(now: &Zoned) -> String {
     )
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// The wall clock `YYYY-MM-DD HH:MM:SS` at a fixed UTC `offset_minutes`, derived
 /// from the same instant as `now`. Used to show the active time zone's time.
-/// Offsets are clamped to jiff's valid range.
+/// An offset outside jiff's valid range shows UTC (`CLK-F1`).
 #[must_use]
 pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> String {
-    let secs = (offset_minutes * 60).clamp(-93_599, 93_599);
-    let offset = Offset::from_seconds(secs).unwrap_or(Offset::UTC);
+    // CLK-F1: an offset that does not fit, or that jiff rejects, shows UTC.
+    let offset = offset_minutes
+        .checked_mul(60)
+        .and_then(|secs| Offset::from_seconds(secs).ok())
+        .unwrap_or(Offset::UTC);
     now.timestamp()
         .to_zoned(TimeZone::fixed(offset))
         .strftime("%Y-%m-%d %H:%M:%S")
@@ -150,12 +173,13 @@ impl Clock {
 
     /// Highlight the previous row (clamped).
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0); // CLK-F2: stop at the first row
     }
 
     /// Highlight the next row (clamped).
     pub fn down(&mut self) {
-        self.selected = (self.selected + 1).min(self.row_count() - 1);
+        let last = sub_or(self.row_count(), 1, 0); // CLK-F2: no rows, row 0
+        self.selected = self.selected.checked_add(1).unwrap_or(last).min(last);
     }
 
     /// Set the highlight from an absolute row index (e.g. a mouse click); ignored
