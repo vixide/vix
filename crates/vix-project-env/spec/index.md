@@ -136,3 +136,7 @@ The terminal binary never does this: a terminal already has the shell's
 `crates/vix-project-env/src/lib.rs`: `resolve`, `resolve_with` (injectable
 `Runner`, used by the tests to prove nothing runs when untrusted),
 `set_active`/`apply_to`/`active_vars`, `parse_detectors`/`load_detectors`/`load_user_detectors`/`needs_trust` (project and user detectors), `ProjectEnv::label`, `Detector::timeout_secs`/`env`, `env_name_allowed`, `ProjectEnv::command_env`; `run.rs` (the only file that starts a process, behind the `process` feature that the app's `tasks` capability enables, and listed in `tui/tests/spawn_sites.rs`). App side: `tui/src/app/project_env.rs`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The login `PATH` parser splits on the marker with `split_once` instead of slicing, and detector commands are read with `first` and `split_first` instead of indexing. Two `unwrap_or_default` calls remain in `load_detectors` and `load_user_detectors`: a missing detector file is the empty list (absent only), but an invalid file is also treated as empty today; making an invalid detector file an error is left for a later change.
