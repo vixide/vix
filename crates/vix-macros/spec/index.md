@@ -38,3 +38,7 @@ tested), the `Macro` schema, and `load`/`upsert` over `macros.toml`. The host
 owns `begin_save_macro`/`save_macro`, `open_macro_chooser`/`macro_key`/
 `run_selected_macro`, and the `SaveMacro` prompt; `ui::draw_macro_chooser`
 renders the chooser.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Function-key parsing now strips the `F` prefix instead of slicing past it. No fallbacks are declared: an unparseable token is `None`.

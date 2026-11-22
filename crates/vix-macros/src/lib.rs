@@ -19,6 +19,18 @@
 //!
 //! Owning spec: `crates/vix-macros/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -149,7 +161,7 @@ fn decode_code(name: &str) -> Option<KeyCode> {
         // `F` followed by digits is a function key; a lone `F` falls through to
         // the single-character case below.
         f if f.starts_with('F') && f.len() > 1 => {
-            let n: u8 = f[1..].parse().ok()?;
+            let n: u8 = f.strip_prefix('F')?.parse().ok()?;
             KeyCode::F(n)
         }
         other => {
