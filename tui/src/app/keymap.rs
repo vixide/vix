@@ -97,9 +97,15 @@ impl App {
             KeyCode::Down => self.clock.down(),
             KeyCode::Enter => {
                 let now = crate::clock::now_local();
-                if let Some(text) = self.clock.selected_value(&now) {
-                    let area = self.editor_view();
-                    self.editor.insert_str(&text, area);
+                match self.clock.selected_value(&now) {
+                    Some(Ok(text)) => {
+                        let area = self.editor_view();
+                        self.editor.insert_str(&text, area);
+                    }
+                    Some(Err(e)) => self
+                        .messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string()),
+                    None => {}
                 }
                 self.visible.set(crate::app::Visible::CLOCK, false);
             }

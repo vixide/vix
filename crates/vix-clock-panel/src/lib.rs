@@ -89,24 +89,31 @@ fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
 
 /// The wall clock `YYYY-MM-DD HH:MM:SS` at a fixed UTC `offset_minutes`, derived
 /// from the same instant as `now`. Used to show the active time zone's time.
-/// An offset outside jiff's valid range shows UTC (`CLK-F1`).
-#[must_use]
-pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> String {
-    // CLK-F1: an offset that does not fit, or that jiff rejects, shows UTC.
+///
+/// # Errors
+/// [`ClockError::OffsetOutOfRange`] if `offset_minutes` is not an offset jiff
+/// accepts (more than a day either side of UTC); it is never replaced by UTC or
+/// by the nearest valid offset.
+pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> Result<String, ClockError> {
     let offset = offset_minutes
         .checked_mul(60)
         .and_then(|secs| Offset::from_seconds(secs).ok())
-        .unwrap_or(Offset::UTC);
-    now.timestamp()
+        .ok_or(ClockError::OffsetOutOfRange {
+            figure: "offset_minutes",
+        })?;
+    Ok(now
+        .timestamp()
         .to_zoned(TimeZone::fixed(offset))
         .strftime("%Y-%m-%d %H:%M:%S")
-        .to_string()
+        .to_string())
 }
 
 /// The active zone's current wall clock (`YYYY-MM-DD HH:MM:SS`), using its
 /// standard (non-DST) offset from [`vix_time_zone_model`].
-#[must_use]
-pub fn active_zone_datetime(now: &Zoned) -> String {
+///
+/// # Errors
+/// As [`datetime_at_offset`].
+pub fn active_zone_datetime(now: &Zoned) -> Result<String, ClockError> {
     datetime_at_offset(now, vix_time_zone_model::active_offset_minutes())
 }
 
@@ -116,9 +123,31 @@ pub struct Row {
     /// Stable key identifying the row (`"local"`, `"utc"`, `"iso_week"`,
     /// `"zone"`), so the host can localize the label.
     pub key: &'static str,
-    /// The formatted value (e.g. `2026-06-14 09:30:00`).
-    pub value: String,
+    /// The formatted value (e.g. `2026-06-14 09:30:00`), or the error when the
+    /// row cannot be computed (the host shows it as unknown, never as a time).
+    pub value: Result<String, ClockError>,
 }
+
+/// Why a clock value could not be computed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ClockError {
+    /// The UTC offset is outside the range jiff accepts.
+    OffsetOutOfRange {
+        /// The figure that is out of range.
+        figure: &'static str,
+    },
+}
+
+impl std::fmt::Display for ClockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OffsetOutOfRange { figure } => write!(f, "{figure}: not a valid UTC offset"),
+        }
+    }
+}
+
+impl std::error::Error for ClockError {}
 
 /// The clock box: which row is selected. The values themselves are recomputed
 /// from the live clock on each render, so this holds only the cursor.
@@ -148,15 +177,15 @@ impl Clock {
         vec![
             Row {
                 key: "local",
-                value: local_datetime(now),
+                value: Ok(local_datetime(now)),
             },
             Row {
                 key: "utc",
-                value: utc_iso(now),
+                value: Ok(utc_iso(now)),
             },
             Row {
                 key: "iso_week",
-                value: iso_week_date(now),
+                value: Ok(iso_week_date(now)),
             },
             Row {
                 key: "zone",
@@ -190,9 +219,10 @@ impl Clock {
         }
     }
 
-    /// The highlighted row's value at instant `now` (for insertion).
+    /// The highlighted row's value at instant `now` (for insertion): `None` when
+    /// no row is highlighted, `Some(Err(..))` when the row cannot be computed.
     #[must_use]
-    pub fn selected_value(&self, now: &Zoned) -> Option<String> {
+    pub fn selected_value(&self, now: &Zoned) -> Option<Result<String, ClockError>> {
         self.rows(now)
             .into_iter()
             .nth(self.selected)
@@ -217,8 +247,8 @@ mod tests {
     #[test]
     fn offset_conversion_differs_by_offset() {
         let now = now_local();
-        let utc = datetime_at_offset(&now, 0);
-        let plus = datetime_at_offset(&now, 60);
+        let utc = datetime_at_offset(&now, 0).unwrap();
+        let plus = datetime_at_offset(&now, 60).unwrap();
         // Same length, and (almost always) a different wall-clock string.
         assert_eq!(utc.len(), plus.len());
     }
@@ -236,5 +266,42 @@ mod tests {
         c.down();
         assert_eq!(c.selected, 3);
         assert!(c.selected_value(&now).is_some());
+    }
+
+    #[test]
+    fn an_offset_jiff_rejects_is_an_error_not_utc() {
+        let now = now_local();
+        let bad = Err(ClockError::OffsetOutOfRange {
+            figure: "offset_minutes",
+        });
+        // jiff accepts offsets up to just under 26 hours: 25:59:59 is the edge.
+        assert!(datetime_at_offset(&now, 1_559).is_ok(), "last valid offset");
+        assert!(datetime_at_offset(&now, -1_559).is_ok());
+        assert_eq!(datetime_at_offset(&now, 1_560), bad, "one past it");
+        assert_eq!(datetime_at_offset(&now, -1_560), bad);
+        assert_eq!(
+            datetime_at_offset(&now, i32::MAX),
+            bad,
+            "the product overflows"
+        );
+        assert_eq!(
+            ClockError::OffsetOutOfRange {
+                figure: "offset_minutes"
+            }
+            .to_string(),
+            "offset_minutes: not a valid UTC offset"
+        );
+    }
+
+    #[test]
+    fn every_zone_in_the_table_has_a_valid_offset() {
+        let now = now_local();
+        for zone in vix_time_zone_model::ZONES {
+            assert!(
+                datetime_at_offset(&now, zone.std_offset_minutes).is_ok(),
+                "{}",
+                zone.name
+            );
+        }
     }
 }

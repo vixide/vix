@@ -12259,9 +12259,15 @@ impl App {
         if row < self.clock.row_count() {
             self.clock.select(row);
             let now = crate::clock::now_local();
-            if let Some(text) = self.clock.selected_value(&now) {
-                let area = self.editor_view();
-                self.editor.insert_str(&text, area);
+            match self.clock.selected_value(&now) {
+                Some(Ok(text)) => {
+                    let area = self.editor_view();
+                    self.editor.insert_str(&text, area);
+                }
+                Some(Err(e)) => self
+                    .messages
+                    .error(t!("msg.command_failed", error = e.to_string()).to_string()),
+                None => {}
             }
         }
     }

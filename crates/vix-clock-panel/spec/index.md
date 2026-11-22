@@ -44,9 +44,8 @@ builders (`local_clock`, `local_datetime`, `utc_iso`, `iso_week_date`,
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Fixed-offset clocks use `checked_mul` and show UTC for an offset jiff rejects instead of clamping it; row selection uses `checked_*`.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Fixed-offset clocks use `checked_mul`. An offset jiff rejects is an input error: `datetime_at_offset` and `active_zone_datetime` return `Result<String, ClockError>` (`ClockError::OffsetOutOfRange { figure }`) instead of showing UTC or clamping, and `Row::value` is that `Result`, so the host shows a row that cannot be computed as unknown ("—") and never inserts it. A test checks that every zone in the time-zone table has a valid offset. Row selection uses `checked_*`.
 
 | ID | Failure | Declared fallback | Why it is correct |
 | -- | ------- | ----------------- | ----------------- |
-| `CLK-F1` | The offset in seconds does not fit, or jiff rejects it | UTC | Real time zone offsets are within a day; anything else is not a real offset. |
-| `CLK-F2` | A row step goes below the first or past the last row | the first or last row | Row selection stops at either end. |
+| `CLK-F1` | A row step goes below the first or past the last row | the first or last row | Row selection stops at either end, like a list. |

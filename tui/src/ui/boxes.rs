@@ -104,7 +104,9 @@ pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
                 "iso_week" => t!("ui.clock_iso_week").to_string(),
                 _ => t!("ui.clock_zone", zone = zone).to_string(),
             };
-            ListItem::new(Line::from(format!(" {label:<10} {}", r.value)))
+            // An uncomputable value reads as unknown ("—"), never as a time.
+            let value = r.value.as_deref().unwrap_or("—");
+            ListItem::new(Line::from(format!(" {label:<10} {value}")))
         })
         .collect();
     let list = List::new(items).highlight_style(theme::selected());
