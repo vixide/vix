@@ -248,11 +248,16 @@ impl PluginState {
 /// command).
 pub fn parse_spec(spec: &str) -> Result<(String, Option<String>), PluginError> {
     let bad = || PluginError::InvalidSpec(spec.to_string());
-    let last_sep = spec.rfind(['/', ':']).map_or(0, |i| i + 1);
-    let (url, rev) = match spec[last_sep..].rfind('@') {
+    // The revision is the text after the last `@`, but only if that `@` comes
+    // after the last `/` or `:` (a `user@host` before the path is not one).
+    let last_sep = match spec.rfind(['/', ':']) {
+        Some(i) => i.checked_add(1).ok_or_else(bad)?,
+        None => 0,
+    };
+    let (url, rev) = match spec.rfind('@').filter(|&at| at >= last_sep) {
         Some(at) => {
-            let at = last_sep + at;
-            (&spec[..at], Some(&spec[at + 1..]))
+            let (url, from_at) = spec.split_at_checked(at).ok_or_else(bad)?;
+            (url, from_at.strip_prefix('@'))
         }
         None => (spec, None),
     };
@@ -315,6 +320,7 @@ pub fn digest(dir: &Path) -> Result<String, PluginError> {
     walk(dir, dir, &mut entries)?;
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     let mut h = Sha256::new();
+    let bad_len = || PluginError::Io(std::io::Error::other("file length does not fit u64"));
     for (rel, kind, path) in entries {
         h.update(rel.as_bytes());
         h.update([0]);
@@ -322,14 +328,22 @@ pub fn digest(dir: &Path) -> Result<String, PluginError> {
             EntryKind::File => {
                 let bytes = std::fs::read(&path)?;
                 h.update(b"f");
-                h.update((bytes.len() as u64).to_le_bytes());
+                h.update(
+                    u64::try_from(bytes.len())
+                        .map_err(|_| bad_len())?
+                        .to_le_bytes(),
+                );
                 h.update(&bytes);
             }
             EntryKind::Symlink => {
                 let target = std::fs::read_link(&path)?;
                 let target = target.to_string_lossy();
                 h.update(b"l");
-                h.update((target.len() as u64).to_le_bytes());
+                h.update(
+                    u64::try_from(target.len())
+                        .map_err(|_| bad_len())?
+                        .to_le_bytes(),
+                );
                 h.update(target.as_bytes());
             }
         }
@@ -747,6 +761,19 @@ mod tests {
         assert!(parse_spec("ext::sh -c touch% /tmp/pwned").is_err());
         assert!(parse_spec("").is_err());
         assert!(parse_spec("https://example.com/x.git@").is_err());
+        // The revision is after the last `@`, which must come after the last `/`
+        // or `:`; a `user@host` earlier in the URL is part of the URL.
+        assert_eq!(
+            parse_spec("git@example.com:me/a@b.git@v2").unwrap(),
+            (
+                "git@example.com:me/a@b.git".to_string(),
+                Some("v2".to_string())
+            )
+        );
+        assert_eq!(
+            parse_spec("me@example.com:path").unwrap(),
+            ("me@example.com:path".to_string(), None)
+        );
     }
 
     #[test]

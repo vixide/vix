@@ -13,6 +13,18 @@
 //! script's `bind_key` requests into the real keymap (`crates/
 //! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 mod catalog;
 mod discovery;
 mod engine;

@@ -565,3 +565,7 @@ everywhere else in this repo (`spec/test/index.md`).
 | `Read { message }` | the file could not be read (used by `load_dir`) |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The plugin spec parser and the locale-tag fallback use `split_at_checked`, `strip_prefix` and `rsplit_once` instead of slicing, and the content digest uses `u64::try_from` for lengths. **Raised, not changed:** the script API's `set_cursor_offset(n)` is documented (here, in the scripting guide and in a test) to clamp `n` to the buffer, which is a bound for an out-of-range input that `RCA-DECL-6` forbids. Changing it makes a script that passes an out-of-range offset fail, so it needs a decision before it is implemented.
