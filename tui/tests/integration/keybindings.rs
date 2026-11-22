@@ -33,6 +33,8 @@ fn keybindings_reload_action_reports_a_summary() {
 // the overlay, the Prompt-wins-over-keybinding_editor dispatch order the
 // rebind flow depends on, and `accept_rebind_key`'s validation, which
 // rejects an empty or unparseable token before ever touching the file.
+// The writes themselves are tested in `tests/rebind_sandbox.rs`, which
+// re-executes itself with a throwaway `HOME` and config directory.
 
 #[test]
 fn keybinding_editor_action_opens_and_closes() {

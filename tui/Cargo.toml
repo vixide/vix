@@ -544,6 +544,10 @@ name = "action_sweep"
 path = "tests/action_sweep.rs"
 
 [[test]]
+name = "rebind_sandbox"
+path = "tests/rebind_sandbox.rs"
+
+[[test]]
 name = "e2e_tmux"
 path = "tests/e2e_tmux.rs"
 
