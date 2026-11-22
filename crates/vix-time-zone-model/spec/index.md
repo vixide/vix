@@ -38,9 +38,4 @@ See `crates/vix-time-zone-model/spec/index.md`.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Offsets are split with `unsigned_abs`, `checked_div` and `checked_rem`; the active-zone lookup uses `get`. `i32::MIN` minutes used to overflow in `abs`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `TZ-F1` | A division or remainder by 60 fails | `0` | The divisor is a constant above zero, so this cannot happen. |
-| `TZ-F2` | The stored zone index is outside the table | UTC | The setter only stores valid indexes; if the table shrank, UTC is the neutral zone. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Offsets are split with `unsigned_abs` (`i32::MIN` minutes used to overflow in `abs`); the divisions by the constant 60 carry `RCA-EXC-2` expectations. The active-zone lookup indexes the table under an `RCA-EXC-2` expectation instead of falling back to UTC: the stored index only comes from `set_active`, which stores `index_of` results, and the table is a non-empty constant. No fallbacks are declared.

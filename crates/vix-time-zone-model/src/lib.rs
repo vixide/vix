@@ -71,9 +71,11 @@ pub fn format_offset(minutes: i32) -> String {
     // keeps its minus sign, which `minutes / 60` alone would lose.
     // `unsigned_abs` has no overflow at `i32::MIN`, unlike `abs`.
     let m = minutes.unsigned_abs();
-    // TZ-F1: the divisor is a constant above zero, so these never fail.
-    let hours = m.checked_div(60).unwrap_or(0);
-    let rest = m.checked_rem(60).unwrap_or(0);
+    #[expect(
+        clippy::integer_division,
+        reason = "RCA-EXC-2: the divisor is the constant 60"
+    )]
+    let (hours, rest) = (m / 60, m % 60);
     format!("UTC{sign}{hours:02}:{rest:02}")
 }
 
@@ -131,19 +133,13 @@ pub fn set_active(name: &str) -> bool {
 /// The active [`Zone`] (UTC until one is set).
 #[must_use]
 pub fn active() -> &'static Zone {
-    const UTC_FALLBACK: Zone = Zone {
-        name: "UTC",
-        std_offset_minutes: 0,
-        has_dst: false,
-        abbrev: "UTC",
-    };
     let idx = read().unwrap_or_else(utc_index);
-    // TZ-F2: `set_active` only stores valid indexes; if the table ever shrank
-    // under a stored one, the active zone reads as UTC.
-    ZONES
-        .get(idx)
-        .or_else(|| ZONES.get(utc_index()))
-        .unwrap_or(&UTC_FALLBACK)
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "RCA-EXC-2: the stored index only comes from `set_active`, which stores `index_of` results, and `utc_index` is an `index_of` result or 0; ZONES is a constant, non-empty table"
+    )]
+    let zone = &ZONES[idx];
+    zone
 }
 
 /// The active zone's canonical name.
@@ -205,5 +201,14 @@ mod tests {
 
         // Restore for any other test ordering.
         assert!(set_active("UTC"));
+    }
+
+    #[test]
+    fn format_offset_handles_the_extremes() {
+        // `i32::MIN.abs()` overflows; `unsigned_abs` does not.
+        assert_eq!(format_offset(i32::MIN), "UTC-35791394:08");
+        assert_eq!(format_offset(i32::MAX), "UTC+35791394:07");
+        assert_eq!(format_offset(-30), "UTC-00:30");
+        assert_eq!(format_offset(0), "UTC+00:00");
     }
 }
