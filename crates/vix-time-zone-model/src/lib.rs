@@ -24,6 +24,18 @@
 //! assert!(vix_time_zone_model::index_of("Europe/Paris").is_some());
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod zones;
@@ -57,8 +69,12 @@ pub fn format_offset(minutes: i32) -> String {
     let sign = if minutes < 0 { '-' } else { '+' };
     // Sign is printed separately so a negative sub-hour offset (e.g. -00:30)
     // keeps its minus sign, which `minutes / 60` alone would lose.
-    let m = minutes.abs();
-    format!("UTC{sign}{:02}:{:02}", m / 60, m % 60)
+    // `unsigned_abs` has no overflow at `i32::MIN`, unlike `abs`.
+    let m = minutes.unsigned_abs();
+    // TZ-F1: the divisor is a constant above zero, so these never fail.
+    let hours = m.checked_div(60).unwrap_or(0);
+    let rest = m.checked_rem(60).unwrap_or(0);
+    format!("UTC{sign}{hours:02}:{rest:02}")
 }
 
 /// Index of `name` in [`ZONES`] (exact match), if present.
@@ -115,10 +131,19 @@ pub fn set_active(name: &str) -> bool {
 /// The active [`Zone`] (UTC until one is set).
 #[must_use]
 pub fn active() -> &'static Zone {
+    const UTC_FALLBACK: Zone = Zone {
+        name: "UTC",
+        std_offset_minutes: 0,
+        has_dst: false,
+        abbrev: "UTC",
+    };
     let idx = read().unwrap_or_else(utc_index);
-    // The `min` is belt-and-braces: `set_active` only stores valid indexes, but
-    // clamping keeps this indexing infallible if the table ever shrinks.
-    &ZONES[idx.min(ZONES.len() - 1)]
+    // TZ-F2: `set_active` only stores valid indexes; if the table ever shrank
+    // under a stored one, the active zone reads as UTC.
+    ZONES
+        .get(idx)
+        .or_else(|| ZONES.get(utc_index()))
+        .unwrap_or(&UTC_FALLBACK)
 }
 
 /// The active zone's canonical name.
