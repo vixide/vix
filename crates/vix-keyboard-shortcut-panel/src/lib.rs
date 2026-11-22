@@ -154,10 +154,11 @@ impl Panel {
             .collect();
         if let Some((col, ascending)) = self.sort {
             out.sort_by(|&a, &b| {
-                // KSP-F1: a row index outside the table keeps the source order.
-                let (Some(ra), Some(rb)) = (self.rows.get(a), self.rows.get(b)) else {
-                    return std::cmp::Ordering::Equal;
-                };
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: a and b are indexes from enumerating self.rows above"
+                )]
+                let (ra, rb) = (&self.rows[a], &self.rows[b]);
                 let key = |r: &Shortcut| match col {
                     Column::Action => (r.action.to_lowercase(), r.keys.to_lowercase()),
                     Column::Keys => (r.keys.to_lowercase(), r.action.to_lowercase()),
