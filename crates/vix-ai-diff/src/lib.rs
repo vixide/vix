@@ -7,6 +7,18 @@
 //! accepted choices. Pure data over `split_inclusive('\n')` lines, so the result
 //! is an exact reconstruction (no line-ending guessing) and unit-testable.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One segment of the proposed diff.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Seg {
@@ -32,6 +44,14 @@ pub struct Review {
     pub selected: usize,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 impl Review {
     /// Build a review of the change from `old` to `new`, or `None` when they are
     /// identical (nothing to review).
@@ -44,8 +64,9 @@ impl Review {
         let old_lines: Vec<&str> = old.split_inclusive('\n').collect();
         let new_lines: Vec<&str> = new.split_inclusive('\n').collect();
         let take = |src: &[&str], i: usize, n: usize| -> Vec<String> {
-            src.get(i..i + n)
-                .unwrap_or_default()
+            i.checked_add(n)
+                .and_then(|end| src.get(i..end))
+                .unwrap_or(&[]) // AID-F1: a range outside the source is no lines
                 .iter()
                 .map(|s| (*s).to_string())
                 .collect()
@@ -116,14 +137,16 @@ impl Review {
 
     /// Move the highlight to the next change (saturating).
     pub fn next(&mut self) {
-        if self.selected.saturating_add(1) < self.change_count() {
-            self.selected += 1;
+        if let Some(next) = self.selected.checked_add(1)
+            && next < self.change_count()
+        {
+            self.selected = next;
         }
     }
 
     /// Move the highlight to the previous change (saturating).
     pub fn prev(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0); // AID-F2: stop at the first change
     }
 
     /// Toggle acceptance of the highlighted change.
