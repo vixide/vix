@@ -466,9 +466,11 @@ impl Session {
     /// a visit within a day counts most, then a week, then older.
     #[must_use]
     pub fn frecency_ordered(&self, now: i64) -> Vec<String> {
-        let score = |w: &WorkspaceSession| -> i64 {
-            // SES-F2: an age too large to represent is the oldest bucket.
-            let age = now.checked_sub(w.last_visit).unwrap_or(i64::MAX);
+        // A workspace whose age cannot be computed (a stored `last_visit` too far
+        // from `now` for `i64`) is unknown, not old: it has no score and ranks
+        // after every workspace that does (SES-F2).
+        let score = |w: &WorkspaceSession| -> Option<i64> {
+            let age = now.checked_sub(w.last_visit)?;
             let weight = if w.last_visit == 0 {
                 1
             } else if age < 86_400 {
@@ -485,9 +487,10 @@ impl Session {
                 reason = "RCA-EXC-2: visits is a u32 and the weight is at most 8, so the product is below 2^36"
             )]
             let score = i64::from(w.visits) * weight;
-            score
+            Some(score)
         };
         let mut ranked: Vec<&WorkspaceSession> = self.workspaces.iter().collect();
+        // `None` sorts below every `Some`, so `Reverse` puts unknown scores last.
         ranked.sort_by_key(|w| std::cmp::Reverse(score(w)));
         ranked.into_iter().map(|w| w.root.clone()).collect()
     }
@@ -778,5 +781,30 @@ mod tests {
             0o600
         );
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_workspace_whose_age_cannot_be_computed_ranks_last() {
+        let mut s = Session::default();
+        s.set_workspace(WorkspaceSession {
+            root: "/unknown".into(),
+            last_visit: i64::MIN,
+            ..Default::default()
+        });
+        s.set_workspace(WorkspaceSession {
+            root: "/old".into(),
+            last_visit: 1,
+            ..Default::default()
+        });
+        s.set_workspace(WorkspaceSession {
+            root: "/known".into(),
+            last_visit: 1_000_000,
+            ..Default::default()
+        });
+        // `now - i64::MIN` overflows: "/unknown" has no score and goes last,
+        // after even the oldest known workspace.
+        let order = s.frecency_ordered(2_000_000);
+        assert_eq!(order.last().map(String::as_str), Some("/unknown"));
+        assert_eq!(order.len(), 3);
     }
 }
