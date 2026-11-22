@@ -103,7 +103,12 @@ impl Plan {
     /// How many changes the plan makes.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.renames.len() + self.creates.len() + self.deletes.len()
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: the three lengths belong to three separate allocations, so their sum is bounded by the address space"
+        )]
+        let total = self.renames.len() + self.creates.len() + self.deletes.len();
+        total
     }
 }
 
@@ -140,9 +145,11 @@ pub enum Step {
 pub fn render(entries: &[Listed]) -> String {
     let width = id_width(entries.len());
     let mut out = String::new();
-    for (i, e) in entries.iter().enumerate() {
+    // Ids count from 1; zipping with a counting range keeps the arithmetic
+    // out of this function.
+    for (id, e) in (1_usize..).zip(entries) {
         let slash = if e.is_dir { "/" } else { "" };
-        let _ = writeln!(out, "/{:0width$} {}{slash}", i + 1, e.name);
+        let _ = writeln!(out, "/{id:0width$} {}{slash}", e.name);
     }
     out
 }
@@ -157,13 +164,14 @@ fn id_width(count: usize) -> usize {
 fn split_id(line: &str) -> (Option<usize>, &str) {
     if let Some(rest) = line.strip_prefix('/') {
         let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
-        if digits > 0 {
-            let after = &rest[digits..];
-            if after.starts_with([' ', '\t'])
-                && let Ok(id) = rest[..digits].parse::<usize>()
-            {
-                return (Some(id), after.trim_start_matches([' ', '\t']));
-            }
+        // The digits are ASCII, so the split is on a character boundary; a
+        // `None` would mean the text is not what was just counted.
+        if digits > 0
+            && let Some((number, after)) = rest.split_at_checked(digits)
+            && after.starts_with([' ', '\t'])
+            && let Ok(id) = number.parse::<usize>()
+        {
+            return (Some(id), after.trim_start_matches([' ', '\t']));
         }
     }
     (None, line)
@@ -209,8 +217,7 @@ pub fn diff(entries: &[Listed], buffer: &str) -> Result<Plan, DiffError> {
     let mut seen: BTreeSet<usize> = BTreeSet::new();
     let mut plan = Plan::default();
     let mut finals: BTreeSet<String> = BTreeSet::new();
-    for (i, raw) in buffer.lines().enumerate() {
-        let line = i + 1;
+    for (line, raw) in (1_usize..).zip(buffer.lines()) {
         if raw.trim().is_empty() {
             continue;
         }
@@ -236,9 +243,9 @@ pub fn diff(entries: &[Listed], buffer: &str) -> Result<Plan, DiffError> {
     }
     plan.deletes = entries
         .iter()
-        .enumerate()
-        .filter(|(k, _)| !seen.contains(&(k + 1)))
-        .map(|(_, e)| e.clone())
+        .zip(1_usize..)
+        .filter(|(_, id)| !seen.contains(id))
+        .map(|(e, _)| e.clone())
         .collect();
     Ok(plan)
 }
@@ -271,7 +278,6 @@ pub fn schedule(entries: &[Listed], plan: &Plan, temp_tag: &str) -> Vec<Step> {
     taken.extend(plan.creates.iter().map(|(n, _)| n.clone()));
     // Pending renames, from -> to, in a stable order.
     let mut pending: BTreeMap<String, String> = plan.renames.iter().cloned().collect();
-    let mut temp_n = 0usize;
     while !pending.is_empty() {
         let ready = pending
             .iter()
@@ -288,12 +294,14 @@ pub fn schedule(entries: &[Listed], plan: &Plan, temp_tag: &str) -> Vec<Step> {
         let Some((from, to)) = pending.pop_first() else {
             break;
         };
-        let temp = loop {
-            temp_n += 1;
-            let candidate = format!(".{temp_tag}-{temp_n}");
-            if !taken.contains(&candidate) {
-                break candidate;
-            }
+        // The first free `.<tag>-<n>`: earlier temporaries are in `taken`, so
+        // counting from 1 each time yields the same sequence a running counter
+        // would. A usize range cannot run out of names in practice.
+        let Some(temp) = (1_usize..=usize::MAX)
+            .map(|n| format!(".{temp_tag}-{n}"))
+            .find(|candidate| !taken.contains(candidate))
+        else {
+            break;
         };
         taken.insert(temp.clone());
         occupied.remove(&from);

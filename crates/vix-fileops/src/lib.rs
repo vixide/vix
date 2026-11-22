@@ -1,6 +1,20 @@
 //! Filesystem helpers for the explorer's copy / cut / paste / delete, plus a
 //! crash-safe atomic writer used across the app for saving files.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice,
+        clippy::unreachable,
+        clippy::panic
+    )
+)]
+
 pub mod dir_edit;
 /// The freedesktop.org trash, written here so it needs no `chrono`. Built where
 /// it is used (Linux and the BSDs) and, for its tests, on every Unix.
@@ -585,6 +599,21 @@ pub fn write_private_temp(prefix: &str, data: &[u8]) -> io::Result<PathBuf> {
         .unwrap_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "temp name unavailable")))
 }
 
+/// `a + b`, or the declared `fallback` when the sum does not fit. The
+/// fallback is a parameter so each call site names (and cites) its
+/// declaration; written inline, `checked_add(..).unwrap_or(u64::MAX)` is
+/// rewritten by Clippy to `saturating_add`, which the checked-arithmetic spec
+/// forbids (RCA-INT-4).
+fn add_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero (see
+/// [`add_or`] for why the fallback is a parameter).
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// A name in `dir` derived from `original` that doesn't yet exist, appending
 /// " copy", " copy 2", … before the extension. Used for same-directory copies.
 #[must_use]
@@ -596,22 +625,22 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
         .extension()
         .map(|e| e.to_string_lossy().into_owned());
 
-    for n in 1.. {
-        let suffix = if n == 1 {
-            " copy".to_string()
-        } else {
-            format!(" copy {n}")
-        };
-        let name = match &ext {
-            Some(e) => format!("{stem}{suffix}.{e}"),
-            None => format!("{stem}{suffix}"),
-        };
-        let candidate = dir.join(name);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!("the loop returns once a free name is found")
+    let named = |suffix: &str| match &ext {
+        Some(e) => dir.join(format!("{stem}{suffix}.{e}")),
+        None => dir.join(format!("{stem}{suffix}")),
+    };
+    // " copy", " copy 2", " copy 3", ...: the first that is free. A u64 range
+    // cannot run out of names in practice; FOPS-F1 names the fallback anyway.
+    (1_u32..=u32::MAX)
+        .map(|n| {
+            if n == 1 {
+                named(" copy")
+            } else {
+                named(&format!(" copy {n}"))
+            }
+        })
+        .find(|candidate| !candidate.exists())
+        .unwrap_or_else(|| named(" copy")) // FOPS-F1
 }
 
 /// Whether `path` exists but this user can't write it (T572). The metadata
@@ -747,11 +776,15 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     // file's size from `read_to_end`, which otherwise grows the buffer by
     // doubling (a 100 MB file cost ~264 MB of allocations, T749). One spare
     // byte lets the read see EOF without growing.
-    let capacity = usize::try_from(meta.len().saturating_add(1)).unwrap_or(0);
+    let capacity = meta
+        .len()
+        .checked_add(1)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0); // FOPS-F2: the capacity is only a hint
     let mut bytes = Vec::with_capacity(capacity);
     // `take` bounds the read even if the file grows after the stat.
     fs::File::open(path)?
-        .take(max_bytes + 1)
+        .take(add_or(max_bytes, 1, u64::MAX)) // FOPS-F3
         .read_to_end(&mut bytes)?;
     decode_text(bytes, max_bytes)
 }
@@ -800,7 +833,7 @@ pub fn stream_text_guarded(
     let whole = || read_text_guarded(path, max_bytes).map(TextStream::Whole);
     // `take(max + 1)`: one byte over the cap lets us detect a file that grew
     // after the metadata check without ever reading unbounded data.
-    let mut file = fs::File::open(path)?.take(max_bytes + 1);
+    let mut file = fs::File::open(path)?.take(add_or(max_bytes, 1, u64::MAX)); // FOPS-F3
     let mut buf = vec![0u8; BLOCK];
     // Bytes of a character split across two blocks, kept at the front.
     let mut carry = 0;
@@ -809,20 +842,26 @@ pub fn stream_text_guarded(
     loop {
         // Fill the block (a read may return less than asked).
         let mut filled = carry;
-        while filled < buf.len() {
-            match file.read(&mut buf[filled..]) {
+        while let Some(room) = buf.get_mut(filled..).filter(|room| !room.is_empty()) {
+            match file.read(room) {
                 Ok(0) => break,
-                Ok(n) => filled += n,
+                // A read never returns more than the room it was given.
+                Ok(n) => filled = filled.checked_add(n).unwrap_or(buf.len()), // FOPS-F4
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
         }
-        let read = filled - carry;
-        total += read as u64;
+        // `filled` starts at `carry` and only grows, so this cannot underflow.
+        let read = sub_or(filled, carry, 0); // FOPS-F4
+        total = u64::try_from(read)
+            .ok()
+            .map_or(u64::MAX, |n| add_or(total, n, u64::MAX)); // FOPS-F5: a count that does not fit is over any cap
         if total > max_bytes {
             return Err(refuse(TextReadError::TooLarge));
         }
-        let block = &buf[..filled];
+        let Some(block) = buf.get(..filled) else {
+            return whole(); // FOPS-F4
+        };
         if first {
             first = false;
             if vix_encoding::sniff_bom(block).is_some() || block.iter().take(8192).any(|&b| b == 0)
@@ -840,13 +879,14 @@ pub fn stream_text_guarded(
             // A character cut off by the block's end: keep its bytes.
             Err(e) => {
                 let valid = e.valid_up_to();
-                if let Ok(text) = std::str::from_utf8(&block[..valid]) {
+                if let Some(Ok(text)) = block.get(..valid).map(std::str::from_utf8) {
                     sink(text);
                 }
                 valid
             }
         };
-        carry = filled - valid;
+        // `valid` is at most `filled` (it is a prefix of the block).
+        carry = sub_or(filled, valid, 0); // FOPS-F4
         if read == 0 {
             // End of file: a character still cut off is invalid UTF-8.
             return if carry == 0 {
@@ -855,7 +895,9 @@ pub fn stream_text_guarded(
                 whole()
             };
         }
-        buf.copy_within(valid..filled, 0);
+        if valid <= filled && filled <= buf.len() {
+            buf.copy_within(valid..filled, 0);
+        }
     }
 }
 
@@ -869,7 +911,7 @@ pub fn stream_text_guarded(
 /// [`TextReadError::Binary`].
 pub fn decode_text(mut bytes: Vec<u8>, max_bytes: u64) -> io::Result<TextFile> {
     let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
-    if bytes.len() as u64 > max_bytes {
+    if u64::try_from(bytes.len()).map_or(true, |len| len > max_bytes) {
         return Err(refuse(TextReadError::TooLarge));
     }
     let bom = vix_encoding::sniff_bom(&bytes);

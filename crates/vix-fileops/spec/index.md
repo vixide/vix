@@ -250,3 +250,19 @@ spans directories, `*` doesn't cross `/`, invalid patterns are skipped) and
 The host turns `TooLarge` and `Binary` into confirmations (`large_file_mb`; binary files
 open in the byte editor, which saves the bytes back exactly) rather than errors.
 
+
+## Checked arithmetic
+
+The crate follows `spec/rust-checked-arithmetic/index.md` and, outside tests,
+denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`,
+`as_conversions`, `indexing_slicing`, `string_slice`, `unreachable` and `panic`
+(RCA-ENF-3). Each failure that recovers on the spot uses the fallback declared
+here, and cites it in a comment at the call.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `FOPS-F1` | Every one of the 2^32 " copy N" names is taken | the plain " copy" name | Unreachable in practice: it takes four billion existing copies of one file. The fallback is the first candidate name, which is a valid file name; callers that must not overwrite check for existence themselves. |
+| `FOPS-F2` | The file size plus one does not fit a `usize` | capacity `0` | The capacity is only an allocation hint. |
+| `FOPS-F3` | `max_bytes + 1` overflows | `u64::MAX` | The read limit is one past the cap only to detect a file that grew; no cap can be above `u64::MAX`. |
+| `FOPS-F4` | A block offset is out of range | decode the whole file the usual way | The streaming path is an optimization; the whole-file path gives the same text. |
+| `FOPS-F5` | The running byte total overflows `u64` | `u64::MAX` | A total that does not fit is over any cap, so the file is refused as too large. |
