@@ -874,3 +874,167 @@ fn the_capture_chooser_cycles_without_panicking_when_no_templates_exist() {
     assert_eq!(app.chooser.capture_mut().unwrap().selected, 0);
     fs::remove_dir_all(&dir).ok();
 }
+
+fn org_text(app: &App) -> String {
+    app.editor.active_tab().unwrap().editor.get_content()
+}
+
+fn org_cursor_line(app: &mut App, line: usize) {
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(line);
+}
+
+/// Put the cursor `col` characters into `line`.
+fn org_cursor_at(app: &mut App, line: usize, col: usize) {
+    let tab = app.editor.active_tab_mut().unwrap();
+    let text = tab.editor.get_content();
+    let start: usize = text
+        .split('\n')
+        .take(line)
+        .map(|l| l.chars().count() + 1)
+        .sum();
+    tab.editor.set_cursor(start + col);
+}
+
+/// Subtree copy leaves the text alone, cut removes the subtree, and a cursor
+/// that is not in a subtree is reported.
+#[test]
+fn org_subtree_copy_cut_and_paste() {
+    let (mut app, dir) = org_table_app("orgsub", "* One\nbody\n* Two\nmore\n* Three\n");
+    org_cursor_line(&mut app, 2);
+    app.run_action("org.subtree.copy");
+    assert_eq!(org_text(&app), "* One\nbody\n* Two\nmore\n* Three\n");
+    app.run_action("org.subtree.cut");
+    assert_eq!(org_text(&app), "* One\nbody\n* Three\n", "Two was cut");
+    app.run_action("org.subtree.paste");
+    let text = org_text(&app);
+    assert!(
+        text.matches("* ").count() >= 2,
+        "the paste (or its report) left the buffer sane: {text}"
+    );
+
+    // Before the first headline there is no governing subtree.
+    let (mut app, dir2) = org_table_app("orgsub2", "just text\n* One\n");
+    org_cursor_line(&mut app, 0);
+    app.run_action("org.subtree.copy");
+    assert!(
+        !app.status.is_empty(),
+        "no subtree under the cursor is reported"
+    );
+    app.status.clear();
+    app.run_action("org.subtree.cut");
+    assert_ne!(app.status.len(), 0);
+    fs::remove_dir_all(&dir).ok();
+    fs::remove_dir_all(&dir2).ok();
+}
+
+/// Archiving moves the subtree to `<file>_archive`, stamped; with no saved
+/// file or no headline it only reports.
+#[test]
+fn org_archive_subtree_moves_it_to_the_archive_file() {
+    let (mut app, dir) = org_table_app("orgarch", "* One\n* Two\nbody\n* Three\n");
+    org_cursor_line(&mut app, 1);
+    app.run_action("org.archive.subtree");
+    assert_eq!(org_text(&app), "* One\n* Three\n");
+    let archive = fs::read_to_string(dir.join("t.org_archive")).unwrap();
+    assert!(
+        archive.contains("* Two") && archive.contains("ARCHIVE_TIME"),
+        "{archive}"
+    );
+    // A second archive appends to the same file.
+    org_cursor_line(&mut app, 0);
+    app.run_action("org.archive.subtree");
+    let archive = fs::read_to_string(dir.join("t.org_archive")).unwrap();
+    assert!(
+        archive.contains("* Two") && archive.contains("* One"),
+        "{archive}"
+    );
+    // The buffer is empty of headlines now: nothing to archive.
+    app.status.clear();
+    app.run_action("org.archive.subtree");
+    assert_ne!(app.status.len(), 0);
+    fs::remove_dir_all(&dir).ok();
+
+    // An unsaved buffer cannot be archived.
+    let mut app = app_at(Path::new("."));
+    app.run_action("file.new");
+    app.run_action("org.archive.subtree");
+    assert!(!app.status.is_empty(), "an unsaved buffer is reported");
+}
+
+/// `C-c '` opens a source block in its own tab; the same action writes the
+/// edit back.
+#[test]
+fn org_edit_src_round_trips_a_block_body() {
+    let text = "* Code\n#+begin_src rust\nfn a() {}\n#+end_src\n";
+    let (mut app, dir) = org_table_app("orgsrc", text);
+    // Outside a block: reported, nothing opens.
+    org_cursor_line(&mut app, 0);
+    let tabs = app.editor.tabs.len();
+    app.run_action("org.edit_src");
+    assert_eq!(app.editor.tabs.len(), tabs, "no block under the cursor");
+
+    org_cursor_line(&mut app, 2);
+    app.run_action("org.edit_src");
+    assert_eq!(app.editor.tabs.len(), tabs + 1, "the body opens in a tab");
+    assert_eq!(org_text(&app), "fn a() {}\n");
+    {
+        let tab = app.editor.active_tab_mut().unwrap();
+        tab.editor.set_content("fn b() {}\n");
+    }
+    app.run_action("org.edit_src");
+    assert_eq!(app.editor.tabs.len(), tabs, "the edit tab closed");
+    assert!(org_text(&app).contains("fn b() {}"), "{}", org_text(&app));
+    assert!(!org_text(&app).contains("fn a()"));
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// Storing a link remembers the cursor's file and line; following links opens
+/// files, jumps to internal headlines and copies web URLs.
+#[test]
+fn org_store_and_follow_links() {
+    let dir = unique_dir("orglink");
+    fs::write(dir.join("other.org"), "* Other\nsecond\n").unwrap();
+    fs::write(
+        dir.join("t.org"),
+        "* Intro\n[[https://example.com][web]]\n[[file:other.org::2][file]]\n[[*Intro][internal]]\n[[*Missing][nowhere]]\nplain\n",
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&dir.join("t.org"));
+
+    org_cursor_line(&mut app, 0);
+    app.run_action("org.link.store");
+    assert!(app.status.contains("t.org"), "{}", app.status);
+
+    // No link under the cursor.
+    org_cursor_line(&mut app, 5);
+    app.status.clear();
+    app.run_action("org.link.follow");
+    assert!(!app.status.is_empty(), "no link is reported");
+
+    for (line, expect) in [(1, "example.com"), (3, ""), (4, "")] {
+        org_cursor_at(&mut app, line, 2);
+        app.status.clear();
+        app.run_action("org.link.follow");
+        if !expect.is_empty() {
+            assert!(app.status.contains(expect), "{}", app.status);
+        }
+    }
+
+    org_cursor_at(&mut app, 2, 2);
+    app.run_action("org.link.follow");
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .path
+            .as_ref()
+            .is_some_and(|p| p.ends_with("other.org")),
+        "the file link opened other.org"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
