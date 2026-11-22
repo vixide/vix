@@ -608,16 +608,13 @@ fn add_or(a: u64, b: u64, fallback: u64) -> u64 {
     a.checked_add(b).unwrap_or(fallback)
 }
 
-/// `a - b`, or the declared `fallback` when it would go below zero (see
-/// [`add_or`] for why the fallback is a parameter).
-fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
-    a.checked_sub(b).unwrap_or(fallback)
-}
-
 /// A name in `dir` derived from `original` that doesn't yet exist, appending
 /// " copy", " copy 2", … before the extension. Used for same-directory copies.
+///
+/// Returns `None` only if every one of the four billion numbered names is
+/// taken: no existing name is ever handed back.
 #[must_use]
-pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
+pub fn unique_copy_name(dir: &Path, original: &Path) -> Option<PathBuf> {
     let stem = original
         .file_stem()
         .map_or_default(|s| s.to_string_lossy().into_owned());
@@ -629,8 +626,7 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
         Some(e) => dir.join(format!("{stem}{suffix}.{e}")),
         None => dir.join(format!("{stem}{suffix}")),
     };
-    // " copy", " copy 2", " copy 3", ...: the first that is free. A u64 range
-    // cannot run out of names in practice; FOPS-F1 names the fallback anyway.
+    // " copy", " copy 2", " copy 3", ...: the first that is free.
     (1_u32..=u32::MAX)
         .map(|n| {
             if n == 1 {
@@ -640,7 +636,6 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
             }
         })
         .find(|candidate| !candidate.exists())
-        .unwrap_or_else(|| named(" copy")) // FOPS-F1
 }
 
 /// Whether `path` exists but this user can't write it (T572). The metadata
@@ -846,22 +841,36 @@ pub fn stream_text_guarded(
             match file.read(room) {
                 Ok(0) => break,
                 // A read never returns more than the room it was given.
-                Ok(n) => filled = filled.checked_add(n).unwrap_or(buf.len()), // FOPS-F4
+                Ok(n) => {
+                    #[expect(
+                        clippy::arithmetic_side_effects,
+                        reason = "RCA-EXC-2: a read returns at most the room it was given, so filled + n is at most buf.len()"
+                    )]
+                    let next = filled + n;
+                    filled = next;
+                }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
         }
-        // `filled` starts at `carry` and only grows, so this cannot underflow.
-        let read = sub_or(filled, carry, 0); // FOPS-F4
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: filled starts at carry and only grows"
+        )]
+        let read = filled - carry;
+        // A total that does not fit `u64` is over any cap: the file is refused.
         total = u64::try_from(read)
             .ok()
-            .map_or(u64::MAX, |n| add_or(total, n, u64::MAX)); // FOPS-F5: a count that does not fit is over any cap
+            .and_then(|n| total.checked_add(n))
+            .ok_or_else(|| refuse(TextReadError::TooLarge))?;
         if total > max_bytes {
             return Err(refuse(TextReadError::TooLarge));
         }
-        let Some(block) = buf.get(..filled) else {
-            return whole(); // FOPS-F4
-        };
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: the fill loop stops at buf.len(), so filled is at most buf.len()"
+        )]
+        let block = &buf[..filled];
         if first {
             first = false;
             if vix_encoding::sniff_bom(block).is_some() || block.iter().take(8192).any(|&b| b == 0)
@@ -879,14 +888,22 @@ pub fn stream_text_guarded(
             // A character cut off by the block's end: keep its bytes.
             Err(e) => {
                 let valid = e.valid_up_to();
-                if let Some(Ok(text)) = block.get(..valid).map(std::str::from_utf8) {
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: valid_up_to is at most the block length"
+                )]
+                if let Ok(text) = std::str::from_utf8(&block[..valid]) {
                     sink(text);
                 }
                 valid
             }
         };
-        // `valid` is at most `filled` (it is a prefix of the block).
-        carry = sub_or(filled, valid, 0); // FOPS-F4
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: valid is a prefix length of the block, so at most filled"
+        )]
+        let left_over = filled - valid;
+        carry = left_over;
         if read == 0 {
             // End of file: a character still cut off is invalid UTF-8.
             return if carry == 0 {
@@ -895,9 +912,8 @@ pub fn stream_text_guarded(
                 whole()
             };
         }
-        if valid <= filled && filled <= buf.len() {
-            buf.copy_within(valid..filled, 0);
-        }
+        // `valid <= filled <= buf.len()` (see above), so the range is in bounds.
+        buf.copy_within(valid..filled, 0);
     }
 }
 

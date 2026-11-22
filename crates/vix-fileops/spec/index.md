@@ -253,16 +253,9 @@ open in the byte editor, which saves the bytes back exactly) rather than errors.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests,
-denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`,
-`as_conversions`, `indexing_slicing`, `string_slice`, `unreachable` and `panic`
-(RCA-ENF-3). Each failure that recovers on the spot uses the fallback declared
-here, and cites it in a comment at the call.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Index and slice operations in the streaming reader carry `RCA-EXC-2` expectations that state their proofs (a read returns at most the room it was given, `valid_up_to` is at most the block length, and so on), so no invented fallback remains for them. A byte total that does not fit `u64` refuses the file as too large. `unique_copy_name` returns `Option<PathBuf>`: `None` only if all four billion numbered names are taken, and an existing name is never handed back.
 
 | ID | Failure | Declared fallback | Why it is correct |
 | -- | ------- | ----------------- | ----------------- |
-| `FOPS-F1` | Every one of the 2^32 " copy N" names is taken | the plain " copy" name | Unreachable in practice: it takes four billion existing copies of one file. The fallback is the first candidate name, which is a valid file name; callers that must not overwrite check for existence themselves. |
 | `FOPS-F2` | The file size plus one does not fit a `usize` | capacity `0` | The capacity is only an allocation hint. |
 | `FOPS-F3` | `max_bytes + 1` overflows | `u64::MAX` | The read limit is one past the cap only to detect a file that grew; no cap can be above `u64::MAX`. |
-| `FOPS-F4` | A block offset is out of range | decode the whole file the usual way | The streaming path is an optimization; the whole-file path gives the same text. |
-| `FOPS-F5` | The running byte total overflows `u64` | `u64::MAX` | A total that does not fit is over any cap, so the file is refused as too large. |
