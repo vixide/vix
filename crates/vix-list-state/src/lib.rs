@@ -21,6 +21,9 @@
 //! All functions are pure and total: none panics, including on an empty list
 //! (`len == 0`) or a zero-height viewport.
 //!
+//! Arithmetic follows `spec/rust-checked-arithmetic/index.md`: every step uses
+//! `checked_*` with the fallback the owning spec declares (`LIST-F1`..`LIST-F4`).
+//!
 //! Owning spec: `crates/vix-list-state/spec/index.md`.
 //!
 //! # Examples
@@ -38,22 +41,41 @@
 //! assert_eq!(page_down(selected, 10, 20), 17);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// `minuend - subtrahend`, or the declared `fallback` when it would go below
+/// zero. The fallback is a parameter so each call site names (and cites) the
+/// declaration it comes from; `checked_sub(..).unwrap_or(0)` written inline
+/// is rewritten by Clippy to `saturating_sub`, which the checked-arithmetic
+/// spec forbids (RCA-INT-4).
+fn sub_or(minuend: usize, subtrahend: usize, fallback: usize) -> usize {
+    minuend.checked_sub(subtrahend).unwrap_or(fallback)
+}
+
 /// The highlighted row one step up, stopping at the top (row 0).
 #[must_use]
 pub fn up(selected: usize) -> usize {
-    selected.saturating_sub(1)
+    sub_or(selected, 1, 0) // LIST-F1: stop at the top
 }
 
 /// The highlighted row one step down, stopping at the last of `len` rows.
 /// `len == 0` leaves `selected` unchanged (there is nothing to move onto).
 #[must_use]
 pub fn down(selected: usize, len: usize) -> usize {
-    // `selected + 1 < len` (not `selected < len - 1`) avoids underflow at len 0.
-    if selected + 1 < len {
-        selected + 1
-    } else {
-        selected
-    }
+    selected
+        .checked_add(1)
+        .filter(|next| *next < len)
+        .unwrap_or(selected) // LIST-F2: stay on the last row
 }
 
 /// The highlighted row one step up, wrapping from row 0 to the last of `len`
@@ -61,35 +83,45 @@ pub fn down(selected: usize, len: usize) -> usize {
 /// the divide-by-zero the hand-rolled `(selected + len - 1) % len` hit.
 #[must_use]
 pub fn wrap_up(selected: usize, len: usize) -> usize {
-    if len == 0 {
-        0
-    } else {
-        (selected % len + len - 1) % len
-    }
+    // LIST-F3: no rows, so row 0.
+    let Some(current) = selected.checked_rem(len) else {
+        return 0;
+    };
+    current
+        .checked_sub(1)
+        .or_else(|| len.checked_sub(1))
+        .unwrap_or(0) // LIST-F3: row 0 wraps to the last row
 }
 
 /// The highlighted row one step down, wrapping from the last of `len` rows
 /// to row 0. `len == 0` yields row 0.
 #[must_use]
 pub fn wrap_down(selected: usize, len: usize) -> usize {
-    if len == 0 {
-        0
-    } else {
-        (selected % len + 1) % len
-    }
+    // LIST-F3: no rows, so row 0.
+    let Some(current) = selected.checked_rem(len) else {
+        return 0;
+    };
+    current
+        .checked_add(1)
+        .filter(|next| *next < len)
+        .unwrap_or(0) // LIST-F3: the last row wraps to row 0
 }
 
 /// The highlighted row `page` steps up (minimum 1), stopping at the top.
 #[must_use]
 pub fn page_up(selected: usize, page: usize) -> usize {
-    selected.saturating_sub(page.max(1))
+    sub_or(selected, page.max(1), 0) // LIST-F1: stop at the top
 }
 
 /// The highlighted row `page` steps down (minimum 1), stopping at the last
 /// of `len` rows. `len == 0` clamps to row 0.
 #[must_use]
 pub fn page_down(selected: usize, page: usize, len: usize) -> usize {
-    (selected + page.max(1)).min(len.saturating_sub(1))
+    let last = sub_or(len, 1, 0); // LIST-F2: no rows, so row 0
+    selected
+        .checked_add(page.max(1))
+        .unwrap_or(last) // LIST-F2: past the end of `usize` is past the last row
+        .min(last) // LIST-F2: stop at the last row
 }
 
 /// Select row `idx` directly (e.g. from a mouse click), if it names a real
@@ -112,16 +144,23 @@ pub fn select_index(idx: usize, len: usize) -> Option<usize> {
 pub fn ensure_visible(selected: usize, scroll: usize, height: usize, len: usize) -> usize {
     let height = height.max(1);
     // Minimal scrolling: only move the window when the selection has left it.
+    let below = scroll
+        .checked_add(height)
+        .is_some_and(|window_end| selected >= window_end);
     let scroll = if selected < scroll {
         selected
-    } else if selected >= scroll + height {
-        selected + 1 - height
+    } else if below {
+        selected
+            .checked_add(1)
+            .and_then(|end| end.checked_sub(height))
+            .unwrap_or(selected) // LIST-F4: put the selection at the top
     } else {
         scroll
     };
     // Final clamp: after the list shrinks (filter, deletion) a stale offset
     // must not leave blank rows below the last item.
-    scroll.min(len.saturating_sub(height))
+    let max_scroll = sub_or(len, height, 0); // LIST-F4: the list fits
+    scroll.min(max_scroll) // LIST-F4: no blank rows below the last item
 }
 
 #[cfg(test)]
@@ -238,5 +277,37 @@ mod tests {
         // A selection left past the end of a list that shrank is folded in.
         assert_eq!(wrap_down(7, 3), 2);
         assert_eq!(wrap_up(7, 3), 0);
+    }
+
+    /// The checked-arithmetic spec: no input panics or wraps, even at the
+    /// edge of `usize` (a plain `selected + 1` would overflow here).
+    #[test]
+    fn extreme_values_neither_panic_nor_wrap() {
+        let max = usize::MAX;
+        assert_eq!(down(max, max), max, "LIST-F2: already on the last row");
+        assert_eq!(down(max, 5), max, "LIST-F2: a stale selection stays put");
+        assert_eq!(page_down(max, 10, 5), 4, "LIST-F2: clamps to the last row");
+        assert_eq!(page_down(3, max, 5), 4, "LIST-F2: a huge page clamps");
+        assert_eq!(page_down(3, 10, 0), 0, "LIST-F2: no rows, so row 0");
+        assert_eq!(page_up(3, max), 0, "LIST-F1: a huge page stops at the top");
+        assert_eq!(wrap_down(max, 3), (max % 3 + 1) % 3);
+        assert_eq!(wrap_up(max, 3), (max % 3 + 2) % 3);
+        assert_eq!(wrap_up(0, 3), 2, "LIST-F3: row 0 wraps to the last row");
+        assert_eq!(wrap_down(2, 3), 0, "LIST-F3: the last row wraps to row 0");
+        assert_eq!(wrap_up(7, 0), 0);
+        assert_eq!(wrap_down(7, 0), 0);
+        // `selected + 1` overflows: LIST-F4 puts the selection at the top of
+        // the window, and the list clamp then stops at `len - height`.
+        assert_eq!(ensure_visible(max, 0, 5, max), max - 5);
+        assert_eq!(
+            ensure_visible(max, max, 5, 10),
+            5,
+            "LIST-F4: clamped to the list"
+        );
+        assert_eq!(
+            ensure_visible(3, 0, usize::MAX, 10),
+            0,
+            "window larger than the list"
+        );
     }
 }

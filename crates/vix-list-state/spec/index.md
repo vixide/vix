@@ -59,6 +59,23 @@ panels had silently dropped before T144 (`vix-file-browser-panel` was the
 one found missing it) — unifying onto the function that has it is a real,
 if minor, behavior fix for those panels, not just deduplication.
 
+## Fallbacks (RCA-DECL-4)
+
+The crate follows `spec/rust-checked-arithmetic/index.md`: each step is a
+`checked_*` operation, and where it fails the code recovers on the spot with
+the fallback declared here. Every fallback is a valid row index.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `LIST-F1` | `selected - n` underflows | row `0` | Moving up stops at the top. |
+| `LIST-F2` | `selected + n` is past the last row (or overflows) | the last row, or `selected` for a single step | Moving down stops at the last row; with `len == 0` there is no row to move onto. |
+| `LIST-F3` | `selected % len` with `len == 0`; wrapping past either end | row `0`, or the last row when wrapping up from row 0 | A chooser that cycles has nothing to land on when empty; otherwise the end wraps to the other end. |
+| `LIST-F4` | `selected + 1 - height` underflows; `len - height` underflows | `selected`; `0` | A selection below the window scrolls to the top row of the window; a list shorter than the window never scrolls. |
+
+The crate denies `arithmetic_side_effects`, `integer_division`,
+`modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice`
+outside tests (RCA-ENF-3, crate-level).
+
 ## Adoption
 
 A panel's public API — field names, method signatures — never changes; only

@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **List navigation can no longer overflow.** Moving a highlighted row up or down, by a row or a page, or scrolling it into view now uses checked arithmetic with a declared fallback for every case (stop at the top or last row, wrap, an empty list), as `spec/rust-checked-arithmetic` requires. A selection or page size at the edge of `usize` no longer panics in debug builds or wraps in release builds. This is the first crate converted; the lints are denied for it from now on.
 - **Org Capture with no templates configured no longer crashes on Up/Down.** Cycling the chooser past either end divided by the number of templates, which is zero when the list is empty. The thirteen choosers that wrap (Capture, Refile, tasks, clipboard history, macros, encodings, recent files and locations, branches, workspaces, scripts, commands, completion cycling) now share one zero-safe `wrap_up`/`wrap_down`.
 - **Local History's "restore selection" restores just the selection.** When several lines in a row had all changed, restoring one of them from an earlier save brought back the whole changed block. Lines that changed one for one now come back one for one; only a block that grew or shrank is still restored whole.
 - **The desktop apps open a folder given on the command line too.** `vix-egui ~/src/app` (or any of the GUIs) now works on that folder, as `vix ~/src/app` does, instead of the current directory.
