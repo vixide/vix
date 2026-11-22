@@ -425,14 +425,15 @@ impl App {
                     c.focus_prev();
                 }
             }
-            KeyCode::Left => {
-                if let Some(c) = self.unit_converter.as_mut() {
-                    c.cycle(-1);
-                }
-            }
-            KeyCode::Right => {
-                if let Some(c) = self.unit_converter.as_mut() {
-                    c.cycle(1);
+            KeyCode::Left | KeyCode::Right => {
+                let step = if key.code == KeyCode::Left { -1 } else { 1 };
+                let refused = self
+                    .unit_converter
+                    .as_mut()
+                    .and_then(|c| c.cycle(step).err());
+                if let Some(e) = refused {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
                 }
             }
             KeyCode::Backspace => {

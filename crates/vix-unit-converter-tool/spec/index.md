@@ -15,9 +15,4 @@ There is an "Insert" button. When the user clicks the button, then insert the te
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Cycling a unit uses `checked_add` and `checked_rem_euclid`, and the unit label lookup uses `get`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `UC-F1` | The step `current + delta` does not fit | the first unit | A step that cannot be applied returns to the start of the list. |
-| `UC-F2` | The selected unit is out of range | an empty label | No real unit has that index. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Cycling a unit uses `checked_add` and `checked_rem_euclid`. `Converter::cycle` returns `Result<(), ConverterError>`: a unit index (a public field) already past the last unit is `ConverterError::OutOfRange { figure, len }` and a step that does not fit is `ConverterError::Overflow { figure }`; the selection is left unchanged, never moved to the first unit. `insert_text` is empty when there is nothing to convert, including an unknown unit, and no longer relies on a documented panic.
