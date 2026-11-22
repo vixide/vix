@@ -20,6 +20,18 @@
 //!
 //! Spec: `crates/vix-welcome-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Scroll state for the welcome overlay.
 ///
 /// The text is stored as source *paragraphs* (one entry per source line — each a
@@ -63,6 +75,14 @@ fn wrap_line(line: &str, width: usize) -> Vec<String> {
     vix_greedy_wrap::wrap_line(line, width)
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 impl Panel {
     /// Open the panel at the top over `paragraphs` (the `welcome.body` locale
     /// string split into lines — one paragraph/heading/bullet per line).
@@ -92,7 +112,7 @@ impl Panel {
         self.wrap_width = width;
         // Fewer display lines after a widen: keep the offset on a real line.
         // (Unlike `clamp` this does not account for the viewport height.)
-        self.scroll = self.scroll.min(self.wrapped.len().saturating_sub(1));
+        self.scroll = self.scroll.min(sub_or(self.wrapped.len(), 1, 0)); // WEL-F1: no lines, offset 0
     }
 
     /// The wrapped display lines (call [`Self::wrap_to`] first).
@@ -117,27 +137,35 @@ impl Panel {
     /// offset at which the last line sits on the bottom row. `viewport` is
     /// floored at 1 so a zero-height pane cannot yield `len` (one past the end).
     fn max_scroll(&self, viewport: usize) -> usize {
-        self.wrapped.len().saturating_sub(viewport.max(1))
+        sub_or(self.wrapped.len(), viewport.max(1), 0) // WEL-F1: fewer lines than rows, no scroll
     }
 
     /// Scroll up one line.
     pub fn up(&mut self) {
-        self.scroll = self.scroll.saturating_sub(1);
+        self.scroll = sub_or(self.scroll, 1, 0); // WEL-F1: stop at the top
     }
 
     /// Scroll down one line, stopping when the last line is in view.
     pub fn down(&mut self, viewport: usize) {
-        self.scroll = (self.scroll + 1).min(self.max_scroll(viewport));
+        let end = self.max_scroll(viewport);
+        // WEL-F2: a step that does not fit is a step past the end.
+        self.scroll = self.scroll.checked_add(1).unwrap_or(end).min(end);
     }
 
     /// Scroll up one page (`viewport` rows).
     pub fn page_up(&mut self, viewport: usize) {
-        self.scroll = self.scroll.saturating_sub(viewport.max(1));
+        self.scroll = sub_or(self.scroll, viewport.max(1), 0); // WEL-F1: stop at the top
     }
 
     /// Scroll down one page (`viewport` rows), clamped to the end.
     pub fn page_down(&mut self, viewport: usize) {
-        self.scroll = (self.scroll + viewport.max(1)).min(self.max_scroll(viewport));
+        let end = self.max_scroll(viewport);
+        // WEL-F2: a page that does not fit is a page past the end.
+        self.scroll = self
+            .scroll
+            .checked_add(viewport.max(1))
+            .unwrap_or(end)
+            .min(end);
     }
 
     /// Clamp the scroll offset to the current `viewport` (e.g. after a resize).
