@@ -6,6 +6,18 @@
 //! async pipeline) and renders the [`TestResult`]s. Spec:
 //! `crates/vix-test-runner/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Outcome of a single test.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Status {
@@ -39,17 +51,12 @@ pub struct TestResult {
 /// ```
 #[must_use]
 pub fn tally(results: &[TestResult]) -> (usize, usize, usize) {
-    let mut pass = 0;
-    let mut fail = 0;
-    let mut ignore = 0;
-    for r in results {
-        match r.status {
-            Status::Pass => pass += 1,
-            Status::Fail => fail += 1,
-            Status::Ignore => ignore += 1,
-        }
-    }
-    (pass, fail, ignore)
+    let count = |status: Status| results.iter().filter(|r| r.status == status).count();
+    (
+        count(Status::Pass),
+        count(Status::Fail),
+        count(Status::Ignore),
+    )
 }
 
 /// Parse test-runner `output` lines into results, attaching failure locations
@@ -155,8 +162,8 @@ fn attach_location(results: &mut [TestResult], name: &str, loc: (String, usize))
 /// line (or a bare `<file>:<line>:<col>` prefix).
 fn panic_location(line: &str) -> Option<(String, usize)> {
     let after = line
-        .rfind("panicked at ")
-        .map_or(line, |i| &line[i + "panicked at ".len()..]);
+        .rsplit_once("panicked at ")
+        .map_or(line, |(_, after)| after);
     let mut parts = after.trim().splitn(3, ':');
     let file = parts.next()?.trim();
     let line_no: usize = parts.next()?.trim().parse().ok()?;
