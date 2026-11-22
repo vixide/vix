@@ -11,6 +11,18 @@
 //! the formatting helpers delegate to `vix-byte-size` and `vix-civil-date`.
 //! Spec: `crates/vix-file-information-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
 // this crate originally called `t!` zero times -- every row label was
@@ -197,9 +209,16 @@ pub fn format_unix_mode(mode: u32) -> String {
 /// ```
 #[must_use]
 pub fn format_unix_time(secs: i64) -> String {
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    let (hour, minute, second) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    // FILEINFO-F1: the divisors are constants above zero, so these never
+    // fail; 0 is the declared answer if they ever did.
+    let days = secs.checked_div_euclid(86_400).unwrap_or(0);
+    let rem = secs.checked_rem_euclid(86_400).unwrap_or(0);
+    let hour = rem.checked_div(3600).unwrap_or(0);
+    let minute = rem
+        .checked_rem(3600)
+        .and_then(|rest| rest.checked_div(60))
+        .unwrap_or(0);
+    let second = rem.checked_rem(60).unwrap_or(0);
     let (year, month, day) = vix_civil_date::civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
 }
