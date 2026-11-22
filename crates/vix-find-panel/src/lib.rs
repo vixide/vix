@@ -24,6 +24,18 @@
 //!
 //! Spec: `crates/vix-find-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use regex::Regex;
 
 /// Byte offset of character index `ch` in `text` (or `text.len()` if past the end).
@@ -72,10 +84,15 @@ pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
 pub fn next_match(text: &str, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
     let from_byte = char_to_byte(text, from_char);
     let m = re.find_iter(text).find(|m| m.start() >= from_byte)?;
-    Some((
+    #[expect(
+        clippy::string_slice,
+        reason = "RCA-EXC-2: regex match offsets are UTF-8 character boundaries inside text"
+    )]
+    let range = (
         text[..m.start()].chars().count(),
         text[..m.end()].chars().count(),
-    ))
+    );
+    Some(range)
 }
 
 /// Replace every match of `re` in `text`. In `regex_mode` the `replacement` is
@@ -142,11 +159,20 @@ pub fn replace_one(
             } else {
                 exp.push_str(template);
             }
-            let mut new = String::with_capacity(text.len() + exp.len());
-            new.push_str(&text[..m.start()]);
-            new.push_str(&exp);
-            new.push_str(&text[m.end()..]);
-            let resume = at_char + exp.chars().count();
+            // The capacity is only a hint.
+            let mut new = String::with_capacity(text.len());
+            #[expect(
+                clippy::string_slice,
+                reason = "RCA-EXC-2: regex match offsets are UTF-8 character boundaries inside text"
+            )]
+            {
+                new.push_str(&text[..m.start()]);
+                new.push_str(&exp);
+                new.push_str(&text[m.end()..]);
+            }
+            // An offset that does not fit means there is nowhere to resume: no
+            // replacement is reported.
+            let resume = at_char.checked_add(exp.chars().count())?;
             return Some((new, resume));
         }
         // Matches are ordered by start, so once past `at_byte` none can match.
