@@ -21,7 +21,7 @@
 //! All functions are pure and total: none panics, including on an empty list
 //! (`len == 0`) or a zero-height viewport.
 //!
-//! Arithmetic follows `spec/rust-checked-arithmetic/index.md`: every step uses
+//! Arithmetic follows the `rust-checked-arithmetic` spec: every step uses
 //! `checked_*` with the fallback the owning spec declares (`LIST-F1`..`LIST-F4`).
 //!
 //! Owning spec: `crates/vix-list-state/spec/index.md`.

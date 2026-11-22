@@ -35,7 +35,7 @@ Convert action shows it through the translated `status.convert_failed` line.
 
 ## Checked arithmetic
 
-The crate follows `spec/rust-checked-arithmetic/index.md`: outside tests it
+The crate follows the `rust-checked-arithmetic` spec: outside tests it
 denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`,
 `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The one
 arithmetic expression it had, a capacity hint in `json_to_rows`, is gone: the

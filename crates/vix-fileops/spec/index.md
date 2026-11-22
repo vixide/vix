@@ -253,7 +253,7 @@ open in the byte editor, which saves the bytes back exactly) rather than errors.
 
 ## Checked arithmetic
 
-The crate follows `spec/rust-checked-arithmetic/index.md` and, outside tests,
+The crate follows the `rust-checked-arithmetic` spec and, outside tests,
 denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`,
 `as_conversions`, `indexing_slicing`, `string_slice`, `unreachable` and `panic`
 (RCA-ENF-3). Each failure that recovers on the spot uses the fallback declared
