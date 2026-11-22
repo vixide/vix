@@ -20,6 +20,18 @@
 //! assert_eq!(lines[&2], Hit::Uncovered);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -271,13 +283,13 @@ fn is_partial_branch(attrs: &str) -> bool {
         return false;
     }
     // Parse the `(a/b)` taken/total pair out of `condition-coverage`.
-    let Some(start) = attrs.find('(') else {
+    let Some((_, after_open)) = attrs.split_once('(') else {
         return false;
     };
-    let Some(end) = attrs[start..].find(')') else {
+    let Some((pair, _)) = after_open.split_once(')') else {
         return false;
     };
-    let Some((a, b)) = attrs[start + 1..start + end].split_once('/') else {
+    let Some((a, b)) = pair.split_once('/') else {
         return false;
     };
     let (Ok(a), Ok(b)) = (a.trim().parse::<u32>(), b.trim().parse::<u32>()) else {

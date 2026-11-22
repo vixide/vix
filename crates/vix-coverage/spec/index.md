@@ -51,3 +51,7 @@ as long as the trailing path segments agree.
   at a time: while coverage is visible, the git diff refresh is skipped for
   the active tab. **Tools → Toggle Coverage Gutter** flips visibility
   without re-parsing (the loaded `Report` stays cached).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The `condition-coverage` pair is read with `split_once` instead of slicing. No fallbacks are declared: a malformed pair is not a partial branch.
