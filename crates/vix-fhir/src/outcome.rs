@@ -57,7 +57,7 @@ fn detail_of(issue: &Value) -> String {
             c.iter()
                 .find_map(|c| c.get("display").and_then(Value::as_str))
         })
-        .unwrap_or_default()
+        .unwrap_or("") // FHIR-F1: an absent display is the empty string
         .to_string()
 }
 

@@ -41,3 +41,11 @@ Security rules enforced at parse time:
 ## Privacy
 
 Nothing is logged, cached to disk or written to the session. Responses open in unsaved tabs; the last response is held in memory only, for the Bundle viewer.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The authority slice in URL parsing uses `get`. The five `unwrap_or_default` calls are now explicit: an absent optional text field is the empty string, which this crate already treats as "not stated" (the reference builder tests `is_empty`).
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `FHIR-F1` | An optional text field is absent (a display, a full URL, a resource type, a bundle type, a summary) | the empty string | FHIR marks these fields optional, and the crate reads an empty string as "not stated". |

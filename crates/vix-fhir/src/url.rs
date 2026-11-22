@@ -19,7 +19,7 @@ pub(crate) fn origin(url: &str) -> Option<(String, String)> {
         return None;
     }
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let authority = &rest[..end];
+    let authority = rest.get(..end)?;
     if authority.is_empty() || authority.contains('@') {
         return None;
     }
