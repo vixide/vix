@@ -124,9 +124,14 @@ fn rgb(hex: &str) -> String {
 /// cursor, `base0E` keywords.
 fn to_json(p: &Palette) -> String {
     // `c(i)` is the JSON `[r, g, b]` for slot `baseNN` with NN = i (decimal).
-    // BASE16-F1: a slot outside 0..16 is an empty hex string, which `rgb`
-    // renders as black like any malformed hex.
-    let c = |i: usize| rgb(p.colors.get(i).copied().unwrap_or(""));
+    let c = |i: usize| {
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: every call below passes a literal slot below 16 and the palette has 16 colors"
+        )]
+        let hex = p.colors[i];
+        rgb(hex)
+    };
     // Chrome regions use (foreground slot, background slot).
     let region =
         |fg: usize, bg: usize| format!("{{\"foreground\": {}, \"background\": {}}}", c(fg), c(bg));

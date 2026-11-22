@@ -14,8 +14,4 @@ themes in `tui/themes/`.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The palette slot lookup uses `get`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `BASE16-F1` | A slot index is outside 0..16 | black | `rgb` already renders malformed hex as black; the callers pass constants below 16, so this never happens. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The palette slot lookup indexes the 16-color array under an `RCA-EXC-2` expectation: every call passes a literal slot below 16. No fallbacks are declared, and a bad slot is no longer rendered as black.
