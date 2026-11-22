@@ -22,9 +22,29 @@
 //!
 //! Owning spec: `crates/vix-oci-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_oci::argv::{self, ComposeOp, ContainerOp, Kind, RunOptions};
 use vix_oci::{Container, Engine, Image, Network, OciError, Pod, Volume};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// A command ready to run, with the line to show the user first.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,7 +215,7 @@ impl Panel {
     /// One row as display text, columns separated by two spaces.
     #[must_use]
     pub fn row(&self, i: usize) -> String {
-        match self.kind {
+        let found = match self.kind {
             Kind::Container => self.containers.get(i).map(|c| {
                 format!(
                     "{}  {}  {}  {}  {}",
@@ -219,7 +239,8 @@ impl Panel {
                     m.created,
                     // Image ids are ASCII (`sha256:` + hex), so byte slicing
                     // is char-safe; 19 shows the prefix plus a short digest.
-                    &m.id[..m.id.len().min(19)]
+                    // OCI-F1: a shorter (or non-ASCII) id is shown whole.
+                    m.id.get(..19).unwrap_or(&m.id)
                 )
             }),
             Kind::Volume => self
@@ -235,8 +256,12 @@ impl Panel {
                 .get(i)
                 .map(|p| format!("{}  {}  {}", p.name, p.status, p.containers)),
             _ => None,
-        }
-        .unwrap_or_default()
+        };
+        // OCI-F2: no row is the empty text (`unwrap_or_default` is forbidden).
+        let Some(row) = found else {
+            return String::new();
+        };
+        row
     }
 
     /// The name or reference an engine command should use for the highlighted
@@ -272,7 +297,7 @@ impl Panel {
             Rows::Networks(v) => self.networks = v,
             Rows::Pods(v) => self.pods = v,
         }
-        self.selected = self.selected.min(self.len().saturating_sub(1));
+        self.selected = self.selected.min(sub_or(self.len(), 1, 0)); // OCI-F3: no rows, row 0
     }
 
     /// Switch to `kind`, resetting the highlight.
@@ -287,12 +312,17 @@ impl Panel {
     pub fn cycle_kind(&mut self, forward: bool) {
         let kinds = self.kinds();
         let at = kinds.iter().position(|k| *k == self.kind).unwrap_or(0);
+        // OCI-F4: stepping past either end wraps; an empty list keeps the kind.
         let next = if forward {
-            (at + 1) % kinds.len()
+            at.checked_add(1).filter(|n| *n < kinds.len()).unwrap_or(0)
         } else {
-            (at + kinds.len() - 1) % kinds.len()
+            at.checked_sub(1)
+                .or_else(|| kinds.len().checked_sub(1))
+                .unwrap_or(0)
         };
-        self.set_kind(kinds[next]);
+        if let Some(kind) = kinds.get(next).copied() {
+            self.set_kind(kind);
+        }
     }
 
     /// Move the highlight up one row.

@@ -43,3 +43,14 @@ cycle `Container`, `Image`, `Volume`, `Network` and (only when
   and is always detached; Build takes `FILE [tag=REF] [context=DIR]`.
 - `compose_pending` and `prune_pending` build the Compose and prune commands
   as confirm-first `Pending`s for the menu entries that skip the list.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Image id display, row selection and kind cycling use `get` and `checked_*`; the old `saturating_sub` is gone and the row text no longer relies on `unwrap_or_default`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `OCI-F1` | An image id is shorter than 19 bytes, or not on a character boundary there | the whole id | The id is only shown, so showing all of it is the safe reading. |
+| `OCI-F2` | There is no row at the highlighted index | the empty text | No row means nothing to show. |
+| `OCI-F3` | `len - 1` on an empty list | row `0` | An empty list has no row to select. |
+| `OCI-F4` | The kind list is empty or a step falls off an end | wrap to the other end; an empty list keeps the kind | Kinds cycle. |
