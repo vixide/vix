@@ -17,6 +17,26 @@
 //! assert_eq!(out, "a   = 1\nbbb = 2\n");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Align every line of `text` that contains `delim` so the (first) delimiter sits
 /// in a common column. Preserves a trailing newline if present.
 ///
@@ -53,8 +73,9 @@ pub fn on_delimiter(text: &str, delim: char) -> String {
         match part {
             Some((left, right)) => {
                 let left = left.trim_end();
-                // `width` is the max over all split lines, so this never underflows.
-                let pad = " ".repeat(width - left.chars().count());
+                // `width` is the max over all split lines, so the difference is
+                // never negative; ALIGN-F1 declares no padding if it were.
+                let pad = " ".repeat(sub_or(width, left.chars().count(), 0));
                 out.push(format!("{left}{pad} {delim} {}", right.trim_start()));
             }
             None => out.push((*line).to_string()),
