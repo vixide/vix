@@ -548,6 +548,10 @@ name = "rebind_sandbox"
 path = "tests/rebind_sandbox.rs"
 
 [[test]]
+name = "oc_sandbox"
+path = "tests/oc_sandbox.rs"
+
+[[test]]
 name = "e2e_tmux"
 path = "tests/e2e_tmux.rs"
 
