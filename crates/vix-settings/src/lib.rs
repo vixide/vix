@@ -21,6 +21,18 @@
 //! assert_eq!(defaults.locale, "en");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use serde::{Deserialize, Serialize};
 
 mod layers;
@@ -1275,7 +1287,8 @@ pub fn unquote_placeholders(template: &str) -> String {
 /// inside is expanded, so it is safe to interpolate untrusted text into a
 /// command line.
 fn sh_single_quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
+    // SET-F1: the capacity is only a hint, so a size that does not fit is 0.
+    let mut out = String::with_capacity(s.len().checked_add(2).unwrap_or(0));
     out.push('\'');
     for c in s.chars() {
         if c == '\'' {
@@ -1317,7 +1330,8 @@ fn sh_single_quote(s: &str) -> String {
 /// - replaces an embedded CR/LF with a space, so a multi-line prompt can't
 ///   be read as more than one `cmd.exe` statement.
 fn cmd_double_quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
+    // SET-F1: the capacity is only a hint, so a size that does not fit is 0.
+    let mut out = String::with_capacity(s.len().checked_add(2).unwrap_or(0));
     out.push('"');
     for c in s.chars() {
         match c {
