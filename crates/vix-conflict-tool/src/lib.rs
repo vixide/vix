@@ -27,6 +27,26 @@
 //!
 //! Spec: `crates/vix-conflict-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Which side of a conflict to keep.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Resolution {
@@ -94,17 +114,27 @@ fn is_marker(line: &str, marker: &str) -> bool {
 /// The first complete conflict block starting at or after line `from`, or
 /// `None` when there is none (or the next block is unterminated).
 fn next_block(lines: &[&str], from: usize) -> Option<Conflict> {
-    let start = (from..lines.len()).find(|&j| is_marker(lines[j], "<<<<<<<"))?;
+    let find = |from: usize, marker: &str| -> Option<usize> {
+        lines
+            .iter()
+            .enumerate()
+            .skip(from)
+            .find(|(_, line)| is_marker(line, marker))
+            .map(|(j, _)| j)
+    };
+    let start = find(from, "<<<<<<<")?;
     // Scanning from the marker line itself is the same as from the line after
     // it: a `<<<<<<<` line can't also start with `=======` (nor `=======` with
     // `>>>>>>>`).
-    let sep = (start..lines.len()).find(|&j| is_marker(lines[j], "======="))?;
-    let endm = (sep..lines.len()).find(|&j| is_marker(lines[j], ">>>>>>>"))?;
+    let sep = find(start, "=======")?;
+    let endm = find(sep, ">>>>>>>")?;
+    // The markers are found in order inside `lines`, so these ranges exist;
+    // `None` (no complete block) is the answer if an addition ever did not fit.
     Some(Conflict {
         start,
-        end: endm + 1,
-        ours: lines[start + 1..sep].concat(),
-        theirs: lines[sep + 1..endm].concat(),
+        end: endm.checked_add(1)?,
+        ours: lines.get(start.checked_add(1)?..sep)?.concat(),
+        theirs: lines.get(sep.checked_add(1)?..endm)?.concat(),
     })
 }
 
@@ -200,7 +230,8 @@ impl List {
     /// new content).
     pub fn refresh(&mut self, text: &str) {
         self.entries = find_all(text);
-        self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+        // CONFLICT-F1: no conflicts select entry 0.
+        self.selected = self.selected.min(sub_or(self.entries.len(), 1, 0));
     }
 }
 
