@@ -62,11 +62,13 @@ pub fn format(
         }
         buf
     });
-    let deadline = Instant::now() + timeout;
+    // FMT-F1: a deadline too far away to represent can never pass, so the
+    // command is simply not timed out.
+    let deadline = Instant::now().checked_add(timeout);
     let status = loop {
         match child.try_wait().map_err(PrettierError::Io)? {
             Some(s) => break s,
-            None if Instant::now() >= deadline => {
+            None if deadline.is_some_and(|d| Instant::now() >= d) => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(PrettierError::TimedOut);

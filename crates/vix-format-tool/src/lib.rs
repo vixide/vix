@@ -6,6 +6,18 @@
 //! without changing its meaning. Used by the Tools → Format menu via
 //! `App::transform_selection_or_buffer_try`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod prettier;
 #[cfg(feature = "process")]
 mod run;
