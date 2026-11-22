@@ -145,3 +145,11 @@ plus selection state, and is wired into the host via a Tools-menu action:
   highlight inside the rendered window.
 - The X11 and HTML color/character tables are bundled as TSV
   (`x11-color-list.tsv`, `html-character-list.tsv`) and parsed once on first use.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The table lookup uses `get` and the byte-to-character conversion uses `char::from`, so no `as` remains.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `ASCII-F1` | A control code has no entry in the 32-entry table | the character itself | The arm bounds the code to the table, so this never happens. |
