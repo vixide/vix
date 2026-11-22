@@ -15,10 +15,40 @@
 //!
 //! Spec: `crates/vix-pomodoro-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Default work length, in minutes.
 pub const DEFAULT_WORK_MINUTES: u64 = 25;
 /// Break length, in minutes.
 pub const BREAK_MINUTES: u64 = 5;
+
+/// Declared bounds of the work length, in minutes (`TIMER-F2`).
+const MIN_WORK_MINUTES: i64 = 1;
+const MAX_WORK_MINUTES: i64 = 180;
+
+/// Minutes as seconds. TIMER-F1: a length that does not fit is the declared
+/// maximum, 180 minutes.
+fn minutes_to_secs(minutes: u64) -> u64 {
+    minutes.checked_mul(60).unwrap_or(180 * 60)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// The timer's current phase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,10 +115,17 @@ impl Timer {
     /// ```
     pub fn adjust_minutes(&mut self, delta: i64) {
         if self.phase == Phase::Idle {
-            // Widen to i64 so a negative `delta` can't underflow the u64 field;
-            // saturating_add guards against an extreme `delta` overflowing i64.
-            let current = i64::try_from(self.work_minutes).unwrap_or(i64::MAX);
-            let adjusted = current.saturating_add(delta).clamp(1, 180);
+            // Widen to i64 so a negative `delta` can't underflow the u64 field.
+            // TIMER-F2: the declared bounds are MIN_WORK..=MAX_WORK minutes; a sum
+            // that overflows `i64` is past the bound in the direction of `delta`.
+            let current = i64::try_from(self.work_minutes).unwrap_or(MAX_WORK_MINUTES);
+            let adjusted = match current.checked_add(delta) {
+                Some(n) if n < MIN_WORK_MINUTES => MIN_WORK_MINUTES,
+                Some(n) if n > MAX_WORK_MINUTES => MAX_WORK_MINUTES,
+                Some(n) => n,
+                None if delta > 0 => MAX_WORK_MINUTES,
+                None => MIN_WORK_MINUTES,
+            };
             self.work_minutes = u64::try_from(adjusted).unwrap_or(1);
         }
     }
@@ -97,7 +134,7 @@ impl Timer {
     /// full length if a countdown (even a break) was already running.
     pub fn start(&mut self) {
         self.phase = Phase::Work;
-        self.remaining = self.work_minutes * 60;
+        self.remaining = minutes_to_secs(self.work_minutes);
     }
 
     /// Stop the countdown and reset to idle at the configured work length.
@@ -144,10 +181,10 @@ impl Timer {
                     // Work finished: roll into the break. Any overshoot in `secs`
                     // is intentionally dropped rather than carried into the break.
                     self.phase = Phase::Break;
-                    self.remaining = BREAK_MINUTES * 60;
+                    self.remaining = minutes_to_secs(BREAK_MINUTES);
                     Tick::BreakStarted
                 } else {
-                    self.remaining -= secs;
+                    self.remaining = sub_or(self.remaining, secs, 0); // TIMER-F3
                     Tick::None
                 }
             }
@@ -157,7 +194,7 @@ impl Timer {
                     self.stop();
                     Tick::Finished
                 } else {
-                    self.remaining -= secs;
+                    self.remaining = sub_or(self.remaining, secs, 0); // TIMER-F3
                     Tick::None
                 }
             }
@@ -169,7 +206,7 @@ impl Timer {
     #[must_use]
     pub fn display_seconds(&self) -> u64 {
         match self.phase {
-            Phase::Idle => self.work_minutes * 60,
+            Phase::Idle => minutes_to_secs(self.work_minutes),
             _ => self.remaining,
         }
     }
@@ -179,7 +216,10 @@ impl Timer {
     #[must_use]
     pub fn label(&self) -> String {
         let s = self.display_seconds();
-        format!("{:02}:{:02}", s / 60, s % 60)
+        // TIMER-F4: the divisor is a constant above zero, so these never fail.
+        let minutes = s.checked_div(60).unwrap_or(0);
+        let seconds = s.checked_rem(60).unwrap_or(0);
+        format!("{minutes:02}:{seconds:02}")
     }
 }
 
