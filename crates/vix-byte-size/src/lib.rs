@@ -11,6 +11,18 @@
 //! user-visible output and [`human_bytes`] for locale-independent text (logs,
 //! tests). See `crates/vix-byte-size/spec/index.md` for the spec.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Convert a `u64` to the nearest `f64` without a lossy `as` cast. The high
 /// and low 32-bit halves are each representable exactly, so the single
 /// rounding on the recombining add matches what `n as f64` would produce.
@@ -41,13 +53,17 @@ pub fn human_bytes(n: u64) -> String {
         return format!("{n} B");
     }
     let mut value = u64_to_f64(n);
-    let mut unit = 0;
-    // Stop at the last unit rather than indexing past `UNITS`.
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
+    // BYTES-F1: the table is never empty; "B" is its first unit anyway.
+    let mut label = UNITS.first().copied().unwrap_or("B");
+    // Step to the next unit while the value is 1024 or more; stop at the last.
+    for next in UNITS.iter().skip(1) {
+        if value < 1024.0 {
+            break;
+        }
         value /= 1024.0;
-        unit += 1;
+        label = next;
     }
-    format!("{value:.1} {}", UNITS[unit])
+    format!("{value:.1} {label}")
 }
 
 /// Locales that conventionally write a decimal quantity with `,` rather
