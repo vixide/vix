@@ -14,6 +14,18 @@
 //! fields borrow straight from the binary with no per-row allocation. Spec:
 //! `crates/vix-html-character-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::OnceLock;
 
 /// One HTML named character reference.
@@ -147,9 +159,17 @@ impl Panel {
     /// The highlighted entity.
     #[must_use]
     pub fn selected_entity(&self) -> &'static Entity {
-        // Clamp defensively: `selected` is a public field and could be set past the end.
-        let i = self.selected.min(self.len().saturating_sub(1));
-        &entities()[i]
+        // `selected` is a public field and could be set past the end: read it
+        // as the last entity, `HTML-F1`, or as an empty one if the table were empty.
+        const EMPTY: Entity = Entity {
+            name: "",
+            code: "",
+            glyph: "",
+        };
+        entities()
+            .get(self.selected)
+            .or_else(|| entities().last())
+            .unwrap_or(&EMPTY)
     }
 
     /// The highlighted entity's reference string (what insertion uses), e.g.

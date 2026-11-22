@@ -14,3 +14,11 @@ reference.
 ## See also
 
 - [ascii-character-picker spec](../../vix-ascii-character-picker/spec/) — shared character-picker behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-entity lookup uses `get`; the old `saturating_sub` is gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `HTML-F1` | `selected` is past the last entity | the last entity (an empty one if the table were empty) | A caller who sets the public field too far still gets a real entity. |
