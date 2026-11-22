@@ -16,6 +16,18 @@
 //! Centralizing the logic means CSV→JSON and JSON→CSV (and the TSV pair) share
 //! exactly one parser and one mapper, so the directions stay consistent.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use serde_json::{Map, Value};
 
 /// Parse CSV text into rows of fields, honoring RFC 4180 quoting: fields may be
@@ -243,7 +255,9 @@ pub fn json_to_rows(json: &str) -> Result<Vec<Vec<String>>, ConvertError> {
         }
         objects.push(obj);
     }
-    let mut rows = Vec::with_capacity(objects.len() + 1);
+    // The capacity is only a hint (the header row may grow the vector once),
+    // so no arithmetic is spent on it.
+    let mut rows = Vec::with_capacity(objects.len());
     rows.push(headers.clone());
     for obj in objects {
         let row = headers
