@@ -16,6 +16,18 @@
 //!
 //! Owning spec: `crates/vix-theme-editor-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_theme_model::{CustomTheme, Rgb};
 
 /// One editable color slot. Named directly rather than modeled generically
@@ -198,12 +210,15 @@ impl Panel {
 
     /// The highlighted slot.
     ///
-    /// # Panics
-    /// If the public [`selected`](Self::selected) field was set to
-    /// `Slot::ALL.len()` or more; the navigation methods never do.
+    /// A [`selected`](Self::selected) past the last slot (the navigation
+    /// methods never leave it there) reads as the last slot, `TEP-F1`.
     #[must_use]
     pub fn selected_slot(&self) -> Slot {
-        Slot::ALL[self.selected]
+        Slot::ALL
+            .get(self.selected)
+            .or_else(|| Slot::ALL.last())
+            .copied()
+            .unwrap_or(Slot::MenuBarFg) // TEP-F1: only if the table were empty
     }
 
     /// Apply `rgb` to the highlighted slot and mark the draft dirty. The host

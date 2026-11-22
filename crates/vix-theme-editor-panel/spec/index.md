@@ -47,3 +47,11 @@ choosing any other theme from the View → Theme submenu).
   establishes for go-to-definition. `PromptKind::ThemeSaveAs` prompts for a name; `save_theme_as`,
   writes the JSON, and calls the same theme-setting path `set_theme_by_name`
   uses (persisted + `editor.refresh_theme()`).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-slot lookup uses `get`, and its `# Panics` section is gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `TEP-F1` | `selected` is past the last slot | the last slot (the first if the table were empty) | The navigation methods never leave `selected` out of range; a caller who sets the public field too far reads the last slot. |
