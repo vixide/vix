@@ -182,9 +182,12 @@ impl Panel {
         // lines before the last line and extends `height` lines upward.
         let end = sub_or(all.len(), self.scroll, 0); // AIP-F2
         let start = sub_or(end, height, 0); // AIP-F2
-        // `start <= end <= all.len()` by construction; an empty window is the
-        // declared answer if that ever failed (AIP-F3).
-        all.get(start..end).map_or_default(<[_]>::to_vec)
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: scroll was clamped to at most all.len() - height just above, so start <= end <= all.len()"
+        )]
+        let window = all[start..end].to_vec();
+        window
     }
 }
 
