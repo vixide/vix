@@ -225,13 +225,13 @@ impl Panel {
 
     /// Move the selection up by `n` rows, stopping at the top.
     pub fn select_up(&mut self, n: usize) {
-        self.selected = sub_or(self.selected, n, 0); // KEYB-F1: stop at the top
+        self.selected = sub_or(self.selected, n, 0); // BINDING-F1: stop at the top
     }
 
     /// Move the selection down by `n` rows, stopping at the last match.
     pub fn select_down(&mut self, n: usize) {
-        let last = sub_or(self.len(), 1, 0); // KEYB-F1: no rows, row 0
-        // KEYB-F2: a step that does not fit is a step to the last row.
+        let last = sub_or(self.len(), 1, 0); // BINDING-F1: no rows, row 0
+        // BINDING-F2: a step that does not fit is a step to the last row.
         self.selected = self.selected.checked_add(n).unwrap_or(last).min(last);
     }
 
@@ -257,7 +257,7 @@ impl Panel {
             self.scroll = top;
         }
         // ...then never leave blank rows below the last match.
-        self.scroll = self.scroll.min(sub_or(self.len(), view_h, 0)); // KEYB-F1: short list, no scroll
+        self.scroll = self.scroll.min(sub_or(self.len(), view_h, 0)); // BINDING-F1: short list, no scroll
     }
 }
 

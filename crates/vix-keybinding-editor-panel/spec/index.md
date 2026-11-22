@@ -80,5 +80,5 @@ The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies 
 
 | ID | Failure | Declared fallback | Why it is correct |
 | -- | ------- | ----------------- | ----------------- |
-| `KEYB-F1` | A subtraction goes below zero | `0` | A short list does not scroll, and moving up stops at the top. |
-| `KEYB-F2` | A selection step does not fit | the last row | Moving down stops at the last match. |
+| `BINDING-F1` | A subtraction goes below zero | `0` | A short list does not scroll, and moving up stops at the top. |
+| `BINDING-F2` | A selection step does not fit | the last row | Moving down stops at the last match. |
