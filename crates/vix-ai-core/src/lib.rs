@@ -23,6 +23,18 @@
 //!
 //! [`Settings::ai_command`]: https://docs.rs/vix-settings (see `crates/vix-settings/src/lib.rs`)
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod anthropic;
 pub mod fim;
 pub mod ollama;
