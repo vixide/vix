@@ -44,8 +44,4 @@ assert_eq!(vix_greedy_wrap::wrap_line("anything", 0), vec!["anything"]);
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line lengths use `checked_add`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `WRAP-F1` | A running length does not fit | the last value | A line length cannot really exceed memory; the count simply stops growing. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line lengths use `checked_add` for the sum that is compared with the width (a sum that does not fit cannot fit the line, so it starts a new one). The chunk counter is a plain increment under an `RCA-EXC-2` expectation: it is reset when it reaches the width, so it is below the width before the increment. No fallbacks are declared.

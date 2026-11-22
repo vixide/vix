@@ -55,8 +55,13 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
                     chunk_len = 0;
                 }
                 cur.push(ch);
-                // WRAP-F1: a count that does not fit stays at its last value.
-                chunk_len = add_or(chunk_len, 1, chunk_len);
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: the check above resets chunk_len when it equals width, so before this increment it is below width, which is at most usize::MAX"
+                )]
+                {
+                    chunk_len += 1;
+                }
             }
             cur_len = chunk_len;
             continue;
@@ -82,12 +87,6 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
         out.push(cur);
     }
     out
-}
-
-/// `a + b`, or the declared `fallback` when the sum does not fit (see
-/// `sub_or` for why the fallback is a parameter).
-fn add_or(a: usize, b: usize, fallback: usize) -> usize {
-    a.checked_add(b).unwrap_or(fallback)
 }
 
 #[cfg(test)]
