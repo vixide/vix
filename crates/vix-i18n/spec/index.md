@@ -242,3 +242,7 @@ right for 5, wrong for 1 and 2). So in `ar`, `ru` and `pl` a counted message is 
 noun (an abbreviation like `elem.` or a one/two-letter particle is fine). Add a new counted
 key to that list. Welsh, Irish and Scottish Gaelic have several plural categories too; they
 were not part of this change and still use the single English-shaped form.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The lazy backend no longer panics: a locale blob that does not parse (it always does, because `build.rs` writes each with `serde_json`, and a test checks every blob) is a locale with no messages, so lookups fall to the next locale in the chain, and an index outside the table has none. The locale-tag fallback uses `rsplit_once` instead of slicing. The panics in `build.rs` stay: a build script that cannot read or write its files must fail the build.
