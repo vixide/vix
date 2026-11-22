@@ -6,6 +6,18 @@
 //! `rust_i18n::set_locale` and persists it. Extracted from the former
 //! `vix-locale-chooser` so the data has its own home.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One selectable UI language.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Locale {
@@ -190,7 +202,10 @@ pub fn visual_order(chars: &[char]) -> Vec<usize> {
     for run in runs {
         let first = starts.partition_point(|&b| b < run.start);
         let end = starts.partition_point(|&b| b < run.end);
-        let odd = levels[run.start].is_rtl();
+        // LOC-F1: a run start outside the level table reads as left-to-right.
+        let odd = levels
+            .get(run.start)
+            .is_some_and(unicode_bidi::Level::is_rtl);
         if odd {
             out.extend((first..end).rev());
         } else {
