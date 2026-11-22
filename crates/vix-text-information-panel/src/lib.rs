@@ -22,6 +22,18 @@
 //! assert_eq!((s.words, s.sentences, s.paragraphs), (4, 3, 2));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
 // this crate originally called `t!` zero times -- every row label was
@@ -29,6 +41,20 @@
 #[macro_use]
 extern crate vix_i18n;
 vix_i18n::surface!();
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Computed statistics for a span of text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -66,7 +92,8 @@ fn count_sentences(text: &str) -> usize {
     for c in text.chars() {
         let term = is_term(c);
         if term && !prev_term {
-            runs += 1;
+            // TEXT-F1: a count that does not fit stays at its last value.
+            runs = add_or(runs, 1, runs);
         }
         prev_term = term;
     }
@@ -88,7 +115,7 @@ fn count_paragraphs(text: &str) -> usize {
         if line.trim().is_empty() {
             in_paragraph = false;
         } else if !in_paragraph {
-            paragraphs += 1;
+            paragraphs = add_or(paragraphs, 1, paragraphs); // TEXT-F1
             in_paragraph = true;
         }
     }
@@ -152,13 +179,15 @@ impl Panel {
 
     /// Move the highlight up one row.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0); // TEXT-F2: stop at the first row
     }
 
     /// Move the highlight down one row.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.rows.len() {
-            self.selected += 1;
+        if let Some(next) = self.selected.checked_add(1)
+            && next < self.rows.len()
+        {
+            self.selected = next;
         }
     }
 

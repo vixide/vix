@@ -19,3 +19,12 @@ with content but no terminator counts as one sentence.
 ## See also
 
 - [file-information-panel spec](../../vix-file-information-panel/spec/) — shared info-panel behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Counters and row selection use `checked_*`; the old `saturating_sub` is gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `TEXT-F1` | A sentence or paragraph count does not fit | the last value | A count cannot go past its type. |
+| `TEXT-F2` | The highlight moves above the first row | the first row | Moving up stops at the first row. |
