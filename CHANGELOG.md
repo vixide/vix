@@ -6,6 +6,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: the workspace is now version 3.0.0.** Checked arithmetic (`spec/rust-checked-arithmetic`) rejects an invalid input instead of replacing it, which changes some public signatures. The Pomodoro timer's `work_minutes` field is now private (read it with `work_minutes()`), and `Timer::adjust_minutes` returns a `Result`: a length outside 1 to 180 minutes is refused with `TimerError::OutOfRange` instead of being clamped. The calendar panel's `move_days`, `move_months`, `move_years`, `next_month` and `prev_month` return `Result<(), MoveError>`; a span the date library refuses is `MoveError::InvalidSpan`, and a move past the calendar's limits stops there. Further signature changes of this kind will be listed here.
+
 ### Fixed
 
 - **The base converter no longer overflows on `i128::MIN`.** Input with a second sign inside the digits, such as `--170141183460469231731687303715884105728`, parsed to the smallest `i128` and then negated it, which panicked in debug builds and wrapped in release builds. It is now reported as out of range.
