@@ -18,3 +18,11 @@ counts, the Memory section, the Storage section) — the panel always opens.
 ## See also
 
 - [file-information-panel spec](../../vix-file-information-panel/spec/) — shared info-panel behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The uptime breakdown uses `checked_div` and `checked_rem`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `SYS-F1` | A division or remainder by a constant fails | `0` | The divisors are constants above zero, so this cannot happen; zero is the neutral answer. |

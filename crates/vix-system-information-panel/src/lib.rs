@@ -17,6 +17,18 @@
 //!
 //! Owning spec: `crates/vix-system-information-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T563:
 // this crate originally called `t!` zero times -- every row label was
@@ -174,9 +186,17 @@ pub fn human_bytes(n: u64) -> String {
 /// ```
 #[must_use]
 pub fn human_uptime(secs: u64) -> String {
-    let days = secs / 86_400;
-    let hours = (secs % 86_400) / 3_600;
-    let mins = (secs % 3_600) / 60;
+    // SYS-F1: the divisors are constants above zero, so these never fail; 0 is
+    // the declared answer if they ever did.
+    let days = secs.checked_div(86_400).unwrap_or(0);
+    let hours = secs
+        .checked_rem(86_400)
+        .and_then(|rest| rest.checked_div(3_600))
+        .unwrap_or(0);
+    let mins = secs
+        .checked_rem(3_600)
+        .and_then(|rest| rest.checked_div(60))
+        .unwrap_or(0);
     if days > 0 {
         format!("{days}d {hours}h {mins}m")
     } else if hours > 0 {
