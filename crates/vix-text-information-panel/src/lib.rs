@@ -50,12 +50,6 @@ fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
     a.checked_sub(b).unwrap_or(fallback)
 }
 
-/// `a + b`, or the declared `fallback` when the sum does not fit (see
-/// `sub_or` for why the fallback is a parameter).
-fn add_or(a: usize, b: usize, fallback: usize) -> usize {
-    a.checked_add(b).unwrap_or(fallback)
-}
-
 /// Computed statistics for a span of text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
@@ -92,8 +86,13 @@ fn count_sentences(text: &str) -> usize {
     for c in text.chars() {
         let term = is_term(c);
         if term && !prev_term {
-            // TEXT-F1: a count that does not fit stays at its last value.
-            runs = add_or(runs, 1, runs);
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: runs counts characters of an in-memory string, so it is far below usize::MAX"
+            )]
+            {
+                runs += 1;
+            }
         }
         prev_term = term;
     }
@@ -115,7 +114,13 @@ fn count_paragraphs(text: &str) -> usize {
         if line.trim().is_empty() {
             in_paragraph = false;
         } else if !in_paragraph {
-            paragraphs = add_or(paragraphs, 1, paragraphs); // TEXT-F1
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: paragraphs counts lines of an in-memory string, so it is far below usize::MAX"
+            )]
+            {
+                paragraphs += 1;
+            }
             in_paragraph = true;
         }
     }
