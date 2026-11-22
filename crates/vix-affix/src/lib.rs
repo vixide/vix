@@ -24,6 +24,18 @@
 //!
 //! Spec: `crates/vix-affix/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Wrap `text` with `prefix` before and `suffix` after.
 ///
 /// # Examples
@@ -75,7 +87,10 @@ pub fn toggle(text: &str, prefix: &str, suffix: &str) -> String {
     // Require room for both affixes so a short string isn't mistaken for wrapped:
     // with prefix == suffix == "*", the one-char text "*" starts and ends with
     // "*" but is one star, not a wrapped empty string (which needs two).
-    if text.len() >= prefix.len() + suffix.len()
+    if prefix
+        .len()
+        .checked_add(suffix.len())
+        .is_some_and(|room| text.len() >= room)
         && text.starts_with(prefix)
         && text.ends_with(suffix)
     {
