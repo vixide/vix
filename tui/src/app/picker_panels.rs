@@ -197,8 +197,11 @@ impl App {
         let Some(p) = self.info.nerd_palette() else {
             return;
         };
-        let glyph = p.selected_glyph();
-        let name = p.selected_name();
+        let (Some(glyph), Some(name)) = (p.selected_glyph(), p.selected_name()) else {
+            self.messages
+                .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+            return;
+        };
         let area = self.layout.editor;
         if self.editor.insert_str(&glyph.to_string(), area) {
             self.status = t!("status.glyph_inserted", name = name).to_string();

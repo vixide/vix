@@ -75,7 +75,8 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let name = Line::from(Span::raw(format!("  {}", p.selected_name())));
+    // A selection past the end names nothing (it is never shown as another glyph).
+    let name = Line::from(Span::raw(format!("  {}", p.selected_name().unwrap_or(""))));
     frame.render_widget(Paragraph::new(name), chunks[1]);
 
     let hint = Line::from(Span::styled(
