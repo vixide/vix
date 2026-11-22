@@ -111,8 +111,14 @@ fn line_start_offsets(text: &str) -> Vec<usize> {
         text.bytes()
             .enumerate()
             .filter(|&(_, b)| b == b'\n')
-            // MDP-F1: an offset that does not fit is dropped (it cannot index text).
-            .filter_map(|(i, _)| i.checked_add(1)),
+            .map(|(i, _)| {
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: i is the index of a newline byte inside the text, so i + 1 is at most the text length"
+                )]
+                let next = i + 1;
+                next
+            }),
     );
     starts
 }
@@ -202,7 +208,14 @@ impl RenderState {
                     name: text.clone(),
                     // 1-based row of the heading text itself, i.e. the line pushed
                     // just below (the rule and blank follow it).
-                    line: add_or(self.out.len(), 1, self.out.len()), // MDP-F1
+                    line: {
+                        #[expect(
+                            clippy::arithmetic_side_effects,
+                            reason = "RCA-EXC-2: out is a Vec of lines in memory, so its length is below usize::MAX"
+                        )]
+                        let line = self.out.len() + 1;
+                        line
+                    },
                 });
                 self.push_line(text);
                 self.push_line(rule_ch.to_string().repeat(width));

@@ -55,9 +55,9 @@ no-op with a status message.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line offsets, list numbers and scrolling use `checked_*`; the old `saturating_sub` calls are gone.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line offsets and the heading line number are plain additions under `RCA-EXC-2` expectations (a newline index plus one, and a vector length plus one). List numbering and scrolling use `checked_*`; the old `saturating_sub` calls are gone.
 
 | ID | Failure | Declared fallback | Why it is correct |
 | -- | ------- | ----------------- | ----------------- |
-| `MDP-F1` | An addition (an offset, a list number or a scroll step) does not fit | the current value, or the end of the document | Counters stop growing and scrolling stops at the end. |
+| `MDP-F1` | A list number or a scroll step does not fit | the current value, or the end of the document | A list number stops growing and scrolling stops at the end; both are bounds of a computed position. |
 | `MDP-F2` | A subtraction goes below zero | `0` | A short document does not scroll, and moving up stops at the top. |
