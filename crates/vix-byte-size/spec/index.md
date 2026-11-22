@@ -47,8 +47,4 @@ directly for the same reason.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The unit table is walked with an iterator, so no index or subtraction remains. Float steps are unchecked by design: the divisions are by a constant above zero.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `BYTES-F1` | The unit table is empty | the unit `B` | The table is a constant with six entries; this is only the answer to a broken constant. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The unit table is walked with an iterator, so no subtraction or index variable remains, and the first unit is read from a constant six-entry array. Float steps are unchecked by design: the divisions are by a constant above zero. No fallbacks are declared.

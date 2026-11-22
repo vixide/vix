@@ -53,8 +53,7 @@ pub fn human_bytes(n: u64) -> String {
         return format!("{n} B");
     }
     let mut value = u64_to_f64(n);
-    // BYTES-F1: the table is never empty; "B" is its first unit anyway.
-    let mut label = UNITS.first().copied().unwrap_or("B");
+    let mut label = UNITS[0];
     // Step to the next unit while the value is 1024 or more; stop at the last.
     for next in UNITS.iter().skip(1) {
         if value < 1024.0 {
