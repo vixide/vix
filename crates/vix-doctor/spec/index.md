@@ -71,3 +71,7 @@ time it can be opened at all).
 
 Off, those checks are absent from `run` rather than reported as failures. The root `git`
 and `lsp` features enable them (`spec/cargo-features`, T595).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The summary counts each status with `filter(..).count()` instead of adding up in a fold.

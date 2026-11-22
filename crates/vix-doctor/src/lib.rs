@@ -14,6 +14,18 @@
 //! `lsp_probes` shims). Every check returns a [`Check`] value rather than
 //! printing, so the CLI and the TUI overlay share one data path.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T561:
 // this crate originally called `t!` zero times -- shown inside a live,
@@ -231,13 +243,12 @@ pub fn format_report(checks: &[Check]) -> Vec<String> {
             format!("[{tag}] {} -- {}", c.name, c.detail)
         })
         .collect();
-    let (pass, fail, skip) = checks
-        .iter()
-        .fold((0, 0, 0), |(p, f, s), c| match c.status {
-            Status::Pass => (p + 1, f, s),
-            Status::Fail => (p, f + 1, s),
-            Status::Skip => (p, f, s + 1),
-        });
+    let count = |status: Status| checks.iter().filter(|c| c.status == status).count();
+    let (pass, fail, skip) = (
+        count(Status::Pass),
+        count(Status::Fail),
+        count(Status::Skip),
+    );
     lines.push(String::new());
     lines.push(t!("doctor.summary", pass = pass, fail = fail, skip = skip).to_string());
     lines
