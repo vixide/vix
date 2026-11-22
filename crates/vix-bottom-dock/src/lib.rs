@@ -179,8 +179,12 @@ impl BottomDock {
         let max_start = sub_or(self.lines.len(), height, 0); // DOCK-F1
         let start = self.scroll.min(max_start).min(self.lines.len());
         let end = add_or(start, height, self.lines.len()).min(self.lines.len()); // DOCK-F2
-        // DOCK-F3: a range outside the lines shows nothing.
-        self.lines.get(start..end).unwrap_or(&[])
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: start is at most the line count, and end is at least start (height is at least 1) and at most the line count"
+        )]
+        let window = &self.lines[start..end];
+        window
     }
 }
 
