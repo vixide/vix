@@ -14,6 +14,18 @@
 //! (hex via `rgb`, backed by `vix-hex-rgb`) → parsed by
 //! [`vix_theme_model::parse_theme`]. Spec: `crates/vix-base16/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_theme_model::{CustomTheme, parse_theme};
 
 /// One palette: a display name and the 16 `base00`–`base0F` colors as RGB hex
@@ -112,7 +124,9 @@ fn rgb(hex: &str) -> String {
 /// cursor, `base0E` keywords.
 fn to_json(p: &Palette) -> String {
     // `c(i)` is the JSON `[r, g, b]` for slot `baseNN` with NN = i (decimal).
-    let c = |i: usize| rgb(p.colors[i]);
+    // BASE16-F1: a slot outside 0..16 is an empty hex string, which `rgb`
+    // renders as black like any malformed hex.
+    let c = |i: usize| rgb(p.colors.get(i).copied().unwrap_or(""));
     // Chrome regions use (foreground slot, background slot).
     let region =
         |fg: usize, bg: usize| format!("{{\"foreground\": {}, \"background\": {}}}", c(fg), c(bg));
