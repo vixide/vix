@@ -74,7 +74,7 @@ pub fn resolve_theme(
 pub fn parse_osc11_reply(reply: &str) -> Option<(u8, u8, u8)> {
     // Everything before `rgb:` (the OSC introducer) and after the third
     // component (the BEL / ST terminator) is ignored, so both terminator styles work.
-    let rest = &reply[reply.find("rgb:")? + 4..];
+    let (_, rest) = reply.split_once("rgb:")?;
     let mut parts = rest.split('/');
     let mut component = |last: bool| -> Option<u8> {
         let part = parts.next()?;
@@ -86,8 +86,14 @@ pub fn parse_osc11_reply(reply: &str) -> Option<(u8, u8, u8)> {
         let value = u32::from_str_radix(&digits, 16).ok()?;
         // Scale an n-digit hex value onto 0..=255 with round-to-nearest
         // (the `max / 2` term), so `f` -> 255 and `ffff` -> 255 alike.
-        let max = 16u32.pow(u32::try_from(digits.len()).ok()?) - 1;
-        u8::try_from((value * 255 + max / 2) / max).ok()
+        let max = 16u32
+            .checked_pow(u32::try_from(digits.len()).ok()?)?
+            .checked_sub(1)?;
+        let scaled = value
+            .checked_mul(255)?
+            .checked_add(max.checked_div(2)?)?
+            .checked_div(max)?;
+        u8::try_from(scaled).ok()
     };
     Some((component(false)?, component(false)?, component(true)?))
 }

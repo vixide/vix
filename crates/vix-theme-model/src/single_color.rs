@@ -98,8 +98,21 @@ pub fn flatten(buf: &mut Buffer, fg: Color, bg: Color) {
 
 /// Euclidean distance between two RGB colors, rounded down.
 fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
-    let d = |x: u8, y: u8| u32::from(x.abs_diff(y)).pow(2);
-    (d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)).isqrt()
+    let d = |x: u8, y: u8| {
+        let diff = u32::from(x.abs_diff(y));
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: a u8 difference is at most 255, so its square fits u32"
+        )]
+        let square = diff * diff;
+        square
+    };
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: three squares of at most 255 sum to at most 195075, which fits u32"
+    )]
+    let sum = d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2);
+    sum.isqrt()
 }
 
 /// An approximate RGB value for `c` (the xterm palette for named and indexed
@@ -110,6 +123,10 @@ fn approx_rgb(c: Color) -> Option<(u8, u8, u8)> {
         Color::Rgb(r, g, b) => (r, g, b),
         Color::Black | Color::Indexed(0 | 16) => (0, 0, 0),
         Color::Indexed(i @ 232..=255) => {
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: i is in 232..=255, so (i - 232) * 10 + 8 is at most 238, which fits u8"
+            )]
             let v = 8 + (i - 232) * 10;
             (v, v, v)
         }

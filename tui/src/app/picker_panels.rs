@@ -479,7 +479,14 @@ impl App {
             return;
         }
         let path = dir.join(format!("{name}.json"));
-        let json = crate::theme_model::to_json(&editor.theme);
+        let json = match crate::theme_model::to_json(&editor.theme) {
+            Ok(json) => json,
+            Err(e) => {
+                self.messages
+                    .error(t!("msg.theme_save_failed", error = e).to_string());
+                return;
+            }
+        };
         if let Err(e) = std::fs::write(&path, json) {
             self.messages
                 .error(t!("msg.theme_save_failed", error = e).to_string());

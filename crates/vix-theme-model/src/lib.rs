@@ -19,6 +19,18 @@
 //! [`single_color`] (the single-color picker model). Spec:
 //! `crates/vix-theme-model/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod background;
 pub mod single_color;
 
@@ -393,13 +405,13 @@ pub fn parse_theme(json: &str) -> Option<CustomTheme> {
 /// (T202's theme editor Save As). Pretty-printed so a saved file is easy to
 /// hand-edit afterward, matching every bundled theme's own formatting.
 ///
-/// Never panics. [`CustomTheme`] contains no type `serde_json` cannot
-/// represent (no floats, no non-string map keys), so serialization does not fail
-/// for a real theme; were it ever to, this returns an empty string rather than
-/// an error.
-#[must_use]
-pub fn to_json(theme: &CustomTheme) -> String {
-    serde_json::to_string_pretty(theme).unwrap_or_default()
+/// # Errors
+/// The `serde_json` error if the theme cannot be serialized. [`CustomTheme`]
+/// contains no type `serde_json` cannot represent (no floats, no non-string map
+/// keys), so this does not happen for a real theme; it is an error, never an
+/// empty file saved as if it were the theme.
+pub fn to_json(theme: &CustomTheme) -> Result<String, serde_json::Error> {
+    serde_json::to_string_pretty(theme)
 }
 
 /// Load all themes (`*.json`) from `dir`, sorted by name. Unreadable or malformed

@@ -24,3 +24,7 @@ terminal I/O that asks lives in the binary.
 ## See also
 
 - [theme spec](../../vix-theme/spec/) — shared theme model
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). `to_json` returns `Result<String, serde_json::Error>` instead of an empty string when serialization fails, so a theme is never saved as an empty file; the theme editor reports the error. The OSC 11 reply parser splits on `rgb:` with `split_once` and scales each component with `checked_*` (a reply that does not fit is `None`). The colour-distance and grey-ramp arithmetic are plain under `RCA-EXC-2` expectations with their bounds.
