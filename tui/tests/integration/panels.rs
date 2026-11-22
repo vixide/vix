@@ -452,11 +452,13 @@ fn explorer_paste_conflicts_ask_and_each_choice_is_kept() {
     }
     let mut app = app_at(&dir);
     app.focus = Focus::Explorer;
+    // Ctrl+C copies the marked set (just the highlighted row when nothing is
+    // marked), so mark all three files.
     let copy = |app: &mut App| {
         for name in ["a.txt", "b.txt", "c.txt"] {
-            app.explorer.selected = node_index(app, name);
-            app.on_key(ctrl('c'));
+            app.explorer.marked.insert(app.root.join(name));
         }
+        app.on_key(ctrl('c'));
     };
     copy(&mut app);
     app.explorer.selected = node_index(&app, "sub");
@@ -863,4 +865,46 @@ fn outline_and_html_palette_take_the_navigation_keys() {
         assert!(!open(&app), "{action} closes on Esc");
     }
     fs::remove_dir_all(&dir).ok();
+}
+
+/// At a paste conflict, `O` overwrites this and every later conflict, and
+/// Esc cancels like `c`.
+#[test]
+fn explorer_paste_conflict_overwrite_all_and_escape() {
+    // A fresh folder and app per scenario.
+    let scenario = |tag: &str, answer: KeyEvent| {
+        let dir = unique_dir(tag);
+        fs::create_dir(dir.join("sub")).unwrap();
+        for name in ["a.txt", "b.txt"] {
+            fs::write(dir.join(name), format!("new {name}")).unwrap();
+            fs::write(dir.join("sub").join(name), format!("old {name}")).unwrap();
+        }
+        let mut app = app_at(&dir);
+        app.focus = Focus::Explorer;
+        // Ctrl+C copies the marked set (or just the highlighted row when
+        // nothing is marked), so mark both files.
+        for name in ["a.txt", "b.txt"] {
+            app.explorer.marked.insert(dir.join(name));
+        }
+        app.on_key(ctrl('c'));
+        app.explorer.selected = node_index(&app, "sub");
+        app.on_key(ctrl('v'));
+        assert!(app.paste.is_some(), "a conflict asks: {}", app.status);
+        app.on_key(answer);
+        assert!(app.paste.is_none(), "the answer settles the paste");
+        let read = |n: &str| fs::read_to_string(dir.join("sub").join(n)).unwrap();
+        let result = (read("a.txt"), read("b.txt"));
+        fs::remove_dir_all(&dir).ok();
+        result
+    };
+    assert_eq!(
+        scenario("paste-esc", keycode(KeyCode::Esc)),
+        ("old a.txt".to_string(), "old b.txt".to_string()),
+        "Esc changes nothing"
+    );
+    assert_eq!(
+        scenario("paste-all", key('O')),
+        ("new a.txt".to_string(), "new b.txt".to_string()),
+        "O overwrites every conflict"
+    );
 }
