@@ -147,3 +147,12 @@ running program and are not saved.
 ## Roadmap
 
 - Per-workspace "reopen last session" command for the disabled-by-default case.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Visit counts and ages use `checked_*`; the one product that remains is bounded by construction and carries an `RCA-EXC-2` expectation.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `SES-F1` | The visit count is at the top of `u32` | the current count | A count cannot go past its maximum, and ranking only compares counts. |
+| `SES-F2` | `now - last_visit` does not fit | the largest age | A difference too large to represent is older than every recency bucket. |

@@ -22,6 +22,18 @@
 //! assert_eq!(s.workspace("/tmp/proj").unwrap().files.len(), 1);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use serde::{Deserialize, Serialize};
 
 /// Application name used by [`confy`] to locate the config directory (matches
@@ -433,7 +445,8 @@ impl Session {
             .iter()
             .find(|w| w.root == ws.root)
             .map_or(0, |w| w.visits);
-        ws.visits = prior.saturating_add(1).max(ws.visits);
+        // SES-F1: a visit count at the top of `u32` stays there.
+        ws.visits = prior.checked_add(1).unwrap_or(prior).max(ws.visits);
         if let Some(old) = self.workspaces.iter().find(|w| w.root == ws.root) {
             ws.scripts_trusted = ws.scripts_trusted.or(old.scripts_trusted);
             ws.remote_trusted = ws.remote_trusted.or(old.remote_trusted);
@@ -454,7 +467,8 @@ impl Session {
     #[must_use]
     pub fn frecency_ordered(&self, now: i64) -> Vec<String> {
         let score = |w: &WorkspaceSession| -> i64 {
-            let age = now.saturating_sub(w.last_visit);
+            // SES-F2: an age too large to represent is the oldest bucket.
+            let age = now.checked_sub(w.last_visit).unwrap_or(i64::MAX);
             let weight = if w.last_visit == 0 {
                 1
             } else if age < 86_400 {
@@ -466,7 +480,12 @@ impl Session {
             } else {
                 1
             };
-            i64::from(w.visits) * weight
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: visits is a u32 and the weight is at most 8, so the product is below 2^36"
+            )]
+            let score = i64::from(w.visits) * weight;
+            score
         };
         let mut ranked: Vec<&WorkspaceSession> = self.workspaces.iter().collect();
         ranked.sort_by_key(|w| std::cmp::Reverse(score(w)));
