@@ -1097,3 +1097,123 @@ fn switch_project_lists_a_workspace_quit_earlier() {
     fs::remove_dir_all(&first).ok();
     fs::remove_dir_all(&second).ok();
 }
+
+/// The panel's keys: arrows move the highlight, Tab switches fields, the Alt
+/// options toggle and search again, and Esc closes it (the search is kept).
+#[test]
+fn workspace_search_panel_keys_navigate_and_toggle_options() {
+    let dir = unique_dir("pskeys");
+    fs::write(dir.join("a.txt"), "Beta\nbeta\nbeta\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("search.workspace");
+    type_str(&mut app, "beta");
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
+
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(app.workspace_search.as_ref().unwrap().selected, 2);
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(app.workspace_search.as_ref().unwrap().selected, 1);
+
+    // Alt+C: case-sensitive drops the capitalised hit; Alt+C again restores it.
+    app.on_key(alt(KeyCode::Char('c')));
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
+    app.on_key(alt(KeyCode::Char('c')));
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
+    // Alt+R: regex mode on and off; an unbound Alt letter just searches again.
+    app.on_key(alt(KeyCode::Char('r')));
+    assert!(
+        app.workspace_search
+            .as_ref()
+            .unwrap()
+            .flags
+            .contains(WorkspaceFlags::REGEX)
+    );
+    app.on_key(alt(KeyCode::Char('r')));
+    app.on_key(alt(KeyCode::Char('z')));
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
+
+    // Tab moves to the next field; typing there edits it.
+    let first = app.workspace_search.as_ref().unwrap().field;
+    app.on_key(keycode(KeyCode::Tab));
+    assert_ne!(app.workspace_search.as_ref().unwrap().field, first);
+    app.on_key(keycode(KeyCode::Backspace));
+
+    app.on_key(esc());
+    assert!(app.workspace_search.is_none(), "Esc closes the panel");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// Alt+H turns on replace mode (focusing the replacement field); Enter there,
+/// or Alt+Enter, plans a replace in every file and asks for confirmation.
+#[test]
+fn workspace_search_replace_mode_plans_a_confirmed_replace_everywhere() {
+    let dir = unique_dir("psreplace");
+    fs::write(dir.join("a.txt"), "needle one\n").unwrap();
+    fs::write(dir.join("b.txt"), "needle two\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("search.workspace");
+    type_str(&mut app, "needle");
+    app.on_key(alt(KeyCode::Char('h')));
+    let ps = app.workspace_search.as_ref().unwrap();
+    assert!(ps.flags.contains(WorkspaceFlags::REPLACING));
+    assert_eq!(format!("{:?}", ps.field), "Replace");
+    type_str(&mut app, "thread");
+    assert_eq!(
+        app.workspace_search.as_ref().unwrap().replace,
+        "thread",
+        "typing goes to the replacement"
+    );
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(
+        app.replace_confirm.is_some(),
+        "the plan awaits confirmation"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "needle one\n",
+        "nothing is written before confirming"
+    );
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "thread one\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("b.txt")).unwrap(),
+        "thread two\n"
+    );
+
+    // Alt+H again leaves replace mode and returns to the query field.
+    app.on_key(alt(KeyCode::Char('h')));
+    let ps = app.workspace_search.as_ref().unwrap();
+    assert!(!ps.flags.contains(WorkspaceFlags::REPLACING));
+    assert_eq!(format!("{:?}", ps.field), "Query");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// Alt+I hands the search on to the dock; with no query it asks for one.
+#[test]
+fn workspace_search_alt_i_continues_in_the_dock_or_asks() {
+    let dir = unique_dir("psdock");
+    fs::write(dir.join("a.txt"), "needle\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("search.workspace");
+    app.on_key(alt(KeyCode::Char('i')));
+    assert!(app.workspace_search.is_none());
+    assert!(
+        matches!(
+            app.prompt.as_ref().map(|p| p.kind),
+            Some(PromptKind::SearchToDock)
+        ),
+        "an empty query asks what to search for"
+    );
+    app.on_key(esc());
+
+    app.run_action("search.workspace");
+    type_str(&mut app, "needle");
+    app.on_key(alt(KeyCode::Char('i')));
+    assert!(app.workspace_search.is_none(), "the panel handed over");
+    assert!(app.prompt.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
