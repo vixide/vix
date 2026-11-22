@@ -17,6 +17,18 @@
 //!
 //! Owning spec: `crates/vix-unit-converter-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// A measurable quantity. Conversions are only defined within one dimension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dimension {
@@ -357,7 +369,11 @@ impl Converter {
             return;
         }
         let current = i64::try_from(*slot).unwrap_or(0);
-        let next = (current + i64::from(delta)).rem_euclid(count);
+        // UC-F1: a step that does not fit keeps the first unit.
+        let next = current
+            .checked_add(i64::from(delta))
+            .and_then(|sum| sum.checked_rem_euclid(count))
+            .unwrap_or(0);
         *slot = usize::try_from(next).unwrap_or(0);
     }
 
@@ -387,7 +403,12 @@ impl Converter {
     #[must_use]
     pub fn insert_text(&self) -> String {
         match self.output() {
-            Some(v) => format!("{} {}", format_number(v), UNITS[self.to].label),
+            // UC-F2: an unknown unit renders with an empty label.
+            Some(v) => format!(
+                "{} {}",
+                format_number(v),
+                UNITS.get(self.to).map_or("", |unit| unit.label)
+            ),
             None => String::new(),
         }
     }
