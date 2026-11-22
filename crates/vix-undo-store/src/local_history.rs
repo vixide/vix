@@ -37,6 +37,12 @@ pub enum HistoryError {
     NotFound(u64),
     /// Reading or writing a snapshot failed.
     Io(std::io::Error),
+    /// A line range does not fit the texts it names (a range start at the
+    /// top of `usize`, or a diff range outside the lines it diffed).
+    Range {
+        /// The figure that is out of range.
+        figure: &'static str,
+    },
 }
 
 impl fmt::Display for HistoryError {
@@ -44,6 +50,7 @@ impl fmt::Display for HistoryError {
         match self {
             Self::NotFound(id) => write!(f, "no snapshot {id}"),
             Self::Io(e) => write!(f, "{e}"),
+            Self::Range { figure } => write!(f, "{figure}: outside the text"),
         }
     }
 }
@@ -137,10 +144,11 @@ impl LocalHistory {
         std::fs::create_dir_all(&dir)?;
         // Ids are millisecond timestamps; two saves in one millisecond bump
         // the id instead of overwriting, preserving uniqueness and ordering.
-        let mut id = now_ms();
-        while dir.join(format!("{id}.snap")).exists() {
-            id += 1;
-        }
+        let id = (now_ms()..=u64::MAX)
+            .find(|id| !dir.join(format!("{id}.snap")).exists())
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::AlreadyExists, "no free snapshot id")
+            })?;
         // Owner-only and atomic: snapshots can hold secrets and a crash must
         // not leave a truncated `.snap` that later reads as real history.
         vix_fileops::write_atomic_private(&dir.join(format!("{id}.snap")), content.as_bytes())?;
@@ -152,7 +160,9 @@ impl LocalHistory {
         Ok(Some(Snapshot {
             id,
             label: label.map(str::to_string),
-            bytes: content.len() as u64,
+            bytes: u64::try_from(content.len()).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "snapshot too large")
+            })?,
         }))
     }
 
@@ -215,6 +225,10 @@ impl LocalHistory {
         if all.len() <= self.keep {
             return;
         }
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: the check above returned unless all.len() is greater than keep"
+        )]
         let excess = all.len() - self.keep;
         let dir = self.dir_for(file);
         // `all` is newest-first, so `.rev()` yields oldest first: victims are
@@ -259,12 +273,12 @@ pub fn unified_diff(old: &str, new: &str) -> String {
         let Some(first) = group.first() else {
             continue;
         };
-        let _ = writeln!(
-            out,
-            "@@ -{} +{} @@",
-            first.old_range().start + 1,
-            first.new_range().start + 1
-        );
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: a diff range starts at a line index of the text, so adding one cannot overflow"
+        )]
+        let (old_line, new_line) = (first.old_range().start + 1, first.new_range().start + 1);
+        let _ = writeln!(out, "@@ -{old_line} +{new_line} @@");
         for op in &group {
             for change in diff.iter_changes(op) {
                 out.push(match change.tag() {
@@ -293,19 +307,30 @@ pub fn unified_diff(old: &str, new: &str) -> String {
 /// `Equal` op never needs reverting; replaced/inserted/deleted ops that touch
 /// the range take their text from the snapshot.
 ///
+/// # Errors
+/// [`HistoryError::Range`] if `start` is at the top of `usize` (no line follows
+/// it) or the diff names lines outside the texts; nothing is guessed.
+///
 /// # Examples
 ///
 /// ```
 /// use vix_undo_store::local_history::revert_range;
 /// // Revert only the third line; the first edit is kept.
-/// assert_eq!(revert_range("A\nb\nC\nd\n", "a\nb\nc\nd\n", 2, 3), "A\nb\nc\nd\n");
+/// assert_eq!(revert_range("A\nb\nC\nd\n", "a\nb\nc\nd\n", 2, 3).unwrap(), "A\nb\nc\nd\n");
 /// ```
-#[must_use]
-pub fn revert_range(current: &str, snapshot: &str, start: usize, end: usize) -> String {
+pub fn revert_range(
+    current: &str,
+    snapshot: &str,
+    start: usize,
+    end: usize,
+) -> Result<String, HistoryError> {
+    let range_err = || HistoryError::Range {
+        figure: "line range",
+    };
     let diff = TextDiff::from_lines(snapshot, current);
     let old: Vec<&str> = snapshot.split_inclusive('\n').collect();
     let new: Vec<&str> = current.split_inclusive('\n').collect();
-    let end = end.max(start + 1);
+    let end = end.max(start.checked_add(1).ok_or_else(range_err)?);
     let mut out = String::new();
     for op in diff.ops() {
         let nr = op.new_range();
@@ -326,20 +351,20 @@ pub fn revert_range(current: &str, snapshot: &str, start: usize, end: usize) -> 
             for (o, n) in or.zip(nr) {
                 let inside = n >= start && n < end;
                 let line = if inside { old.get(o) } else { new.get(n) };
-                out.push_str(line.copied().unwrap_or_default());
+                out.push_str(line.copied().ok_or_else(range_err)?);
             }
             continue;
         }
         let src = if touches {
-            old.get(or).unwrap_or(&[])
+            old.get(or).ok_or_else(range_err)?
         } else {
-            new.get(nr).unwrap_or(&[])
+            new.get(nr).ok_or_else(range_err)?
         };
         for l in src {
             out.push_str(l);
         }
     }
-    out
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -351,17 +376,23 @@ mod tests {
         // All three lines changed, as one block: selecting the middle one
         // brings back only that line.
         assert_eq!(
-            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 1, 2),
+            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 1, 2).unwrap(),
             "ONE\ntwo\nTHREE\n"
         );
         assert_eq!(
-            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 0, 3),
+            revert_range("ONE\nTWO\nTHREE\n", "one\ntwo\nthree\n", 0, 3).unwrap(),
             "one\ntwo\nthree\n"
         );
         // A block that grew has no line correspondence: reverted whole.
-        assert_eq!(revert_range("a\nX\nY\nc\n", "a\nb\nc\n", 1, 2), "a\nb\nc\n");
+        assert_eq!(
+            revert_range("a\nX\nY\nc\n", "a\nb\nc\n", 1, 2).unwrap(),
+            "a\nb\nc\n"
+        );
         // Outside the range, nothing changes.
-        assert_eq!(revert_range("ONE\nTWO\n", "one\ntwo\n", 5, 6), "ONE\nTWO\n");
+        assert_eq!(
+            revert_range("ONE\nTWO\n", "one\ntwo\n", 5, 6).unwrap(),
+            "ONE\nTWO\n"
+        );
     }
 
     fn store(tag: &str) -> (LocalHistory, PathBuf) {
@@ -445,23 +476,44 @@ mod tests {
     fn revert_range_only_touches_the_selection() {
         let snap = "a\nb\nc\nd\n";
         let cur = "A\nb\nC\nd\n";
-        assert_eq!(revert_range(cur, snap, 2, 3), "A\nb\nc\nd\n");
-        assert_eq!(revert_range(cur, snap, 0, 4), snap);
-        assert_eq!(revert_range(cur, snap, 1, 2), cur);
+        assert_eq!(revert_range(cur, snap, 2, 3).unwrap(), "A\nb\nc\nd\n");
+        assert_eq!(revert_range(cur, snap, 0, 4).unwrap(), snap);
+        assert_eq!(revert_range(cur, snap, 1, 2).unwrap(), cur);
     }
 
     #[test]
     fn revert_range_restores_a_deleted_line_and_drops_an_added_one() {
         let snap = "a\nb\nc\n";
         assert_eq!(
-            revert_range("a\nc\n", snap, 1, 2),
+            revert_range("a\nc\n", snap, 1, 2).unwrap(),
             snap,
             "deleted line returns"
         );
         assert_eq!(
-            revert_range("a\nb\nX\nc\n", snap, 2, 3),
+            revert_range("a\nb\nX\nc\n", snap, 2, 3).unwrap(),
             snap,
             "added line goes"
+        );
+    }
+
+    #[test]
+    fn a_range_start_at_the_top_of_usize_is_an_error() {
+        let err = revert_range("a\n", "b\n", usize::MAX, usize::MAX);
+        assert!(
+            matches!(
+                err,
+                Err(HistoryError::Range {
+                    figure: "line range"
+                })
+            ),
+            "{err:?}"
+        );
+        assert_eq!(
+            HistoryError::Range {
+                figure: "line range"
+            }
+            .to_string(),
+            "line range: outside the text"
         );
     }
 }

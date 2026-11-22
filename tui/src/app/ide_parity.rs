@@ -403,7 +403,14 @@ impl App {
         };
         let new = match lines {
             None => snapshot.to_string(),
-            Some((s, e)) => local_history::revert_range(&current, snapshot, s, e),
+            Some((s, e)) => match local_history::revert_range(&current, snapshot, s, e) {
+                Ok(text) => text,
+                Err(e) => {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
+                    return;
+                }
+            },
         };
         if new == current {
             self.status = t!("status.local_history_same").to_string();
