@@ -11,6 +11,18 @@
 //! List navigation delegates to `vix_list_state`. Spec:
 //! `crates/vix-x11-color-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::OnceLock;
 
 /// One X11 color: a name, its `#RRGGBB` hex string, and 8-bit RGB components.
@@ -155,8 +167,19 @@ impl Panel {
     /// never indexes out of range even if a caller set `selected` directly.
     #[must_use]
     pub fn selected_color(&self) -> &'static Color {
-        let i = self.selected.min(self.len().saturating_sub(1));
-        &colors()[i]
+        // A `selected` past the end reads as the last color, `X11-F1`; an empty
+        // table (never in practice) reads as black.
+        const BLACK: Color = Color {
+            name: "Black",
+            hex: "#000000",
+            r: 0,
+            g: 0,
+            b: 0,
+        };
+        colors()
+            .get(self.selected)
+            .or_else(|| colors().last())
+            .unwrap_or(&BLACK)
     }
 
     /// The highlighted color's hex string (what insertion uses).

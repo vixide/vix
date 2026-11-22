@@ -13,3 +13,11 @@ rows, maps clicks to rows, and inserts the chosen hex.
 ## See also
 
 - [ascii-character-picker spec](../../vix-ascii-character-picker/spec/) — shared character-picker behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-color lookup uses `get`; the old `saturating_sub` is gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `X11-F1` | `selected` is past the last color | the last color (black if the table were empty) | A caller who sets the public field too far still gets a real color. |
