@@ -158,8 +158,11 @@ impl App {
         };
         let top = self.editor.tabs[here].editor.get_offset_y();
         if let Some(c) = self.compare.as_ref() {
-            let mapped = compare::map_line(&c.hunks, side, top);
-            self.editor.tabs[there].editor.set_offset_y(mapped);
+            // A line the hunk table cannot map (an inconsistent table) leaves the
+            // other pane where it is.
+            if let Some(mapped) = compare::map_line(&c.hunks, side, top) {
+                self.editor.tabs[there].editor.set_offset_y(mapped);
+            }
         }
         true
     }

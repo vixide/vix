@@ -7,6 +7,18 @@
 //! owns scrolling and `ui` renders the colored lines. Spec:
 //! `crates/vix-diff-view/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // `compare` documents itself with an inner `//!` block (T660).
 pub mod compare;
 
