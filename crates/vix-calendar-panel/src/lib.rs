@@ -21,6 +21,18 @@
 //! assert_eq!(grid.weeks.last().unwrap().iter().flatten().max(), Some(&29));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate). T566:
 // `title()` used `strftime("%B %Y")`, and `%B` isn't locale-aware without
@@ -30,7 +42,7 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 use jiff::civil::Date;
-use jiff::{ToSpan, Zoned};
+use jiff::{Span, Zoned};
 
 /// Current time in the system's local time zone.
 #[must_use]
@@ -78,8 +90,11 @@ pub fn month_grid(month: Date) -> MonthGrid {
     let mut week = [None; 7];
     let mut col = lead;
     for day in 1..=days {
-        week[col] = Some(day);
-        col += 1;
+        if let Some(slot) = week.get_mut(col) {
+            *slot = Some(day);
+        }
+        // CAL-F2: a column that does not fit ends the week.
+        col = col.checked_add(1).unwrap_or(7);
         if col == 7 {
             weeks.push(week);
             week = [None; 7];
@@ -122,6 +137,19 @@ impl Calendar {
         }
     }
 
+    /// Move the selection by `span`; the view follows. CAL-F1: a span jiff
+    /// rejects, or a date past the calendar's limits, leaves the selection
+    /// where it is.
+    fn shift(&mut self, span: Result<Span, jiff::Error>) {
+        if let Some(next) = span
+            .ok()
+            .and_then(|span| self.selected.checked_add(span).ok())
+        {
+            self.selected = next;
+        }
+        self.sync_shown();
+    }
+
     /// Keep the displayed month in sync with the selected day.
     fn sync_shown(&mut self) {
         self.shown = first_of_month(self.selected);
@@ -129,34 +157,17 @@ impl Calendar {
 
     /// Move the selection by `days` (negative = earlier); the view follows.
     pub fn move_days(&mut self, days: i64) {
-        // Negative spans go through `saturating_sub` of the magnitude rather
-        // than negating a span, so the date clamps at the calendar limits.
-        self.selected = if days >= 0 {
-            self.selected.saturating_add(days.days())
-        } else {
-            self.selected.saturating_sub((-days).days())
-        };
-        self.sync_shown();
+        self.shift(Span::new().try_days(days));
     }
 
     /// Move the selection by `months` (negative = earlier); the view follows.
     pub fn move_months(&mut self, months: i64) {
-        self.selected = if months >= 0 {
-            self.selected.saturating_add(months.months())
-        } else {
-            self.selected.saturating_sub((-months).months())
-        };
-        self.sync_shown();
+        self.shift(Span::new().try_months(months));
     }
 
     /// Move the selection by `years` (negative = earlier); the view follows.
     pub fn move_years(&mut self, years: i64) {
-        self.selected = if years >= 0 {
-            self.selected.saturating_add(years.years())
-        } else {
-            self.selected.saturating_sub((-years).years())
-        };
-        self.sync_shown();
+        self.shift(Span::new().try_years(years));
     }
 
     /// The selected date.

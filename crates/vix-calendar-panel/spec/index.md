@@ -51,3 +51,12 @@ navigation state (`move_days`/`move_months`/`move_years`, `selected`,
 optional day numbers, with `today` set only for the current month). The host owns
 the `Visible::CALENDAR` flag, the `Calendar` state, the `tools.calendar` toggle, key/mouse
 routing, and `draw_calendar`. See `crates/vix-calendar-panel/spec/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Moving the selection builds a `Span` with `try_*` and adds it with `checked_add`; the old `saturating_*` calls are gone, and the week grid uses `get_mut`. A move past the calendar's own limits now leaves the selection where it is instead of clamping to the limit date.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `CAL-F1` | A span jiff rejects, or a date past the calendar's limits | the selection stays where it is | A date that does not exist cannot be selected. |
+| `CAL-F2` | A week column count does not fit | the end of the week | The grid has seven columns. |
