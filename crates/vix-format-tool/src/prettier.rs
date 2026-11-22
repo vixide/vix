@@ -48,6 +48,8 @@ pub enum PrettierError {
     Failed(String),
     /// Prettier's output was not valid UTF-8.
     BadOutput,
+    /// The timeout is too long to become a deadline; nothing was started.
+    BadTimeout,
 }
 
 /// Short lowercase messages, suitable for the status line.
@@ -59,6 +61,7 @@ impl fmt::Display for PrettierError {
             PrettierError::TimedOut => f.write_str("prettier timed out"),
             PrettierError::Failed(m) => write!(f, "prettier failed: {m}"),
             PrettierError::BadOutput => f.write_str("prettier output was not UTF-8"),
+            PrettierError::BadTimeout => f.write_str("prettier timeout is too long"),
         }
     }
 }
@@ -232,6 +235,21 @@ mod tests {
         let bin = script(&d, "p", "sleep 30").unwrap();
         let r = format_settled(&bin, &d.join("a.ts"), "x", Duration::from_millis(100));
         assert!(matches!(r, Err(PrettierError::TimedOut)), "{r:?}");
+    }
+
+    #[test]
+    fn an_unrepresentable_timeout_is_refused_before_spawning() {
+        let r = format(
+            Path::new("/nonexistent/prettier"),
+            Path::new("a.ts"),
+            "x",
+            Duration::MAX,
+        );
+        assert!(matches!(r, Err(PrettierError::BadTimeout)), "{r:?}");
+        assert_eq!(
+            PrettierError::BadTimeout.to_string(),
+            "prettier timeout is too long"
+        );
     }
 
     #[test]

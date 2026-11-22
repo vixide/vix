@@ -53,8 +53,4 @@ The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thise
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The command deadline uses `Instant::checked_add`.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `FMT-F1` | `now + timeout` cannot be represented | no deadline | A deadline too far away to represent can never pass, so the command is simply not timed out. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The command deadline uses `Instant::checked_add`. A timeout too long to become a deadline is `PrettierError::BadTimeout`, returned before anything is spawned, instead of running with no deadline.
