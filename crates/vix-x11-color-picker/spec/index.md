@@ -16,8 +16,4 @@ rows, maps clicks to rows, and inserts the chosen hex.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-color lookup uses `get`; the old `saturating_sub` is gone.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `X11-F1` | `selected` is past the last color | the last color (black if the table were empty) | A caller who sets the public field too far still gets a real color. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-color lookups (`selected_color`, `selected_hex`, `selected_name`) use `get` and return `Option`: a public `selected` past the last color is not moved to the nearest one, it is `None`. The app reports it.

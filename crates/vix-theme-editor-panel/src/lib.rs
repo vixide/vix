@@ -169,6 +169,29 @@ impl Slot {
     }
 }
 
+/// Why the highlighted slot could not be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SelectionError {
+    /// The selection is past the last slot.
+    OutOfRange {
+        /// The figure that is out of range.
+        figure: &'static str,
+        /// The number of slots.
+        len: usize,
+    },
+}
+
+impl std::fmt::Display for SelectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutOfRange { figure, len } => write!(f, "{figure}: must be below {len}"),
+        }
+    }
+}
+
+impl std::error::Error for SelectionError {}
+
 /// The theme editor overlay's state: the being-edited draft, and which slot
 /// row is highlighted.
 pub struct Panel {
@@ -208,25 +231,29 @@ impl Panel {
         false
     }
 
-    /// The highlighted slot.
-    ///
-    /// A [`selected`](Self::selected) past the last slot (the navigation
-    /// methods never leave it there) reads as the last slot, `TEP-F1`.
+    /// The highlighted slot, or `None` when the public [`selected`](Self::selected)
+    /// field was set past the last slot (the navigation methods never do): an
+    /// out-of-range selection is not moved to the nearest slot.
     #[must_use]
-    pub fn selected_slot(&self) -> Slot {
-        Slot::ALL
-            .get(self.selected)
-            .or_else(|| Slot::ALL.last())
-            .copied()
-            .unwrap_or(Slot::MenuBarFg) // TEP-F1: only if the table were empty
+    pub fn selected_slot(&self) -> Option<Slot> {
+        Slot::ALL.get(self.selected).copied()
     }
 
     /// Apply `rgb` to the highlighted slot and mark the draft dirty. The host
     /// calls this when the color picker confirms, then re-applies the theme
     /// live.
-    pub fn apply_color(&mut self, rgb: Rgb) {
-        self.selected_slot().set(&mut self.theme, rgb);
+    ///
+    /// # Errors
+    /// [`SelectionError::OutOfRange`] if [`selected`](Self::selected) is past the
+    /// last slot; the theme is left unchanged.
+    pub fn apply_color(&mut self, rgb: Rgb) -> Result<(), SelectionError> {
+        let slot = self.selected_slot().ok_or(SelectionError::OutOfRange {
+            figure: "selected",
+            len: Slot::ALL.len(),
+        })?;
+        slot.set(&mut self.theme, rgb);
         self.dirty = true;
+        Ok(())
     }
 
     /// Move the highlight up one row, stopping at the top.
@@ -305,7 +332,7 @@ mod tests {
     fn apply_color_writes_the_highlighted_slot_and_marks_dirty() {
         let mut p = Panel::open(sample());
         p.selected = 0; // MenuBarFg
-        p.apply_color([200, 200, 200]);
+        p.apply_color([200, 200, 200]).unwrap();
         assert_eq!(Slot::MenuBarFg.get(&p.theme), Some([200, 200, 200]));
         assert!(p.dirty);
         // Only the selected slot changed.
@@ -343,5 +370,22 @@ mod tests {
         assert!(p.select_index(3));
         assert_eq!(p.selected, 3);
         assert!(!p.select_index(p.len()));
+    }
+
+    #[test]
+    fn a_selection_past_the_last_slot_is_refused_not_moved() {
+        let mut p = Panel::open(sample());
+        p.selected = Slot::ALL.len();
+        assert_eq!(p.selected_slot(), None);
+        let err = SelectionError::OutOfRange {
+            figure: "selected",
+            len: Slot::ALL.len(),
+        };
+        assert_eq!(p.apply_color([9, 9, 9]), Err(err));
+        assert!(!p.dirty, "a refused color leaves the draft clean");
+        assert_eq!(Slot::MenuBarFg.get(&p.theme), Some([1, 1, 1]));
+        assert_eq!(err.to_string(), "selected: must be below 15");
+        p.selected = Slot::ALL.len() - 1;
+        assert!(p.selected_slot().is_some(), "the last slot is valid");
     }
 }

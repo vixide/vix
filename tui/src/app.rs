@@ -11349,8 +11349,11 @@ impl App {
         // code — and inserts just that cell's text.
         let cell = self.html_panel.as_mut().and_then(|p| {
             let idx = p.scroll + row_in_view;
-            p.select_index(idx)
-                .then(|| html_cell_at(p.selected_entity(), rel_col))
+            if !p.select_index(idx) {
+                return None;
+            }
+            p.selected_entity()
+                .map(|entity| html_cell_at(entity, rel_col))
         });
         if let Some(text) = cell {
             let area = self.layout.editor;
@@ -11367,7 +11370,12 @@ impl App {
         let Some(p) = self.html_panel.as_ref() else {
             return;
         };
-        let glyph = p.selected_entity().glyph.to_string();
+        let Some(entity) = p.selected_entity() else {
+            self.messages
+                .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+            return;
+        };
+        let glyph = entity.glyph.to_string();
         let area = self.layout.editor;
         if self.editor.insert_str(&glyph, area) {
             self.status = t!("status.html_inserted", name = glyph).to_string();

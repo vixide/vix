@@ -50,8 +50,4 @@ choosing any other theme from the View → Theme submenu).
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-slot lookup uses `get`, and its `# Panics` section is gone.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `TEP-F1` | `selected` is past the last slot | the last slot (the first if the table were empty) | The navigation methods never leave `selected` out of range; a caller who sets the public field too far reads the last slot. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The slot lookup `selected_slot` returns `Option` and `apply_color` returns `Result<(), SelectionError>`: a public `selected` past the last slot is `SelectionError::OutOfRange { figure: "selected", len }` and the draft is left unchanged, never moved to the last slot. The old `# Panics` section is gone.

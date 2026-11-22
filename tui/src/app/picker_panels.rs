@@ -345,18 +345,31 @@ impl App {
             return;
         };
         if self.flags.contains(AppFlags::THEME_EDITOR_PICKING) {
-            let c = p.selected_color();
+            let Some(c) = p.selected_color() else {
+                self.messages
+                    .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+                return;
+            };
+            let mut applied = Ok(());
             if let Some(editor) = self.theme_editor.as_mut() {
-                editor.apply_color([c.r, c.g, c.b]);
+                applied = editor.apply_color([c.r, c.g, c.b]);
                 crate::theme_model::apply(&editor.theme);
                 self.editor.refresh_theme();
+            }
+            if let Err(e) = applied {
+                self.messages
+                    .error(t!("msg.command_failed", error = e.to_string()).to_string());
             }
             self.x11_panel = None;
             self.flags.remove(AppFlags::THEME_EDITOR_PICKING);
             return;
         }
-        let hex = p.selected_hex().to_string();
-        let name = p.selected_name().to_string();
+        let (Some(hex), Some(name)) = (p.selected_hex(), p.selected_name()) else {
+            self.messages
+                .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+            return;
+        };
+        let (hex, name) = (hex.to_string(), name.to_string());
         let area = self.layout.editor;
         if self.editor.insert_str(&hex, area) {
             self.status = t!("status.x11_inserted", name = name).to_string();
