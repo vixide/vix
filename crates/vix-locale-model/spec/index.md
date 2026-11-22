@@ -24,8 +24,4 @@ right-aligned too (`ui::bidi::reflect_rows`); panels with column-sensitive click
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). A run start outside the bidi level table is the one lookup that can miss.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `LOC-F1` | A run start has no level in the table | left-to-right (not RTL) | Level tables cover every run the bidi pass returns; if one ever failed, the safe reading is the base direction. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). `visual_order` returns `Result<Vec<usize>, BidiError>`: a paragraph or a level the bidi library does not return for text with a right-to-left character is `BidiError::Inconsistent { figure }`, not a left-to-right reading or the identity order. The terminal renderer, which cannot report an error, leaves such a row in logical order.
