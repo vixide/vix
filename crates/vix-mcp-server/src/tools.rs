@@ -62,7 +62,13 @@ pub fn list() -> Value {
             "additionalProperties": false
         });
         if required {
-            schema["required"] = json!(["path"]);
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: schema is the object literal built above, and assigning to a key of an object inserts it"
+            )]
+            {
+                schema["required"] = json!(["path"]);
+            }
         }
         schema
     };
@@ -399,11 +405,13 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
                 .map(|e| {
                     // `line` is the heading's row in the rendered preview;
                     // map it back to its source line.
-                    let line = rendered
-                        .source_lines
-                        .get(e.line.saturating_sub(1))
-                        .copied()
-                        .unwrap_or(e.line);
+                    // A heading with no source line is unknown (`null`), never the
+                    // preview row passed off as a source line.
+                    let line = e
+                        .line
+                        .checked_sub(1)
+                        .and_then(|row| rendered.source_lines.get(row))
+                        .copied();
                     // `kind` holds the heading marker (`#`, `##`, ...), so
                     // its length is the heading level.
                     json!({"level": e.kind.len(), "title": e.name, "line": line})
@@ -415,7 +423,14 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
             let entries = vix_org::headlines(text)
                 .into_iter()
                 // `headlines` reports 0-based lines; the tool contract is 1-based.
-                .map(|(line, level, title)| json!({"level": level, "title": title, "line": line + 1}))
+                .map(|(line, level, title)| {
+                    #[expect(
+                        clippy::arithmetic_side_effects,
+                        reason = "RCA-EXC-2: line is a line index of the text, so line + 1 is at most the line count"
+                    )]
+                    let one_based = line + 1;
+                    json!({"level": level, "title": title, "line": one_based})
+                })
                 .collect();
             ("org", entries)
         }
@@ -460,9 +475,14 @@ fn diagnostics<H: Host>(root: &Path, host: &H, args: &Value) -> Result<Value, To
         for conflict in vix_conflict_tool::find_all(&text) {
             // `start` is a 0-based line (hence `+ 1`); `end` is already the
             // 1-based line of the closing marker.
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: start is a line index of the text, so start + 1 is at most the line count"
+            )]
+            let start_line = conflict.start + 1;
             found.push(json!({
                 "path": path,
-                "line": conflict.start + 1,
+                "line": start_line,
                 "end_line": conflict.end,
                 "severity": "error",
                 "source": "vix-conflict",

@@ -43,6 +43,18 @@
 //! assert!(reply.contains(r#""result":{}"#));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -371,8 +383,9 @@ impl<H: Host> Server<H> {
             .ok_or((INVALID_PARAMS, "missing tool name".to_string()))?;
         // Unknown tool names are protocol errors; a *known* tool failing is
         // reported in-band as `isError`, so the model can see and react.
-        if !tools::list()["tools"]
-            .as_array()
+        if !tools::list()
+            .get("tools")
+            .and_then(Value::as_array)
             .is_some_and(|all| all.iter().any(|t| t["name"] == name))
         {
             return Err((INVALID_PARAMS, format!("unknown tool: {name}")));

@@ -103,3 +103,7 @@ connection is invisible, writes and `WITH … DELETE` are refused, a
 rotates. `tui/tests/mcp_stdio.rs` spawns the real binary for an
 `initialize` → `tools/list` → `tools/call` round trip and checks it wrote
 nothing.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line numbers and the walk depth are plain additions under `RCA-EXC-2` expectations that state their proofs; the tool schema and the tool-name lookup use `get` and a proven object key. A Markdown heading with no source line is reported as `null` (unknown) in the `outline` tool's `line` field, instead of the preview row number passed off as a source line. A file with no extension has the empty extension (`RCA-IN-3`: absent only).
