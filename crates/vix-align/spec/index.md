@@ -11,8 +11,4 @@ See `spec/index/index.md` for the project overview and `crates/vix-editor-core/s
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The padding width uses a subtraction with a declared fallback.
-
-| ID | Failure | Declared fallback | Why it is correct |
-| -- | ------- | ----------------- | ----------------- |
-| `ALIGN-F1` | The padding `width - left` goes below zero | no padding | The width is the maximum over all split lines, so this never happens; if it did, the line would simply not be padded. |
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The padding width is a plain subtraction under an `RCA-EXC-2` expectation: the column width is the maximum of the same trimmed lengths. No fallbacks are declared.
