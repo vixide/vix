@@ -494,7 +494,7 @@ mod tests {
         // 99999999999 does not fit a u32: the `$` is malformed, so it stays text.
         let p = parse("a $99999999999 b");
         assert_eq!(p.text, "a $99999999999 b");
-        assert!(p.stops.is_empty());
+        assert_eq!(p.stops.len(), 0);
         let p = parse("a ${99999999999:x} b");
         assert!(p.stops.is_empty(), "{:?}", p.stops);
     }
