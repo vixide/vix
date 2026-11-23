@@ -27,7 +27,33 @@
 //!
 //! Owning spec: `crates/vix-db/spec/index.md` ("Database Browser").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::connect::Kind;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// The object folders under each schema.
 ///
@@ -160,6 +186,29 @@ pub struct Tree {
     pub filtering: bool,
 }
 
+impl Schema {
+    /// Whether `folder` is expanded in this schema.
+    #[must_use]
+    pub fn folder_flag(&self, folder: Folder) -> bool {
+        let [tables, views, functions] = &self.folder_expanded;
+        match folder {
+            Folder::Tables => *tables,
+            Folder::Views => *views,
+            Folder::Functions => *functions,
+        }
+    }
+
+    /// The expanded flag of `folder`, to change.
+    pub fn folder_flag_mut(&mut self, folder: Folder) -> &mut bool {
+        let [tables, views, functions] = &mut self.folder_expanded;
+        match folder {
+            Folder::Tables => tables,
+            Folder::Views => views,
+            Folder::Functions => functions,
+        }
+    }
+}
+
 impl Tree {
     /// Build a tree from `(schema, name, kind)` rows, where `kind` is one of
     /// `table`, `view`, `function`. The first schema and its Tables folder
@@ -192,9 +241,11 @@ impl Tree {
                         name: schema.clone(),
                         ..Schema::default()
                     });
-                    schemas.len() - 1
+                    sub_or(schemas.len(), 1, 0)
                 });
-            let entry = &mut schemas[idx];
+            let Some(entry) = schemas.get_mut(idx) else {
+                continue;
+            };
             match kind.as_str() {
                 "view" => entry.views.push(name.clone()),
                 "function" => entry.functions.push(name.clone()),
@@ -209,7 +260,7 @@ impl Tree {
         }
         if let Some(first) = schemas.first_mut() {
             first.expanded = true;
-            first.folder_expanded[Folder::Tables.index()] = true;
+            *first.folder_flag_mut(Folder::Tables) = true;
         }
         Tree {
             schemas,
@@ -244,24 +295,21 @@ impl Tree {
             // (folder, names, expanded) triples let one loop body build all
             // three folders instead of three near-identical blocks.
             for (folder, names, expanded) in [
-                (
-                    Folder::Tables,
-                    &s.tables,
-                    s.folder_expanded[Folder::Tables.index()],
-                ),
-                (
-                    Folder::Views,
-                    &s.views,
-                    s.folder_expanded[Folder::Views.index()],
-                ),
+                (Folder::Tables, &s.tables, s.folder_flag(Folder::Tables)),
+                (Folder::Views, &s.views, s.folder_flag(Folder::Views)),
                 (
                     Folder::Functions,
                     &s.functions,
-                    s.folder_expanded[Folder::Functions.index()],
+                    s.folder_flag(Folder::Functions),
                 ),
             ] {
                 let matches: Vec<usize> = (0..names.len())
-                    .filter(|&i| !searching || names[i].to_lowercase().contains(&needle))
+                    .filter(|&i| {
+                        !searching
+                            || names
+                                .get(i)
+                                .is_some_and(|name| name.to_lowercase().contains(&needle))
+                    })
                     .collect();
                 if names.is_empty() || (searching && matches.is_empty()) {
                     continue;
@@ -277,9 +325,12 @@ impl Tree {
                     continue;
                 }
                 for oi in matches {
+                    let Some(name) = names.get(oi) else {
+                        continue;
+                    };
                     out.push(RowView {
                         depth: 2,
-                        text: names[oi].clone(),
+                        text: name.clone(),
                         expandable: false,
                         expanded: false,
                         reference: RowRef::Object(si, folder, oi),
@@ -287,7 +338,7 @@ impl Tree {
                 }
             }
             // A searching schema with no matching objects disappears entirely.
-            if searching && out.len() == schema_at + 1 {
+            if searching && out.len() == add_or(schema_at, 1, usize::MAX) {
                 out.pop();
             }
         }
@@ -303,7 +354,7 @@ impl Tree {
                 self.filter.pop();
             }
         }
-        self.sel = self.sel.min(self.rows().len().saturating_sub(1));
+        self.sel = self.sel.min(sub_or(self.rows().len(), 1, 0));
     }
 
     /// Toggle (or set, when `expand` is given) the selected row's folder state.
@@ -317,12 +368,15 @@ impl Tree {
         };
         match row.reference {
             RowRef::Schema(si) => {
-                let cur = self.schemas[si].expanded;
-                self.schemas[si].expanded = expand.unwrap_or(!cur);
+                if let Some(schema) = self.schemas.get_mut(si) {
+                    schema.expanded = expand.unwrap_or(!schema.expanded);
+                }
             }
             RowRef::Folder(si, folder) => {
-                let flag = &mut self.schemas[si].folder_expanded[folder.index()];
-                *flag = expand.unwrap_or(!*flag);
+                if let Some(schema) = self.schemas.get_mut(si) {
+                    let flag = schema.folder_flag_mut(folder);
+                    *flag = expand.unwrap_or(!*flag);
+                }
             }
             RowRef::Object(..) => {}
         }
@@ -352,7 +406,7 @@ impl Tree {
         let rows = self.rows();
         let row = rows.get(self.sel)?;
         if let RowRef::Object(si, folder, oi) = row.reference {
-            let s = &self.schemas[si];
+            let s = self.schemas.get(si)?;
             let names = match folder {
                 Folder::Tables => &s.tables,
                 Folder::Views => &s.views,

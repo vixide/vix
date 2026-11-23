@@ -24,6 +24,18 @@
 //! piece of per-connection state. Owning spec: `crates/vix-db/spec/index.md`
 //! ("Connection Management") and `spec/session.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
@@ -77,6 +89,20 @@ pub(crate) struct PendingConnect {
     password: String,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 impl Browser {
     /// Keys on the saved-connections list: navigate (arrows or `j`/`k`),
     /// Enter to connect, `a`dd, `e`dit, `d`elete, Esc/`q` to leave.
@@ -87,12 +113,13 @@ impl Browser {
             return Outcome::Consumed;
         }
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.sel = self.sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.sel = sub_or(self.sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.sel = (self.sel + 1).min(self.connections.len().saturating_sub(1));
+                self.sel =
+                    add_or(self.sel, 1, usize::MAX).min(sub_or(self.connections.len(), 1, 0));
             }
             KeyCode::Home => self.sel = 0,
-            KeyCode::End => self.sel = self.connections.len().saturating_sub(1),
+            KeyCode::End => self.sel = sub_or(self.connections.len(), 1, 0),
             KeyCode::Enter => self.start_connect(self.sel),
             KeyCode::Char('a') => {
                 self.form = Form::default();
@@ -124,7 +151,7 @@ impl Browser {
                         self.mcp_shared.remove(&removed.name);
                         self.held_passwords.remove(&removed.name);
                     }
-                    self.sel = self.sel.min(self.connections.len().saturating_sub(1));
+                    self.sel = self.sel.min(sub_or(self.connections.len(), 1, 0));
                     self.dirty.connections = true;
                 }
             }
@@ -150,8 +177,12 @@ impl Browser {
     /// list and environments dirty for the host to persist.
     pub(super) fn key_form(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
-            KeyCode::Up => self.form.sel = self.form.sel.saturating_sub(1),
-            KeyCode::Down | KeyCode::Tab => self.form.sel = (self.form.sel + 1) % FORM_ROWS,
+            KeyCode::Up => self.form.sel = sub_or(self.form.sel, 1, 0),
+            KeyCode::Down | KeyCode::Tab => {
+                self.form.sel = add_or(self.form.sel, 1, usize::MAX)
+                    .checked_rem(FORM_ROWS)
+                    .unwrap_or(0);
+            }
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_KIND => {
                 self.form.kind = self.form.kind.next();
             }
@@ -174,10 +205,14 @@ impl Browser {
                 self.form_mcp_sharing = self.form_mcp_sharing.toggled();
             }
             KeyCode::Char(c) if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
-                self.form.fields[self.form.sel].push(c);
+                if let Some(field) = self.form.fields.get_mut(self.form.sel) {
+                    field.push(c);
+                }
             }
             KeyCode::Backspace if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
-                self.form.fields[self.form.sel].pop();
+                if let Some(field) = self.form.fields.get_mut(self.form.sel) {
+                    field.pop();
+                }
             }
             KeyCode::Enter => {
                 // The name is the only required field: it identifies the
@@ -204,9 +239,10 @@ impl Browser {
         let conn = self.form.to_connection();
         let name = conn.name.clone();
         let old_name = match self.form.editing {
-            Some(i) if i < self.connections.len() => {
-                Some(std::mem::replace(&mut self.connections[i], conn).name)
-            }
+            Some(i) if i < self.connections.len() => self
+                .connections
+                .get_mut(i)
+                .map(|slot| std::mem::replace(slot, conn).name),
             _ => {
                 self.connections.push(conn);
                 None
@@ -314,12 +350,17 @@ impl Browser {
             let _ = tx.send(connect_worker(&worker_conn, worker_password.as_deref()));
         });
         self.message = Some(t!("msg.db_connecting", secs = 0).to_string());
+        // No password supplied is the empty password.
+        let mut held_password = String::new();
+        if let Some(given) = password {
+            held_password = given;
+        }
         self.pending_connect = Some(PendingConnect {
             rx,
             started: std::time::Instant::now(),
             conn,
             idx,
-            password: password.unwrap_or_default(),
+            password: held_password,
         });
     }
 
@@ -430,8 +471,10 @@ impl Browser {
             .run_catalog(catalog::columns_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 2)
-                    .map(|r| (r[0].clone(), r[1].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, ..] => Some((a.clone(), b.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.completer.set_schema(self.tree.table_names(), columns);
@@ -440,8 +483,10 @@ impl Browser {
             .run_catalog(catalog::relationships_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 4)
-                    .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, c, d, ..] => Some((a.clone(), b.clone(), c.clone(), d.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.completer.set_relationships(rels);

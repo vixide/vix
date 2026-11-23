@@ -27,6 +27,18 @@
 //! SSH tunnel's own errors, which are the workbench's translated ones.
 //! Owning specs: `spec/mcp-server` and `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use futures_util::StreamExt as _;
 use std::time::Duration;
 
@@ -63,6 +75,12 @@ pub const REFUSED_KEYWORDS: &[&str] = &["into", "lock", "share", "commit", "roll
 
 /// The statement that ends every shared read: nothing is ever committed.
 pub const CLOSING_SQL: &str = "ROLLBACK";
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Whether a saved connection is shared with MCP clients: the value of the
 /// connection form's **Share with MCP** row
@@ -300,7 +318,11 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
     let chars: Vec<char> = sql.chars().collect();
     let statements: Vec<String> = editor::statement_spans(sql)
         .into_iter()
-        .map(|(start, end)| chars[start..end].iter().collect::<String>())
+        .filter_map(|(start, end)| {
+            chars
+                .get(start..end)
+                .map(|piece| piece.iter().collect::<String>())
+        })
         .filter(|piece| first_word(piece).is_some())
         .collect();
     let statement = match statements.as_slice() {
@@ -308,7 +330,9 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
         [one] => one.trim().to_string(),
         many => return Err(Refusal::Several(many.len())),
     };
-    let first = first_word(&statement).unwrap_or_default();
+    let Some(first) = first_word(&statement) else {
+        return Err(Refusal::Empty);
+    };
     if !READ_STATEMENTS.contains(&first.as_str()) {
         return Err(Refusal::NotARead(first));
     }
@@ -335,22 +359,26 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
 fn first_word(sql: &str) -> Option<String> {
     let chars: Vec<char> = sql.chars().collect();
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
         if c.is_whitespace() || c == '(' {
-            i += 1;
-        } else if c == '-' && chars.get(i + 1) == Some(&'-') {
-            while i < chars.len() && chars[i] != '\n' {
-                i += 1;
+            i = add_or(i, 1, usize::MAX);
+        } else if c == '-' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'-') {
+            while chars.get(i).is_some_and(|&c| c != '\n') {
+                i = add_or(i, 1, usize::MAX);
             }
-        } else if c == '/' && chars.get(i + 1) == Some(&'*') {
-            i += 2;
-            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                i += 1;
+        } else if c == '/' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'*') {
+            i = add_or(i, 2, usize::MAX);
+            while chars
+                .get(i)
+                .is_some_and(|&c| !(c == '*' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'/')))
+            {
+                i = add_or(i, 1, usize::MAX);
             }
-            i += 2;
+            i = add_or(i, 2, usize::MAX);
         } else {
-            let word: String = chars[i..]
+            let word: String = chars
+                .get(i..)
+                .unwrap_or(&[])
                 .iter()
                 .take_while(|c| c.is_ascii_alphanumeric() || **c == '_')
                 .collect();
@@ -444,7 +472,14 @@ pub fn default_schema(kind: Kind, schemas: &[String]) -> String {
         Kind::Postgres if schemas.iter().any(|s| s == "public") || schemas.is_empty() => {
             "public".to_string()
         }
-        _ => schemas.first().cloned().unwrap_or_default(),
+        _ => {
+            // No schema listed is the empty name.
+            let mut name = String::new();
+            if let Some(first) = schemas.first() {
+                name.clone_from(first);
+            }
+            name
+        }
     }
 }
 
@@ -589,8 +624,14 @@ impl ReadOnly {
         } else {
             SERVER_GRACE
         };
-        let deadline =
-            tokio::time::Instant::now() + Duration::from_secs(STATEMENT_TIMEOUT_SECS) + grace;
+        let Some(deadline) = tokio::time::Instant::now()
+            .checked_add(Duration::from_secs(STATEMENT_TIMEOUT_SECS))
+            .and_then(|at| at.checked_add(grace))
+        else {
+            return Err(ShareError::Query(
+                "the statement timeout is out of range".to_string(),
+            ));
+        };
         for sql in opening_sql(conn.kind) {
             let run = live.execute(sql);
             match rt.block_on(async { tokio::time::timeout_at(deadline, run).await }) {

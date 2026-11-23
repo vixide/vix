@@ -35,6 +35,18 @@
 //!
 //! Owning spec: `crates/vix-db/spec/index.md` ("Database Browser").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::connect::Kind;
 
 /// Which way a [`Relation`] points, seen from the selected table.
@@ -258,39 +270,67 @@ fn qualified(schema: &str, table: &str, home: &str) -> String {
 /// ```
 #[must_use]
 pub fn fk_relations(kind: RelationKind, rows: &[Vec<String>], home: &str) -> Vec<Relation> {
+    /// What identifies a constraint: its key, name, and both tables (schema, table).
+    type Head<'a> = (&'a str, &'a str, &'a str, &'a str, &'a str, &'a str);
+    /// A constraint being built: its head and the column lists of both sides.
+    type Group<'a> = (Head<'a>, Vec<&'a str>, Vec<&'a str>);
     let mut out: Vec<Relation> = Vec::new();
     // Columns of the constraint being built; flushed when the group changes.
-    let mut group: Option<(Vec<&str>, Vec<&str>, Vec<&str>)> = None;
-    let flush = |g: &mut Option<(Vec<&str>, Vec<&str>, Vec<&str>)>, out: &mut Vec<Relation>| {
-        if let Some((head, from_cols, to_cols)) = g.take() {
+    let mut group: Option<Group<'_>> = None;
+    let flush = |g: &mut Option<Group<'_>>, out: &mut Vec<Relation>| {
+        if let Some(((_, name, from_schema, from_table, to_schema, to_table), from_cols, to_cols)) =
+            g.take()
+        {
             out.push(Relation {
                 kind,
-                constraint: head[1].to_string(),
+                constraint: name.to_string(),
                 from: format!(
                     "{} ({})",
-                    qualified(head[2], head[3], home),
+                    qualified(from_schema, from_table, home),
                     from_cols.join(", ")
                 ),
                 to: format!(
                     "{} ({})",
-                    qualified(head[5], head[6], home),
+                    qualified(to_schema, to_table, home),
                     to_cols.join(", ")
                 ),
             });
         }
     };
-    for row in rows.iter().filter(|r| r.len() >= 8) {
-        let head: Vec<&str> = row.iter().map(String::as_str).collect();
+    for row in rows {
+        // A foreign-key row has eight columns; shorter rows are skipped.
+        let [
+            key,
+            name,
+            from_schema,
+            from_table,
+            from_col,
+            to_schema,
+            to_table,
+            to_col,
+            ..,
+        ] = row.as_slice()
+        else {
+            continue;
+        };
+        let head: Head<'_> = (
+            key.as_str(),
+            name.as_str(),
+            from_schema.as_str(),
+            from_table.as_str(),
+            to_schema.as_str(),
+            to_table.as_str(),
+        );
         // A constraint is identified by its key and both tables.
         let same = group.as_ref().is_some_and(|(h, _, _)| {
-            h[0] == head[0] && h[2..4] == head[2..4] && h[5..7] == head[5..7]
+            h.0 == head.0 && h.2 == head.2 && h.3 == head.3 && h.4 == head.4 && h.5 == head.5
         });
         if !same {
             flush(&mut group, &mut out);
         }
-        let g = group.get_or_insert_with(|| (head.clone(), Vec::new(), Vec::new()));
-        g.1.push(row[4].as_str());
-        g.2.push(row[7].as_str());
+        let g = group.get_or_insert_with(|| (head, Vec::new(), Vec::new()));
+        g.1.push(from_col.as_str());
+        g.2.push(to_col.as_str());
     }
     flush(&mut group, &mut out);
     out
@@ -302,14 +342,21 @@ pub fn fk_relations(kind: RelationKind, rows: &[Vec<String>], home: &str) -> Vec
 #[must_use]
 pub fn view_relations(rows: &[Vec<String>], home: &str, table: &str, scan: bool) -> Vec<Relation> {
     rows.iter()
-        .filter(|r| r.len() >= 2)
-        .filter(|r| !r[1].eq_ignore_ascii_case(table))
-        .filter(|r| !scan || r.get(2).is_some_and(|sql| mentions_table(sql, table)))
-        .map(|r| Relation {
-            kind: RelationKind::View,
-            constraint: String::new(),
-            from: qualified(&r[0], &r[1], home),
-            to: table.to_string(),
+        .filter_map(|r| {
+            let [schema, view, ..] = r.as_slice() else {
+                return None;
+            };
+            if view.eq_ignore_ascii_case(table)
+                || (scan && !r.get(2).is_some_and(|sql| mentions_table(sql, table)))
+            {
+                return None;
+            }
+            Some(Relation {
+                kind: RelationKind::View,
+                constraint: String::new(),
+                from: qualified(schema, view, home),
+                to: table.to_string(),
+            })
         })
         .collect()
 }
