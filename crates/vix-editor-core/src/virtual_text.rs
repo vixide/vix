@@ -14,18 +14,6 @@
 //! cursor never lands on it. Drawing happens from the line renderers in
 //! [`crate::render`]. See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::code::{RopeGraphemes, grapheme_width_and_chars_len};
 use crate::editor::Editor;
 use ratatui_core::buffer::Buffer;
@@ -121,7 +109,10 @@ pub fn truncate_to_width(text: &str, avail: usize) -> String {
         .map(|c| if c == '\t' { ' ' } else { c })
         .filter(|c| !c.is_control())
         .collect();
-    let width: usize = clean.iter().map(|c| c.width().unwrap_or(0)).sum();
+    let width: usize = clean
+        .iter()
+        .map(|c| c.width().unwrap_or(0))
+        .fold(0, |total, w| add_or(total, w, usize::MAX));
     if width <= avail {
         return clean.into_iter().collect();
     }

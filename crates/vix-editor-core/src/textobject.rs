@@ -18,18 +18,6 @@
 //! and cached by `compiled_query`. Editor-level commands (select-around,
 //! jump to next function) are in [`crate::editor`] and the host's keymap.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::code::{Code, LangAssets, RopeProvider, compiled_query};
 use std::rc::Rc;
 use streaming_iterator::StreamingIterator;

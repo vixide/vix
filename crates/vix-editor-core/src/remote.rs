@@ -24,18 +24,6 @@
 //! the local selection and the local cursor. The CRDT and transport are not
 //! here: see the Cowork crates and `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 pub use crate::code::Splice;
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -94,7 +82,7 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
     for e in edits {
         // Deletion first, then insertion, mirroring how a splice is applied.
         if e.delete > 0 {
-            let end = e.offset.saturating_add(e.delete);
+            let end = add_or(e.offset, e.delete, usize::MAX);
             if pos >= end {
                 // Wholly after the deleted range: shift left.
                 pos = sub_or(pos, e.delete, 0);

@@ -20,18 +20,6 @@
 //! The authoritative list of names is `crates/vix-editor-core/spec/actions.tsv`;
 //! see also `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, UnIndent, Undo,

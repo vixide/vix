@@ -4,18 +4,6 @@
 //! Tree-sitter grammar keys used by [`crate::code`]. See
 //! `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 /// `a + b`, or the declared `fallback` when the sum does not fit (see
 /// `sub_or` for why the fallback is a parameter).
 fn add_or(a: usize, b: usize, fallback: usize) -> usize {

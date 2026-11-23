@@ -11,18 +11,6 @@
 //! normally resolves keys itself and calls the actions directly; this is the
 //! standalone/default path. See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
@@ -36,6 +24,26 @@ use vix_input::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind}
 
 /// Lines one mouse-wheel notch scrolls the editor.
 pub const WHEEL_LINES: usize = 3;
+
+/// `a + b` for screen columns; a column past the top of `u16` is past the right edge.
+fn add_u16(a: u16, b: u16) -> u16 {
+    add_u16_or(a, b, u16::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b` for screen rows and columns; below zero is zero.
+fn sub_u16(a: u16, b: u16) -> u16 {
+    sub_u16_or(a, b, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// `a - b`, or the declared `fallback` when it would go below zero. The
 /// fallback is a parameter so each call names the declaration it comes from;
@@ -281,7 +289,7 @@ impl Editor {
         // Scroll first, then extend to the (clamped) edge row, so the
         // selection tracks the freshly scrolled-in line.
         let top = area.top();
-        let last = area.bottom().saturating_sub(1);
+        let last = sub_u16(area.bottom(), 1);
         if row <= top {
             self.scroll_up();
         }
@@ -292,8 +300,8 @@ impl Editor {
         // `max` then `min`, not `clamp`: a view narrower than its gutter (or no
         // rows at all) has `min > max`, which `clamp` asserts against.
         let col = column
-            .max(area.left().saturating_add(gutter))
-            .min(area.right().saturating_sub(1));
+            .max(add_u16(area.left(), gutter))
+            .min(sub_u16(area.right(), 1));
         if let Some(cursor) = self.cursor_from_mouse(col, row.max(top).min(last), &area) {
             self.handle_mouse_drag(cursor);
         }
@@ -308,7 +316,7 @@ impl Editor {
         };
         // Strictly inside the view: nothing to do. The edge rows themselves
         // count as "outside" to match `drag_to`'s `<= top` / `>= last`.
-        if row > area.top() && row < area.bottom().saturating_sub(1) {
+        if row > area.top() && row < sub_u16(area.bottom(), 1) {
             return false;
         }
         self.drag_to(column, row, *area);

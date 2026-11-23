@@ -7,6 +7,18 @@
 //! crate's `lang-*` Cargo features. Lint configuration (pedantic + the targeted
 //! exceptions) is inherited from the crate root (`lib.rs`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod actions;
 pub mod click;
 pub mod code;

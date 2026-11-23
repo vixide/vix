@@ -11,18 +11,6 @@
 //! "Range" means the selection's line span, or the whole buffer when there is
 //! no selection. See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::editor::Editor;
 
 /// The lines before index `a` (all of them when `a` is past the end).

@@ -7,18 +7,6 @@
 //! target around it, and `#+` keyword and comment lines. The renderer uses
 //! the first span covering a character, so the more specific spans come first.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 /// Keywords drawn as an open task.
 const TODO_WORDS: &[&str] = &["TODO", "NEXT", "WAIT", "WAITING", "HOLD"];
 /// Keywords drawn as a closed task.

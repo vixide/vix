@@ -4,18 +4,6 @@
 //! widget in [`crate::editor`] owns the live selection state; this module is
 //! pure data. See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 #[derive(Debug, Clone, Copy)]
 /// How a drag selection snaps to text units as the cursor moves.
 pub enum SelectionSnap {

@@ -22,18 +22,6 @@
 //!
 //! See `crates/vix-editor-core/spec/index.md` and `spec/actions.tsv`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::code::EditKind;
 use crate::editor::Editor;
 use crate::selection::Selection;

@@ -14,18 +14,6 @@
 //! leaves, so the root-to-current path is always intact. See
 //! `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::collections::HashSet;
 
 use crate::code::EditBatch;

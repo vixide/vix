@@ -12,18 +12,6 @@
 //! `&self` only, so caches the renderer fills sit behind `Cell`/`RefCell`. See
 //! `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::actions::Action;
 use crate::click::{ClickKind, ClickTracker};
 use crate::code::Code;
@@ -876,7 +864,7 @@ impl Editor {
     /// Move the cursor to the start of 0-based `line` (clamped to the buffer) and
     /// clear any selection.
     pub fn set_cursor_line(&mut self, line: usize) {
-        let last = self.code.len_lines().saturating_sub(1);
+        let last = sub_or(self.code.len_lines(), 1, 0);
         self.cursor = self.code.line_to_char(line.min(last));
         self.selection = None;
     }

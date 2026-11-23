@@ -9,18 +9,6 @@
 //! The App shell (`src/ui.rs`) draws everything *around* the editor; the editor
 //! itself is drawn only here. See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
 use crate::editor::{CommentMark, Editor, Flags};
 use ratatui_core::buffer::Buffer;

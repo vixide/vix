@@ -78,10 +78,35 @@ thread_local! {
     static FULL_TEXT_SCANS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a + b` for the counters kept here, or the declared `fallback` when the sum does not fit.
+fn add_u64_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Bump this thread's [`full_text_scans`] counter (called by the whole-buffer
 /// passes only).
 fn note_full_text_scan() {
-    FULL_TEXT_SCANS.with(|n| n.set(n.get().wrapping_add(1)));
+    // A diagnostic counter: after 2^64 scans it starts over at 0.
+    FULL_TEXT_SCANS.with(|n| n.set(add_u64_or(n.get(), 1, 0)));
 }
 
 /// How many whole-buffer passes — a full copy of the text
@@ -252,7 +277,10 @@ fn parse_worker_loop(
         let mut input = |byte: usize, _: Point| -> &[u8] {
             if byte <= rope.len_bytes() {
                 let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-                &chunk.as_bytes()[byte - start..]
+                chunk
+                    .as_bytes()
+                    .get(sub_or(byte, start, 0)..)
+                    .unwrap_or(&[])
             } else {
                 &[]
             }
@@ -423,7 +451,7 @@ impl Code {
                 // `edit_gen` *before* its own `request_async_parse` call; this
                 // mirrors it for the initial parse instead of special-casing
                 // generation 0 in `ParseWorker`/`poll_parse`/`parse_pending`.
-                code.edit_gen = code.edit_gen.wrapping_add(1);
+                code.edit_gen = add_u64_or(code.edit_gen, 1, 0);
                 if !code.request_async_parse() {
                     // The background worker failed to start (e.g. thread
                     // spawn failed) -- fall back to a synchronous parse
@@ -534,7 +562,7 @@ impl Code {
     pub fn point(&self, offset: usize) -> (usize, usize) {
         let row = self.content.char_to_line(offset);
         let line_start = self.content.line_to_char(row);
-        let col = offset - line_start;
+        let col = sub_or(offset, line_start, 0);
         (row, col)
     }
 
@@ -542,7 +570,7 @@ impl Code {
     #[must_use]
     pub fn offset(&self, row: usize, col: usize) -> usize {
         let line_start = self.content.line_to_char(row);
-        line_start + col
+        add_or(line_start, col, usize::MAX)
     }
 
     /// Return the entire buffer contents as a `String`.
@@ -590,13 +618,13 @@ impl Code {
                 }
                 if !piece.is_empty() {
                     // `chars().count()` is std's vectorized count.
-                    cur += piece.chars().count();
+                    cur = add_or(cur, piece.chars().count(), usize::MAX);
                     ends_cr = piece.ends_with('\r');
                 }
                 if line_ends {
                     // A line break follows: the line ends (`\r\n` counts as
                     // the break, as `str::lines` treats it).
-                    max = max.max(cur - usize::from(ends_cr));
+                    max = max.max(sub_or(cur, usize::from(ends_cr), 0));
                     cur = 0;
                     ends_cr = false;
                 }
@@ -667,10 +695,10 @@ impl Code {
     pub fn line_len(&self, idx: usize) -> usize {
         let line = self.content.line(idx);
         let len = line.len_chars();
-        if idx == self.content.len_lines() - 1 {
+        if add_or(idx, 1, usize::MAX) == self.content.len_lines() {
             len
         } else {
-            len.saturating_sub(1)
+            sub_or(len, 1, 0)
         }
     }
 
@@ -762,9 +790,12 @@ impl Code {
     /// Insert `text` at character offset `from`, updating the syntax tree.
     pub fn insert(&mut self, from: usize, text: &str) {
         let byte_idx = self.content.char_to_byte(from);
-        let byte_len: usize = text.chars().map(char::len_utf8).sum();
+        let byte_len: usize = text
+            .chars()
+            .map(char::len_utf8)
+            .fold(0, |total, n| add_or(total, n, usize::MAX));
 
-        self.revision = self.revision.wrapping_add(1);
+        self.revision = add_u64_or(self.revision, 1, 0);
         self.content.insert(from, text);
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
@@ -795,7 +826,7 @@ impl Code {
             self.edit_tree(InputEdit {
                 start_byte: byte_idx,
                 old_end_byte: byte_idx,
-                new_end_byte: byte_idx + byte_len,
+                new_end_byte: add_or(byte_idx, byte_len, usize::MAX),
                 start_position: Point { row: 0, column: 0 },
                 old_end_position: Point { row: 0, column: 0 },
                 new_end_position: Point { row: 0, column: 0 },
@@ -809,14 +840,14 @@ impl Code {
         let to_byte = self.content.char_to_byte(to);
         let removed_text = self.content.slice(from..to).to_string();
 
-        self.revision = self.revision.wrapping_add(1);
+        self.revision = add_u64_or(self.revision, 1, 0);
         self.content.remove(from..to);
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
         {
             log.push(Splice {
                 offset: from,
-                delete: to - from,
+                delete: sub_or(to, from, 0),
                 insert: String::new(),
             });
         }
@@ -858,7 +889,7 @@ impl Code {
         if let Some(tree) = self.tree.as_mut() {
             tree.edit(&edit);
         }
-        self.edit_gen = self.edit_gen.wrapping_add(1);
+        self.edit_gen = add_u64_or(self.edit_gen, 1, 0);
         // Small/medium buffers reparse synchronously (identical to the original
         // behavior); large buffers reparse on the background worker so typing
         // stays responsive.
@@ -904,10 +935,6 @@ impl Code {
 
     /// Send the current buffer to the background worker for reparsing, cancelling
     /// any in-flight parse. Returns `false` if no worker is available.
-    #[expect(
-        clippy::expect_used,
-        reason = "invariant established earlier in this function"
-    )]
     fn request_async_parse(&mut self) -> bool {
         if !self.ensure_parse_worker() {
             return false;
@@ -916,7 +943,9 @@ impl Code {
         let old = self.tree.clone();
         let generation = self.edit_gen;
         let cancel = Arc::new(AtomicBool::new(false));
-        let worker = self.parse_worker.as_mut().expect("worker ensured above");
+        let Some(worker) = self.parse_worker.as_mut() else {
+            return false;
+        };
         worker.cancel.store(true, Ordering::Relaxed); // abort the superseded parse
         worker.cancel = Arc::clone(&cancel);
         worker.requested = generation;
@@ -979,7 +1008,10 @@ impl Code {
                 &mut |byte, _| {
                     if byte <= rope.len_bytes() {
                         let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-                        &chunk.as_bytes()[byte - start..]
+                        chunk
+                            .as_bytes()
+                            .get(sub_or(byte, start, 0)..)
+                            .unwrap_or(&[])
                     } else {
                         &[]
                     }
@@ -1044,8 +1076,8 @@ impl Code {
         // capture index, descending). A painter applying spans in order then
         // lets shorter, more specific spans overwrite the broader ones.
         results.sort_by(|a, b| {
-            let len_a = a.1 - a.0;
-            let len_b = b.1 - b.0;
+            let len_a = sub_or(a.1, a.0, 0);
+            let len_b = sub_or(b.1, b.0, 0);
             match len_b.cmp(&len_a) {
                 std::cmp::Ordering::Equal => b.2.cmp(&a.2),
                 other => other,
@@ -1073,7 +1105,7 @@ impl Code {
             return vec![];
         }
         let first = self.content.byte_to_line(start);
-        let last = self.content.byte_to_line(end - 1);
+        let last = self.content.byte_to_line(sub_or(end, 1, 0));
         let mut out = Vec::new();
         for i in first..=last {
             let line_start = self.content.line_to_byte(i);
@@ -1081,7 +1113,11 @@ impl Code {
             let text = line.trim_end_matches(['\n', '\r']);
             for (s, e, name) in crate::org_highlight::line_spans(text) {
                 if let Some(&value) = theme.get(name) {
-                    out.push((line_start + s, line_start + e, value));
+                    out.push((
+                        add_or(line_start, s, usize::MAX),
+                        add_or(line_start, e, usize::MAX),
+                        value,
+                    ));
                 }
             }
         }
@@ -1108,7 +1144,12 @@ impl Code {
         let mut out = Vec::new();
         while let Some(m) = matches.next() {
             for capture in m.captures() {
-                let name = names[capture.index as usize];
+                let Some(name) = usize::try_from(capture.index)
+                    .ok()
+                    .and_then(|i| names.get(i).copied())
+                else {
+                    continue;
+                };
                 let is_prose = name == "comment"
                     || name.starts_with("comment.")
                     || name == "string"
@@ -1147,12 +1188,17 @@ impl Code {
 
         while let Some(m) = matches.next() {
             for capture in m.captures() {
-                let name = capture_names[capture.index as usize];
+                let Some(name) = usize::try_from(capture.index)
+                    .ok()
+                    .and_then(|i| capture_names.get(i).copied())
+                else {
+                    continue;
+                };
                 if let Some(value) = ctx.theme.get(name) {
                     results.push((
                         capture.node.start_byte(),
                         capture.node.end_byte(),
-                        capture.index as usize,
+                        usize::try_from(capture.index).unwrap_or(usize::MAX),
                         *value,
                     ));
                 } else if let Some(lang) = name.strip_prefix("injection.content.") {
@@ -1182,13 +1228,18 @@ impl Code {
                         ctx,
                         slice,
                         0,
-                        end - start,
+                        sub_or(end, start, 0),
                         injection_query,
                         inj_tree.root_node(),
                     );
 
                     for (s, e, i, v) in injection_results {
-                        results.push((s + start, e + start, i, v));
+                        results.push((
+                            add_or(s, start, usize::MAX),
+                            add_or(e, start, usize::MAX),
+                            i,
+                            v,
+                        ));
                     }
                 }
             }
@@ -1229,7 +1280,7 @@ impl Code {
         for e in edits {
             let len = self.len();
             let start = e.offset.min(len);
-            let end = start.saturating_add(e.delete).min(len);
+            let end = add_or(start, e.delete, usize::MAX).min(len);
             if end > start {
                 self.remove(start, end);
             }
@@ -1256,7 +1307,7 @@ impl Code {
         for edit in batch.edits.iter().rev() {
             match edit.kind {
                 EditKind::Insert { offset, ref text } => {
-                    self.remove(offset, offset + text.chars().count());
+                    self.remove(offset, add_or(offset, text.chars().count(), usize::MAX));
                 }
                 EditKind::Remove { offset, ref text } => {
                     self.insert(offset, text);
@@ -1308,7 +1359,7 @@ impl Code {
                     self.insert(offset, text);
                 }
                 EditKind::Remove { offset, ref text } => {
-                    self.remove(offset, offset + text.chars().count());
+                    self.remove(offset, add_or(offset, text.chars().count(), usize::MAX));
                 }
             }
         }
@@ -1328,12 +1379,12 @@ impl Code {
         let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
 
         let mut start = pos;
-        while start > 0 {
-            let c = self.content.char(start - 1);
+        while let Some(before) = start.checked_sub(1) {
+            let c = self.content.char(before);
             if !is_word_char(c) {
                 break;
             }
-            start -= 1;
+            start = before;
         }
 
         let mut end = pos;
@@ -1342,7 +1393,7 @@ impl Code {
             if !is_word_char(c) {
                 break;
             }
-            end += 1;
+            end = add_or(end, 1, usize::MAX);
         }
 
         (start, end)
@@ -1361,7 +1412,7 @@ impl Code {
 
         let line = self.content.char_to_line(pos);
         let start = self.content.line_to_char(line);
-        let end = start + self.content.line(line).len_chars();
+        let end = add_or(start, self.content.line(line).len_chars(), usize::MAX);
 
         (start, end)
     }
@@ -1397,7 +1448,7 @@ impl Code {
         if self.content.len_lines() > 1 {
             let line = self.content.line(0);
             let n = line.len_chars();
-            if n >= 2 && line.char(n - 2) == '\r' && line.char(n - 1) == '\n' {
+            if n >= 2 && line.char(sub_or(n, 2, 0)) == '\r' && line.char(sub_or(n, 1, 0)) == '\n' {
                 return "CRLF";
             }
         }
@@ -1444,7 +1495,7 @@ impl Code {
 
         let count_units = count_indent_units(line, &indent_unit, Some(c));
 
-        count_units * indent_unit.chars().count() >= c
+        mul_or(count_units, indent_unit.chars().count(), usize::MAX) >= c
     }
 
     /// Return the column width of the leading indentation on `line_idx`, if any.
@@ -1461,7 +1512,7 @@ impl Code {
         }
 
         let count_units = count_indent_units(line, &indent_unit, None);
-        let col = count_units * indent_unit.chars().count();
+        let col = mul_or(count_units, indent_unit.chars().count(), usize::MAX);
         if col > 0 { Some(col) } else { None }
     }
 
@@ -1498,24 +1549,24 @@ impl Code {
         for line in &lines {
             let mut lvl = 0;
             let mut rest = *line;
-            while rest.starts_with(&indent_unit) {
-                lvl += 1;
-                rest = &rest[indent_unit.len()..];
+            while let Some(after) = rest.strip_prefix(indent_unit.as_str()) {
+                lvl = add_or(lvl, 1, usize::MAX);
+                rest = after;
             }
             line_levels.push(lvl);
         }
 
         let mut result = Vec::with_capacity(lines.len());
 
-        let first_line_trimmed = lines[0].trim_start();
-        result.push(first_line_trimmed.to_string());
+        let (Some(first_line), Some(&first_level)) = (lines.first(), line_levels.first()) else {
+            return 0;
+        };
+        result.push(first_line.trim_start().to_string());
 
         let mut prev_nonempty_level = base_level;
-        let mut prev_line_level_in_block = line_levels[0];
+        let mut prev_line_level_in_block = first_level;
 
-        for i in 1..lines.len() {
-            let line = lines[i];
-
+        for (&line, &cur) in lines.iter().zip(line_levels.iter()).skip(1) {
             if line.trim().is_empty() {
                 result.push(line.to_string());
                 continue;
@@ -1523,10 +1574,9 @@ impl Code {
 
             // diff relative to previous non-empty line in the source block,
             // clamped to a single step in either direction.
-            let cur = line_levels[i];
             let new_level = match cur.cmp(&prev_line_level_in_block) {
-                std::cmp::Ordering::Greater => prev_nonempty_level + 1,
-                std::cmp::Ordering::Less => prev_nonempty_level.saturating_sub(1),
+                std::cmp::Ordering::Greater => add_or(prev_nonempty_level, 1, usize::MAX),
+                std::cmp::Ordering::Less => sub_or(prev_nonempty_level, 1, 0),
                 std::cmp::Ordering::Equal => prev_nonempty_level,
             };
             let indents = indent_unit.repeat(new_level);
@@ -1535,7 +1585,7 @@ impl Code {
 
             // update levels only for non-empty line
             prev_nonempty_level = new_level;
-            prev_line_level_in_block = line_levels[i];
+            prev_line_level_in_block = cur;
         }
 
         // `lines()` drops the block's trailing newline; put it back, so pasting a
@@ -1668,11 +1718,12 @@ impl<'a> Iterator for RopeGraphemes<'a> {
                     break;
                 }
                 Err(GraphemeIncomplete::NextChunk) => {
-                    self.cur_chunk_start += self.cur_chunk.len();
+                    self.cur_chunk_start =
+                        add_or(self.cur_chunk_start, self.cur_chunk.len(), usize::MAX);
                     self.cur_chunk = self.chunks.next().unwrap_or("");
                 }
                 Err(GraphemeIncomplete::PreContext(idx)) => {
-                    let (chunk, byte_idx, _, _) = self.text.chunk_at_byte(idx.saturating_sub(1));
+                    let (chunk, byte_idx, _, _) = self.text.chunk_at_byte(sub_or(idx, 1, 0));
                     self.cursor.provide_context(chunk, byte_idx);
                 }
                 _ => unreachable!(),
@@ -1685,9 +1736,9 @@ impl<'a> Iterator for RopeGraphemes<'a> {
 
             Some(self.text.slice(a_char..b_char))
         } else {
-            let a2 = a - self.cur_chunk_start;
-            let b2 = b - self.cur_chunk_start;
-            Some((&self.cur_chunk[a2..b2]).into())
+            let a2 = sub_or(a, self.cur_chunk_start, 0);
+            let b2 = sub_or(b, self.cur_chunk_start, 0);
+            Some(self.cur_chunk.get(a2..b2).unwrap_or("").into())
         }
     }
 }

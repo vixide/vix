@@ -13,18 +13,6 @@
 //! ([`Editor::filler_before`] is `0` there) and does not consult folds.
 //! See `crates/vix-editor-core/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 
