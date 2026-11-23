@@ -45,7 +45,7 @@ pub fn to_wire(text: &str) -> Vec<u8> {
 /// Wrap `payload` in an MLLP frame.
 #[must_use]
 pub fn frame(payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(payload.len() + 3);
+    let mut out = Vec::new();
     out.push(START);
     out.extend_from_slice(payload);
     out.push(END);

@@ -79,7 +79,9 @@ impl Path {
             return Err(PathError::MissingSegment);
         }
         let mut parts = rest.split('.');
-        let head = parts.next().unwrap_or_default();
+        let Some(head) = parts.next() else {
+            return Err(PathError::MissingField);
+        };
         if head.is_empty() {
             return Err(PathError::MissingField);
         }

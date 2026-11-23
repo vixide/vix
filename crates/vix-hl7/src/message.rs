@@ -3,6 +3,12 @@
 use crate::escape::unescape;
 use crate::path::Path;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The five delimiter characters a message declares in its `MSH` segment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Delimiters {
@@ -113,14 +119,16 @@ fn split_cols(s: &str, sep: char, base: usize) -> Vec<(usize, &str)> {
     let mut out = Vec::new();
     let mut start = 0;
     let mut piece_col = base;
-    for (col, (i, c)) in (base..).zip(s.char_indices()) {
+    for (offset, (i, c)) in s.char_indices().enumerate() {
         if c == sep {
-            out.push((piece_col, &s[start..i]));
-            start = i + c.len_utf8();
-            piece_col = col + 1;
+            let col = add_or(base, offset, usize::MAX);
+            out.push((piece_col, s.get(start..i).unwrap_or("")));
+            start = add_or(i, c.len_utf8(), usize::MAX);
+            piece_col = add_or(col, 1, usize::MAX);
         }
     }
-    out.push((piece_col, &s[start..]));
+    // `start` is just past a separator (or 0), so it is a char boundary.
+    out.push((piece_col, s.get(start..).unwrap_or("")));
     out
 }
 
@@ -163,7 +171,11 @@ fn parse_field(text: &str, col: usize, d: &Delimiters, literal: bool) -> Field {
 /// entry).
 fn parse_segment(line: &str, line_no: usize, d: &Delimiters) -> Segment {
     let pieces = split_cols(line, d.field, 0);
-    let name = pieces[0].1.trim().to_string();
+    let name = pieces
+        .first()
+        .map_or("", |piece| piece.1)
+        .trim()
+        .to_string();
     let is_msh = name == "MSH" && pieces.len() > 1;
     let mut fields = Vec::new();
     if is_msh {
@@ -195,7 +207,7 @@ fn lines(text: &str) -> Vec<(usize, String)> {
                     chars.next();
                 }
                 out.push((n, std::mem::take(&mut cur)));
-                n += 1;
+                n = add_or(n, 1, usize::MAX);
             }
             '\u{0B}' | '\u{1C}' => {}
             other => cur.push(other),

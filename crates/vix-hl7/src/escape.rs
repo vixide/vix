@@ -1,6 +1,24 @@
 //! HL7 escape sequences (`\F\`, `\S\`, `\T\`, `\R\`, `\E\`, `\.br\`, `\Xhh..\`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::message::Delimiters;
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Decode the escape sequences in `raw` using the message's delimiters.
 ///
@@ -13,26 +31,29 @@ pub fn unescape(raw: &str, d: &Delimiters) -> String {
         return raw.to_string();
     }
     let chars: Vec<char> = raw.chars().collect();
-    let mut out = String::with_capacity(raw.len());
+    let mut out = String::new();
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
+        // `i` is an index of `chars`, so the next index cannot overflow.
+        let next = add_or(i, 1, usize::MAX);
         if c != d.escape {
             out.push(c);
-            i += 1;
+            i = next;
             continue;
         }
-        let close = chars[i + 1..].iter().position(|&x| x == d.escape);
+        let rest = chars.get(next..).unwrap_or(&[]);
+        let close = rest.iter().position(|&x| x == d.escape);
         let decoded = close.and_then(|close| {
-            let body: String = chars[i + 1..i + 1 + close].iter().collect();
+            let body: String = rest.get(..close)?.iter().collect();
             decode_sequence(&body, d).map(|text| (text, close))
         });
         if let Some((text, close)) = decoded {
             out.push_str(&text);
-            i += close + 2;
+            // Past the opening escape, the body and the closing escape.
+            i = add_or(add_or(next, close, usize::MAX), 1, usize::MAX);
         } else {
             out.push(c);
-            i += 1;
+            i = next;
         }
     }
     out
@@ -65,7 +86,7 @@ fn decode_hex(hex: &str) -> Option<String> {
     if hex.is_empty() || !hex.is_ascii() || !hex.len().is_multiple_of(2) {
         return None;
     }
-    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    let mut bytes = Vec::new();
     for pair in hex.as_bytes().chunks(2) {
         let s = std::str::from_utf8(pair).ok()?;
         bytes.push(u8::from_str_radix(s, 16).ok()?);

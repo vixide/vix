@@ -80,11 +80,15 @@ impl Ack {
     #[must_use]
     pub fn from_message(msg: &Message) -> Option<Ack> {
         msg.segment("MSA")?;
-        let get = |p: &str| {
-            Path::parse(p)
-                .ok()
-                .and_then(|p| msg.get(&p))
-                .unwrap_or_default()
+        // A field that is absent (or a path that does not parse) reads as empty text.
+        let get = |p: &str| -> String {
+            let Ok(path) = Path::parse(p) else {
+                return String::new();
+            };
+            let Some(value) = msg.get(&path) else {
+                return String::new();
+            };
+            value
         };
         let code_text = get("MSA-1");
         let error_code = msg.segment("ERR").map(|_| {
