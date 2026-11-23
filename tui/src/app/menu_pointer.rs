@@ -62,7 +62,10 @@ pub(super) fn dropdown_item_at(
     let offset =
         crate::ui::dropdown_scroll(highlighted, usize::from(rect.height.minus(2)), items.len());
     let idx = offset.plus(usize::from(row.minus(top)));
-    (idx < items.len() && !items[idx].is_separator()).then_some(idx)
+    items
+        .get(idx)
+        .filter(|item| !item.is_separator())
+        .map(|_| idx)
 }
 
 impl App {
@@ -94,7 +97,8 @@ impl App {
         let rect = self.layout.menu_dropdown;
         if rect_contains(rect, col, row) {
             let item = self.menu.open.and_then(|mi| {
-                dropdown_item_at(rect, self.menu.item, self.menu.defs()[mi].items, row)
+                let def = self.menu.defs().get(mi)?;
+                dropdown_item_at(rect, self.menu.item, def.items, row)
             });
             return Target::Top(item);
         }
@@ -106,7 +110,10 @@ impl App {
         match target {
             Target::SubSub(_) => self.menu.subsubmenu_items(),
             Target::Sub(_) => self.menu.submenu_items(),
-            Target::Top(_) => self.menu.open.map(|mi| self.menu.defs()[mi].items),
+            Target::Top(_) => self
+                .menu
+                .open
+                .and_then(|mi| self.menu.defs().get(mi).map(|def| def.items)),
             Target::Bar | Target::Outside => None,
         }
     }
@@ -118,7 +125,7 @@ impl App {
             return None;
         };
         self.menu_level_items(target)
-            .map(|items| (idx, &items[idx]))
+            .and_then(|items| items.get(idx).map(|item| (idx, item)))
     }
 
     /// Handle a left click while the menu is open: the bar switches or

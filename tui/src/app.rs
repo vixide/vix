@@ -3433,12 +3433,16 @@ impl App {
                     .with_input(cur),
                 );
             }
-            a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
+            a if a.starts_with("view.theme:") => {
+                self.set_theme_by_name(a.strip_prefix("view.theme:").unwrap_or_default());
+            }
             "view.theme_edit" => self.open_theme_editor(),
             a if a.starts_with("view.locale:") => {
-                self.set_locale_by_code(&a["view.locale:".len()..]);
+                self.set_locale_by_code(a.strip_prefix("view.locale:").unwrap_or_default());
             }
-            a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
+            a if a.starts_with("view.keymap:") => {
+                self.set_keymap(a.strip_prefix("view.keymap:").unwrap_or_default());
+            }
             #[cfg(feature = "script")]
             a if a.starts_with("script:") => self.run_script_command(a),
             "tools.calendar" => {
@@ -3456,7 +3460,7 @@ impl App {
                 }
             }
             a if a.starts_with("view.time_zone:") => {
-                self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
+                self.set_time_zone_by_name(a.strip_prefix("view.time_zone:").unwrap_or_default());
             }
             a if self.run_tools_action(a) => {}
             a if self.run_text_tool_action(a) => {}
@@ -4395,7 +4399,7 @@ impl App {
     /// suspend and similar) that are small enough to be one-liners over the active tab. Returns
     /// `false` for ids it does not own so the caller falls through to the next dispatcher.
     fn run_named_action(&mut self, id: &str) -> bool {
-        let view_h = self.editor_view().height as usize;
+        let view_h = usize::from(self.editor_view().height);
         // Editor motion/selection (no buffer change).
         macro_rules! ed {
             ($m:ident) => {{
@@ -4984,9 +4988,9 @@ impl App {
                     let n = chars.len();
                     let start = start.min(n);
                     let end = end.min(n).max(start);
-                    let mut out: String = chars[..start].iter().collect();
+                    let mut out: String = chars.get(..start).unwrap_or(&[]).iter().collect();
                     out.push_str(&output);
-                    out.extend(&chars[end..]);
+                    out.extend(chars.get(end..).unwrap_or(&[]));
                     (out, start.plus(output_len))
                 }
             };
@@ -5836,7 +5840,10 @@ impl App {
             } else {
                 vix_list_state::wrap_up(i, n)
             };
-            if CONTEXT_ITEMS[i].1 != SEP_ACTION {
+            if CONTEXT_ITEMS
+                .get(i)
+                .is_some_and(|item| item.1 != SEP_ACTION)
+            {
                 break;
             }
         }
@@ -5854,8 +5861,11 @@ impl App {
             self.context_menu = None; // click outside dismisses
             return;
         }
-        let row = (mouse.row.minus(r.y.plus(1))) as usize; // +1 for the top border
-        if row < CONTEXT_ITEMS.len() && CONTEXT_ITEMS[row].1 != SEP_ACTION {
+        let row = usize::from(mouse.row.minus(r.y.plus(1))); // +1 for the top border
+        if CONTEXT_ITEMS
+            .get(row)
+            .is_some_and(|item| item.1 != SEP_ACTION)
+        {
             if let Some(cm) = self.context_menu.as_mut() {
                 cm.selected = row;
             }
@@ -5868,7 +5878,7 @@ impl App {
         let action = self
             .context_menu
             .as_ref()
-            .map(|cm| CONTEXT_ITEMS[cm.selected].1);
+            .and_then(|cm| CONTEXT_ITEMS.get(cm.selected).map(|item| item.1));
         self.context_menu = None;
         if let Some(action) = action
             && action != SEP_ACTION
@@ -5947,9 +5957,11 @@ impl App {
         // Whole-word occurrences of `word`, capped to keep the pass cheap.
         let mut i = 0;
         while i.plus(wlen) <= chars.len() {
-            if chars[i..i.plus(wlen)].iter().copied().eq(word.chars())
-                && (i == 0 || !is_word(chars[i.minus(1)]))
-                && (i.plus(wlen) == chars.len() || !is_word(chars[i.plus(wlen)]))
+            if chars
+                .get(i..i.plus(wlen))
+                .is_some_and(|w| w.iter().copied().eq(word.chars()))
+                && (i == 0 || !chars.get(i.minus(1)).copied().is_some_and(is_word))
+                && !chars.get(i.plus(wlen)).copied().is_some_and(is_word)
             {
                 marks.push((i, i.plus(wlen)));
                 i = i.plus(wlen);
@@ -7039,7 +7051,9 @@ impl App {
         let rule = "=".repeat(title.chars().count().clamp(8, 60));
         let banner =
             format!("{indent}{prefix} {rule}\n{indent}{prefix} {title}\n{indent}{prefix} {rule}");
-        lines[line] = banner;
+        if let Some(slot) = lines.get_mut(line) {
+            *slot = banner;
+        }
         tab.editor.set_content(&lines.join("\n"));
         tab.editor.set_cursor_line(line.plus(1));
         tab.dirty = true;
@@ -7200,11 +7214,13 @@ impl App {
                 return;
             }
             KeyCode::PageUp => {
-                self.editor.page_up(area.height.minus(2).max(1) as usize);
+                self.editor
+                    .page_up(usize::from(area.height.minus(2).max(1)));
                 return;
             }
             KeyCode::PageDown => {
-                self.editor.page_down(area.height.minus(2).max(1) as usize);
+                self.editor
+                    .page_down(usize::from(area.height.minus(2).max(1)));
                 return;
             }
             _ => {}
@@ -7702,10 +7718,14 @@ impl App {
         let cur = tab.editor.get_cursor();
         let chars: Vec<char> = tab.editor.get_content().chars().collect();
         let mut start = cur.min(chars.len());
-        while start > 0 && !chars[start.minus(1)].is_whitespace() {
+        while start > 0 && !chars.get(start.minus(1)).is_some_and(|c| c.is_whitespace()) {
             start = start.minus(1);
         }
-        let abbr: String = chars[start..cur.min(chars.len())].iter().collect();
+        let abbr: String = chars
+            .get(start..cur.min(chars.len()))
+            .unwrap_or(&[])
+            .iter()
+            .collect();
         let Some(html) = crate::emmet::expand(&abbr) else {
             self.status = t!("status.emmet_none").to_string();
             return;
@@ -7743,7 +7763,10 @@ impl App {
             } else {
                 vix_list_state::wrap_up(s.index, n)
             };
-            let (anchor, end, word) = (s.anchor, s.end, s.candidates[s.index].clone());
+            let Some(word) = s.candidates.get(s.index).cloned() else {
+                return;
+            };
+            let (anchor, end) = (s.anchor, s.end);
             self.replace_range_chars(anchor, end, &word);
             if let Some(s) = self.complete_session.as_mut() {
                 s.end = anchor.plus(word.chars().count());
@@ -7755,10 +7778,14 @@ impl App {
         let chars: Vec<char> = content.chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cur.min(chars.len());
-        while start > 0 && is_word(chars[start.minus(1)]) {
+        while start > 0 && chars.get(start.minus(1)).copied().is_some_and(is_word) {
             start = start.minus(1);
         }
-        let prefix: String = chars[start..cur.min(chars.len())].iter().collect();
+        let prefix: String = chars
+            .get(start..cur.min(chars.len()))
+            .unwrap_or(&[])
+            .iter()
+            .collect();
         if prefix.is_empty() {
             self.status = t!("status.no_completions").to_string();
             return;
@@ -7774,7 +7801,9 @@ impl App {
             self.status = t!("status.no_completions").to_string();
             return;
         }
-        let word = candidates[0].clone();
+        let Some(word) = candidates.first().cloned() else {
+            return;
+        };
         self.replace_range_chars(start, cur, &word);
         self.complete_session = Some(CompleteSession {
             anchor: start,
@@ -7791,9 +7820,9 @@ impl App {
             let chars: Vec<char> = t.editor.get_content().chars().collect();
             let n = chars.len();
             let (a, b) = (start.min(n), end.min(n).max(start.min(n)));
-            let mut out: String = chars[..a].iter().collect();
+            let mut out: String = chars.get(..a).unwrap_or(&[]).iter().collect();
             out.push_str(text);
-            out.extend(&chars[b..]);
+            out.extend(chars.get(b..).unwrap_or(&[]));
             t.editor.set_content(&out);
             t.editor.set_cursor(a.plus(text.chars().count()));
             t.dirty = true;
@@ -8643,9 +8672,11 @@ impl App {
     fn close_buffers_under(&mut self, path: &Path) {
         let mut i = 0;
         while i < self.editor.tabs.len() {
-            let under = self.editor.tabs[i]
-                .path
-                .as_ref()
+            let under = self
+                .editor
+                .tabs
+                .get(i)
+                .and_then(|t| t.path.as_ref())
                 .is_some_and(|p| p == path || p.starts_with(path));
             if under {
                 self.editor.tabs.remove(i);
@@ -8711,7 +8742,7 @@ impl App {
     /// Esc returns focus to the editor.
     fn bottomdock_key(&mut self, key: KeyEvent) {
         // A page is the dock's visible height (minus its top border).
-        let page = (self.layout.bottom_dock.height.minus(1) as usize).max(1);
+        let page = usize::from(self.layout.bottom_dock.height.minus(1)).max(1);
         match key.code {
             KeyCode::Up => self.bottom_dock.scroll_up(1),
             KeyCode::Down => self.bottom_dock.scroll_down(1, page),
@@ -8917,7 +8948,10 @@ impl App {
         let read =
             crate::authority::current().read_limited(path, crate::fileops::HARD_MAX_TEXT_BYTES + 1);
         match read {
-            Ok(bytes) if (bytes.len() as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
+            Ok(bytes)
+                if u64::try_from(bytes.len())
+                    .is_ok_and(|n| n <= crate::fileops::HARD_MAX_TEXT_BYTES) =>
+            {
                 self.edit
                     .open_edit_bytes(crate::edit_bytes::Hex::from_bytes(bytes));
                 self.edit_bytes_file = Some(path.to_path_buf());
@@ -9243,7 +9277,9 @@ impl App {
             return;
         }
         self.nav_idx = self.nav_idx.minus(1);
-        let loc = self.nav_history[self.nav_idx].clone();
+        let Some(loc) = self.nav_history.get(self.nav_idx).cloned() else {
+            return;
+        };
         self.navigate_to(&loc);
     }
 
@@ -9254,7 +9290,9 @@ impl App {
             return;
         }
         self.nav_idx = self.nav_idx.plus(1);
-        let loc = self.nav_history[self.nav_idx].clone();
+        let Some(loc) = self.nav_history.get(self.nav_idx).cloned() else {
+            return;
+        };
         self.navigate_to(&loc);
     }
 
@@ -9316,11 +9354,12 @@ impl App {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 use crate::color_converter_tool::Field;
                 for field in Field::ALL {
-                    if rect_contains(
-                        self.layout.color_converter_rows[field.index()],
-                        mouse.column,
-                        mouse.row,
-                    ) {
+                    if self
+                        .layout
+                        .color_converter_rows
+                        .get(field.index())
+                        .is_some_and(|row| rect_contains(*row, mouse.column, mouse.row))
+                    {
                         if let Some(c) = self.color_converter.as_mut() {
                             c.set_focus(field);
                         }
@@ -9359,7 +9398,12 @@ impl App {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 use crate::regex_tool::Field;
                 for (i, f) in [Field::Pattern, Field::Subject].into_iter().enumerate() {
-                    if rect_contains(self.layout.regex_tester_rows[i], mouse.column, mouse.row) {
+                    if self
+                        .layout
+                        .regex_tester_rows
+                        .get(i)
+                        .is_some_and(|row| rect_contains(*row, mouse.column, mouse.row))
+                    {
                         if let Some(t) = self.regex_tester.as_mut() {
                             t.focus = f;
                         }
@@ -9377,7 +9421,12 @@ impl App {
                     .into_iter()
                     .enumerate()
                 {
-                    if rect_contains(self.layout.unit_converter_rows[i], mouse.column, mouse.row) {
+                    if self
+                        .layout
+                        .unit_converter_rows
+                        .get(i)
+                        .is_some_and(|row| rect_contains(*row, mouse.column, mouse.row))
+                    {
                         if let Some(c) = self.unit_converter.as_mut() {
                             c.focus = focus;
                         }
@@ -9834,7 +9883,7 @@ impl App {
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
             let r = self.layout.outline_dock;
-            self.outline_dock_click(row.minus(r.y) as usize);
+            self.outline_dock_click(usize::from(row.minus(r.y)));
             return;
         }
         if self.visible.contains(Visible::TEST_PANEL)
@@ -9842,7 +9891,7 @@ impl App {
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
             let r = self.layout.test_panel;
-            let idx = row.minus(r.y) as usize;
+            let idx = usize::from(row.minus(r.y));
             if idx < self.test_results.len() {
                 self.jump_to_test(idx);
             }
@@ -9860,7 +9909,7 @@ impl App {
     fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
         let a = self.layout.bottom_dock;
         let total = self.bottom_dock.lines.len();
-        let viewport = a.height.minus(1) as usize;
+        let viewport = usize::from(a.height.minus(1));
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
         let sb_col = a.x.plus(a.width.minus(1));
         if sb_shown
@@ -9888,7 +9937,7 @@ impl App {
             }
             MouseEventKind::ScrollUp => self.bottom_dock.scroll_up(3),
             MouseEventKind::ScrollDown => {
-                let page = (self.layout.bottom_dock.height.minus(1) as usize).max(1);
+                let page = usize::from(self.layout.bottom_dock.height.minus(1)).max(1);
                 self.bottom_dock.scroll_down(3, page);
             }
             _ => {}
@@ -9902,8 +9951,8 @@ impl App {
         if row <= area.y {
             return; // the top border row
         }
-        let inner_h = area.height.minus(1) as usize;
-        let idx = row.minus(area.y).minus(1) as usize;
+        let inner_h = usize::from(area.height.minus(1));
+        let idx = usize::from(row.minus(area.y).minus(1));
         let Some(line) = self.bottom_dock.visible(inner_h).get(idx).cloned() else {
             return;
         };
@@ -9994,7 +10043,7 @@ impl App {
         if mm.height == 0 {
             return;
         }
-        let rel = row.minus(mm.y) as usize;
+        let rel = usize::from(row.minus(mm.y));
         let total = self
             .editor
             .active_tab()
@@ -10020,8 +10069,8 @@ impl App {
         }
         let total = self.editor.active_line_count().max(1);
         // Fraction of the track the pointer is at, mapped to a 1-based line.
-        let rel = row.minus(sb.y).min(sb.height.minus(1)) as usize;
-        let denom = (sb.height.minus(1)).max(1) as usize;
+        let rel = usize::from(row.minus(sb.y).min(sb.height.minus(1)));
+        let denom = usize::from((sb.height.minus(1)).max(1));
         let line = (rel.times(total.minus(1)).quot(denom)).plus(1);
         let area = self.editor_view();
         self.editor.goto(line, None, area);
@@ -10218,7 +10267,7 @@ impl App {
         // Pressing or dragging the scrollbar (rightmost inner column) scrolls the
         // tree instead of selecting a row.
         let total = self.explorer.nodes.len();
-        let viewport = a.height.minus(1) as usize;
+        let viewport = usize::from(a.height.minus(1));
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
         let sb_col = a.x.plus(a.width.minus(2));
         if sb_shown
@@ -10253,11 +10302,14 @@ impl App {
                 if mouse.row < inner_top {
                     return;
                 }
-                let idx = self.explorer.top.plus(mouse.row.minus(inner_top) as usize);
+                let idx = self
+                    .explorer
+                    .top
+                    .plus(usize::from(mouse.row.minus(inner_top)));
                 if idx < self.explorer.nodes.len() {
                     let was_selected = self.explorer.selected == idx;
                     self.explorer.selected = idx;
-                    let is_dir = self.explorer.nodes[idx].is_dir;
+                    let is_dir = self.explorer.nodes.get(idx).is_some_and(|n| n.is_dir);
                     if was_selected && !is_dir {
                         // Second click on the same file promotes to a real tab.
                         self.open_or_expand_selected();
@@ -10280,7 +10332,7 @@ impl App {
         let inner_top = area.y.plus(1);
         // Scrollbar (rightmost column) press/drag scrolls the message list.
         let total = self.messages.items.len();
-        let viewport = area.height.minus(1) as usize;
+        let viewport = usize::from(area.height.minus(1));
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && area.width > 1;
         let sb_col = area.x.plus(area.width.minus(1));
         if sb_shown
@@ -10307,7 +10359,7 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.focus = Focus::Messages;
                 if mouse.row >= inner_top {
-                    let idx = mouse.row.minus(inner_top) as usize;
+                    let idx = usize::from(mouse.row.minus(inner_top));
                     if idx < self.messages.items.len() {
                         self.messages.selected = idx;
                         // Clicking near the right edge hits the close "x".
@@ -10858,7 +10910,7 @@ impl App {
                 }
                 let mut hit = false;
                 if let Some(fb) = self.file_browser.as_mut() {
-                    let idx = fb.scroll.plus(mouse.row.minus(r.y) as usize);
+                    let idx = fb.scroll.plus(usize::from(mouse.row.minus(r.y)));
                     if idx < fb.len() {
                         fb.selected = idx;
                         hit = true;
@@ -11360,7 +11412,7 @@ impl App {
         let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
         };
-        let rel_col = mouse.column.minus(r.x) as usize;
+        let rel_col = usize::from(mouse.column.minus(r.x));
         // A click picks the individual cell under the pointer — glyph, name, or
         // code — and inserts just that cell's text.
         let cell = self.html_panel.as_mut().and_then(|p| {
@@ -11968,7 +12020,9 @@ impl App {
                 .rposition(|(s, _)| *s < cur)
                 .unwrap_or(matches.len().minus(1)) // before the first: wrap to the last
         };
-        let target = matches[target_idx];
+        let Some(&target) = matches.get(target_idx) else {
+            return (0, 0);
+        };
         t.editor.set_cursor(target.0);
         t.editor
             .set_selection(Some(Selection::new(target.0, target.1)));
@@ -12271,7 +12325,7 @@ impl App {
             self.visible.set(Visible::CLOCK, false);
             return;
         }
-        let row = mouse.row.minus(r.y) as usize;
+        let row = usize::from(mouse.row.minus(r.y));
         if row < self.clock.row_count() {
             self.clock.select(row);
             let now = crate::clock::now_local();
@@ -12323,8 +12377,8 @@ impl App {
         // The weekday header is row 1 and the week rows start at row 2, each day
         // cell three columns wide. Clicking a day inserts it.
         let text = if rel_y >= 2 {
-            let week = rel_y.minus(2) as usize;
-            let col = rel_x.quot(3) as usize;
+            let week = usize::from(rel_y.minus(2));
+            let col = usize::from(rel_x.quot(3));
             self.calendar
                 .grid()
                 .weeks
@@ -12645,12 +12699,12 @@ impl App {
             .iter()
             .map(|(line, character, name)| {
                 let rel = self.root_relative(&path);
-                let line1 = *line as usize + 1;
+                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
                 Hit {
                     path: path.clone(),
                     rel,
                     line: line1,
-                    col: *character as usize + 1,
+                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
                     display: format!("{name}  :{line1}"),
                     text: name.clone(),
                 }
@@ -12675,12 +12729,12 @@ impl App {
             .iter()
             .map(|(path, line, character, name)| {
                 let rel = self.root_relative(path);
-                let line1 = *line as usize + 1;
+                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
                 Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line: line1,
-                    col: *character as usize + 1,
+                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
                     display: format!("{name}  {rel}:{line1}"),
                     text: name.clone(),
                 }
@@ -12705,12 +12759,12 @@ impl App {
             .iter()
             .map(|(path, line, character)| {
                 let rel = self.root_relative(path);
-                let line1 = *line as usize + 1;
+                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
                 Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line: line1,
-                    col: *character as usize + 1,
+                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
                     display: format!("{rel}:{line1}"),
                     text: String::new(),
                 }
@@ -12751,7 +12805,10 @@ impl App {
                 .messages
                 .warn(t!("msg.no_definition", symbol = symbol).to_string()),
             1 => {
-                let (path, line, col) = (hits[0].path.clone(), hits[0].line, hits[0].col);
+                let Some(first) = hits.first() else {
+                    return;
+                };
+                let (path, line, col) = (first.path.clone(), first.line, first.col);
                 self.with_jump(|s| {
                     s.open_path(&path, false);
                     let area = s.editor_view();
@@ -12842,17 +12899,17 @@ impl App {
         let chars: Vec<char> = text.chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cursor.min(chars.len());
-        while start > 0 && is_word(chars[start.minus(1)]) {
+        while start > 0 && chars.get(start.minus(1)).copied().is_some_and(is_word) {
             start = start.minus(1);
         }
         let mut end = cursor.min(chars.len());
-        while end < chars.len() && is_word(chars[end]) {
+        while chars.get(end).copied().is_some_and(is_word) {
             end = end.plus(1);
         }
         if start == end {
             return None;
         }
-        let sym: String = chars[start..end].iter().collect();
+        let sym: String = chars.get(start..end)?.iter().collect();
         let ok = sym
             .chars()
             .next()
@@ -12880,7 +12937,7 @@ impl App {
                 return ControlFlow::Continue(());
             }
             let byte = line.text.find(symbol).unwrap_or(0);
-            let col = (line.text[..byte].chars().count()).plus(1);
+            let col = (line.text.get(..byte).unwrap_or("").chars().count()).plus(1);
             let clipped: String = line.text.trim_start().chars().take(120).collect();
             hits.push(Hit {
                 path: line.path.to_path_buf(),
@@ -14811,7 +14868,7 @@ fn lsp_pos_to_char(
     character: u32,
     enc: crate::lsp_core::Encoding,
 ) -> usize {
-    let line = line as usize;
+    let line = usize::try_from(line).unwrap_or(usize::MAX);
     if line >= code.len_lines() {
         return code.len();
     }
@@ -14842,13 +14899,11 @@ fn apply_edits_to_text(
     }
     line_start.push(acc); // total length, for a position past the last line
     let resolve = |line: u32, character: u32| -> usize {
-        let li = line as usize;
-        if li >= lines.len() {
+        let li = usize::try_from(line).unwrap_or(usize::MAX);
+        let (Some(start), Some(text)) = (line_start.get(li), lines.get(li)) else {
             return acc;
-        }
-        (line_start[li]).plus(crate::lsp_core::position::col_to_char(
-            lines[li], character, enc,
-        ))
+        };
+        start.plus(crate::lsp_core::position::col_to_char(text, character, enc))
     };
     let mut resolved: Vec<(usize, usize, &str)> = edits
         .iter()
@@ -15061,9 +15116,9 @@ fn replace_char_span(t: &mut Tab, span: (usize, usize), replacement: &str) {
     let bs = t.editor.code_ref().char_to_byte(span.0);
     let be = t.editor.code_ref().char_to_byte(span.1);
     let mut new = String::with_capacity(content.len().plus(replacement.len()));
-    new.push_str(&content[..bs]);
+    new.push_str(content.get(..bs).unwrap_or(""));
     new.push_str(replacement);
-    new.push_str(&content[be..]);
+    new.push_str(content.get(be..).unwrap_or(""));
     t.editor.set_content(&new);
     t.editor
         .set_cursor(span.0.plus(replacement.chars().count()));

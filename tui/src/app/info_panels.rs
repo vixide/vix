@@ -582,7 +582,7 @@ impl App {
         if start == cursor {
             return false;
         }
-        let word: String = chars[start..cursor].iter().collect();
+        let word: String = chars.get(start..cursor).unwrap_or(&[]).iter().collect();
         let Some(snippet) = crate::snippets::find_by_prefix(&self.snippet_library, &word) else {
             return false;
         };
@@ -671,7 +671,9 @@ impl App {
             let Some(sess) = self.snippet_session.as_mut() else {
                 return;
             };
-            let (cur_start, cur_end) = sess.stops[sess.index];
+            let Some(&(cur_start, cur_end)) = sess.stops.get(sess.index) else {
+                return;
+            };
             // A later stop nested inside the current field (`${1:a ${2:b}}`)
             // was typed over once the user edited that field: drop it.
             if cursor != cur_end {

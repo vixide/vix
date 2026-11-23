@@ -25,7 +25,10 @@ use crate::theme::{self, icon};
 /// optional cut-dimming and mark dot, and a trailing git-change letter. Split
 /// out of [`draw_explorer`] to keep it within the line limit.
 fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
-    app.explorer.nodes[top..end]
+    app.explorer
+        .nodes
+        .get(top..end)
+        .unwrap_or(&[])
         .iter()
         .map(|n| {
             let indent = "  ".repeat(n.depth);
@@ -93,11 +96,11 @@ pub(super) fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     let total = app.explorer.nodes.len();
     let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
     let vbar = allow_bars && total > usize::from(inner.height);
-    let text_w = if vbar {
+    let text_w = usize::from(if vbar {
         inner.width.minus(1)
     } else {
         inner.width
-    } as usize;
+    });
 
     let top = app.explorer.top.min(total);
     // Build the full (unsliced) styled rows for the visible window.
@@ -107,18 +110,20 @@ pub(super) fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
     let hbar = allow_bars && content_w > text_w;
-    let body_h = if hbar {
+    let body_h = usize::from(if hbar {
         inner.height.minus(1)
     } else {
         inner.height
-    } as usize;
+    });
     let hmax = content_w.minus(text_w);
     app.explorer_hmax = hmax;
     app.explorer_hscroll = app.explorer_hscroll.min(hmax);
     let off = app.explorer_hscroll;
 
     let visible = body_h.min(rows.len());
-    let items: Vec<ListItem> = rows[..visible]
+    let items: Vec<ListItem> = rows
+        .get(..visible)
+        .unwrap_or(&[])
         .iter()
         .map(|spans| ListItem::new(Line::from(hslice_spans(spans, off, text_w))))
         .collect();

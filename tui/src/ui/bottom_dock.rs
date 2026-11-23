@@ -51,18 +51,18 @@ pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let vbar = allow_bars && total > h;
 
     // The visible rows, and whether they overflow horizontally → a bottom hbar.
-    let view_h = if allow_bars {
+    let view_h = usize::from(if allow_bars {
         inner.height.minus(1)
     } else {
         inner.height
-    } as usize;
+    });
     let visible: Vec<String> = app.bottom_dock.visible(view_h).to_vec();
     let content_w = max_line_width(visible.iter().map(String::as_str));
-    let text_w_full = if vbar {
+    let text_w_full = usize::from(if vbar {
         inner.width.minus(1)
     } else {
         inner.width
-    } as usize;
+    });
     let hbar = allow_bars && content_w > text_w_full;
 
     let text_w = text_w_full;
