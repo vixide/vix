@@ -318,3 +318,217 @@ impl Browser {
         self.message = Some(t!("msg.db_ai_failed").to_string());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{ctrl, family, press, typed, workbench};
+    use vix_input::KeyCode;
+
+    fn queued(b: &mut Browser) -> AiRequest {
+        assert!(b.ai_busy());
+        assert_eq!(b.message, Some(t!("msg.db_ai_thinking").to_string()));
+        b.take_ai_request().expect("a queued request")
+    }
+
+    #[test]
+    fn ask_needs_a_connection() {
+        let mut b = Browser::new(Vec::new());
+        b.open_ask();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        assert_ne!(b.view, View::Ask);
+        for f in [Browser::explain_query, Browser::optimize_current] {
+            b.message = None;
+            f(&mut b);
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        }
+        b.ask_input = "list users".into();
+        b.submit_ask();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        assert!(!b.ai_busy());
+        assert_eq!(b.schema_facts(), (Vec::new(), Vec::new()));
+    }
+
+    #[test]
+    fn typing_a_question_queues_a_schema_only_sql_request() {
+        let mut b = family(false);
+        ctrl(&mut b, 'a');
+        assert_eq!(b.view, View::Ask);
+        typed(&mut b, "kids per parent");
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "t");
+        press(&mut b, KeyCode::Tab); // ignored
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench);
+        let req = queued(&mut b);
+        assert!(req.context.contains("kids per parent"), "{}", req.context);
+        assert!(req.context.contains("child"), "{}", req.context);
+        assert!(!req.context.contains("alpha"), "row data never leaves");
+        assert_eq!(req.prompt, ai::instruction(true), "read-only connection");
+        assert_eq!(req.reply, AiReply::Sql);
+        assert!(b.ai_busy(), "now in flight");
+        assert!(b.take_ai_request().is_none(), "handed out exactly once");
+    }
+
+    #[test]
+    fn a_writable_connection_gets_the_writable_instruction() {
+        let mut b = family(true);
+        b.ask_input = "add a parent".into();
+        b.submit_ask();
+        assert_eq!(queued(&mut b).prompt, ai::instruction(false));
+    }
+
+    #[test]
+    fn a_leading_question_mark_asks_for_a_prose_answer() {
+        let mut b = family(false);
+        b.ask_input = "  ? how are they related  ".into();
+        b.submit_ask();
+        let req = queued(&mut b);
+        assert_eq!(req.reply, AiReply::Prose);
+        assert_eq!(req.prompt, ai::answer_instruction());
+        assert!(req.context.contains("how are they related"));
+    }
+
+    #[test]
+    fn an_empty_question_closes_the_prompt_without_asking() {
+        let mut b = family(false);
+        b.open_ask();
+        b.ask_input = " ? ".into();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench);
+        assert!(!b.ai_busy());
+        b.open_ask();
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn only_one_request_may_be_outstanding() {
+        let mut b = family(false);
+        b.ask_input = "first".into();
+        b.submit_ask();
+        let busy = t!("msg.db_ai_busy").to_string();
+        b.message = None;
+        b.ask_input = "second".into();
+        b.submit_ask();
+        assert_eq!(b.message, Some(busy.clone()));
+        for f in [Browser::fix_error, Browser::explain_query, Browser::optimize_current] {
+            b.message = None;
+            f(&mut b);
+            assert_eq!(b.message, Some(busy.clone()));
+        }
+    }
+
+    #[test]
+    fn fixing_needs_a_failed_query_and_feeds_it_to_the_assistant() {
+        let mut b = family(false);
+        b.fix_error();
+        assert_eq!(b.message, Some(t!("msg.db_ai_no_error").to_string()));
+        assert!(!b.ai_busy());
+        b.last_error = Some(("SELEKT 1".into(), "syntax error".into()));
+        b.fix_error();
+        let req = queued(&mut b);
+        assert!(req.context.contains("SELEKT 1") && req.context.contains("syntax error"));
+        assert_eq!(req.reply, AiReply::Sql);
+    }
+
+    #[test]
+    fn explain_and_optimize_use_the_statement_at_the_cursor() {
+        let mut b = family(false);
+        b.explain_query();
+        assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+        b.optimize_current();
+        assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+        b.focus = Pane::Editor;
+        typed(&mut b, "SELECT * FROM parent");
+        b.explain_query();
+        let req = queued(&mut b);
+        assert_eq!(req.reply, AiReply::Prose);
+        assert!(req.context.contains("SELECT * FROM parent"));
+        b.ai_failed();
+        b.optimize_current();
+        let req = queued(&mut b);
+        assert_eq!(req.reply, AiReply::Sql);
+        assert!(req.context.contains("SELECT * FROM parent"));
+        assert!(req.context.contains("SCAN"), "the plan is included: {}", req.context);
+    }
+
+    #[test]
+    fn a_sql_reply_replaces_the_editor_and_is_validated_with_explain() {
+        let mut b = family(false);
+        b.focus = Pane::Editor;
+        typed(&mut b, "old text");
+        b.ask_input = "all parents".into();
+        b.submit_ask();
+        let _ = b.take_ai_request();
+        b.apply_ai_reply("Here you go:\n```sql\nSELECT * FROM parent\n```");
+        assert!(!b.ai_busy());
+        assert_eq!(b.query.text(), "SELECT * FROM parent");
+        assert_eq!(b.focus, Pane::Results, "the EXPLAIN plan is shown");
+        assert!(!b.grid.rows.is_empty());
+        assert!(!b.editable());
+        assert_eq!(b.message, Some(t!("msg.db_ai_ready").to_string()));
+    }
+
+    #[test]
+    fn a_sql_reply_that_does_not_explain_still_lands_in_the_editor() {
+        let mut b = family(false);
+        b.apply_ai_reply("SELECT * FROM nowhere");
+        assert_eq!(b.query.text(), "SELECT * FROM nowhere");
+        assert_eq!(b.focus, Pane::Editor);
+        assert_eq!(b.message, Some(t!("msg.db_ai_ready").to_string()));
+    }
+
+    #[test]
+    fn an_empty_reply_changes_nothing() {
+        let mut b = family(false);
+        b.focus = Pane::Editor;
+        typed(&mut b, "keep");
+        b.ai = AiState::Running(AiReply::Sql);
+        b.apply_ai_reply("   ");
+        assert_eq!(b.query.text(), "keep");
+        assert_eq!(b.message, Some(t!("msg.db_ai_empty").to_string()));
+        assert!(!b.ai_busy());
+        b.ai = AiState::Running(AiReply::Prose);
+        b.apply_ai_reply("  \n ");
+        assert_eq!(b.message, Some(t!("msg.db_ai_empty").to_string()));
+        assert_ne!(b.view, View::Cell);
+    }
+
+    #[test]
+    fn a_prose_reply_opens_in_the_viewer() {
+        let mut b = family(false);
+        b.ask_input = "?what is parent".into();
+        b.submit_ask();
+        let _ = b.take_ai_request();
+        b.apply_ai_reply("  It holds the owners.\n");
+        assert_eq!(b.view, View::Cell);
+        assert_eq!(b.cell_text, "It holds the owners.");
+        assert_eq!(b.view_scroll, 0);
+        assert_eq!(b.message, Some(t!("msg.db_ai_answer").to_string()));
+    }
+
+    #[test]
+    fn a_failed_request_frees_the_queue() {
+        let mut b = family(false);
+        b.ask_input = "x".into();
+        b.submit_ask();
+        b.ai_failed();
+        assert!(!b.ai_busy());
+        assert_eq!(b.message, Some(t!("msg.db_ai_failed").to_string()));
+    }
+
+    #[test]
+    fn schema_facts_list_typed_columns_and_foreign_keys() {
+        let mut b = workbench(
+            false,
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY)",
+                "CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER REFERENCES p(id))",
+            ],
+        );
+        let (columns, rels) = b.schema_facts();
+        assert!(columns.contains(&("c".into(), "p_id".into(), "INTEGER".into())));
+        assert_eq!(rels, [("c".into(), "p_id".into(), "p".into(), "id".into())]);
+    }
+}

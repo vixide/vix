@@ -103,6 +103,9 @@ pub mod store;
 pub mod table_export;
 pub mod tunnel;
 
+#[cfg(test)]
+mod test_support;
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Browser::handle_key`].
