@@ -9,6 +9,19 @@
 //! copy, and [`dropdown_item_at`] is its pure core, testable without an
 //! [`App`].
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::layout::Rect;
 
 use super::{App, rect_contains};
@@ -42,16 +55,13 @@ pub(super) fn dropdown_item_at(
     items: &[Item],
     row: u16,
 ) -> Option<usize> {
-    let top = rect.y + 1;
+    let top = rect.y.plus(1);
     if row < top {
         return None;
     }
-    let offset = crate::ui::dropdown_scroll(
-        highlighted,
-        usize::from(rect.height.saturating_sub(2)),
-        items.len(),
-    );
-    let idx = offset + usize::from(row - top);
+    let offset =
+        crate::ui::dropdown_scroll(highlighted, usize::from(rect.height.minus(2)), items.len());
+    let idx = offset.plus(usize::from(row.minus(top)));
     (idx < items.len() && !items[idx].is_separator()).then_some(idx)
 }
 

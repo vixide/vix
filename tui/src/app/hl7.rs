@@ -8,6 +8,19 @@
 //! client), and keeps nothing -- message text and replies are never logged or
 //! written to disk, and the last endpoint is remembered in memory only.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{App, Focus, rect_contains};
@@ -51,7 +64,7 @@ impl App {
     /// Handle a key in the HL7 segment panel: move/page, filter-by-typing (Backspace edits the
     /// filter), Enter jumps the editor to the segment's line, Esc closes.
     pub(super) fn hl7_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.hl7_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.hl7_panel.height)).max(1);
         let Some(p) = self.hl7_panel.as_mut() else {
             return;
         };
@@ -81,7 +94,7 @@ impl App {
         let Some(p) = self.hl7_panel.as_mut() else {
             return;
         };
-        let idx = p.scroll + (mouse.row - rect.y) as usize;
+        let idx = p.scroll.plus(mouse.row.minus(rect.y) as usize);
         if p.select_index(idx) {
             self.jump_to_hl7_row();
         }
@@ -99,7 +112,7 @@ impl App {
         };
         self.hl7_panel = None;
         let area = self.layout.editor;
-        self.editor.goto(line + 1, Some(col + 1), area);
+        self.editor.goto(line.plus(1), Some(col.plus(1)), area);
         self.focus = Focus::Editor;
     }
 }

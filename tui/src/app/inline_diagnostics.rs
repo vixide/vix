@@ -5,6 +5,18 @@
 //! when the cursor reaches a line with a diagnostic, shows its message in the
 //! status line. The selection rules are pure, in [`crate::lsp::inline`].
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::PathBuf;
 
 use crate::editor_core::virtual_text::{EolText, VirtualTextLayer};

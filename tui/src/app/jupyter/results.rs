@@ -2,6 +2,19 @@
 //! `#+RESULTS:` (written, appended to or cleared as one undo step), an
 //! image saved for an Org `[[file:…]]` link, and an image opened in a tab.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Component, Path};
 
 use vix_jupyter::core::babel::{self, Handling};
@@ -83,7 +96,11 @@ impl App {
         }
         let start = char_offset_of_line(text, edit.start);
         let old_end = char_offset_of_line(text, edit.end);
-        let delta = new.chars().count().cast_signed() - text.chars().count().cast_signed();
+        let delta = new
+            .chars()
+            .count()
+            .cast_signed()
+            .minus(text.chars().count().cast_signed());
         let tab = &mut self.editor.tabs[index];
         let cursor = tab.editor.get_cursor();
         tab.editor.set_content(&new);
@@ -248,9 +265,9 @@ fn char_offset_of_line(text: &str, line: usize) -> usize {
     let mut seen = 0;
     for (i, c) in text.chars().enumerate() {
         if c == '\n' {
-            seen += 1;
+            seen = seen.plus(1);
             if seen == line {
-                return i + 1;
+                return i.plus(1);
             }
         }
     }
@@ -263,7 +280,7 @@ fn locate_block(text: &str, begin: usize, code: &str) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     let end_if_same = |b: usize| {
         let (found, end, _) = crate::org::src_block_at(text, b)?;
-        (found == b && lines[b + 1..end].join("\n") == code).then_some(end)
+        (found == b && lines[b.plus(1)..end].join("\n") == code).then_some(end)
     };
     end_if_same(begin).or_else(|| {
         lines

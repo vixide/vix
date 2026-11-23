@@ -8,6 +8,19 @@
 //! starting) is retried a bounded number of times. Replies for an older
 //! document version never reach this module (`vix-lsp` drops them).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -222,7 +235,7 @@ impl App {
             && let Some(st) = self.doc_extras.get_mut(&path)
             && st.retries < RETRIES
         {
-            st.retries += 1;
+            st.retries = st.retries.plus(1);
             st.refresh.after(now, LENS_DEBOUNCE);
         }
     }
@@ -345,7 +358,7 @@ impl App {
         match target_kind(target) {
             TargetKind::File { path, line } => {
                 let path = crate::lsp::uri_to_path(&format!("file://{path}"));
-                self.lsp_jump(&path, line.map_or(0, |l| l.saturating_sub(1)), 0);
+                self.lsp_jump(&path, line.map_or(0, |l| l.minus(1)), 0);
                 self.status = t!("status.link_opened", target = target.to_string()).to_string();
             }
             TargetKind::External(url) => {

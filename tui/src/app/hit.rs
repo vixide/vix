@@ -6,15 +6,25 @@
 //! spelled that out by hand; this is the one copy, a pure function a test can
 //! drive without building an [`App`](super::App) or drawing a frame.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::layout::Rect;
 use vix_input::{MouseButton, MouseEvent, MouseEventKind};
 
 /// Whether `(col, row)` lies inside `r`.
 pub(super) fn rect_has(r: Rect, col: u16, row: u16) -> bool {
-    col >= r.x
-        && col < r.x.saturating_add(r.width)
-        && row >= r.y
-        && row < r.y.saturating_add(r.height)
+    col >= r.x && col < r.x.plus(r.width) && row >= r.y && row < r.y.plus(r.height)
 }
 
 /// The zero-based row, counted from the top of `rect`, that a left-button
@@ -23,7 +33,7 @@ pub(super) fn rect_has(r: Rect, col: u16, row: u16) -> bool {
 pub(super) fn left_click_row(rect: Rect, mouse: MouseEvent) -> Option<usize> {
     (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         && rect_has(rect, mouse.column, mouse.row))
-    .then(|| usize::from(mouse.row - rect.y))
+    .then(|| usize::from(mouse.row.minus(rect.y)))
 }
 
 #[cfg(test)]

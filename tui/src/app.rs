@@ -1,5 +1,17 @@
 //! Application state and event handling.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 #[cfg(feature = "ai")]
 mod acp;
 #[cfg(feature = "ai")]
@@ -31,6 +43,7 @@ mod fhir_http;
 mod fhir_http_off;
 mod focus;
 mod ghost;
+use crate::geo::{Geo, later};
 #[cfg(feature = "cowork")]
 use cowork as cowork_state;
 #[cfg(not(feature = "cowork"))]
@@ -1532,7 +1545,7 @@ impl Keymap {
 fn node_to_pane(node: &crate::session::PaneNode, tab_count: usize) -> crate::pane_tree::Pane {
     match node {
         crate::session::PaneNode::Leaf(i) => {
-            crate::pane_tree::Pane::Leaf((*i).min(tab_count.saturating_sub(1)))
+            crate::pane_tree::Pane::Leaf((*i).min(tab_count.minus(1)))
         }
         crate::session::PaneNode::Split {
             dir,
@@ -4347,7 +4360,7 @@ impl App {
             "next_tab" => self.run_action("tab.next"),
             "previous_tab" => self.run_action("tab.prev"),
             "first_tab" => self.editor.active = 0,
-            "last_tab" => self.editor.active = self.editor.tabs.len().saturating_sub(1),
+            "last_tab" => self.editor.active = self.editor.tabs.len().minus(1),
             // splits
             "vsplit" => self.run_action("view.split_vertical"),
             "hsplit" => self.run_action("view.split_horizontal"),
@@ -4579,7 +4592,7 @@ impl App {
                 self.status = t!("status.save_all_stopped", count = saved, path = path).to_string();
                 return;
             }
-            saved += 1;
+            saved = saved.plus(1);
         }
         self.editor.active = original;
         self.status = if skipped == 0 {
@@ -4611,7 +4624,7 @@ impl App {
             if savable {
                 targets.push(i);
             } else {
-                skipped += 1;
+                skipped = skipped.plus(1);
             }
         }
         (targets, skipped)
@@ -4907,7 +4920,8 @@ impl App {
         let new_len = new.chars().count();
         if let Some(t) = self.editor.active_tab_mut() {
             replace_char_span(t, (s, e), &new);
-            t.editor.set_selection(Some(Selection::new(s, s + new_len)));
+            t.editor
+                .set_selection(Some(Selection::new(s, s.plus(new_len))));
             t.dirty = true;
             t.preview = false;
         }
@@ -4973,7 +4987,7 @@ impl App {
                     let mut out: String = chars[..start].iter().collect();
                     out.push_str(&output);
                     out.extend(&chars[end..]);
-                    (out, start + output_len)
+                    (out, start.plus(output_len))
                 }
             };
             tab.editor.set_content(&new);
@@ -5143,8 +5157,7 @@ impl App {
                 self.editor.insert_str(&format!("{prefix}{suffix}"), area);
                 if let Some(t) = self.editor.active_tab_mut() {
                     let cursor = t.editor.get_cursor();
-                    t.editor
-                        .set_cursor(cursor.saturating_sub(suffix.chars().count()));
+                    t.editor.set_cursor(cursor.minus(suffix.chars().count()));
                 }
             }
         }
@@ -5319,7 +5332,7 @@ impl App {
                 let cur = t.editor.get_cursor();
                 let line = code.char_to_line(cur);
                 let line_start = code.line_to_char(line);
-                let line_end = line_start + code.line_len(line);
+                let line_end = line_start.plus(code.line_len(line));
                 (
                     char_to_lsp_pos(code, line_start, enc),
                     char_to_lsp_pos(code, line_end, enc),
@@ -5360,12 +5373,12 @@ impl App {
             KeyCode::Esc => self.code_actions = None,
             KeyCode::Up => {
                 if let Some(m) = self.code_actions.as_mut() {
-                    m.selected = m.selected.saturating_sub(1);
+                    m.selected = m.selected.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(m) = self.code_actions.as_mut() {
-                    m.selected = (m.selected + 1).min(m.actions.len().saturating_sub(1));
+                    m.selected = m.selected.plus(1).min(m.actions.len().minus(1));
                 }
             }
             KeyCode::Enter => self.apply_selected_code_action(),
@@ -5446,7 +5459,7 @@ impl App {
             return;
         }
         // Keep the fractional remainder so the countdown stays accurate over time.
-        self.pomodoro_last_tick = Some(last + std::time::Duration::from_secs(secs));
+        self.pomodoro_last_tick = Some(later(last, std::time::Duration::from_secs(secs)));
         if let Some(timer) = self.pomodoro.as_mut() {
             match timer.tick(secs) {
                 Tick::BreakStarted => {
@@ -5713,14 +5726,14 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.spell_suggest.as_mut() {
-                    p.selected = p.selected.saturating_sub(1);
+                    p.selected = p.selected.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(p) = self.spell_suggest.as_mut()
-                    && p.selected + 1 < p.suggestions.len()
+                    && p.selected.plus(1) < p.suggestions.len()
                 {
-                    p.selected += 1;
+                    p.selected = p.selected.plus(1);
                 }
             }
             KeyCode::Enter => self.spell_apply_selected(),
@@ -5841,7 +5854,7 @@ impl App {
             self.context_menu = None; // click outside dismisses
             return;
         }
-        let row = (mouse.row.saturating_sub(r.y + 1)) as usize; // +1 for the top border
+        let row = (mouse.row.minus(r.y.plus(1))) as usize; // +1 for the top border
         if row < CONTEXT_ITEMS.len() && CONTEXT_ITEMS[row].1 != SEP_ACTION {
             if let Some(cm) = self.context_menu.as_mut() {
                 cm.selected = row;
@@ -5933,18 +5946,18 @@ impl App {
         let mut marks = Vec::new();
         // Whole-word occurrences of `word`, capped to keep the pass cheap.
         let mut i = 0;
-        while i + wlen <= chars.len() {
-            if chars[i..i + wlen].iter().copied().eq(word.chars())
-                && (i == 0 || !is_word(chars[i - 1]))
-                && (i + wlen == chars.len() || !is_word(chars[i + wlen]))
+        while i.plus(wlen) <= chars.len() {
+            if chars[i..i.plus(wlen)].iter().copied().eq(word.chars())
+                && (i == 0 || !is_word(chars[i.minus(1)]))
+                && (i.plus(wlen) == chars.len() || !is_word(chars[i.plus(wlen)]))
             {
-                marks.push((i, i + wlen));
-                i += wlen;
+                marks.push((i, i.plus(wlen)));
+                i = i.plus(wlen);
                 if marks.len() >= 500 {
                     break;
                 }
             } else {
-                i += 1;
+                i = i.plus(1);
             }
         }
         // A single occurrence (the word itself) isn't worth highlighting.
@@ -6302,7 +6315,7 @@ impl App {
             p.rows = rows;
             let len = p.len();
             if p.selected >= len {
-                p.selected = len.saturating_sub(1);
+                p.selected = len.minus(1);
             }
         }
     }
@@ -6314,7 +6327,7 @@ impl App {
         if self.keybinding_editor.is_none() {
             return;
         }
-        let page = (self.layout.keybinding_editor_body.height as usize).max(1);
+        let page = (usize::from(self.layout.keybinding_editor_body.height)).max(1);
         match key.code {
             KeyCode::Esc => self.keybinding_editor = None,
             KeyCode::Backspace => {
@@ -7028,7 +7041,7 @@ impl App {
             format!("{indent}{prefix} {rule}\n{indent}{prefix} {title}\n{indent}{prefix} {rule}");
         lines[line] = banner;
         tab.editor.set_content(&lines.join("\n"));
-        tab.editor.set_cursor_line(line + 1);
+        tab.editor.set_cursor_line(line.plus(1));
         tab.dirty = true;
     }
 
@@ -7187,13 +7200,11 @@ impl App {
                 return;
             }
             KeyCode::PageUp => {
-                self.editor
-                    .page_up(area.height.saturating_sub(2).max(1) as usize);
+                self.editor.page_up(area.height.minus(2).max(1) as usize);
                 return;
             }
             KeyCode::PageDown => {
-                self.editor
-                    .page_down(area.height.saturating_sub(2).max(1) as usize);
+                self.editor.page_down(area.height.minus(2).max(1) as usize);
                 return;
             }
             _ => {}
@@ -7216,7 +7227,7 @@ impl App {
                 let cur = t.editor.get_cursor();
                 let code = t.editor.code_ref();
                 let line = code.char_to_line(cur);
-                cur < code.line_to_char(line) + code.line_len(line)
+                cur < code.line_to_char(line).plus(code.line_len(line))
             });
             if over_char {
                 self.editor.delete_forward();
@@ -7691,8 +7702,8 @@ impl App {
         let cur = tab.editor.get_cursor();
         let chars: Vec<char> = tab.editor.get_content().chars().collect();
         let mut start = cur.min(chars.len());
-        while start > 0 && !chars[start - 1].is_whitespace() {
-            start -= 1;
+        while start > 0 && !chars[start.minus(1)].is_whitespace() {
+            start = start.minus(1);
         }
         let abbr: String = chars[start..cur.min(chars.len())].iter().collect();
         let Some(html) = crate::emmet::expand(&abbr) else {
@@ -7735,7 +7746,7 @@ impl App {
             let (anchor, end, word) = (s.anchor, s.end, s.candidates[s.index].clone());
             self.replace_range_chars(anchor, end, &word);
             if let Some(s) = self.complete_session.as_mut() {
-                s.end = anchor + word.chars().count();
+                s.end = anchor.plus(word.chars().count());
             }
             return;
         }
@@ -7744,8 +7755,8 @@ impl App {
         let chars: Vec<char> = content.chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cur.min(chars.len());
-        while start > 0 && is_word(chars[start - 1]) {
-            start -= 1;
+        while start > 0 && is_word(chars[start.minus(1)]) {
+            start = start.minus(1);
         }
         let prefix: String = chars[start..cur.min(chars.len())].iter().collect();
         if prefix.is_empty() {
@@ -7769,7 +7780,7 @@ impl App {
             anchor: start,
             candidates,
             index: 0,
-            end: start + word.chars().count(),
+            end: start.plus(word.chars().count()),
         });
     }
 
@@ -7784,7 +7795,7 @@ impl App {
             out.push_str(text);
             out.extend(&chars[b..]);
             t.editor.set_content(&out);
-            t.editor.set_cursor(a + text.chars().count());
+            t.editor.set_cursor(a.plus(text.chars().count()));
             t.dirty = true;
             t.preview = false;
         }
@@ -7835,8 +7846,9 @@ impl App {
         let cur = t.editor.get_cursor();
         let line = code.char_to_line(cur);
         let line_start = code.line_to_char(line);
-        let line_text = code.slice(line_start, line_start + code.line_len(line));
-        let character = crate::lsp_core::position::char_to_col(&line_text, cur - line_start, enc);
+        let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
+        let character =
+            crate::lsp_core::position::char_to_col(&line_text, cur.minus(line_start), enc);
         (u32::try_from(line).unwrap_or(0), character)
     }
 
@@ -8033,7 +8045,7 @@ impl App {
             return;
         };
         let cur = tab.editor.get_cursor();
-        if cur < 2 || tab.editor.code_ref().char_slice(cur - 2, cur) != "[[" {
+        if cur < 2 || tab.editor.code_ref().char_slice(cur.minus(2), cur) != "[[" {
             return;
         }
         self.open_node_link_completion();
@@ -8600,7 +8612,7 @@ impl App {
                 Ok(()) => {
                     self.close_buffers_under(&canon);
                     gone.push(item);
-                    removed += 1;
+                    removed = removed.plus(1);
                 }
                 Err(e) => self
                     .messages
@@ -8638,13 +8650,13 @@ impl App {
             if under {
                 self.editor.tabs.remove(i);
             } else {
-                i += 1;
+                i = i.plus(1);
             }
         }
         if self.editor.tabs.is_empty() {
             self.editor.new_tab();
         } else if self.editor.active >= self.editor.tabs.len() {
-            self.editor.active = self.editor.tabs.len() - 1;
+            self.editor.active = self.editor.tabs.len().minus(1);
         }
     }
 
@@ -8699,7 +8711,7 @@ impl App {
     /// Esc returns focus to the editor.
     fn bottomdock_key(&mut self, key: KeyEvent) {
         // A page is the dock's visible height (minus its top border).
-        let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
+        let page = (self.layout.bottom_dock.height.minus(1) as usize).max(1);
         match key.code {
             KeyCode::Up => self.bottom_dock.scroll_up(1),
             KeyCode::Down => self.bottom_dock.scroll_down(1, page),
@@ -8724,7 +8736,7 @@ impl App {
         match settings.editor_behavior.large_file_mb {
             0 => crate::fileops::HARD_MAX_TEXT_BYTES,
             mb => mb
-                .saturating_mul(1024 * 1024)
+                .times(1024 * 1024)
                 .min(crate::fileops::HARD_MAX_TEXT_BYTES),
         }
     }
@@ -9006,7 +9018,7 @@ impl App {
         let head: String = (0..n.min(lines.max(2)))
             .map(|i| code.line(i).to_string())
             .collect();
-        let tail: String = (n.saturating_sub(modeline::TAIL_LINES.max(lines))..n)
+        let tail: String = (n.minus(modeline::TAIL_LINES.max(lines))..n)
             .map(|i| code.line(i).to_string())
             .collect();
         modeline::parse(&head, &tail, lines)
@@ -9093,7 +9105,7 @@ impl App {
         self.closed_tabs.push(path);
         let cap = 20;
         if self.closed_tabs.len() > cap {
-            let drop = self.closed_tabs.len() - cap;
+            let drop = self.closed_tabs.len().minus(cap);
             self.closed_tabs.drain(0..drop);
         }
     }
@@ -9209,7 +9221,7 @@ impl App {
         let dest = self.current_location();
         // Drop any forward history, then append origin then destination.
         if !self.nav_history.is_empty() {
-            self.nav_history.truncate(self.nav_idx + 1);
+            self.nav_history.truncate(self.nav_idx.plus(1));
         }
         if let Some(o) = origin
             && self.nav_history.last() != Some(&o)
@@ -9221,7 +9233,7 @@ impl App {
         {
             self.nav_history.push(d);
         }
-        self.nav_idx = self.nav_history.len().saturating_sub(1);
+        self.nav_idx = self.nav_history.len().minus(1);
     }
 
     /// Go to the previous entry in the position history (Alt+Left).
@@ -9230,18 +9242,18 @@ impl App {
             self.status = t!("status.no_earlier").into();
             return;
         }
-        self.nav_idx -= 1;
+        self.nav_idx = self.nav_idx.minus(1);
         let loc = self.nav_history[self.nav_idx].clone();
         self.navigate_to(&loc);
     }
 
     /// Go to the next entry in the position history (Alt+Right).
     fn nav_forward(&mut self) {
-        if self.nav_idx + 1 >= self.nav_history.len() {
+        if self.nav_idx.plus(1) >= self.nav_history.len() {
             self.status = t!("status.no_later").into();
             return;
         }
-        self.nav_idx += 1;
+        self.nav_idx = self.nav_idx.plus(1);
         let loc = self.nav_history[self.nav_idx].clone();
         self.navigate_to(&loc);
     }
@@ -9618,14 +9630,14 @@ impl App {
                 if crate::ui::layout_mirrored(self) {
                     self.layout.explorer.x
                 } else {
-                    self.layout.explorer.right().saturating_sub(1)
+                    self.layout.explorer.right().minus(1)
                 }
             });
         let right_edge = (self.visible.contains(Visible::MESSAGES)
             && self.layout.messages.width > 0)
             .then(|| {
                 if crate::ui::layout_mirrored(self) {
-                    self.layout.messages.right().saturating_sub(1)
+                    self.layout.messages.right().minus(1)
                 } else {
                     self.layout.messages.x
                 }
@@ -9822,7 +9834,7 @@ impl App {
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
             let r = self.layout.outline_dock;
-            self.outline_dock_click((row - r.y) as usize);
+            self.outline_dock_click(row.minus(r.y) as usize);
             return;
         }
         if self.visible.contains(Visible::TEST_PANEL)
@@ -9830,7 +9842,7 @@ impl App {
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
             let r = self.layout.test_panel;
-            let idx = (row - r.y) as usize;
+            let idx = row.minus(r.y) as usize;
             if idx < self.test_results.len() {
                 self.jump_to_test(idx);
             }
@@ -9848,9 +9860,9 @@ impl App {
     fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
         let a = self.layout.bottom_dock;
         let total = self.bottom_dock.lines.len();
-        let viewport = a.height.saturating_sub(1) as usize;
+        let viewport = a.height.minus(1) as usize;
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
-        let sb_col = a.x + a.width.saturating_sub(1);
+        let sb_col = a.x.plus(a.width.minus(1));
         if sb_shown
             && mouse.column == sb_col
             && matches!(
@@ -9861,15 +9873,12 @@ impl App {
             self.focus = Focus::BottomDock;
             let sb_rect = Rect {
                 x: sb_col,
-                y: a.y + 1,
+                y: a.y.plus(1),
                 width: 1,
-                height: a.height - 1,
+                height: a.height.minus(1),
             };
-            self.bottom_dock.scroll = crate::ui::scrollbar_pos_from_row(
-                sb_rect,
-                mouse.row,
-                total.saturating_sub(viewport),
-            );
+            self.bottom_dock.scroll =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.minus(viewport));
             return;
         }
         match mouse.kind {
@@ -9879,7 +9888,7 @@ impl App {
             }
             MouseEventKind::ScrollUp => self.bottom_dock.scroll_up(3),
             MouseEventKind::ScrollDown => {
-                let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
+                let page = (self.layout.bottom_dock.height.minus(1) as usize).max(1);
                 self.bottom_dock.scroll_down(3, page);
             }
             _ => {}
@@ -9893,8 +9902,8 @@ impl App {
         if row <= area.y {
             return; // the top border row
         }
-        let inner_h = area.height.saturating_sub(1) as usize;
-        let idx = (row - area.y - 1) as usize;
+        let inner_h = area.height.minus(1) as usize;
+        let idx = row.minus(area.y).minus(1) as usize;
         let Some(line) = self.bottom_dock.visible(inner_h).get(idx).cloned() else {
             return;
         };
@@ -9928,7 +9937,7 @@ impl App {
 
     /// Enter jump-to-line mode: assign a short label to each visible line.
     fn open_jump(&mut self) {
-        let height = self.layout.editor.height as usize;
+        let height = usize::from(self.layout.editor.height);
         if height == 0 {
             return;
         }
@@ -9938,7 +9947,7 @@ impl App {
             .active_tab()
             .map_or(0, |t| t.text().lines().count().max(1));
         let labels: Vec<(String, usize)> = (0..height)
-            .map(|r| top + r)
+            .map(|r| top.plus(r))
             .take_while(|&line| line < total)
             .enumerate()
             .map(|(i, line)| (jump_label(i), line))
@@ -9967,7 +9976,7 @@ impl App {
         if let Some((_, line)) = jm.labels.iter().find(|(label, _)| *label == jm.typed) {
             let line = *line;
             let area = self.editor_view();
-            self.editor.goto(line + 1, None, area); // goto is 1-based
+            self.editor.goto(line.plus(1), None, area); // goto is 1-based
             self.focus = Focus::Editor;
         } else if jm
             .labels
@@ -9985,14 +9994,17 @@ impl App {
         if mm.height == 0 {
             return;
         }
-        let rel = row.saturating_sub(mm.y) as usize;
+        let rel = row.minus(mm.y) as usize;
         let total = self
             .editor
             .active_tab()
             .map_or(1, |t| t.text().lines().count().max(1));
-        let line = (rel * total / mm.height as usize).min(total.saturating_sub(1));
+        let line = rel
+            .times(total)
+            .quot(usize::from(mm.height))
+            .min(total.minus(1));
         let area = self.editor_view();
-        self.editor.goto(line + 1, None, area); // goto is 1-based
+        self.editor.goto(line.plus(1), None, area); // goto is 1-based
         self.focus = Focus::Editor;
     }
 
@@ -10008,9 +10020,9 @@ impl App {
         }
         let total = self.editor.active_line_count().max(1);
         // Fraction of the track the pointer is at, mapped to a 1-based line.
-        let rel = row.saturating_sub(sb.y).min(sb.height.saturating_sub(1)) as usize;
-        let denom = (sb.height.saturating_sub(1)).max(1) as usize;
-        let line = 1 + rel * (total - 1) / denom;
+        let rel = row.minus(sb.y).min(sb.height.minus(1)) as usize;
+        let denom = (sb.height.minus(1)).max(1) as usize;
+        let line = (rel.times(total.minus(1)).quot(denom)).plus(1);
         let area = self.editor_view();
         self.editor.goto(line, None, area);
         self.focus = Focus::Editor;
@@ -10052,11 +10064,11 @@ impl App {
                 } else {
                     0
                 };
-                let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
+                let max = full.minus(MIN_EDITOR.plus(other)).max(MIN_DOCK);
                 let w = if crate::ui::layout_mirrored(self) {
-                    self.layout.explorer.right().saturating_sub(col)
+                    self.layout.explorer.right().minus(col)
                 } else {
-                    col.saturating_sub(self.layout.explorer.x) + 1
+                    col.minus(self.layout.explorer.x).plus(1)
                 }
                 .clamp(MIN_DOCK, max);
                 self.settings.explorer_width = w;
@@ -10067,11 +10079,11 @@ impl App {
                 } else {
                     0
                 };
-                let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
+                let max = full.minus(MIN_EDITOR.plus(other)).max(MIN_DOCK);
                 let w = if crate::ui::layout_mirrored(self) {
-                    col.saturating_sub(self.layout.messages.x) + 1
+                    col.minus(self.layout.messages.x).plus(1)
                 } else {
-                    self.layout.messages.right().saturating_sub(col)
+                    self.layout.messages.right().minus(col)
                 }
                 .clamp(MIN_DOCK, max);
                 self.settings.messages_width = w;
@@ -10089,11 +10101,8 @@ impl App {
         const MIN_BODY: u16 = 3;
         let bottom = self.layout.bottom_dock.bottom(); // boundary above the status bar
         let body_top = self.layout.menu.bottom(); // first body row (below the menu)
-        let max = bottom
-            .saturating_sub(body_top)
-            .saturating_sub(MIN_BODY)
-            .max(MIN_DOCK);
-        let h = bottom.saturating_sub(row).clamp(MIN_DOCK, max);
+        let max = bottom.minus(body_top).minus(MIN_BODY).max(MIN_DOCK);
+        let h = bottom.minus(row).clamp(MIN_DOCK, max);
         self.settings.bottom_dock_height = h;
     }
 
@@ -10115,7 +10124,7 @@ impl App {
         };
         let mut rect = pane.rect;
         if self.visible.contains(Visible::SCROLLBAR) && rect.width > 1 {
-            rect.width -= 1;
+            rect.width = rect.width.minus(1);
         }
         self.layout.editor = rect;
     }
@@ -10134,7 +10143,7 @@ impl App {
             .editor
             .split_layout(self.layout.editor_region)
             .len()
-            .saturating_sub(1);
+            .minus(1);
         self.editor.focus_leaf(idx.min(last));
         self.focus = Focus::Editor;
     }
@@ -10205,13 +10214,13 @@ impl App {
     /// file, and a second click on an already selected file opens it for real.
     fn explorer_mouse(&mut self, mouse: MouseEvent) {
         let a = self.layout.explorer;
-        let inner_top = a.y + 1; // inside the border
+        let inner_top = a.y.plus(1); // inside the border
         // Pressing or dragging the scrollbar (rightmost inner column) scrolls the
         // tree instead of selecting a row.
         let total = self.explorer.nodes.len();
-        let viewport = a.height.saturating_sub(1) as usize;
+        let viewport = a.height.minus(1) as usize;
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
-        let sb_col = a.x + a.width.saturating_sub(2);
+        let sb_col = a.x.plus(a.width.minus(2));
         if sb_shown
             && mouse.column == sb_col
             && matches!(
@@ -10224,12 +10233,12 @@ impl App {
                 x: sb_col,
                 y: inner_top,
                 width: 1,
-                height: a.height - 1,
+                height: a.height.minus(1),
             };
             // The thumb tracks the selection, so map the drag to a selected row;
             // `ensure_visible` (in draw) scrolls the view to follow it.
             self.explorer.selected =
-                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.minus(1));
             return;
         }
         match mouse.kind {
@@ -10244,7 +10253,7 @@ impl App {
                 if mouse.row < inner_top {
                     return;
                 }
-                let idx = self.explorer.top + (mouse.row - inner_top) as usize;
+                let idx = self.explorer.top.plus(mouse.row.minus(inner_top) as usize);
                 if idx < self.explorer.nodes.len() {
                     let was_selected = self.explorer.selected == idx;
                     self.explorer.selected = idx;
@@ -10268,12 +10277,12 @@ impl App {
     /// it.
     fn messages_mouse(&mut self, mouse: MouseEvent) {
         let area = self.layout.messages;
-        let inner_top = area.y + 1;
+        let inner_top = area.y.plus(1);
         // Scrollbar (rightmost column) press/drag scrolls the message list.
         let total = self.messages.items.len();
-        let viewport = area.height.saturating_sub(1) as usize;
+        let viewport = area.height.minus(1) as usize;
         let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && area.width > 1;
-        let sb_col = area.x + area.width.saturating_sub(1);
+        let sb_col = area.x.plus(area.width.minus(1));
         if sb_shown
             && mouse.column == sb_col
             && matches!(
@@ -10286,10 +10295,10 @@ impl App {
                 x: sb_col,
                 y: inner_top,
                 width: 1,
-                height: area.height - 1,
+                height: area.height.minus(1),
             };
             self.messages.selected =
-                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.minus(1));
             return;
         }
         match mouse.kind {
@@ -10298,11 +10307,11 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.focus = Focus::Messages;
                 if mouse.row >= inner_top {
-                    let idx = (mouse.row - inner_top) as usize;
+                    let idx = mouse.row.minus(inner_top) as usize;
                     if idx < self.messages.items.len() {
                         self.messages.selected = idx;
                         // Clicking near the right edge hits the close "x".
-                        if mouse.column >= area.x + area.width.saturating_sub(3) {
+                        if mouse.column >= area.x.plus(area.width.minus(3)) {
                             self.messages.close_selected();
                         }
                     }
@@ -10318,13 +10327,13 @@ impl App {
         let mut x = crate::ui::tabs_origin(self, self.layout.tabs);
         for (i, tab) in self.editor.tabs.iter().enumerate() {
             let w = u16::try_from(tab.title().chars().count()).unwrap_or(u16::MAX);
-            if col >= x && col < x + w {
+            if col >= x && col < x.plus(w) {
                 self.editor.active = i;
                 self.editor.promote_active();
                 self.focus = Focus::Editor;
                 return;
             }
-            x += w + 3; // title + " │ " divider
+            x = x.plus(w.plus(3)); // title + " │ " divider
         }
     }
 
@@ -10364,7 +10373,7 @@ impl App {
         let defs = self.menu.defs();
         (0..defs.len()).find(|&i| {
             let x = crate::ui::menu_title_x(defs, self.layout.menu, i, mirrored);
-            col >= x && col < x + crate::ui::menu_title_width(defs, i)
+            col >= x && col < x.plus(crate::ui::menu_title_width(defs, i))
         })
     }
 
@@ -10849,7 +10858,7 @@ impl App {
                 }
                 let mut hit = false;
                 if let Some(fb) = self.file_browser.as_mut() {
-                    let idx = fb.scroll + (mouse.row - r.y) as usize;
+                    let idx = fb.scroll.plus(mouse.row.minus(r.y) as usize);
                     if idx < fb.len() {
                         fb.selected = idx;
                         hit = true;
@@ -11044,9 +11053,7 @@ impl App {
 
     /// Route a key to the open table editor and act on its outcome.
     fn edit_table_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_table.height)
-            .saturating_sub(1)
-            .max(1);
+        let page = usize::from(self.layout.edit_table.height).minus(1).max(1);
         let outcome = match self.edit.edit_table_mut() {
             Some(grid) => grid.handle_key(key, page),
             None => return,
@@ -11094,9 +11101,7 @@ impl App {
 
     /// Route a key to the open outline editor and act on its outcome.
     fn edit_outline_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_outline.height)
-            .saturating_sub(1)
-            .max(1);
+        let page = usize::from(self.layout.edit_outline.height).minus(1).max(1);
         let outcome = match self.edit.edit_outline_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
@@ -11162,9 +11167,7 @@ impl App {
     /// Route a key to the open SQL editor and act on its outcome.
     #[cfg(feature = "sql")]
     fn edit_sql_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_sql.height)
-            .saturating_sub(1)
-            .max(1);
+        let page = usize::from(self.layout.edit_sql.height).minus(1).max(1);
         let outcome = match self.edit.edit_sql_mut() {
             Some(editor) => editor.handle_key(key, page),
             None => return,
@@ -11215,9 +11218,7 @@ impl App {
 
     /// Route a key to the open structured-value editor and act on its outcome.
     fn edit_value_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_value.height)
-            .saturating_sub(1)
-            .max(1);
+        let page = usize::from(self.layout.edit_value.height).minus(1).max(1);
         let outcome = match self.edit.edit_value_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
@@ -11273,9 +11274,7 @@ impl App {
 
     /// Route a key to the open byte editor and act on its outcome.
     fn edit_bytes_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_bytes.height)
-            .saturating_sub(1)
-            .max(1);
+        let page = usize::from(self.layout.edit_bytes.height).minus(1).max(1);
         let outcome = match self.edit.edit_bytes_mut() {
             Some(hex) => hex.handle_key(key, page),
             None => return,
@@ -11337,7 +11336,7 @@ impl App {
     /// Handle a key in the HTML entity palette: navigation keys move, Enter inserts the
     /// highlighted entity's glyph (palette stays open), Esc closes.
     fn html_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.html_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.html_panel.height)).max(1);
         if crate::app::picker_panels::list_panel_full_nav_key(
             self.html_panel.as_mut(),
             key.code,
@@ -11361,11 +11360,11 @@ impl App {
         let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
         };
-        let rel_col = mouse.column.saturating_sub(r.x) as usize;
+        let rel_col = mouse.column.minus(r.x) as usize;
         // A click picks the individual cell under the pointer — glyph, name, or
         // code — and inserts just that cell's text.
         let cell = self.html_panel.as_mut().and_then(|p| {
-            let idx = p.scroll + row_in_view;
+            let idx = p.scroll.plus(row_in_view);
             if !p.select_index(idx) {
                 return None;
             }
@@ -11458,7 +11457,7 @@ impl App {
     /// Handle a key in the welcome panel: navigation keys scroll; Esc, Enter, F1 or `q` close
     /// it.
     fn welcome_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.welcome.height as usize).max(1);
+        let page = (usize::from(self.layout.welcome.height)).max(1);
         match key.code {
             KeyCode::Up => {
                 if let Some(w) = self.welcome.as_mut() {
@@ -11499,7 +11498,7 @@ impl App {
 
     /// Handle a mouse event in the welcome panel: the wheel scrolls it.
     fn welcome_mouse(&mut self, mouse: MouseEvent) {
-        let page = (self.layout.welcome.height as usize).max(1);
+        let page = (usize::from(self.layout.welcome.height)).max(1);
         match mouse.kind {
             MouseEventKind::ScrollUp => {
                 if let Some(w) = self.welcome.as_mut() {
@@ -11680,7 +11679,7 @@ impl App {
     /// Handle a key in the document outline: navigation keys move, Enter jumps to the
     /// heading/symbol in the buffer, Esc closes.
     fn outline_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.outline.height as usize).max(1);
+        let page = (usize::from(self.layout.outline.height)).max(1);
         if crate::app::picker_panels::list_panel_full_nav_key(self.outline.as_mut(), key.code, page)
         {
             return;
@@ -11699,7 +11698,7 @@ impl App {
             return;
         };
         if let Some(o) = self.outline.as_mut() {
-            let idx = o.scroll + row;
+            let idx = o.scroll.plus(row);
             if o.select_index(idx) {
                 self.jump_to_outline();
             }
@@ -11772,7 +11771,7 @@ impl App {
             let cur = self
                 .editor
                 .active_tab()
-                .map_or(1, |t| t.editor.cursor_line() + 1);
+                .map_or(1, |t| t.editor.cursor_line().plus(1));
             o.select_nearest(cur);
         }
     }
@@ -11782,7 +11781,7 @@ impl App {
         let Some(o) = self.outline_dock.as_mut() else {
             return;
         };
-        let idx = o.scroll + row;
+        let idx = o.scroll.plus(row);
         if idx >= o.entries.len() {
             return;
         }
@@ -11967,14 +11966,14 @@ impl App {
             matches
                 .iter()
                 .rposition(|(s, _)| *s < cur)
-                .unwrap_or(matches.len() - 1) // before the first: wrap to the last
+                .unwrap_or(matches.len().minus(1)) // before the first: wrap to the last
         };
         let target = matches[target_idx];
         t.editor.set_cursor(target.0);
         t.editor
             .set_selection(Some(Selection::new(target.0, target.1)));
         t.editor.focus(&area);
-        (target_idx + 1, matches.len())
+        (target_idx.plus(1), matches.len())
     }
 
     /// Remove the search-match highlights from the active buffer.
@@ -12188,7 +12187,7 @@ impl App {
         if !rect_contains(r, col, row) {
             return;
         }
-        let rel = row - r.y;
+        let rel = row.minus(r.y);
         if let Some(s) = self.search.as_mut() {
             if rel == 0 {
                 s.field = Field::Query;
@@ -12272,7 +12271,7 @@ impl App {
             self.visible.set(Visible::CLOCK, false);
             return;
         }
-        let row = (mouse.row - r.y) as usize;
+        let row = mouse.row.minus(r.y) as usize;
         if row < self.clock.row_count() {
             self.clock.select(row);
             let now = crate::clock::now_local();
@@ -12302,8 +12301,8 @@ impl App {
             self.visible.set(Visible::CALENDAR, false);
             return;
         }
-        let rel_y = mouse.row - r.y;
-        let rel_x = mouse.column - r.x;
+        let rel_y = mouse.row.minus(r.y);
+        let rel_x = mouse.column.minus(r.x);
         // The calendar is the month header on top and the day grid beneath. Row 0
         // is the month header carrying the `◀`/`▶` nav arrows (`◀` at column 0,
         // `▶` at column 20).
@@ -12324,8 +12323,8 @@ impl App {
         // The weekday header is row 1 and the week rows start at row 2, each day
         // cell three columns wide. Clicking a day inserts it.
         let text = if rel_y >= 2 {
-            let week = (rel_y - 2) as usize;
-            let col = (rel_x / 3) as usize;
+            let week = rel_y.minus(2) as usize;
+            let col = rel_x.quot(3) as usize;
             self.calendar
                 .grid()
                 .weeks
@@ -12843,12 +12842,12 @@ impl App {
         let chars: Vec<char> = text.chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cursor.min(chars.len());
-        while start > 0 && is_word(chars[start - 1]) {
-            start -= 1;
+        while start > 0 && is_word(chars[start.minus(1)]) {
+            start = start.minus(1);
         }
         let mut end = cursor.min(chars.len());
         while end < chars.len() && is_word(chars[end]) {
-            end += 1;
+            end = end.plus(1);
         }
         if start == end {
             return None;
@@ -12881,7 +12880,7 @@ impl App {
                 return ControlFlow::Continue(());
             }
             let byte = line.text.find(symbol).unwrap_or(0);
-            let col = line.text[..byte].chars().count() + 1;
+            let col = (line.text[..byte].chars().count()).plus(1);
             let clipped: String = line.text.trim_start().chars().take(120).collect();
             hits.push(Hit {
                 path: line.path.to_path_buf(),
@@ -12987,7 +12986,7 @@ impl App {
                     path: line.path.to_path_buf(),
                     rel: line.rel.to_string(),
                     line: line.number,
-                    col: start + 1,
+                    col: start.plus(1),
                     display: format!("{}:{}: {clipped}", line.rel, line.number),
                     text: clipped,
                 });
@@ -13008,7 +13007,7 @@ impl App {
                 t!("status.matches_in_files", count = hits.len(), files = files).to_string()
             };
             if p.selected >= hits.len() {
-                p.selected = hits.len().saturating_sub(1);
+                p.selected = hits.len().minus(1);
             }
             p.hits = hits;
         }
@@ -13061,7 +13060,7 @@ impl App {
             let rel = path.strip_prefix(&self.root).unwrap_or(path);
             lines.push(format!("{} ({count})", rel.display()));
             plan.push((path.clone(), new));
-            replaced += count;
+            replaced = replaced.plus(count);
         }
         if plan.is_empty() {
             if let Some(p) = self.workspace_search.as_mut() {
@@ -13133,7 +13132,7 @@ impl App {
                 }
                 if tab.dirty {
                     tab.editor.set_content(new);
-                    buffer_only += 1;
+                    buffer_only = buffer_only.plus(1);
                     changed.push(path.clone());
                     continue;
                 }
@@ -13164,12 +13163,12 @@ impl App {
             KeyCode::Char('n' | 'N') | KeyCode::Esc => self.replace_confirm = None,
             KeyCode::Up => {
                 if let Some(rc) = self.replace_confirm.as_mut() {
-                    rc.scroll = rc.scroll.saturating_sub(1);
+                    rc.scroll = rc.scroll.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(rc) = self.replace_confirm.as_mut() {
-                    rc.scroll = (rc.scroll + 1).min(rc.lines.len().saturating_sub(1));
+                    rc.scroll = rc.scroll.plus(1).min(rc.lines.len().minus(1));
                 }
             }
             _ => {}
@@ -13288,7 +13287,7 @@ impl App {
                 self.messages
                     .warn(t!("msg.wgrep_line_drifted", path = rel.display(), line = n).to_string());
             }
-            drifted += rewrite.drifted.len();
+            drifted = drifted.plus(rewrite.drifted.len());
             if rewrite.applied.is_empty() {
                 continue;
             }
@@ -13298,7 +13297,7 @@ impl App {
             let applied = rewrite.applied.len();
             lines.push(format!("{} ({applied})", rel.display()));
             plan.push((path, rewrite.content));
-            edited += applied;
+            edited = edited.plus(applied);
         }
         if drifted > 0 {
             self.status = t!("status.wgrep_drifted", count = drifted).to_string();
@@ -13353,12 +13352,12 @@ impl App {
             KeyCode::Char('n' | 'N') | KeyCode::Esc => self.wgrep_confirm = None,
             KeyCode::Up => {
                 if let Some(wc) = self.wgrep_confirm.as_mut() {
-                    wc.scroll = wc.scroll.saturating_sub(1);
+                    wc.scroll = wc.scroll.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(wc) = self.wgrep_confirm.as_mut() {
-                    wc.scroll = (wc.scroll + 1).min(wc.lines.len().saturating_sub(1));
+                    wc.scroll = wc.scroll.plus(1).min(wc.lines.len().minus(1));
                 }
             }
             _ => {}
@@ -13490,7 +13489,7 @@ impl App {
                 }
                 Decision::Replace => {
                     let resume = do_replace(t, &re, regex, &template, (cs, ce));
-                    replaced += 1;
+                    replaced = replaced.plus(1);
                     t.dirty = true;
                     t.preview = false;
                     t.editor.remove_marks();
@@ -13503,8 +13502,8 @@ impl App {
                     let mut guard = 0usize;
                     loop {
                         let resume = do_replace(t, &re, regex, &template, cur);
-                        replaced += 1;
-                        guard += 1;
+                        replaced = replaced.plus(1);
+                        guard = guard.plus(1);
                         if guard > 1_000_000 {
                             break;
                         }
@@ -13930,13 +13929,13 @@ impl App {
                 return ControlFlow::Continue(());
             };
             files.hit();
-            count += 1;
+            count = count.plus(1);
             let clipped: String = line.text.trim_start().chars().take(120).collect();
             out.push(format!(
                 "{}:{}:{}: {clipped}",
                 line.rel,
                 line.number,
-                start + 1
+                start.plus(1)
             ));
             if count >= 5000 {
                 ControlFlow::Break(())
@@ -14367,7 +14366,7 @@ impl App {
 
 /// Whether the terminal cell `(col, row)` lies inside `r`.
 fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
-    col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+    col >= r.x && col < r.x.plus(r.width) && row >= r.y && row < r.y.plus(r.height)
 }
 
 impl App {
@@ -14768,10 +14767,10 @@ fn is_auth_failure_line(line: &str) -> bool {
 /// lowercase letters), so early lines get single-key labels.
 fn jump_label(i: usize) -> String {
     if i < 26 {
-        char::from(b'a' + u8::try_from(i).unwrap_or(0)).to_string()
+        char::from((b'a').plus(u8::try_from(i).unwrap_or(0))).to_string()
     } else {
-        let first = char::from(b'a' + u8::try_from(i / 26 - 1).unwrap_or(0));
-        let second = char::from(b'a' + u8::try_from(i % 26).unwrap_or(0));
+        let first = char::from((b'a').plus(u8::try_from(i.quot(26).minus(1)).unwrap_or(0)));
+        let second = char::from((b'a').plus(u8::try_from(i % 26).unwrap_or(0)));
         format!("{first}{second}")
     }
 }
@@ -14817,8 +14816,10 @@ fn lsp_pos_to_char(
         return code.len();
     }
     let line_start = code.line_to_char(line);
-    let line_text = code.slice(line_start, line_start + code.line_len(line));
-    line_start + crate::lsp_core::position::col_to_char(&line_text, character, enc)
+    let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
+    line_start.plus(crate::lsp_core::position::col_to_char(
+        &line_text, character, enc,
+    ))
 }
 
 /// Apply LSP text edits to a plain string, resolving each `(line, character)`
@@ -14833,11 +14834,11 @@ fn apply_edits_to_text(
     // Char offset at the start of each line (line N → offset), plus the line
     // texts, so a position resolves to `line_start[line] + col_to_char(..)`.
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
-    let mut line_start = Vec::with_capacity(lines.len() + 1);
+    let mut line_start = Vec::with_capacity(lines.len().plus(1));
     let mut acc = 0usize;
     for l in &lines {
         line_start.push(acc);
-        acc += l.chars().count();
+        acc = acc.plus(l.chars().count());
     }
     line_start.push(acc); // total length, for a position past the last line
     let resolve = |line: u32, character: u32| -> usize {
@@ -14845,7 +14846,9 @@ fn apply_edits_to_text(
         if li >= lines.len() {
             return acc;
         }
-        line_start[li] + crate::lsp_core::position::col_to_char(lines[li], character, enc)
+        (line_start[li]).plus(crate::lsp_core::position::col_to_char(
+            lines[li], character, enc,
+        ))
     };
     let mut resolved: Vec<(usize, usize, &str)> = edits
         .iter()
@@ -14887,8 +14890,9 @@ fn char_to_lsp_pos(
     let offset = char_offset.min(code.len());
     let line = code.char_to_line(offset);
     let line_start = code.line_to_char(line);
-    let line_text = code.slice(line_start, line_start + code.line_len(line));
-    let character = crate::lsp_core::position::char_to_col(&line_text, offset - line_start, enc);
+    let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
+    let character =
+        crate::lsp_core::position::char_to_col(&line_text, offset.minus(line_start), enc);
     (u32::try_from(line).unwrap_or(u32::MAX), character)
 }
 
@@ -14984,9 +14988,9 @@ fn dir_size(dir: &Path) -> u64 {
             continue;
         }
         match entry.kind {
-            crate::authority::FileKind::Dir => total += dir_size(&entry.path),
+            crate::authority::FileKind::Dir => total = total.plus(dir_size(&entry.path)),
             crate::authority::FileKind::File => {
-                total += auth.symlink_metadata(&entry.path).map_or(0, |m| m.len);
+                total = total.plus(auth.symlink_metadata(&entry.path).map_or(0, |m| m.len));
             }
             _ => {}
         }
@@ -15007,8 +15011,8 @@ fn count_files(dir: &Path) -> u64 {
             continue;
         }
         match entry.kind {
-            crate::authority::FileKind::Dir => count += count_files(&entry.path),
-            crate::authority::FileKind::File => count += 1,
+            crate::authority::FileKind::Dir => count = count.plus(count_files(&entry.path)),
+            crate::authority::FileKind::File => count = count.plus(1),
             _ => {}
         }
     }
@@ -15023,7 +15027,7 @@ fn script_current_line_text(ed: &crate::editor::CodeEditor) -> String {
     let code = ed.code_ref();
     let (row, _col) = code.point(ed.get_cursor());
     let start = code.line_to_char(row);
-    ed.get_content_slice(start, start + code.line_len(row))
+    ed.get_content_slice(start, start.plus(code.line_len(row)))
 }
 
 /// Hex color for a diff-gutter line mark (green add, yellow modify, red delete).
@@ -15056,12 +15060,13 @@ fn replace_char_span(t: &mut Tab, span: (usize, usize), replacement: &str) {
     let content = t.text();
     let bs = t.editor.code_ref().char_to_byte(span.0);
     let be = t.editor.code_ref().char_to_byte(span.1);
-    let mut new = String::with_capacity(content.len() + replacement.len());
+    let mut new = String::with_capacity(content.len().plus(replacement.len()));
     new.push_str(&content[..bs]);
     new.push_str(replacement);
     new.push_str(&content[be..]);
     t.editor.set_content(&new);
-    t.editor.set_cursor(span.0 + replacement.chars().count());
+    t.editor
+        .set_cursor(span.0.plus(replacement.chars().count()));
 }
 
 /// Move the cursor to a match, select it, and add a search highlight mark.

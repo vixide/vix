@@ -12,6 +12,19 @@
 //! a method is *defined* never has to happen in lockstep with everything it
 //! calls.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::{App, AppFlags, Focus, Keymap, display_key, menu_index_for_alt};
@@ -23,7 +36,7 @@ impl App {
     /// A key while the help panel is open: type to filter, arrows and paging
     /// scroll, `Esc`/`F1` closes. It takes every key.
     pub(super) fn help_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.help_body.height as usize).max(1);
+        let page = (usize::from(self.layout.help_body.height)).max(1);
         match key.code {
             KeyCode::Esc | KeyCode::F(1) => self.help = None,
             KeyCode::Backspace => {
@@ -157,7 +170,7 @@ impl App {
                     } else {
                         1
                     };
-                    self.calendar.move_days(sign * step)
+                    self.calendar.move_days(sign.times(step))
                 };
                 if let Err(e) = moved {
                     self.messages

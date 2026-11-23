@@ -9,6 +9,18 @@
 //! `VIX_IM_PASSWORD_<NAME>` at connect time, handed to the connection once
 //! and never stored, shown or logged.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_im::{ConversationId, ConversationKind, Message};
 use vix_im_irc::net::{ConnectOptions, Handle, connect};
 use vix_im_irc::{Command, Config, ErrorKind, Event, Password, Sasl};

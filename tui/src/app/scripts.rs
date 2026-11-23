@@ -8,7 +8,20 @@
 //! here with the keybinding-editor code (T204), which stays in `app.rs`
 //! for now (not one of this epic's named slices).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
@@ -154,7 +167,7 @@ impl App {
         self.chooser
             .open_plugin(super::PluginChooser { rows, selected });
         if let Some(c) = self.chooser.plugin_mut() {
-            c.selected = c.selected.min(c.rows.len() - 1);
+            c.selected = c.selected.min(c.rows.len().minus(1));
         }
     }
 
@@ -513,16 +526,16 @@ impl App {
                 };
                 if query.is_empty() {
                     let key = recent_rank(&action_id)
-                        .map_or(1000 + i32::try_from(idx).unwrap_or(0), |r| {
+                        .map_or(i32::try_from(idx).unwrap_or(0).plus(1000), |r| {
                             i32::try_from(r).unwrap_or(0)
                         });
-                    scored.push((-key, idx, entry));
+                    scored.push((0_i32.minus(key), idx, entry));
                 } else if let Some(score) = palette::fuzzy_score(&cmd.label, query) {
                     let boost = recent_rank(&action_id)
-                        .map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
-                    scored.push((score + boost, idx, entry));
+                        .map_or(0, |r| 12_i32.minus(i32::try_from(r).unwrap_or(12)).max(0));
+                    scored.push((score.plus(boost), idx, entry));
                 }
-                idx += 1;
+                idx = idx.plus(1);
             }
         }
         scored

@@ -1,6 +1,19 @@
 //! The undo tree overlay (T638): the graph from `vix_undo_tree_panel`, one
 //! row per state with its `seq` and local time, the selection highlighted.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -30,12 +43,12 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let total = state.panel.len();
     let width = 48u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -53,7 +66,7 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunks[0].height as usize;
+    let view_h = chunk(&chunks, 0).height as usize;
     if let Some(s) = app.undo_tree.as_mut() {
         s.panel.ensure_visible(view_h);
     }
@@ -85,35 +98,35 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
             }
         })
         .collect();
-    let show_bar = total > view_h && chunks[0].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 0).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[0].width - 1,
+            width: chunk(&chunks, 0).width.minus(1),
             ..chunks[0]
         }
     } else {
-        chunks[0]
+        chunk(&chunks, 0)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[0].x + chunks[0].width - 1,
+            x: chunk(&chunks, 0).x.plus(chunk(&chunks, 0).width).minus(1),
             ..chunks[0]
         };
-        draw_scrollbar(frame, sb_area, selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, selected, total.minus(1));
     }
     let hint = Line::from(Span::styled(
         t!("ui.undo_tree_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.undo_tree = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }

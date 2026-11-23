@@ -6,6 +6,19 @@
 //! The tree itself is the pure `vix_dap::view::DebugView`; this module only
 //! routes keys and events between it, the client and the editor.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
@@ -150,12 +163,12 @@ impl App {
         let Some(text) = self.editor.active_tab().map(|t| t.editor.get_content()) else {
             return Vec::new();
         };
-        let Some(line) = text.lines().nth(frame.line - 1) else {
+        let Some(line) = text.lines().nth(frame.line.minus(1)) else {
             return Vec::new();
         };
         self.dap_view
             .inline_values(line)
-            .map(|v| EolText::new(frame.line - 1, v))
+            .map(|v| EolText::new(frame.line.minus(1), v))
             .into_iter()
             .collect()
     }
@@ -187,7 +200,7 @@ impl App {
         match key.code {
             KeyCode::Up => self.dap_view.move_by(-1),
             KeyCode::Down => self.dap_view.move_by(1),
-            KeyCode::PageUp => self.dap_view.move_by(-page),
+            KeyCode::PageUp => self.dap_view.move_by(0_isize.minus(page)),
             KeyCode::PageDown => self.dap_view.move_by(page),
             KeyCode::Home => self.dap_view.home(),
             KeyCode::End => self.dap_view.end(),
@@ -376,7 +389,7 @@ impl App {
         let Some((path, line)) = self
             .editor
             .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line().plus(1))))
         else {
             self.status = t!("status.debug_no_file").to_string();
             return;

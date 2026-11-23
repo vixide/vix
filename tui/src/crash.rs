@@ -13,6 +13,19 @@
 //! prefilled GitHub issue in the browser, where the user reviews it and
 //! decides whether to submit.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -130,19 +143,19 @@ pub fn redact_quoted(message: &str) -> String {
     let mut rest = message;
     while let Some(open) = rest.find(['`', '"']) {
         let quote = rest[open..].chars().next().unwrap_or('`');
-        let Some(len) = rest[open + 1..].find(quote) else {
+        let Some(len) = rest[open.plus(1)..].find(quote) else {
             break;
         };
-        let inner = &rest[open + 1..open + 1 + len];
+        let inner = &rest[open.plus(1)..open.plus(1).plus(len)];
         out.push_str(&rest[..open]);
         if quote == '`' || inner.chars().count() > 40 {
             out.push(quote);
             out.push_str("<removed>");
             out.push(quote);
         } else {
-            out.push_str(&rest[open..=open + 1 + len]);
+            out.push_str(&rest[open..=open.plus(1).plus(len)]);
         }
-        rest = &rest[open + 2 + len..];
+        rest = &rest[open.plus(2).plus(len)..];
     }
     out.push_str(rest);
     out
@@ -232,7 +245,7 @@ pub fn issue_url(repository: &str, report: &str) -> String {
 /// Percent-encode `text` for a URL query value.
 fn encode(text: &str) -> String {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut out = String::with_capacity(text.len() * 3);
+    let mut out = String::with_capacity(text.len().times(3));
     for &b in text.as_bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
             out.push(char::from(b));

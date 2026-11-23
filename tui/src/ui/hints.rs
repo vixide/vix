@@ -2,6 +2,19 @@
 //! popup (candidate keys for a pending prefix) and the jump-to-line labels
 //! (leap-style navigation).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -28,15 +41,17 @@ pub(super) fn draw_which_key(app: &App, frame: &mut Frame, area: Rect) {
         .collect();
     let width = rows
         .iter()
-        .map(|(k, a)| k.len() + a.len() + 7)
+        .map(|(k, a)| k.len().plus(a.len()).plus(7))
         .max()
         .unwrap_or(20)
         .clamp(20, area.width.max(20) as usize);
     let width = u16::try_from(width).unwrap_or(20).min(area.width);
-    let height = (u16::try_from(rows.len()).unwrap_or(1) + 2).min(area.height);
+    let height = (u16::try_from(rows.len()).unwrap_or(1))
+        .plus(2)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width),
-        y: area.y + area.height.saturating_sub(height),
+        x: area.x.plus(area.width.minus(width)),
+        y: area.y.plus(area.height.minus(height)),
         width,
         height,
     };
@@ -63,8 +78,8 @@ pub(super) fn draw_jump_labels(app: &App, frame: &mut Frame) {
         let Some(row_off) = tab.editor.text_screen_row(*line, ed) else {
             continue;
         };
-        let y = ed.y + u16::try_from(row_off).unwrap_or(u16::MAX);
-        if y >= ed.y + ed.height {
+        let y = ed.y.plus(u16::try_from(row_off).unwrap_or(u16::MAX));
+        if y >= ed.y.plus(ed.height) {
             continue;
         }
         frame.render_widget(

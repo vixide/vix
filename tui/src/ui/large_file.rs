@@ -3,6 +3,19 @@
 //! and a hint, input, or notice line. The viewer reads only what is drawn;
 //! see `crates/vix-large-file/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -16,14 +29,14 @@ pub(super) fn human_size(bytes: u64) -> String {
     let mut unit = 0;
     // Hundredths of the unit, in integers (no float casts).
     let mut scaled = u128::from(bytes) * 100;
-    while scaled >= 1024 * 100 && unit + 1 < UNITS.len() {
+    while scaled >= 1024 * 100 && unit.plus(1) < UNITS.len() {
         scaled /= 1024;
-        unit += 1;
+        unit = unit.plus(1);
     }
     if unit == 0 {
         return format!("{bytes} B");
     }
-    format!("{}.{:02} {}", scaled / 100, scaled % 100, UNITS[unit])
+    format!("{}.{:02} {}", scaled.quot(100), scaled % 100, UNITS[unit])
 }
 
 /// One row: the dimmed byte offset, then the text, the cursor line and a
@@ -172,13 +185,13 @@ pub(super) fn draw_large_file(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
     let st = v.status();
     let gutter = st.len.to_string().len();
-    let text_width = usize::from(chunks[0].width).saturating_sub(gutter + 3);
-    let rows = v.view(usize::from(chunks[0].height), text_width);
+    let text_width = usize::from(chunk(&chunks, 0).width).minus(gutter.plus(3));
+    let rows = v.view(usize::from(chunk(&chunks, 0).height), text_width);
     let lines: Vec<Line> = rows
         .iter()
         .map(|r| row_line(r, gutter, st.hscroll > 0))
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     // The status after `view`, which may have scrolled.
     let st = v.status();
     frame.render_widget(
@@ -186,10 +199,10 @@ pub(super) fn draw_large_file(app: &mut App, frame: &mut Frame, area: Rect) {
             status_text(&st),
             theme::title(true),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
-    frame.render_widget(Paragraph::new(bottom_line(v)), chunks[2]);
-    app.layout.large_file = chunks[0];
+    frame.render_widget(Paragraph::new(bottom_line(v)), chunk(&chunks, 2));
+    app.layout.large_file = chunk(&chunks, 0);
 }
 
 #[cfg(test)]

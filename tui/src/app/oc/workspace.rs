@@ -15,6 +15,18 @@
 //! (the T714 trust gate for a workspace that is still local), and the
 //! container workspace that results counts as trusted.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::PathBuf;
 use std::time::Instant;
 

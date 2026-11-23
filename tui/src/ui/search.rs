@@ -2,6 +2,19 @@
 //! replace, the in-buffer find/replace box, and the generic prompt overlay
 //! (including its Org-capture preview).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -52,13 +65,13 @@ pub(super) fn draw_preview(
             t!("ui.preview_beyond", line = p.target),
             theme::dim(),
         )));
-        height = height.saturating_sub(1);
+        height = height.minus(1);
     }
     let (first, rows) = p.visible(height);
-    let last = first + rows.len().saturating_sub(1);
+    let last = first.plus(rows.len().minus(1));
     let gutter = last.to_string().len();
     for (i, text) in rows.iter().enumerate() {
-        let n = first + i;
+        let n = first.plus(i);
         let number = Span::styled(format!("{n:>gutter$} "), theme::dim());
         let line = if n == p.target && !p.beyond {
             Line::from(vec![number, Span::raw(text.clone())]).style(theme::selected())
@@ -250,14 +263,14 @@ pub(super) fn draw_workspace_search(app: &mut App, frame: &mut Frame, area: Rect
 fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<Rect> {
     let mut rects = vec![Rect::default(); buttons.len()];
     let mut x = row.x;
-    let right = row.x + row.width;
+    let right = row.x.plus(row.width);
     for (i, (label, style)) in buttons.iter().enumerate() {
         let text = format!(" {label} ");
         let w = u16::try_from(text.chars().count()).unwrap_or(u16::MAX);
         if x >= right {
             break;
         }
-        let w = w.min(right - x);
+        let w = w.min(right.minus(x));
         let r = Rect {
             x,
             y: row.y,
@@ -266,7 +279,7 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
         };
         frame.render_widget(Paragraph::new(Line::from(Span::styled(text, *style))), r);
         rects[i] = r;
-        x = x.saturating_add(w + 1);
+        x = x.plus(w.plus(1));
     }
     rects
 }
@@ -281,10 +294,10 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let replacing = s.flags.contains(SearchFlags::REPLACING);
     let height = if replacing { 6 } else { 4 };
-    let width = area.width * 7 / 10;
+    let width = area.width.times(7).quot(10);
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + 1,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus(1),
         width,
         height,
     };
@@ -401,7 +414,7 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
-        rows[rows.len() - 1],
+        rows[rows.len().minus(1)],
     );
     mirror_search_box(app, frame, inner);
 }
@@ -493,12 +506,8 @@ fn draw_prompt_preview(frame: &mut Frame, inner: Rect, text: &str, preview_rows:
         .unwrap_or(0);
     let scroll_y = u16::try_from(current_line)
         .unwrap_or(0)
-        .saturating_sub(preview_rows / 2)
-        .min(
-            u16::try_from(line_count)
-                .unwrap_or(0)
-                .saturating_sub(preview_rows),
-        );
+        .minus(preview_rows.quot(2))
+        .min(u16::try_from(line_count).unwrap_or(0).minus(preview_rows));
     frame.render_widget(
         Paragraph::new(text)
             .style(theme::dim())
@@ -547,12 +556,12 @@ pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
             | crate::app::PromptKind::OrgCaptureField
             | crate::app::PromptKind::OrgCaptureReview
     );
-    let width = area.width * 6 / 10;
+    let width = area.width.times(6).quot(10);
     let body_rows: u16 = if multiline {
-        u16::try_from(p.input.split('\n').count())
+        (u16::try_from(p.input.split('\n').count())
             .unwrap_or(1)
-            .clamp(1, 12)
-            + 1
+            .clamp(1, 12))
+        .plus(1)
     } else if toggles {
         2
     } else {
@@ -565,15 +574,15 @@ pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let preview_line_count = p.preview.as_deref().map_or(0, |t| t.lines().count());
     let preview_rows = u16::try_from(preview_line_count).unwrap_or(0).min(14);
     let preview_extra = if preview_rows > 0 {
-        preview_rows + 1
+        preview_rows.plus(1)
     } else {
         0
     };
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus(area.height.quot(3)),
         width,
-        height: (body_rows + preview_extra + 2).min(area.height),
+        height: body_rows.plus(preview_extra).plus(2).min(area.height),
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -602,7 +611,7 @@ pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(inner);
         let parts: Vec<&str> = p.input.split('\n').collect();
-        let last = parts.len().saturating_sub(1);
+        let last = parts.len().minus(1);
         let mut lines: Vec<Line> = Vec::with_capacity(parts.len());
         for (i, part) in parts.iter().enumerate() {
             let prefix = if i == 0 { "\u{276f} " } else { "  " };

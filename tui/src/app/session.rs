@@ -9,7 +9,20 @@
 //! key/mouse handlers, `open_settings_file`). `App::new`/`build_core`
 //! (the constructor itself) deliberately stayed in `app.rs`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -225,7 +238,7 @@ impl App {
                 t.editor
                     .set_offset_y(ws.scrolls.get(i).copied().unwrap_or(0));
             }
-            opened += 1;
+            opened = opened.plus(1);
         }
 
         if opened > 0 {
@@ -234,7 +247,7 @@ impl App {
             if had_blank && self.editor.tabs.first().is_some_and(|t| t.path.is_none()) {
                 self.editor.tabs.remove(0);
             }
-            self.editor.active = ws.active.min(self.editor.tabs.len().saturating_sub(1));
+            self.editor.active = ws.active.min(self.editor.tabs.len().minus(1));
             // Restore the split only when every file reopened cleanly, so the
             // recorded pane index still lines up with the tab order.
             if had_blank && opened == ws.files.len() {
@@ -253,9 +266,9 @@ impl App {
         if tree.leaf_count() < 2 {
             return;
         }
-        self.editor.focused_leaf = s.focused.min(tree.leaf_count() - 1);
+        self.editor.focused_leaf = s.focused.min(tree.leaf_count().minus(1));
         if let Some(tab) = tree.leaf_tab(self.editor.focused_leaf) {
-            self.editor.active = tab.min(count.saturating_sub(1));
+            self.editor.active = tab.min(count.minus(1));
         }
         self.editor.split_root = Some(tree);
     }

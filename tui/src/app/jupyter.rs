@@ -28,8 +28,21 @@
 //!   trusted. A selection, cell or line is something the user sends on
 //!   purpose and is never prompted.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 mod results;
 
+use crate::geo::Geo;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -396,7 +409,7 @@ impl App {
             path: self.editor.active_tab().and_then(|t| t.path.clone()),
             tab: self.editor.active,
             hint_line: target.last,
-            advance_to: advance.then_some(target.last + 1),
+            advance_to: advance.then_some(target.last.plus(1)),
             org: target.org,
             code: target.code,
             language: target.language,
@@ -712,7 +725,7 @@ impl App {
                     execution_count: None,
                     runs: HashMap::new(),
                 });
-                Some(self.jupyter.kernels.len() - 1)
+                Some(self.jupyter.kernels.len().minus(1))
             }
             Err(e) => {
                 self.messages.error(
@@ -833,8 +846,8 @@ impl App {
                 run.hint = hint;
             }
             let weight = output_weight(&output);
-            if writes_org && run.kept.saturating_add(weight) <= MAX_ORG_OUTPUT_BYTES {
-                run.kept += weight;
+            if writes_org && run.kept.plus(weight) <= MAX_ORG_OUTPUT_BYTES {
+                run.kept = run.kept.plus(weight);
                 run.outputs.push(output);
             }
         }
@@ -945,11 +958,11 @@ impl App {
         let text = editor.get_content();
         let language = editor.language().to_owned();
         if let Some((start, end)) = editor.selection_span() {
-            let code: String = text.chars().skip(start).take(end - start).collect();
+            let code: String = text.chars().skip(start).take(end.minus(start)).collect();
             let first = line_of(&text, start);
             let mut last = line_of(&text, end);
             if last > first && code.ends_with('\n') {
-                last -= 1;
+                last = last.minus(1);
             }
             return target(code, language, last, None);
         }
@@ -959,7 +972,7 @@ impl App {
         }
         let lines: Vec<&str> = text.split('\n').collect();
         if let Some(cell) = cell::cell_at(&text, line, &editor.comment_prefix()) {
-            let last = cell.body.end.saturating_sub(1).max(cell.body.start);
+            let last = cell.body.end.minus(1).max(cell.body.start);
             let code = lines
                 .get(cell.body)
                 .map_or_default(|l| l.join("\n").trim_end().to_owned());
@@ -988,7 +1001,7 @@ impl App {
 fn block_target(text: &str, line: usize, language: &str) -> Option<Target> {
     let (begin, end, block_language) = crate::org::src_block_at(text, line)?;
     let lines: Vec<&str> = text.split('\n').collect();
-    let code = lines[begin + 1..end].join("\n");
+    let code = lines[begin.plus(1)..end].join("\n");
     let language = if block_language.is_empty() {
         language.to_owned()
     } else {
@@ -1073,7 +1086,10 @@ fn output_weight(output: &Output) -> usize {
             ename,
             evalue,
             traceback,
-        } => ename.len() + evalue.len() + traceback.iter().map(String::len).sum::<usize>(),
+        } => ename
+            .len()
+            .plus(evalue.len())
+            .plus(traceback.iter().map(String::len).sum::<usize>()),
         _ => 0,
     }
 }

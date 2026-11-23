@@ -2,6 +2,18 @@
 //! layer, so sending and paging are no-ops (the actions are also refused up
 //! front by `run_action`'s capability check).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::App;
 
 impl App {

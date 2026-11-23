@@ -1,6 +1,19 @@
 //! The bottom dock: the output/log strip beneath the main body, with
 //! vertical and horizontal scroll.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
@@ -33,30 +46,38 @@ pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let total = app.bottom_dock.lines.len();
-    let h = inner.height as usize;
+    let h = usize::from(inner.height);
     let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
     let vbar = allow_bars && total > h;
 
     // The visible rows, and whether they overflow horizontally → a bottom hbar.
     let view_h = if allow_bars {
-        inner.height.saturating_sub(1)
+        inner.height.minus(1)
     } else {
         inner.height
     } as usize;
     let visible: Vec<String> = app.bottom_dock.visible(view_h).to_vec();
     let content_w = max_line_width(visible.iter().map(String::as_str));
-    let text_w_full = if vbar { inner.width - 1 } else { inner.width } as usize;
+    let text_w_full = if vbar {
+        inner.width.minus(1)
+    } else {
+        inner.width
+    } as usize;
     let hbar = allow_bars && content_w > text_w_full;
 
     let text_w = text_w_full;
-    let body_h = if hbar { inner.height - 1 } else { inner.height };
+    let body_h = if hbar {
+        inner.height.minus(1)
+    } else {
+        inner.height
+    };
     let text_area = Rect {
         width: u16::try_from(text_w).unwrap_or(u16::MAX),
         height: body_h,
         ..inner
     };
 
-    let hmax = content_w.saturating_sub(text_w);
+    let hmax = content_w.minus(text_w);
     app.bottom_hmax = hmax;
     app.bottom_hscroll = app.bottom_hscroll.min(hmax);
     let off = app.bottom_hscroll;
@@ -85,22 +106,17 @@ pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
 
     if vbar {
         let sb = Rect {
-            x: inner.x + inner.width - 1,
+            x: inner.x.plus(inner.width).minus(1),
             y: inner.y,
             width: 1,
             height: body_h,
         };
-        draw_scrollbar(
-            frame,
-            sb,
-            app.bottom_dock.scroll,
-            total.saturating_sub(view_h),
-        );
+        draw_scrollbar(frame, sb, app.bottom_dock.scroll, total.minus(view_h));
     }
     app.layout.bottom_hscrollbar = if hbar {
         let hb = Rect {
             x: inner.x,
-            y: inner.y + inner.height - 1,
+            y: inner.y.plus(inner.height).minus(1),
             width: u16::try_from(text_w).unwrap_or(u16::MAX),
             height: 1,
         };

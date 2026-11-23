@@ -9,6 +9,19 @@
 //! here would collide with that `use`. Mostly contiguous, unlike the
 //! git/scripts slices -- closer in shape to keymap dispatch.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent};
@@ -152,7 +165,7 @@ impl App {
             }
             // Through the authority slot (T710); the local one walks with
             // `ignore` exactly as before.
-            let opts = crate::authority::WalkOptions::file_index(CAP - out.len());
+            let opts = crate::authority::WalkOptions::file_index(CAP.minus(out.len()));
             out.extend(auth.walk_files(folder, &opts));
         }
         self.file_index = out;
@@ -236,20 +249,21 @@ impl App {
                 continue;
             }
             seen.push(action);
-            let idx = start_idx + seen.len();
+            let idx = start_idx.plus(seen.len());
             let entry = Entry {
                 label: format!("> {path}"),
                 action: PAction::RunCommand(action.to_string()),
             };
             if query.is_empty() {
-                let key = recent_rank(action).map_or(1000 + i32::try_from(idx).unwrap_or(0), |r| {
-                    i32::try_from(r).unwrap_or(0)
-                });
-                scored.push((-key, idx, entry));
+                let key = recent_rank(action)
+                    .map_or(i32::try_from(idx).unwrap_or(0).plus(1000), |r| {
+                        i32::try_from(r).unwrap_or(0)
+                    });
+                scored.push((0_i32.minus(key), idx, entry));
             } else if let Some(score) = palette::fuzzy_score(&path, query) {
-                let boost =
-                    recent_rank(action).map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
-                scored.push((score + boost, idx, entry));
+                let boost = recent_rank(action)
+                    .map_or(0, |r| 12_i32.minus(i32::try_from(r).unwrap_or(12)).max(0));
+                scored.push((score.plus(boost), idx, entry));
             }
         }
         scored
@@ -274,21 +288,22 @@ impl App {
             .filter(|a| self.action_listed(a.id))
             .enumerate()
         {
-            let idx = start_idx + i;
+            let idx = start_idx.plus(i);
             let label = t!(a.title).to_string();
             let entry = Entry {
                 label: format!("> {label}"),
                 action: PAction::RunCommand(a.id.to_string()),
             };
             if query.is_empty() {
-                let key = recent_rank(a.id).map_or(1000 + i32::try_from(idx).unwrap_or(0), |r| {
-                    i32::try_from(r).unwrap_or(0)
-                });
-                scored.push((-key, idx, entry));
+                let key = recent_rank(a.id)
+                    .map_or(i32::try_from(idx).unwrap_or(0).plus(1000), |r| {
+                        i32::try_from(r).unwrap_or(0)
+                    });
+                scored.push((0_i32.minus(key), idx, entry));
             } else if let Some(score) = palette::fuzzy_score(&label, query) {
-                let boost =
-                    recent_rank(a.id).map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
-                scored.push((score + boost, idx, entry));
+                let boost = recent_rank(a.id)
+                    .map_or(0, |r| 12_i32.minus(i32::try_from(r).unwrap_or(12)).max(0));
+                scored.push((score.plus(boost), idx, entry));
             }
         }
         scored
@@ -310,7 +325,7 @@ impl App {
         };
         if let Some(p) = self.palette.as_mut() {
             if p.selected >= entries.len() {
-                p.selected = entries.len().saturating_sub(1);
+                p.selected = entries.len().minus(1);
             }
             p.entries = entries;
         }
@@ -341,22 +356,22 @@ impl App {
                         // Recents (rank 0..) sort above everything; non-recents keep
                         // catalog order after them.
                         let key = recent_rank(action)
-                            .map_or(1000 + i32::try_from(cat_idx).unwrap_or(0), |r| {
+                            .map_or(i32::try_from(cat_idx).unwrap_or(0).plus(1000), |r| {
                                 i32::try_from(r).unwrap_or(0)
                             });
-                        scored.push((-key, cat_idx, entry));
+                        scored.push((0_i32.minus(key), cat_idx, entry));
                     } else if let Some(score) = palette::fuzzy_score(&label, query) {
                         let boost = recent_rank(action)
-                            .map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
-                        scored.push((score + boost, cat_idx, entry));
+                            .map_or(0, |r| 12_i32.minus(i32::try_from(r).unwrap_or(12)).max(0));
+                        scored.push((score.plus(boost), cat_idx, entry));
                     }
                 }
                 scored.extend(self.script_palette_entries(query));
-                let catalog_start = palette::COMMANDS.len() + self.script_command_count();
+                let catalog_start = palette::COMMANDS.len().plus(self.script_command_count());
                 scored.extend(self.catalog_palette_entries(query, catalog_start));
                 scored.extend(self.menu_palette_entries(
                     query,
-                    catalog_start + vix_action_catalog::CATALOG.len(),
+                    catalog_start.plus(vix_action_catalog::CATALOG.len()),
                 ));
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
                 entries = scored.into_iter().map(|(_, _, e)| e).collect();
@@ -656,7 +671,7 @@ impl App {
                     self.recompute_palette();
                 }
                 if let Some(p) = self.palette.as_mut() {
-                    p.selected = m.selected.min(p.entries.len().saturating_sub(1));
+                    p.selected = m.selected.min(p.entries.len().minus(1));
                 }
                 self.preview_goto_line();
             }
@@ -675,7 +690,7 @@ impl App {
                 self.workspace_search = Some(ps);
                 self.run_workspace_search();
                 if let Some(ps) = self.workspace_search.as_mut() {
-                    ps.selected = m.selected.min(ps.hits.len().saturating_sub(1));
+                    ps.selected = m.selected.min(ps.hits.len().minus(1));
                 }
             }
             None => self.status = t!("status.picker_resume_none").to_string(),

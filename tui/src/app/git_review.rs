@@ -7,6 +7,19 @@
 //! on the hunk under the cursor by handing its patch to `git apply` (T665
 //! follow-up); the stash chooser opens a stash here with `r`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::PathBuf;
 
 use vix_review::{
@@ -246,7 +259,7 @@ impl App {
         );
         self.editor.close_active();
         self.open_readonly_text_tab(&title, &text);
-        self.editor.goto(row + 1, None, self.layout.editor);
+        self.editor.goto(row.plus(1), None, self.layout.editor);
     }
 
     /// **Git → Export Review Comments**: write `.vix/review/<range>.md` and
@@ -291,7 +304,7 @@ impl App {
             state.rendered.prev_hunk(row)
         };
         if let Some(r) = target {
-            self.editor.goto(r + 1, None, self.layout.editor);
+            self.editor.goto(r.plus(1), None, self.layout.editor);
         }
     }
 
@@ -428,10 +441,7 @@ impl App {
         let span = self.editor.active_tab().and_then(|t| {
             let (start, end) = t.editor.selection_span()?;
             let code = t.editor.code_ref();
-            Some((
-                code.char_to_line(start),
-                code.char_to_line(end.saturating_sub(1)),
-            ))
+            Some((code.char_to_line(start), code.char_to_line(end.minus(1))))
         });
         let (first, last) = span.unwrap_or((cursor, cursor));
         let Some(state) = self.active_review() else {
@@ -640,7 +650,7 @@ impl App {
     pub(super) fn review_view_key(&mut self, key: vix_input::KeyEvent) -> bool {
         use vix_input::{KeyCode, KeyModifiers};
         if key.code != KeyCode::Char('v')
-            || !(key.modifiers - KeyModifiers::SHIFT).is_empty()
+            || !key.modifiers.difference(KeyModifiers::SHIFT).is_empty()
             || self.active_review().is_none()
         {
             return false;
@@ -674,19 +684,20 @@ impl App {
         let (new_cursor, new_top) = match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 let inside = mouse.column >= area.x
-                    && mouse.column < area.x + area.width
+                    && mouse.column < area.x.plus(area.width)
                     && mouse.row >= area.y
-                    && mouse.row < area.y + area.height;
+                    && mouse.row < area.y.plus(area.height);
                 if !inside {
                     return true;
                 }
                 // A click on a wrapped continuation line is on its row.
-                let Some((index, _)) = panes.row_at(first, usize::from(mouse.row - area.y), rh)
+                let Some((index, _)) =
+                    panes.row_at(first, usize::from(mouse.row.minus(area.y)), rh)
                 else {
                     return true;
                 };
                 let (left, _) = vix_review::SideBySide::halves(width);
-                let half = if usize::from(mouse.column - area.x) < left {
+                let half = if usize::from(mouse.column.minus(area.x)) < left {
                     vix_review::Half::Left
                 } else {
                     vix_review::Half::Right
@@ -699,15 +710,15 @@ impl App {
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
                 let last_first = panes.last_first(height, rh);
                 let moved = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                    first.saturating_sub(1)
+                    first.minus(1)
                 } else {
-                    (first + 1).min(last_first)
+                    first.plus(1).min(last_first)
                 };
                 // Keep the cursor's row inside the new view.
                 let selected = panes.row_for_inline(cursor);
                 let (mut used, mut visible_last) = (0, moved);
                 for i in moved..panes.rows.len() {
-                    used += rh(i).max(1);
+                    used = used.plus(rh(i).max(1));
                     if used > height && i > moved {
                         break;
                     }

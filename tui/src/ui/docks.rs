@@ -2,6 +2,19 @@
 //! (DAP) panel, the outline dock (document structure sidebar), and the
 //! notifications drawer.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
@@ -36,7 +49,7 @@ pub(super) fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         frame.render_widget(hint, inner);
         return;
     }
-    let view_h = inner.height as usize;
+    let view_h = usize::from(inner.height);
     let lines: Vec<Line> = app
         .test_results
         .iter()
@@ -81,15 +94,15 @@ pub(super) fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let rows = app.dap_view.rows();
-    let height = inner.height as usize;
+    let height = usize::from(inner.height);
     // Keep the highlight in view.
     let view = &mut app.dap_view;
     if view.selected < view.scroll {
         view.scroll = view.selected;
-    } else if height > 0 && view.selected >= view.scroll + height {
-        view.scroll = view.selected + 1 - height;
+    } else if height > 0 && view.selected >= view.scroll.plus(height) {
+        view.scroll = view.selected.plus(1).minus(height);
     }
-    view.scroll = view.scroll.min(rows.len().saturating_sub(1));
+    view.scroll = view.scroll.min(rows.len().minus(1));
     let (scroll, selected) = (view.scroll, view.selected);
     let lines: Vec<Line> = rows
         .iter()
@@ -125,7 +138,7 @@ pub(super) fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 /// thread/frame or an expander, the name, and its value or location dimmed.
 fn debug_row_line(row: &crate::dap::view::Row) -> Line<'static> {
     use crate::dap::view::RowKind;
-    let indent = "  ".repeat(row.depth + 1);
+    let indent = "  ".repeat(row.depth.plus(1));
     let marker = if row.current {
         "\u{25b6} "
     } else if row.expanded {
@@ -167,11 +180,11 @@ pub(super) fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
         frame.render_widget(hint, inner);
         return;
     };
-    let view_h = inner.height as usize;
+    let view_h = usize::from(inner.height);
     o.ensure_visible(view_h);
     let total = o.len();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in o.scroll..(o.scroll + view_h).min(total) {
+    for idx in o.scroll..o.scroll.plus(view_h).min(total) {
         let e = &o.entries[idx];
         let kind = if e.kind.is_empty() {
             String::new()
@@ -255,12 +268,20 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     let total = app.messages.items.len();
     let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
-    let vbar = allow_bars && total > inner.height as usize;
-    let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
+    let vbar = allow_bars && total > usize::from(inner.height);
+    let text_w = if vbar {
+        inner.width.minus(1)
+    } else {
+        inner.width
+    } as usize;
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
     let hbar = allow_bars && content_w > text_w;
-    let body_h = if hbar { inner.height - 1 } else { inner.height };
-    let hmax = content_w.saturating_sub(text_w);
+    let body_h = if hbar {
+        inner.height.minus(1)
+    } else {
+        inner.height
+    };
+    let hmax = content_w.minus(text_w);
     app.messages_hmax = hmax;
     app.messages_hscroll = app.messages_hscroll.min(hmax);
     let off = app.messages_hscroll;
@@ -292,17 +313,17 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if vbar {
         let sb = Rect {
-            x: inner.x + inner.width - 1,
+            x: inner.x.plus(inner.width).minus(1),
             y: inner.y,
             width: 1,
             height: body_h,
         };
-        draw_scrollbar(frame, sb, app.messages.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb, app.messages.selected, total.minus(1));
     }
     app.layout.messages_hscrollbar = if hbar {
         let hb = Rect {
             x: inner.x,
-            y: inner.y + inner.height - 1,
+            y: inner.y.plus(inner.height).minus(1),
             width: u16::try_from(text_w).unwrap_or(u16::MAX),
             height: 1,
         };

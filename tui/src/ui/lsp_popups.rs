@@ -2,7 +2,20 @@
 //! editor: the completion list, the hover tooltip, and the code-action /
 //! code-lens choosers (sharing one generic single-column chooser box).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ClampFit;
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
@@ -20,19 +33,18 @@ fn cursor_screen_yx(app: &App) -> Option<(u16, u16)> {
     let (line, col) = app.editor.cursor_1based();
     // The row the cursor's line is drawn on (folds and code-lens rows, T726,
     // counted); a line off screen falls back to plain scroll arithmetic.
-    let line0 = line.saturating_sub(1);
+    let line0 = line.minus(1);
     let row = t
         .editor
         .text_screen_row(line0, area)
-        .unwrap_or_else(|| line0.saturating_sub(t.editor.get_offset_y()));
-    let y = area.y + u16::try_from(row).unwrap_or(0);
-    let x = area.x
-        + u16::try_from(col.saturating_sub(1))
-            .unwrap_or(0)
-            .min(area.width);
+        .unwrap_or_else(|| line0.minus(t.editor.get_offset_y()));
+    let y = area.y.plus(u16::try_from(row).unwrap_or(0));
+    let x = area
+        .x
+        .plus(u16::try_from(col.minus(1)).unwrap_or(0).min(area.width));
     Some((
-        x.min(area.x + area.width.saturating_sub(1)),
-        y.min(area.y + area.height.saturating_sub(1)),
+        x.min(area.x.plus(area.width.minus(1))),
+        y.min(area.y.plus(area.height.minus(1))),
     ))
 }
 
@@ -54,34 +66,37 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
     let max_rows = 10.min(shown.len());
     // Scroll so the highlighted row stays visible.
     let start = if popup.selected >= max_rows {
-        popup.selected + 1 - max_rows
+        popup.selected.plus(1).minus(max_rows)
     } else {
         0
     };
-    let end = (start + max_rows).min(shown.len());
+    let end = start.plus(max_rows).min(shown.len());
 
     // Width from the widest visible label (+detail), capped to the area.
     let widest = shown[start..end]
         .iter()
         .map(|it| {
-            it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3)
+            it.label
+                .chars()
+                .count()
+                .plus(it.detail.as_ref().map_or(0, |d| d.chars().count().plus(3)))
         })
         .max()
         .unwrap_or(10);
     let width = u16::try_from(widest)
         .unwrap_or(u16::MAX)
-        .saturating_add(2)
-        .clamp_fit(16, area.width.saturating_sub(2));
-    let height = u16::try_from(max_rows).unwrap_or(u16::MAX) + 2;
+        .plus(2)
+        .clamp_fit(16, area.width.minus(2));
+    let height = u16::try_from(max_rows).unwrap_or(u16::MAX).plus(2);
 
-    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
+    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x.plus(2), area.y));
     // Below the cursor if it fits, else above.
-    let y = if cy + 1 + height <= area.y + area.height {
-        cy + 1
+    let y = if cy.plus(1).plus(height) <= area.y.plus(area.height) {
+        cy.plus(1)
     } else {
-        cy.saturating_sub(height)
+        cy.minus(height)
     };
-    let x = cx.min(area.x + area.width.saturating_sub(width));
+    let x = cx.min(area.x.plus(area.width.minus(width)));
     let rect = Rect {
         x,
         y,
@@ -111,7 +126,7 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
         )
         .highlight_style(theme::selected());
     let mut state = ListState::default();
-    state.select(Some(popup.selected - start));
+    state.select(Some(popup.selected.minus(start)));
     frame.render_stateful_widget(list, rect, &mut state);
 }
 
@@ -123,25 +138,25 @@ pub(super) fn draw_hover(app: &App, frame: &mut Frame) {
         return;
     }
     let text = h.text.replace('\r', "");
-    let width = 64u16.min(area.width.saturating_sub(2)).max(20);
-    let inner_w = width.saturating_sub(2).max(1) as usize;
+    let width = 64u16.min(area.width.minus(2)).max(20);
+    let inner_w = width.minus(2).max(1) as usize;
     // Estimate wrapped height.
     let mut rows = 0usize;
     for line in text.lines() {
-        rows += line.chars().count() / inner_w + 1;
+        rows = rows.plus(line.chars().count().quot(inner_w).plus(1));
     }
     let height = u16::try_from(rows)
         .unwrap_or(u16::MAX)
-        .saturating_add(2)
+        .plus(2)
         .clamp_fit(3, 12.min(area.height));
 
-    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
-    let y = if cy + 1 + height <= area.y + area.height {
-        cy + 1
+    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x.plus(2), area.y));
+    let y = if cy.plus(1).plus(height) <= area.y.plus(area.height) {
+        cy.plus(1)
     } else {
-        cy.saturating_sub(height)
+        cy.minus(height)
     };
-    let x = cx.min(area.x + area.width.saturating_sub(width));
+    let x = cx.min(area.x.plus(area.width.minus(width)));
     let rect = Rect {
         x,
         y,
@@ -182,13 +197,13 @@ fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], sel
     let longest = titles.iter().map(|t| t.chars().count()).max().unwrap_or(20);
     let width = u16::try_from(longest)
         .unwrap_or(u16::MAX)
-        .saturating_add(4)
+        .plus(4)
         .clamp_fit(24, area.width);
     let rows_n = u16::try_from(titles.len()).unwrap_or(u16::MAX);
-    let height = rows_n.saturating_add(2).min(area.height);
+    let height = rows_n.plus(2).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };

@@ -4,6 +4,19 @@
 //! module only buckets them into track rows. See
 //! `crates/vix-editor/spec/scrollbars/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::style::Color;
 
 use crate::editor::Tab;
@@ -38,11 +51,13 @@ pub(super) fn bucket(markers: &[Marker], total_lines: usize, height: usize) -> V
     if height == 0 {
         return Vec::new();
     }
-    let max_line = total_lines.saturating_sub(1);
-    let span = height - 1;
+    let max_line = total_lines.minus(1);
+    let span = height.minus(1);
     for m in markers {
         let line = m.line.min(max_line);
-        let row = (line * span + max_line / 2)
+        let row = line
+            .times(span)
+            .plus(max_line.quot(2))
             .checked_div(max_line)
             .unwrap_or(0)
             .min(span);

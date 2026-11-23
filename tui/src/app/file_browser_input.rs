@@ -5,6 +5,19 @@
 //! check the whole keymap without an [`App`]. [`App::file_browser_key`] then
 //! applies the command to the open browser.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::App;
@@ -106,7 +119,7 @@ impl App {
                         fb.selected = 0;
                         fb.scroll = 0;
                     }
-                    Command::Last => fb.selected = fb.len().saturating_sub(1),
+                    Command::Last => fb.selected = fb.len().minus(1),
                     Command::Parent => fb.parent(),
                     Command::EnterDirectory => {
                         if fb.selected_entry().is_some_and(|e| e.is_dir) {

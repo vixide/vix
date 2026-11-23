@@ -10,6 +10,18 @@
 //! checks are `vix_authority::container::pick`. Owning spec:
 //! `crates/vix-authority/spec/container/index.md` ("Pickers").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

@@ -10,6 +10,19 @@
 //! [`vix_choice_list::Panel`], wrapped in [`ChoiceList`] with the purpose that
 //! says what a chosen row means.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -152,7 +165,7 @@ impl App {
 
     /// Handle a key for the pick-one overlay.
     pub(super) fn choice_list_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.choice_list.height as usize).max(1);
+        let page = (usize::from(self.layout.choice_list.height)).max(1);
         let Some(open) = self.choice_list.as_mut() else {
             return;
         };
@@ -181,7 +194,7 @@ impl App {
         let Some(open) = self.choice_list.as_mut() else {
             return;
         };
-        let idx = open.panel.scroll + (mouse.row - rect.y) as usize;
+        let idx = open.panel.scroll.plus(mouse.row.minus(rect.y) as usize);
         if open.panel.select_index(idx) {
             self.activate_choice(ChoiceAction::Primary);
         }
@@ -329,10 +342,10 @@ impl App {
         if let Some(s) = sel {
             let first = code.char_to_line(s.start.min(s.end));
             let last = code.char_to_line(s.start.max(s.end));
-            (first, last + 1)
+            (first, last.plus(1))
         } else {
             let line = code.char_to_line(tab.editor.get_cursor());
-            (line, line + 1)
+            (line, line.plus(1))
         }
     }
 
@@ -580,7 +593,7 @@ impl App {
         }
         let tidied = t!(
             "status.cleanup_done",
-            lines = report.trimmed_lines + report.trailing_blank_lines
+            lines = report.trimmed_lines.plus(report.trailing_blank_lines)
         )
         .to_string();
         if self.active_path().is_some_and(|p| self.lsp.handles(&p)) {
@@ -819,7 +832,7 @@ impl App {
         let Some(exp) = crate::snippets::postfix::expand(&before, family) else {
             return false;
         };
-        let start = cursor - exp.replace_chars;
+        let start = cursor.minus(exp.replace_chars);
         let area = self.editor_view();
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_selection_range(start, cursor);
@@ -846,8 +859,8 @@ enum ChoiceAction {
 /// Rows for a peek at 1-based `line` of `text` (numbered, the definition line
 /// marked) and the index of the definition row.
 fn peek_rows(text: &str, line: usize) -> (Vec<String>, usize) {
-    let target = line.saturating_sub(1);
-    let first = target.saturating_sub(PEEK_BEFORE);
+    let target = line.minus(1);
+    let first = target.minus(PEEK_BEFORE);
     let rows: Vec<String> = text
         .lines()
         .enumerate()
@@ -855,10 +868,10 @@ fn peek_rows(text: &str, line: usize) -> (Vec<String>, usize) {
         .take(PEEK_BEFORE + PEEK_AFTER + 1)
         .map(|(i, l)| {
             let mark = if i == target { '>' } else { ' ' };
-            format!("{mark} {:>5}  {l}", i + 1)
+            format!("{mark} {:>5}  {l}", i.plus(1))
         })
         .collect();
-    (rows, target - first)
+    (rows, target.minus(first))
 }
 
 /// `YYYY-MM-DD HH:MM:SS` in the local time zone for `ms` since the Unix epoch.
@@ -880,9 +893,13 @@ fn format_bytes(n: u64) -> String {
     if n < KB {
         format!("{n} B")
     } else if n < KB * KB {
-        format!("{}.{} KB", n / KB, n % KB * 10 / KB)
+        format!("{}.{} KB", n.quot(KB), n.modulo(KB).times(10).quot(KB))
     } else {
-        format!("{}.{} MB", n / (KB * KB), n % (KB * KB) * 10 / (KB * KB))
+        format!(
+            "{}.{} MB",
+            n.quot(KB.times(KB)),
+            n.modulo(KB.times(KB)).times(10).quot(KB.times(KB))
+        )
     }
 }
 

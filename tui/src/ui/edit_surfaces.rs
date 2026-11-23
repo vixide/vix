@@ -3,6 +3,19 @@
 //! structured-value (JSON/YAML) editor, the byte (hex) editor, the HTML
 //! character picker, and the document-outline panel.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -18,7 +31,7 @@ fn fit(s: &str, w: usize) -> String {
     let mut out: String = s.chars().take(w).collect();
     let len = out.chars().count();
     if len < w {
-        out.push_str(&" ".repeat(w - len));
+        out.push_str(&" ".repeat(w.minus(len)));
     }
     out
 }
@@ -42,12 +55,12 @@ fn first_visible_col(grid: &crate::edit_table::Grid, widths: &[usize], avail: us
     let mut first = grid.col_scroll().min(sel);
     loop {
         let used: usize = (first..=sel)
-            .map(|c| widths.get(c).copied().unwrap_or(3) + 1)
+            .map(|c| widths.get(c).copied().unwrap_or(3).plus(1))
             .sum();
         if used <= avail || first >= sel {
             break;
         }
-        first += 1;
+        first = first.plus(1);
     }
     first
 }
@@ -57,11 +70,11 @@ fn visible_cols(grid: &crate::edit_table::Grid, widths: &[usize], avail: usize) 
     let mut out = Vec::new();
     let mut used = 0usize;
     for c in grid.col_scroll()..grid.col_count() {
-        let need = widths.get(c).copied().unwrap_or(3) + 1;
-        if used + need > avail && !out.is_empty() {
+        let need = widths.get(c).copied().unwrap_or(3).plus(1);
+        if used.plus(need) > avail && !out.is_empty() {
             break;
         }
-        used += need;
+        used = used.plus(need);
         out.push(c);
     }
     out
@@ -74,7 +87,7 @@ fn table_row_line(
     cols: &[usize],
     widths: &[usize],
 ) -> Line<'static> {
-    let mut spans = Vec::with_capacity(cols.len() * 2);
+    let mut spans = Vec::with_capacity(cols.len().times(2));
     let editing = grid.is_editing() && r == grid.row();
     for &c in cols {
         let w = widths.get(c).copied().unwrap_or(3);
@@ -108,9 +121,9 @@ fn table_status_line(grid: &crate::edit_table::Grid) -> Line<'static> {
     };
     let pos = format!(
         " r{}/{} c{}/{}  ",
-        grid.row() + 1,
+        grid.row().plus(1),
         grid.row_count(),
-        grid.col() + 1,
+        grid.col().plus(1),
         grid.col_count(),
     );
     Line::from(vec![
@@ -162,9 +175,9 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let widths = column_widths(grid);
-    let avail = usize::from(chunks[1].width);
+    let avail = usize::from(chunk(&chunks, 1).width);
     let first = first_visible_col(grid, &widths, avail);
-    let body_h = usize::from(chunks[1].height);
+    let body_h = usize::from(chunk(&chunks, 1).height);
     if let Some(g) = app.edit.edit_table_mut() {
         g.set_col_scroll(first);
         g.ensure_row_visible(body_h);
@@ -176,18 +189,18 @@ pub(super) fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
     let cols = visible_cols(grid, &widths, avail);
     frame.render_widget(
         Paragraph::new(table_row_line(grid, 0, &cols, &widths)),
-        chunks[0],
+        chunk(&chunks, 0),
     );
 
     let start = grid.row_scroll();
     let mut lines = Vec::with_capacity(body_h);
-    for r in start..(start + body_h).min(grid.row_count()) {
+    for r in start..start.plus(body_h).min(grid.row_count()) {
         lines.push(table_row_line(grid, r, &cols, &widths));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[1]);
-    frame.render_widget(Paragraph::new(table_status_line(grid)), chunks[2]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 1));
+    frame.render_widget(Paragraph::new(table_status_line(grid)), chunk(&chunks, 2));
 
-    app.layout.edit_table = chunks[1];
+    app.layout.edit_table = chunk(&chunks, 1);
 }
 
 /// Per-column display width for the visible span, from `ColumnView::column_width`.
@@ -209,21 +222,21 @@ fn column_view_visible_cols(
     let mut first = 0usize;
     loop {
         let used: usize = (first..=sel)
-            .map(|c| widths.get(c).copied().unwrap_or(3) + 1)
+            .map(|c| widths.get(c).copied().unwrap_or(3).plus(1))
             .sum();
         if used <= avail || first >= sel {
             break;
         }
-        first += 1;
+        first = first.plus(1);
     }
     let mut out = Vec::new();
     let mut used = 0usize;
     for c in first..view.col_count() {
-        let need = widths.get(c).copied().unwrap_or(3) + 1;
-        if used + need > avail && !out.is_empty() {
+        let need = widths.get(c).copied().unwrap_or(3).plus(1);
+        if used.plus(need) > avail && !out.is_empty() {
             break;
         }
-        used += need;
+        used = used.plus(need);
         out.push(c);
     }
     out
@@ -238,7 +251,7 @@ fn column_view_row_line(
     cols: &[usize],
     widths: &[usize],
 ) -> Line<'static> {
-    let mut spans = Vec::with_capacity(cols.len() * 2);
+    let mut spans = Vec::with_capacity(cols.len().times(2));
     for &c in cols {
         let w = widths.get(c).copied().unwrap_or(3);
         let selected = !is_header && r == view.row() && c == view.col();
@@ -279,9 +292,9 @@ fn column_view_status_line(view: &crate::column_view::ColumnView) -> Line<'stati
     };
     let pos = format!(
         " r{}/{} c{}/{}  ",
-        view.row() + 1,
+        view.row().plus(1),
         view.row_count(),
-        view.col() + 1,
+        view.col().plus(1),
         view.col_count(),
     );
     Line::from(vec![
@@ -319,9 +332,9 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let widths = column_view_widths(view);
-    let avail = usize::from(chunks[1].width);
+    let avail = usize::from(chunk(&chunks, 1).width);
     let cols = column_view_visible_cols(view, &widths, avail);
-    let body_h = usize::from(chunks[1].height);
+    let body_h = usize::from(chunk(&chunks, 1).height);
     if let Some(v) = app.edit.column_view_mut() {
         v.ensure_row_visible(body_h);
     }
@@ -331,18 +344,21 @@ pub(super) fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new(column_view_row_line(view, true, 0, &cols, &widths)),
-        chunks[0],
+        chunk(&chunks, 0),
     );
 
     let start = view.row_scroll();
     let mut lines = Vec::with_capacity(body_h);
-    for r in start..(start + body_h).min(view.row_count()) {
+    for r in start..start.plus(body_h).min(view.row_count()) {
         lines.push(column_view_row_line(view, false, r, &cols, &widths));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[1]);
-    frame.render_widget(Paragraph::new(column_view_status_line(view)), chunks[2]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 1));
+    frame.render_widget(
+        Paragraph::new(column_view_status_line(view)),
+        chunk(&chunks, 2),
+    );
 
-    app.layout.column_view = chunks[1];
+    app.layout.column_view = chunk(&chunks, 1);
 }
 
 /// One rendered outline line: indentation, a fold marker (▾/▸/·), and the text.
@@ -394,7 +410,7 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let body_h = usize::from(chunks[0].height);
+    let body_h = usize::from(chunk(&chunks, 0).height);
     if let Some(e) = app.edit.edit_sql_mut() {
         e.ensure_visible(body_h);
     }
@@ -402,18 +418,18 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let total = editor.len();
-    let width = chunks[0].width as usize;
+    let width = chunk(&chunks, 0).width as usize;
     let mut lines: Vec<Line> = Vec::with_capacity(body_h);
-    for i in editor.scroll()..(editor.scroll() + body_h).min(total) {
+    for i in editor.scroll()..editor.scroll().plus(body_h).min(total) {
         let kind = editor.kind(i);
         let preview = editor.preview(i);
-        let text = format!(" {kind:8} {}", trunc(&preview, width.saturating_sub(11)));
+        let text = format!(" {kind:8} {}", trunc(&preview, width.minus(11)));
         let line = if i == editor.sel() {
             Line::from(Span::styled(text, theme::selected()))
         } else {
             Line::from(vec![
                 Span::styled(format!(" {kind:8} "), theme::dim()),
-                Span::raw(trunc(&preview, width.saturating_sub(11))),
+                Span::raw(trunc(&preview, width.minus(11))),
             ])
         };
         lines.push(line);
@@ -424,16 +440,16 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::dim(),
         )));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.edit_sql_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
 
-    app.layout.edit_sql = chunks[0];
+    app.layout.edit_sql = chunk(&chunks, 0);
 }
 
 /// Render the prose outline editor overlay.
@@ -470,7 +486,7 @@ pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let body_h = usize::from(chunks[0].height);
+    let body_h = usize::from(chunk(&chunks, 0).height);
     if let Some(t) = app.edit.edit_outline_mut() {
         t.ensure_visible(body_h);
     }
@@ -483,16 +499,16 @@ pub(super) fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     for &i in vis.iter().skip(start).take(body_h) {
         lines.push(outline_line(tree, i, i == tree.sel()));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.edit_outline_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
 
-    app.layout.edit_outline = chunks[0];
+    app.layout.edit_outline = chunk(&chunks, 0);
 }
 
 /// One rendered row of the structured-value (JSON/YAML) tree.
@@ -558,7 +574,7 @@ pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let body_h = usize::from(chunks[0].height);
+    let body_h = usize::from(chunk(&chunks, 0).height);
     if let Some(t) = app.edit.edit_value_mut() {
         t.ensure_visible(body_h);
     }
@@ -568,27 +584,27 @@ pub(super) fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
     let editing = tree.is_editing();
     let start = tree.scroll();
     let mut lines = Vec::with_capacity(body_h);
-    for i in start..(start + body_h).min(tree.row_count()) {
+    for i in start..start.plus(body_h).min(tree.row_count()) {
         lines.push(value_line(tree, i, editing));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.edit_value_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
-    app.layout.edit_value = chunks[0];
+    app.layout.edit_value = chunk(&chunks, 0);
 }
 
 /// One rendered hex-dump row: offset, hex byte pairs, and the ASCII gutter.
 fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
     use crate::edit_bytes::COLS;
-    let off = row * COLS;
+    let off = row.times(COLS);
     let mut spans = vec![Span::styled(format!("{off:08x}  "), theme::dim())];
     for col in 0..COLS {
-        let idx = off + col;
+        let idx = off.plus(col);
         if idx < hex.len() {
             let style = if idx == hex.cursor() {
                 theme::selected()
@@ -602,7 +618,7 @@ fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
     }
     spans.push(Span::raw(" "));
     for col in 0..COLS {
-        let idx = off + col;
+        let idx = off.plus(col);
         if idx < hex.len() {
             let b = hex.byte(idx);
             let ch = if (0x20..0x7f).contains(&b) {
@@ -655,7 +671,7 @@ pub(super) fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let body_h = usize::from(chunks[0].height);
+    let body_h = usize::from(chunk(&chunks, 0).height);
     if let Some(h) = app.edit.edit_bytes_mut() {
         h.ensure_visible(body_h);
     }
@@ -664,18 +680,18 @@ pub(super) fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let start = hex.scroll();
     let mut lines = Vec::with_capacity(body_h);
-    for row in start..(start + body_h).min(hex.rows()) {
+    for row in start..start.plus(body_h).min(hex.rows()) {
         lines.push(bytes_line(hex, row));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.edit_bytes_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
-    app.layout.edit_bytes = chunks[0];
+    app.layout.edit_bytes = chunk(&chunks, 0);
 }
 
 /// Render the HTML character-entity picker overlay.
@@ -686,12 +702,12 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let width = 46u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -715,9 +731,9 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let header = Line::from(Span::styled(t!("ui.html_header").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(header), chunks[0]);
+    frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
-    let view_h = chunks[1].height as usize;
+    let view_h = chunk(&chunks, 1).height as usize;
     if let Some(p) = app.html_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -725,12 +741,12 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (i, e) in entities[p.scroll..(p.scroll + view_h).min(total)]
+    for (i, e) in entities[p.scroll..p.scroll.plus(view_h).min(total)]
         .iter()
         .enumerate()
     {
         let text = format!("  {:2}  {:26}  {}", e.glyph, e.name, e.code);
-        let idx = p.scroll + i;
+        let idx = p.scroll.plus(i);
         if idx == p.selected {
             lines.push(Line::from(Span::styled(text, theme::selected())));
         } else {
@@ -738,34 +754,34 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         }
     }
     // Reserve a one-column gutter for the scrollbar when the table overflows.
-    let show_bar = total > view_h && chunks[1].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[1].width - 1,
+            width: chunk(&chunks, 1).width.minus(1),
             ..chunks[1]
         }
     } else {
-        chunks[1]
+        chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[1].x + chunks[1].width - 1,
+            x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
             ..chunks[1]
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.html_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     app.layout.html_panel = Rect {
-        x: chunks[1].x,
-        y: chunks[1].y,
+        x: chunk(&chunks, 1).x,
+        y: chunk(&chunks, 1).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[1].height),
+            .min(chunk(&chunks, 1).height),
     };
 }
 
@@ -777,12 +793,12 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 48u16.min(area.width);
-    let max_rows = area.height.saturating_sub(3).max(1);
+    let max_rows = area.height.minus(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 3).min(area.height);
+    let height = rows.plus(3).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -801,7 +817,7 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = chunk(&chunks, 0).height as usize;
     if let Some(o) = app.outline.as_mut() {
         o.ensure_visible(view_h);
     }
@@ -809,7 +825,7 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in o.scroll..(o.scroll + view_h).min(o.len()) {
+    for idx in o.scroll..o.scroll.plus(view_h).min(o.len()) {
         let e = &o.entries[idx];
         let kind = if e.kind.is_empty() {
             String::new()
@@ -826,21 +842,21 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
             ]));
         }
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
 
     let hint = Line::from(Span::styled(
         t!("ui.outline_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.outline = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: chunks[0].width,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
+        width: chunk(&chunks, 0).width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }
 
@@ -865,12 +881,12 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 64u16.min(area.width);
-    let max_rows = area.height.saturating_sub(3).max(1);
+    let max_rows = area.height.minus(3).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 3).min(area.height);
+    let height = rows.plus(3).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -889,7 +905,7 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = chunk(&chunks, 0).height as usize;
     if let Some(l) = app.conflict_list.as_mut() {
         l.ensure_visible(view_h);
     }
@@ -898,13 +914,13 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     // Reserve room for the row number and the " → " separator so both
     // previews get a fair, even share of the remaining width.
-    let side_width = (chunks[0].width as usize).saturating_sub(9) / 2;
+    let side_width = ((chunk(&chunks, 0).width as usize).minus(9)).quot(2);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in l.scroll..(l.scroll + view_h).min(l.len()) {
+    for idx in l.scroll..l.scroll.plus(view_h).min(l.len()) {
         let c = &l.entries[idx];
         let text = format!(
             "{:>3}: {} → {}",
-            idx + 1,
+            idx.plus(1),
             preview_line(&c.ours, side_width),
             preview_line(&c.theirs, side_width)
         );
@@ -914,20 +930,20 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
             lines.push(Line::from(Span::raw(text)));
         }
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
 
     let hint = Line::from(Span::styled(
         t!("ui.conflict_list_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.conflict_list = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: chunks[0].width,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
+        width: chunk(&chunks, 0).width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }

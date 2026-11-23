@@ -21,7 +21,20 @@
 //! `wrap_text`, `smart_toggle`) sit interleaved in the original range but
 //! aren't org-specific, so they stayed in `app.rs`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -339,15 +352,16 @@ impl App {
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         let (new, new_line) = crate::org::new_heading(&text, line);
-        let offset = new
+        let offset = (new
             .split('\n')
             .take(new_line)
-            .map(|l| l.chars().count() + 1)
-            .sum::<usize>()
-            + new
-                .split('\n')
+            .map(|l| l.chars().count().plus(1))
+            .sum::<usize>())
+        .plus(
+            new.split('\n')
                 .nth(new_line)
-                .map_or(0, |l| l.chars().count());
+                .map_or(0, |l| l.chars().count()),
+        );
         tab.editor.set_content(&new);
         tab.editor.set_cursor(offset);
         tab.dirty = true;
@@ -391,8 +405,7 @@ impl App {
                 .map(|(_, s)| *s)
                 .collect();
             tab.editor.set_content(&rest.join("\n"));
-            tab.editor
-                .set_cursor_line(start.min(rest.len().saturating_sub(1)));
+            tab.editor.set_cursor_line(start.min(rest.len().minus(1)));
             tab.dirty = true;
             self.status = t!("status.org_subtree_cut").to_string();
         } else {
@@ -433,7 +446,7 @@ impl App {
         let targets: Vec<(usize, String)> = crate::org::headlines(&text)
             .into_iter()
             .filter(|(l, _, _)| !(start..end).contains(l))
-            .map(|(l, level, title)| (l, format!("{}{title}", "  ".repeat(level - 1))))
+            .map(|(l, level, title)| (l, format!("{}{title}", "  ".repeat(level.minus(1)))))
             .collect();
         if targets.is_empty() {
             self.status = t!("status.org_no_refile_target").to_string();
@@ -565,8 +578,8 @@ impl App {
         };
         let body: Vec<&str> = text
             .split('\n')
-            .skip(begin + 1)
-            .take(end - begin - 1)
+            .skip(begin.plus(1))
+            .take(end.minus(begin).minus(1))
             .collect();
         self.src_edit = Some(SrcEdit {
             source: tab.path.clone(),
@@ -696,7 +709,7 @@ impl App {
             return;
         }
         if let Some(tab) = self.editor.active_tab_mut() {
-            let target = line.min(rest.split('\n').count().saturating_sub(1));
+            let target = line.min(rest.split('\n').count().minus(1));
             tab.editor.set_content(&rest);
             tab.editor.set_cursor_line(target);
             tab.dirty = true;
@@ -921,7 +934,7 @@ impl App {
             .unwrap_or(&path)
             .to_string_lossy()
             .into_owned();
-        let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1);
+        let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line.plus(1), line.plus(1));
         self.status = t!("status.org_link_stored", link = stored).to_string();
         self.stored_org_link = Some(stored);
     }
@@ -1206,7 +1219,7 @@ impl App {
         };
         if pc.next < pc.prompts.len() {
             pc.answers.push(input.to_string());
-            pc.next += 1;
+            pc.next = pc.next.plus(1);
         } else {
             pc.tags = Some(input.to_string());
         }
@@ -1277,7 +1290,7 @@ impl App {
                 .unwrap_or(p)
                 .to_string_lossy()
                 .into_owned();
-            format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1)
+            format!("[[file:{rel}::{}][{rel}:{}]]", line.plus(1), line.plus(1))
         });
         let initial = self
             .editor
@@ -1558,7 +1571,7 @@ impl App {
         let (text, view, _) = self.build_view(&kind);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
-            let last = text.split('\n').count().saturating_sub(1);
+            let last = text.split('\n').count().minus(1);
             tab.editor.set_cursor_line(cursor_line.min(last));
             tab.dirty = false;
             tab.read_only = true;
@@ -1714,7 +1727,7 @@ impl App {
             let is_headline = lines
                 .get(line)
                 .is_some_and(|l| crate::org::headline_level(l).is_some());
-            let subtree = crate::org::subtree_range(&lines, line).map(|(s, e)| (s, e - 1));
+            let subtree = crate::org::subtree_range(&lines, line).map(|(s, e)| (s, e.minus(1)));
             (is_headline, crate::org::drawer_range(&lines, line), subtree)
         };
         if let Some((start, end)) = drawer {

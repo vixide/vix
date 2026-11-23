@@ -4,6 +4,18 @@
 //! scroll; the gutter marks each side's changes. See
 //! `crates/vix-diff-view/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::{Path, PathBuf};
 
 use crate::diff_view::compare::{self, Hunk, Mark, Side};

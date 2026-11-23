@@ -4,6 +4,18 @@
 //! each result into translated lines. See `crates/vix-script/spec/index.md`,
 //! "Plugins".
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// What a `--plugin` command printed, and whether it succeeded (the binary
 /// exits non-zero when it didn't).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -3,6 +3,18 @@
 //! Sets up the terminal (with mouse capture), runs the event loop, and restores
 //! on exit. All of the application logic lives in the `vix` library crate.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Always start with high quality coding conventions.
 
 // When we build for MUSL static, use faster memory allocator.

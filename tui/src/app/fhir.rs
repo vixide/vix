@@ -2,6 +2,18 @@
 //! networking half lives in `fhir_http.rs` (feature `http`); everything here is
 //! terminal state only and compiles without it.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::picker_panels::{list_panel_click_index, list_panel_nav_key};
@@ -50,7 +62,7 @@ impl App {
     /// Keys for the Bundle viewer: arrows/page move, Enter opens the entry,
     /// `n` follows the `next` link, Esc closes.
     pub(super) fn fhir_bundle_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.fhir_bundle.height as usize).max(1);
+        let page = (usize::from(self.layout.fhir_bundle.height)).max(1);
         if list_panel_nav_key(self.fhir_bundle.as_mut(), key.code, page) {
             return;
         }

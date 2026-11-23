@@ -3,7 +3,20 @@
 //! runners, which build their process through the workspace authority, so a
 //! remote workspace stashes and lists worktrees on its own host.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -44,7 +57,7 @@ impl App {
             self.chooser = None;
             return false;
         }
-        let selected = selected.min(entries.len() - 1);
+        let selected = selected.min(entries.len().minus(1));
         self.chooser.open_stash(StashChooser { entries, selected });
         true
     }
@@ -245,7 +258,7 @@ impl App {
         let selected = selected
             .or_else(|| WorktreeChooser::current_in(&worktrees, &self.root))
             .unwrap_or(0)
-            .min(worktrees.len() - 1);
+            .min(worktrees.len().minus(1));
         self.chooser.open_worktree(WorktreeChooser {
             worktrees,
             selected,

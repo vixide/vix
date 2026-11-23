@@ -9,6 +9,18 @@
 //! read-only through `vix_db::mcp_share`, every call logged to
 //! [`DB_LOG_NAME`] next to the session file) — and runs the stdio loop.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io;
 use std::path::{Path, PathBuf};
 use vix_mcp_server::{Host, HostError, Server, Table};

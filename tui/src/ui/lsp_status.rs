@@ -3,7 +3,20 @@
 //! open files, in-flight progress, capabilities and last error. Read live
 //! from [`crate::lsp::Lsp::statuses`] each frame.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -44,12 +57,16 @@ fn wrap_list(items: &[String], width: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut cur = String::new();
     for (i, item) in items.iter().enumerate() {
-        let piece = if i + 1 < items.len() {
+        let piece = if i.plus(1) < items.len() {
             format!("{item},")
         } else {
             item.clone()
         };
-        let need = cur.chars().count() + usize::from(!cur.is_empty()) + piece.chars().count();
+        let need = cur
+            .chars()
+            .count()
+            .plus(usize::from(!cur.is_empty()))
+            .plus(piece.chars().count());
         if !cur.is_empty() && need > width {
             lines.push(std::mem::take(&mut cur));
         }
@@ -112,7 +129,7 @@ fn server_lines(s: &ServerStatus, selected: bool, width: usize) -> Vec<Line<'sta
     .chain(rows.iter().map(|(l, _)| l.chars().count()))
     .max()
     .unwrap_or(0);
-    let value_w = width.saturating_sub(label_w + 5).max(10);
+    let value_w = width.minus(label_w.plus(5)).max(10);
     let caps = if s.capabilities.is_empty() {
         vec![none]
     } else {
@@ -126,7 +143,7 @@ fn server_lines(s: &ServerStatus, selected: bool, width: usize) -> Vec<Line<'sta
     for (label, values) in rows {
         for (i, value) in values.into_iter().enumerate() {
             let shown = if i == 0 { label.as_str() } else { "" };
-            let pad = label_w.saturating_sub(shown.chars().count());
+            let pad = label_w.minus(shown.chars().count());
             out.push(Line::from(vec![
                 Span::styled(format!("   {shown}{}  ", " ".repeat(pad)), theme::dim()),
                 Span::raw(value),
@@ -142,9 +159,9 @@ pub(super) fn draw_lsp_status(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let statuses = app.lsp.statuses();
-    let selected = selected.min(statuses.len().saturating_sub(1));
+    let selected = selected.min(statuses.len().minus(1));
     let width = 86u16.min(area.width);
-    let inner_w = usize::from(width.saturating_sub(2));
+    let inner_w = usize::from(width.minus(2));
 
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut starts = Vec::with_capacity(statuses.len());
@@ -167,15 +184,11 @@ pub(super) fn draw_lsp_status(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.extend(server_lines(s, i == selected, inner_w));
     }
 
-    let wanted = u16::try_from(lines.len())
-        .unwrap_or(u16::MAX)
-        .saturating_add(3);
-    let height = wanted
-        .min(area.height.saturating_sub(2).max(4))
-        .min(area.height);
+    let wanted = u16::try_from(lines.len()).unwrap_or(u16::MAX).plus(3);
+    let height = wanted.min(area.height.minus(2).max(4)).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -192,34 +205,36 @@ pub(super) fn draw_lsp_status(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = usize::from(chunks[0].height).max(1);
+    let view_h = usize::from(chunk(&chunks, 0).height).max(1);
 
     // Keep the highlighted server's whole block in view when it fits, and
     // its header in view always.
     let start = starts.get(selected).copied().unwrap_or(0);
-    let end = starts.get(selected + 1).map_or(lines.len(), |&n| n - 1);
+    let end = starts
+        .get(selected.plus(1))
+        .map_or(lines.len(), |&n| n.minus(1));
     let Some(panel) = app.info.lsp_status_mut() else {
         return;
     };
     panel.selected = selected;
-    if end > panel.scroll + view_h {
-        panel.scroll = end.saturating_sub(view_h).min(start);
+    if end > panel.scroll.plus(view_h) {
+        panel.scroll = end.minus(view_h).min(start);
     }
     if start < panel.scroll {
         panel.scroll = start;
     }
-    panel.scroll = panel.scroll.min(lines.len().saturating_sub(view_h));
+    panel.scroll = panel.scroll.min(lines.len().minus(view_h));
     let scroll = panel.scroll;
     panel.starts = starts;
 
     let visible: Vec<Line> = lines.into_iter().skip(scroll).take(view_h).collect();
-    frame.render_widget(Paragraph::new(visible), chunks[0]);
+    frame.render_widget(Paragraph::new(visible), chunk(&chunks, 0));
     let hint = Line::from(Span::styled(
         t!("ui.lsp_status_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.lsp_status = chunks[0];
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
+    app.layout.lsp_status = chunk(&chunks, 0);
 }
 
 #[cfg(test)]

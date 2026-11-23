@@ -6,6 +6,18 @@
 //! shows at a time: while the coverage gutter is visible, `refresh_git_gutter`
 //! is skipped for the active tab (see `src/ui.rs`'s call site).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::{App, Prompt, PromptKind};
 
 impl App {

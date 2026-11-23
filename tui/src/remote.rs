@@ -8,6 +8,18 @@
 //! without prompting instead, and `App::adopt_remote` gives both the same
 //! status-bar host, connection-lost state and trust prompt.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::PathBuf;
 
 use crate::authority::remote::RemoteTarget;

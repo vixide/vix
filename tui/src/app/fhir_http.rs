@@ -6,6 +6,18 @@
 //! unsaved tabs, the last Bundle is kept in memory only, and status/error
 //! messages name the interaction and HTTP status, never a URL, body or token.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::fhir::{
     BuiltRequest, Content, FhirError, OperationOutcome, Profile, Spec, classify, net, parse_bundle,
     parse_operation_outcome, pretty,

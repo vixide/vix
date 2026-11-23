@@ -9,6 +9,19 @@
 //! `Ctrl+Y` copies its hash; `Tab` steps the branch/tag filter; typing
 //! searches.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_git_graph::{Action, GraphError, Mode, PAGE_SIZE, Panel};
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
@@ -108,7 +121,7 @@ impl App {
     /// Ctrl+O checks out, Ctrl+P cherry-picks, Ctrl+B creates a branch, Ctrl+Y copies the hash;
     /// Esc closes.
     fn git_graph_browse_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.git_graph.height as usize).max(1);
+        let page = (usize::from(self.layout.git_graph.height)).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let Some(p) = self.git_graph.as_mut() else {
             return;
@@ -331,7 +344,7 @@ impl App {
         let Some(p) = self.git_graph.as_mut() else {
             return;
         };
-        let idx = p.scroll + row;
+        let idx = p.scroll.plus(row);
         let again = p.selected == idx;
         if p.select_index(idx) && again {
             self.open_git_graph_diff();

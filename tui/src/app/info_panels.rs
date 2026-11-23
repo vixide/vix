@@ -8,8 +8,21 @@
 //! of "tools", another large genuinely contiguous block like org core
 //! was, no cherry-picking needed).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
 use crate::app::picker_panels::list_panel_full_nav_key;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
@@ -35,7 +48,7 @@ impl App {
     /// Handle a key in the contacts browser: Up/Down/PageUp/PageDown/Home/End move, Enter opens
     /// the selected contact's vCard, Esc closes.
     pub(super) fn contacts_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.contacts.height as usize).max(1);
+        let page = (usize::from(self.layout.contacts.height)).max(1);
         if list_panel_full_nav_key(self.contacts.as_mut(), key.code, page) {
             return;
         }
@@ -56,7 +69,7 @@ impl App {
         let hit = self
             .contacts
             .as_mut()
-            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
+            .is_some_and(|p| p.select_index(p.scroll.plus(row_in_view)));
         if hit {
             self.open_selected_vcard();
         }
@@ -65,7 +78,7 @@ impl App {
     /// Handle a key in the vCard detail panel: movement keys scroll the selection, Enter
     /// inserts the highlighted value into the editor, Esc closes the panel.
     pub(super) fn vcard_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.vcard.height as usize).max(1);
+        let page = (usize::from(self.layout.vcard.height)).max(1);
         if list_panel_full_nav_key(self.vcard.as_mut(), key.code, page) {
             return;
         }
@@ -87,7 +100,7 @@ impl App {
         let hit = self
             .vcard
             .as_mut()
-            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
+            .is_some_and(|p| p.select_index(p.scroll.plus(row_in_view)));
         if hit {
             self.insert_selected_vcard_value();
         }
@@ -150,7 +163,7 @@ impl App {
     /// Handle a key in the file-information panel: movement keys select, Enter inserts the
     /// highlighted value into the editor (panel stays open), Esc closes.
     pub(super) fn file_info_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.file_info.height as usize).max(1);
+        let page = (usize::from(self.layout.file_info.height)).max(1);
         if list_panel_full_nav_key(self.info.file_info_mut(), key.code, page) {
             return;
         }
@@ -169,7 +182,7 @@ impl App {
             return;
         };
         if let Some(p) = self.info.file_info_mut() {
-            let idx = p.scroll + row_in_view;
+            let idx = p.scroll.plus(row_in_view);
             if p.select_index(idx) {
                 self.insert_selected_file_info();
             }
@@ -283,9 +296,7 @@ impl App {
     /// Handle a key in the Markdown preview: arrows and paging scroll, `t` opens the table of
     /// contents (T206), Esc/`q` closes the preview.
     pub(super) fn markdown_preview_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.markdown_preview.as_mut() {
@@ -329,7 +340,7 @@ impl App {
         let mut toc = Outline::new(entries);
         if let Some(scroll) = self.markdown_preview.as_ref().map(|p| p.scroll) {
             // 0-based scroll -> 1-based "current line" for select_nearest.
-            toc.select_nearest(scroll + 1);
+            toc.select_nearest(scroll.plus(1));
         }
         self.markdown_toc = Some(toc);
     }
@@ -337,9 +348,7 @@ impl App {
     /// Handle a key in the Markdown table of contents: movement keys select a heading, Enter
     /// scrolls the preview to it, Esc closes the list.
     pub(super) fn markdown_toc_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(o) = self.markdown_toc.as_mut() {
@@ -475,7 +484,7 @@ impl App {
     /// Handle a key in the snippet picker: arrows and paging move, typing filters by prefix
     /// (Backspace edits), Enter inserts the snippet, Esc closes.
     pub(super) fn snippets_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.snippets.height as usize).max(1);
+        let page = (usize::from(self.layout.snippets.height)).max(1);
         let lib = &self.snippet_library;
         match key.code {
             KeyCode::Up => {
@@ -520,7 +529,7 @@ impl App {
         let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
         };
-        let idx = self.snippets.as_ref().map_or(0, |p| p.scroll) + row;
+        let idx = self.snippets.as_ref().map_or(0, |p| p.scroll).plus(row);
         let hit = self
             .snippets
             .as_mut()
@@ -567,8 +576,8 @@ impl App {
         let chars: Vec<char> = tab.editor.get_content().chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cursor;
-        while start > 0 && chars.get(start - 1).copied().is_some_and(is_word) {
-            start -= 1;
+        while start > 0 && chars.get(start.minus(1)).copied().is_some_and(is_word) {
+            start = start.minus(1);
         }
         if start == cursor {
             return false;
@@ -624,7 +633,7 @@ impl App {
         }
         let stops: Vec<(usize, usize)> = stops
             .iter()
-            .map(|s| (base + s.start, base + s.end))
+            .map(|s| (base.plus(s.start), base.plus(s.end)))
             .collect();
         let single = stops.len() == 1;
         self.snippet_session = Some(SnippetSession { stops, index: 0 });
@@ -671,7 +680,7 @@ impl App {
                 sess.stops.retain(|&(s, e)| {
                     let nested = s >= cur_start && e <= cur_end && s < cur_end;
                     let keep = i <= current || !nested;
-                    i += 1;
+                    i = i.plus(1);
                     keep
                 });
             }
@@ -680,17 +689,17 @@ impl App {
             for (s, e) in &mut sess.stops {
                 if *s >= cur_end {
                     if cursor >= cur_end {
-                        let add = cursor - cur_end;
-                        *s += add;
-                        *e += add;
+                        let add = cursor.minus(cur_end);
+                        *s = s.plus(add);
+                        *e = e.plus(add);
                     } else {
-                        let sub = cur_end - cursor;
-                        *s = s.saturating_sub(sub);
-                        *e = e.saturating_sub(sub);
+                        let sub = cur_end.minus(cursor);
+                        *s = s.minus(sub);
+                        *e = e.minus(sub);
                     }
                 }
             }
-            let next = sess.index + 1;
+            let next = sess.index.plus(1);
             if next >= sess.stops.len() {
                 None
             } else {
@@ -717,7 +726,7 @@ impl App {
     /// Handle a key in the system-information panel: movement keys select, Enter inserts the
     /// highlighted value (panel stays open), Esc closes.
     pub(super) fn system_info_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.system_info.height as usize).max(1);
+        let page = (usize::from(self.layout.system_info.height)).max(1);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.info.system_info_mut() {
@@ -764,7 +773,7 @@ impl App {
             return;
         };
         if let Some(p) = self.info.system_info_mut() {
-            let idx = p.scroll + row_in_view;
+            let idx = p.scroll.plus(row_in_view);
             if p.select_index(idx) {
                 self.insert_selected_system_info();
             }

@@ -29,6 +29,18 @@
 //!
 //! [`ratatui`]: https://crates.io/crates/ratatui
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Always start with high quality coding conventions.
 
 // The translation table is embedded once, in the `vix_i18n` crate. Bringing it
@@ -49,6 +61,7 @@ pub mod app;
 pub mod capability;
 pub mod cli;
 pub mod crash;
+pub(crate) mod geo;
 pub mod mcp;
 pub mod profile;
 pub mod remote;

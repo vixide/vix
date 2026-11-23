@@ -2,6 +2,18 @@
 //! Crash…** (`spec/crash-reports/index.md`). The report itself is written by
 //! the panic hook in [`crate::crash`]; nothing here sends anything.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::Path;
 
 use vix_input::{KeyCode, KeyEvent};

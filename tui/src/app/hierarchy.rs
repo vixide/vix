@@ -4,6 +4,18 @@
 //! the direction, and `Alt+D` in that list flipping the direction against the
 //! same prepared item and server.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::PathBuf;
 
 use crate::lsp::{HierarchyDirection, HierarchyItem};

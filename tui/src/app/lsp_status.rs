@@ -8,7 +8,20 @@
 //! from Starting to Running (or Failed) while it is open. The panel itself
 //! only remembers which server is highlighted.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{App, rect_contains};
@@ -43,14 +56,14 @@ impl App {
             return;
         };
         match key.code {
-            KeyCode::Up => panel.selected = panel.selected.saturating_sub(1),
+            KeyCode::Up => panel.selected = panel.selected.minus(1),
             KeyCode::Down => {
-                if panel.selected + 1 < count {
-                    panel.selected += 1;
+                if panel.selected.plus(1) < count {
+                    panel.selected = panel.selected.plus(1);
                 }
             }
             KeyCode::Home => panel.selected = 0,
-            KeyCode::End => panel.selected = count.saturating_sub(1),
+            KeyCode::End => panel.selected = count.minus(1),
             KeyCode::Enter | KeyCode::Char('r') => self.lsp_status_restart_selected(),
             KeyCode::Esc | KeyCode::Char('q') => self.info.close_lsp_status(),
             _ => {}
@@ -67,11 +80,11 @@ impl App {
         if !rect_contains(r, mouse.column, mouse.row) {
             return;
         }
-        let row = usize::from(mouse.row - r.y);
+        let row = usize::from(mouse.row.minus(r.y));
         let Some(panel) = self.info.lsp_status_mut() else {
             return;
         };
-        let line = panel.scroll + row;
+        let line = panel.scroll.plus(row);
         if let Some(idx) = panel.starts.iter().rposition(|&s| s <= line) {
             panel.selected = idx;
         }

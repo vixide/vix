@@ -6,7 +6,20 @@
 //! across the file rather than one contiguous block. An inherent `impl App`
 //! block can live in any module of the crate.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use crate::app::picker_panels::list_panel_full_nav_key;
@@ -316,11 +329,11 @@ impl App {
             if forward {
                 hunks[0].current_start
             } else {
-                hunks[hunks.len() - 1].current_start
+                hunks[hunks.len().minus(1)].current_start
             }
         });
         let area = self.editor_view();
-        self.editor.goto(target + 1, None, area);
+        self.editor.goto(target.plus(1), None, area);
     }
 
     /// Restore the committed (HEAD) version of the hunk under the cursor in the
@@ -398,12 +411,12 @@ impl App {
             return;
         };
         // Search from the line after the cursor so repeated calls advance.
-        match crate::conflict_tool::find(&content, line + 1)
+        match crate::conflict_tool::find(&content, line.plus(1))
             .or_else(|| crate::conflict_tool::find(&content, 0))
         {
             Some(c) => {
                 let area = self.editor_view();
-                self.editor.goto(c.start + 1, None, area);
+                self.editor.goto(c.start.plus(1), None, area);
             }
             None => self.status = t!("status.no_conflict").to_string(),
         }
@@ -434,7 +447,7 @@ impl App {
     /// selection, Enter jumps to the conflict, `o`/`t`/`b` resolve it with ours/theirs/both,
     /// Esc closes.
     pub(super) fn conflict_list_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.conflict_list.height as usize).max(1);
+        let page = (usize::from(self.layout.conflict_list.height)).max(1);
         if list_panel_full_nav_key(self.conflict_list.as_mut(), key.code, page) {
             return;
         }
@@ -462,7 +475,7 @@ impl App {
             return;
         };
         if let Some(l) = self.conflict_list.as_mut() {
-            let idx = l.scroll + row;
+            let idx = l.scroll.plus(row);
             if l.select_index(idx) {
                 self.jump_to_conflict_list_selection();
             }
@@ -482,7 +495,7 @@ impl App {
         self.conflict_list = None;
         self.with_jump(|s| {
             let area = s.editor_view();
-            s.editor.goto(start + 1, None, area);
+            s.editor.goto(start.plus(1), None, area);
             s.focus = crate::app::Focus::Editor;
         });
     }
@@ -603,7 +616,7 @@ impl App {
         let head_count = hunk.head_text.split_inclusive('\n').count();
         // The hunk's committed lines must still be present in the index region,
         // or staging this hunk could corrupt other staged changes.
-        let region = base_lines.get(hunk.head_start..hunk.head_start + head_count);
+        let region = base_lines.get(hunk.head_start..hunk.head_start.plus(head_count));
         if region.map(<[&str]>::concat).as_deref() != Some(hunk.head_text.as_str()) {
             self.status = t!("status.stage_hunk_failed", error = "index diverged").to_string();
             return;
@@ -614,7 +627,7 @@ impl App {
             .map_or_default(<[&str]>::concat);
         let mut new_index = base_lines[..hunk.head_start].concat();
         new_index.push_str(&added);
-        new_index.push_str(&base_lines[hunk.head_start + head_count..].concat());
+        new_index.push_str(&base_lines[hunk.head_start.plus(head_count)..].concat());
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -644,15 +657,15 @@ impl App {
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
             .map_or_default(<[&str]>::concat);
-        let added_count = hunk.current_end - hunk.current_start;
-        let region = base_lines.get(hunk.head_start..hunk.head_start + added_count);
+        let added_count = hunk.current_end.minus(hunk.current_start);
+        let region = base_lines.get(hunk.head_start..hunk.head_start.plus(added_count));
         if region.map(<[&str]>::concat).as_deref() != Some(added.as_str()) {
             self.status = t!("status.unstage_hunk_failed", error = "hunk not staged").to_string();
             return;
         }
         let mut new_index = base_lines[..hunk.head_start].concat();
         new_index.push_str(&hunk.head_text);
-        new_index.push_str(&base_lines[hunk.head_start + added_count..].concat());
+        new_index.push_str(&base_lines[hunk.head_start.plus(added_count)..].concat());
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -704,14 +717,14 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.git_panel.as_mut() {
-                    p.selected = p.selected.saturating_sub(1);
+                    p.selected = p.selected.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(p) = self.git_panel.as_mut()
-                    && p.selected + 1 < self.git_status.len()
+                    && p.selected.plus(1) < self.git_status.len()
                 {
-                    p.selected += 1;
+                    p.selected = p.selected.plus(1);
                 }
             }
             // Space / s / u toggle or set the staged state of the selected file.
@@ -761,7 +774,7 @@ impl App {
     /// Keep the panel selection inside the (possibly shrunk) status list after a refresh.
     fn clamp_git_selection(&mut self) {
         if let Some(p) = self.git_panel.as_mut() {
-            p.selected = p.selected.min(self.git_status.len().saturating_sub(1));
+            p.selected = p.selected.min(self.git_status.len().minus(1));
         }
     }
 
@@ -1026,9 +1039,7 @@ impl App {
     /// Handle a key in the Git log view: Up/Down/PageUp/PageDown move, Enter opens the commit
     /// diff, `c` cherry-picks (only in the pick-a-commit scope), Esc closes.
     pub(super) fn git_log_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.git_log.as_mut() {
@@ -1150,7 +1161,7 @@ impl App {
             return;
         };
         let hit = self.git_log.as_mut().is_some_and(|p| {
-            let idx = p.scroll + row;
+            let idx = p.scroll.plus(row);
             let ok = idx < p.entries.len();
             if ok {
                 p.selected = idx;
@@ -1284,7 +1295,7 @@ impl App {
         let Some((path, line)) = self
             .editor
             .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line().plus(1))))
         else {
             self.status = t!("status.blame_no_file").into();
             return;
@@ -1358,7 +1369,7 @@ impl App {
             }
             return;
         };
-        let line = line0 + 1;
+        let line = line0.plus(1);
         if self.blame_cache.as_ref() == Some(&(path.clone(), line)) {
             return;
         }

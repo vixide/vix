@@ -3,8 +3,21 @@
 //! shared `draw_list_chooser`), the diff viewer, the Git status panel, the
 //! right-click context menu, and the spell-check suggestion popup.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ClampFit;
 use crate::app::chooser::ChooserSlot;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -109,12 +122,12 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 90u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -139,7 +152,7 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunks[0].height as usize;
+    let view_h = chunk(&chunks, 0).height as usize;
     let Some(t) = app.git_rebase.as_mut() else {
         return;
     };
@@ -165,13 +178,13 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
             }
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     let hint = Line::from(Span::styled(
         t!("ui.git_rebase_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.chooser = chunks[0];
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
+    app.layout.chooser = chunk(&chunks, 0);
 }
 
 /// Draw the read-only diff viewer overlay (about 80% of the screen).
@@ -180,11 +193,11 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(d) = app.diff_view.as_ref() else {
         return;
     };
-    let width = (area.width * 8 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 8 / 10).clamp_fit(8, area.height);
+    let width = area.width.times(8).quot(10).clamp_fit(30, area.width);
+    let height = area.height.times(8).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -202,8 +215,8 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunks[0].height as usize;
-    let start = d.scroll.min(d.lines.len().saturating_sub(1));
+    let view_h = chunk(&chunks, 0).height as usize;
+    let start = d.scroll.min(d.lines.len().minus(1));
     let lines: Vec<Line> = d
         .lines
         .iter()
@@ -243,12 +256,12 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
             Line::from(spans)
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     let hint = Line::from(Span::styled(
         t!("ui.diff_view_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 }
 
 /// Draw the project (workspace root) chooser.
@@ -424,14 +437,13 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let rows = app.git_status.len().max(1);
     let width = 64u16.min(area.width);
-    let (hint, hint_rows) =
-        super::hint_paragraph(&t!("ui.git_changes_hint"), width.saturating_sub(2));
-    let max_rows = area.height.saturating_sub(3 + hint_rows).max(1);
+    let (hint, hint_rows) = super::hint_paragraph(&t!("ui.git_changes_hint"), width.minus(2));
+    let max_rows = area.height.minus(hint_rows.plus(3)).max(1);
     let visible = u16::try_from(rows).unwrap_or(u16::MAX).min(max_rows);
-    let height = (visible + 3 + hint_rows).min(area.height);
+    let height = visible.plus(3).plus(hint_rows).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -456,7 +468,7 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     if app.git_status.is_empty() {
         let clean = Line::from(Span::styled(t!("ui.git_clean").to_string(), theme::dim()));
-        frame.render_widget(Paragraph::new(clean), chunks[0]);
+        frame.render_widget(Paragraph::new(clean), chunk(&chunks, 0));
     } else {
         let items: Vec<ListItem> = app
             .git_status
@@ -476,19 +488,19 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
             .collect();
         let list = List::new(items).highlight_style(theme::selected());
         let mut state = ListState::default();
-        state.select(Some(selected.min(app.git_status.len() - 1)));
-        frame.render_stateful_widget(list, chunks[0], &mut state);
+        state.select(Some(selected.min(app.git_status.len().minus(1))));
+        frame.render_stateful_widget(list, chunk(&chunks, 0), &mut state);
     }
 
-    frame.render_widget(hint, chunks[1]);
+    frame.render_widget(hint, chunk(&chunks, 1));
 
     app.layout.git_panel = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: chunks[0].width,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
+        width: chunk(&chunks, 0).width,
         height: u16::try_from(app.git_status.len())
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }
 
@@ -506,12 +518,12 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 100u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -549,7 +561,7 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = chunk(&chunks, 0).height as usize;
     if let Some(p) = app.git_log.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -557,7 +569,7 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in p.scroll..(p.scroll + view_h).min(p.entries.len()) {
+    for idx in p.scroll..p.scroll.plus(view_h).min(p.entries.len()) {
         let e = &p.entries[idx];
         let text = format!(
             "  {:<8} {:<10} {:<20} {}",
@@ -572,12 +584,12 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
             lines.push(Line::from(text));
         }
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
 
     let hint = Line::from(Span::styled(hint_text.to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
-    app.layout.git_log = chunks[0];
+    app.layout.git_log = chunk(&chunks, 0);
 }
 
 /// Draw the right-click context menu from `CONTEXT_ITEMS`; `menu.separator`
@@ -598,13 +610,15 @@ pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let width = (u16::try_from(labels.iter().map(|l| l.chars().count()).max().unwrap_or(8))
-        .unwrap_or(u16::MAX)
-        + 4)
+        .unwrap_or(u16::MAX))
+    .plus(4)
     .min(area.width);
-    let height = (u16::try_from(CONTEXT_ITEMS.len()).unwrap_or(u16::MAX) + 2).min(area.height);
+    let height = (u16::try_from(CONTEXT_ITEMS.len()).unwrap_or(u16::MAX))
+        .plus(2)
+        .min(area.height);
     // Clamp so the menu stays on screen near the click.
-    let x = cm.x.min(area.right().saturating_sub(width));
-    let y = cm.y.min(area.bottom().saturating_sub(height));
+    let x = cm.x.min(area.right().minus(width));
+    let y = cm.y.min(area.bottom().minus(height));
     let rect = Rect {
         x,
         y,
@@ -625,7 +639,10 @@ pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
         .enumerate()
         .map(|(i, (_, action))| {
             if *action == "menu.separator" {
-                Line::from(Span::styled("─".repeat(inner.width as usize), theme::dim()))
+                Line::from(Span::styled(
+                    "─".repeat(usize::from(inner.width)),
+                    theme::dim(),
+                ))
             } else {
                 let text = format!(" {} ", labels[i]);
                 if i == cm.selected {
@@ -657,12 +674,18 @@ pub(super) fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         .unwrap_or(0)
         .max(title.chars().count())
         .max(hint.chars().count());
-    let width = (u16::try_from(widest).unwrap_or(u16::MAX) + 6).min(area.width);
+    let width = u16::try_from(widest)
+        .unwrap_or(u16::MAX)
+        .plus(6)
+        .min(area.width);
     // Borders (2) + suggestion rows + hint (1).
-    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 3).min(area.height);
+    let height = u16::try_from(rows)
+        .unwrap_or(u16::MAX)
+        .plus(3)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -686,7 +709,7 @@ pub(super) fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
             t!("ui.spell_no_suggestions").to_string(),
             theme::dim(),
         ));
-        frame.render_widget(Paragraph::new(none), chunks[0]);
+        frame.render_widget(Paragraph::new(none), chunk(&chunks, 0));
     } else {
         let items: Vec<ListItem> = p
             .suggestions
@@ -696,19 +719,19 @@ pub(super) fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         let list = List::new(items).highlight_style(theme::selected());
         let mut state = ListState::default();
         state.select(Some(p.selected));
-        frame.render_stateful_widget(list, chunks[0], &mut state);
+        frame.render_stateful_widget(list, chunk(&chunks, 0), &mut state);
     }
 
     let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.spell_suggest = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: chunks[0].width,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
+        width: chunk(&chunks, 0).width,
         height: u16::try_from(p.suggestions.len())
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }
 
@@ -738,11 +761,14 @@ fn draw_list_chooser_sized(
     width: u16,
 ) -> Rect {
     let width = width.min(area.width);
-    let (hint, hint_rows) = super::hint_paragraph(hint, width.saturating_sub(2));
-    let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX) + 3 + hint_rows).min(area.height);
+    let (hint, hint_rows) = super::hint_paragraph(hint, width.minus(2));
+    let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX))
+        .plus(3)
+        .plus(hint_rows)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus(area.height.quot(3)),
         width,
         height,
     };
@@ -783,10 +809,10 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
     };
     let width = 100u16.min(area.width);
     let rows_h = u16::try_from(rc.entries.len()).unwrap_or(u16::MAX);
-    let height = (rows_h + 5).min(area.height);
+    let height = rows_h.plus(5).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -811,8 +837,8 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 
     // Fixed name (22), size (9), and date (16 + 16) columns; path gets the rest.
     let name_w = 22usize;
-    let path_w = (chunks[0].width as usize)
-        .saturating_sub(name_w + 9 + 16 + 16 + 6)
+    let path_w = (chunk(&chunks, 0).width as usize)
+        .minus((name_w + 9).plus(16).plus(16).plus(6))
         .max(8);
     let row_text = |name: &str, path: &str, size: &str, created: &str, modified: &str| {
         format!(
@@ -833,10 +859,10 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
     );
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(header, theme::title(true)))),
-        chunks[0],
+        chunk(&chunks, 0),
     );
 
-    let view_h = chunks[1].height as usize;
+    let view_h = chunk(&chunks, 1).height as usize;
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, e) in rc.entries.iter().enumerate().take(view_h) {
         let name = e
@@ -858,13 +884,13 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         };
         lines.push(line);
     }
-    frame.render_widget(Paragraph::new(lines), chunks[1]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 1));
 
     let hint = Line::from(Span::styled(t!("ui.recent_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     // Mouse hit-testing maps clicks to data rows only (the header is not a row).
-    app.layout.chooser = chunks[1];
+    app.layout.chooser = chunk(&chunks, 1);
 }
 
 /// Draw the location chooser (references, definitions, ...): the file name and

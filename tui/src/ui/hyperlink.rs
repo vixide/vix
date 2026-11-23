@@ -9,6 +9,19 @@
 //! Only a URL from the recorded list is ever linked, and only one made of
 //! printable ASCII, so text in a message can't smuggle an escape sequence.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::num::NonZeroU16;
 use std::ops::Range;
 
@@ -39,13 +52,13 @@ pub(super) fn find_urls(text: &str) -> Vec<Range<usize>> {
     let mut from = 0;
     while let Some(start) = SCHEMES
         .iter()
-        .filter_map(|s| text[from..].find(s).map(|i| from + i))
+        .filter_map(|s| text[from..].find(s).map(|i| from.plus(i)))
         .min()
     {
         let len = text[start..]
             .find(|c: char| !is_url_char(c))
-            .unwrap_or(text.len() - start);
-        let mut end = start + len;
+            .unwrap_or(text.len().minus(start));
+        let mut end = start.plus(len);
         loop {
             let url = &text[start..end];
             let Some(last) = url.chars().last() else {
@@ -58,7 +71,7 @@ pub(super) fn find_urls(text: &str) -> Vec<Range<usize>> {
                 || unbalanced('(', ')')
                 || unbalanced('[', ']')
             {
-                end -= 1;
+                end = end.minus(1);
             } else {
                 break;
             }
@@ -71,7 +84,7 @@ pub(super) fn find_urls(text: &str) -> Vec<Range<usize>> {
         {
             out.push(start..end);
         }
-        from = (start + len).max(start + 1);
+        from = start.plus(len).max(start.plus(1));
     }
     out
 }
@@ -127,7 +140,7 @@ pub(super) fn link_area(buf: &mut Buffer, area: Rect, urls: &[String]) {
                 let Ok(dx) = u16::try_from(offset) else {
                     break;
                 };
-                let cell = &mut buf[(area.left() + dx, y)];
+                let cell = &mut buf[(area.left().plus(dx), y)];
                 let symbol = wrap(cell.symbol(), url);
                 cell.set_symbol(&symbol).set_diff_option(one);
             }

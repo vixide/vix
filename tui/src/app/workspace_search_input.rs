@@ -4,6 +4,18 @@
 //! [`command_for`] is a pure table from a key to a [`Command`], testable
 //! without an [`App`]; [`App::ps_key`] applies the command to the open panel.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, Field, Prompt, PromptKind, WorkspaceFlags};

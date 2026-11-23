@@ -3,6 +3,18 @@
 //! event loop still call these entry points. Each is a no-op, so call sites carry
 //! no `cfg`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::KeyEvent;
 
 use super::App;

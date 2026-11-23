@@ -20,6 +20,19 @@
 //! Like the rest of IM, nothing here opens or focuses anything on its own: a
 //! thread someone else committed shows only as a gutter mark.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -146,10 +159,10 @@ fn anchor_all<'a>(
 ) -> (Vec<String>, Vec<String>) {
     let (mut outdated, mut moved) = (Vec::new(), Vec::new());
     for thread in threads {
-        let start = usize::try_from(thread.start_line.max(1) - 1).unwrap_or(usize::MAX);
+        let start = usize::try_from(thread.start_line.max(1).minus(1)).unwrap_or(usize::MAX);
         let anchor_lines: Vec<&str> = thread.anchor_text.split('\n').collect();
         let here = lines
-            .get(start..start.saturating_add(anchor_lines.len()))
+            .get(start..start.plus(anchor_lines.len()))
             .is_some_and(|slice| {
                 slice
                     .iter()
@@ -279,7 +292,7 @@ impl App {
                 } else {
                     CommentMark::Open
                 };
-                let line = usize::try_from(t.start_line.saturating_sub(1)).unwrap_or(usize::MAX);
+                let line = usize::try_from(t.start_line.minus(1)).unwrap_or(usize::MAX);
                 (line, mark)
             })
             .collect();
@@ -393,8 +406,8 @@ impl App {
                 }
                 let code = t.editor.code_ref();
                 Some((
-                    code.char_to_line(s) + 1,
-                    code.char_to_line(e.saturating_sub(1).max(s)) + 1,
+                    code.char_to_line(s).plus(1),
+                    (code.char_to_line(e.minus(1).max(s))).plus(1),
                 ))
             })
             .unwrap_or_else(|| {
@@ -496,11 +509,11 @@ impl App {
     ) -> Option<ImDialog> {
         match key.code {
             KeyCode::Up => Some(ImDialog::Threads {
-                selected: selected.saturating_sub(1),
+                selected: selected.minus(1),
                 ids,
             }),
             KeyCode::Down => {
-                let selected = (selected + 1).min(ids.len().saturating_sub(1));
+                let selected = selected.plus(1).min(ids.len().minus(1));
                 Some(ImDialog::Threads { ids, selected })
             }
             KeyCode::Enter => {

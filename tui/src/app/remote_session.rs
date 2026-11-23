@@ -17,6 +17,19 @@
 //! ssh://…`, which connects before the UI and can prompt). Vix never accepts a
 //! host key itself and never handles a password.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -378,7 +391,7 @@ impl App {
         let selected = if recent.is_empty() {
             0
         } else {
-            1 + pickers.len()
+            pickers.len().plus(1)
         };
         self.choice_list = Some(ChoiceList {
             panel: vix_choice_list::Panel::new(
@@ -780,7 +793,7 @@ impl App {
             let _ = kind;
             return;
         }
-        match names.get(after_new - pickers.len()) {
+        match names.get(after_new.minus(pickers.len())) {
             Some(name) => self.open_remote(&name.clone()),
             None => self.open_remote_prompt(),
         }

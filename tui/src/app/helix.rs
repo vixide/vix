@@ -27,6 +27,19 @@
 //! selection for `Editor::edit_selections`, which applies them as one
 //! undo step.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, AppFlags, Focus};
@@ -635,7 +648,7 @@ impl App {
                 let piece = piece.repeat(count.max(1));
                 let plan = vix_modal::helix::paste(&text, start, end, &piece, before);
                 SelectionEdit::new(plan.at, plan.at, &plan.text)
-                    .selecting(plan.select.0 - plan.at, plan.select.1 - plan.at)
+                    .selecting(plan.select.0.minus(plan.at), plan.select.1.minus(plan.at))
             })
             .collect();
         self.helix_edit(&edits);
@@ -748,17 +761,17 @@ impl App {
             .active_tab()
             .map_or(1, |t| t.editor.caret_count());
         let width = if carets > 1 {
-            let grown = text.chars().count().saturating_sub(len_before);
-            if grown % carets == 0 {
-                grown / carets
+            let grown = text.chars().count().minus(len_before);
+            if grown.modulo(carets) == 0 {
+                grown.quot(carets)
             } else {
                 0
             }
         } else {
-            cursor.saturating_sub(start)
+            cursor.minus(start)
         };
-        let from = cursor.saturating_sub(width);
-        let typed: String = text.chars().skip(from).take(cursor - from).collect();
+        let from = cursor.minus(width);
+        let typed: String = text.chars().skip(from).take(cursor.minus(from)).collect();
         match change {
             Edit::Change(_) => self.helix_record(Edit::Change(typed)),
             Edit::Insert { after, .. } if !typed.is_empty() => {

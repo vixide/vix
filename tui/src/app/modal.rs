@@ -17,7 +17,20 @@
 //! (Visual mode's own motion vocabulary, still just `h j k l` per T112) keeps
 //! working exactly as it did before the engine existed.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ModalPending;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
 
@@ -192,7 +205,7 @@ impl App {
         if key.code == KeyCode::Char(op) {
             let count = self.modal_effective_count();
             self.apply_modal_motion(Linewise, move |t, p| {
-                vix_modal::motion::line_down(t, p, count.saturating_sub(1))
+                vix_modal::motion::line_down(t, p, count.minus(1))
             });
             return true;
         }
@@ -595,7 +608,10 @@ impl App {
             let (before, after) = match recorded.iter().position(is_digit) {
                 Some(start) => {
                     let len = recorded[start..].iter().take_while(|k| is_digit(k)).count();
-                    (recorded[..start].to_vec(), recorded[start + len..].to_vec())
+                    (
+                        recorded[..start].to_vec(),
+                        recorded[start.plus(len)..].to_vec(),
+                    )
                 }
                 None => (recorded.clone(), Vec::new()),
             };
@@ -679,8 +695,7 @@ impl App {
     /// multiplied by whatever count was typed after it (`3` in `2d3w`) —
     /// the spec's own `{count1}{operator}{count2}{motion}` rule.
     fn modal_effective_count(&self) -> usize {
-        self.modal_operator_count
-            .saturating_mul(self.modal_count.value())
+        self.modal_operator_count.times(self.modal_count.value())
     }
 
     /// Clear both count slots back to "nothing typed" — every
@@ -809,15 +824,16 @@ impl App {
         // `sel.end` is exclusive, so back it up one character before asking
         // which line it's on -- otherwise a selection ending right at a
         // line break would misreport itself as reaching into the next line.
-        let end_row = code.char_to_line(sel.end.saturating_sub(1).max(sel.start));
+        let end_row = code.char_to_line(sel.end.minus(1).max(sel.start));
         let line_start = code.line_to_char(start_row);
-        let line_end = if end_row + 1 < code.len_lines() {
-            code.line_to_char(end_row + 1)
+        let line_end = if end_row.plus(1) < code.len_lines() {
+            code.line_to_char(end_row.plus(1))
         } else {
-            line_start
-                + (start_row..=end_row)
+            line_start.plus(
+                (start_row..=end_row)
                     .map(|r| code.line_len(r))
-                    .sum::<usize>()
+                    .sum::<usize>(),
+            )
         };
         // Keep the cursor on the same end the native shift-motion just left
         // it on, so growing the selection downward keeps the caret visually

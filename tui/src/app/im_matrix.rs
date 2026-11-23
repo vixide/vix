@@ -10,6 +10,18 @@
 //! password is read from `VIX_IM_PASSWORD_<NAME>` at connect time and goes
 //! to the helper once, over its stdin.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::Path;
 
 use vix_im::{ConversationId, ConversationKind, Message};

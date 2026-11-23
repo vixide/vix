@@ -2,6 +2,19 @@
 //! password/save/ask/params prompts, and the three-pane workbench itself
 //! (schema tree, SQL editor with autocomplete, results grid).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
@@ -36,15 +49,15 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
     let view = b.view;
     let compare = b.compare().map(|c| c.screen);
     if compare.is_some() {
-        draw_db_compare(app, frame, chunks[0]);
+        draw_db_compare(app, frame, chunk(&chunks, 0));
     } else {
-        draw_db_view(app, frame, view, chunks[0]);
+        draw_db_view(app, frame, view, chunk(&chunks, 0));
     }
     let Some(b) = app.db.as_ref() else { return };
     if let Some(msg) = &b.message {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(msg.clone(), theme::dim()))),
-            chunks[1],
+            chunk(&chunks, 1),
         );
     }
     let hint = match compare {
@@ -53,7 +66,7 @@ pub(super) fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
-        chunks[2],
+        chunk(&chunks, 2),
     );
 }
 
@@ -246,8 +259,8 @@ fn draw_db_password(app: &mut App, frame: &mut Frame, area: Rect) {
         Line::from(format!(" {masked}")),
     ];
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(masked.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(masked.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The query-history / saved-queries list of the DB overlay.
@@ -287,16 +300,16 @@ fn draw_db_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(Span::styled(format!(" {empty}"), theme::dim())));
     }
     let width = usize::from(area.width);
-    let height = usize::from(area.height).saturating_sub(1);
-    let skip = b.list_sel.saturating_sub(height.saturating_sub(1));
+    let height = usize::from(area.height).minus(1);
+    let skip = b.list_sel.minus(height.minus(1));
     for (i, (name, sql)) in entries.iter().enumerate().skip(skip).take(height) {
         let one_line = sql.split_whitespace().collect::<Vec<_>>().join(" ");
         let text = if name.is_empty() {
-            format!(" {}", trunc(&one_line, width.saturating_sub(2)))
+            format!(" {}", trunc(&one_line, width.minus(2)))
         } else {
             format!(
                 " {name}  {}",
-                trunc(&one_line, width.saturating_sub(name.chars().count() + 4))
+                trunc(&one_line, width.minus(name.chars().count().plus(4)))
             )
         };
         if i == b.list_sel {
@@ -321,8 +334,8 @@ fn draw_db_save_name(app: &mut App, frame: &mut Frame, area: Rect) {
         Line::from(format!(" {}", b.save_name)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(b.save_name.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(b.save_name.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The inline cell editor prompt (stages a new value for the selected cell),
@@ -355,8 +368,8 @@ fn draw_db_cell_edit(app: &mut App, frame: &mut Frame, area: Rect) {
         }
     }
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(b.edit_input.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(b.edit_input.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The server-side row search form: column, operator and value rows, and the
@@ -406,8 +419,8 @@ fn draw_db_row_filter(app: &mut App, frame: &mut Frame, area: Rect) {
     lines.push(Line::from(preview));
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
     if form.field == 2 {
-        let col = u16::try_from(width + 3 + form.value.chars().count()).unwrap_or(u16::MAX);
-        frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 3));
+        let col = u16::try_from(width.plus(3).plus(form.value.chars().count())).unwrap_or(u16::MAX);
+        frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(3)));
     }
 }
 
@@ -426,8 +439,8 @@ fn draw_db_import(app: &mut App, frame: &mut Frame, area: Rect) {
         Line::from(format!(" {}", b.import_path)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(b.import_path.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(b.import_path.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The bind-parameter prompt: one value at a time, showing progress.
@@ -442,7 +455,7 @@ fn draw_db_params(app: &mut App, frame: &mut Frame, area: Rect) {
     let title = t!(
         "ui.db_params_title",
         name = name,
-        done = p.values.len() + 1,
+        done = p.values.len().plus(1),
         total = p.names.len()
     );
     let lines = vec![
@@ -450,8 +463,8 @@ fn draw_db_params(app: &mut App, frame: &mut Frame, area: Rect) {
         Line::from(format!(" {}", p.input)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(p.input.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(p.input.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The natural-language "Ask AI" prompt of the DB overlay.
@@ -467,8 +480,8 @@ fn draw_db_ask(app: &mut App, frame: &mut Frame, area: Rect) {
         Line::from(format!(" {}", b.ask_input)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
-    let col = u16::try_from(b.ask_input.chars().count() + 1).unwrap_or(u16::MAX);
-    frame.set_cursor_position((area.x + col.min(area.width.saturating_sub(1)), area.y + 1));
+    let col = u16::try_from(b.ask_input.chars().count().plus(1)).unwrap_or(u16::MAX);
+    frame.set_cursor_position((area.x.plus(col.min(area.width.minus(1))), area.y.plus(1)));
 }
 
 /// The write/DDL confirmation of the DB overlay.
@@ -535,8 +548,8 @@ fn draw_db_log(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::dim(),
         )));
     }
-    let height = usize::from(area.height).saturating_sub(1);
-    let skip = b.list_sel.saturating_sub(height.saturating_sub(1));
+    let height = usize::from(area.height).minus(1);
+    let skip = b.list_sel.minus(height.minus(1));
     for (i, e) in b.log.entries.iter().enumerate().skip(skip).take(height) {
         // Green fast, yellow moderate, red slow — errors always red.
         let timing = if !e.ok || e.ms >= 500 {
@@ -682,8 +695,8 @@ fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     let results_area = Block::default().borders(Borders::ALL).inner(right[1]);
     // The results grid keeps its first row for the headers.
     let results_body = Rect {
-        y: results_area.y.saturating_add(1),
-        height: results_area.height.saturating_sub(1),
+        y: results_area.y.plus(1),
+        height: results_area.height.minus(1),
         ..results_area
     };
     if let Some(b) = app.db.as_mut() {
@@ -746,7 +759,7 @@ fn draw_db_tree(app: &App, frame: &mut Frame, area: Rect) {
             }
             _ => arrow,
         };
-        let text = format!("{}{arrow}{text}", " ".repeat(row.depth * 2));
+        let text = format!("{}{arrow}{text}", " ".repeat(row.depth.times(2)));
         let line = if i == b.tree.sel && focused {
             Line::from(Span::styled(text, theme::selected()))
         } else if row.depth < 2 {
@@ -829,14 +842,15 @@ fn draw_db_editor(app: &App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), body);
     if focused {
-        let row = b.query.row.saturating_sub(b.query.scroll);
-        let col = b.query.col.min(usize::from(body.width.saturating_sub(1)));
+        let row = b.query.row.minus(b.query.scroll);
+        let col = b.query.col.min(usize::from(body.width.minus(1)));
         frame.set_cursor_position((
-            body.x + u16::try_from(col).unwrap_or(u16::MAX),
-            body.y
-                + u16::try_from(row)
+            body.x.plus(u16::try_from(col).unwrap_or(u16::MAX)),
+            body.y.plus(
+                u16::try_from(row)
                     .unwrap_or(u16::MAX)
-                    .min(body.height.saturating_sub(1)),
+                    .min(body.height.minus(1)),
+            ),
         ));
         draw_db_popup(b, frame, body);
     }
@@ -847,22 +861,22 @@ fn draw_db_popup(b: &crate::db::Browser, frame: &mut Frame, body: Rect) {
     let Some(popup) = b.popup.as_ref() else {
         return;
     };
-    let width = popup
+    let width = (popup
         .items
         .iter()
         .map(|s| s.chars().count())
         .max()
-        .unwrap_or(0)
-        + 2;
+        .unwrap_or(0))
+    .plus(2);
     let width = u16::try_from(width).unwrap_or(u16::MAX).min(body.width);
     let height = u16::try_from(popup.items.len()).unwrap_or(u16::MAX).min(6);
-    let row = u16::try_from(b.query.row.saturating_sub(b.query.scroll)).unwrap_or(u16::MAX);
+    let row = u16::try_from(b.query.row.minus(b.query.scroll)).unwrap_or(u16::MAX);
     let col = u16::try_from(popup.start).unwrap_or(u16::MAX);
-    let x = (body.x + col).min(body.right().saturating_sub(width));
-    let y = if body.y + row + 1 + height <= body.bottom() {
-        body.y + row + 1
+    let x = body.x.plus(col).min(body.right().minus(width));
+    let y = if body.y.plus(row).plus(1).plus(height) <= body.bottom() {
+        body.y.plus(row).plus(1)
     } else {
-        (body.y + row).saturating_sub(height)
+        body.y.plus(row).minus(height)
     };
     let rect = Rect {
         x,
@@ -967,7 +981,7 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     lines.push(Line::from(header));
-    let height = usize::from(body.height).saturating_sub(1);
+    let height = usize::from(body.height).minus(1);
     lines.extend(db_result_rows(
         b, &cols, &widths, &filtered, focused, height,
     ));
@@ -1077,7 +1091,7 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = b.compare() else {
         return;
     };
-    let width = usize::from(area.width).saturating_sub(2);
+    let width = usize::from(area.width).minus(2);
     let title = |text: String| Line::from(Span::styled(format!(" {text}"), theme::title(true)));
     let mut lines: Vec<Line> = Vec::new();
     let mut cursor: Option<(usize, usize)> = None;
@@ -1089,7 +1103,7 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
                 t!("ui.db_compare_pick")
             )));
             let schema = t!("ui.db_compare_schema", schema = c.schema).to_string();
-            cursor = Some((1, schema.chars().count() + 1));
+            cursor = Some((1, schema.chars().count().plus(1)));
             lines.push(Line::from(format!(" {schema}")));
             for (i, idx) in c.candidates.iter().enumerate() {
                 let Some(conn) = b.connections.get(*idx) else {
@@ -1109,7 +1123,7 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
                 t!("ui.db_compare_password", name = c.target_name()).to_string(),
             ));
             let masked = "\u{2022}".repeat(c.password.chars().count());
-            cursor = Some((1, masked.chars().count() + 1));
+            cursor = Some((1, masked.chars().count().plus(1)));
             lines.push(Line::from(format!(" {masked}")));
         }
         Screen::Working => {
@@ -1147,12 +1161,12 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
         }
         Screen::SavePath => {
             lines.push(title(t!("ui.db_compare_save").to_string()));
-            cursor = Some((1, c.path.chars().count() + 1));
+            cursor = Some((1, c.path.chars().count().plus(1)));
             lines.push(Line::from(format!(" {}", c.path)));
         }
         Screen::Script => {
             lines.push(title(t!("ui.db_compare_script").to_string()));
-            let height = usize::from(area.height).saturating_sub(1);
+            let height = usize::from(area.height).minus(1);
             for l in c.script().lines().skip(c.script_scroll).take(height) {
                 lines.push(Line::from(format!(" {l}")));
             }
@@ -1164,8 +1178,8 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
         let col = u16::try_from(col).unwrap_or(u16::MAX);
         let row = u16::try_from(row).unwrap_or(u16::MAX);
         frame.set_cursor_position((
-            area.x + col.min(area.width.saturating_sub(1)),
-            area.y + row.min(area.height.saturating_sub(1)),
+            area.x.plus(col.min(area.width.minus(1))),
+            area.y.plus(row.min(area.height.minus(1))),
         ));
     }
 }
@@ -1174,7 +1188,7 @@ fn draw_db_compare(app: &mut App, frame: &mut Frame, area: Rect) {
 /// with checkboxes and flags, and the highlighted change's definitions and
 /// statements.
 fn draw_db_compare_review(c: &crate::db::compare::review::Compare, frame: &mut Frame, area: Rect) {
-    let width = usize::from(area.width).saturating_sub(2);
+    let width = usize::from(area.width).minus(2);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -1215,7 +1229,7 @@ fn draw_db_compare_review(c: &crate::db::compare::review::Compare, frame: &mut F
         return;
     }
     let height = usize::from(rows[1].height);
-    let skip = c.cursor.saturating_sub(height.saturating_sub(1));
+    let skip = c.cursor.minus(height.minus(1));
     let mut list: Vec<Line> = Vec::with_capacity(height);
     for (i, change) in c.changes.iter().enumerate().skip(skip).take(height) {
         list.push(compare_change_line(c, i, change, width));

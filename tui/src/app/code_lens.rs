@@ -17,6 +17,19 @@
 //! the command pipeline, `showReferences` opens the references list); any
 //! other command is refused with a translated message.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, later};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -49,7 +62,7 @@ impl Debounce {
     /// Push the deadline to `delay` after `now`: each call (each edit)
     /// restarts the wait, so a burst of typing makes one request.
     pub(crate) fn after(&mut self, now: Instant, delay: Duration) {
-        self.due = Some(now + delay);
+        self.due = Some(later(now, delay));
     }
 
     /// Whether a refresh is due at `now`; clears it if so.
@@ -164,7 +177,7 @@ pub(crate) fn clean_title(title: &str) -> String {
             rest = &rest[i..];
             break;
         };
-        rest = &rest[i + j + 1..];
+        rest = &rest[i.plus(j).plus(1)..];
     }
     out.push_str(rest);
     out.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -309,7 +322,7 @@ impl App {
                 && let Some(st) = self.code_lenses.get_mut(&path)
                 && st.retries < LENS_RETRIES
             {
-                st.retries += 1;
+                st.retries = st.retries.plus(1);
                 st.refresh.after(now, LENS_DEBOUNCE);
             }
             self.apply_code_lenses(&path);
@@ -368,7 +381,7 @@ impl App {
             return;
         }
         let top = self.editor.top_visible_line();
-        let bottom = top + self.layout.editor.height as usize;
+        let bottom = top.plus(usize::from(self.layout.editor.height));
         let wanted: Vec<Value> = st
             .unresolved
             .iter()
@@ -496,12 +509,12 @@ impl App {
     fn open_lens_choice(&mut self, lenses: Vec<Lens>, cursor: usize) {
         let rows = lenses
             .iter()
-            .map(|l| format!("{:>5}  {}", l.line + 1, l.title))
+            .map(|l| format!("{:>5}  {}", l.line.plus(1), l.title))
             .collect();
         let selected = lenses
             .iter()
             .position(|l| l.line >= cursor)
-            .unwrap_or(lenses.len().saturating_sub(1));
+            .unwrap_or(lenses.len().minus(1));
         self.choice_list = Some(ChoiceList {
             panel: vix_choice_list::Panel::new(
                 t!("menu.item.lsp.code_lens").to_string(),

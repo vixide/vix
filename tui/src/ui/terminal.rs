@@ -1,6 +1,19 @@
 //! The PTY-backed integrated terminal panel, and a Cowork guest's view of a
 //! host's shared terminal (T697), drawn the same way.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -92,7 +105,7 @@ fn draw_screen(
     if cursor && !screen.hide_cursor() {
         let (crow, ccol) = screen.cursor_position();
         if crow < inner.height && ccol < inner.width {
-            frame.set_cursor_position((inner.x + ccol, inner.y + crow));
+            frame.set_cursor_position((inner.x.plus(ccol), inner.y.plus(crow)));
         }
     }
 }
@@ -124,8 +137,8 @@ pub(super) fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.terminals.len() > 1 && inner.height > 1 {
         let strip = Rect { height: 1, ..inner };
         draw_tab_strip(app, frame, strip);
-        inner.y += 1;
-        inner.height -= 1;
+        inner.y = inner.y.plus(1);
+        inner.height = inner.height.minus(1);
     }
     app.layout.terminal = inner;
     // Match the PTY grid to the visible area so the shell wraps correctly.
@@ -146,9 +159,9 @@ fn draw_tab_strip(app: &App, frame: &mut Frame, strip: Rect) {
     let active = app.terminals.active_index();
     let mut spans: Vec<Span> = Vec::new();
     for (i, (id, _)) in app.terminals.iter().enumerate() {
-        let mut label = format!(" {} ", i + 1);
+        let mut label = format!(" {} ", i.plus(1));
         if shared == Some(id) {
-            label = format!(" {} ({}) ", i + 1, t!("ui.terminal_shared_tab"));
+            label = format!(" {} ({}) ", i.plus(1), t!("ui.terminal_shared_tab"));
         }
         let style = if i == active {
             theme::title(true).add_modifier(Modifier::REVERSED)

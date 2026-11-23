@@ -7,6 +7,18 @@
 //! decision itself is pure ([`TerminalCaps::detect`] over a
 //! [`TermEnv`]), so tests pass a fake environment.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::theme::color_depth::{self, ColorDepth, TermEnv};
 
 /// The terminal features the renderer adapts to.

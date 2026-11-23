@@ -6,6 +6,19 @@
 //! file writes arrive as a pending `vix-ai-diff` review and never touch the disk;
 //! paths outside the workspace root are refused.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 
@@ -152,7 +165,7 @@ impl AcpHost {
         }
         match Terminal::spawn(&run.argv, &run.cwd, &run.env, run.limit) {
             Ok(term) => {
-                self.next_terminal += 1;
+                self.next_terminal = self.next_terminal.plus(1);
                 let id = format!("term-{}", self.next_terminal);
                 self.terminals.insert(id.clone(), term);
                 self.term_views.open(&id, &run.argv);
@@ -327,7 +340,7 @@ impl App {
                     .ai_agents
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| format!("{}) {c}", i + 1))
+                    .map(|(i, c)| format!("{}) {c}", i.plus(1)))
                     .collect();
                 self.prompt = Some(Prompt::new(
                     PromptKind::AcpAgent,
@@ -479,7 +492,7 @@ impl App {
         };
         let mut lines = vec![format!("$ {}  [{status}]", view.command)];
         let output: Vec<&str> = view.output.lines().collect();
-        let skip = output.len().saturating_sub(tail);
+        let skip = output.len().minus(tail);
         if view.truncated || skip > 0 {
             lines.push(format!("  {}", t!("ui.acp_term_truncated")));
         }

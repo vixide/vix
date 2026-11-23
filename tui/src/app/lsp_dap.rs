@@ -14,6 +14,19 @@
 //! (constructs the LSP client at startup) and `menu_hover` (menu tooltips,
 //! an unrelated same-named function) both stayed in `app.rs`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent};
@@ -98,7 +111,7 @@ impl App {
                         return None;
                     }
                     let abs = lsp_pos_to_char(code, line, character, enc);
-                    let col = abs.saturating_sub(code.line_to_char(line_idx));
+                    let col = abs.minus(code.line_to_char(line_idx));
                     Some((line_idx, col, label.clone()))
                 })
                 .collect()
@@ -136,7 +149,7 @@ impl App {
                         return None;
                     }
                     let start = lsp_pos_to_char(code, tok.line, tok.character, enc);
-                    let end = lsp_pos_to_char(code, tok.line, tok.character + tok.length, enc);
+                    let end = lsp_pos_to_char(code, tok.line, tok.character.plus(tok.length), enc);
                     (start < end).then_some((start, end, capture.to_string()))
                 })
                 .collect()
@@ -221,13 +234,13 @@ impl App {
             resolved
                 .iter()
                 .filter(|(s, e)| *s <= cur_s && *e >= cur_e && (*s < cur_s || *e > cur_e))
-                .min_by_key(|(s, e)| e - s)
+                .min_by_key(|(s, e)| e.minus(*s))
         } else {
             // Largest range strictly inside the current selection.
             resolved
                 .iter()
                 .filter(|(s, e)| *s >= cur_s && *e <= cur_e && (*s > cur_s || *e < cur_e))
-                .max_by_key(|(s, e)| e - s)
+                .max_by_key(|(s, e)| e.minus(*s))
         };
         if let Some(&(s, e)) = target {
             t.editor
@@ -257,7 +270,7 @@ impl App {
         let Some((path, line)) = self
             .editor
             .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line().plus(1))))
         else {
             self.status = t!("status.blame_no_file").to_string();
             return;
@@ -337,10 +350,8 @@ impl App {
         let lines: Vec<usize> = self
             .breakpoints
             .get(&path)
-            .map_or_default(|s| s.keys().map(|l| l.saturating_sub(1)).collect());
-        let debug_line = stopped
-            .filter(|(p, _)| *p == path)
-            .map(|(_, l)| l.saturating_sub(1));
+            .map_or_default(|s| s.keys().map(|l| l.minus(1)).collect());
+        let debug_line = stopped.filter(|(p, _)| *p == path).map(|(_, l)| l.minus(1));
         let inline = self.debug_inline_values(&path);
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_breakpoints(lines);
@@ -475,7 +486,7 @@ impl App {
                     let start = lsp_pos_to_char(code, range.start.line, range.start.character, enc);
                     let mut end = lsp_pos_to_char(code, range.end.line, range.end.character, enc);
                     if end <= start {
-                        end = start + 1; // make a zero-width diagnostic visible
+                        end = start.plus(1); // make a zero-width diagnostic visible
                     }
                     (start, end, severity_color(*sev))
                 })
@@ -496,11 +507,11 @@ impl App {
                     return;
                 };
                 let code = t.editor.code_ref();
-                let ln = (line as usize).min(code.len_lines().saturating_sub(1));
+                let ln = (line as usize).min(code.len_lines().minus(1));
                 let line_start = code.line_to_char(ln);
-                let line_text = code.slice(line_start, line_start + code.line_len(ln));
+                let line_text = code.slice(line_start, line_start.plus(code.line_len(ln)));
                 let col = crate::lsp_core::position::col_to_char(&line_text, character, enc);
-                (ln + 1, col + 1)
+                (ln.plus(1), col.plus(1))
             };
             let area = s.editor_view();
             s.editor.goto(target_line, Some(target_col), area);
@@ -587,7 +598,7 @@ impl App {
         let suffix = self.editor.active_tab().map_or("]]", |t| {
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
-            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" {
+            if cur.plus(2) <= code.len_chars() && code.char_slice(cur, cur.plus(2)) == "]]" {
                 ""
             } else {
                 "]]"
@@ -624,7 +635,7 @@ impl App {
         let suffix = self.editor.active_tab().map_or("]]", |t| {
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
-            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" {
+            if cur.plus(2) <= code.len_chars() && code.char_slice(cur, cur.plus(2)) == "]]" {
                 ""
             } else {
                 "]]"
@@ -938,12 +949,12 @@ impl App {
                     tab.editor.set_cursor(caret);
                     tab.dirty = true;
                     tab.preview = false;
-                    files += 1;
+                    files = files.plus(1);
                 }
             } else if let Ok(text) = auth.read_to_string(path) {
                 let new = apply_edits_to_text(&text, enc, file_edits);
                 if new != text && auth.write(path, new.as_bytes()).is_ok() {
-                    files += 1;
+                    files = files.plus(1);
                 }
             }
         }
@@ -1086,7 +1097,7 @@ impl App {
             return;
         }
         groups.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-        let count = groups.len() + task_hits.len();
+        let count = groups.len().plus(task_hits.len());
         let hits: Vec<Hit> = groups
             .into_iter()
             .flat_map(|(parent, related)| std::iter::once(parent).chain(related))

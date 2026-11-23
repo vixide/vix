@@ -9,6 +9,19 @@
 //! too big to move in one piece; see `tasks.md`'s T141 entry). Mostly
 //! contiguous, plus one outlier (`refresh_backlinks_follow`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use super::{App, AppFlags, Prompt, PromptKind};
@@ -274,7 +287,7 @@ impl App {
                 .unsigned_abs(),
         )
         .unwrap_or(0);
-        let path = paths[seed % paths.len()].clone();
+        let path = paths[seed.modulo(paths.len())].clone();
         self.open_path(&path, false);
     }
 
@@ -420,7 +433,7 @@ impl App {
         }
         // Body = the subtree's lines after the heading, each promoted by `depth-1`
         // leading stars so nested headlines stay relative to a top-level file.
-        let body: String = lines[start + 1..end]
+        let body: String = lines[start.plus(1)..end]
             .iter()
             .map(|l| {
                 crate::org::headline_level(l).map_or_else(
@@ -428,7 +441,7 @@ impl App {
                     |lvl| {
                         format!(
                             "{} {}",
-                            "*".repeat(lvl.saturating_sub(depth - 1).max(1)),
+                            "*".repeat(lvl.minus(depth.minus(1)).max(1)),
                             l[lvl..].trim_start()
                         )
                     },

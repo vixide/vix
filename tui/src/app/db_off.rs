@@ -4,6 +4,18 @@
 //! call sites need no `cfg` of their own. `App::db` / the SQL editor slot are
 //! uninhabited-typed `Option`s that are always `None`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::KeyEvent;
 
 use super::App;

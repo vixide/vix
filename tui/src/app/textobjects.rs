@@ -11,8 +11,21 @@
 //! `if`/`af`/`ic`/`ac`/`ia`/`aa` and `]f`/`[f`/`]c`/`[c`/`]a`/`[a`
 //! (`tui/src/app/modal.rs`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::App;
 use crate::editor_core::textobject::{TextObjectDir, TextObjectKind};
+use crate::geo::Geo;
 
 /// One offline structural expansion, remembered so Shrink Selection can
 /// undo it without a language server.
@@ -91,7 +104,7 @@ impl App {
             .filter(|o| o.around.0 <= s && e <= o.around.1)
             .map(|o| if inside { o.inside } else { o.around })
             .filter(|&r| s == e || r != (s, e))
-            .nth(count.max(1) - 1)
+            .nth(count.max(1).minus(1))
             .ok_or(TextObjectMiss::NotFound)
     }
 
@@ -109,7 +122,7 @@ impl App {
             .editor
             .code_ref()
             .enclosing_textobjects(kind, t.editor.get_cursor())
-            .get(count.max(1) - 1)?;
+            .get(count.max(1).minus(1))?;
         Some(if inside { obj.inside } else { obj.around })
     }
 

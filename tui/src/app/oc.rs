@@ -16,6 +16,19 @@
 //! into the bottom dock through the same no-shell runner Git and Jujutsu use;
 //! short ones run to completion and report in the status line.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyEvent, MouseEvent};
 
 use crate::oci::argv::{self, ComposeOp, Kind};
@@ -319,7 +332,7 @@ impl App {
 
     /// A key while the OC panel is open.
     pub(super) fn oc_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.oc.height as usize).max(1);
+        let page = (usize::from(self.layout.oc.height)).max(1);
         let Some(request) = self.oc.as_mut().map(|p| p.key(key, page)) else {
             return;
         };
@@ -362,7 +375,7 @@ impl App {
         let Some(p) = self.oc.as_mut() else {
             return;
         };
-        let idx = p.scroll + row;
+        let idx = p.scroll.plus(row);
         let again = p.selected == idx;
         if p.select_index(idx)
             && again

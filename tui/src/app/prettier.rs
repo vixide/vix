@@ -7,6 +7,18 @@
 //! decision that gates project scripts, T132). Otherwise only a `PATH`
 //! Prettier is considered.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::{Path, PathBuf};
 
 use vix_format_tool::prettier::{self, PrettierError};

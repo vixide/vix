@@ -2,7 +2,20 @@
 //! generic modal dialog (About/Website/Email), the color converter, the
 //! regex tester, the calculator, and the unit converter.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ClampFit;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -29,11 +42,11 @@ pub(super) fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
         Phase::Break => t!("ui.pomodoro_cancel"),
     };
     let big = timer.label();
-    let width = 36u16.min(area.width.saturating_sub(2)).max(24);
+    let width = 36u16.min(area.width.minus(2)).max(24);
     let height = 7u16.min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -82,11 +95,11 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.welcome.is_none() {
         return;
     }
-    let width = 72u16.min(area.width.saturating_sub(2)).max(24);
-    let height = area.height.saturating_sub(2).clamp(6, 24);
+    let width = 72u16.min(area.width.minus(2)).max(24);
+    let height = area.height.minus(2).clamp(6, 24);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -104,12 +117,12 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let body = chunks[0];
-    let view_h = body.height as usize;
+    let body = chunk(&chunks, 0);
+    let view_h = usize::from(body.height);
 
     // Wrap the paragraphs to the text width (reserving the scrollbar column), so
     // the lines below are already soft-wrapped; then clamp the scroll to them.
-    let text_width = body.width.saturating_sub(1).max(1) as usize;
+    let text_width = body.width.minus(1).max(1) as usize;
     if let Some(w) = app.welcome.as_mut() {
         w.wrap_to(text_width);
         w.clamp(view_h);
@@ -122,14 +135,14 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     let show_bar = total > view_h && body.width > 1;
     let text_area = if show_bar {
         Rect {
-            width: body.width - 1,
+            width: body.width.minus(1),
             ..body
         }
     } else {
         body
     };
     let visible: Vec<Line> = app.welcome.as_ref().map_or_default(|w| {
-        w.lines()[scroll..(scroll + view_h).min(total)]
+        w.lines()[scroll..scroll.plus(view_h).min(total)]
             .iter()
             .map(|l| Line::from(Span::raw(l.clone())))
             .collect()
@@ -137,17 +150,17 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(visible), text_area);
     if show_bar {
         let sb_area = Rect {
-            x: body.x + body.width - 1,
+            x: body.x.plus(body.width).minus(1),
             ..body
         };
-        draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
+        draw_scrollbar(frame, sb_area, scroll, total.minus(view_h));
     }
 
     let hint = Line::from(Span::styled(
         t!("ui.welcome_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.welcome = body;
 }
@@ -161,11 +174,11 @@ pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let content_w =
         u16::try_from(body.chars().count().max(title.chars().count())).unwrap_or(u16::MAX);
-    let width = content_w.saturating_add(6).clamp_fit(16, area.width);
+    let width = content_w.plus(6).clamp_fit(16, area.width);
     let height = 5u16.min(area.height); // border + body + blank + Ok + border
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + (area.height.saturating_sub(height)) / 2,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus((area.height.minus(height)).quot(2)),
         width,
         height,
     };
@@ -216,12 +229,12 @@ pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect)
 
     let title = t!("menu.item.tools.color_converter");
     let hint = t!("ui.color_converter_hint");
-    let width = 44u16.min(area.width.saturating_sub(2)).max(24);
+    let width = 44u16.min(area.width.minus(2)).max(24);
     // border + 3 field rows + blank + swatch + blank + hint + border.
     let height = 9u16.min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -284,11 +297,11 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let title = t!("menu.item.tools.regex_tester");
     let hint = t!("ui.regex_tester_hint");
-    let width = 60u16.min(area.width.saturating_sub(2)).max(28);
+    let width = 60u16.min(area.width.minus(2)).max(28);
     let height = 12u16.min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -348,7 +361,7 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
                 t!("status.matches_n", n = m.len()).to_string(),
                 theme::dim(),
             ))];
-            let view = rows[3].height.saturating_sub(1) as usize;
+            let view = rows[3].height.minus(1) as usize;
             for s in m.iter().take(view) {
                 lines.push(Line::from(format!("  {s}")));
             }
@@ -371,11 +384,11 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let title = t!("menu.item.tools.calculator");
     let hint = t!("ui.calculator_hint");
-    let width = 50u16.min(area.width.saturating_sub(2)).max(28);
+    let width = 50u16.min(area.width.minus(2)).max(28);
     let height = 8u16.min(area.height); // border + input + blank + buttons + blank + result + hint + border
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -437,18 +450,18 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(buttons), rows[1]);
     // Button hit rects: the drawn " [ Run ] [ Insert ] " cells, so they can
     // follow the row when a mirrored layout right-aligns it.
-    let run_w = u16::try_from(t!("ui.calculator_run").chars().count() + 5).unwrap_or(0);
-    let insert_w = u16::try_from(t!("ui.calculator_insert").chars().count() + 5).unwrap_or(0);
+    let run_w = u16::try_from((t!("ui.calculator_run").chars().count()).plus(5)).unwrap_or(0);
+    let insert_w = u16::try_from((t!("ui.calculator_insert").chars().count()).plus(5)).unwrap_or(0);
     app.layout.calculator_rects[1] = Rect {
-        x: rows[1].x + 1,
+        x: (rows[1].x).plus(1),
         y: rows[1].y,
-        width: run_w.min(rows[1].width.saturating_sub(1)),
+        width: run_w.min(rows[1].width.minus(1)),
         height: 1,
     };
     app.layout.calculator_rects[2] = Rect {
-        x: rows[1].x + 1 + run_w,
+        x: (rows[1].x).plus(1).plus(run_w),
         y: rows[1].y,
-        width: insert_w.min(rows[1].width.saturating_sub(1 + run_w)),
+        width: insert_w.min(rows[1].width.minus(run_w.plus(1))),
         height: 1,
     };
 
@@ -492,11 +505,11 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
 
     let title = t!("menu.item.tools.convert.unit");
     let hint = t!("ui.unit_converter_hint");
-    let width = 46u16.min(area.width.saturating_sub(2)).max(28);
+    let width = 46u16.min(area.width.minus(2)).max(28);
     let height = 8u16.min(area.height); // border + value + from + to + blank + hint + border
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };

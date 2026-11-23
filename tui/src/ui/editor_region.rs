@@ -3,6 +3,19 @@
 //! "center" case (text area with an optional minimap and horizontal
 //! scrollbar).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 
@@ -95,7 +108,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
             frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), hrect);
         }
         if minimap_area.width > 0 {
-            draw_minimap(app, frame, minimap_area, editor_area.height as usize);
+            draw_minimap(app, frame, minimap_area, usize::from(editor_area.height));
         }
         return;
     }
@@ -109,7 +122,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
                 .collect();
             frame.render_widget(Paragraph::new(col), divider);
         } else {
-            let row = "─".repeat(divider.width as usize);
+            let row = "─".repeat(usize::from(divider.width));
             frame.render_widget(
                 Paragraph::new(Line::from(Span::styled(row, dstyle))),
                 divider,
@@ -177,9 +190,9 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         }
         if sb.width > 0 {
             let total = tab.line_count().max(1);
-            let pos = tab.cursor_1based().0.saturating_sub(1);
+            let pos = tab.cursor_1based().0.minus(1);
             let markers = scrollbar_markers(app, tab, total, sb.height);
-            draw_scrollbar_marked(frame, sb, pos, total.saturating_sub(1), &markers);
+            draw_scrollbar_marked(frame, sb, pos, total.minus(1), &markers);
         }
     }
     text
@@ -211,15 +224,15 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &crate::editor::CodeEditor)
         return; // scrolled past the guide
     }
     let gutter = u16::try_from(editor.gutter_width()).unwrap_or(u16::MAX);
-    let Ok(rel) = u16::try_from(RULER_COLUMN - off) else {
+    let Ok(rel) = u16::try_from(RULER_COLUMN.minus(off)) else {
         return;
     };
-    let x = text.x + gutter + rel;
-    if x < text.x || x >= text.x + text.width {
+    let x = text.x.plus(gutter).plus(rel);
+    if x < text.x || x >= text.x.plus(text.width) {
         return;
     }
     let buf = frame.buffer_mut();
-    for y in text.y..text.y + text.height {
+    for y in text.y..text.y.plus(text.height) {
         if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(x, y)) {
             if cell.symbol() == " " {
                 cell.set_symbol("│");
@@ -256,14 +269,14 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         let gutter = tab.editor.gutter_width();
         let maxw = tab.editor.max_line_width();
         let off = tab.editor.get_offset_x();
-        let text_visible = (text.width as usize).saturating_sub(gutter);
+        let text_visible = (usize::from(text.width)).minus(gutter);
         // A horizontal scrollbar appears when not soft-wrapping and a line
         // overflows the visible text width (and the scrollbar is enabled).
         let hbar =
             app.settings.viewport.show_scrollbar && !soft && text.height > 1 && maxw > text_visible;
         let editor_area = if hbar {
             Rect {
-                height: text.height - 1,
+                height: text.height.minus(1),
                 ..text
             }
         } else {
@@ -271,7 +284,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         };
         let vsb = if hbar {
             Rect {
-                height: scrollbar.height.saturating_sub(1),
+                height: scrollbar.height.minus(1),
                 ..scrollbar
             }
         } else {
@@ -282,24 +295,24 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
 
         if vsb.width > 0 {
             let total = app.editor.active_line_count().max(1);
-            let pos = app.editor.cursor_1based().0.saturating_sub(1);
+            let pos = app.editor.cursor_1based().0.minus(1);
             let markers = scrollbar_markers(app, tab, total, vsb.height);
-            draw_scrollbar_marked(frame, vsb, pos, total.saturating_sub(1), &markers);
+            draw_scrollbar_marked(frame, vsb, pos, total.minus(1), &markers);
         }
         if hbar {
             let gutter_w = u16::try_from(gutter).unwrap_or(u16::MAX);
             // Saturating: a window narrower than the gutter has no scrollable
             // width left (T575).
             let hb = Rect {
-                x: text.x.saturating_add(gutter_w),
-                y: (text.y + text.height).saturating_sub(1),
-                width: text.width.saturating_sub(gutter_w),
+                x: text.x.plus(gutter_w),
+                y: text.y.plus(text.height).minus(1),
+                width: text.width.minus(gutter_w),
                 height: 1,
             };
-            draw_hscrollbar(frame, hb, off, maxw.saturating_sub(text_visible));
+            draw_hscrollbar(frame, hb, off, maxw.minus(text_visible));
             hbar_rect = Some(hb);
             app.layout.editor = editor_area;
-            app.editor_hmax = maxw.saturating_sub(text_visible);
+            app.editor_hmax = maxw.minus(text_visible);
         }
     }
     if hbar_rect.is_none() {

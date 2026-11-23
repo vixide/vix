@@ -7,6 +7,18 @@
 //! `vix-palette` stay `cfg`-free and simply hide whatever [`is_available`]
 //! rejects. See `spec/cargo-features/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// An optional area of Vix that a Cargo feature can compile out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

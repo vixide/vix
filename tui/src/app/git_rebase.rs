@@ -4,6 +4,19 @@
 //! on that one process (see `crates/vix-git/src/rebase.rs`), so no editor
 //! ever opens and Vix's own environment is never touched.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
 use super::git::git_error_text;
@@ -87,7 +100,7 @@ impl App {
         if let Some(row) = self.chooser_row(mouse)
             && let Some(t) = self.git_rebase.as_mut()
         {
-            let idx = t.scroll + row;
+            let idx = t.scroll.plus(row);
             if idx < t.commits.len() {
                 t.selected = idx;
             }

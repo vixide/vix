@@ -13,6 +13,19 @@
 //! offsets in the buffer as it was, and the buffer and the document are
 //! identical between ticks.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -890,7 +903,7 @@ impl App {
                     tab.editor.apply_remote_edits(&splices(&edits));
                     if let Some(last) = edits.last() {
                         tab.editor
-                            .set_cursor(last.offset + last.insert.chars().count());
+                            .set_cursor(last.offset.plus(last.insert.chars().count()));
                         tab.editor.focus(&area);
                     }
                     tab.dirty = true;
@@ -1150,7 +1163,7 @@ impl App {
                 return;
             }
             let opened = self.editor.active;
-            self.editor.active = previous.min(self.editor.tabs.len().saturating_sub(1));
+            self.editor.active = previous.min(self.editor.tabs.len().minus(1));
             opened
         };
         let Some(text) = self
@@ -2270,7 +2283,7 @@ impl App {
         }
         let opened = self.editor.active;
         if !focus {
-            self.editor.active = previous.min(self.editor.tabs.len().saturating_sub(1));
+            self.editor.active = previous.min(self.editor.tabs.len().minus(1));
         }
         if let Some(tab) = self.editor.tabs.get_mut(opened) {
             tab.path = Some(PathBuf::from(format!(

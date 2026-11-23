@@ -1,7 +1,20 @@
 //! AI overlays: the reviewable AI-diff hunk viewer and the persistent AI chat
 //! panel.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ClampFit;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -18,11 +31,11 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(review) = app.ai_diff_review() else {
         return;
     };
-    let width = (area.width * 8 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 8 / 10).clamp_fit(8, area.height);
+    let width = area.width.times(8).quot(10).clamp_fit(30, area.width);
+    let height = area.height.times(8).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -47,7 +60,7 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let body = chunks[0];
+    let body = chunk(&chunks, 0);
     let positions = review.change_positions();
     let selected_seg = positions.get(review.selected).copied();
 
@@ -88,13 +101,11 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
         }
     }
     // Scroll so the selected hunk stays visible: anchor the view near it.
-    let view_h = body.height as usize;
+    let view_h = usize::from(body.height);
     let anchor = selected_seg.map_or(0, |sid| {
         review.segs[..sid].iter().map(seg_line_count).sum::<usize>()
     });
-    let start = anchor
-        .saturating_sub(view_h / 3)
-        .min(lines.len().saturating_sub(view_h));
+    let start = anchor.minus(view_h.quot(3)).min(lines.len().minus(view_h));
     let window: Vec<Line> = lines.into_iter().skip(start).take(view_h).collect();
     frame.render_widget(Paragraph::new(window), body);
 
@@ -102,14 +113,14 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.ai_diff_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 }
 
 /// Number of rendered lines a diff segment occupies (old + new for a change).
 fn seg_line_count(seg: &crate::ai_diff::Seg) -> usize {
     match seg {
         crate::ai_diff::Seg::Equal(ls) => ls.len(),
-        crate::ai_diff::Seg::Change { old, new, .. } => old.len() + new.len(),
+        crate::ai_diff::Seg::Change { old, new, .. } => old.len().plus(new.len()),
     }
 }
 
@@ -120,11 +131,11 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.ai_panel.is_none() {
         return;
     }
-    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 7 / 10).clamp_fit(8, area.height);
+    let width = area.width.times(7).quot(10).clamp_fit(30, area.width);
+    let height = area.height.times(7).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -152,9 +163,9 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
             Constraint::Length(1),
         ])
         .split(inner);
-    let body = chunks[0];
-    let view_h = body.height as usize;
-    let view_w = body.width as usize;
+    let body = chunk(&chunks, 0);
+    let view_h = usize::from(body.height);
+    let view_w = usize::from(body.width);
     let lines: Vec<Line> = {
         let Some(p) = app.ai_panel.as_mut() else {
             return;
@@ -182,13 +193,13 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::raw(input),
         Span::styled("▏", theme::dim()),
     ]);
-    frame.render_widget(Paragraph::new(input_line), chunks[1]);
+    frame.render_widget(Paragraph::new(input_line), chunk(&chunks, 1));
 
     let hint = Line::from(Span::styled(
         t!("ui.ai_panel_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 }
 
 /// The docked agent plan pane (T635, `ai.agent_plan_dock`): the agent's plan,
@@ -225,7 +236,7 @@ pub(super) fn draw_agent_plan_dock(app: &mut App, frame: &mut Frame, area: Rect)
         lines.extend(terminals.into_iter().map(Line::from));
     }
     // Keep the newest lines in view when the content outgrows the pane.
-    let overflow = lines.len().saturating_sub(inner.height as usize);
+    let overflow = lines.len().minus(usize::from(inner.height));
     let shown: Vec<Line> = lines.into_iter().skip(overflow).collect();
     frame.render_widget(Paragraph::new(shown).wrap(Wrap { trim: false }), inner);
 }

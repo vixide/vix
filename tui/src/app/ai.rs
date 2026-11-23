@@ -2,6 +2,20 @@
 //! doc-comment), the background CLI/HTTP runner, the chat panel, and the
 //! accept/reject diff review.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
+
 use super::{
     AiDest, AiDiffState, AiMsg, AiReplace, AiTarget, App, Focus, KeyCode, KeyEvent, Prompt,
     PromptKind, spawn_shell_on,
@@ -229,7 +243,7 @@ impl App {
         let cursor = tab.editor.get_cursor();
         let line = code.char_to_line(cursor);
         let line_start = code.line_to_char(line);
-        let context_end_line = (line + CONTEXT_LINES).min(code.len_lines().saturating_sub(1));
+        let context_end_line = line.plus(CONTEXT_LINES).min(code.len_lines().minus(1));
         let context_end = code.line_to_char(context_end_line);
         let context = code.slice(line_start, context_end);
         if context.trim().is_empty() {

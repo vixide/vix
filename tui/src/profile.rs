@@ -9,6 +9,19 @@
 //! frame (16 ms) to reach the screen, and the slowest inputs. With the
 //! variable unset nothing is timed. See `docs/performance/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -92,7 +105,7 @@ pub fn stats(micros: &[u32], count: u64) -> Stats {
     let rank = |p: usize| {
         // Nearest rank: the smallest value with at least p% of samples at or
         // below it.
-        let i = (p * sorted.len()).div_ceil(100).max(1) - 1;
+        let i = (p.times(sorted.len()).div_ceil(100).max(1)).minus(1);
         Duration::from_micros(u64::from(sorted[i]))
     };
     Stats {
@@ -100,7 +113,7 @@ pub fn stats(micros: &[u32], count: u64) -> Stats {
         p50: rank(50),
         p95: rank(95),
         p99: rank(99),
-        max: Duration::from_micros(u64::from(sorted[sorted.len() - 1])),
+        max: Duration::from_micros(u64::from(sorted[sorted.len().minus(1)])),
     }
 }
 
@@ -145,7 +158,9 @@ impl Profiler {
     /// Record that `phase` took `took`.
     pub fn record(&mut self, phase: Phase, took: Duration) {
         let i = phase.index();
-        self.counts[i] += 1;
+        if let Some(count) = self.counts.get_mut(i) {
+            *count = count.plus(1);
+        }
         let micros = u32::try_from(took.as_micros()).unwrap_or(u32::MAX);
         if self.samples[i].len() < MAX_SAMPLES {
             self.samples[i].push(micros);

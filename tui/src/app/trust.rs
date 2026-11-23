@@ -6,6 +6,18 @@
 //! trust. The script half (`project_script_count`, `load_scripts`) is a
 //! no-op in such a build (`scripts_off.rs`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, ScriptTrustPrompt};

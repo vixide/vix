@@ -5,6 +5,19 @@
 //! completers (Org-roam node titles, Org-contacts) in `lsp_dap.rs`. See
 //! `crates/vix-lsp/spec/index.md` § Completion.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, later};
 use std::time::{Duration, Instant};
 
 use vix_input::{KeyCode, KeyEvent};
@@ -152,7 +165,7 @@ fn completion_edits(
         }
     };
     let mut edits = vec![(to_range(start, end), insert.to_string())];
-    let mut caret = start + insert.chars().count();
+    let mut caret = start.plus(insert.chars().count());
     for (r, text) in &item.additional_edits {
         let a = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
         let b = lsp_pos_to_char(code, r.end.line, r.end.character, enc).max(a);
@@ -161,7 +174,9 @@ fn completion_edits(
         }
         if b <= start {
             // An edit before the insertion (an import) shifts the caret.
-            caret = caret + text.chars().count() - (b - a).min(caret);
+            caret = caret
+                .plus(text.chars().count())
+                .minus(b.minus(a).min(caret));
         }
         edits.push((*r, text.clone()));
     }
@@ -192,7 +207,7 @@ impl App {
             .editor
             .active_tab()
             .map_or(0, |t| t.editor.get_cursor());
-        (cursor.saturating_sub(prefix.chars().count()), prefix)
+        (cursor.minus(prefix.chars().count()), prefix)
     }
 
     /// Open a completion popup over `items` (a non-LSP completer's list),
@@ -301,7 +316,7 @@ impl App {
         if let Some(parsed) = snippet {
             // The caret sits just past the inserted text, wherever additional
             // edits moved it, so the snippet's text begins here.
-            let base = caret.saturating_sub(parsed.text.chars().count());
+            let base = caret.minus(parsed.text.chars().count());
             self.start_snippet_session(base, &parsed.stops);
         }
     }
@@ -314,16 +329,16 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.completion.as_mut() {
-                    p.selected = p.selected.saturating_sub(1);
+                    p.selected = p.selected.minus(1);
                 }
                 self.resolve_selected_completion();
                 true
             }
             KeyCode::Down => {
                 if let Some(p) = self.completion.as_mut()
-                    && p.selected + 1 < p.visible.len()
+                    && p.selected.plus(1) < p.visible.len()
                 {
-                    p.selected += 1;
+                    p.selected = p.selected.plus(1);
                 }
                 self.resolve_selected_completion();
                 true
@@ -402,8 +417,10 @@ impl App {
         }
         let trigger = self.lsp.is_completion_trigger(&path, c);
         if trigger || is_word_char(c) {
-            self.completion_due =
-                Some((Instant::now() + COMPLETION_DEBOUNCE, trigger.then_some(c)));
+            self.completion_due = Some((
+                later(Instant::now(), COMPLETION_DEBOUNCE),
+                trigger.then_some(c),
+            ));
         }
     }
 

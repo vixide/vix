@@ -4,6 +4,18 @@
 //! the active buffer. The merge itself is `vix_settings`' (`merge_layer`,
 //! `unmerge`, `Settings::for_language`); this is the host side.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::borrow::Cow;
 use std::path::Path;
 

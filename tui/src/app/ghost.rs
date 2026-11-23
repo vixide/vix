@@ -6,6 +6,19 @@
 //! clean-up are in `vix_ai_core::fim`; the drawing is `tui/src/ui/ghost.rs`.
 //! See `crates/vix-lsp/spec/index.md` § Inline (ghost-text) completion.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, later};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant};
@@ -70,7 +83,7 @@ impl App {
         let cursor = ed.get_cursor();
         let line = code.char_to_line(cursor);
         let start = code.line_to_char(line);
-        let end = start + code.line_len(line);
+        let end = start.plus(code.line_len(line));
         Some(CursorState {
             path: tab.path.clone(),
             revision: ed.revision(),
@@ -120,7 +133,7 @@ impl App {
                 .seen
                 .as_ref()
                 .is_some_and(|(p, rev, _)| *p == c.path && *rev != c.revision);
-            self.ghost.due = edited.then(|| (Instant::now() + GHOST_DEBOUNCE, true));
+            self.ghost.due = edited.then(|| (later(Instant::now(), GHOST_DEBOUNCE), true));
             self.ghost.seen = Some(key);
         }
         self.collect_ghost_ai(&c);

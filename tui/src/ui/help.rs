@@ -3,6 +3,19 @@
 //! table over every built-in binding, the editor additionally marking user
 //! and script overrides and a rebind/reset target row.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -42,7 +55,7 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::raw(h.query.clone()),
         Span::styled("\u{2588}", theme::dim()),
     ]);
-    frame.render_widget(Paragraph::new(search), chunks[0]);
+    frame.render_widget(Paragraph::new(search), chunk(&chunks, 0));
 
     // Two columns: action name, then key combo. The keys column is as wide as
     // the widest combo; the action column takes the rest.
@@ -53,7 +66,9 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
         .max()
         .unwrap_or(8)
         .clamp(8, 28);
-    let action_w = (chunks[1].width as usize).saturating_sub(keys_w + 3).max(8);
+    let action_w = (chunk(&chunks, 1).width as usize)
+        .minus(keys_w.plus(3))
+        .max(8);
 
     // Header row with sort indicators; clicking a header sorts that column.
     let marker = |col: Column| match h.sort {
@@ -77,21 +92,23 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::title(true),
         ),
     ]);
-    frame.render_widget(Paragraph::new(header), chunks[1]);
-    let header_w = u16::try_from(action_w + 1).unwrap_or(u16::MAX);
+    frame.render_widget(Paragraph::new(header), chunk(&chunks, 1));
+    let header_w = u16::try_from(action_w.plus(1)).unwrap_or(u16::MAX);
     app.layout.help_headers = [
         Rect {
-            width: header_w.min(chunks[1].width),
+            width: header_w.min(chunk(&chunks, 1).width),
             ..chunks[1]
         },
         Rect {
-            x: chunks[1].x + header_w.min(chunks[1].width),
-            width: chunks[1].width.saturating_sub(header_w),
+            x: chunk(&chunks, 1)
+                .x
+                .plus(header_w.min(chunk(&chunks, 1).width)),
+            width: chunk(&chunks, 1).width.minus(header_w),
             ..chunks[1]
         },
     ];
 
-    let view_h = chunks[2].height as usize;
+    let view_h = chunk(&chunks, 2).height as usize;
     if let Some(h) = app.help.as_mut() {
         h.clamp_scroll(view_h);
     }
@@ -113,11 +130,11 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         lines
     };
-    frame.render_widget(Paragraph::new(body), chunks[2]);
-    app.layout.help_body = chunks[2];
+    frame.render_widget(Paragraph::new(body), chunk(&chunks, 2));
+    app.layout.help_body = chunk(&chunks, 2);
 
     let hint = Line::from(Span::styled(t!("ui.help_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[3]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 3));
 }
 
 /// Vix → Keybindings…: the editable sibling of [`draw_help`] — same
@@ -159,7 +176,7 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
         Span::raw(p.query.clone()),
         Span::styled("\u{2588}", theme::dim()),
     ]);
-    frame.render_widget(Paragraph::new(search), chunks[0]);
+    frame.render_widget(Paragraph::new(search), chunk(&chunks, 0));
 
     let keys_w = p
         .rows
@@ -168,7 +185,9 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
         .max()
         .unwrap_or(8)
         .clamp(8, 28);
-    let action_w = (chunks[1].width as usize).saturating_sub(keys_w + 3).max(8);
+    let action_w = (chunk(&chunks, 1).width as usize)
+        .minus(keys_w.plus(3))
+        .max(8);
 
     let marker = |col: Column| match p.sort {
         Some((c, true)) if c == col => " ↑",
@@ -191,21 +210,23 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
             theme::title(true),
         ),
     ]);
-    frame.render_widget(Paragraph::new(header), chunks[1]);
-    let header_w = u16::try_from(action_w + 1).unwrap_or(u16::MAX);
+    frame.render_widget(Paragraph::new(header), chunk(&chunks, 1));
+    let header_w = u16::try_from(action_w.plus(1)).unwrap_or(u16::MAX);
     app.layout.keybinding_editor_headers = [
         Rect {
-            width: header_w.min(chunks[1].width),
+            width: header_w.min(chunk(&chunks, 1).width),
             ..chunks[1]
         },
         Rect {
-            x: chunks[1].x + header_w.min(chunks[1].width),
-            width: chunks[1].width.saturating_sub(header_w),
+            x: chunk(&chunks, 1)
+                .x
+                .plus(header_w.min(chunk(&chunks, 1).width)),
+            width: chunk(&chunks, 1).width.minus(header_w),
             ..chunks[1]
         },
     ];
 
-    let view_h = chunks[2].height as usize;
+    let view_h = chunk(&chunks, 2).height as usize;
     if let Some(p) = app.keybinding_editor.as_mut() {
         p.clamp_scroll(view_h);
     }
@@ -229,14 +250,14 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
     } else {
         lines
     };
-    frame.render_widget(Paragraph::new(body), chunks[2]);
-    app.layout.keybinding_editor_body = chunks[2];
+    frame.render_widget(Paragraph::new(body), chunk(&chunks, 2));
+    app.layout.keybinding_editor_body = chunk(&chunks, 2);
 
     let hint = Line::from(Span::styled(
         t!("ui.keybinding_editor_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[3]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 3));
 }
 
 /// One row of [`draw_keybinding_editor`]'s table: the action title tagged

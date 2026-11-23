@@ -10,6 +10,19 @@
 //! answered or the wait runs out; a second operation started meanwhile goes
 //! ahead without waiting.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, later};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -131,7 +144,7 @@ impl App {
         let kept = &mut self.watch_scan.announced;
         kept.extend(changes);
         if kept.len() > ANNOUNCED_KEPT {
-            kept.drain(..kept.len() - ANNOUNCED_KEPT);
+            kept.drain(..kept.len().minus(ANNOUNCED_KEPT));
         }
     }
 
@@ -150,7 +163,7 @@ impl App {
         if self.watch_scan.next_scan.is_some_and(|t| now < t) {
             return;
         }
-        self.watch_scan.next_scan = Some(now + SCAN_EVERY);
+        self.watch_scan.next_scan = Some(later(now, SCAN_EVERY));
         let roots = self.lsp.watch_roots();
         if roots.is_empty() {
             return;

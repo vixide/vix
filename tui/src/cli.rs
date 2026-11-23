@@ -3,6 +3,18 @@
 //! T307, `tasks.md`) so the two can never drift: one `clap` definition, one
 //! generated page.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // `--version` is hand-rolled (`disable_version_flag`) rather than left to
 // clap's automatic short-circuiting handler, so `--version --json` can be
 // told apart from plain `--version` before anything exits (T208). A plain

@@ -8,6 +8,19 @@
 //! skips auto-save, the hot-exit backup pass and the reload-on-change check
 //! (see [`App::undo_tree_previewing`]), and quitting restores first.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use vix_undo_tree_panel::{Panel, TreeNode};
 
@@ -87,7 +100,7 @@ impl App {
     /// Handle a key in the undo-tree panel: movement keys select a state and live-preview it in
     /// the buffer; Enter commits the previewed state; Esc cancels and restores the original.
     pub(super) fn undo_tree_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.undo_tree.height as usize).max(1);
+        let page = (usize::from(self.layout.undo_tree.height)).max(1);
         let Some(state) = self.undo_tree.as_mut() else {
             return;
         };
@@ -125,7 +138,7 @@ impl App {
         let Some(state) = self.undo_tree.as_mut() else {
             return;
         };
-        let row = state.panel.scroll + (mouse.row - rect.y) as usize;
+        let row = state.panel.scroll.plus(mouse.row.minus(rect.y) as usize);
         if state.panel.select_row(row) {
             self.preview_undo_tree();
         }

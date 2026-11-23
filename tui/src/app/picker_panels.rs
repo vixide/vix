@@ -9,7 +9,20 @@
 //! media-type detection, not part of the media-type *panel*, despite the
 //! similar name.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
+use crate::geo::Geo;
 use ratatui::layout::Rect;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
@@ -131,7 +144,7 @@ pub(super) fn list_panel_click_index<P: ListPanel>(
     mouse: MouseEvent,
 ) -> Option<usize> {
     let row = crate::app::hit::left_click_row(rect, mouse)?;
-    Some(panel?.scroll() + row)
+    Some((panel?.scroll()).plus(row))
 }
 
 impl App {
@@ -182,8 +195,8 @@ impl App {
         if !rect_contains(r, mouse.column, mouse.row) {
             return;
         }
-        let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
-        let row = (mouse.row - r.y) as usize;
+        let col = mouse.column.minus(r.x).quot(crate::ui::NERD_CELL_W) as usize;
+        let row = mouse.row.minus(r.y) as usize;
         if let Some(p) = self.info.nerd_palette_mut()
             && p.select_at(row, col)
         {
@@ -234,7 +247,7 @@ impl App {
     /// Handle a key in the ASCII table: shared list navigation first, then Home/End jump to the
     /// ends, Enter inserts the character (panel stays open), Esc closes.
     pub(super) fn ascii_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.ascii_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.ascii_panel.height)).max(1);
         if list_panel_nav_key(self.info.ascii_panel_mut(), key.code, page) {
             return;
         }
@@ -294,7 +307,7 @@ impl App {
     /// the color (or, when opened from the theme editor, assigns it to the slot), Esc closes it
     /// and ends any theme-editor pick.
     pub(super) fn x11_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.x11_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.x11_panel.height)).max(1);
         if list_panel_nav_key(self.x11_panel.as_mut(), key.code, page) {
             return;
         }
@@ -406,7 +419,7 @@ impl App {
     /// choose the highlighted slot's color; Ctrl+S prompts for a name to save the theme as; Esc
     /// closes the editor (reverting the live preview).
     pub(super) fn theme_editor_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.theme_editor.height as usize).max(1);
+        let page = (usize::from(self.layout.theme_editor.height)).max(1);
         if list_panel_nav_key(self.theme_editor.as_mut(), key.code, page) {
             return;
         }
@@ -522,7 +535,7 @@ impl App {
     /// Handle a key in the media-type picker: shared list navigation, typing filters (Backspace
     /// edits), Enter inserts the media type (panel stays open), Esc closes.
     pub(super) fn media_type_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.media_type_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.media_type_panel.height)).max(1);
         if list_panel_nav_key(self.info.media_type_panel_mut(), key.code, page) {
             return;
         }
@@ -593,7 +606,7 @@ impl App {
     /// Handle a key in the Todo Tree: shared list navigation; Space folds a group, `g` toggles
     /// the grouping, `[`/`]` collapse/expand all, Enter jumps to the item, Esc closes.
     pub(super) fn todo_tree_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.todo_tree.height as usize).max(1);
+        let page = (usize::from(self.layout.todo_tree.height)).max(1);
         if list_panel_nav_key(self.todo_tree.as_mut(), key.code, page) {
             return;
         }

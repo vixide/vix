@@ -3,7 +3,20 @@
 //! prompt, the paste-name-conflict prompt, and the interactive query-replace
 //! status bar.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ClampFit;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
@@ -32,22 +45,22 @@ pub(super) fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     };
     // Display columns, so wide (CJK) text is measured as it is drawn.
     let cols = u16::try_from(Line::from(c.message.as_str()).width()).unwrap_or(u16::MAX);
-    let width = cols.saturating_add(6).min(area.width);
+    let width = cols.plus(6).min(area.width);
     // A message wider than the screen (Cowork's terminal-sharing warning,
     // T697) wraps onto more lines instead of being cut off.
-    let text_width = width.saturating_sub(2).max(1);
+    let text_width = width.minus(2).max(1);
     // Word wrapping can need one line more than the column count says.
     let lines = if cols <= text_width {
         1
     } else {
-        cols.div_ceil(text_width) + 1
+        cols.div_ceil(text_width).plus(1)
     };
-    let y = area.y + area.height / 3;
+    let y = area.y.plus(area.height.quot(3));
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
         y,
         width,
-        height: lines.saturating_add(2).min(area.bottom().saturating_sub(y)),
+        height: lines.plus(2).min(area.bottom().minus(y)),
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -71,16 +84,16 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.script_trust.as_ref() else {
         return;
     };
-    let width = (area.width * 3 / 5).clamp(40, 64).min(area.width);
+    let width = area.width.times(3).quot(5).clamp(40, 64).min(area.width);
     // More rows when the message names several things to trust.
     let parts = usize::from(p.count > 0)
-        + usize::from(p.settings)
-        + usize::from(p.env)
-        + usize::from(p.language_server.is_some());
+        .plus(usize::from(p.settings))
+        .plus(usize::from(p.env))
+        .plus(usize::from(p.language_server.is_some()));
     let height = if parts > 1 { 9u16 } else { 7 }.min(area.height);
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus(area.height.quot(3)),
         width,
         height,
     };
@@ -133,12 +146,15 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         ),
         None => message,
     };
-    frame.render_widget(Paragraph::new(message).wrap(Wrap { trim: true }), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(message).wrap(Wrap { trim: true }),
+        chunk(&chunks, 0),
+    );
     let hint = Line::from(Span::styled(
         t!("ui.script_trust_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
     right_align(app, frame, inner);
 }
 
@@ -147,11 +163,11 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(rc) = app.replace_confirm.as_ref() else {
         return;
     };
-    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
+    let width = area.width.times(7).quot(10).clamp_fit(30, area.width);
+    let height = area.height.times(6).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -178,8 +194,8 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunks[0].height as usize;
-    let start = rc.scroll.min(rc.lines.len().saturating_sub(1));
+    let view_h = chunk(&chunks, 0).height as usize;
+    let start = rc.scroll.min(rc.lines.len().minus(1));
     let lines: Vec<Line> = rc
         .lines
         .iter()
@@ -187,12 +203,12 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .take(view_h)
         .map(|l| Line::from(Span::raw(l.clone())))
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
     let hint = Line::from(Span::styled(
         t!("ui.replace_confirm_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 }
 
 /// The T211 apply-diff-back-to-sources confirm step, mirroring
@@ -243,11 +259,11 @@ fn draw_preview_confirm(
     scroll: usize,
     hint: &str,
 ) {
-    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
-    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
+    let width = area.width.times(7).quot(10).clamp_fit(30, area.width);
+    let height = area.height.times(6).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -265,17 +281,17 @@ fn draw_preview_confirm(
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunks[0].height as usize;
-    let start = scroll.min(lines.len().saturating_sub(1));
+    let view_h = chunk(&chunks, 0).height as usize;
+    let start = scroll.min(lines.len().minus(1));
     let rows: Vec<Line> = lines
         .iter()
         .skip(start)
         .take(view_h)
         .map(|l| Line::from(Span::raw(l.clone())))
         .collect();
-    frame.render_widget(Paragraph::new(rows), chunks[0]);
+    frame.render_widget(Paragraph::new(rows), chunk(&chunks, 0));
     let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 }
 
 /// Draw the "unsaved changes" prompt shown before closing a modified tab.
@@ -286,12 +302,12 @@ pub(super) fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
     let message = t!("ui.unsaved_prompt", name = u.name).to_string();
     let choices = t!("ui.unsaved_choices");
     let width = (u16::try_from(message.chars().count().max(choices.chars().count()))
-        .unwrap_or(u16::MAX)
-        + 6)
+        .unwrap_or(u16::MAX))
+    .plus(6)
     .min(area.width);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.quot(3)),
         width,
         height: 4,
     };
@@ -328,8 +344,8 @@ pub(super) fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     ];
     let width = 56u16.min(area.width);
     let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
+        x: area.x.plus((area.width.minus(width)).quot(2)),
+        y: area.y.plus(area.height.quot(3)),
         width,
         height: 4,
     };
@@ -353,7 +369,7 @@ pub(super) fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
     };
     let bar = Rect {
         x: area.x,
-        y: area.y + area.height.saturating_sub(2),
+        y: area.y.plus(area.height.minus(2)),
         width: area.width,
         height: 1,
     };
@@ -386,7 +402,7 @@ pub(super) fn draw_structural_replace(app: &App, frame: &mut Frame, area: Rect) 
     };
     let bar = Rect {
         x: area.x,
-        y: area.y + area.height.saturating_sub(2),
+        y: area.y.plus(area.height.minus(2)),
         width: area.width,
         height: 1,
     };
