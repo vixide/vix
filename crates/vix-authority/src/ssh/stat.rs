@@ -129,4 +129,27 @@ mod tests {
         assert_eq!(StatFlavor::from_probe(b"bsd\n"), Some(StatFlavor::Bsd));
         assert_eq!(StatFlavor::from_probe(b"?"), None);
     }
+    #[test]
+    fn each_flavor_has_its_own_commands() {
+        assert_eq!(StatFlavor::from_probe(b"gnu\n"), Some(StatFlavor::Gnu));
+        assert_eq!(StatFlavor::Gnu.command(true), "stat -L -c '%f %s %Y %W' --");
+        assert_eq!(StatFlavor::Gnu.command(false), "stat -c '%f %s %Y %W' --");
+        assert_eq!(StatFlavor::Gnu.mode_command(), "stat -L -c %a --");
+        // BSD asks for the same fields in its own letters, octal mode.
+        assert_eq!(StatFlavor::Bsd.command(true), "stat -L -f '%p %z %m %B' --");
+        assert_eq!(StatFlavor::Bsd.command(false), "stat -f '%p %z %m %B' --");
+        assert_eq!(StatFlavor::Bsd.mode_command(), "stat -L -f %Lp --");
+    }
+
+    #[test]
+    fn times_before_the_epoch_and_unknown_times() {
+        assert_eq!(epoch("0"), None);
+        assert_eq!(epoch("-"), None);
+        assert_eq!(epoch("?"), None);
+        let before = epoch("-5").unwrap();
+        assert_eq!(epoch_secs(before), Some(-5));
+        let after = epoch("86400").unwrap();
+        assert_eq!(epoch_secs(after), Some(86_400));
+        assert_eq!(epoch_secs(SystemTime::UNIX_EPOCH), Some(0));
+    }
 }
