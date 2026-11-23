@@ -114,6 +114,11 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "`process` feature, enabled only by root `lsp`",
     ),
     (
+        "crates/vix-lsp/src/rig_tests.rs",
+        "an idle `sleep` standing in for a language-server process in unit tests",
+        "`#[cfg(test)]` only; the module is never compiled into a built binary",
+    ),
+    (
         "crates/vix-dap/src/lib.rs",
         "debug-adapter process",
         "`process` feature, enabled only by root `dap`",
