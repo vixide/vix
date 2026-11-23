@@ -417,8 +417,12 @@ impl App {
         else {
             return;
         };
-        // Search from the line after the cursor so repeated calls advance.
-        match crate::conflict_tool::find(&content, line.plus(1))
+        // Search from past the conflict the cursor is inside (or the line
+        // after it), so repeated calls advance instead of re-finding it.
+        let from = crate::conflict_tool::find(&content, line)
+            .filter(|c| c.start <= line)
+            .map_or(line.plus(1), |c| c.end);
+        match crate::conflict_tool::find(&content, from)
             .or_else(|| crate::conflict_tool::find(&content, 0))
         {
             Some(c) => {
@@ -1747,3 +1751,6 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+pub(super) mod tests;

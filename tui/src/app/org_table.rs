@@ -778,3 +778,6 @@ impl App {
         self.status = t!("status.org_columns_dblocks_updated_all").to_string();
     }
 }
+
+#[cfg(test)]
+mod tests;
