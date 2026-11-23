@@ -4703,7 +4703,7 @@ fn workspace_replace_reports_a_bad_regex_and_skips_unwritable_files() {
     // A planned file whose directory vanished is reported, not written.
     let ghost = dir.join("gone/dir/x.txt");
     let changed = a.apply_file_plan(&[(ghost.clone(), "new".to_string())]);
-    assert!(changed.is_empty());
+    assert_eq!(changed.len(), 0);
     assert!(
         a.messages
             .items
