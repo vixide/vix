@@ -11,6 +11,18 @@
 //! target, and running the migration, happen on a background thread polled
 //! by [`Browser::poll_compare`].
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -22,6 +34,20 @@ use super::read::{default_schema, read_session, supported};
 use super::snapshot::Snapshot;
 use crate::lifecycle::{ConnectOutcome, connect_worker};
 use crate::{Browser, Outcome, Pane, View, connect, editor, session, tunnel};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which screen of the schema compare is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,7 +226,12 @@ fn run_migration(session: &mut session::Session, statements: &[String]) -> Resul
     for (i, sql) in statements.iter().enumerate() {
         if let Err(e) = session.run(sql) {
             let _ = session.run("ROLLBACK");
-            return Err(t!("msg.db_compare_failed", n = i + 1, error = e.to_string()).to_string());
+            return Err(t!(
+                "msg.db_compare_failed",
+                n = add_or(i, 1, usize::MAX),
+                error = e.to_string()
+            )
+            .to_string());
         }
     }
     if let Err(e) = session.run("COMMIT") {
@@ -324,11 +355,15 @@ impl Browser {
                     let step = page.max(1);
                     match key.code {
                         KeyCode::Up | KeyCode::Char('k') => {
-                            c.script_scroll = c.script_scroll.saturating_sub(1);
+                            c.script_scroll = sub_or(c.script_scroll, 1, 0);
                         }
-                        KeyCode::Down | KeyCode::Char('j') => c.script_scroll += 1,
-                        KeyCode::PageUp => c.script_scroll = c.script_scroll.saturating_sub(step),
-                        KeyCode::PageDown => c.script_scroll += step,
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            c.script_scroll = add_or(c.script_scroll, 1, usize::MAX);
+                        }
+                        KeyCode::PageUp => c.script_scroll = sub_or(c.script_scroll, step, 0),
+                        KeyCode::PageDown => {
+                            c.script_scroll = add_or(c.script_scroll, step, usize::MAX);
+                        }
                         KeyCode::Home => c.script_scroll = 0,
                         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
                             c.screen = Screen::Review;
@@ -348,8 +383,10 @@ impl Browser {
             return;
         };
         match key.code {
-            KeyCode::Up => c.pick = c.pick.saturating_sub(1),
-            KeyCode::Down => c.pick = (c.pick + 1).min(c.candidates.len().saturating_sub(1)),
+            KeyCode::Up => c.pick = sub_or(c.pick, 1, 0),
+            KeyCode::Down => {
+                c.pick = add_or(c.pick, 1, usize::MAX).min(sub_or(c.candidates.len(), 1, 0));
+            }
             KeyCode::Char(ch) => c.schema.push(ch),
             KeyCode::Backspace => {
                 c.schema.pop();
@@ -560,12 +597,14 @@ impl Browser {
         let Some(c) = self.compare.as_mut() else {
             return;
         };
-        let last = c.changes.len().saturating_sub(1);
+        let last = sub_or(c.changes.len(), 1, 0);
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => c.cursor = c.cursor.saturating_sub(1),
-            KeyCode::Down | KeyCode::Char('j') => c.cursor = (c.cursor + 1).min(last),
-            KeyCode::PageUp => c.cursor = c.cursor.saturating_sub(page.max(1)),
-            KeyCode::PageDown => c.cursor = (c.cursor + page.max(1)).min(last),
+            KeyCode::Up | KeyCode::Char('k') => c.cursor = sub_or(c.cursor, 1, 0),
+            KeyCode::Down | KeyCode::Char('j') => {
+                c.cursor = add_or(c.cursor, 1, usize::MAX).min(last);
+            }
+            KeyCode::PageUp => c.cursor = sub_or(c.cursor, page.max(1), 0),
+            KeyCode::PageDown => c.cursor = add_or(c.cursor, page.max(1), usize::MAX).min(last),
             KeyCode::Home => c.cursor = 0,
             KeyCode::End => c.cursor = last,
             KeyCode::Char(' ') => {

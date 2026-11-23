@@ -10,6 +10,18 @@
 //! with a bar the same length as their positive counterparts (the printed
 //! number still carries the sign). Owning spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 
 /// Full width, in cells, of the longest bar.
@@ -17,6 +29,14 @@ const WIDTH: usize = 40;
 
 /// The widest label kept before truncating with an ellipsis.
 const LABEL_MAX: usize = 24;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// Render `rows` as a horizontal bar chart, labelling each bar with the first
 /// column and sizing it by the last column parsed as a number. Returns `None`
@@ -37,11 +57,11 @@ pub fn bars(headers: &[String], rows: &[&Vec<String>]) -> Option<String> {
     if headers.len() < 2 || rows.is_empty() {
         return None;
     }
-    let value_col = headers.len() - 1;
+    let value_col = sub_or(headers.len(), 1, 0);
     let parsed: Vec<(String, f64)> = rows
         .iter()
         .filter_map(|r| {
-            let label = r.first().cloned().unwrap_or_default();
+            let label = r.first().cloned()?;
             let value = r.get(value_col)?.trim().parse::<f64>().ok()?;
             Some((label, value))
         })
@@ -58,7 +78,11 @@ pub fn bars(headers: &[String], rows: &[&Vec<String>]) -> Option<String> {
         .max()
         .unwrap_or(0);
 
-    let mut out = format!("{}  by  {}\n\n", headers[0], headers[value_col]);
+    let mut out = format!(
+        "{}  by  {}\n\n",
+        headers.first().map_or("", String::as_str),
+        headers.get(value_col).map_or("", String::as_str)
+    );
     for (label, value) in &parsed {
         let ratio = if peak > 0.0 { value.abs() / peak } else { 0.0 };
         let bar = bar_of(ratio);
@@ -87,7 +111,7 @@ fn truncate(label: &str, max: usize) -> String {
     if label.chars().count() <= max {
         return label.to_string();
     }
-    let kept: String = label.chars().take(max.saturating_sub(1)).collect();
+    let kept: String = label.chars().take(sub_or(max, 1, 0)).collect();
     format!("{kept}…")
 }
 

@@ -20,6 +20,18 @@
 //! `Tables:` / `Foreign keys:` summary, then a task-specific tail. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 
 /// Column triples `(table, column, type)` as the catalog returns them.
@@ -27,6 +39,12 @@ pub type Columns = [(String, String, String)];
 
 /// Foreign-key edges `(child_table, child_column, parent_table, parent_column)`.
 pub type Relationships = [(String, String, String, String)];
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// The fixed instruction passed on the assistant's command line. The schema
 /// and question travel on stdin, so this string never contains user text.
@@ -234,7 +252,12 @@ pub fn extract_sql(reply: &str) -> String {
     };
     let lines: Vec<&str> = reply.lines().collect();
     if let Some(pos) = lines.iter().position(|l| starts_sql(l)) {
-        return lines[pos..].join("\n").trim().to_string();
+        return lines
+            .get(pos..)
+            .unwrap_or(&[])
+            .join("\n")
+            .trim()
+            .to_string();
     }
     reply.trim().to_string()
 }
@@ -244,10 +267,10 @@ pub fn extract_sql(reply: &str) -> String {
 /// fence.
 fn fenced_block(reply: &str) -> Option<String> {
     let start = reply.find("```")?;
-    let after = &reply[start + 3..];
-    let body_start = after.find('\n').map_or(after, |nl| &after[nl + 1..]);
-    let end = body_start.find("```")?;
-    Some(body_start[..end].trim().to_string())
+    let after = reply.get(add_or(start, 3, usize::MAX)..)?;
+    let body_start = after.split_once('\n').map_or(after, |(_, body)| body);
+    let (body, _) = body_start.split_once("```")?;
+    Some(body.trim().to_string())
 }
 
 #[cfg(test)]

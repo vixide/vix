@@ -16,6 +16,18 @@
 //! escapes a literal that starts with `=` (see [`value_sql`]). Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::{BTreeSet, HashMap};
 
 use super::catalog::{quote_ident, quote_value};
@@ -24,6 +36,20 @@ use super::connect::Kind;
 
 /// One staged edit of a row being updated: its column and `(original, new)`.
 type RowEdit<'a> = (usize, &'a (String, String));
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What a staged change does to its row (the grid colors rows by it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,7 +121,7 @@ impl Staged {
     #[must_use]
     pub fn len(&self, cells: &CellEdits) -> usize {
         let (u, i, d) = self.counts(cells);
-        u + i + d
+        add_or(add_or(u, i, usize::MAX), d, usize::MAX)
     }
 
     /// `(updated, inserted, deleted)` row counts, as a commit reports them.
@@ -151,7 +177,7 @@ impl Staged {
             return;
         }
         rows.remove(row);
-        let shift = |r: usize| if r > row { r - 1 } else { r };
+        let shift = |r: usize| if r > row { sub_or(r, 1, 0) } else { r };
         *cells = std::mem::take(cells)
             .into_iter()
             .filter(|((r, _), _)| *r != row)
@@ -347,16 +373,16 @@ pub fn statements(target: &Target<'_>, cells: &CellEdits, staged: &Staged) -> Ve
         };
         let names: Vec<String> = edits
             .iter()
-            .map(|(c, _)| target.headers[*c].clone())
+            .filter_map(|(c, _)| target.headers.get(*c).cloned())
             .collect();
         let set: Vec<String> = edits
             .iter()
-            .map(|(c, (_, new))| {
-                format!(
+            .filter_map(|(c, (_, new))| {
+                Some(format!(
                     "{} = {}",
-                    quote_ident(kind, &target.headers[*c]),
+                    quote_ident(kind, target.headers.get(*c)?),
                     value_sql(kind, new)
-                )
+                ))
             })
             .collect();
         let select: Vec<String> = names.iter().map(|n| quote_ident(kind, n)).collect();
@@ -400,7 +426,7 @@ fn insert_sql(target: &Target<'_>, cells: &CellEdits, row: usize) -> String {
     }
     let names: Vec<String> = cols
         .iter()
-        .map(|&c| quote_ident(kind, &target.headers[c]))
+        .filter_map(|&c| Some(quote_ident(kind, target.headers.get(c)?)))
         .collect();
     let values: Vec<String> = cols
         .iter()

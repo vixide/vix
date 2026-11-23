@@ -30,6 +30,18 @@
 //!
 //! Owning specs: `crates/vix-db/spec/index.md` and `spec/session.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
@@ -116,13 +128,27 @@ pub(crate) struct Anchor {
     len: usize,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The editor offset a server error position points at (T775): `position`
 /// is 1-based in chars of the sent SQL; a position inside a wrapping prefix
 /// (an `EXPLAIN …` the user did not type) maps nowhere, and one past the
 /// statement's end is clamped to it.
 fn error_offset(anchor: Anchor, position: usize) -> Option<usize> {
     let rel = position.checked_sub(1)?.checked_sub(anchor.prefix)?;
-    Some(anchor.start + rel.min(anchor.len))
+    Some(add_or(anchor.start, rel.min(anchor.len), usize::MAX))
 }
 
 /// A server-side cancel (T774) in flight or done, awaited by
@@ -257,10 +283,6 @@ impl Browser {
 
     /// Keys on the bind-parameter prompt: each `Enter` records the value for the
     /// current placeholder; once all are filled the substituted statement runs.
-    #[expect(
-        clippy::expect_used,
-        reason = "invariant established earlier in this function"
-    )]
     pub(super) fn key_params(&mut self, key: KeyEvent) -> Outcome {
         let Some(prompt) = self.params.as_mut() else {
             self.view = View::Workbench;
@@ -275,7 +297,9 @@ impl Browser {
                 let value = std::mem::take(&mut prompt.input);
                 prompt.values.push(value);
                 if prompt.values.len() >= prompt.names.len() {
-                    let prompt = self.params.take().expect("prompt present");
+                    let Some(prompt) = self.params.take() else {
+                        return Outcome::Consumed;
+                    };
                     let pairs: Vec<(String, String)> =
                         prompt.names.into_iter().zip(prompt.values).collect();
                     let sql = params::substitute(&prompt.sql, &pairs);
@@ -384,7 +408,7 @@ impl Browser {
             .map(|&(s, e)| {
                 text.chars()
                     .skip(s)
-                    .take(e - s)
+                    .take(sub_or(e, s, 0))
                     .collect::<String>()
                     .trim()
                     .to_string()
@@ -481,7 +505,7 @@ impl Browser {
         let at = sql.find(core)?;
         Some(Anchor {
             start,
-            prefix: sql[..at].chars().count(),
+            prefix: sql.get(..at)?.chars().count(),
             len: core.chars().count(),
         })
     }
@@ -874,7 +898,8 @@ impl Browser {
                 Err(e) => {
                     self.last_error = Some((stmt.clone(), e.to_string()));
                     self.note_tx(stmt, false);
-                    self.message = Some(format!("{}/{}: {e}", i + 1, stmts.len()));
+                    self.message =
+                        Some(format!("{}/{}: {e}", add_or(i, 1, usize::MAX), stmts.len()));
                     return;
                 }
             }

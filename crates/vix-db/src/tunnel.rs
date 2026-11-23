@@ -20,6 +20,18 @@
 //! or agent authentication is therefore required. Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::connect::{Connection, Kind};
 use std::net::TcpListener;
 use std::process::Child;
@@ -271,27 +283,21 @@ fn free_port() -> Option<u16> {
 /// timeout elapses. Returns early with `false` if `child` (the `ssh` process)
 /// exits first — with `ExitOnForwardFailure=yes` a failed forward exits almost
 /// immediately, so this avoids blocking the caller for the full timeout.
-#[expect(
-    clippy::expect_used,
-    reason = "invariant established earlier in this function"
-)]
 fn wait_ready(local_port: u16, child: &mut Child) -> bool {
     use std::net::TcpStream;
     // Poll rather than sleep once: `ssh` gives no readiness signal, and the
     // only observable "up" state is the local port accepting a connection.
-    let deadline = Instant::now() + READY_TIMEOUT;
-    let addr = format!("127.0.0.1:{local_port}");
-    while Instant::now() < deadline {
+    // A timeout too long to be a deadline never expires.
+    let deadline = Instant::now().checked_add(READY_TIMEOUT);
+    let Ok(addr) = format!("127.0.0.1:{local_port}").parse::<std::net::SocketAddr>() else {
+        return false;
+    };
+    while deadline.is_none_or(|deadline| Instant::now() < deadline) {
         // If ssh has already exited the forward will never come up.
         if matches!(child.try_wait(), Ok(Some(_))) {
             return false;
         }
-        if TcpStream::connect_timeout(
-            &addr.parse().expect("valid loopback addr"),
-            Duration::from_millis(200),
-        )
-        .is_ok()
-        {
+        if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
             return true;
         }
         std::thread::sleep(Duration::from_millis(100));

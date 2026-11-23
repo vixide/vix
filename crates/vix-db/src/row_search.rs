@@ -4,9 +4,39 @@
 //! `WHERE` clause, and the result stays editable like any preview. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, catalog, editor, row_filter};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// The slot after `i` in a ring of `n` slots (the first after the last).
+fn ring_next(i: usize, n: usize) -> usize {
+    i.checked_add(1).filter(|next| *next < n).unwrap_or(0)
+}
+
+/// The slot before `i` in a ring of `n` slots (the last before the first).
+fn ring_prev(i: usize, n: usize) -> usize {
+    i.checked_sub(1).unwrap_or_else(|| sub_or(n, 1, 0))
+}
 
 impl Browser {
     /// Open the row search for the current table preview (`F`), on the
@@ -16,10 +46,7 @@ impl Browser {
             self.message = Some(t!("msg.db_filter_needs_preview").to_string());
             return;
         }
-        self.row_filter.column = self
-            .grid
-            .cur_col
-            .min(self.grid.headers.len().saturating_sub(1));
+        self.row_filter.column = self.grid.cur_col.min(sub_or(self.grid.headers.len(), 1, 0));
         self.row_filter.field = 2;
         self.row_filter.open = true;
     }
@@ -51,14 +78,14 @@ impl Browser {
         let columns = self.grid.headers.len().max(1);
         let ops = row_filter::OPS.len();
         match key.code {
-            KeyCode::Up | KeyCode::BackTab => form.field = (form.field + 2) % 3,
-            KeyCode::Down | KeyCode::Tab => form.field = (form.field + 1) % 3,
+            KeyCode::Up | KeyCode::BackTab => form.field = ring_prev(form.field, 3),
+            KeyCode::Down | KeyCode::Tab => form.field = ring_next(form.field, 3),
             KeyCode::Left | KeyCode::Right => {
                 let step = |i: usize, n: usize| {
                     if key.code == KeyCode::Left {
-                        (i + n - 1) % n
+                        ring_prev(i, n)
                     } else {
-                        (i + 1) % n
+                        ring_next(i, n)
                     }
                 };
                 match form.field {

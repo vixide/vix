@@ -23,12 +23,38 @@
 //! error or on any statement that does not affect exactly one row (T777).
 //! Writes require write mode. Owning spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{
     Browser, Outcome, Pane, Popup, TxState, View, catalog, columns, connect, execute, relations,
     staging,
 };
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 impl Browser {
     /// The staged new value for a cell, if any (for the grid overlay).
@@ -90,7 +116,7 @@ impl Browser {
     /// the AI prose answer, the row-expansion view and the DDL view, all of
     /// which are shown through `cell_text`.
     pub(super) fn key_cell(&mut self, key: KeyEvent) -> Outcome {
-        let last = self.cell_text.lines().count().saturating_sub(1);
+        let last = sub_or(self.cell_text.lines().count(), 1, 0);
         match key.code {
             KeyCode::Char('p') => self.cell_pretty = !self.cell_pretty,
             KeyCode::Char('y') => {
@@ -98,13 +124,15 @@ impl Browser {
                 self.yank(&text);
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.view_scroll = self.view_scroll.saturating_sub(1);
+                self.view_scroll = sub_or(self.view_scroll, 1, 0);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.view_scroll = (self.view_scroll + 1).min(last);
+                self.view_scroll = add_or(self.view_scroll, 1, usize::MAX).min(last);
             }
-            KeyCode::PageUp => self.view_scroll = self.view_scroll.saturating_sub(10),
-            KeyCode::PageDown => self.view_scroll = (self.view_scroll + 10).min(last),
+            KeyCode::PageUp => self.view_scroll = sub_or(self.view_scroll, 10, 0),
+            KeyCode::PageDown => {
+                self.view_scroll = add_or(self.view_scroll, 10, usize::MAX).min(last);
+            }
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => self.view = View::Workbench,
             _ => {}
         }
@@ -315,24 +343,26 @@ impl Browser {
                 let n = self.edit_choices().len();
                 if n > 0 {
                     let next = match (self.edit_choice, key.code) {
-                        (None, KeyCode::Up) => n - 1,
+                        (None, KeyCode::Up) => sub_or(n, 1, 0),
                         (None, _) => 0,
-                        (Some(i), KeyCode::Up) => (i + n - 1) % n,
-                        (Some(i), _) => (i + 1) % n,
+                        (Some(i), KeyCode::Up) => {
+                            i.checked_sub(1).unwrap_or_else(|| sub_or(n, 1, 0))
+                        }
+                        (Some(i), _) => i.checked_add(1).filter(|next| *next < n).unwrap_or(0),
                     };
-                    self.edit_input = self.edit_choices()[next].clone();
-                    self.edit_choice = Some(next);
+                    if let Some(choice) = self.edit_choices().get(next).cloned() {
+                        self.edit_input = choice;
+                        self.edit_choice = Some(next);
+                    }
                 }
             }
             KeyCode::Enter => {
                 if let Some((row, col)) = self.editing_cell.take() {
-                    let original = self
-                        .grid
-                        .rows
-                        .get(row)
-                        .and_then(|r| r.get(col))
-                        .cloned()
-                        .unwrap_or_default();
+                    // A cell that is no longer in the grid has an empty original.
+                    let mut original = String::new();
+                    if let Some(cell) = self.grid.rows.get(row).and_then(|r| r.get(col)) {
+                        original.clone_from(cell);
+                    }
                     let new = std::mem::take(&mut self.edit_input);
                     // Staging the original value again is "undo": the entry
                     // goes, so commit never issues a no-op UPDATE.
@@ -423,7 +453,7 @@ impl Browser {
         self.staged
             .remove_inserted(&mut self.edits, row, &mut self.grid.rows);
         let visible = self.grid.filtered().len();
-        self.grid.sel = self.grid.sel.min(visible.saturating_sub(1));
+        self.grid.sel = self.grid.sel.min(sub_or(visible, 1, 0));
         self.grid.scroll = self.grid.scroll.min(self.grid.sel);
         self.message = Some(t!("msg.db_edit_row_discarded").to_string());
     }
@@ -727,7 +757,9 @@ impl Browser {
     /// dismisses it. Aliases resolve over the whole statement under the
     /// cursor, not just its line (T780).
     pub(super) fn refresh_popup(&mut self) {
-        let line = self.query.lines()[self.query.row].clone();
+        let Some(line) = self.query.lines().get(self.query.row).cloned() else {
+            return;
+        };
         let statement = self.query.statement_at_cursor().unwrap_or_default();
         let s = self.completer.suggest_in(&line, self.query.col, &statement);
         self.popup = (!s.items.is_empty()).then_some(Popup {

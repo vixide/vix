@@ -13,8 +13,26 @@
 //! prompt itself (Ctrl+U) lives in `panels`. Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::catalog::{quote_ident, quote_literal};
 use super::connect::Kind;
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// The field delimiter for `path`: a tab for `.tsv` / `.tab`, else a comma.
 /// The extension match is case-insensitive.
@@ -31,7 +49,7 @@ pub fn delimiter(path: &str) -> char {
     let ext = std::path::Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or_default()
+        .unwrap_or("")
         .to_ascii_lowercase();
     if ext == "tsv" || ext == "tab" {
         '\t'
@@ -70,7 +88,7 @@ pub fn table_name(path: &str) -> String {
         })
         .collect();
     let name = name.trim_matches('_').to_string();
-    if name.is_empty() || name.as_bytes()[0].is_ascii_digit() {
+    if name.is_empty() || name.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         format!("t_{name}")
     } else {
         name
@@ -191,7 +209,7 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
                 .collect();
             let name = name.trim_matches('_');
             if name.is_empty() {
-                format!("col{}", i + 1)
+                format!("col{}", add_or(i, 1, usize::MAX))
             } else {
                 name.to_string()
             }
@@ -204,7 +222,7 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
         .collect();
     let create = format!("CREATE TABLE {ident} ({})", col_defs.join(", "));
 
-    let data = &records[1..];
+    let data = records.get(1..).unwrap_or(&[]);
     if data.is_empty() {
         return vec![create];
     }

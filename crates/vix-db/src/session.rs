@@ -41,6 +41,18 @@
 //! The design is described in `crates/vix-db/spec/session.md`; the callers are
 //! the `lifecycle` (connect) and `execute` (run/cancel) modules of this crate.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use futures_util::StreamExt as _;
 use std::sync::mpsc;
 
@@ -66,6 +78,12 @@ enum Request {
     /// affected on the given one-shot channel (T777's exactly-one-row
     /// commit check), instead of streaming rows.
     Exec(String, mpsc::Sender<Result<u64, QueryError>>),
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
 }
 
 /// A piece of a streamed result: the header row, then batches of data rows,
@@ -807,7 +825,7 @@ async fn stream_sql(
                 }
                 let cells = row.cells();
                 batch.push(cells);
-                total += 1;
+                total = add_or(total, 1, usize::MAX);
                 if batch.len() >= BATCH
                     && reply_tx
                         .send(Chunk::Rows(std::mem::take(&mut batch)))

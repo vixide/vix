@@ -933,3 +933,7 @@ The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
 so the workbench status lines are unchanged. `Browser::run_sql` and
 `run_catalog` return it too; the workbench turns it into text only at the
 point it shows a message.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Conversion in progress, file by file** (each converted file denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` outside tests): `tunnel`, `session`, `chart`, `import`, `copy_ai`, `ai_features`, `row_search`, `execute`, `staging`, `ai`, `cell_edit`, `results` and `compare/review` are done. They read through `get`, iterators, `split_once` and small `checked_*` helpers; movement stops at the first and last row, a tunnel readiness timeout too long to be a deadline never expires, and a cell no longer in the grid has an empty original.
